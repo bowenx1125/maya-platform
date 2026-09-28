@@ -735,6 +735,12 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 )}
               </p>
             ) : null}
+            {knowledgePreviewRefreshing ? (
+              <p className="muted-copy" role="status" aria-live="polite">
+                <span className="spinner" aria-hidden="true" />
+                {t("knowledgePreviewRefreshing")}
+              </p>
+            ) : null}
             {knowledgeUploadError && error === knowledgeUploadError ? (
               <ErrorNotice
                 error={knowledgeUploadError}

@@ -92,6 +92,7 @@ from app.modules.knowledge.services import (
     parse_json_payload_hash,
     rag_preview,
     recover_operation_now,
+    renew_idempotency_lease,
     replace_document_chunks,
     saga_checkpoint,
     scoped_group_role,
@@ -105,6 +106,7 @@ from app.modules.knowledge.services import (
 )
 
 router = APIRouter(tags=["Knowledge"])
+KNOWLEDGE_UPLOAD_LEASE_SECONDS = 90
 
 _UPLOAD_BODY = {
     "required": True,
@@ -321,6 +323,7 @@ async def upload_knowledge_document(
             current_docs = []
 
         try:
+            renew_idempotency_lease(db, record, lease_seconds=KNOWLEDGE_UPLOAD_LEASE_SECONDS)
             filename, content = await run_in_threadpool(
                 convert_knowledge_upload, source_filename, source_content
             )
@@ -701,6 +704,7 @@ async def replace_knowledge_document(
             raise stale_revision(scoped.document.index_revision)
 
         try:
+            renew_idempotency_lease(db, record, lease_seconds=KNOWLEDGE_UPLOAD_LEASE_SECONDS)
             filename, content = await run_in_threadpool(
                 convert_knowledge_upload, source_filename, source_content
             )

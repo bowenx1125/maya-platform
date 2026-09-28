@@ -508,6 +508,7 @@ const enMessages = {
     "File converted to Markdown and enabled for this draft.",
   knowledgePreviewRefreshFailed:
     "The file was uploaded successfully, but the evidence preview could not be refreshed.",
+  knowledgePreviewRefreshing: "Refreshing the Markdown preview…",
   knowledgeImportFile: "Import a file",
   knowledgeImportLink: "Courseware",
   editor: "editor",
@@ -1242,6 +1243,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   knowledgeImported: "文件已转换为 Markdown 并加入小组知识库。",
   knowledgeEvidenceImported: "文件已转换为 Markdown 并启用到当前草稿。",
   knowledgePreviewRefreshFailed: "文件已成功上传，但知识预览暂时未能刷新。",
+  knowledgePreviewRefreshing: "正在刷新 Markdown 预览…",
   knowledgeImportFile: "导入文件",
   knowledgeImportLink: "课件",
   editor: "编辑器",

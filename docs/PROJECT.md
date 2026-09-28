@@ -125,12 +125,14 @@ content locally to Markdown; only the converted Markdown is retained. Uploads
 are capped at 10 MB, PDFs at 200 pages, and extracted text at 100,000
 characters. Scanned pages and embedded images are not OCR-processed. Page
 headings in converted PDFs are labels, not reliable page citations in later RAG
-results. PDF parsing runs in a worker limited to 512 MB of virtual address
-space on POSIX or process memory on Windows, with 20 CPU seconds and a 30-second
-parse-result timeout after worker startup; startup and cleanup are outside that
-timeout. At most two workers run per server process. DOCX packages are capped
-at 1,024 parts, 20 MB per part and 64 MB expanded total. No cloud parser or
-charged model call is used.
+results. PDF and DOCX parsing run in workers limited to 512 MB of virtual
+address space on POSIX or process memory on Windows, with 20 CPU seconds and a
+30-second parse-result timeout after worker startup; startup and cleanup are
+outside that timeout. At most two workers run per server process. DOCX packages
+are capped at 1,024 parts, 20 MB per part and 64 MB expanded total. Knowledge
+upload and replacement claims renew to 90 seconds before conversion. No cloud
+parser or charged model call is used. Conversion of arbitrary file formats is
+not implemented; formats outside Markdown, PDF and DOCX are rejected.
 
 The uploader shows a pending status while upload, conversion and indexing run,
 and reports unsupported formats, missing text, size limits and safely stopped
@@ -140,9 +142,13 @@ Teacher courseware is read-only in the shared library; a teacher can retry a
 failed index. Legacy documents predate uploader-role tracking and migration
 0033 conservatively labels them student-owned; their historical authors cannot
 be safely inferred. Current backend and frontend tests cover conversion,
-limits, idempotent replay, role access and Workspace status copy. Authenticated
-browser visual acceptance and a real teacher-session courseware walkthrough
-remain unverified.
+limits, idempotent replay, role access and Workspace status copy. The public
+roundtable tooltip was visually checked; the camera-control bubble was adjusted
+to avoid covering neighboring controls and rechecked. Tooltip placement also
+avoids nearby controls for hover, focus and touch. The read-only chat composer
+shows and associates its explanation for keyboard and screen-reader users.
+Authenticated Workspace visual acceptance and a real teacher-session courseware
+walkthrough remain unverified.
 
 ## Remaining scope
 

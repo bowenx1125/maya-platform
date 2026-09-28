@@ -12,7 +12,7 @@ import unicodedata
 import zipfile
 from io import BytesIO
 from multiprocessing.process import BaseProcess
-from typing import Any
+from typing import Any, Literal
 
 from docx import Document as load_docx
 from docx.table import Table
@@ -32,10 +32,10 @@ MAX_PDF_CONTENT_WORK_BYTES = 32 * 1024 * 1024
 MAX_PDF_TOTAL_FORM_INVOCATIONS = 64
 MAX_PDF_FORM_INVOCATIONS_PER_PAGE = 16
 MAX_PDF_RECOVERY_BYTES = 1 * 1024 * 1024
-PDF_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
-PDF_WORKER_CPU_SECONDS = 20
-PDF_WORKER_TIMEOUT_SECONDS = 30
-_PDF_WORKER_SLOTS = threading.BoundedSemaphore(2)
+INGEST_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
+INGEST_WORKER_CPU_SECONDS = 20
+INGEST_WORKER_TIMEOUT_SECONDS = 30
+_INGEST_WORKER_SLOTS = threading.BoundedSemaphore(2)
 INGEST_VERSION = "local-markdown-v1"
 
 
@@ -47,7 +47,7 @@ class KnowledgeImportError(ValueError):
         self.reason = reason
 
 
-def _set_pdf_worker_limits() -> None:
+def _set_ingest_worker_limits() -> None:
     if os.name == "nt":
         return
     try:
@@ -59,17 +59,17 @@ def _set_pdf_worker_limits() -> None:
             raise RuntimeError("Process resource limits are unavailable")
         resource.setrlimit(
             address_space_limit,
-            (PDF_WORKER_MEMORY_BYTES, PDF_WORKER_MEMORY_BYTES),
+            (INGEST_WORKER_MEMORY_BYTES, INGEST_WORKER_MEMORY_BYTES),
         )
         resource.setrlimit(
             cpu_limit,
-            (PDF_WORKER_CPU_SECONDS, PDF_WORKER_CPU_SECONDS + 1),
+            (INGEST_WORKER_CPU_SECONDS, INGEST_WORKER_CPU_SECONDS + 1),
         )
     except (ImportError, OSError, ValueError, RuntimeError) as exc:
-        raise RuntimeError("PDF worker limits are unavailable") from exc
+        raise RuntimeError("Document worker limits are unavailable") from exc
 
 
-def _assign_windows_pdf_worker_job(process: BaseProcess) -> int | None:
+def _assign_windows_ingest_worker_job(process: BaseProcess) -> int | None:
     if os.name != "nt":
         return None
     from ctypes import wintypes
@@ -129,8 +129,8 @@ def _assign_windows_pdf_worker_job(process: BaseProcess) -> int | None:
     limits = ExtendedLimitInformation()
     limits.BasicLimitInformation.LimitFlags = 0x0002 | 0x0008 | 0x0100 | 0x2000
     limits.BasicLimitInformation.ActiveProcessLimit = 1
-    limits.BasicLimitInformation.PerProcessUserTimeLimit = PDF_WORKER_CPU_SECONDS * 10_000_000
-    limits.ProcessMemoryLimit = PDF_WORKER_MEMORY_BYTES
+    limits.BasicLimitInformation.PerProcessUserTimeLimit = INGEST_WORKER_CPU_SECONDS * 10_000_000
+    limits.ProcessMemoryLimit = INGEST_WORKER_MEMORY_BYTES
     worker_handle = kernel32.OpenProcess(0x0001 | 0x0100, False, process.pid)
     if not worker_handle:
         kernel32.CloseHandle(job)
@@ -150,7 +150,8 @@ def _assign_windows_pdf_worker_job(process: BaseProcess) -> int | None:
     return int(job)
 
 
-def _pdf_worker(
+def _ingest_worker(
+    kind: Literal["pdf", "docx"],
     send_connection: Any,
     ready_event: Any,
     start_event: Any,
@@ -158,7 +159,7 @@ def _pdf_worker(
 ) -> None:
     try:
         try:
-            _set_pdf_worker_limits()
+            _set_ingest_worker_limits()
         except Exception:
             send_connection.send(("error", "processing_failed"))
             return
@@ -166,7 +167,10 @@ def _pdf_worker(
         if not start_event.wait(timeout=5):
             send_connection.send(("error", "processing_failed"))
             return
-        markdown = _pdf_to_markdown(data)
+        if kind == "pdf":
+            markdown = _pdf_to_markdown(data)
+        else:
+            markdown = _docx_to_markdown(data)
         send_connection.send(("ok", markdown.encode("utf-8")))
     except KnowledgeImportError as exc:
         send_connection.send(("error", exc.reason))
@@ -179,8 +183,8 @@ def _pdf_worker(
         send_connection.close()
 
 
-def _convert_pdf_isolated(data: bytes) -> bytes:
-    if not _PDF_WORKER_SLOTS.acquire(timeout=2):
+def _convert_document_isolated(kind: Literal["pdf", "docx"], data: bytes) -> bytes:
+    if not _INGEST_WORKER_SLOTS.acquire(timeout=2):
         raise KnowledgeImportError("processing_failed")
     receive_connection: Any = None
     send_connection: Any = None
@@ -193,8 +197,8 @@ def _convert_pdf_isolated(data: bytes) -> bytes:
         ready_event = context.Event()
         start_event = context.Event()
         process = context.Process(
-            target=_pdf_worker,
-            args=(send_connection, ready_event, start_event, data),
+            target=_ingest_worker,
+            args=(kind, send_connection, ready_event, start_event, data),
         )
         process.start()
         process_started = True
@@ -210,9 +214,9 @@ def _convert_pdf_isolated(data: bytes) -> bytes:
             if status == "error":
                 raise KnowledgeImportError(result)
             raise KnowledgeImportError("processing_failed")
-        job_handle = _assign_windows_pdf_worker_job(process)
+        job_handle = _assign_windows_ingest_worker_job(process)
         start_event.set()
-        if not receive_connection.poll(PDF_WORKER_TIMEOUT_SECONDS):
+        if not receive_connection.poll(INGEST_WORKER_TIMEOUT_SECONDS):
             raise KnowledgeImportError("processing_failed")
         try:
             status, result = receive_connection.recv()
@@ -244,7 +248,15 @@ def _convert_pdf_isolated(data: bytes) -> bytes:
             receive_connection.close()
         if send_connection is not None:
             send_connection.close()
-        _PDF_WORKER_SLOTS.release()
+        _INGEST_WORKER_SLOTS.release()
+
+
+def _convert_pdf_isolated(data: bytes) -> bytes:
+    return _convert_document_isolated("pdf", data)
+
+
+def _convert_docx_isolated(data: bytes) -> bytes:
+    return _convert_document_isolated("docx", data)
 
 
 def _validate_filename(filename: str) -> None:
@@ -453,6 +465,8 @@ def _validate_docx_package(data: bytes) -> None:
                 raise KnowledgeImportError("invalid_docx")
     except KnowledgeImportError:
         raise
+    except MemoryError as exc:
+        raise KnowledgeImportError("processing_failed") from exc
     except Exception as exc:
         raise KnowledgeImportError("invalid_docx") from exc
 
@@ -510,6 +524,8 @@ def _docx_to_markdown(data: bytes) -> str:
             raise KnowledgeImportError("content_too_large")
     except KnowledgeImportError:
         raise
+    except MemoryError as exc:
+        raise KnowledgeImportError("processing_failed") from exc
     except Exception as exc:
         raise KnowledgeImportError("invalid_docx") from exc
     return markdown + "\n"
@@ -527,7 +543,8 @@ def convert_knowledge_upload(filename: str, data: bytes) -> tuple[str, bytes]:
     if extension == "pdf":
         markdown = _convert_pdf_isolated(data).decode("utf-8")
     elif extension == "docx":
-        markdown = _docx_to_markdown(data)
+        _validate_docx_package(data)
+        markdown = _convert_docx_isolated(data).decode("utf-8")
     else:
         raise KnowledgeImportError("unsupported_format")
     if len(markdown) > MAX_RAG_CHARS:

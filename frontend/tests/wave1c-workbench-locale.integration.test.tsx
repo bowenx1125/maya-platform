@@ -485,6 +485,7 @@ describe("Wave 1C real workbench locale boundary", () => {
 
     const retryButton = screen.getByRole("button", { name: "Retry" });
     fireEvent.click(retryButton);
+    expect(screen.getByText("Refreshing the Markdown preview…")).toBeTruthy();
     expect((retryButton as HTMLButtonElement).disabled).toBe(true);
     expect(
       (screen.getAllByLabelText("Upload")[1] as HTMLInputElement).disabled,
@@ -506,6 +507,7 @@ describe("Wave 1C real workbench locale boundary", () => {
         "The file was uploaded successfully, but the evidence preview could not be refreshed.",
       ),
     ).toBeNull();
+    expect(screen.queryByText("Refreshing the Markdown preview…")).toBeNull();
     expect(
       screen.getByText(
         "File converted to Markdown and enabled for this draft.",

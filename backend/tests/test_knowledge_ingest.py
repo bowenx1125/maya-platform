@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from io import BytesIO
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -7,6 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import app.modules.knowledge.ingest as knowledge_ingest
 import app.modules.knowledge.multipart as multipart
 import app.modules.knowledge.router as knowledge_router
+import app.modules.knowledge.services as knowledge_services
 import pytest
 from app.core.models import AgentVersionDocument, GroupMember, KnowledgeDocument
 from app.modules.knowledge.ingest import (
@@ -110,7 +112,7 @@ def test_pdf_page_content_stops_when_work_budget_is_exceeded(
 
 
 def test_pdf_worker_timeout_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(knowledge_ingest, "PDF_WORKER_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(knowledge_ingest, "INGEST_WORKER_TIMEOUT_SECONDS", 0)
     with pytest.raises(KnowledgeImportError, match="processing_failed"):
         convert_knowledge_upload("lecture.pdf", _pdf_bytes(["Page text"]))
 
@@ -127,6 +129,17 @@ def test_docx_conversion_rejects_bad_and_expanded_packages(
         archive.writestr("word/document.xml", b"x" * 9)
     with pytest.raises(KnowledgeImportError, match="docx_limit"):
         convert_knowledge_upload("lesson.docx", expanded.getvalue())
+
+
+def test_docx_memory_exhaustion_is_reported_as_processing_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_memory_error(_data: bytes) -> Document:
+        raise MemoryError
+
+    monkeypatch.setattr(knowledge_ingest, "load_docx", raise_memory_error)
+    with pytest.raises(KnowledgeImportError, match="processing_failed"):
+        knowledge_ingest._docx_to_markdown(_docx_bytes())
 
 
 def test_upload_format_and_file_size_are_checked(
@@ -245,7 +258,6 @@ def test_teacher_can_add_courseware_to_group_library_without_binding_it_to_draft
             },
         )
         assert bound.status_code == 404
-
         _student_again, student_csrf_again = login(client, "bowen")
         replaced = client.post(
             f"/api/v1/knowledge-documents/{document['id']}/replace",
@@ -304,6 +316,50 @@ def test_teacher_can_add_courseware_to_group_library_without_binding_it_to_draft
             },
         )
         assert teacher_reindex.status_code == 202, teacher_reindex.text
+
+
+def test_upload_and_replace_keep_idempotency_claim_during_slow_conversion(
+    app_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, _database, _settings = app_factory()
+    now = knowledge_services.now_utc
+    elapsed = timedelta(0)
+
+    def advanced_now() -> Any:
+        return now() + elapsed
+
+    original_convert = knowledge_router.convert_knowledge_upload
+
+    def slow_conversion(filename: str, content: bytes) -> tuple[str, bytes]:
+        nonlocal elapsed
+        if filename.endswith(".docx"):
+            elapsed += timedelta(seconds=11)
+        return original_convert(filename, content)
+
+    monkeypatch.setattr(knowledge_services, "now_utc", advanced_now)
+    monkeypatch.setattr(knowledge_router, "convert_knowledge_upload", slow_conversion)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        _student, csrf = login(client, "bowen")
+        headers = {"Origin": "http://testserver", "X-CSRF-Token": csrf}
+        uploaded = client.post(
+            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+            headers={**headers, "Idempotency-Key": "slow-docx-courseware-upload"},
+            files={"file": ("lesson.docx", _docx_bytes(), "application/octet-stream")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        document = uploaded.json()["document"]
+
+        replaced = client.post(
+            f"/api/v1/knowledge-documents/{document['id']}/replace",
+            headers={**headers, "Idempotency-Key": "slow-docx-courseware-replace"},
+            data={
+                "expected_content_hash": document["content_hash"],
+                "expected_index_revision": str(document["index_revision"]),
+            },
+            files={"file": ("lesson.docx", _docx_bytes(), "application/octet-stream")},
+        )
+        assert replaced.status_code == 201, replaced.text
 
 
 def test_upload_idempotent_replay_skips_file_conversion(

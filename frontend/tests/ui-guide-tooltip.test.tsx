@@ -37,7 +37,6 @@ function renderGuide(locale: "en" | "zh" = "en") {
       <button
         type="button"
         data-ui-guide="knowledge.edit"
-        data-ui-guide-touch="true"
         aria-describedby="existing-description"
       >
         Edit
@@ -126,6 +125,155 @@ describe("workspace UI guide tooltip", () => {
     fireEvent.pointerUp(button, { pointerType: "touch" });
 
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("shows touch help on guided controls without a special touch marker", () => {
+    renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+
+    fireEvent.pointerUp(button, { pointerType: "touch" });
+
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Markdown editor",
+    );
+  });
+
+  it("avoids covering nearby controls when a guided control receives focus", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1280,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 720,
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <UiGuideTooltip />
+        <button type="button" data-ui-guide="knowledge.edit">
+          Focused control
+        </button>
+        <button type="button">Neighbor control</button>
+      </LocaleProvider>,
+    );
+    const [button, neighbor] = screen.getAllByRole("button");
+    button.getBoundingClientRect = () =>
+      ({
+        left: 1146,
+        right: 1182,
+        top: 588,
+        bottom: 624,
+        width: 36,
+        height: 36,
+        x: 1146,
+        y: 588,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    neighbor.getBoundingClientRect = () =>
+      ({
+        left: 1150,
+        right: 1186,
+        top: 630,
+        bottom: 666,
+        width: 36,
+        height: 36,
+        x: 1150,
+        y: 630,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.focusIn(button);
+    const tooltip = screen.getByRole("tooltip");
+    tooltip.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        right: 180,
+        top: 0,
+        bottom: 40,
+        width: 180,
+        height: 40,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    fireEvent.resize(window);
+
+    expect(Number.parseFloat(tooltip.style.top)).toBeLessThan(588);
+  });
+
+  it("avoids covering nearby controls when a guided control is hovered", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1280,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 720,
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <UiGuideTooltip />
+        <button type="button" data-ui-guide="knowledge.edit">
+          Hovered control
+        </button>
+        <button type="button">Neighbor control</button>
+      </LocaleProvider>,
+    );
+    const [button, neighbor] = screen.getAllByRole("button");
+    button.getBoundingClientRect = () =>
+      ({
+        left: 490,
+        right: 530,
+        top: 490,
+        bottom: 530,
+        width: 40,
+        height: 40,
+        x: 490,
+        y: 490,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    neighbor.getBoundingClientRect = () =>
+      ({
+        left: 510,
+        right: 550,
+        top: 510,
+        bottom: 550,
+        width: 40,
+        height: 40,
+        x: 510,
+        y: 510,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.pointerOver(button, {
+      pointerType: "mouse",
+      clientX: 500,
+      clientY: 500,
+    });
+    const tooltip = screen.getByRole("tooltip");
+    tooltip.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        right: 180,
+        top: 0,
+        bottom: 40,
+        width: 180,
+        height: 40,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    fireEvent.pointerMove(button, {
+      pointerType: "mouse",
+      clientX: 500,
+      clientY: 500,
+    });
+
+    const left = Number.parseFloat(tooltip.style.left);
+    const top = Number.parseFloat(tooltip.style.top);
+    expect(
+      left + 180 <= 510 || left >= 550 || top + 40 <= 510 || top >= 550,
+    ).toBe(true);
   });
 
   it("repositions focused help after scrolling and resizing", () => {

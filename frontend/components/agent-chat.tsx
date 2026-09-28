@@ -16,6 +16,7 @@ import {
   subscribeChatRequest,
 } from "../lib/chat-request-store";
 import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
+import { uiGuideText } from "../lib/ui-guide-copy";
 import { AvatarPreview } from "./avatar";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
@@ -36,6 +37,9 @@ export function AgentChat() {
   const t = useT();
   const { locale } = useLocale();
   const chatLang = locale === "zh" ? "zh-CN" : "en";
+  const readOnlyHelp =
+    uiGuideText("chat.readOnly", locale) ??
+    "This Agent is unavailable for new messages.";
   const courseId = user?.courses[0]?.course_id;
   const [agents, setAgents] = useState<ChatAgent[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -512,9 +516,19 @@ export function AgentChat() {
               className={styles.composer}
               onSubmit={(event) => void send(event)}
             >
+              {character?.available === false ? (
+                <p id="chat-readonly-help" className={styles.readOnlyHelp}>
+                  {readOnlyHelp}
+                </p>
+              ) : null}
               <textarea
                 id="chat-message"
                 aria-label="Message"
+                aria-describedby={
+                  character?.available === false
+                    ? "chat-readonly-help"
+                    : undefined
+                }
                 value={draft}
                 rows={1}
                 disabled={busy || character?.available === false}
@@ -533,13 +547,15 @@ export function AgentChat() {
               <button
                 type="submit"
                 className={`${styles.sendButton} primary-action`}
-                aria-label={
-                  character?.available === false ? "Read-only" : "Send"
-                }
+                aria-label="Send"
                 data-ui-guide={
                   character?.available === false ? "chat.readOnly" : "chat.send"
                 }
-                title={character?.available === false ? "Read-only" : undefined}
+                aria-describedby={
+                  character?.available === false
+                    ? "chat-readonly-help"
+                    : undefined
+                }
                 disabled={
                   busy ||
                   character?.available === false ||

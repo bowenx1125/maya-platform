@@ -117,7 +117,7 @@ export function UiGuideTooltip() {
     const onPointerUp = (event: PointerEvent) => {
       if (event.pointerType !== "touch") return;
       const target = guideTarget(event.target);
-      if (!target || target.dataset.uiGuideTouch !== "true") return;
+      if (!target) return;
       if (touchPinned && described === target) {
         hide();
         return;
@@ -176,26 +176,7 @@ export function UiGuideTooltip() {
     if (!active || !text || !tooltip) return;
     const size = tooltip.getBoundingClientRect();
     const edge = 8;
-    let left: number;
-    let top: number;
-    if (active.anchor === "pointer") {
-      left = active.x + 12;
-      if (left + size.width + edge > window.innerWidth) {
-        left = active.x - size.width - 12;
-      }
-      top = active.y + 12;
-      if (top + size.height + edge > window.innerHeight) {
-        top = active.y - size.height - 12;
-      }
-    } else {
-      const rect = active.target.getBoundingClientRect();
-      left = rect.left + (rect.width - size.width) / 2;
-      top = rect.bottom + 10;
-      if (top + size.height + edge > window.innerHeight) {
-        top = rect.top - size.height - 10;
-      }
-    }
-    const nextPosition = {
+    const clamp = (left: number, top: number) => ({
       left: Math.max(
         edge,
         Math.min(left, window.innerWidth - size.width - edge),
@@ -204,7 +185,57 @@ export function UiGuideTooltip() {
         edge,
         Math.min(top, window.innerHeight - size.height - edge),
       ),
-    };
+    });
+    let nextPosition: { left: number; top: number };
+    const rect = active.target.getBoundingClientRect();
+    const candidates =
+      active.anchor === "pointer"
+        ? [
+            clamp(active.x + 12, active.y + 12),
+            clamp(active.x + 12, active.y - size.height - 12),
+            clamp(active.x - size.width - 12, active.y + 12),
+            clamp(active.x - size.width - 12, active.y - size.height - 12),
+          ]
+        : [
+            clamp(rect.left + (rect.width - size.width) / 2, rect.bottom + 10),
+            clamp(
+              rect.left + (rect.width - size.width) / 2,
+              rect.top - size.height - 10,
+            ),
+            clamp(rect.right + 10, rect.top + (rect.height - size.height) / 2),
+            clamp(
+              rect.left - size.width - 10,
+              rect.top + (rect.height - size.height) / 2,
+            ),
+          ];
+    const obstacles = [
+      rect,
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'button, input, select, textarea, a[href], [role="button"], [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+        .filter((element) => element !== active.target)
+        .map((element) => element.getBoundingClientRect())
+        .filter((obstacle) => obstacle.width > 0 && obstacle.height > 0),
+    ];
+    const overlapArea = (position: { left: number; top: number }) =>
+      obstacles.reduce((total, obstacle) => {
+        const width = Math.max(
+          0,
+          Math.min(position.left + size.width, obstacle.right) -
+            Math.max(position.left, obstacle.left),
+        );
+        const height = Math.max(
+          0,
+          Math.min(position.top + size.height, obstacle.bottom) -
+            Math.max(position.top, obstacle.top),
+        );
+        return total + width * height;
+      }, 0);
+    nextPosition = candidates.reduce((best, candidate) =>
+      overlapArea(candidate) < overlapArea(best) ? candidate : best,
+    );
     setPosition((current) =>
       current.left === nextPosition.left && current.top === nextPosition.top
         ? current
