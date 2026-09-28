@@ -323,10 +323,10 @@ API intent; ordinary Teacher Done with RAG creates no Job. Intent atomically sav
 Set/link and Job/run; owner GET returns safe status. No Provider blocks with zero calls/assets.
 R2 full check/boundary, Sol, HTTP/browser passed. No Docker/real Provider.
 
-## MayaForm K2b1 — Provider stage foundation (in progress)
+## MayaForm K2b1 — Provider stage accepted
 
 0038 binds a confirmed, owner-authorized `llm_knowledge_generate` operation to the K2a run.
 Fresh Agno 3.0.11 invokes once; canonical request bytes, persisted SHA-256 and `post_bytes`
 are identical. Consent/ACL fences, accounting, not-sent/unknown recovery and sanitized typed
-accepted stages are covered; no Assets or completion are claimed. Focused backend, mypy/Ruff
-and OpenAPI/TS/route sync pass. Full check/boundary pass; independent migration/HTTP and Sol review pending.
+accepted stages are covered; no Assets or completion are claimed. Focused backend, mypy/Ruff,
+OpenAPI/TS/route, full check/boundary, populated migration/HTTP and Sol passed. No real Provider/Docker.
