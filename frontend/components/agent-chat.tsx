@@ -39,6 +39,7 @@ import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
+import { TeamEntryFlow } from "./chats/team-entry-flow";
 import styles from "./agent-chat.module.css";
 
 function unknownChatOutcomeError() {
@@ -112,6 +113,7 @@ function AgentChatScope({
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [historyRefreshTarget, setHistoryRefreshTarget] =
     useState<ChatSession | null>(null);
+  const [showNewEntry, setShowNewEntry] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const sendSequence = useRef(0);
   const uiRevision = useRef(0);
@@ -865,14 +867,22 @@ function AgentChatScope({
       <PageIntro title="Chats" />
       <WorkspaceAction
         name="new"
-        disabled={
-          busy ||
-          character?.available === false ||
-          !agents.some((agent) => agent.version_id === versionId)
-        }
-        onClick={() => start()}
+        disabled={busy || showNewEntry}
+        onClick={() => setShowNewEntry(true)}
       />
-      {error ? (
+      {showNewEntry ? (
+        <TeamEntryFlow
+          api={api}
+          courseId={courseId}
+          agents={agents}
+          onClose={() => setShowNewEntry(false)}
+          onStartAgent={(nextVersionId) => {
+            setShowNewEntry(false);
+            start(nextVersionId);
+          }}
+        />
+      ) : null}
+      {!showNewEntry && error ? (
         <ErrorNotice
           error={error}
           onRetry={
@@ -882,7 +892,9 @@ function AgentChatScope({
           }
         />
       ) : null}
-      {requestState?.status === "uncertain" && requestState.sessionId ? (
+      {!showNewEntry &&
+      requestState?.status === "uncertain" &&
+      requestState.sessionId ? (
         <button
           className="inline-button"
           type="button"
@@ -891,9 +903,10 @@ function AgentChatScope({
           {t("chatCheckStatus")}
         </button>
       ) : null}
-      {!agents.length && !selected ? (
+      {!showNewEntry && !agents.length && !selected ? (
         <EmptyCard title={t("noPublishedAgents")} />
-      ) : (
+      ) : null}
+      {!showNewEntry && (agents.length > 0 || selected) ? (
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
             <select
@@ -1080,7 +1093,7 @@ function AgentChatScope({
             </form>
           </section>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

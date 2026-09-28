@@ -40,6 +40,14 @@ from app.modules.knowledge_sets.models import (
     KnowledgeSetSource,
 )
 from app.modules.reports import models as _report_models
+from app.modules.teams.models import (
+    CourseTeamPublication,
+    Team,
+    TeamMemberInvokeGrant,
+    TeamVersion,
+    TeamVersionMember,
+    TeamVersionSet,
+)
 from sqlalchemy import text
 
 del DemoAccountBinding, _debate_models, _interaction_models, _report_models
@@ -1163,6 +1171,89 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
                 )
             )
             session.add(
+                Team(
+                    id=_uid(130),
+                    owner_user_id=_uid(2),
+                    course_id=_uid(10),
+                    group_id=None,
+                    ownership_scope="personal",
+                    display_name="Preserved Team",
+                    visibility="public",
+                    metadata_revision=0,
+                    authorization_epoch=0,
+                    current_version_seq=1,
+                    deleted_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                TeamVersion(
+                    id=_uid(131),
+                    team_id=_uid(130),
+                    version_seq=1,
+                    display_name="Preserved Team",
+                    visibility="public",
+                    authorization_epoch=0,
+                    created_by_user_id=_uid(2),
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                TeamVersionMember(
+                    id=_uid(132),
+                    team_version_id=_uid(131),
+                    agent_id=_uid(12),
+                    agent_version_id=str(agent_version_id),
+                    position=0,
+                    is_leader=True,
+                    display_name="Preserved Agent",
+                    avatar_config_json="{}",
+                    own_knowledge_set_snapshots_json="[]",
+                    raw_source_fences_json="[]",
+                    created_at=now,
+                )
+            )
+            session.add(
+                TeamVersionSet(
+                    id=_uid(133),
+                    team_version_id=_uid(131),
+                    knowledge_set_id=set_id,
+                    authorization_epoch=1,
+                    position=0,
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                CourseTeamPublication(
+                    id=_uid(134),
+                    course_id=_uid(10),
+                    team_id=_uid(130),
+                    team_version_id=_uid(131),
+                    publisher_user_id=_uid(2),
+                    authorization_epoch=0,
+                    state="published",
+                    published_at=now,
+                    revoked_at=None,
+                )
+            )
+            session.flush()
+            session.add(
+                TeamMemberInvokeGrant(
+                    id=_uid(135),
+                    publication_id=_uid(134),
+                    team_version_id=_uid(131),
+                    team_member_id=_uid(132),
+                    agent_id=_uid(12),
+                    agent_version_id=str(agent_version_id),
+                    authorization_epoch=0,
+                    created_at=now,
+                )
+            )
+            session.add(
                 Job(
                     id=job_id,
                     operation="knowledge_set.generate",
@@ -1262,6 +1353,12 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             "knowledge_generation_runs",
             "knowledge_generation_target_snapshots",
             "knowledge_generation_accepted_stages",
+            "teams",
+            "team_versions",
+            "team_version_members",
+            "team_version_sets",
+            "course_team_publications",
+            "team_member_invoke_grants",
         )
         before = _table_rows(database_path, preserved_tables)
         with sqlite3.connect(database_path) as connection:

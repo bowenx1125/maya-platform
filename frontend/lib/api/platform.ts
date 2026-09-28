@@ -175,6 +175,15 @@ export type DemoComposition = {
 };
 export type ChatAgent = components["schemas"]["ChatAgent"];
 export type ChatSession = components["schemas"]["ChatSession"];
+export type TeamVisibility =
+  components["schemas"]["CreateTeamRequest"]["visibility"];
+export type TeamMemberInput = components["schemas"]["TeamMemberInput"];
+export type TeamWriteRequest = components["schemas"]["CreateTeamRequest"];
+export type TeamUpdateRequest = components["schemas"]["SaveTeamVersionRequest"];
+export type TeamSummaryDto = components["schemas"]["TeamSummary"];
+export type TeamDetailDto = components["schemas"]["TeamDetail"];
+export type MayaTeamDirectoryDto =
+  components["schemas"]["MayaTeamDirectoryEntry"];
 
 export type ChatStreamResult = {
   session: ChatSession;
@@ -655,6 +664,44 @@ export class PlatformApi {
     return payload as T;
   }
 
+  private async mutateJson<T>(
+    method: "POST" | "PUT",
+    path: string,
+    body: unknown,
+    idempotencyKey: string,
+  ): Promise<T> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
+      {
+        method,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const raw = await response.text();
+    let payload: unknown;
+    try {
+      payload = raw ? JSON.parse(raw) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    if (!response.ok) {
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    return payload as T;
+  }
+
   private async deleteJson(path: string): Promise<void> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     const response = await fetch(
@@ -762,6 +809,43 @@ export class PlatformApi {
 
   conversations(): Promise<ChatSession[]> {
     return this.getJson("conversations");
+  }
+
+  teams(courseId: string): Promise<TeamSummaryDto[]> {
+    return this.getJson(`courses/${encodeURIComponent(courseId)}/teams`);
+  }
+
+  mayaTeams(courseId: string): Promise<MayaTeamDirectoryDto[]> {
+    return this.getJson(`courses/${encodeURIComponent(courseId)}/maya-teams`);
+  }
+
+  team(teamId: string): Promise<TeamDetailDto> {
+    return this.getJson(`teams/${encodeURIComponent(teamId)}`);
+  }
+
+  createTeam(
+    courseId: string,
+    body: TeamWriteRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TeamDetailDto> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "POST",
+        `courses/${encodeURIComponent(courseId)}/teams`,
+        body,
+        key,
+      ),
+    );
+  }
+
+  updateTeam(
+    teamId: string,
+    body: TeamUpdateRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TeamDetailDto> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson("PUT", `teams/${encodeURIComponent(teamId)}`, body, key),
+    );
   }
 
   createConversation(versionId: string): Promise<ChatSession> {

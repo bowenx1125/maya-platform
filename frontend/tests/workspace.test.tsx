@@ -154,6 +154,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function startNewAgentChat() {
+  const nav = within(screen.getByRole("navigation"));
+  fireEvent.click(nav.getByRole("button", { name: "New" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /New Agent chat/ }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
+  return screen.findByRole("textbox", { name: "Message" });
+}
+
 describe("private Agent chat", () => {
   it("starts from the sidebar and sends consecutive messages with the latest revision", async () => {
     render(
@@ -167,7 +177,7 @@ describe("private Agent chat", () => {
     const nav = within(screen.getByRole("navigation"));
     expect(nav.queryByText("Back")).toBeNull();
     expect(nav.queryByText("Done")).toBeNull();
-    fireEvent.click(await nav.findByRole("button", { name: "New" }));
+    await startNewAgentChat();
     expect(state.api.createConversation).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(
@@ -775,11 +785,7 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByText("A considered reply");
-    fireEvent.click(
-      within(screen.getByRole("navigation")).getByRole("button", {
-        name: "New",
-      }),
-    );
+    await startNewAgentChat();
     fireEvent.click(screen.getByRole("button", { name: "Hello" }));
     await screen.findByText("Finished after reopen", {}, { timeout: 4000 });
     expect(state.api.conversation).toHaveBeenCalledTimes(2);
@@ -972,15 +978,11 @@ describe("private Agent chat", () => {
       );
       await act(async () => hooks.onTextDone?.(oldReady));
       await screen.findByText("Old settled reply");
-      fireEvent.click(
-        within(screen.getByRole("navigation")).getByRole("button", {
-          name: "New",
-        }),
-      );
+      const newInput = await startNewAgentChat();
       expect(
         within(screen.getByRole("log")).queryByText("Old settled reply"),
       ).toBeNull();
-      fireEvent.change(input, { target: { value: "My new-chat draft" } });
+      fireEvent.change(newInput, { target: { value: "My new-chat draft" } });
       await act(async () => {
         const failure = new PlatformApiError(503, "chat_transport_uncertain", {
           code: "chat_transport_uncertain",
@@ -1003,7 +1005,7 @@ describe("private Agent chat", () => {
           ttsErrorCode: null,
         }),
       );
-      expect(input).toHaveProperty("value", "My new-chat draft");
+      expect(newInput).toHaveProperty("value", "My new-chat draft");
       expect(getChatRequest()).toBeNull();
       expect(
         within(screen.getByRole("log")).queryByText("Old settled reply"),

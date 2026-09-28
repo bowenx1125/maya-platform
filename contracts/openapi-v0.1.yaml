@@ -25,6 +25,7 @@ tags:
   - name: Live
   - name: Provider settings
   - name: knowledge-sets
+  - name: teams
 paths:
   /conversations:
     get:
@@ -3703,6 +3704,245 @@ paths:
       summary: Remove Knowledge Set Source
       tags:
       - knowledge-sets
+  /courses/{course_id}/teams:
+    post:
+      tags:
+      - teams
+      summary: Create Team
+      operationId: createTeam
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: course_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Course Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 32
+          title: X-Csrf-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: Team and immutable version 1 created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamDetail'
+        '404':
+          description: Course, Agent version, or Set not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid Team membership or scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      tags:
+      - teams
+      summary: List Course Teams
+      operationId: listCourseTeams
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: course_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Course Id
+      responses:
+        '200':
+          description: Teams owned by or visible in the scope.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamSummary'
+                title: Response 200 Listcourseteams
+        '404':
+          description: Course not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /courses/{course_id}/maya-teams:
+    get:
+      tags:
+      - teams
+      summary: List Maya Teams
+      operationId: listMayaTeams
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: course_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Course Id
+      responses:
+        '200':
+          description: Current published Maya Teams.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MayaTeamDirectoryEntry'
+                title: Response 200 Listmayateams
+        '404':
+          description: Course not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /teams/{team_id}:
+    get:
+      tags:
+      - teams
+      summary: Get Team
+      operationId: getTeam
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Team Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamDetail'
+        '404':
+          description: Team not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+      - teams
+      summary: Save Team Version
+      operationId: saveTeamVersion
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Team Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          title: Idempotency-Key
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 32
+          title: X-Csrf-Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTeamVersionRequest'
+      responses:
+        '200':
+          description: A new immutable Team version was saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamDetail'
+        '404':
+          description: Team, Agent version, or Set not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Team metadata revision is stale.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid Team membership or scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /teams/{team_id}/versions:
+    get:
+      tags:
+      - teams
+      summary: List Team Versions
+      operationId: listTeamVersions
+      security:
+      - sessionCookie: []
+      parameters:
+      - name: team_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Team Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamVersionDTO'
+                title: Response Listteamversions
+        '404':
+          description: Team not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     sessionCookie:
@@ -7640,3 +7880,432 @@ components:
       - expected_metadata_revision
       title: UpdateKnowledgeSetRequest
       type: object
+    CreateTeamRequest:
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          title: Display Name
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+          title: Visibility
+        members:
+          items:
+            $ref: '#/components/schemas/TeamMemberInput'
+          type: array
+          title: Members
+        shared_knowledge_set_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Shared Knowledge Set Ids
+        group_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Group Id
+      additionalProperties: false
+      type: object
+      required:
+      - display_name
+      - visibility
+      - members
+      title: CreateTeamRequest
+    DirectoryMemberDTO:
+      properties:
+        display_name:
+          type: string
+          title: Display Name
+        avatar_config:
+          additionalProperties: true
+          type: object
+          title: Avatar Config
+        position:
+          type: integer
+          minimum: 0.0
+          title: Position
+        is_leader:
+          type: boolean
+          title: Is Leader
+      additionalProperties: false
+      type: object
+      required:
+      - display_name
+      - avatar_config
+      - position
+      - is_leader
+      title: DirectoryMemberDTO
+    MayaTeamDirectoryEntry:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        team_version_id:
+          type: string
+          format: uuid
+          title: Team Version Id
+        course_id:
+          type: string
+          format: uuid
+          title: Course Id
+        display_name:
+          type: string
+          title: Display Name
+        leader_display_name:
+          type: string
+          title: Leader Display Name
+        members:
+          items:
+            $ref: '#/components/schemas/DirectoryMemberDTO'
+          type: array
+          title: Members
+        published_at:
+          type: string
+          format: date-time
+          title: Published At
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - team_version_id
+      - course_id
+      - display_name
+      - leader_display_name
+      - members
+      - published_at
+      title: MayaTeamDirectoryEntry
+    SaveTeamVersionRequest:
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          title: Display Name
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+          title: Visibility
+        members:
+          items:
+            $ref: '#/components/schemas/TeamMemberInput'
+          type: array
+          title: Members
+        shared_knowledge_set_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Shared Knowledge Set Ids
+        expected_metadata_revision:
+          type: integer
+          minimum: 0.0
+          title: Expected Metadata Revision
+      additionalProperties: false
+      type: object
+      required:
+      - display_name
+      - visibility
+      - members
+      - expected_metadata_revision
+      title: SaveTeamVersionRequest
+    TeamDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        course_id:
+          type: string
+          format: uuid
+          title: Course Id
+        owner_user_id:
+          type: string
+          format: uuid
+          title: Owner User Id
+        ownership_scope:
+          type: string
+          enum:
+          - personal
+          - group
+          title: Ownership Scope
+        group_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Group Id
+        display_name:
+          type: string
+          title: Display Name
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+          title: Visibility
+        metadata_revision:
+          type: integer
+          minimum: 0.0
+          title: Metadata Revision
+        authorization_epoch:
+          type: integer
+          minimum: 0.0
+          title: Authorization Epoch
+        current_version_id:
+          type: string
+          format: uuid
+          title: Current Version Id
+        current_version_seq:
+          type: integer
+          minimum: 1.0
+          title: Current Version Seq
+        member_count:
+          type: integer
+          minimum: 2.0
+          title: Member Count
+        can_edit:
+          type: boolean
+          title: Can Edit
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        members:
+          items:
+            $ref: '#/components/schemas/TeamMemberDTO'
+          type: array
+          title: Members
+        shared_knowledge_set_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Shared Knowledge Set Ids
+        publication_state:
+          type: string
+          enum:
+          - published
+          - unpublished
+          title: Publication State
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - course_id
+      - owner_user_id
+      - ownership_scope
+      - group_id
+      - display_name
+      - visibility
+      - metadata_revision
+      - authorization_epoch
+      - current_version_id
+      - current_version_seq
+      - member_count
+      - can_edit
+      - created_at
+      - updated_at
+      - members
+      - shared_knowledge_set_ids
+      - publication_state
+      title: TeamDetail
+    TeamMemberDTO:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        agent_id:
+          type: string
+          format: uuid
+          title: Agent Id
+        agent_version_id:
+          type: string
+          format: uuid
+          title: Agent Version Id
+        display_name:
+          type: string
+          title: Display Name
+        avatar_config:
+          additionalProperties: true
+          type: object
+          title: Avatar Config
+        position:
+          type: integer
+          minimum: 0.0
+          title: Position
+        is_leader:
+          type: boolean
+          title: Is Leader
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - agent_id
+      - agent_version_id
+      - display_name
+      - avatar_config
+      - position
+      - is_leader
+      title: TeamMemberDTO
+    TeamMemberInput:
+      properties:
+        agent_version_id:
+          type: string
+          format: uuid
+          title: Agent Version Id
+        is_leader:
+          type: boolean
+          title: Is Leader
+          default: false
+        position:
+          type: integer
+          minimum: 0.0
+          title: Position
+      additionalProperties: false
+      type: object
+      required:
+      - agent_version_id
+      - position
+      title: TeamMemberInput
+    TeamSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        course_id:
+          type: string
+          format: uuid
+          title: Course Id
+        owner_user_id:
+          type: string
+          format: uuid
+          title: Owner User Id
+        ownership_scope:
+          type: string
+          enum:
+          - personal
+          - group
+          title: Ownership Scope
+        group_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Group Id
+        display_name:
+          type: string
+          title: Display Name
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+          title: Visibility
+        metadata_revision:
+          type: integer
+          minimum: 0.0
+          title: Metadata Revision
+        authorization_epoch:
+          type: integer
+          minimum: 0.0
+          title: Authorization Epoch
+        current_version_id:
+          type: string
+          format: uuid
+          title: Current Version Id
+        current_version_seq:
+          type: integer
+          minimum: 1.0
+          title: Current Version Seq
+        member_count:
+          type: integer
+          minimum: 2.0
+          title: Member Count
+        can_edit:
+          type: boolean
+          title: Can Edit
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - course_id
+      - owner_user_id
+      - ownership_scope
+      - group_id
+      - display_name
+      - visibility
+      - metadata_revision
+      - authorization_epoch
+      - current_version_id
+      - current_version_seq
+      - member_count
+      - can_edit
+      title: TeamSummary
+    TeamVersionDTO:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        team_id:
+          type: string
+          format: uuid
+          title: Team Id
+        version_seq:
+          type: integer
+          minimum: 1.0
+          title: Version Seq
+        display_name:
+          type: string
+          title: Display Name
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+          title: Visibility
+        authorization_epoch:
+          type: integer
+          minimum: 0.0
+          title: Authorization Epoch
+        members:
+          items:
+            $ref: '#/components/schemas/TeamMemberDTO'
+          type: array
+          title: Members
+        shared_knowledge_set_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Shared Knowledge Set Ids
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - team_id
+      - version_seq
+      - display_name
+      - visibility
+      - authorization_epoch
+      - members
+      - shared_knowledge_set_ids
+      - created_at
+      title: TeamVersionDTO

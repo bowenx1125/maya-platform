@@ -28,14 +28,17 @@ from urllib.parse import quote
 
 K2A_SCHEMA_HEAD = "0037_knowledge_generation_runs"
 K2B1_SCHEMA_HEAD = "0038_knowledge_generation_provider_stage"
-SCHEMA_HEAD = "0039_knowledge_generation_materialization"
+K2B2_SCHEMA_HEAD = "0039_knowledge_generation_materialization"
+K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
+SCHEMA_HEAD = K3A_SCHEMA_HEAD
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
     KNOWLEDGE_SETS_SCHEMA_HEAD,
     K2A_SCHEMA_HEAD,
     K2B1_SCHEMA_HEAD,
-    SCHEMA_HEAD,
+    K2B2_SCHEMA_HEAD,
+    K3A_SCHEMA_HEAD,
 }
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
@@ -118,6 +121,12 @@ PRESERVED_TABLES = (
     "knowledge_generation_accepted_stages",
     "knowledge_generation_source_receipts",
     "knowledge_generation_items",
+    "teams",
+    "team_versions",
+    "team_version_members",
+    "team_version_sets",
+    "course_team_publications",
+    "team_member_invoke_grants",
 )
 K1_PRESERVED_TABLES = frozenset(
     {
@@ -137,6 +146,16 @@ K2B2_PRESERVED_TABLES = frozenset(
         "knowledge_generation_source_receipts",
         "knowledge_generation_items",
         "knowledge_generation_target_snapshots",
+    }
+)
+K3A_PRESERVED_TABLES = frozenset(
+    {
+        "teams",
+        "team_versions",
+        "team_version_members",
+        "team_version_sets",
+        "course_team_publications",
+        "team_member_invoke_grants",
     }
 )
 
@@ -367,14 +386,20 @@ def _validate_schema(connection: sqlite3.Connection) -> str:
         required_preserved.difference_update(K1_PRESERVED_TABLES)
         required_preserved.difference_update(K2_PRESERVED_TABLES)
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
     elif schema_head == KNOWLEDGE_SETS_SCHEMA_HEAD:
         required_preserved.difference_update(K2_PRESERVED_TABLES)
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
     elif schema_head == K2A_SCHEMA_HEAD:
         required_preserved.discard("knowledge_generation_accepted_stages")
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
     elif schema_head == K2B1_SCHEMA_HEAD:
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
+    elif schema_head == K2B2_SCHEMA_HEAD:
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
     required = set(TARGET_TABLES) | required_preserved | {"alembic_version"}
     if required.difference(tables):
         raise CleanupError("schema_tables_missing")

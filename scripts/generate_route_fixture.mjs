@@ -143,6 +143,12 @@ const implemented = new Set([
   "listProviderDataCallReportManifests",
   "listProviderDataCallPublicationManifests",
   "confirmProviderDataCallDisclosure",
+  "createTeam",
+  "listCourseTeams",
+  "listMayaTeams",
+  "getTeam",
+  "listTeamVersions",
+  "saveTeamVersion",
 ]);
 const methods = new Set([
   "get",

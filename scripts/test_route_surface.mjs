@@ -72,8 +72,8 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Knowledge Sets add the generation status operation alongside Set/Asset routes.
-  if (platformOperationCount !== 128 || placeholderCount !== 0) {
+  // Teams add immutable definitions, versions, and the scoped Maya directory.
+  if (platformOperationCount !== 134 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

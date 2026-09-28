@@ -1799,6 +1799,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Teams */
+        get: operations["listCourseTeams"];
+        put?: never;
+        /** Create Team */
+        post: operations["createTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/maya-teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maya Teams */
+        get: operations["listMayaTeams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Team */
+        get: operations["getTeam"];
+        /** Save Team Version */
+        put: operations["saveTeamVersion"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Team Versions */
+        get: operations["listTeamVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3912,6 +3982,269 @@ export interface components {
              * @enum {string|null}
              */
             visibility?: "private" | "public" | null;
+        };
+        /** CreateTeamRequest */
+        CreateTeamRequest: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Members */
+            members: components["schemas"]["TeamMemberInput"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids?: string[];
+            /** Group Id */
+            group_id?: string | null;
+        };
+        /** DirectoryMemberDTO */
+        DirectoryMemberDTO: {
+            /** Display Name */
+            display_name: string;
+            /** Avatar Config */
+            avatar_config: {
+                [key: string]: unknown;
+            };
+            /** Position */
+            position: number;
+            /** Is Leader */
+            is_leader: boolean;
+        };
+        /** MayaTeamDirectoryEntry */
+        MayaTeamDirectoryEntry: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Team Version Id
+             * Format: uuid
+             */
+            team_version_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Leader Display Name */
+            leader_display_name: string;
+            /** Members */
+            members: components["schemas"]["DirectoryMemberDTO"][];
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+        };
+        /** SaveTeamVersionRequest */
+        SaveTeamVersionRequest: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Members */
+            members: components["schemas"]["TeamMemberInput"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids?: string[];
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+        };
+        /** TeamDetail */
+        TeamDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Owner User Id
+             * Format: uuid
+             */
+            owner_user_id: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "personal" | "group";
+            /** Group Id */
+            group_id: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Metadata Revision */
+            metadata_revision: number;
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /**
+             * Current Version Id
+             * Format: uuid
+             */
+            current_version_id: string;
+            /** Current Version Seq */
+            current_version_seq: number;
+            /** Member Count */
+            member_count: number;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Members */
+            members: components["schemas"]["TeamMemberDTO"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids: string[];
+            /**
+             * Publication State
+             * @enum {string}
+             */
+            publication_state: "published" | "unpublished";
+        };
+        /** TeamMemberDTO */
+        TeamMemberDTO: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Agent Version Id
+             * Format: uuid
+             */
+            agent_version_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Avatar Config */
+            avatar_config: {
+                [key: string]: unknown;
+            };
+            /** Position */
+            position: number;
+            /** Is Leader */
+            is_leader: boolean;
+        };
+        /** TeamMemberInput */
+        TeamMemberInput: {
+            /**
+             * Agent Version Id
+             * Format: uuid
+             */
+            agent_version_id: string;
+            /**
+             * Is Leader
+             * @default false
+             */
+            is_leader: boolean;
+            /** Position */
+            position: number;
+        };
+        /** TeamSummary */
+        TeamSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Owner User Id
+             * Format: uuid
+             */
+            owner_user_id: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "personal" | "group";
+            /** Group Id */
+            group_id: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Metadata Revision */
+            metadata_revision: number;
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /**
+             * Current Version Id
+             * Format: uuid
+             */
+            current_version_id: string;
+            /** Current Version Seq */
+            current_version_seq: number;
+            /** Member Count */
+            member_count: number;
+            /** Can Edit */
+            can_edit: boolean;
+        };
+        /** TeamVersionDTO */
+        TeamVersionDTO: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+            /** Version Seq */
+            version_seq: number;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /** Members */
+            members: components["schemas"]["TeamMemberDTO"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
     };
     responses: {
@@ -8380,6 +8713,233 @@ export interface operations {
             };
             /** @description Set content revision is stale. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teams owned by or visible in the scope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createTeam: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRequest"];
+            };
+        };
+        responses: {
+            /** @description Team and immutable version 1 created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Course, Agent version, or Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Team membership or scope. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMayaTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current published Maya Teams. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MayaTeamDirectoryEntry"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Team not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    saveTeamVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveTeamVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable Team version was saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Team, Agent version, or Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Team metadata revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Team membership or scope. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listTeamVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamVersionDTO"][];
+                };
+            };
+            /** @description Team not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -81,6 +81,7 @@ from app.modules.reports.service import (
     recover_report_jobs,
 )
 from app.modules.reports.task_manager import ReportTaskManager
+from app.modules.teams.router import router as teams_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.modules.workspace.chat import router as chat_router
@@ -471,6 +472,7 @@ def create_app(
     app.include_router(agents_router, prefix="/api/v1")
     app.include_router(knowledge_router, prefix="/api/v1")
     app.include_router(knowledge_sets_router, prefix="/api/v1")
+    app.include_router(teams_router, prefix="/api/v1")
     app.include_router(avatars_router, prefix="/api/v1")
     app.include_router(voices_router, prefix="/api/v1")
     app.include_router(debate_setup_router, prefix="/api/v1")
@@ -635,6 +637,8 @@ def create_app(
                             "submitVote",
                             "submitBarrage",
                             "translateCurrentPublishedContent",
+                            "createTeam",
+                            "saveTeamVersion",
                         }:
                             operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]
