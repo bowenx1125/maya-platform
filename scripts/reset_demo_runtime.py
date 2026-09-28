@@ -45,7 +45,9 @@ def _contains_symlink(path: Path, stop: Path) -> bool:
 
     current = path
     while True:
-        if current.is_symlink():
+        # Windows junctions also redirect directory operations, but do not
+        # report as symbolic links. Treat them as unsafe runtime components.
+        if current.is_symlink() or current.is_junction():
             return True
         # ``/var`` is a symlink on macOS. Stop once the requested path has
         # reached the already-resolved product root so harmless system aliases

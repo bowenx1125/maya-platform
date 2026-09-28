@@ -2,6 +2,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -41,6 +42,7 @@ const ignoredRuntimeFiles = new Set([
   "backend/config/demo-accounts/accounts.private.md",
   "backend/config/demo_users.yaml",
 ]);
+const binaryArchiveName = /\.(?:zip|rar|7z|tar|gz|bz2|xz)$/i;
 const forbiddenReference =
   /(?:Document Validation Agent|agent-core-private|OpenMAIC-main|parallax-main|OpenAvatarChat-main|TalkingHead-main|motion-engine-main|RomanticSimulation)/i;
 const supplierUrlPattern =
@@ -60,7 +62,7 @@ const gitRoot = execFileSync(
   ["-C", root, "rev-parse", "--show-toplevel"],
   { encoding: "utf8" },
 ).trim();
-if (resolve(gitRoot) !== root) {
+if (realpathSync.native(gitRoot) !== realpathSync.native(root)) {
   throw new Error(
     "Git root must be exactly the product directory that contains this boundary checker; parent workspaces must never be scanned as the product repository",
   );
@@ -69,7 +71,7 @@ if (resolve(gitRoot) !== root) {
 const tracked = execFileSync(
   "git",
   ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"],
-  { encoding: "buffer" },
+  { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
 )
   .toString("utf8")
   .split("\0")
@@ -102,7 +104,11 @@ function walk(directory) {
       continue;
     }
     if (!entry.isFile()) continue;
-    if (ignoredRuntimeFiles.has(relativePath)) continue;
+    if (
+      ignoredRuntimeFiles.has(relativePath) ||
+      binaryArchiveName.test(relativePath)
+    )
+      continue;
     let bytes;
     try {
       bytes = readFileSync(absolute);

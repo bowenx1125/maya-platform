@@ -73,8 +73,8 @@ try {
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
   // Private Chat, Provider settings and student Live add twelve operations.
-  // Chat streaming adds streamConversationMessage.
-  if (platformOperationCount !== 105 || placeholderCount !== 0) {
+  // Chat streaming and conversation deletion add two more.
+  if (platformOperationCount !== 106 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
@@ -134,6 +134,21 @@ try {
       "missing CSRF parameter",
       (doc) => {
         delete doc.paths["/api/v1/auth/logout"].post.parameters;
+      },
+    ],
+    [
+      "conversation deletion security drift",
+      (doc) => {
+        doc.paths["/api/v1/conversations/{conversation_id}"].delete.security =
+          [];
+      },
+    ],
+    [
+      "streaming request body required drift",
+      (doc) => {
+        doc.paths[
+          "/api/v1/conversations/{conversation_id}/messages:stream"
+        ].post.requestBody.required = false;
       },
     ],
     [

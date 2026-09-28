@@ -190,6 +190,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
       security:
       - sessionCookie: []
       summary: Delete Conversation
@@ -1033,7 +1039,7 @@ paths:
       operationId: listKnowledgeDocuments
       responses:
         "200":
-          description: Current group Markdown library.
+          description: Current group knowledge library, including PDF/DOCX converted on the Maya server.
           content:
             application/json:
               schema:
@@ -1043,7 +1049,7 @@ paths:
     post:
       tags: [Knowledge]
       operationId: uploadKnowledgeDocument
-      description: Creates an immutable Markdown document; no content deduplication.
+      description: Converts supported PDF/DOCX uploads on the Maya server into an immutable Markdown source; only converted Markdown is retained and content is not deduplicated.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - $ref: "#/components/parameters/CsrfToken"
@@ -1055,18 +1061,25 @@ paths:
               type: object
               required: [file]
               properties:
-                file: { type: string, format: binary }
+                file:
+                  type: string
+                  format: binary
+                  description: UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted on the Maya server.
                 target_agent_version_id: { $ref: "#/components/schemas/Uuid" }
                 expected_revision: { type: integer, minimum: 0 }
       responses:
         "201":
-          description: Document stored and indexed; a target draft is updated only when explicitly supplied.
+          description: Document stored; a target draft is updated only when explicitly supplied.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/KnowledgeDocumentMutation" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
-        "422": { $ref: "#/components/responses/Error" }
+        "422":
+          description: Invalid Markdown, PDF, or DOCX upload.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /knowledge-documents/{document_id}:
     parameters:
       - $ref: "#/components/parameters/DocumentId"
@@ -1098,7 +1111,10 @@ paths:
               type: object
               required: [file, expected_content_hash, expected_index_revision]
               properties:
-                file: { type: string, format: binary }
+                file:
+                  type: string
+                  format: binary
+                  description: UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted on the Maya server.
                 expected_content_hash: { type: string }
                 expected_index_revision: { type: integer, minimum: 0 }
       responses:
@@ -1109,6 +1125,11 @@ paths:
               schema: { $ref: "#/components/schemas/KnowledgeDocument" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "422":
+          description: Invalid Markdown, PDF, or DOCX replacement.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /knowledge-documents/{document_id}/download:
     parameters:
       - $ref: "#/components/parameters/DocumentId"
@@ -1117,7 +1138,7 @@ paths:
       operationId: downloadKnowledgeDocument
       responses:
         "200":
-          description: Original Markdown bytes.
+          description: Stored Markdown bytes; PDF/DOCX sources are returned after local conversion.
           content:
             text/markdown:
               schema: { type: string }
@@ -3646,6 +3667,7 @@ components:
           id,
           group_id,
           source_filename,
+          source_owner_role,
           char_count,
           content_hash,
           index_revision,
@@ -3657,6 +3679,7 @@ components:
         id: { $ref: "#/components/schemas/Uuid" }
         group_id: { $ref: "#/components/schemas/Uuid" }
         source_filename: { type: string }
+        source_owner_role: { type: string, enum: [student, teacher] }
         char_count: { type: integer, minimum: 1 }
         content_hash:
           {

@@ -151,8 +151,12 @@ def load_llm_turn_output_schema() -> dict[str, object]:
 
     try:
         raw = _schema_path().read_bytes()
-        digest = hashlib.sha256(raw).hexdigest()
-        value = json.loads(raw.decode("utf-8"))
+        # Git may materialize this checked-in text contract with CRLF on
+        # Windows. Hash the LF form pinned by the contract so line-ending
+        # checkout settings do not invalidate an otherwise exact schema.
+        normalized = raw.replace(b"\r\n", b"\n")
+        digest = hashlib.sha256(normalized).hexdigest()
+        value = json.loads(normalized.decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise LLMOutputError("LLM output schema is unavailable", code="schema_unavailable") from exc
     if digest != LLM_TURN_OUTPUT_SCHEMA_HASH or not isinstance(value, dict):

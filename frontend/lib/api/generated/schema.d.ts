@@ -484,7 +484,7 @@ export interface paths {
         };
         get: operations["listKnowledgeDocuments"];
         put?: never;
-        /** @description Creates an immutable Markdown document; no content deduplication. */
+        /** @description Converts supported PDF/DOCX uploads on the Maya server into an immutable Markdown source; only converted Markdown is retained and content is not deduplicated. */
         post: operations["uploadKnowledgeDocument"];
         delete?: never;
         options?: never;
@@ -2088,6 +2088,8 @@ export interface components {
             id: components["schemas"]["Uuid"];
             group_id: components["schemas"]["Uuid"];
             source_filename: string;
+            /** @enum {string} */
+            source_owner_role: "student" | "teacher";
             char_count: number;
             content_hash: string;
             index_revision: number;
@@ -3164,6 +3166,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     sendConversationMessage: {
@@ -4226,7 +4237,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current group Markdown library. */
+            /** @description Current group knowledge library, including PDF/DOCX converted on the Maya server. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4254,7 +4265,10 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
+                    /**
+                     * Format: binary
+                     * @description UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted on the Maya server.
+                     */
                     file: string;
                     target_agent_version_id?: components["schemas"]["Uuid"];
                     expected_revision?: number;
@@ -4262,7 +4276,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Document stored and indexed; a target draft is updated only when explicitly supplied. */
+            /** @description Document stored; a target draft is updated only when explicitly supplied. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4273,7 +4287,15 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            422: components["responses"]["Error"];
+            /** @description Invalid Markdown, PDF, or DOCX upload. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getKnowledgeDocument: {
@@ -4315,7 +4337,10 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
+                    /**
+                     * Format: binary
+                     * @description UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted on the Maya server.
+                     */
                     file: string;
                     expected_content_hash: string;
                     expected_index_revision: number;
@@ -4334,6 +4359,15 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            /** @description Invalid Markdown, PDF, or DOCX replacement. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     downloadKnowledgeDocument: {
@@ -4347,7 +4381,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Original Markdown bytes. */
+            /** @description Stored Markdown bytes; PDF/DOCX sources are returned after local conversion. */
             200: {
                 headers: {
                     [name: string]: unknown;

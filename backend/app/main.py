@@ -604,6 +604,7 @@ def create_app(
                                     }
                         if operation_id not in {
                             "uploadKnowledgeDocument",
+                            "replaceKnowledgeDocument",
                             "updateAgentDraft",
                             "setAgentVersionDocuments",
                             "uploadAgentMd",

@@ -27,6 +27,8 @@ export function UiGuideTooltip() {
   const [active, setActive] = useState<ActiveGuide | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const localeRef = useRef(locale);
+  const text = active ? uiGuideText(active.key, locale) : null;
 
   useEffect(() => {
     let described: HTMLElement | null = null;
@@ -59,7 +61,7 @@ export function UiGuideTooltip() {
       point: { x: number; y: number; anchor: ActiveGuide["anchor"] },
     ) => {
       const key = target.dataset.uiGuide;
-      if (!key || !uiGuideText(key, locale)) return;
+      if (!key || !uiGuideText(key, localeRef.current)) return;
       if (described !== target) {
         restoreDescription();
         previousDescription = target.getAttribute("aria-describedby");
@@ -163,11 +165,15 @@ export function UiGuideTooltip() {
       document.removeEventListener("keydown", onKeyDown, true);
       restoreDescription();
     };
+  }, []);
+
+  useLayoutEffect(() => {
+    localeRef.current = locale;
   }, [locale]);
 
   useLayoutEffect(() => {
     const tooltip = tooltipRef.current;
-    if (!active || !tooltip) return;
+    if (!active || !text || !tooltip) return;
     const size = tooltip.getBoundingClientRect();
     const edge = 8;
     let left: number;
@@ -189,7 +195,7 @@ export function UiGuideTooltip() {
         top = rect.top - size.height - 10;
       }
     }
-    setPosition({
+    const nextPosition = {
       left: Math.max(
         edge,
         Math.min(left, window.innerWidth - size.width - edge),
@@ -198,10 +204,26 @@ export function UiGuideTooltip() {
         edge,
         Math.min(top, window.innerHeight - size.height - edge),
       ),
-    });
-  }, [active]);
+    };
+    setPosition((current) =>
+      current.left === nextPosition.left && current.top === nextPosition.top
+        ? current
+        : nextPosition,
+    );
+  }, [active, text]);
 
-  const text = active ? uiGuideText(active.key, locale) : null;
+  useEffect(() => {
+    const reposition = () => {
+      setActive((current) => (current ? { ...current } : null));
+    };
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, []);
+
   if (!active || !text) return null;
   return createPortal(
     <div

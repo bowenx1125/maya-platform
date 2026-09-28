@@ -157,7 +157,7 @@ def _assert_storage_recovered(database: Any, data_root: Path) -> None:
                 is not None
             )
     disk_paths = {
-        str(path.relative_to(data_root)) for path in data_root.rglob("*.md") if path.is_file()
+        path.relative_to(data_root).as_posix() for path in data_root.rglob("*.md") if path.is_file()
     }
     assert disk_paths <= stored_paths
     publish_root = data_root / "tmp" / "publish"
@@ -901,7 +901,7 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
             files={"file": ("oversized.md", oversized, "text/markdown")},
         )
         assert rejected.status_code == 422, rejected.text
-        assert rejected.json()["code"] == "rag_over_limit"
+        assert rejected.json()["code"] == "knowledge_import_too_large"
 
         with database.session() as session:
             old_row = session.get(KnowledgeDocument, old["id"])

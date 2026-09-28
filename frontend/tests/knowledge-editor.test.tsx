@@ -87,4 +87,45 @@ describe("MarkdownEditor", () => {
     expect(file.name).toBe("文化.md");
     expect(await file.text()).toBe("# evidence");
   });
+
+  it("announces conversion and resets the parent mutation only for a changed file", async () => {
+    let finishFirstImport!: () => void;
+    const firstImport = new Promise<void>((resolve) => {
+      finishFirstImport = resolve;
+    });
+    const onCreate = vi
+      .fn()
+      .mockReturnValueOnce(firstImport)
+      .mockResolvedValue(undefined);
+    const onChange = vi.fn();
+    render(<MarkdownEditor onCreate={onCreate} onChange={onChange} />);
+
+    const input = screen.getByLabelText("Import a file");
+    const pdf = new File(["course text"], "slides.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(input, { target: { files: [pdf] } });
+    expect(
+      await screen.findByText(
+        "Uploading, converting to Markdown, and indexing…",
+      ),
+    ).toBeTruthy();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    finishFirstImport();
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(input, { target: { files: [pdf] } });
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    const docx = new File(["course text"], "slides.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    fireEvent.change(input, { target: { files: [docx] } });
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(3));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByText(/Maya's server extracts text to Markdown/i),
+    ).toBeTruthy();
+  });
 });

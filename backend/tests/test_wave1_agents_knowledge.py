@@ -269,7 +269,7 @@ def test_wave1_revision_and_workspace_invariants(client: TestClient) -> None:
         files={"file": ("lesson.txt", b"not markdown", "text/plain")},
     )
     assert invalid.status_code == 422
-    assert invalid.json()["code"] == "file_operation_failed"
+    assert invalid.json()["code"] == "knowledge_import_unsupported"
 
 
 def test_wave1_deterministic_markdown_and_migration_constraints(tmp_path: Path) -> None:
@@ -671,7 +671,7 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
         files={"file": ("lesson.txt", b"not markdown", "text/plain")},
     )
-    _assert_business_error(upload_error, "file_operation_failed")
+    _assert_business_error(upload_error, "knowledge_import_unsupported")
 
     set_error = client.put(
         f"/api/v1/agent-versions/{version_id}/knowledge-documents",

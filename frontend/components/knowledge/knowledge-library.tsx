@@ -41,7 +41,13 @@ type RetryAction =
  * hash/index revision through the platform API.  The server decides which
  * current drafts to update; the page never auto-enables a new library file.
  */
-export function KnowledgeLibrary({ groupId }: { groupId: string }) {
+export function KnowledgeLibrary({
+  groupId,
+  teacherReadOnly = false,
+}: {
+  groupId: string;
+  teacherReadOnly?: boolean;
+}) {
   const t = useT();
   const { api } = useSession();
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
@@ -94,7 +100,11 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
       mutationStore.finish(intent, handle);
       setDocuments((current) => [...current, mutation.document]);
       setCreating(false);
-      setNotice("knowledgeSaved");
+      setNotice(
+        /\.(pdf|docx)$/i.test(file.name)
+          ? "knowledgeImported"
+          : "knowledgeSaved",
+      );
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) {
         setRetryAction({ kind: "create", file });
@@ -143,7 +153,11 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
       ]);
       setEditing(null);
       setEditingContent("");
-      setNotice("knowledgeSaved");
+      setNotice(
+        /\.(pdf|docx)$/i.test(request.file.name)
+          ? "knowledgeImported"
+          : "knowledgeSaved",
+      );
     } catch (cause) {
       if (isConflict(cause)) {
         setConflict(true);
@@ -359,16 +373,19 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                       }
                     />
                     <div className="icon-action-row">
-                      <button
-                        className="icon-action"
-                        type="button"
-                        disabled={busyId !== null}
-                        aria-label={t("edit")}
-                        data-ui-guide="knowledge.edit"
-                        onClick={() => void beginEdit(document)}
-                      >
-                        <IconEdit />
-                      </button>
+                      {!teacherReadOnly &&
+                      document.source_owner_role === "student" ? (
+                        <button
+                          className="icon-action"
+                          type="button"
+                          disabled={busyId !== null}
+                          aria-label={t("edit")}
+                          data-ui-guide="knowledge.edit"
+                          onClick={() => void beginEdit(document)}
+                        >
+                          <IconEdit />
+                        </button>
+                      ) : null}
                       <button
                         className="icon-action"
                         type="button"
@@ -379,7 +396,11 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                       >
                         <IconDownload />
                       </button>
-                      {document.index_status === "failed" ? (
+                      {((!teacherReadOnly &&
+                        document.source_owner_role === "student") ||
+                        (teacherReadOnly &&
+                          document.source_owner_role === "teacher")) &&
+                      document.index_status === "failed" ? (
                         <button
                           className="icon-action"
                           type="button"
@@ -391,16 +412,19 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
                           <IconRefresh />
                         </button>
                       ) : null}
-                      <button
-                        className="icon-action icon-action-danger"
-                        type="button"
-                        disabled={busyId !== null}
-                        aria-label={t("delete")}
-                        data-ui-guide="knowledge.hide"
-                        onClick={() => void hide(document)}
-                      >
-                        <IconClose />
-                      </button>
+                      {!teacherReadOnly &&
+                      document.source_owner_role === "student" ? (
+                        <button
+                          className="icon-action icon-action-danger"
+                          type="button"
+                          disabled={busyId !== null}
+                          aria-label={t("delete")}
+                          data-ui-guide="knowledge.hide"
+                          onClick={() => void hide(document)}
+                        >
+                          <IconClose />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>

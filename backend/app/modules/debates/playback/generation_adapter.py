@@ -1652,17 +1652,13 @@ class SqlTurnPreparer:
                 attempt_no = latest.attempt_no + 1
             else:
                 attempt_no = latest.attempt_no
+        query_request_cap = _query_request_cap(
+            self.settings,
+            debate,
+            participant_count=len(participants),
+        )
         try:
             total_tokens = sum(count_tokens(text) for text in query_plan.query_texts)
-            repository.raise_scope_budget(
-                str(debate.id),
-                ProviderScopeBudgetV1(
-                    max_requests=2_147_483_647,
-                    max_total_tokens=9_223_372_036_854_775_807,
-                    max_cost_cny=1.0e18,
-                    budget_bucket=EMBEDDING_QUERY_BUCKET,
-                ),
-            )
             pending_control = SqlAlchemyQueryControlAdapter(
                 db,
                 scope_id=str(debate.id),
@@ -1674,7 +1670,7 @@ class SqlTurnPreparer:
                 query_hashes=query_plan.query_hashes,
                 attempt_no=attempt_no,
                 logical_item_id=logical_item_id,
-                max_requests=2_147_483_647,
+                max_requests=query_request_cap,
                 max_total_tokens=9_223_372_036_854_775_807,
                 max_cost_cny=1.0e18,
                 repository=ProviderRepository(db, require_export_confirmation=False),
@@ -1776,6 +1772,22 @@ class SqlTurnPreparer:
                 "The real query Provider resource changed.",
                 503,
             )
+        try:
+            repository.raise_scope_budget(
+                str(debate.id),
+                ProviderScopeBudgetV1(
+                    max_requests=query_request_cap,
+                    max_total_tokens=9_223_372_036_854_775_807,
+                    max_cost_cny=1.0e18,
+                    budget_bucket=EMBEDDING_QUERY_BUCKET,
+                ),
+            )
+        except Exception as error:
+            raise PlatformError(
+                "provider_preflight_blocked",
+                "The exact real query budget is unavailable.",
+                503,
+            ) from error
         control = SqlAlchemyQueryControlAdapter(
             db,
             scope_id=str(debate.id),
@@ -1788,7 +1800,7 @@ class SqlTurnPreparer:
             attempt_no=attempt_no,
             logical_item_id=logical_item_id,
             confirmation_revision=confirmation.confirmation_revision,
-            max_requests=2_147_483_647,
+            max_requests=query_request_cap,
             max_total_tokens=9_223_372_036_854_775_807,
             max_cost_cny=1.0e18,
         )

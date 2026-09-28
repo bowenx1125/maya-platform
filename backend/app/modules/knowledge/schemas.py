@@ -13,6 +13,7 @@ class KnowledgeDocument(BaseModel):
     id: UUID
     group_id: UUID
     source_filename: str
+    source_owner_role: Literal["student", "teacher"]
     char_count: int = Field(ge=1)
     content_hash: str = Field(
         min_length=64,

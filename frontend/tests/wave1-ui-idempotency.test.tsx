@@ -57,6 +57,7 @@ function failedDocument(): KnowledgeDocument {
     id: "document-id",
     group_id: "group-id",
     source_filename: "notes.md",
+    source_owner_role: "student",
     char_count: 128,
     workspace_state: "active",
     index_status: "failed",

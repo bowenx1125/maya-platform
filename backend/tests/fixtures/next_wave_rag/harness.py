@@ -40,6 +40,14 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CASE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,127}$")
 _SAFE_RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
 
+
+def _fixture_sha256(path: Path) -> str:
+    """Hash fixture text independently of Git's configured checkout line endings."""
+
+    content = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
+
+
 ConditionName = Literal["correct", "disabled", "irrelevant", "updated"]
 Language = Literal["en", "zh"]
 SemanticVerdict = Literal["pending", "not_evaluable"]
@@ -753,7 +761,7 @@ def load_fixture_bundle(root: Path | None = None) -> FixtureBundle:
     if schema_version != MANIFEST_SCHEMA_VERSION:
         raise _issue("manifest_schema_version_invalid", "schema_version")
     try:
-        fixture_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        fixture_hash = _fixture_sha256(manifest_path)
         recorded_hash = (fixture_root / MANIFEST_HASH_FILENAME).read_text(encoding="utf-8").strip()
     except (OSError, UnicodeError) as exc:
         raise _issue("manifest_hash_unavailable", MANIFEST_HASH_FILENAME) from exc
@@ -764,10 +772,7 @@ def load_fixture_bundle(root: Path | None = None) -> FixtureBundle:
         raise _issue("fixture_files_manifest_invalid", "files_sha256")
     for name, expected_hash in file_hashes.items():
         path = _relative_fixture_file(fixture_root, name, field="files_sha256")
-        if (
-            not isinstance(expected_hash, str)
-            or hashlib.sha256(path.read_bytes()).hexdigest() != expected_hash
-        ):
+        if not isinstance(expected_hash, str) or _fixture_sha256(path) != expected_hash:
             raise _issue("fixture_file_hash_mismatch", name)
 
     questions_path = _safe_relative_path(manifest.get("questions_file"), field="questions_file")

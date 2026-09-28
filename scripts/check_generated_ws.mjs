@@ -13,6 +13,9 @@ const tempCommandResults = resolve(
   "ws-command-results.v1.schema.json",
 );
 const tempFixtures = resolve(tempDir, "fixtures");
+const sameText = (left, right) =>
+  readFileSync(left, "utf8").replace(/\r\n/g, "\n") ===
+  readFileSync(right, "utf8").replace(/\r\n/g, "\n");
 const run = (script, args) => {
   const result = spawnSync(process.execPath, [resolve(root, script), ...args], {
     cwd: root,
@@ -32,19 +35,17 @@ try {
   ]);
   run("scripts/generate_ws_fixtures.mjs", ["--output-dir", tempFixtures]);
   if (
-    !readFileSync(tempSchema).equals(
-      readFileSync(resolve(root, "contracts/ws-events.v1.schema.json")),
-    )
+    !sameText(tempSchema, resolve(root, "contracts/ws-events.v1.schema.json"))
   )
     throw new Error("generated WebSocket schema differs from tracked output");
   if (
-    !readFileSync(tempCommands).equals(
-      readFileSync(resolve(root, "contracts/ws-commands.v1.schema.json")),
+    !sameText(
+      tempCommands,
+      resolve(root, "contracts/ws-commands.v1.schema.json"),
     ) ||
-    !readFileSync(tempCommandResults).equals(
-      readFileSync(
-        resolve(root, "contracts/ws-command-results.v1.schema.json"),
-      ),
+    !sameText(
+      tempCommandResults,
+      resolve(root, "contracts/ws-command-results.v1.schema.json"),
     )
   )
     throw new Error(
@@ -52,8 +53,9 @@ try {
     );
   for (const name of ["ws-events.valid.json", "ws-events.invalid.json"]) {
     if (
-      !readFileSync(resolve(tempFixtures, name)).equals(
-        readFileSync(resolve(root, "contracts/fixtures", name)),
+      !sameText(
+        resolve(tempFixtures, name),
+        resolve(root, "contracts/fixtures", name),
       )
     )
       throw new Error(

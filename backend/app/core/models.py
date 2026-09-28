@@ -330,6 +330,9 @@ class KnowledgeDocument(Base):
         String(36), ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
     )
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_owner_role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="student", server_default="student"
+    )
     stored_file_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False
     )
@@ -354,6 +357,10 @@ class KnowledgeDocument(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "source_owner_role IN ('student', 'teacher')",
+            name="ck_knowledge_documents_source_owner_role",
+        ),
         CheckConstraint("char_count >= 1", name="ck_knowledge_documents_char_count"),
         CheckConstraint("index_revision >= 0", name="ck_knowledge_documents_index_revision"),
         CheckConstraint(

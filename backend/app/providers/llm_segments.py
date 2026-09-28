@@ -71,7 +71,8 @@ SEGMENT_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 
 # The schema is optional-field compatible: old frozen requests retain their
 # persisted schema hash and remain readable during recovery, while new
-# requests bind this updated wire schema hash.
+# requests bind this updated wire schema hash. Git may check this text file out
+# with CRLF on Windows, so the pin covers LF-canonical bytes.
 SEGMENT_SCHEMA_SHA256 = "aca03345f91e4e34c07fa9bbdc02020131bafc972778fc4cc3dd67a2ca52a26b"
 
 
@@ -92,7 +93,7 @@ def _schema_candidates() -> tuple[Path, Path]:
 def _schema_bytes() -> bytes:
     try:
         candidate = next(path for path in _schema_candidates() if path.is_file())
-        raw = candidate.read_bytes()
+        raw = candidate.read_bytes().replace(b"\r\n", b"\n")
     except (OSError, StopIteration) as exc:
         raise LLMAdapterError(code="llm_schema_invalid") from exc
     if hashlib.sha256(raw).hexdigest() != SEGMENT_SCHEMA_SHA256:

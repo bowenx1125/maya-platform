@@ -156,9 +156,7 @@ function PublishedAgentTile({
       >
         {item.agent.name}
       </Link>
-      {groupName ? (
-        <span className="agent-tile-group">{groupName}</span>
-      ) : null}
+      {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
       <button
         type="button"
         className="agent-pill agent-pill-action"
@@ -322,27 +320,37 @@ export function TeacherAgentDetail({
         title="RAG"
         className={detailStyles.card}
         action={
-          snapshot?.documents.length ? (
-            <button
-              className="icon-action"
-              type="button"
-              aria-label={`${t("download")} RAG`}
-              title={t("download")}
-              onClick={() => {
-                void (async () => {
-                  for (const document of snapshot.documents) {
-                    const result = await api.downloadSnapshotDocument(
-                      snapshot.id,
-                      document.id,
-                    );
-                    downloadText(result.content, result.filename);
-                  }
-                })();
-              }}
-            >
-              <IconDownload />
-            </button>
-          ) : null
+          <div className={detailStyles.actions}>
+            {group ? (
+              <Link
+                className="secondary-action"
+                href={`/teacher/groups/${group.id}/knowledge`}
+              >
+                {t("knowledgeImportLink")}
+              </Link>
+            ) : null}
+            {snapshot?.documents.length ? (
+              <button
+                className="icon-action"
+                type="button"
+                aria-label={`${t("download")} RAG`}
+                title={t("download")}
+                onClick={() => {
+                  void (async () => {
+                    for (const document of snapshot.documents) {
+                      const result = await api.downloadSnapshotDocument(
+                        snapshot.id,
+                        document.id,
+                      );
+                      downloadText(result.content, result.filename);
+                    }
+                  })();
+                }}
+              >
+                <IconDownload />
+              </button>
+            ) : null}
+          </div>
         }
       >
         {snapshot?.documents.length ? (

@@ -105,6 +105,7 @@ def replace_document_copy_on_write(
     expected_index_revision: int | None,
     idempotency_record_id: str,
     claim_token: str,
+    authorization_check: Callable[[Session, str], None] | None = None,
     checkpoint: Callable[[str], None] = saga_checkpoint,
 ) -> tuple[KnowledgeDocument, tuple[str, ...], str]:
     """Create and atomically promote an immutable Markdown replacement.
@@ -125,6 +126,8 @@ def replace_document_copy_on_write(
     old_document = db.get(KnowledgeDocument, old_document_id)
     if old_document is None:
         raise not_found()
+    if authorization_check is not None:
+        authorization_check(db, old_document.group_id)
     if expected_content_hash is None or expected_index_revision is None:
         raise stale_revision(old_document.index_revision)
     if old_document.workspace_state != "active":
@@ -244,6 +247,8 @@ def replace_document_copy_on_write(
         final_old = db.get(KnowledgeDocument, old_document_id)
         if final_old is None:
             raise not_found()
+        if authorization_check is not None:
+            authorization_check(db, final_old.group_id)
         if final_old.workspace_state != "active":
             raise stale_revision(final_old.index_revision)
         final_stored = final_old.stored_file
@@ -306,6 +311,7 @@ def replace_document_copy_on_write(
             id=new_document_id,
             group_id=captured_group_id,
             source_filename=replacement.filename,
+            source_owner_role=old_document.source_owner_role,
             stored_file_id=stored_file.id,
             char_count=replacement.char_count,
             index_status="ready",

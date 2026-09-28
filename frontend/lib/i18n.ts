@@ -336,6 +336,20 @@ const enMessages = {
   evidenceSetLede:
     "Only the files you enable below can be retrieved by this draft. Uploading a file enables it here, not for other Agents.",
   uploadMarkdown: "Upload",
+  knowledgeImportFormats:
+    "Upload Markdown, PDF, or Word (.docx), up to 10 MB; PDFs can have up to 200 pages. Maya's server extracts text to Markdown and keeps only the converted Markdown. Scanned pages and embedded images are not OCR-processed; extraction is limited to 100,000 characters.",
+  knowledgeImportPending: "Uploading, converting to Markdown, and indexing…",
+  knowledgeUploadPending: "Uploading and indexing the Markdown file…",
+  knowledgeImportInvalid:
+    "Use a readable PDF with selectable text, a DOCX file, or UTF-8 Markdown. Scanned pages and embedded images are not OCR-processed.",
+  knowledgeImportTooLarge:
+    "This file exceeds the 10 MB, 200-page PDF, or 100,000-character extraction limit.",
+  knowledgeImportNoText:
+    "No selectable text was found. Scanned pages and embedded images are not OCR-processed.",
+  knowledgeImportUnsupported:
+    "This file type is not supported. Upload Markdown, PDF, or Word (.docx).",
+  knowledgeImportProcessingFailed:
+    "Maya could not safely process this document. Try a smaller or less complex file.",
   noGroupMarkdown: "Empty",
   hiddenWorkspace: "hidden from workspace",
   groupMarkdown: "group Markdown",
@@ -488,6 +502,14 @@ const enMessages = {
     "AGENT.md uploaded and saved as the next draft revision.",
   evidenceUpdatedNotice: "Enabled evidence set updated.",
   markdownUploadedNotice: "Markdown uploaded and enabled for this draft.",
+  knowledgeImported:
+    "File converted to Markdown and added to the group library.",
+  knowledgeEvidenceImported:
+    "File converted to Markdown and enabled for this draft.",
+  knowledgePreviewRefreshFailed:
+    "The file was uploaded successfully, but the evidence preview could not be refreshed.",
+  knowledgeImportFile: "Import a file",
+  knowledgeImportLink: "Courseware",
   editor: "editor",
   navigation: "navigation",
   languageLabel: "Language",
@@ -1073,6 +1095,20 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   evidenceSetLede:
     "只有下面启用的文件才能被此草稿检索。上传文件只会启用到当前草稿。",
   uploadMarkdown: "上传",
+  knowledgeImportFormats:
+    "支持 Markdown、PDF 和 Word（.docx），单文件不超过 10 MB，PDF 最多 200 页。文件上传到 Maya 服务器抽取为 Markdown，服务器仅保留转换后的 Markdown。扫描页和图片不做 OCR；抽取内容上限为 100,000 字符。",
+  knowledgeImportPending: "正在上传、转换为 Markdown 并建立索引…",
+  knowledgeUploadPending: "正在上传并索引 Markdown 文件…",
+  knowledgeImportInvalid:
+    "请上传带可选中文本的 PDF、DOCX 或 UTF-8 Markdown。扫描页和文档图片目前不会进行 OCR。",
+  knowledgeImportTooLarge:
+    "文件超过 10 MB、PDF 超过 200 页，或抽取文本超过 100,000 字符。",
+  knowledgeImportNoText:
+    "没有找到可选中文本。扫描页和文档图片目前不会进行 OCR。",
+  knowledgeImportUnsupported:
+    "暂不支持此文件类型。请上传 Markdown、PDF 或 Word（.docx）。",
+  knowledgeImportProcessingFailed:
+    "Maya 未能在安全限制内处理此文件。请尝试较小或内容较简单的文档。",
   noGroupMarkdown: "暂无",
   hiddenWorkspace: "已从工作区隐藏",
   groupMarkdown: "小组 Markdown",
@@ -1203,6 +1239,11 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   agentMdUploadedNotice: "AGENT.md 已上传并保存为下一个草稿版本。",
   evidenceUpdatedNotice: "已更新启用的证据集。",
   markdownUploadedNotice: "Markdown 已上传并启用到当前草稿。",
+  knowledgeImported: "文件已转换为 Markdown 并加入小组知识库。",
+  knowledgeEvidenceImported: "文件已转换为 Markdown 并启用到当前草稿。",
+  knowledgePreviewRefreshFailed: "文件已成功上传，但知识预览暂时未能刷新。",
+  knowledgeImportFile: "导入文件",
+  knowledgeImportLink: "课件",
   editor: "编辑器",
   navigation: "导航",
   languageLabel: "语言",
@@ -1577,6 +1618,11 @@ export function localeToHtmlLang(locale: Locale): "en-US" | "zh-CN" {
 export const LOCALE_COOKIE = "maya_ui_locale";
 
 const errorCodeKeys: Record<string, MessageKey> = {
+  knowledge_import_invalid: "knowledgeImportInvalid",
+  knowledge_import_too_large: "knowledgeImportTooLarge",
+  knowledge_import_no_text: "knowledgeImportNoText",
+  knowledge_import_unsupported: "knowledgeImportUnsupported",
+  knowledge_import_processing_failed: "knowledgeImportProcessingFailed",
   unauthenticated: "errorUnauthenticated",
   account_not_found: "errorAccountNotFound",
   username_taken: "errorUsernameTaken",

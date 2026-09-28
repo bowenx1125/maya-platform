@@ -163,6 +163,16 @@ def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str |
     return "teacher" if row[1] is None else "student"
 
 
+def course_member_role(db: Session, context: AuthContext, group_id: str) -> str | None:
+    """Return the durable course role even when a teacher joined the workspace."""
+
+    return db.scalar(
+        select(CourseMember.role)
+        .join(Group, Group.course_id == CourseMember.course_id)
+        .where(Group.id == group_id, CourseMember.user_id == context.user.id)
+    )
+
+
 def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) -> str:
     """Require the student side of a group's workspace.
 
@@ -318,6 +328,34 @@ def visible_student_document(db: Session, context: AuthContext, document_id: str
     if row is None:
         raise not_found()
     return ScopedDocument(row[0], "student")
+
+
+def visible_knowledge_library_document(
+    db: Session, context: AuthContext, document_id: str
+) -> ScopedDocument:
+    """Read a group source while keeping student-only uploads out of teacher view."""
+
+    row = db.execute(
+        select(KnowledgeDocument, WorkspaceMember.user_id)
+        .join(Group, Group.id == KnowledgeDocument.group_id)
+        .join(CourseMember, CourseMember.course_id == Group.course_id)
+        .outerjoin(
+            WorkspaceMember,
+            and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
+        )
+        .where(
+            KnowledgeDocument.id == document_id,
+            CourseMember.user_id == context.user.id,
+            or_(CourseMember.role == "teacher", WorkspaceMember.user_id.is_not(None)),
+        )
+    ).first()
+    if row is None:
+        raise not_found()
+    document, member_id = row
+    role = "student" if member_id is not None else "teacher"
+    if role == "teacher" and document.source_owner_role != "teacher":
+        raise not_found()
+    return ScopedDocument(document, role)
 
 
 def _canonical(value: Any) -> str:
@@ -806,6 +844,7 @@ def _document_dto(document: KnowledgeDocument) -> KnowledgeDocumentDTO:
         id=UUID(document.id),
         group_id=UUID(document.group_id),
         source_filename=document.source_filename,
+        source_owner_role=cast(Literal["student", "teacher"], document.source_owner_role),
         char_count=document.char_count,
         content_hash=document.content_hash,
         index_revision=document.index_revision,

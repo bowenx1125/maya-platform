@@ -14,7 +14,7 @@ const responseAllowlistPath = resolve(
   root,
   "contracts/response-contract-allowlist.json",
 );
-const redocly = resolve(root, "node_modules/.bin/redocly");
+const redocly = resolve(root, "node_modules/@redocly/cli/bin/cli.js");
 const implementedOperationIds = new Set([
   "login",
   "switchDemoIdentity",
@@ -83,6 +83,8 @@ const implementedOperationIds = new Set([
   "createConversation",
   "getConversation",
   "sendConversationMessage",
+  "streamConversationMessage",
+  "deleteConversation",
   "getProviderSettings",
   "updateProviderSettings",
   "checkProvider",
@@ -128,8 +130,9 @@ function bundleToJson(inputPath) {
   const output = resolve(tempDir, "openapi.json");
   try {
     const result = spawnSync(
-      redocly,
+      process.execPath,
       [
+        redocly,
         "bundle",
         inputPath,
         "--ext",
