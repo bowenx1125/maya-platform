@@ -127,6 +127,7 @@ class KnowledgeAsset(Base):
         String(36), ForeignKey("knowledge_sets.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    generation_lineage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     current_version_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by_user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -142,6 +143,14 @@ class KnowledgeAsset(Base):
         CheckConstraint("current_version_seq >= 0", name="ck_knowledge_assets_version_seq"),
         UniqueConstraint("id", "knowledge_set_id", name="uq_knowledge_assets_set_id"),
         Index("ix_knowledge_assets_set_kind", "knowledge_set_id", "kind", "created_at"),
+        Index(
+            "uq_knowledge_assets_set_lineage",
+            "knowledge_set_id",
+            "generation_lineage_key",
+            unique=True,
+            sqlite_where=(generation_lineage_key.is_not(None)),
+            postgresql_where=(generation_lineage_key.is_not(None)),
+        ),
     )
 
 
@@ -326,6 +335,28 @@ class KnowledgeGenerationRun(Base):
     )
 
 
+class KnowledgeGenerationTargetSnapshot(Base):
+    """Immutable generated-Asset heads captured when a run is created."""
+
+    __tablename__ = "knowledge_generation_target_snapshots"
+
+    run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("knowledge_generation_runs.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    asset_heads_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(asset_heads_json) > 0",
+            name="ck_knowledge_generation_target_snapshot_json",
+        ),
+        Index("ix_knowledge_generation_target_snapshot_created", "created_at"),
+    )
+
+
 class KnowledgeGenerationAcceptedStage(Base):
     """Sanitized canonical provider output bound to one generation operation.
 
@@ -377,4 +408,119 @@ class KnowledgeGenerationAcceptedStage(Base):
             name="ck_knowledge_generation_stage_suppression",
         ),
         Index("ix_knowledge_generation_stage_operation", "operation_id"),
+    )
+
+
+class KnowledgeGenerationSourceReceipt(Base):
+    """Opaque run-scoped handles for authorized, immutable source bindings."""
+
+    __tablename__ = "knowledge_generation_source_receipts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("knowledge_generation_runs.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_binding_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("knowledge_set_sources.id", ondelete="RESTRICT"), nullable=False
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    )
+    stored_file_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_file_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_index_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "source_binding_id", name="uq_generation_receipt_binding"),
+        CheckConstraint(
+            "length(source_content_hash) = 64",
+            name="ck_generation_receipt_content_hash",
+        ),
+        CheckConstraint(
+            "length(source_file_sha256) = 64",
+            name="ck_generation_receipt_file_hash",
+        ),
+        CheckConstraint(
+            "source_authorization_epoch >= 0 AND source_index_revision >= 0",
+            name="ck_generation_receipt_counters",
+        ),
+        Index("ix_generation_receipts_run", "run_id", "created_at"),
+    )
+
+
+class KnowledgeGenerationItem(Base):
+    """Per-candidate materialization journal for an accepted Provider stage."""
+
+    __tablename__ = "knowledge_generation_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("knowledge_generation_runs.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    stage_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    item_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    item_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    lineage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    candidate_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_receipt_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    citation_unverified_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_assets.id", ondelete="RESTRICT"), nullable=True
+    )
+    asset_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("knowledge_asset_versions.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    expected_asset_version_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "item_key", name="uq_knowledge_generation_item_key"),
+        UniqueConstraint("run_id", "item_index", name="uq_knowledge_generation_item_index"),
+        UniqueConstraint("asset_version_id", name="uq_knowledge_generation_item_version"),
+        CheckConstraint("length(stage_hash) = 64", name="ck_knowledge_generation_item_stage"),
+        CheckConstraint("length(item_key) = 64", name="ck_knowledge_generation_item_key"),
+        CheckConstraint("item_index >= 0", name="ck_knowledge_generation_item_index"),
+        CheckConstraint(
+            "kind IN ('concept', 'question', 'note', 'invalid')",
+            name="ck_knowledge_generation_item_kind",
+        ),
+        CheckConstraint(
+            "lineage_key IS NULL OR length(lineage_key) = 64",
+            name="ck_knowledge_generation_item_lineage",
+        ),
+        CheckConstraint("length(candidate_hash) = 64", name="ck_knowledge_generation_item_hash"),
+        CheckConstraint(
+            "citation_unverified_count >= 0",
+            name="ck_knowledge_generation_item_citation_count",
+        ),
+        CheckConstraint(
+            "state IN ('pending', 'applied', 'failed', 'skipped')",
+            name="ck_knowledge_generation_item_state",
+        ),
+        CheckConstraint(
+            "expected_asset_version_seq IS NULL OR expected_asset_version_seq >= 1",
+            name="ck_knowledge_generation_item_expected_seq",
+        ),
+        CheckConstraint(
+            "(state = 'applied' AND asset_id IS NOT NULL AND asset_version_id IS NOT NULL) OR "
+            "(state != 'applied' AND asset_version_id IS NULL)",
+            name="ck_knowledge_generation_item_applied_version",
+        ),
+        Index("ix_knowledge_generation_items_run_state", "run_id", "state", "item_index"),
+        Index("ix_knowledge_generation_items_lineage", "lineage_key", "updated_at"),
     )

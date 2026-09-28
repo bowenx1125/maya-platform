@@ -20,9 +20,14 @@ from app.modules.knowledge_sets.generation import (
     claim_generation_run,
     recover_generation_runs_at_startup,
 )
+from app.modules.knowledge_sets.materialization import materialize_accepted_knowledge_generation
 from app.modules.knowledge_sets.models import (
     KnowledgeAsset,
+    KnowledgeAssetVersion,
+    KnowledgeAssetVersionSource,
+    KnowledgeGenerationItem,
     KnowledgeGenerationRun,
+    KnowledgeGenerationSourceReceipt,
     KnowledgeSet,
 )
 from app.providers.control import (
@@ -227,7 +232,7 @@ def test_done_creates_one_stable_owner_run_and_blocks_without_provider(
 def test_ordinary_teacher_done_with_rag_does_not_enqueue_and_chat_still_works(
     client: TestClient, app_bundle: Any
 ) -> None:
-    _app, database, _settings = app_bundle
+    _app, database, settings = app_bundle
     _teacher, csrf = login(client, "maya")
     _agent_id, version_id, revision, _document_id = _teacher_agent_with_source(
         client,
@@ -287,7 +292,7 @@ def test_provider_accepted_stage_is_atomic_and_suppresses_revoked_content(
     app_bundle: Any,
     authorized: bool,
 ) -> None:
-    _app, database, _settings = app_bundle
+    _app, database, settings = app_bundle
     _teacher, csrf = login(client, "maya")
     _agent_id, version_id, revision, document_id = _teacher_agent_with_source(client, csrf)
     published = _publish(
@@ -443,13 +448,49 @@ def test_provider_accepted_stage_is_atomic_and_suppresses_revoked_content(
     with database.session() as db:
         run = db.get(KnowledgeGenerationRun, run_id)
         job = db.scalar(select(Job).where(Job.id == run.job_id)) if run is not None else None
-        assert run is not None and run.state == "blocked"
+        assert run is not None
         assert job is not None
         assert (run.safe_error_code, job.state) == (
-            ("accepted_stage_ready", "pending")
-            if authorized
-            else ("authorization_revoked_after_send", "failed")
+            (None, "running") if authorized else ("authorization_revoked_after_send", "failed")
         )
+        if authorized:
+            assert run.state == "running" and run.claim_token == token
+        else:
+            assert run.state == "blocked" and run.claim_token is None
+
+    if authorized:
+        materialize_accepted_knowledge_generation(
+            database.session_factory,
+            run_id,
+            token,
+            data_root=settings.resolved_data_root,
+        )
+        with database.session() as db:
+            run = db.get(KnowledgeGenerationRun, run_id)
+            job = db.get(Job, run.job_id) if run is not None else None
+            assert run is not None and run.state == "completed"
+            assert job is not None and job.state == "completed"
+            assert (
+                db.scalar(
+                    select(func.count())
+                    .select_from(KnowledgeAsset)
+                    .where(KnowledgeAsset.knowledge_set_id == run.knowledge_set_id)
+                )
+                == 1
+            )
+            assert (
+                db.scalar(
+                    select(KnowledgeGenerationItem.state).where(
+                        KnowledgeGenerationItem.run_id == run_id
+                    )
+                )
+                == "applied"
+            )
+    else:
+        with database.session() as db:
+            run = db.get(KnowledgeGenerationRun, run_id)
+            assert run is not None and run.state == "blocked"
+            assert db.scalar(select(func.count()).select_from(KnowledgeAsset)) == 0
 
 
 @pytest.mark.parametrize(
@@ -495,6 +536,21 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
     )
     assert published.status_code == 200, published.text
     run_id = published.json()["knowledge_generation"]["run_id"]
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        generated_set_id = run.knowledge_set_id
+        generated_agent_id = run.agent_id
+    set_detail = client.get(f"/api/v1/knowledge-sets/{generated_set_id}")
+    assert set_detail.status_code == 200, set_detail.text
+    assert set_detail.json()["generated_by_agent_id"] == generated_agent_id
+    with database.session() as db:
+        source_receipt_id = db.scalar(
+            select(KnowledgeGenerationSourceReceipt.id).where(
+                KnowledgeGenerationSourceReceipt.run_id == run_id
+            )
+        )
+    assert isinstance(source_receipt_id, str)
 
     workspace = "syntheticknowledgeworkspace"
     endpoint = (
@@ -564,7 +620,17 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
                                                 ],
                                                 "total_points": 2,
                                             },
-                                        }
+                                            "source_receipt_ids": [source_receipt_id],
+                                        },
+                                        {"kind": "question", "prompt": "invalid middle item"},
+                                        {
+                                            "kind": "note",
+                                            "title": "Closing note",
+                                            "body": "A valid item is kept after an invalid one.",
+                                            "source_receipt_ids": [
+                                                "00000000-0000-0000-0000-000000000001"
+                                            ],
+                                        },
                                     ]
                                 },
                                 ensure_ascii=False,
@@ -686,6 +752,7 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
     assert persisted_stage is not None
     assert persisted_stage["canonical_stage_json"] is not None
     assert "reference_answer" in str(persisted_stage["canonical_stage_json"])
+    assert persisted_stage["item_count"] == 3
     assert "synthetic-secret-never-send-to-real-provider" not in str(persisted_stage)
     assert persisted_stage["usage_json"] == (
         '{"input_tokens":24,"output_tokens":19,"total_tokens":43}'
@@ -696,9 +763,36 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
     with database.session() as db:
         run = db.get(KnowledgeGenerationRun, run_id)
         job = db.scalar(select(Job).where(Job.id == run.job_id)) if run is not None else None
-        assert run is not None and run.state == "blocked"
-        assert job is not None and job.state == "pending"
-        assert run.safe_error_code == "accepted_stage_ready"
+        assert run is not None and run.state == "failed"
+        assert job is not None and job.state == "failed"
+        assert run.safe_error_code == "knowledge_generation_partial_failure"
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(KnowledgeAsset)
+                .where(KnowledgeAsset.knowledge_set_id == run.knowledge_set_id)
+            )
+            == 2
+        )
+        assert db.scalar(select(func.count()).select_from(KnowledgeAssetVersionSource)) == 1
+        items = db.scalars(
+            select(KnowledgeGenerationItem)
+            .where(KnowledgeGenerationItem.run_id == run_id)
+            .order_by(KnowledgeGenerationItem.item_index)
+        ).all()
+        assert [item.state for item in items] == ["applied", "failed", "applied"]
+        assert items[2].citation_unverified_count == 1
+        assert items[2].safe_error_code == "citation_unverified"
+        versions = db.scalars(
+            select(KnowledgeAssetVersion).where(KnowledgeAssetVersion.generation_job_id == job.id)
+        ).all()
+        assert len(versions) == 2
+        assert all(version.origin == "ai" for version in versions)
+        status = client.get(f"/api/v1/knowledge-generation-jobs/{job.id}")
+        assert status.status_code == 200, status.text
+        assert status.json()["accepted_item_count"] == 3
+        assert status.json()["materialized_item_count"] == 2
+        assert status.json()["failed_item_count"] == 1
 
 
 def test_generation_source_mismatch_and_non_teacher_owner_fail_before_enqueue(

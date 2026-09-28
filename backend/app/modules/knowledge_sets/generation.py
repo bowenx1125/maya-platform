@@ -1,9 +1,4 @@
-"""Durable, permission-fenced Knowledge preparation intents.
-
-This slice records eligible Done requests and safely blocks them until the
-Provider-backed worker is implemented. It deliberately never makes a model
-request or creates an AI asset.
-"""
+"""Durable, permission-fenced Knowledge generation and recovery intents."""
 
 from __future__ import annotations
 
@@ -39,8 +34,13 @@ from app.modules.knowledge.services import (
 )
 from app.modules.knowledge_sets.models import (
     AgentKnowledgeSet,
+    KnowledgeAsset,
+    KnowledgeAssetVersion,
     KnowledgeGenerationAcceptedStage,
+    KnowledgeGenerationItem,
     KnowledgeGenerationRun,
+    KnowledgeGenerationSourceReceipt,
+    KnowledgeGenerationTargetSnapshot,
     KnowledgeSet,
     KnowledgeSetSource,
 )
@@ -255,6 +255,39 @@ def _input_payload(
     }
 
 
+def _target_asset_heads(db: Session, set_row: KnowledgeSet) -> str:
+    """Freeze each generated lineage's exact head before a later AI write."""
+
+    assets = db.scalars(
+        select(KnowledgeAsset)
+        .where(
+            KnowledgeAsset.knowledge_set_id == set_row.id,
+            KnowledgeAsset.generation_lineage_key.is_not(None),
+            KnowledgeAsset.current_version_seq >= 1,
+        )
+        .order_by(KnowledgeAsset.generation_lineage_key, KnowledgeAsset.id)
+    ).all()
+    heads: list[dict[str, object]] = []
+    for asset in assets:
+        version = db.scalar(
+            select(KnowledgeAssetVersion).where(
+                KnowledgeAssetVersion.asset_id == asset.id,
+                KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+            )
+        )
+        if version is None or asset.generation_lineage_key is None:
+            raise RuntimeError("Generated Knowledge Set has a broken Asset head.")
+        heads.append(
+            {
+                "lineage_key": asset.generation_lineage_key,
+                "asset_id": asset.id,
+                "version_seq": asset.current_version_seq,
+                "origin": version.origin,
+            }
+        )
+    return _canonical_json(heads)
+
+
 def enqueue_generation_for_publish(
     db: Session,
     context: AuthContext,
@@ -310,6 +343,7 @@ def enqueue_generation_for_publish(
         return GenerationEnqueue(existing_run, existing_job, False)
 
     timestamp = now_utc()
+    target_asset_heads_json = _target_asset_heads(db, set_row)
     job_id = str(uuid4())
     run = KnowledgeGenerationRun(
         id=str(uuid4()),
@@ -347,6 +381,29 @@ def enqueue_generation_for_publish(
         with db.begin_nested():
             db.add(job)
             db.add(run)
+            db.flush()
+            db.add(
+                KnowledgeGenerationTargetSnapshot(
+                    run_id=run.id,
+                    asset_heads_json=target_asset_heads_json,
+                    created_at=timestamp,
+                )
+            )
+            for source in source_manifest:
+                db.add(
+                    KnowledgeGenerationSourceReceipt(
+                        id=str(uuid4()),
+                        run_id=run.id,
+                        source_binding_id=str(source["binding_id"]),
+                        document_id=str(source["document_id"]),
+                        stored_file_id=str(source["stored_file_id"]),
+                        source_content_hash=str(source["content_hash"]),
+                        source_file_sha256=str(source["file_sha256"]),
+                        source_authorization_epoch=int(source["authorization_epoch"]),
+                        source_index_revision=int(source["index_revision"]),
+                        created_at=timestamp,
+                    )
+                )
             db.flush()
     except IntegrityError as exc:
         existing_run = db.scalar(
@@ -620,7 +677,15 @@ def recover_generation_runs_at_startup(db: Session) -> int:
             elif operation.state == "prepared":
                 pass
             elif operation.state == "accepted" and accepted_stage is not None:
-                safe_error_code = accepted_stage.safe_error_code or "accepted_stage_ready"
+                if accepted_stage.safe_error_code is not None:
+                    safe_error_code = accepted_stage.safe_error_code
+                elif (
+                    accepted_stage.canonical_stage_json is not None
+                    and _current_generation_authorized(db, run)
+                ):
+                    safe_error_code = "accepted_stage_ready"
+                else:
+                    safe_error_code = "authorization_revoked"
             else:
                 safe_error_code = operation.safe_error_code or {
                     "reserved": "knowledge_generation_not_sent",
@@ -638,7 +703,7 @@ def recover_generation_runs_at_startup(db: Session) -> int:
         if job is not None and job.operation == GENERATION_OPERATION:
             job.claim_token = None
             job.updated_at = now
-        if safe_error_code is None:
+        if safe_error_code is None or safe_error_code == "accepted_stage_ready":
             run.state = "pending"
             run.safe_error_code = None
             if job is not None and job.operation == GENERATION_OPERATION:
@@ -648,7 +713,7 @@ def recover_generation_runs_at_startup(db: Session) -> int:
             run.state = "blocked"
             run.safe_error_code = safe_error_code
             if job is not None and job.operation == GENERATION_OPERATION:
-                job.state = "pending" if safe_error_code == "accepted_stage_ready" else "failed"
+                job.state = "failed"
                 job.safe_error_code = safe_error_code
     db.commit()
     return len(rows)
@@ -686,6 +751,10 @@ def get_generation_status(
     if state in {"pending", "running"} and not _current_generation_authorized(db, run):
         state = "blocked"
         error_code = "authorization_revoked"
+    stage = db.get(KnowledgeGenerationAcceptedStage, run.id)
+    item_states = db.scalars(
+        select(KnowledgeGenerationItem.state).where(KnowledgeGenerationItem.run_id == run.id)
+    ).all()
     return KnowledgeGenerationStatus(
         run_id=UUID(run.id),
         job_id=UUID(run.job_id),
@@ -693,6 +762,13 @@ def get_generation_status(
         state=cast(_GenerationState, state),
         provider_manifest_hash=run.provider_manifest_hash,
         safe_error_code=error_code,
+        accepted_item_count=(
+            stage.item_count if stage is not None and stage.canonical_stage_json is not None else 0
+        ),
+        materialized_item_count=sum(1 for item_state in item_states if item_state == "applied"),
+        failed_item_count=sum(
+            1 for item_state in item_states if item_state in {"failed", "skipped"}
+        ),
         created_at=run.created_at,
         updated_at=run.updated_at,
     )

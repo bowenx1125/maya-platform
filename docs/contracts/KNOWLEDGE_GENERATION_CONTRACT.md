@@ -1,10 +1,11 @@
-# Knowledge generation durability and Provider stage contract (K2a/K2b1)
+# Knowledge generation durability and Provider stage contract (K2a/K2b)
 
 K2a persists an explicitly supplied Teacher Knowledge intent. K2b1 adds a
-confirmed, owner-authorized one-shot Provider operation and an immutable,
-sanitized accepted stage. K2b1 does not materialize Assets or claim completed
-Knowledge. K2b2 must add the explicit AI Knowledge product path and transactional
-per-Asset save. Ordinary Agent Done remains independent.
+confirmed, owner-authorized one-shot Provider operation and immutable sanitized
+stage. K2b2-A materializes accepted candidates into the same K1 Set, one
+permission-fenced Asset transaction at a time. The explicit Create/Update AI
+Knowledge UI passed focused independent review; overall K2b2/backend acceptance
+is pending. Ordinary Agent Done remains independent.
 
 ## Done intent and authorization
 
@@ -37,9 +38,11 @@ manifest; it excludes the random AgentVersion ID and mutable display names.
 The database unique key reuses the same run across concurrent or differently
 keyed identical Done requests. Every reuse rechecks current authorization.
 
-`GET /knowledge-generation-jobs/{job_id}` returns only the safe status, Set ID,
-timestamps and safe error code to the current Teacher owner. It never returns
-Markdown, source content, Provider request/response data or other owners' rows.
+`GET /knowledge-generation-jobs/{job_id}` is owner-only and returns safe state,
+Set ID, timestamps, error code and accepted/materialized/failed item counts. It
+never returns Markdown, source content, Provider request/response data or other
+owners' rows. Owner Set summaries expose `generated_by_agent_id` only for a
+generation-owned Set; manual Sets and non-owner projections return null.
 
 ## K2a worker and K2b1 Provider boundary
 
@@ -66,12 +69,12 @@ header or request body is persisted. Knowledge generation reuses the existing
 LLM accounting bucket without an added quota or retry allowance.
 
 A valid response stores only canonical typed candidate JSON and validated
-usage (or null when usage is absent/invalid). Acceptance, stage, reservation and
-run/job transitions commit together. The run remains `blocked/accepted_stage_ready`
-and the Job remains pending until K2b2 materializes per-Asset transactions; no
-AI-authored Asset or successful completion is asserted by K2b1. If ACL changes
-while the call is in flight, the response content is suppressed and only a
-safe receipt hash/error is retained.
+usage (or null when usage is absent/invalid); usage is never an Asset-content
+gate. Acceptance, stage, reservation and run/job transitions commit together.
+K2b1 alone does not materialize Assets. K2b2-A keeps the accepted claim for its
+local worker, which can resume the immutable stage without another Provider
+request. If ACL changes while the call is in flight, the response content is
+suppressed and only a safe receipt hash/error is retained.
 
 Startup never automatically repeats an uncertain request: reserved becomes
 not-sent with zero charged count, sending becomes `acceptance_unknown`, and an
@@ -79,12 +82,44 @@ accepted stage remains accepted for local zero-network recovery. A failed local
 stage commit becomes acceptance-unknown. No provider diagnostics enter the
 owner status DTO.
 
-Migration `0037_knowledge_generation_runs` adds the run table; `0038_knowledge_generation_provider_stage`
-adds the run manifest hash and accepted-stage ledger. Both run transactionally
-with the Alembic head; downgrades refuse generation or Provider history. Debate
-cleanup preserves generation rows, provider stages and their FK-linked
-operations. Tests cover Done/job atomicity, same-input reuse, owner status,
-source revocation, exact-wire Fake dispatch, consent requeue, one-shot states,
-stage suppression/recovery, fresh and populated migrations and fault rollback.
-These tests use no real Provider. K2b2 Asset creation and Teacher UI remain
-future work.
+## K2b2-A accepted-stage materialization
+
+Each selected source gets a random, run-scoped `source_receipt_id`. The provider
+sees that opaque ID beside authorized courseware text, never a client-chosen
+binding or location. A candidate's optional receipt IDs become K1 source
+relations only after the worker rechecks run, Set, binding, document, file,
+hashes, epoch, index revision and current ACL. Invalid optional receipts are
+dropped and counted as unverified; they do not reject otherwise valid content.
+
+The worker hashes the canonical accepted stage and derives a deterministic
+item key from run/stage/index. Each Concept, Question (including its teacher-only
+Rubric/reference answer), or Note is validated with K1 rules and saved in its
+own short transaction. A malformed item records a safe failure without undoing
+earlier successes or suppressing later valid items. Items retain stage/candidate
+hashes, receipt IDs, lineage and immutable AssetVersion IDs. Status counts mean
+accepted candidates, committed versions, and failed plus skipped items.
+
+The stable owner/course/Agent Set identity is reused on explicit later Done.
+Generated items use stable kind/ordinal lineage. Each run freezes expected
+Asset IDs, head sequence and origin at enqueue; materialization appends only
+when the current head still matches. An older concurrent run skips a stale
+item as `target_head_changed` while it may save independent items. Manual heads
+stay intact (`manual_head_preserved`). Current Teacher, Agent, Set, source and
+claim fences are checked for every item; revocation preserves committed items
+and blocks remaining work. Startup reclaims an accepted stage for local
+materialization with zero Provider calls; stale claims cannot write. Per-item
+commits are immediately readable through K1 APIs. There is no review,
+confirmation or content-quality gate.
+
+Migration `0037_knowledge_generation_runs` adds the run table;
+`0038_knowledge_generation_provider_stage` adds manifest and accepted-stage
+data; `0039_knowledge_generation_materialization` adds source receipts,
+target-head snapshots, item journal and generated lineage. Existing 0038 runs
+receive an empty lineage baseline because that schema could not store generated
+Assets. Migrations are atomic with Alembic head updates;
+downgrade refuses to discard generation or materialization history. Debate
+cleanup preserves K2 rows. Tests cover good/bad/good, citations, manual head,
+source/Teacher/Set revocation, late claims, zero-network recovery, provider
+accounting states and migration rollback. The explicit Teacher UI passed focused
+independent review; overall K2b2 and real Provider acceptance remain pending.
+No real Provider was called.

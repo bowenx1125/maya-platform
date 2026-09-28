@@ -38,6 +38,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeAsset,
     KnowledgeAssetVersion,
     KnowledgeAssetVersionSource,
+    KnowledgeGenerationRun,
     KnowledgeSet,
     KnowledgeSetSource,
 )
@@ -121,12 +122,13 @@ def _set_role(db: Session, context: AuthContext, row: KnowledgeSet) -> SetRole |
 
 def _source_matches_current(
     db: Session,
-    context: AuthContext,
+    context: AuthContext | str,
     row: KnowledgeSetSource,
     *,
     role: SetRole,
     for_write: bool = False,
 ) -> bool:
+    actor_user_id = context.user.id if isinstance(context, AuthContext) else context
     document = db.get(KnowledgeDocument, row.document_id)
     stored_file = db.get(StoredFile, row.stored_file_id)
     set_row = db.get(KnowledgeSet, row.knowledge_set_id)
@@ -145,7 +147,7 @@ def _source_matches_current(
         set_row.ownership_scope == "personal"
         and document.ownership_scope == "group"
         and document.group_id is not None
-        and scoped_group_role_for_user(db, context.user.id, document.group_id) != "student"
+        and scoped_group_role_for_user(db, actor_user_id, document.group_id) != "student"
     ):
         # Course Teachers may read a Public Group source as a summary, but a
         # personal Set's bound reference remains tied to active Group access.
@@ -212,6 +214,17 @@ def _summary(
     db: Session, context: AuthContext, row: KnowledgeSet, *, can_edit: bool
 ) -> KnowledgeSetSummary:
     role = _set_role(db, context, row)
+    generated_by_agent_id: str | None = None
+    if can_edit:
+        generated_by_agent_id = db.scalar(
+            select(KnowledgeGenerationRun.agent_id)
+            .where(
+                KnowledgeGenerationRun.knowledge_set_id == row.id,
+                KnowledgeGenerationRun.owner_user_id == context.user.id,
+            )
+            .order_by(KnowledgeGenerationRun.created_at.desc())
+            .limit(1)
+        )
     active_sources = _active_sources(db, row.id)
     source_count = sum(
         1
@@ -241,6 +254,7 @@ def _summary(
     return KnowledgeSetSummary(
         id=_uid(row.id),
         owner_user_id=_uid(row.owner_user_id) if can_edit else None,
+        generated_by_agent_id=(UUID(generated_by_agent_id) if generated_by_agent_id else None),
         course_id=_uid(row.course_id),
         group_id=_uid(row.group_id) if row.group_id else None,
         ownership_scope=row.ownership_scope,  # type: ignore[arg-type]
@@ -715,7 +729,7 @@ def _version_sources(db: Session, version_id: str) -> list[KnowledgeAssetVersion
 
 def _asset_version_sources_readable(
     db: Session,
-    context: AuthContext,
+    context: AuthContext | str,
     set_row: KnowledgeSet,
     role: SetRole,
     version: KnowledgeAssetVersion,
@@ -749,7 +763,7 @@ def _asset_version_sources_readable(
 
 def _validated_content(
     db: Session,
-    context: AuthContext,
+    context: AuthContext | str,
     set_row: KnowledgeSet,
     role: SetRole,
     content: AssetContent,
@@ -880,12 +894,16 @@ def _validated_content(
 
 def _store_version(
     db: Session,
-    context: AuthContext,
+    actor_user_id: str,
     set_row: KnowledgeSet,
     asset: KnowledgeAsset,
     content_json: str,
     references: list[tuple[KnowledgeSetSource, AssetCitation]],
     version_seq: int,
+    *,
+    origin: Literal["manual", "ai"] = "manual",
+    generator_agent_version_id: str | None = None,
+    generation_job_id: str | None = None,
 ) -> KnowledgeAssetVersion:
     timestamp = now_utc()
     source_canonical = _canonical_json(
@@ -911,10 +929,10 @@ def _store_version(
         source_dependency_hash=_sha256(source_canonical) if references else None,
         dependency_authorization_epoch=(set_row.authorization_epoch if references else None),
         set_authorization_epoch=set_row.authorization_epoch,
-        origin="manual",
-        created_by_user_id=context.user.id,
-        generator_agent_version_id=None,
-        generation_job_id=None,
+        origin=origin,
+        created_by_user_id=actor_user_id,
+        generator_agent_version_id=generator_agent_version_id,
+        generation_job_id=generation_job_id,
         created_at=timestamp,
     )
     db.add(version)
@@ -949,6 +967,116 @@ def _store_version(
         )
     db.flush()
     return version
+
+
+def save_generated_knowledge_asset(
+    db: Session,
+    *,
+    actor_user_id: str,
+    set_id: str,
+    generation_lineage_key: str,
+    expected_asset_version_seq: int | None,
+    content: AssetContent,
+    generator_agent_version_id: str,
+    generation_job_id: str,
+    data_root: Path,
+) -> tuple[KnowledgeAsset, KnowledgeAssetVersion]:
+    """Save one generated item using K1's source validation and content CAS."""
+
+    set_row = db.scalar(select(KnowledgeSet).where(KnowledgeSet.id == set_id).with_for_update())
+    if (
+        set_row is None
+        or set_row.deleted_at is not None
+        or set_row.owner_user_id != actor_user_id
+        or set_row.ownership_scope != "personal"
+        or len(generation_lineage_key) != 64
+    ):
+        raise not_found()
+    content_json, references = _validated_content(
+        db,
+        actor_user_id,
+        set_row,
+        "owner",
+        content,
+        data_root=data_root,
+        for_write=True,
+    )
+    asset = db.scalar(
+        select(KnowledgeAsset)
+        .where(
+            KnowledgeAsset.knowledge_set_id == set_row.id,
+            KnowledgeAsset.generation_lineage_key == generation_lineage_key,
+        )
+        .with_for_update()
+    )
+    if expected_asset_version_seq is None:
+        if asset is not None:
+            raise stale_revision(asset.current_version_seq)
+        _advance_set_content(db, set_row, set_row.content_revision)
+        timestamp = now_utc()
+        asset = KnowledgeAsset(
+            id=str(uuid4()),
+            knowledge_set_id=set_row.id,
+            kind=content.kind,
+            generation_lineage_key=generation_lineage_key,
+            current_version_seq=1,
+            created_by_user_id=actor_user_id,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        db.add(asset)
+        db.flush()
+        version_seq = 1
+    else:
+        if asset is None or asset.current_version_seq != expected_asset_version_seq:
+            raise stale_revision(asset.current_version_seq if asset is not None else None)
+        if asset.kind != content.kind:
+            raise unprocessable(
+                "knowledge_asset_kind_immutable",
+                "A generated Asset keeps its original kind.",
+            )
+        current_version = db.scalar(
+            select(KnowledgeAssetVersion).where(
+                KnowledgeAssetVersion.asset_id == asset.id,
+                KnowledgeAssetVersion.version_seq == expected_asset_version_seq,
+            )
+        )
+        if current_version is None or current_version.origin != "ai":
+            raise stale_revision(asset.current_version_seq)
+        _advance_set_content(db, set_row, set_row.content_revision)
+        next_seq = expected_asset_version_seq + 1
+        result = db.execute(
+            update(KnowledgeAsset)
+            .where(
+                KnowledgeAsset.id == asset.id,
+                KnowledgeAsset.knowledge_set_id == set_row.id,
+                KnowledgeAsset.current_version_seq == expected_asset_version_seq,
+            )
+            .values(current_version_seq=next_seq, updated_at=now_utc())
+            .execution_options(synchronize_session=False)
+        )
+        if getattr(result, "rowcount", 0) != 1:
+            raise stale_revision(
+                db.scalar(
+                    select(KnowledgeAsset.current_version_seq).where(KnowledgeAsset.id == asset.id)
+                )
+            )
+        asset.current_version_seq = next_seq
+        asset.updated_at = now_utc()
+        version_seq = next_seq
+    version = _store_version(
+        db,
+        actor_user_id,
+        set_row,
+        asset,
+        content_json,
+        references,
+        version_seq,
+        origin="ai",
+        generator_agent_version_id=generator_agent_version_id,
+        generation_job_id=generation_job_id,
+    )
+    return asset, version
 
 
 def _full_version_dto(
@@ -1120,7 +1248,7 @@ def create_knowledge_asset(
     )
     db.add(asset)
     db.flush()
-    version = _store_version(db, context, set_row, asset, content_json, references, 1)
+    version = _store_version(db, context.user.id, set_row, asset, content_json, references, 1)
     return _asset_dto(db, context, set_row, access.role, asset, version=version)  # type: ignore[return-value]
 
 
@@ -1175,7 +1303,9 @@ def update_knowledge_asset(
         )
     asset.current_version_seq = next_seq
     asset.updated_at = now_utc()
-    version = _store_version(db, context, set_row, asset, content_json, references, next_seq)
+    version = _store_version(
+        db, context.user.id, set_row, asset, content_json, references, next_seq
+    )
     return _asset_dto(db, context, set_row, access.role, asset, version=version)  # type: ignore[return-value]
 
 

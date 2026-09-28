@@ -35,6 +35,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeAssetVersionSource,
     KnowledgeGenerationAcceptedStage,
     KnowledgeGenerationRun,
+    KnowledgeGenerationTargetSnapshot,
     KnowledgeSet,
     KnowledgeSetSource,
 )
@@ -1226,6 +1227,14 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             )
             session.flush()
             session.add(
+                KnowledgeGenerationTargetSnapshot(
+                    run_id=generation_run_id,
+                    asset_heads_json="[]",
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
                 KnowledgeGenerationAcceptedStage(
                     run_id=generation_run_id,
                     operation_id=provider_operation_id,
@@ -1251,6 +1260,7 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             "knowledge_asset_version_sources",
             "agent_knowledge_sets",
             "knowledge_generation_runs",
+            "knowledge_generation_target_snapshots",
             "knowledge_generation_accepted_stages",
         )
         before = _table_rows(database_path, preserved_tables)

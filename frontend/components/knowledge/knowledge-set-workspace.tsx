@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
 import {
   isAmbiguousMutationFailure,
@@ -16,6 +17,7 @@ import {
   type KnowledgeAssetRequest,
   type KnowledgeDocument,
   type KnowledgeGraph,
+  type KnowledgeGenerationStatus,
   type KnowledgeSetDetail,
   type KnowledgeSetSummary,
   type UpdateKnowledgeAssetRequest,
@@ -36,6 +38,11 @@ import styles from "./knowledge-set-workspace.module.css";
 
 type AssetKind = "concept" | "question" | "note";
 type WorkspaceTab = "sources" | AssetKind;
+type KnowledgeGenerationProgress = KnowledgeGenerationStatus & {
+  accepted_item_count: number;
+  materialized_item_count: number;
+  failed_item_count: number;
+};
 
 type AssetDraft = {
   title: string;
@@ -80,8 +87,117 @@ function labelForTab(tab: WorkspaceTab, t: ReturnType<typeof useT>): string {
   }
 }
 
+function GenerationStatusNotice({
+  status,
+  error,
+  agentId,
+  onRetry,
+}: {
+  status: KnowledgeGenerationStatus | null;
+  error: unknown;
+  agentId?: string;
+  onRetry: () => void;
+}) {
+  const t = useT();
+  if (error) {
+    return (
+      <div className="notice notice-warning" role="alert">
+        <strong>{t("generationStatusUnavailable")}</strong>
+        <span>{t("generationStatusUnavailableHelp")}</span>
+        <button className="inline-button" type="button" onClick={onRetry}>
+          {t("retryStatusCheck")}
+        </button>
+      </div>
+    );
+  }
+  if (!status)
+    return (
+      <p className="notice" role="status">
+        {t("loading")}
+      </p>
+    );
+  const progress = status as KnowledgeGenerationProgress;
+  const countLine = `${t("aiKnowledgeSavedItems")}: ${progress.materialized_item_count}; ${t("aiKnowledgeCandidates")}: ${progress.accepted_item_count}; ${t("aiKnowledgeFailedItems")}: ${progress.failed_item_count}`;
+  if (status.state === "pending" || status.state === "running") {
+    return (
+      <div className="notice" role="status">
+        <strong>Generating AI Knowledge</strong>
+        {progress.accepted_item_count > 0 ||
+        progress.materialized_item_count > 0 ||
+        progress.failed_item_count > 0 ? (
+          <span>{countLine}</span>
+        ) : null}
+      </div>
+    );
+  }
+  const hasPartialItems =
+    progress.materialized_item_count > 0 && progress.failed_item_count > 0;
+  const partialFailure =
+    status.safe_error_code === "knowledge_generation_partial_failure" &&
+    progress.materialized_item_count > 0;
+  if (status.state === "completed" && !hasPartialItems) {
+    return (
+      <div className="notice notice-success" role="status">
+        <strong>{t("aiKnowledgeGenerationFinished")}</strong>
+        <span>{countLine}</span>
+      </div>
+    );
+  }
+  const safeReason = status.safe_error_code
+    ? ` (${status.safe_error_code.replaceAll("_", " ")})`
+    : "";
+  const unknownAcceptance = status.safe_error_code === "acceptance_unknown";
+  const disclosureRequired =
+    status.safe_error_code === "provider_confirmation_required" &&
+    status.provider_manifest_hash;
+  return (
+    <div className="notice notice-warning" role="alert">
+      <strong>
+        {partialFailure || hasPartialItems
+          ? t("aiKnowledgeGenerationPartial")
+          : status.state === "blocked"
+            ? t("aiKnowledgeGenerationBlocked")
+            : t("aiKnowledgeGenerationStopped")}
+        {safeReason}
+      </strong>
+      {progress.materialized_item_count > 0 ||
+      progress.failed_item_count > 0 ||
+      progress.accepted_item_count > 0 ? (
+        <span>{countLine}</span>
+      ) : null}
+      <span>
+        {unknownAcceptance
+          ? t("aiKnowledgeGenerationUnknown")
+          : disclosureRequired
+            ? t("aiKnowledgeProviderConfirmationRecovery")
+            : partialFailure || hasPartialItems
+              ? t("aiKnowledgeGenerationPartialRecovery")
+              : t("aiKnowledgeGenerationRecovery")}
+      </span>
+      {disclosureRequired ? (
+        <Link
+          className="text-link"
+          href={`/teacher/provider-disclosures/${encodeURIComponent(status.provider_manifest_hash as string)}`}
+        >
+          {t("reviewProviderDisclosure")}
+        </Link>
+      ) : null}
+      {agentId && !unknownAcceptance ? (
+        <Link
+          className="text-link"
+          href={`/teacher/agents/${encodeURIComponent(agentId)}?flow=ai-knowledge`}
+        >
+          {t("openAgentWorkbench")}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 type KnowledgeSetWorkspaceProps = {
   agentId?: string;
+  initialSetId?: string;
+  generationJobId?: string;
   role?: "teacher" | "student";
 };
 
@@ -106,6 +222,8 @@ export function KnowledgeSetWorkspace(props: KnowledgeSetWorkspaceProps) {
     <KnowledgeSetWorkspaceBody
       key={actorScope}
       agentId={props.agentId}
+      initialSetId={props.initialSetId}
+      generationJobId={props.generationJobId}
       role={role}
       roleCourseId={roleCourseId}
       actorScope={actorScope}
@@ -115,11 +233,15 @@ export function KnowledgeSetWorkspace(props: KnowledgeSetWorkspaceProps) {
 
 function KnowledgeSetWorkspaceBody({
   agentId,
+  initialSetId,
+  generationJobId,
   role,
   roleCourseId,
   actorScope,
 }: {
   agentId?: string;
+  initialSetId?: string;
+  generationJobId?: string;
   role: "teacher" | "student";
   roleCourseId: string | undefined;
   actorScope: string;
@@ -134,6 +256,13 @@ function KnowledgeSetWorkspaceBody({
   const workspaceScope = `${actorScope}:${selectedCourseId ?? "auto"}`;
   const actorScopeRef = useRef(workspaceScope);
   const selectedAssetIdRef = useRef<string | null>(null);
+  const generationAssetRefreshRef = useRef(
+    new Map<
+      string,
+      { materializedCount: number; terminalRefreshed: boolean }
+    >(),
+  );
+  const generationAssetRequestRef = useRef(new Map<string, number>());
   const isCurrentScope = useCallback(
     (scope: string) => actorScopeRef.current === scope,
     [],
@@ -191,6 +320,12 @@ function KnowledgeSetWorkspaceBody({
     useState<AgentKnowledgeSets | null>(null);
   const [agentSetIds, setAgentSetIds] = useState<string[]>([]);
   const [agentError, setAgentError] = useState<unknown>(null);
+  const [generationStatusSnapshot, setGenerationStatusSnapshot] = useState<{
+    jobId: string;
+    status?: KnowledgeGenerationStatus;
+    error?: unknown;
+  } | null>(null);
+  const [generationStatusRetry, setGenerationStatusRetry] = useState(0);
 
   const clearSelectedSetData = useCallback(() => {
     setDetail(null);
@@ -299,7 +434,7 @@ function KnowledgeSetWorkspaceBody({
       const currentSetId = selectedSetIdRef.current;
       const nextSetId = nextSets.some((row) => row.id === currentSetId)
         ? currentSetId
-        : (nextSets[0]?.id ?? null);
+        : (initialSetId ?? nextSets[0]?.id ?? null);
       selectSet(nextSetId);
       setAgentKnowledge(nextAgentKnowledge);
       setAgentSetIds(nextAgentKnowledge?.sets.map((row) => row.id) ?? []);
@@ -314,6 +449,7 @@ function KnowledgeSetWorkspaceBody({
     }
   }, [
     agentId,
+    initialSetId,
     api,
     isCurrentScope,
     selectedCourseId,
@@ -332,15 +468,44 @@ function KnowledgeSetWorkspaceBody({
     return () => window.clearTimeout(timer);
   }, [loadWorkspace]);
 
+  useEffect(() => {
+    if (!generationJobId) return;
+    let active = true;
+    let timer: number | undefined;
+    const refresh = async () => {
+      try {
+        const next = await api.knowledgeGenerationJob(generationJobId);
+        if (!active) return;
+        setGenerationStatusSnapshot({ jobId: generationJobId, status: next });
+        if (next.state === "pending" || next.state === "running") {
+          timer = window.setTimeout(() => void refresh(), 1500);
+        }
+      } catch (cause) {
+        if (active)
+          setGenerationStatusSnapshot({ jobId: generationJobId, error: cause });
+      }
+    };
+    void refresh();
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [api, generationJobId, generationStatusRetry]);
+
   const refreshSelected = useCallback(
-    async (setId: string) => {
+    async (setId: string, isStillCurrent?: () => boolean) => {
       const requestScope = workspaceScope;
       const [nextDetail, nextAssets, nextGraph] = await Promise.all([
         api.knowledgeSet(setId),
         api.knowledgeSetAssets(setId),
         api.knowledgeSetGraph(setId),
       ]);
-      if (!isCurrentScope(requestScope)) return;
+      if (
+        !isCurrentScope(requestScope) ||
+        selectedSetIdRef.current !== setId ||
+        (isStillCurrent && !isStillCurrent())
+      )
+        return false;
       setDetail(nextDetail);
       setAssets(nextAssets);
       const selectedId = selectedAssetIdRef.current;
@@ -362,9 +527,66 @@ function KnowledgeSetWorkspaceBody({
           .filter((source) => source.available && source.document_id)
           .map((source) => source.document_id as string),
       );
+      return true;
     },
     [api, isCurrentScope, workspaceScope],
   );
+
+  useEffect(() => {
+    if (generationStatusSnapshot?.jobId !== generationJobId) return;
+    const status = generationStatusSnapshot?.status;
+    if (!status || status.knowledge_set_id !== selectedSetId) return;
+    const progress = status as KnowledgeGenerationProgress;
+    if (progress.materialized_item_count <= 0) return;
+    const terminal = status.state !== "pending" && status.state !== "running";
+    const requestScope = workspaceScope;
+    const refreshKey = `${requestScope}:${generationJobId}:${status.knowledge_set_id}`;
+    const previous = generationAssetRefreshRef.current.get(refreshKey) ?? {
+      materializedCount: 0,
+      terminalRefreshed: false,
+    };
+    const countIncreased =
+      progress.materialized_item_count > previous.materializedCount;
+    const firstTerminalRefresh = terminal && !previous.terminalRefreshed;
+    if (!countIncreased && !firstTerminalRefresh) return;
+    let active = true;
+    const requestId =
+      (generationAssetRequestRef.current.get(refreshKey) ?? 0) + 1;
+    generationAssetRequestRef.current.set(refreshKey, requestId);
+    const isStillCurrent = () =>
+      active &&
+      isCurrentScope(requestScope) &&
+      selectedSetIdRef.current === status.knowledge_set_id &&
+      generationAssetRequestRef.current.get(refreshKey) === requestId;
+    void (async () => {
+      try {
+        const applied = await refreshSelected(
+          status.knowledge_set_id,
+          isStillCurrent,
+        );
+        if (isStillCurrent() && applied && isCurrentScope(requestScope)) {
+          generationAssetRefreshRef.current.set(refreshKey, {
+            materializedCount: progress.materialized_item_count,
+            terminalRefreshed: terminal,
+          });
+        }
+      } catch (cause) {
+        if (isStillCurrent() && isCurrentScope(requestScope)) {
+          setError(cause);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [
+    generationStatusSnapshot,
+    generationJobId,
+    isCurrentScope,
+    refreshSelected,
+    selectedSetId,
+    workspaceScope,
+  ]);
 
   useEffect(() => {
     if (!selectedSetId || !workspaceCourseId) return;
@@ -481,6 +703,13 @@ function KnowledgeSetWorkspaceBody({
   const currentSet = selectedSetId
     ? (setById.get(selectedSetId) ?? null)
     : null;
+  const generatedByAgentId =
+    role === "teacher" &&
+    detail?.can_edit &&
+    detail.ownership_scope === "personal" &&
+    detail.owner_user_id === user?.id
+      ? detail.generated_by_agent_id
+      : null;
   const visibleAssets = useMemo(
     () => assets.filter((asset) => tab === "sources" || asset.kind === tab),
     [assets, tab],
@@ -967,13 +1196,23 @@ function KnowledgeSetWorkspaceBody({
           </p>
         </div>
         {knowledgeView === "sets" ? (
-          <button
-            className="primary-action"
-            type="button"
-            onClick={() => setShowCreate((current) => !current)}
-          >
-            {showCreate ? t("cancel") : t("newKnowledgeSet")}
-          </button>
+          <div className={styles.headerActions}>
+            {role === "teacher" ? (
+              <Link
+                className="primary-action"
+                href="/teacher/agents/new?flow=ai-knowledge"
+              >
+                {t("createAiKnowledge")}
+              </Link>
+            ) : null}
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={() => setShowCreate((current) => !current)}
+            >
+              {showCreate ? t("cancel") : t("newKnowledgeSet")}
+            </button>
+          </div>
         ) : null}
       </header>
 
@@ -1023,6 +1262,22 @@ function KnowledgeSetWorkspaceBody({
             <p className={styles.notice} role="status">
               {notice}
             </p>
+          ) : null}
+          {generationJobId ? (
+            <GenerationStatusNotice
+              status={
+                generationStatusSnapshot?.jobId === generationJobId
+                  ? (generationStatusSnapshot.status ?? null)
+                  : null
+              }
+              error={
+                generationStatusSnapshot?.jobId === generationJobId
+                  ? generationStatusSnapshot.error
+                  : null
+              }
+              agentId={agentId}
+              onRetry={() => setGenerationStatusRetry((current) => current + 1)}
+            />
           ) : null}
           {error ? <ErrorNotice error={error} /> : null}
 
@@ -1230,6 +1485,14 @@ function KnowledgeSetWorkspaceBody({
                           ) : null}
                         </div>
                       )}
+                      {generatedByAgentId ? (
+                        <Link
+                          className="primary-action"
+                          href={`/teacher/agents/${encodeURIComponent(generatedByAgentId)}?flow=ai-knowledge&update_set_id=${encodeURIComponent(detail.id)}`}
+                        >
+                          {t("updateAiKnowledge")}
+                        </Link>
+                      ) : null}
                       <form
                         className={styles.metadataForm}
                         onSubmit={saveMetadata}

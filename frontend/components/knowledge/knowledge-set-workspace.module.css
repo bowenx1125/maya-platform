@@ -33,6 +33,13 @@
   line-height: 1.55;
 }
 
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .eyebrow {
   color: #897346 !important;
   font-size: 0.72rem;
@@ -597,8 +604,18 @@
     flex-direction: column;
   }
 
-  .intro > button {
-    align-self: flex-start;
+  .headerActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .headerActions > :is(a, button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
   }
 
   .setList,

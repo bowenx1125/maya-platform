@@ -16,7 +16,7 @@ from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
-ALEMBIC_HEAD = "0038_knowledge_generation_provider_stage"
+ALEMBIC_HEAD = "0039_knowledge_generation_materialization"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

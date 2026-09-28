@@ -27,12 +27,14 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 K2A_SCHEMA_HEAD = "0037_knowledge_generation_runs"
-SCHEMA_HEAD = "0038_knowledge_generation_provider_stage"
+K2B1_SCHEMA_HEAD = "0038_knowledge_generation_provider_stage"
+SCHEMA_HEAD = "0039_knowledge_generation_materialization"
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
     KNOWLEDGE_SETS_SCHEMA_HEAD,
     K2A_SCHEMA_HEAD,
+    K2B1_SCHEMA_HEAD,
     SCHEMA_HEAD,
 }
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
@@ -112,7 +114,10 @@ PRESERVED_TABLES = (
     "knowledge_asset_version_sources",
     "agent_knowledge_sets",
     "knowledge_generation_runs",
+    "knowledge_generation_target_snapshots",
     "knowledge_generation_accepted_stages",
+    "knowledge_generation_source_receipts",
+    "knowledge_generation_items",
 )
 K1_PRESERVED_TABLES = frozenset(
     {
@@ -126,6 +131,13 @@ K1_PRESERVED_TABLES = frozenset(
 )
 K2_PRESERVED_TABLES = frozenset(
     {"knowledge_generation_runs", "knowledge_generation_accepted_stages"}
+)
+K2B2_PRESERVED_TABLES = frozenset(
+    {
+        "knowledge_generation_source_receipts",
+        "knowledge_generation_items",
+        "knowledge_generation_target_snapshots",
+    }
 )
 
 IDEMPOTENCY_OPERATIONS = (
@@ -354,10 +366,15 @@ def _validate_schema(connection: sqlite3.Connection) -> str:
     if schema_head == "0035_w1_resource_ownership":
         required_preserved.difference_update(K1_PRESERVED_TABLES)
         required_preserved.difference_update(K2_PRESERVED_TABLES)
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
     elif schema_head == KNOWLEDGE_SETS_SCHEMA_HEAD:
         required_preserved.difference_update(K2_PRESERVED_TABLES)
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
     elif schema_head == K2A_SCHEMA_HEAD:
         required_preserved.discard("knowledge_generation_accepted_stages")
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+    elif schema_head == K2B1_SCHEMA_HEAD:
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
     required = set(TARGET_TABLES) | required_preserved | {"alembic_version"}
     if required.difference(tables):
         raise CleanupError("schema_tables_missing")

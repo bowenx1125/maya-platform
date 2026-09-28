@@ -42,6 +42,37 @@ const enMessages = {
   noJoinedGroup: "Join a Group workspace to manage its original files here.",
   openAgents: "Open your Agents",
   newKnowledgeSet: "New Set",
+  createAiKnowledge: "Create AI Knowledge",
+  updateAiKnowledge: "Update AI Knowledge",
+  generatedSetAgentMismatch:
+    "This Knowledge Set is not linked to a generation receipt for this Agent. Return to the Set and use its Update AI Knowledge action.",
+  aiKnowledgeFlowIntro:
+    "Choose the source files for this Agent. Done will publish the Agent and start Knowledge generation from those selected sources.",
+  aiKnowledgeSourcesRequired: "Choose at least one Source to continue.",
+  aiKnowledgeSourcesRequiredHelp:
+    "No Agent will be published and no generation request will be sent until a Source is selected.",
+  generationReceiptMissing:
+    "The Agent was published, but no Knowledge generation receipt was returned. Open its Knowledge Sets to check the current state.",
+  aiKnowledgeGenerationFinished: "AI Knowledge generation finished.",
+  aiKnowledgeSavedItems: "Saved items",
+  aiKnowledgeCandidates: "candidates",
+  aiKnowledgeFailedItems: "Failed items",
+  aiKnowledgeGenerationPartial: "AI Knowledge was partially saved.",
+  aiKnowledgeGenerationPartialRecovery:
+    "Saved items are available in this Set. Failed or skipped items were not saved, and manually edited current content was preserved. Review the source and Set before starting another explicit generation.",
+  aiKnowledgeGenerationBlocked: "AI Knowledge generation is blocked.",
+  aiKnowledgeGenerationStopped: "AI Knowledge generation did not complete.",
+  aiKnowledgeGenerationRecovery:
+    "Review the safe reason, update the Agent sources or required provider authorization, then publish again from the Agent Workbench.",
+  aiKnowledgeProviderConfirmationRecovery:
+    "Open and confirm the exact provider disclosure for this run before continuing.",
+  aiKnowledgeGenerationUnknown:
+    "Provider acceptance is unknown. Do not publish again or retry the request. Keep this Agent and Set for reconciliation; use the Set below to inspect any saved items.",
+  generationStatusUnavailable: "Generation status is unavailable.",
+  generationStatusUnavailableHelp:
+    "The status could not be checked. Retry the status check; the saved Set and Agent remain available here.",
+  retryStatusCheck: "Retry status check",
+  openAgentWorkbench: "Open Agent Workbench",
   setName: "Set name",
   editSetName: "Edit Set name",
   createSet: "Create Set",
@@ -373,6 +404,7 @@ const enMessages = {
   shareDisclosureWithTeacher:
     "Ask the course teacher to review this Agent version, then publish again after confirmation.",
   openProviderDisclosure: "Review",
+  reviewProviderDisclosure: "Open provider disclosure",
   agentWorkbench: "Edit",
   groundingRag: "RAG grounded",
   groundingGeneral: "General reasoning",
@@ -900,6 +932,37 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   noJoinedGroup: "加入小组工作区后，可在这里管理其原始文件。",
   openAgents: "打开你的 Agents",
   newKnowledgeSet: "新建知识集",
+  createAiKnowledge: "创建 AI 知识",
+  updateAiKnowledge: "更新 AI 知识",
+  generatedSetAgentMismatch:
+    "此知识集没有与该 Agent 对应的生成凭据。请返回知识集并使用它的更新 AI 知识入口。",
+  aiKnowledgeFlowIntro:
+    "为这个 Agent 选择来源文件。点击完成后会发布 Agent，并根据所选来源开始生成知识。",
+  aiKnowledgeSourcesRequired: "请至少选择一个来源后继续。",
+  aiKnowledgeSourcesRequiredHelp:
+    "选择来源前不会发布 Agent，也不会发送生成请求。",
+  generationReceiptMissing:
+    "Agent 已发布，但没有返回知识生成凭据。请打开它的知识集检查当前状态。",
+  aiKnowledgeGenerationFinished: "AI 知识生成已结束。",
+  aiKnowledgeSavedItems: "已保存素材",
+  aiKnowledgeCandidates: "候选素材",
+  aiKnowledgeFailedItems: "失败素材",
+  aiKnowledgeGenerationPartial: "AI 知识已部分保存。",
+  aiKnowledgeGenerationPartialRecovery:
+    "已保存素材可在此知识集中使用。失败或跳过的素材未保存，教师手动修改的当前内容已保留。再次明确发起生成前，请检查来源和知识集。",
+  aiKnowledgeGenerationBlocked: "AI 知识生成受阻。",
+  aiKnowledgeGenerationStopped: "AI 知识生成未完成。",
+  aiKnowledgeGenerationRecovery:
+    "查看安全错误原因，更新 Agent 来源或所需的供应商授权，然后回到 Agent 工作台重新发布。",
+  aiKnowledgeProviderConfirmationRecovery:
+    "请打开并确认此生成任务对应的确切供应商披露，然后再继续。",
+  aiKnowledgeGenerationUnknown:
+    "供应商是否接受请求尚不明确。请勿再次发布或重试请求。保留此 Agent 和知识集以便核对，并在下方检查已保存素材。",
+  generationStatusUnavailable: "无法读取生成状态。",
+  generationStatusUnavailableHelp:
+    "状态检查失败。可以重试；已保存的知识集和 Agent 仍可在此查看。",
+  retryStatusCheck: "重试状态检查",
+  openAgentWorkbench: "打开 Agent 工作台",
   setName: "知识集名称",
   editSetName: "修改知识集名称",
   createSet: "创建知识集",
@@ -1219,6 +1282,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   shareDisclosureWithTeacher:
     "请课程教师查看这个智能体版本；确认后再重新发布。",
   openProviderDisclosure: "审批",
+  reviewProviderDisclosure: "打开供应商披露",
   agentWorkbench: "编辑",
   groundingRag: "RAG 证据回答",
   groundingGeneral: "一般推理",

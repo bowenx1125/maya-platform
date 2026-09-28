@@ -197,11 +197,13 @@ export function AgentWorkbench({
   backHref,
   actorScopeKey,
   knowledgeHref,
+  generationFlow = false,
 }: {
   versionId: string;
   backHref?: string;
   actorScopeKey?: string;
   knowledgeHref?: string;
+  generationFlow?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -238,6 +240,7 @@ export function AgentWorkbench({
   const [retryAction, setRetryAction] = useState<
     "uploadKnowledge" | "publish" | null
   >(null);
+  const [generationSourcePrompt, setGenerationSourcePrompt] = useState(false);
   const [providerConfirmationRequired, setProviderConfirmationRequired] =
     useState(false);
   const [pendingKnowledgeUpload, setPendingKnowledgeUpload] = useState<{
@@ -629,6 +632,12 @@ export function AgentWorkbench({
 
   async function publish(retry = false) {
     const requestScope = workbenchScope;
+    if (generationFlow && selectedDocumentIds.length === 0) {
+      setGenerationSourcePrompt(true);
+      setError(null);
+      return;
+    }
+    setGenerationSourcePrompt(false);
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
     const saved = localDirty ? await saveDraft() : currentVersion;
@@ -647,11 +656,25 @@ export function AgentWorkbench({
     try {
       const next = await api.publish(saved.id, saved.revision, {
         idempotency: handle,
+        ...(generationFlow
+          ? { generation: { source_document_ids: selectedDocumentIds } }
+          : {}),
       });
       mutationStore.finish(publishIntent, handle);
       if (!isCurrentScope(requestScope)) return;
       setRetryAction(null);
       setVersion(next);
+      if (generationFlow) {
+        const receipt = next.knowledge_generation;
+        if (!receipt) {
+          setError(new Error(t("generationReceiptMissing")));
+          return;
+        }
+        router.replace(
+          `/teacher/knowledge?agent_id=${encodeURIComponent(currentAgent.id)}&set_id=${encodeURIComponent(receipt.knowledge_set_id)}&job_id=${encodeURIComponent(receipt.job_id)}`,
+        );
+        return;
+      }
       setNotice("publishedNotice");
       router.replace(
         currentAgent.ownership_scope === "personal"
@@ -689,6 +712,11 @@ export function AgentWorkbench({
             event.preventDefault();
         }}
       />
+      {generationFlow ? (
+        <p className="notice notice-info" role="status">
+          {t("aiKnowledgeFlowIntro")}
+        </p>
+      ) : null}
       <WorkspaceAction
         name="done"
         disabled={saving || (!localDirty && blockers.length > 0)}
@@ -729,6 +757,12 @@ export function AgentWorkbench({
           >
             {t("openProviderDisclosure")}
           </Link>
+        </div>
+      ) : null}
+      {generationSourcePrompt ? (
+        <div className="notice notice-warning" role="alert">
+          <strong>{t("aiKnowledgeSourcesRequired")}</strong>
+          <span>{t("aiKnowledgeSourcesRequiredHelp")}</span>
         </div>
       ) : null}
       {notice ? (

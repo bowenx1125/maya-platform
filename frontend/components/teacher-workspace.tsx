@@ -3,7 +3,13 @@
 import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type AgentDetail,
@@ -183,7 +189,11 @@ export function TeacherDashboard() {
   );
 }
 
-export function TeacherPersonalAgentCreate() {
+export function TeacherPersonalAgentCreate({
+  generationFlow = false,
+}: {
+  generationFlow?: boolean;
+}) {
   const t = useT();
   const { identityGeneration, user } = useSession();
   const teacherMembership = user?.courses.find(
@@ -194,7 +204,11 @@ export function TeacherPersonalAgentCreate() {
   }
   const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
   return (
-    <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
+    <CreateAgentForm
+      key={scopeKey}
+      courseId={teacherMembership.course_id}
+      generationFlow={generationFlow}
+    />
   );
 }
 
@@ -267,17 +281,24 @@ function PublishedAgentTile({
 export function TeacherAgentDetail({
   agentId,
   snapshotId,
+  generationFlow = false,
+  generationSetId,
 }: {
   agentId: string;
   snapshotId?: string;
+  generationFlow?: boolean;
+  generationSetId?: string;
 }) {
   const t = useT();
   const { api, identityGeneration, user } = useSession();
   const actorScope = `${user?.id ?? "anonymous"}:${agentId}:${identityGeneration}`;
+  const loadScope = `${actorScope}:${generationSetId ?? "no-generation-set"}`;
+  const loadScopeRef = useRef(loadScope);
   const actorScopeRef = useRef(actorScope);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    loadScopeRef.current = loadScope;
     actorScopeRef.current = actorScope;
-  }, [actorScope]);
+  }, [actorScope, loadScope]);
   const mutationStore = useIdempotencyStore();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [group, setGroup] = useState<GroupDetail | null>(null);
@@ -288,21 +309,51 @@ export function TeacherAgentDetail({
   const [editingVersionId, setEditingVersionId] = useState<string | null>(null);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [verifiedGenerationSetId, setVerifiedGenerationSetId] = useState<
+    string | null
+  >(null);
+  const updateDraftAttempted = useRef<string | null>(null);
   const load = useCallback(async () => {
-    const requestScope = actorScope;
+    const requestScope = loadScope;
     setLoading(true);
     setError(null);
     setSnapshot(null);
     try {
       const nextAgent = await api.agent(agentId);
-      if (actorScopeRef.current !== requestScope) return;
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
       const [nextVersions, nextGroup] = await Promise.all([
         api.versions(agentId),
         nextAgent.group_id && typeof api.group === "function"
           ? api.group(nextAgent.group_id)
           : Promise.resolve(null),
       ]);
-      if (actorScopeRef.current !== requestScope) return;
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
+      const generationSet = generationSetId
+        ? await api.knowledgeSet(generationSetId)
+        : null;
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
+      const verifiedGenerationSet =
+        generationSet &&
+        generationSet.id === generationSetId &&
+        generationSet.course_id === nextAgent.course_id &&
+        generationSet.can_edit &&
+        generationSet.owner_user_id === user?.id &&
+        generationSet.generated_by_agent_id === agentId
+          ? generationSetId
+          : null;
+      setVerifiedGenerationSetId(verifiedGenerationSet);
       setAgent(nextAgent);
       setGroup(nextGroup);
       const visibleVersions =
@@ -324,18 +375,29 @@ export function TeacherAgentDetail({
         null;
       if (selectedSnapshotId) {
         const nextSnapshot = await api.snapshot(selectedSnapshotId);
-        if (actorScopeRef.current !== requestScope) return;
+        if (
+          actorScopeRef.current !== actorScope ||
+          loadScopeRef.current !== requestScope
+        )
+          return;
         setSnapshot(nextSnapshot);
       } else setSnapshot(null);
     } catch (cause) {
-      if (actorScopeRef.current === requestScope) setError(cause);
+      if (
+        actorScopeRef.current === actorScope &&
+        loadScopeRef.current === requestScope
+      )
+        setError(cause);
     } finally {
-      if (actorScopeRef.current === requestScope) {
+      if (
+        actorScopeRef.current === actorScope &&
+        loadScopeRef.current === requestScope
+      ) {
         setLoadedScope(requestScope);
         setLoading(false);
       }
     }
-  }, [actorScope, agentId, api, snapshotId]);
+  }, [actorScope, agentId, api, generationSetId, loadScope, snapshotId, user]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -343,18 +405,9 @@ export function TeacherAgentDetail({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading || loadedScope !== actorScope) return <LoadingCard />;
-  if (error || !agent)
-    return (
-      <ErrorNotice
-        error={error ?? new Error(t("publishedAgentNotFound"))}
-        onRetry={() => void load()}
-      />
-    );
-  const currentAgent = agent;
-  async function createPersonalVersion() {
+  const createPersonalVersion = useCallback(async () => {
     if (creatingDraft) return;
-    const requestScope = actorScope;
+    const requestScope = loadScope;
     const intent = `teacher-next-version:${requestScope}`;
     const handle = mutationStore.handleFor(intent);
     setCreatingDraft(true);
@@ -362,23 +415,83 @@ export function TeacherAgentDetail({
     try {
       const next = await api.nextVersion(agentId, { idempotency: handle });
       mutationStore.finish(intent, handle);
-      if (actorScopeRef.current !== requestScope) return;
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
       setVersions((current) => [...current, next]);
       setEditingVersionId(next.id);
     } catch (cause) {
-      if (actorScopeRef.current !== requestScope) return;
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
       setError(cause);
     } finally {
-      if (actorScopeRef.current === requestScope) setCreatingDraft(false);
+      if (
+        actorScopeRef.current === actorScope &&
+        loadScopeRef.current === requestScope
+      )
+        setCreatingDraft(false);
     }
+  }, [actorScope, agentId, api, creatingDraft, loadScope, mutationStore]);
+
+  useEffect(() => {
+    if (
+      !generationFlow ||
+      !generationSetId ||
+      verifiedGenerationSetId !== generationSetId ||
+      loading ||
+      loadedScope !== loadScope ||
+      !agent ||
+      agent.ownership_scope !== "personal" ||
+      editingVersionId ||
+      creatingDraft
+    )
+      return;
+    const attemptKey = `${actorScope}:${generationSetId}`;
+    if (updateDraftAttempted.current === attemptKey) return;
+    updateDraftAttempted.current = attemptKey;
+    void createPersonalVersion();
+  }, [
+    actorScope,
+    agent,
+    creatingDraft,
+    editingVersionId,
+    generationFlow,
+    generationSetId,
+    loadedScope,
+    loadScope,
+    loading,
+    createPersonalVersion,
+    verifiedGenerationSetId,
+  ]);
+
+  if (loading || loadedScope !== loadScope) return <LoadingCard />;
+  if (error || !agent)
+    return (
+      <ErrorNotice
+        error={error ?? new Error(t("publishedAgentNotFound"))}
+        onRetry={() => void load()}
+      />
+    );
+  if (generationSetId && verifiedGenerationSetId !== generationSetId) {
+    return <ErrorNotice error={new Error(t("generatedSetAgentMismatch"))} />;
   }
+  const currentAgent = agent;
   if (agent.ownership_scope === "personal" && editingVersionId) {
+    const knowledgeHref = generationSetId
+      ? `/teacher/knowledge?agent_id=${encodeURIComponent(agentId)}&set_id=${encodeURIComponent(generationSetId)}`
+      : `/teacher/knowledge?agent_id=${encodeURIComponent(agentId)}`;
     return (
       <AgentWorkbench
         key={`${actorScope}:${editingVersionId}`}
         actorScopeKey={actorScope}
         backHref="/teacher"
-        knowledgeHref={`/teacher/knowledge?agent_id=${encodeURIComponent(agentId)}`}
+        knowledgeHref={knowledgeHref}
+        generationFlow={generationFlow}
         versionId={editingVersionId}
       />
     );

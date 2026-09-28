@@ -134,5 +134,6 @@ The following are **acceptance obligations, not current PASS claims**:
    or charged request; `acceptance_unknown` stays isolated and Chat can continue.
 
 The [supplement acceptance matrix](../validation/MAYAFORM_V14_SUPPLEMENT.md)
-tracks what has actually passed. K2b2, K3 and K4 remain to be implemented and
-tested against this contract.
+tracks what has actually passed. K2b2 has passed frozen Fake/DB and isolated
+Teacher UI reviews; a real Provider call, deployment and teaching quality have
+not passed. K3 and K4 remain to be implemented and tested against this contract.

@@ -1325,43 +1325,39 @@ class ProviderRepository:
                 raise ProviderRepositoryError("Knowledge accepted stage CAS failed")
 
             if claim_is_current:
-                safe_error_code = (
-                    accepted_stage.safe_error_code
-                    if accepted_stage.safe_error_code is not None
-                    else "accepted_stage_ready"
-                )
-                job_state = "failed" if accepted_stage.safe_error_code is not None else "pending"
-                run_changed = connection.execute(
-                    update(run_table)
-                    .where(
-                        run_table.c.id == stage.run_id,
-                        run_table.c.state == "running",
-                        run_table.c.claim_token == stage.claim_token,
-                        run_table.c.provider_operation_id == stage.operation_id,
+                if accepted_stage.safe_error_code is not None:
+                    safe_error_code = accepted_stage.safe_error_code
+                    run_changed = connection.execute(
+                        update(run_table)
+                        .where(
+                            run_table.c.id == stage.run_id,
+                            run_table.c.state == "running",
+                            run_table.c.claim_token == stage.claim_token,
+                            run_table.c.provider_operation_id == stage.operation_id,
+                        )
+                        .values(
+                            state="blocked",
+                            safe_error_code=safe_error_code,
+                            claim_token=None,
+                            lease_expires_at=None,
+                            updated_at=now,
+                        )
                     )
-                    .values(
-                        state="blocked",
-                        safe_error_code=safe_error_code,
-                        claim_token=None,
-                        lease_expires_at=None,
-                        updated_at=now,
+                    job_changed = connection.execute(
+                        update(job_table)
+                        .where(
+                            job_table.c.id == run_row["job_id"],
+                            job_table.c.claim_token == stage.claim_token,
+                        )
+                        .values(
+                            state="failed",
+                            safe_error_code=safe_error_code,
+                            claim_token=None,
+                            updated_at=now,
+                        )
                     )
-                )
-                job_changed = connection.execute(
-                    update(job_table)
-                    .where(
-                        job_table.c.id == run_row["job_id"],
-                        job_table.c.claim_token == stage.claim_token,
-                    )
-                    .values(
-                        state=job_state,
-                        safe_error_code=safe_error_code,
-                        claim_token=None,
-                        updated_at=now,
-                    )
-                )
-                if run_changed.rowcount != 1 or job_changed.rowcount != 1:
-                    raise ProviderRepositoryError("Knowledge run accepted-stage fence failed")
+                    if run_changed.rowcount != 1 or job_changed.rowcount != 1:
+                        raise ProviderRepositoryError("Knowledge run accepted-stage fence failed")
         return accepted_stage
 
     def knowledge_generation_stage(self, run_id: str) -> Mapping[str, object] | None:

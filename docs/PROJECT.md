@@ -301,32 +301,35 @@ W2b removes Agent.md/RAG caps; 14,343/108,350/123,080-char fixtures persist loss
 0034 preserves data; oversized downgrade refuses. Supplier batches stay ≤10/30k estimated
 tokens via codepoint chunks. Sol/check/boundary passed; no Provider; IME NOT_RUN.
 
-## MayaForm W1 owner-first workspace — 2026-09-27
+## MayaForm W1 owner-first workspace — accepted R5
 
-0035 adds owner/course/scope/visibility epochs, nullable personal Agent/sources and Chat-name
-snapshot; legacy group owner remains NULL/Public. Private-origin drafts stay owner-only through
-visibility changes; current source ACL gates sharing. Teacher personal CRUD and no-RAG work;
-withdrawal freezes history and denies sends. Debate remains group-only. Student Agent.md is
-allowed; no Toolkit binding/approval. R5: 70 files; full check/boundary, Sol ACL/migration,
-80 Mock requests and Teacher no-RAG Chat/mobile passed. No Provider/Docker; IME NOT_RUN.
-
-K1 R3 accepted: four shared immutable/CAS types; Question Rubric/reference answer teacher-only;
-Graph read-only in Concepts; global/Agent entry points share a store. P09 DTO projection,
-source ACL/excerpt verification and 0036 cleanup passed. POST/PATCH replay returns the exact
-accepted JSON after current ACL checks. Contract: `docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`.
-Sol/full check/boundary passed; no Provider/Docker/deployment.
+0035 adds owner/course/scope/visibility epochs, personal Agents/sources and frozen Chat names;
+legacy Group owner remains NULL. Private-derived drafts stay owner-only until owner Done; source
+ACL gates sharing. Teacher personal/no-RAG, withdrawal history/send fence and group-only Debate
+passed. Student Agent.md is allowed; no Toolkit/approval. R5: 70 files, full check/boundary, Sol
+ACL/migration, 80 Mock requests and Teacher Chat/mobile passed; no Provider/Docker; IME NOT_RUN.
+K1: four immutable types, teacher-only Rubric/reference answer, read-only Graph in Concepts, one
+store across entry points. P09/source verification/0036 cleanup/replay passed; see
+`docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`.
 
 ## MayaForm K2a — accepted
 
-0037: owner-scoped Job/run, stable input-key reuse, lease/startup recovery. Optional explicit
-API intent; ordinary Teacher Done with RAG creates no Job. Intent atomically saves a Private
-Set/link and Job/run; owner GET returns safe status. No Provider blocks with zero calls/assets.
-R2 full check/boundary, Sol, HTTP/browser passed. No Docker/real Provider.
+0037 adds owner-only Jobs/runs, stable input reuse and leases. Only explicit intent enqueues;
+ordinary Done with RAG creates no Job. Publish, Private Set/link and run are atomic. No Provider
+means zero calls/assets. R2 check, Sol and HTTP/browser passed.
 
-## MayaForm K2b1 — Provider stage accepted
+## MayaForm K2b1 — accepted Provider stage
 
-0038 binds a confirmed, owner-authorized `llm_knowledge_generate` operation to the K2a run.
-Fresh Agno 3.0.11 invokes once; canonical request bytes, persisted SHA-256 and `post_bytes`
-are identical. Consent/ACL fences, accounting, not-sent/unknown recovery and sanitized typed
-accepted stages are covered; no Assets or completion are claimed. Focused backend, mypy/Ruff,
-OpenAPI/TS/route, full check/boundary, populated migration/HTTP and Sol passed. No real Provider/Docker.
+0038 binds one confirmed `llm_knowledge_generate` operation to the run. Agno 3.0.11 calls once;
+canonical bytes equal stored hash and `post_bytes`. ACL/disclosure, accounting, unknown recovery
+and sanitized stage passed. No Assets in K2b1. Full check, populated migration/HTTP and Sol passed;
+no real Provider/Docker.
+
+## MayaForm K2b2-A — implementation, 2026-09-28
+
+0039 adds source receipts, item journal and generated lineage. Accepted candidates save as
+independent K1 CAS versions; invalid optional citations are unverified, not blockers. Focused
+good/bad/good, concurrent head-CAS, manual-head, ACL revocation, stale claim and zero-network recovery
+pass. Status has accepted/materialized/failed counts; owner Set DTO has `generated_by_agent_id`.
+OpenAPI/TS/hash/94-route compare and frontend typecheck pass. Boundary probe passes; full check/
+backend Sol/HTTP pending. UI focused review passed. No real Provider/Docker.

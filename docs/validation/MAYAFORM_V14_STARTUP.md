@@ -36,8 +36,15 @@ results in `docs/PROJECT.md` after each run.
    Teacher disclosure before sending. Record the run ID, request hash,
    charged-request count and result status without logging credentials,
    endpoint, raw response, Source text or private paths. Do not automatically
-   repeat an `acceptance_unknown` request. Compare actual saved assets and
-   browser behavior with the account/Source ACL and the S01–S22 evidence map.
+   repeat an `acceptance_unknown` request. In Teacher Knowledge Sets, use
+   **Create AI Knowledge**, select the synthetic Source in the Agent workbench
+   and press Done once. Check that the same Set appears in global and Agent
+   Knowledge, the owner-only Job reports accepted/materialized/failed item
+   counts, and each saved Concept/Question/Note becomes readable immediately.
+   Then use **Update AI Knowledge** from that Set, change Agent.md or its
+   Source selection, and verify the same Set ID while preserving a manually
+   edited current asset head. Compare actual saved assets and browser behavior
+   with the account/Source ACL and the S01–S22 evidence map.
 
 For a local Compose invocation, use variables pointing to the **already
 reviewed** override files; do not substitute guessed paths or print the

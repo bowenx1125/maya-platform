@@ -325,9 +325,11 @@ function GroupAgentTile({
 export function CreateAgentForm({
   groupId,
   courseId,
+  generationFlow = false,
 }: {
   groupId?: string;
   courseId?: string;
+  generationFlow?: boolean;
 }) {
   const { identityGeneration, user } = useSession();
   const actorScopeKey = `${user?.id ?? "anonymous"}:${courseId ?? groupId ?? "none"}:${identityGeneration}`;
@@ -337,6 +339,7 @@ export function CreateAgentForm({
       actorScopeKey={actorScopeKey}
       courseId={courseId}
       groupId={groupId}
+      generationFlow={generationFlow}
     />
   );
 }
@@ -345,10 +348,12 @@ function CreateAgentFormSession({
   groupId,
   courseId,
   actorScopeKey,
+  generationFlow,
 }: {
   groupId?: string;
   courseId?: string;
   actorScopeKey: string;
+  generationFlow: boolean;
 }) {
   const t = useT();
   const { api } = useSession();
@@ -409,7 +414,7 @@ function CreateAgentFormSession({
           ? draftId
             ? `/student/agent-versions/${draftId}/edit`
             : `/student/agents/${created.id}`
-          : `/teacher/agents/${created.id}`,
+          : `/teacher/agents/${created.id}${generationFlow ? "?flow=ai-knowledge" : ""}`,
       );
     } catch (cause) {
       if (!mounted.current) return;
@@ -434,6 +439,11 @@ function CreateAgentFormSession({
   return (
     <>
       <PageIntro title={t("newAgent")} />
+      {generationFlow ? (
+        <p className="notice notice-info" role="status">
+          {t("aiKnowledgeFlowIntro")}
+        </p>
+      ) : null}
       <WorkspaceAction
         name="back"
         href={groupId ? `/student/groups/${groupId}` : "/teacher"}

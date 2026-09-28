@@ -118,6 +118,7 @@ class DeleteKnowledgeSetRequest(StrictModel):
 class KnowledgeSetSummary(StrictModel):
     id: UUID
     owner_user_id: UUID | None = None
+    generated_by_agent_id: UUID | None = None
     course_id: UUID
     group_id: UUID | None
     ownership_scope: Literal["group", "personal"]
@@ -272,6 +273,9 @@ class KnowledgeGenerationStatus(StrictModel):
     state: KnowledgeGenerationState
     provider_manifest_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     safe_error_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    accepted_item_count: int = Field(default=0, ge=0)
+    materialized_item_count: int = Field(default=0, ge=0)
+    failed_item_count: int = Field(default=0, ge=0)
     created_at: datetime
     updated_at: datetime
 
