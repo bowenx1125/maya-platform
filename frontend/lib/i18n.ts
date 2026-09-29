@@ -337,15 +337,16 @@ const enMessages = {
     "Only the files you enable below can be retrieved by this draft. Uploading a file enables it here, not for other Agents.",
   uploadMarkdown: "Upload",
   knowledgeImportFormats:
-    "Upload Markdown, PDF, or Word (.docx), up to 10 MB; PDFs can have up to 200 pages. Maya's server extracts text to Markdown and keeps only the converted Markdown. Scanned pages and embedded images are not OCR-processed; extraction is limited to 100,000 characters.",
-  knowledgeImportPending: "Uploading, converting to Markdown, and indexing…",
+    "Upload Markdown, PDF, or Word (.docx), up to 10 MB; PDFs can have up to 200 pages and up to 50 scanned pages for local OCR. Maya converts text to Markdown locally and keeps only the Markdown. OCR text is marked for teacher review; text in images embedded in DOCX is not OCR-processed. Extraction is limited to 100,000 characters.",
+  knowledgeImportPending:
+    "Uploading, converting to Markdown (including local OCR for scanned PDF pages), and indexing…",
   knowledgeUploadPending: "Uploading and indexing the Markdown file…",
   knowledgeImportInvalid:
-    "Use a readable PDF with selectable text, a DOCX file, or UTF-8 Markdown. Scanned pages and embedded images are not OCR-processed.",
+    "Use a readable PDF, Word (.docx), or UTF-8 Markdown. Scanned PDF pages are OCR-processed locally and marked for teacher review. Images embedded in DOCX are not OCR-processed.",
   knowledgeImportTooLarge:
-    "This file exceeds the 10 MB, 200-page PDF, or 100,000-character extraction limit.",
+    "This file exceeds the 10 MB, 200-page PDF, 50 scanned-page OCR, or 100,000-character extraction limit.",
   knowledgeImportNoText:
-    "No selectable text was found. Scanned pages and embedded images are not OCR-processed.",
+    "No readable text was found, even after local OCR. Check the file or provide a text-based copy.",
   knowledgeImportUnsupported:
     "This file type is not supported. Upload Markdown, PDF, or Word (.docx).",
   knowledgeImportProcessingFailed:
@@ -1097,15 +1098,16 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "只有下面启用的文件才能被此草稿检索。上传文件只会启用到当前草稿。",
   uploadMarkdown: "上传",
   knowledgeImportFormats:
-    "支持 Markdown、PDF 和 Word（.docx），单文件不超过 10 MB，PDF 最多 200 页。文件上传到 Maya 服务器抽取为 Markdown，服务器仅保留转换后的 Markdown。扫描页和图片不做 OCR；抽取内容上限为 100,000 字符。",
-  knowledgeImportPending: "正在上传、转换为 Markdown 并建立索引…",
+    "支持 Markdown、PDF 和 Word（.docx），单文件不超过 10 MB，PDF 最多 200 页，其中最多 50 页可进行本地 OCR。Maya 在本地提取文本并转换为 Markdown，只保留 Markdown。OCR 文本会标记为需教师复核；DOCX 内嵌图片不会进行 OCR。抽取内容上限为 100,000 字符。",
+  knowledgeImportPending:
+    "正在上传、转换为 Markdown（扫描 PDF 页会进行本地 OCR）并建立索引…",
   knowledgeUploadPending: "正在上传并索引 Markdown 文件…",
   knowledgeImportInvalid:
-    "请上传带可选中文本的 PDF、DOCX 或 UTF-8 Markdown。扫描页和文档图片目前不会进行 OCR。",
+    "请上传可读取的 PDF、Word（.docx）或 UTF-8 Markdown。扫描 PDF 页会在本地进行 OCR，结果会标记为需教师复核；DOCX 内嵌图片不会进行 OCR。",
   knowledgeImportTooLarge:
-    "文件超过 10 MB、PDF 超过 200 页，或抽取文本超过 100,000 字符。",
+    "文件超过 10 MB、PDF 超过 200 页、扫描页 OCR 超过 50 页，或抽取内容超过 100,000 字符。",
   knowledgeImportNoText:
-    "没有找到可选中文本。扫描页和文档图片目前不会进行 OCR。",
+    "本地 OCR 后仍未找到可读取文本。请检查文件，或提供含文本层的版本。",
   knowledgeImportUnsupported:
     "暂不支持此文件类型。请上传 Markdown、PDF 或 Word（.docx）。",
   knowledgeImportProcessingFailed:

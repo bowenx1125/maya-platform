@@ -107,7 +107,7 @@ describe("MarkdownEditor", () => {
     fireEvent.change(input, { target: { files: [pdf] } });
     expect(
       await screen.findByText(
-        "Uploading, converting to Markdown, and indexing…",
+        "Uploading, converting to Markdown (including local OCR for scanned PDF pages), and indexing…",
       ),
     ).toBeTruthy();
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -125,7 +125,7 @@ describe("MarkdownEditor", () => {
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(3));
     expect(onChange).toHaveBeenCalledTimes(2);
     expect(
-      screen.getByText(/Maya's server extracts text to Markdown/i),
+      screen.getByText(/Maya converts text to Markdown locally/i),
     ).toBeTruthy();
   });
 });

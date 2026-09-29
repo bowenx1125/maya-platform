@@ -117,22 +117,49 @@ ledger to 17 successes. The last Chat change removed product I/O caps but did
 not include a new charged SiyaH run or RAG-quality acceptance. Supplier
 capacity and teaching quality remain unverified.
 
-## Workspace file conversion — September 28, 2026
+## Workspace file conversion — September 29, 2026
 
 Workspace Evidence, group Knowledge and teacher Courseware accept Markdown,
-PDF and Word DOCX. The Maya server extracts selectable PDF text and DOCX
-content locally to Markdown; only the converted Markdown is retained. Uploads
+PDF and Word DOCX. The Maya server runs its bounded `pypdf` preflight first,
+then applies bundled RapidOCR locally only to PDF pages with no selectable text
+and nonempty page content; a mixed PDF sends only those pages through OCR. OCR
+accepts at most 50 pages at 150 dpi with ONNX Runtime limited to two intra-op
+and one inter-op thread. Scanned pages are rasterized with pypdfium2 5.13.0 and
+recognized through RapidOCR's direct image API. The pypdfium2 wrapper is
+licensed Apache-2.0 or BSD-3-Clause. Keep its installed `licenses` tree,
+including the PDFium `BUILD_LICENSES` files, with any redistributed backend
+runtime. On Windows x64, the installed
+pypdfium2 distribution including PDFium and license metadata measured 8.1 MB;
+the removed `rapidocr-pdf`, PyMuPDF and `filetype` files measured 55.7 MB in the
+same environment, a net reduction of 47.6 MB. OCR output is marked for teacher
+review. The detector, classifier and recognizer models are bundled with the
+`rapidocr==3.9.2` wheel, which is 27,275,208 bytes (about 26.0 MiB, including
+all three models). The Windows x64 ONNX Runtime wheel is 14,311,470 bytes
+(about 13.65 MiB). Processing does not download a model or send document
+content to a cloud service. Only the converted Markdown is retained. Uploads
 are capped at 10 MB, PDFs at 200 pages, and extracted text at 100,000
-characters. Scanned pages and embedded images are not OCR-processed. Page
-headings in converted PDFs are labels, not reliable page citations in later RAG
-results. PDF and DOCX parsing run in workers limited to 512 MB of virtual
-address space on POSIX or process memory on Windows, with 20 CPU seconds and a
-30-second parse-result timeout after worker startup; startup and cleanup are
-outside that timeout. At most two workers run per server process. DOCX packages
-are capped at 1,024 parts, 20 MB per part and 64 MB expanded total. Knowledge
-upload and replacement claims renew to 90 seconds before conversion. No cloud
-parser or charged model call is used. Conversion of arbitrary file formats is
-not implemented; formats outside Markdown, PDF and DOCX are rejected.
+characters. Text inside images
+embedded in DOCX is not OCR-processed. Page headings in converted PDFs are
+labels, not reliable page citations in later RAG results. Document workers
+retain a 512 MB memory limit, 20 CPU seconds and 30-second parse-result timeout
+for selectable-text/PDF and DOCX fast paths. When OCR is required, that same
+worker is extended to 1,536 MB and at most 60 CPU seconds and 60 seconds total
+parse-result wait; only one OCR worker may run at a time, with at most two
+document workers total per server process. Startup and cleanup are outside the
+result timeout. DOCX packages are capped at 1,024 parts, 20 MB per part and 64
+MB expanded total. Knowledge upload and replacement claims renew to 90 seconds
+before conversion. Conversion of arbitrary file formats is not implemented;
+formats outside Markdown, PDF and DOCX are rejected.
+
+On September 29, after switching PDF rendering to pypdfium2 and using RapidOCR's
+direct image API, the two teacher-provided `future aspects of Chinese
+civilization` PDFs completed the isolated conversion function under the Windows
+Job Object limits: the 12-page deck produced 7,574 Markdown characters with 12
+OCR-marked pages; the 32-page deck produced 13,640 characters with 32
+OCR-marked pages. The source PDFs were read only for this check and were not
+uploaded, stored or committed. The Markdown includes a teacher-review marker on
+every OCR page; the extraction run does not establish that every recognized
+word is correct.
 
 The uploader shows a pending status while upload, conversion and indexing run,
 and reports unsupported formats, missing text, size limits and safely stopped

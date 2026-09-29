@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
+import sys
 from datetime import timedelta
 from io import BytesIO
+from types import ModuleType, SimpleNamespace
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -46,11 +49,19 @@ def _docx_bytes() -> bytes:
     return output.getvalue()
 
 
-def _pdf_bytes(page_texts: list[str | None]) -> bytes:
+def _pdf_bytes(
+    page_texts: list[str | None],
+    *,
+    non_text_content_pages: set[int] | None = None,
+) -> bytes:
     writer = PdfWriter()
-    for text in page_texts:
+    for page_index, text in enumerate(page_texts):
         page = writer.add_blank_page(width=612, height=792)
         if text is None:
+            if non_text_content_pages and page_index in non_text_content_pages:
+                content = DecodedStreamObject()
+                content.set_data(b"q Q")
+                page[NameObject("/Contents")] = writer._add_object(content)
             continue
         font = DictionaryObject(
             {
@@ -94,10 +105,181 @@ def test_pdf_conversion_keeps_physical_page_markers() -> None:
 
 def test_pdf_conversion_marks_unreadable_pages_and_rejects_image_only_files() -> None:
     _, markdown_bytes = convert_knowledge_upload("lecture.pdf", _pdf_bytes(["Readable page", None]))
-    assert b"No selectable text was found on this page; OCR was not run." in markdown_bytes
+    assert b"No page content was found on this page." in markdown_bytes
 
     with pytest.raises(KnowledgeImportError, match="pdf_no_text"):
         convert_knowledge_upload("scan.pdf", _pdf_bytes([None]))
+
+
+def test_pdf_mixed_content_ocr_targets_only_pages_without_selectable_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[bytes, list[int]]] = []
+    limit_events: list[str] = []
+
+    def ocr(data: bytes, page_indexes: list[int]) -> dict[int, str]:
+        calls.append((data, page_indexes))
+        return {1: "Locally recognized page"}
+
+    monkeypatch.setattr(knowledge_ingest, "_run_pdf_ocr", ocr)
+    pdf = _pdf_bytes(["Selectable page", None], non_text_content_pages={1})
+    markdown = knowledge_ingest._pdf_to_markdown(
+        pdf, before_ocr=lambda: limit_events.append("extended")
+    )
+
+    assert calls == [(pdf, [1])]
+    assert limit_events == ["extended"]
+    assert "Selectable page" in markdown
+    assert "> OCR-generated text; teacher review required." in markdown
+    assert "Locally recognized page" in markdown
+
+
+def test_pdf_ocr_without_readable_results_returns_no_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(knowledge_ingest, "_run_pdf_ocr", lambda _data, _pages: {})
+    pdf = _pdf_bytes([None], non_text_content_pages={0})
+
+    with pytest.raises(KnowledgeImportError, match="pdf_no_text"):
+        knowledge_ingest._pdf_to_markdown(pdf)
+
+
+def test_isolated_document_worker_logs_only_the_safe_failure_code(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    class BusySlots:
+        def acquire(self, *, timeout: float) -> bool:
+            assert timeout == 2
+            return False
+
+    monkeypatch.setattr(knowledge_ingest, "_INGEST_WORKER_SLOTS", BusySlots())
+
+    with caplog.at_level(logging.WARNING, logger=knowledge_ingest.__name__):
+        with pytest.raises(KnowledgeImportError, match="processing_failed"):
+            knowledge_ingest._convert_document_isolated("pdf", b"private upload data")
+
+    assert "reason=processing_failed" in caplog.text
+    assert "private upload data" not in caplog.text
+
+
+def test_pdf_ocr_rasterizes_only_selected_pages_with_bundled_rapidocr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rendered: list[tuple[int, float, bool]] = []
+    model_params: dict[str, Any] = {}
+
+    class Bitmap:
+        def __init__(self, page_index: int) -> None:
+            self.page_index = page_index
+
+        def to_numpy(self) -> int:
+            return self.page_index
+
+        def close(self) -> None:
+            return None
+
+    class Page:
+        def __init__(self, page_index: int) -> None:
+            self.page_index = page_index
+
+        def render(self, *, scale: float, limit_image_cache: bool) -> Bitmap:
+            rendered.append((self.page_index, scale, limit_image_cache))
+            return Bitmap(self.page_index)
+
+        def close(self) -> None:
+            return None
+
+    class Document:
+        def __init__(self, _data: bytes) -> None:
+            pass
+
+        def __enter__(self) -> Document:
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def __len__(self) -> int:
+            return 4
+
+        def __getitem__(self, page_index: int) -> Page:
+            return Page(page_index)
+
+    class Engine:
+        def __call__(self, image: int) -> SimpleNamespace:
+            return SimpleNamespace(txts=(f"recognized page {image}",))
+
+    def create_engine(*, params: dict[str, Any]) -> Engine:
+        model_params.update(params)
+        return Engine()
+
+    rapidocr = ModuleType("rapidocr")
+    rapidocr.RapidOCR = create_engine  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pypdfium2", SimpleNamespace(PdfDocument=Document))
+    monkeypatch.setitem(sys.modules, "rapidocr", rapidocr)
+    monkeypatch.setattr(knowledge_ingest, "_bundled_rapidocr_model_dir", lambda: "models")
+
+    result = knowledge_ingest._run_pdf_ocr(b"private PDF bytes", [1, 3])
+
+    assert result == {1: "recognized page 1", 3: "recognized page 3"}
+    assert rendered == [(1, 150 / 72, True), (3, 150 / 72, True)]
+    assert model_params["Global.model_root_dir"] == "models"
+    assert model_params["EngineConfig.onnxruntime.intra_op_num_threads"] == 2
+    assert model_params["EngineConfig.onnxruntime.inter_op_num_threads"] == 1
+
+
+def test_pdf_ocr_rejects_invalid_page_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Document:
+        def __init__(self, _data: bytes) -> None:
+            pass
+
+        def __enter__(self) -> Document:
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def __len__(self) -> int:
+            return 1
+
+    rapidocr = ModuleType("rapidocr")
+    rapidocr.RapidOCR = lambda **_kwargs: object()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pypdfium2", SimpleNamespace(PdfDocument=Document))
+    monkeypatch.setitem(sys.modules, "rapidocr", rapidocr)
+    monkeypatch.setattr(knowledge_ingest, "_bundled_rapidocr_model_dir", lambda: "models")
+
+    with pytest.raises(KnowledgeImportError, match="processing_failed"):
+        knowledge_ingest._run_pdf_ocr(b"private PDF bytes", [1])
+
+
+def test_pdf_ocr_page_limit_fails_before_running_ocr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(knowledge_ingest, "MAX_PDF_OCR_PAGES", 1)
+    monkeypatch.setattr(
+        knowledge_ingest,
+        "_run_pdf_ocr",
+        lambda _data, _pages: pytest.fail("OCR must not start above the page cap"),
+    )
+    pdf = _pdf_bytes([None, None], non_text_content_pages={0, 1})
+
+    with pytest.raises(KnowledgeImportError, match="pdf_limit"):
+        knowledge_ingest._pdf_to_markdown(pdf)
+
+
+def test_pdf_ocr_text_keeps_the_extracted_character_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(knowledge_ingest, "MAX_RAG_CHARS", 64)
+    monkeypatch.setattr(
+        knowledge_ingest,
+        "_run_pdf_ocr",
+        lambda _data, _pages: {0: "recognized text " * 8},
+    )
+    pdf = _pdf_bytes([None], non_text_content_pages={0})
+
+    with pytest.raises(KnowledgeImportError, match="content_too_large"):
+        knowledge_ingest._pdf_to_markdown(pdf)
 
 
 def test_pdf_page_content_stops_when_work_budget_is_exceeded(
