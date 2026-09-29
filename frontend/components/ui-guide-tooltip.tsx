@@ -32,20 +32,23 @@ export function UiGuideTooltip() {
 
   useEffect(() => {
     let described: HTMLElement | null = null;
+    let descriptionTarget: HTMLElement | null = null;
     let previousDescription: string | null = null;
     let currentKey: UiGuideKey | null = null;
     let hovered: HTMLElement | null = null;
     let focused: HTMLElement | null = null;
+    let focusedDescriptionElement: HTMLElement | null = null;
     let touchPinned = false;
 
     const restoreDescription = () => {
-      if (!described) return;
+      if (!descriptionTarget) return;
       if (previousDescription === null) {
-        described.removeAttribute("aria-describedby");
+        descriptionTarget.removeAttribute("aria-describedby");
       } else {
-        described.setAttribute("aria-describedby", previousDescription);
+        descriptionTarget.setAttribute("aria-describedby", previousDescription);
       }
       described = null;
+      descriptionTarget = null;
       previousDescription = null;
     };
 
@@ -59,19 +62,25 @@ export function UiGuideTooltip() {
     const show = (
       target: HTMLElement,
       point: { x: number; y: number; anchor: ActiveGuide["anchor"] },
+      descriptionElement: HTMLElement = focused === target &&
+      focusedDescriptionElement
+        ? focusedDescriptionElement
+        : target,
     ) => {
       const key = target.dataset.uiGuide;
       if (!key || !uiGuideText(key, localeRef.current)) return;
-      if (described !== target) {
+      if (descriptionTarget !== descriptionElement) {
         restoreDescription();
-        previousDescription = target.getAttribute("aria-describedby");
+        previousDescription =
+          descriptionElement.getAttribute("aria-describedby");
         const ids = new Set(
           (previousDescription ?? "").split(/\s+/).filter(Boolean),
         );
         ids.add(tooltipId);
-        target.setAttribute("aria-describedby", [...ids].join(" "));
-        described = target;
+        descriptionElement.setAttribute("aria-describedby", [...ids].join(" "));
+        descriptionTarget = descriptionElement;
       }
+      described = target;
       currentKey = key as UiGuideKey;
       setActive({ ...point, key: key as UiGuideKey, target });
     };
@@ -130,7 +139,9 @@ export function UiGuideTooltip() {
       const target = guideTarget(event.target);
       if (!target) return;
       focused = target;
-      show(target, anchorPoint(target));
+      focusedDescriptionElement =
+        event.target instanceof HTMLElement ? event.target : target;
+      show(target, anchorPoint(target), focusedDescriptionElement);
     };
 
     const onFocusOut = (event: FocusEvent) => {
@@ -139,6 +150,7 @@ export function UiGuideTooltip() {
       if (!target || target !== focused || (next && target.contains(next)))
         return;
       focused = null;
+      focusedDescriptionElement = null;
       if (hovered !== target && !touchPinned) hide();
     };
 

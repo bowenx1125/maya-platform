@@ -85,6 +85,51 @@ describe("workspace UI guide tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("describes the focused control when help is marked on its label", () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <UiGuideTooltip />
+        <label data-ui-guide="voice.consent">
+          <input
+            type="checkbox"
+            aria-label="Voice consent"
+            aria-describedby="existing-description"
+          />
+          Voice consent
+        </label>
+      </LocaleProvider>,
+    );
+    const checkbox = screen.getByRole("checkbox", { name: "Voice consent" });
+    const label = checkbox.closest("label");
+
+    fireEvent.focusIn(checkbox);
+
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "permission to upload and clone",
+    );
+    expect(checkbox.getAttribute("aria-describedby")).toBe(
+      "existing-description maya-ui-guide-tooltip",
+    );
+    expect(label?.hasAttribute("aria-describedby")).toBe(false);
+
+    fireEvent.pointerOver(checkbox, {
+      pointerType: "mouse",
+      clientX: 40,
+      clientY: 50,
+    });
+
+    expect(checkbox.getAttribute("aria-describedby")).toBe(
+      "existing-description maya-ui-guide-tooltip",
+    );
+    expect(label?.hasAttribute("aria-describedby")).toBe(false);
+
+    fireEvent.pointerOut(checkbox, { relatedTarget: document.body });
+    fireEvent.focusOut(checkbox, { relatedTarget: document.body });
+    expect(checkbox.getAttribute("aria-describedby")).toBe(
+      "existing-description",
+    );
+  });
+
   it("keeps the focused control described when the locale changes", () => {
     render(
       <LocaleProvider initialLocale="en">
