@@ -273,7 +273,10 @@ describe("Wave 1C real workbench locale boundary", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Done" })).toBeNull(),
+      expect(
+        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true),
     );
     expect(api.updateDraft).toHaveBeenCalledTimes(1);
     expect(api.publish).not.toHaveBeenCalled();
@@ -316,7 +319,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(screen.queryByRole("heading", { name: "Test Chat" })).toBeNull();
   });
 
-  it("keeps Back in the sidebar and asks before discarding local edits", async () => {
+  it("leads the page with Back and asks before discarding local edits", async () => {
     const { api } = makeApi();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
@@ -324,7 +327,8 @@ describe("Wave 1C real workbench locale boundary", () => {
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Unsaved" },
     });
-    expect(back.closest("nav")).not.toBeNull();
+    expect(back.closest("nav")).toBeNull();
+    expect(back.closest("main")).not.toBeNull();
     expect(back.getAttribute("href")).toBe("/student/agents/agent-id");
     expect(fireEvent.click(back)).toBe(false);
     expect(confirm).toHaveBeenCalledTimes(1);

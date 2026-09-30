@@ -7,10 +7,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import workspaceStyles from "./workspace-theme.module.css";
 import styles from "./app-shell.module.css";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
-import {
-  WorkspaceActionsContext,
-  type WorkspaceActions,
-} from "./workspace-actions";
 
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
@@ -29,7 +25,6 @@ export function AppShell({
   const [busy, setBusy] = useState(false);
   const courseId = user?.courses?.[0]?.course_id;
   const [live, setLive] = useState(false);
-  const [actions, setActions] = useState<WorkspaceActions>({});
   const [agentGroup, setAgentGroup] = useState<{
     route: string;
     groupId: string;
@@ -176,107 +171,61 @@ export function AppShell({
     (activePath.startsWith(`${home}/`) ? home : undefined);
 
   return (
-    <WorkspaceActionsContext.Provider value={setActions}>
-      <div className={styles.frame}>
-        <header className={styles.sidebar}>
-          <nav
-            aria-label={`${role === "teacher" ? t("teacher") : t("student")} ${t("navigation")}`}
-            className={styles.navigation}
-          >
-            {links.map((link) =>
-              link.disabled ? (
-                <span
-                  className={`${styles.link} ${styles.disabled}`}
-                  aria-disabled="true"
-                  key={link.href}
-                >
-                  <WorkspaceIcon name={link.icon} />
-                  <span>{link.label}</span>
-                </span>
-              ) : (
-                <Link
-                  aria-current={activeHref === link.href ? "page" : undefined}
-                  className={`${styles.link} ${activeHref === link.href ? styles.active : ""} ${link.icon === "live" ? styles.live : ""}`}
-                  href={link.href}
-                  key={link.href}
-                >
-                  {link.icon === "home" ? (
-                    <span
-                      className={`brand-dot ${styles.homeMark}`}
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <WorkspaceIcon name={link.icon} />
-                  )}
-                  <span>{link.label}</span>
-                </Link>
-              ),
-            )}
-            {(
-              [
-                ["new", "New"],
-                ["back", "Back"],
-                ["done", "Done"],
-              ] as const
-            ).map(([name, label]) => {
-              const action = actions[name];
-              // New stays in the sidebar once a page registers it, faded when
-              // it cannot run. Back and Done only appear when that screen
-              // needs them and they are usable.
-              if (!action) return null;
-              if (name !== "new" && action.disabled) return null;
-              const faded = Boolean(action.disabled);
-              const content = (
-                <>
-                  <WorkspaceIcon name={name} />
-                  <span>{label}</span>
-                </>
-              );
-              return action.href ? (
-                <Link
-                  key={name}
-                  className={`${styles.link}${faded ? ` ${styles.disabled}` : ""}`}
-                  href={action.href}
-                  onClick={action.onClick}
-                  aria-disabled={faded || undefined}
-                  tabIndex={faded ? -1 : undefined}
-                >
-                  {content}
-                </Link>
-              ) : (
-                <button
-                  key={name}
-                  className={`${styles.link} ${styles.action}${faded ? ` ${styles.disabled}` : ""}`}
-                  type={action.form ? "submit" : "button"}
-                  form={action.form}
-                  disabled={faded}
-                  onClick={action.onClick}
-                >
-                  {content}
-                </button>
-              );
-            })}
-          </nav>
-          <div className={styles.account}>
-            <button
-              className={styles.logout}
-              type="button"
-              disabled={busy}
-              onClick={() => void signOut()}
-            >
-              <WorkspaceIcon name="logout" />
-              {t("logout")}
-            </button>
-          </div>
-        </header>
-        <main
-          id="workspace-content"
-          tabIndex={-1}
-          className={`${styles.main} ${workspaceStyles.surface}`}
+    <div className={styles.frame}>
+      <header className={styles.sidebar}>
+        <nav
+          aria-label={`${role === "teacher" ? t("teacher") : t("student")} ${t("navigation")}`}
+          className={styles.navigation}
         >
-          {children}
-        </main>
-      </div>
-    </WorkspaceActionsContext.Provider>
+          {links.map((link) =>
+            link.disabled ? (
+              <span
+                className={`${styles.link} ${styles.disabled}`}
+                aria-disabled="true"
+                key={link.href}
+              >
+                <WorkspaceIcon name={link.icon} />
+                <span>{link.label}</span>
+              </span>
+            ) : (
+              <Link
+                aria-current={activeHref === link.href ? "page" : undefined}
+                className={`${styles.link} ${activeHref === link.href ? styles.active : ""} ${link.icon === "live" ? styles.live : ""}`}
+                href={link.href}
+                key={link.href}
+              >
+                {link.icon === "home" ? (
+                  <span
+                    className={`brand-dot ${styles.homeMark}`}
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <WorkspaceIcon name={link.icon} />
+                )}
+                <span>{link.label}</span>
+              </Link>
+            ),
+          )}
+        </nav>
+        <div className={styles.account}>
+          <button
+            className={styles.logout}
+            type="button"
+            disabled={busy}
+            onClick={() => void signOut()}
+          >
+            <WorkspaceIcon name="logout" />
+            {t("logout")}
+          </button>
+        </div>
+      </header>
+      <main
+        id="workspace-content"
+        tabIndex={-1}
+        className={`${styles.main} ${workspaceStyles.surface}`}
+      >
+        {children}
+      </main>
+    </div>
   );
 }

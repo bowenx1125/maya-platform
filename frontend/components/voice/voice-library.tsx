@@ -6,8 +6,8 @@ import { type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useLocale, useT } from "../locale";
+import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
-import { WorkspaceAction } from "../workspace-actions";
 import {
   EmptyCard,
   ErrorNotice,
@@ -145,31 +145,22 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     }
   }
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <LoadingCard />
-      </>
-    );
-  }
+  if (loading) return <LoadingCard />;
   if (error && profiles.length === 0) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <ErrorNotice error={error} onRetry={() => void load()} />
-      </>
-    );
+    return <ErrorNotice error={error} onRetry={() => void load()} />;
   }
+
+  const newVoice = (
+    <PageAction
+      name="new"
+      disabled={busy || creating}
+      onClick={() => setCreating(true)}
+    />
+  );
 
   return (
     <div className={styles.voicePanel}>
       <PageIntro title={t("voices")} />
-      <WorkspaceAction
-        name="new"
-        disabled={busy || creating}
-        onClick={() => setCreating(true)}
-      />
       {error ? (
         <ErrorNotice error={error} onRetry={() => setError(null)} />
       ) : null}
@@ -180,20 +171,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
       ) : null}
       {creating ? (
         <SectionCard>
-          <WorkspaceAction
-            name="back"
-            disabled={busy}
-            onClick={() => {
-              setCreating(false);
-              setFile(null);
-              setConsent(false);
-            }}
-          />
-          <WorkspaceAction
-            name="done"
-            disabled={!file || !consent || busy}
-            onClick={() => void submitEnrollment()}
-          />
           <div className={styles.uploadCard}>
             <input
               className={styles.fileInput}
@@ -227,12 +204,31 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
               />
               <span>{t("voiceConsentLabel")}</span>
             </label>
+            <div className="button-row">
+              <PageAction
+                name="done"
+                disabled={!file || !consent || busy}
+                onClick={() => void submitEnrollment()}
+              />
+              <PageAction
+                name="back"
+                disabled={busy}
+                onClick={() => {
+                  setCreating(false);
+                  setFile(null);
+                  setConsent(false);
+                }}
+              />
+            </div>
           </div>
         </SectionCard>
       ) : null}
-      <SectionCard title={t("voiceGroupTitle")}>
+      <SectionCard
+        title={t("voiceGroupTitle")}
+        action={profiles.length > 0 ? newVoice : undefined}
+      >
         {profiles.length === 0 ? (
-          <EmptyCard title={t("voiceNoCustom")} />
+          <EmptyCard title={t("voiceNoCustom")} action={newVoice} />
         ) : (
           <div className={styles.profileList}>
             {profiles.map((profile) => (

@@ -14,11 +14,11 @@ import {
 import { ttsPlaybackPhase } from "../lib/chat-tts-playback";
 import { AvatarPreview } from "./avatar";
 import { useLocale, useT } from "./locale";
+import { PageAction } from "./page-action";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
-import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
 
 export function AgentChat() {
@@ -262,28 +262,12 @@ export function AgentChat() {
     }
   }
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <LoadingCard />
-      </>
-    );
-  }
+  if (loading) return <LoadingCard />;
   const character =
     selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
   return (
     <>
       <PageIntro title="Chats" />
-      <WorkspaceAction
-        name="new"
-        disabled={
-          busy ||
-          character?.available === false ||
-          !agents.some((agent) => agent.version_id === versionId)
-        }
-        onClick={() => start()}
-      />
       {error ? <ErrorNotice error={error} /> : null}
       {!agents.length && !selected ? (
         <EmptyCard title={t("noPublishedAgents")} />
@@ -322,6 +306,15 @@ export function AgentChat() {
                 state={busy ? "thinking" : "idle"}
               />
             ) : null}
+            <PageAction
+              name="new"
+              disabled={
+                busy ||
+                character?.available === false ||
+                !agents.some((agent) => agent.version_id === versionId)
+              }
+              onClick={() => start()}
+            />
             <div className={styles.history} aria-label="History">
               {sessions
                 .filter((session) => session.turns.length > 0)

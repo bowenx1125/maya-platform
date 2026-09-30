@@ -49,7 +49,9 @@ describe("M08 voice library", () => {
       ).toBe(false),
     );
     fireEvent.click(screen.getByRole("button", { name: "New" }));
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    const done = () =>
+      screen.getByRole("button", { name: "Done" }) as HTMLButtonElement;
+    expect(done().disabled).toBe(true);
     expect(
       (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
         .disabled,
@@ -62,9 +64,9 @@ describe("M08 voice library", () => {
       type: "audio/wav",
     });
     fireEvent.change(input, { target: { files: [file] } });
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(done().disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(await screen.findByRole("button", { name: "Done" })).toBeTruthy();
+    await waitFor(() => expect(done().disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     expect(screen.queryByLabelText("Voice sample file")).toBeNull();

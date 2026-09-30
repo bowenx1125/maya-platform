@@ -137,7 +137,7 @@ afterEach(() => {
 });
 
 describe("private Agent chat", () => {
-  it("starts from the sidebar and sends consecutive messages with the latest revision", async () => {
+  it("starts from the chat's own New and sends consecutive messages with the latest revision", async () => {
     render(
       <LocaleProvider initialLocale="en">
         <AppShell role="teacher">
@@ -146,18 +146,18 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     await screen.findByTestId("avatar");
-    const nav = within(screen.getByRole("navigation"));
-    expect(nav.queryByText("Back")).toBeNull();
-    expect(nav.queryByText("Done")).toBeNull();
-    fireEvent.click(await nav.findByRole("button", { name: "New" }));
+    const main = within(screen.getByRole("main"));
+    expect(main.queryByText("Back")).toBeNull();
+    expect(main.queryByText("Done")).toBeNull();
+    fireEvent.click(await main.findByRole("button", { name: "New" }));
     expect(state.api.createConversation).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(
-        nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+        main.getByRole("button", { name: "New" }).hasAttribute("disabled"),
       ).toBe(false),
     );
     expect(
-      within(screen.getByRole("main")).queryByRole("button", {
+      within(screen.getByRole("navigation")).queryByRole("button", {
         name: "New",
       }),
     ).toBeNull();

@@ -1,7 +1,5 @@
 "use client";
 
-import { WorkspaceAction } from "./workspace-actions";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +18,7 @@ import { roleLabel } from "../lib/i18n";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { useLocale, useT } from "./locale";
+import { PageAction } from "./page-action";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
@@ -273,16 +272,11 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const createHref = `/student/groups/${groupId}/agents/new`;
+  const newAgent = (
+    <PageAction name="new" href={`/student/groups/${groupId}/agents/new`} />
+  );
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" href={createHref} disabled />
-        <LoadingCard />
-      </>
-    );
-  }
+  if (loading) return <LoadingCard />;
   async function deleteAgent(agentId: string, retry = false) {
     if (deleting || (!retry && !window.confirm(t("deleteAgentConfirm"))))
       return;
@@ -308,13 +302,10 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
 
   if (!group)
     return (
-      <>
-        <WorkspaceAction name="new" href={createHref} disabled />
-        <ErrorNotice
-          error={error ?? new Error(t("groupNotFound"))}
-          onRetry={() => void load()}
-        />
-      </>
+      <ErrorNotice
+        error={error ?? new Error(t("groupNotFound"))}
+        onRetry={() => void load()}
+      />
     );
 
   return (
@@ -328,10 +319,12 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           }
         />
       ) : null}
-      <WorkspaceAction name="new" href={createHref} />
-      <SectionCard title={`${t("agents")} · ${items.length}`}>
+      <SectionCard
+        title={`${t("agents")} · ${items.length}`}
+        action={items.length > 0 ? newAgent : undefined}
+      >
         {items.length === 0 ? (
-          <EmptyCard title={t("noAgents")} />
+          <EmptyCard title={t("noAgents")} action={newAgent} />
         ) : (
           <div className="agent-tile-grid">
             {items.map(({ agent, versions }) => (
@@ -453,12 +446,11 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
   return (
     <>
       <PageIntro title={t("newAgent")} />
-      <WorkspaceAction
+      <PageAction
         name="back"
         href={`/student/groups/${groupId}`}
         disabled={busy}
       />
-      <WorkspaceAction name="done" form="create-agent-form" disabled={busy} />
       <SectionCard title={t("agentIdentity")}>
         <form
           id="create-agent-form"
@@ -500,6 +492,9 @@ export function CreateAgentForm({ groupId }: { groupId: string }) {
               onRetry={retryable ? () => void createAgent() : undefined}
             />
           ) : null}
+          <div className="button-row">
+            <PageAction name="done" form="create-agent-form" disabled={busy} />
+          </div>
         </form>
       </SectionCard>
     </>

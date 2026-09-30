@@ -8,7 +8,7 @@ import { DebateStage } from "../../../../../components/debate/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
 import { DebatePreview } from "../../../../../components/debate/preview";
 import { AppShell } from "../../../../../components/app-shell";
-import { WorkspaceAction } from "../../../../../components/workspace-actions";
+import { PageAction } from "../../../../../components/page-action";
 import {
   RouteGuard,
   useSession,
@@ -400,7 +400,7 @@ export default function TeacherDebateControlPage() {
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
-        <WorkspaceAction name="back" href="/teacher/debates" />
+        <PageAction name="back" href="/teacher/debates" />
         {loading && !detail ? <LoadingCard /> : null}
         {!loading && error && !detail ? (
           <ErrorNotice error={error} onRetry={() => void load()} />

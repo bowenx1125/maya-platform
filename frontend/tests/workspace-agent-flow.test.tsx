@@ -93,12 +93,14 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(screen.queryByText("Info")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
-    const nav = within(screen.getByRole("navigation"));
+    const main = within(screen.getByRole("main"));
     expect(
-      (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
+      (await main.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
     expect(
-      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
+      within(screen.getByRole("navigation")).queryByRole("link", {
+        name: "Back",
+      }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();

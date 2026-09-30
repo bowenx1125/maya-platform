@@ -35,7 +35,7 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { AppShell } from "../components/app-shell";
-import { WorkspaceAction } from "../components/workspace-actions";
+import { PageAction } from "../components/page-action";
 
 function renderTeacherShell(pathname: string) {
   navigation.pathname = pathname;
@@ -153,83 +153,57 @@ describe("PW3-E teacher information architecture", () => {
     ).not.toContain("active");
   });
 
-  it("shows available actions in order and removes them with their page", () => {
-    const run = vi.fn();
-    const view = render(
+  it("keeps page actions in the page and only destinations in the sidebar", () => {
+    render(
       <AppShell role="teacher">
-        <WorkspaceAction name="new" onClick={run} />
-        <WorkspaceAction name="back" href="/teacher" />
-        <WorkspaceAction name="done" onClick={run} disabled />
-        <p>Content</p>
+        <PageAction name="new" href="/teacher/debates/new" />
+        <PageAction name="back" href="/teacher" />
+        <PageAction name="done" onClick={vi.fn()} />
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
-    fireEvent.click(nav.getByRole("button", { name: "New" }));
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(nav.getByRole("link", { name: "Back" })).toBeTruthy();
-    expect(
-      within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
-    ).toBeNull();
-    view.rerender(
-      <AppShell role="teacher">
-        <WorkspaceAction name="new" onClick={run} disabled />
-        <p>Read only</p>
-      </AppShell>,
+    for (const name of ["New", "Back", "Done"]) {
+      expect(nav.queryByRole("link", { name })).toBeNull();
+      expect(nav.queryByRole("button", { name })).toBeNull();
+    }
+    const main = within(screen.getByRole("main"));
+    expect(main.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
+      "/teacher/debates/new",
     );
-    const fadedNew = nav.getByRole("button", {
-      name: "New",
-    }) as HTMLButtonElement;
-    expect(fadedNew.disabled).toBe(true);
-    expect(fadedNew.className).toContain("disabled");
-    expect(nav.queryByRole("link", { name: "Back" })).toBeNull();
+    expect(main.getByRole("link", { name: "Back" })).toBeTruthy();
+    expect(main.getByRole("button", { name: "Done" })).toBeTruthy();
   });
 
-  it("uses a real navigation link for routed creation", () => {
-    render(
-      <AppShell role="teacher">
-        <WorkspaceAction name="new" href="/teacher/debates/new" />
-      </AppShell>,
-    );
+  it("makes a routed action that cannot run a disabled button, not a live link", () => {
+    render(<PageAction name="new" href="/teacher/debates/new" disabled />);
+    expect(screen.queryByRole("link", { name: "New" })).toBeNull();
     expect(
-      within(screen.getByRole("navigation"))
-        .getByRole("link", { name: "New" })
-        .getAttribute("href"),
-    ).toBe("/teacher/debates/new");
+      (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
-  it("orders New, Back, Done and submits the active form from the sidebar", () => {
+  it("submits the form Done belongs to only once it is valid", () => {
     const submit = vi.fn();
     render(
-      <AppShell role="teacher">
-        <WorkspaceAction name="done" form="active-form" />
-        <WorkspaceAction name="back" href="/teacher" />
-        <WorkspaceAction name="new" onClick={vi.fn()} />
-        <form
-          id="active-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          <input aria-label="Name" required />
-        </form>
-      </AppShell>,
+      <form
+        id="active-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <input aria-label="Name" required />
+        <PageAction name="done" form="active-form" />
+      </form>,
     );
-    const nav = screen.getByRole("navigation");
-    expect(
-      Array.from(nav.children)
-        .slice(-3)
-        .map((item) => item.textContent),
-    ).toEqual(["New", "Back", "Done"]);
-    fireEvent.click(within(nav).getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(submit).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Valid" },
     });
-    fireEvent.click(within(nav).getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(submit).toHaveBeenCalledTimes(1);
-    expect(within(screen.getByRole("main")).queryByRole("button")).toBeNull();
   });
 });
 

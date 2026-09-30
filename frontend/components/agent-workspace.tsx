@@ -1,7 +1,5 @@
 "use client";
 
-import { WorkspaceAction } from "./workspace-actions";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +23,7 @@ import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
+import { PageAction } from "./page-action";
 import { IconDownload } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -134,6 +133,16 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     );
   const actions = (
     <div className="button-row">
+      {current ? (
+        <PageAction
+          name="new"
+          disabled={busy || agent.status === "archived"}
+          href={
+            draft ? "/student/agent-versions/" + draft.id + "/edit" : undefined
+          }
+          onClick={draft ? undefined : () => void createNextVersion()}
+        />
+      ) : null}
       {draft && !current ? (
         <Link
           className="secondary-action"
@@ -168,26 +177,15 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           }
         />
       ) : null}
-      {current ? (
-        <WorkspaceAction
-          name="new"
-          disabled={busy || agent.status === "archived"}
-          href={
-            draft ? "/student/agent-versions/" + draft.id + "/edit" : undefined
-          }
-          onClick={draft ? undefined : () => void createNextVersion()}
-        />
-      ) : null}
       {visible ? (
         <ReadOnlyVersion version={visible} agent={agent} actions={actions} />
       ) : (
-        <SectionCard action={actions}>
-          <WorkspaceAction
-            name="back"
-            href={`/student/groups/${agent.group_id}`}
-          />
-          <EmptyCard title={t("noVersions")} />
-        </SectionCard>
+        <>
+          <PageAction name="back" href={`/student/groups/${agent.group_id}`} />
+          <SectionCard action={actions}>
+            <EmptyCard title={t("noVersions")} />
+          </SectionCard>
+        </>
       )}
     </>
   );
@@ -520,7 +518,7 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <WorkspaceAction
+      <PageAction
         name="back"
         href={`/student/agents/${agent.id}`}
         disabled={saving}
@@ -528,11 +526,6 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
           if (localDirty && !window.confirm(t("discardDraftConfirm")))
             event.preventDefault();
         }}
-      />
-      <WorkspaceAction
-        name="done"
-        disabled={saving || (!localDirty && blockers.length > 0)}
-        onClick={() => void publish()}
       />
       <div className="workbench-meta">
         <StatusBadge status="draft" />
@@ -758,6 +751,15 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 ))
               )}
             </div>
+            {/* Done publishes, so it sits under the checks that decide
+              whether it can. */}
+            <div className="button-row">
+              <PageAction
+                name="done"
+                disabled={saving || (!localDirty && blockers.length > 0)}
+                onClick={() => void publish()}
+              />
+            </div>
           </SectionCard>
           <SectionCard title={t("ragPreview")}>
             {preview ? (
@@ -865,16 +867,16 @@ function ReadOnlyVersion({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <WorkspaceAction name="back" href={`/student/groups/${agent.group_id}`} />
+      <PageAction name="back" href={`/student/groups/${agent.group_id}`} />
       <div className="workbench-grid">
         <div className="workbench-main">
           <SectionCard
             title={t("agentMd")}
             action={
-              <>
+              <div className="button-row">
                 {actions}
                 {downloadAction}
-              </>
+              </div>
             }
           >
             <ReportMarkdown className="read-only-markdown rendered-persona">

@@ -9,10 +9,10 @@ import {
   type UpdateCourseMemberRequest,
 } from "../lib/api";
 import { useT } from "./locale";
+import { PageAction } from "./page-action";
 import { IconArrowRight } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
-import { WorkspaceAction } from "./workspace-actions";
 import {
   EmptyCard,
   ErrorNotice,
@@ -187,16 +187,6 @@ export function RosterWorkspace() {
                         });
                       }}
                     >
-                      <WorkspaceAction
-                        name="done"
-                        form={`roster-edit-${entry.user_id}`}
-                        disabled={pending}
-                      />
-                      <WorkspaceAction
-                        name="back"
-                        onClick={() => setEditing(null)}
-                        disabled={pending}
-                      />
                       <label>
                         <span>{t("displayNameLabel")}</span>
                         <input
@@ -227,6 +217,18 @@ export function RosterWorkspace() {
                           }
                         />
                       </label>
+                      <div className="button-row">
+                        <PageAction
+                          name="back"
+                          onClick={() => setEditing(null)}
+                          disabled={pending}
+                        />
+                        <PageAction
+                          name="done"
+                          form={`roster-edit-${entry.user_id}`}
+                          disabled={pending}
+                        />
+                      </div>
                     </form>
                   </div>
                 );

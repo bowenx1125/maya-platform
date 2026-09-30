@@ -158,7 +158,7 @@ stored separately (migration0026); titles display Topic only. Outbound text
 gets NFC/control cleanup and whitespace folding without removing meaningful
 punctuation; Background is unverified scenario data; provider budgets remain;
 draft edits invalidate old Preview plans; creation has separate white
-Topic/Background cards, sidebar Back/Done, and Ruleset language selection.
+Topic/Background cards, in-page Back/Done, and Ruleset language selection.
 
 ## Frozen Markdown Ruleset and current Report repair
 
@@ -168,8 +168,8 @@ teacher-scoped read-only endpoint. Agents Order is followed by one Debate
 Ruleset row: compact language switch with pencil Edit and checkmark Save.
 Selected-language Markdown is rendered full-width; Edit shows raw text; the
 checkmark beside 中文/English saves that language and returns to rendered mode.
-Sidebar Back discards an unsaved edit. Sidebar Done creates the debate and does
-not save an unsaved ruleset edit (Done stays away while the ruleset is in Edit).
+Its Back beside the checkmark discards an unsaved edit. Done creates the debate
+and does not save an unsaved ruleset edit (Done stays away while the ruleset is in Edit).
 The old Multi-round Civilization/phase block is removed and Topic/Background use
 warm paper textareas.
 Create freezes both authored Markdown files and eight complete System messages
@@ -264,6 +264,7 @@ Migration 0031 adds shared Agent tombstones. Delete removes workspace access but
 retains immutable assets and private Chats read-only; a Debate reference or active
 publication blocks it. Quiet workspace actions use accessible icon controls;
 Chats has New, delete and an inline Send arrow; libraries share Back/Done editors.
+The sidebar lists only destinations; New/Back/Done sit with the content they act on.
 The product UI uses compact Inter typography and warm paper surfaces; display serif
 is reserved for login. Teacher Debate rows enter through Immerse.
 

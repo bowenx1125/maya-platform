@@ -21,8 +21,9 @@ real-provider acceptance.
 
 ## Agent workspace
 
-- Verify sidebar **New / Back / Done** appear in this order, only when available;
-  no duplicate creation, return or submission button remains in the content.
+- Verify the sidebar lists only destinations: **New** heads the list it adds to
+  (inside its empty state when there is none), **Back** leads its page or sits
+  beside its editor's **Done**, and **Done** ends the form it submits.
   Chat has New/Send only; fullscreen Immerse retains its own controls. File pickers
   and explicit safety/consent dialogs remain separate.
 - In Workspace, New creates an Agent. Opening an Agent shows its current version

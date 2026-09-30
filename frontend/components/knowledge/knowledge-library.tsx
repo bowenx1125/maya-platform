@@ -10,9 +10,9 @@ import {
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
+import { PageAction } from "../page-action";
 import { IconClose, IconDownload, IconEdit, IconRefresh } from "../quiet-icons";
 import { useSession } from "../session-provider";
-import { WorkspaceAction } from "../workspace-actions";
 import {
   EmptyCard,
   ErrorNotice,
@@ -250,35 +250,25 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
     }
   }
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <LoadingCard />
-      </>
-    );
-  }
+  if (loading) return <LoadingCard />;
   if (error && documents.length === 0 && !creating && !editing) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <ErrorNotice error={error} onRetry={retry} />
-      </>
-    );
+    return <ErrorNotice error={error} onRetry={retry} />;
   }
 
   const visible = documents.filter(
     (document) => document.workspace_state === "active",
   );
+  const newFile = (
+    <PageAction
+      name="new"
+      disabled={busyId !== null}
+      onClick={() => setCreating(true)}
+    />
+  );
 
   return (
     <>
       <PageIntro title={t("knowledgePageTitle")} />
-      <WorkspaceAction
-        name="new"
-        disabled={busyId !== null || creating || editing !== null}
-        onClick={() => setCreating(true)}
-      />
       {error ? <ErrorNotice error={error} onRetry={retry} /> : null}
       {conflict ? (
         <div className="notice notice-warning" role="status">
@@ -329,9 +319,12 @@ export function KnowledgeLibrary({ groupId }: { groupId: string }) {
         </SectionCard>
       ) : null}
       {!creating && !editing ? (
-        <SectionCard title={`${t("filesHeading")} · ${visible.length}`}>
+        <SectionCard
+          title={`${t("filesHeading")} · ${visible.length}`}
+          action={visible.length > 0 ? newFile : undefined}
+        >
           {visible.length === 0 ? (
-            <EmptyCard title={t("knowledgeNoFiles")} />
+            <EmptyCard title={t("knowledgeNoFiles")} action={newFile} />
           ) : (
             <div className="knowledge-tile-grid">
               {visible.map((document) => (
