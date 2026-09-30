@@ -3,9 +3,10 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../components/locale";
 
@@ -19,14 +20,18 @@ vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
 }));
 
+type Membership = { role: string };
+const session = vi.hoisted(() => ({
+  user: {
+    display_name: "Teacher",
+    courses: [] as (Membership & { course_id: string })[],
+    groups: [] as (Membership & { group_id: string })[],
+  },
+  api: {} as Record<string, unknown>,
+}));
+
 vi.mock("../components/session-provider", () => ({
-  useSession: () => ({
-    user: {
-      display_name: "Teacher",
-      groups: [],
-    },
-    logout: vi.fn(async () => undefined),
-  }),
+  useSession: () => ({ ...session, logout: vi.fn(async () => undefined) }),
 }));
 
 import { AppShell } from "../components/app-shell";
@@ -42,6 +47,37 @@ function renderTeacherShell(pathname: string) {
     </LocaleProvider>,
   );
 }
+
+function renderStudentShell(pathname: string) {
+  navigation.pathname = pathname;
+  return render(
+    <LocaleProvider initialLocale="en">
+      <AppShell role="student">
+        <p>Student content</p>
+      </AppShell>
+    </LocaleProvider>,
+  );
+}
+
+const courseTeacherInTwoGroups = {
+  display_name: "Maya",
+  courses: [{ course_id: "course", role: "teacher" }],
+  groups: [
+    { group_id: "group-a", role: "admin" },
+    { group_id: "group-b", role: "admin" },
+  ],
+};
+
+function navHrefs() {
+  return within(screen.getByRole("navigation"))
+    .getAllByRole("link")
+    .map((link) => link.getAttribute("href"));
+}
+
+beforeEach(() => {
+  session.user = { display_name: "Teacher", courses: [], groups: [] };
+  session.api = {};
+});
 
 describe("PW3-E teacher information architecture", () => {
   afterEach(() => cleanup());
@@ -194,5 +230,98 @@ describe("PW3-E teacher information architecture", () => {
     fireEvent.click(within(nav).getByRole("button", { name: "Done" }));
     expect(submit).toHaveBeenCalledTimes(1);
     expect(within(screen.getByRole("main")).queryByRole("button")).toBeNull();
+  });
+});
+
+describe("student shell navigation", () => {
+  afterEach(() => cleanup());
+
+  it("sends a student's Mayaform to the student home", () => {
+    session.user = {
+      display_name: "Kaikai",
+      courses: [{ course_id: "course", role: "student" }],
+      groups: [{ group_id: "group-a", role: "member" }],
+    };
+    renderStudentShell("/student");
+    const home = within(screen.getByRole("navigation")).getByRole("link", {
+      name: "Mayaform",
+    });
+    expect(home.getAttribute("href")).toBe("/student");
+    expect(home.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("sends a course teacher's Mayaform to the teacher home from inside a group", () => {
+    session.user = courseTeacherInTwoGroups;
+    renderStudentShell("/student/groups/group-b");
+    const nav = within(screen.getByRole("navigation"));
+    const home = nav.getByRole("link", { name: "Mayaform" });
+    expect(home.getAttribute("href")).toBe("/teacher");
+    expect(home.getAttribute("aria-current")).toBeNull();
+    expect(nav.queryByText("Homeward")).toBeNull();
+    expect(navHrefs().filter((href) => href?.startsWith("/teacher"))).toEqual([
+      "/teacher",
+    ]);
+  });
+
+  it("points the group links at the group in the URL, not the first membership", () => {
+    session.user = courseTeacherInTwoGroups;
+    renderStudentShell("/student/groups/group-b/knowledge");
+    expect(navHrefs()).toEqual([
+      "/teacher",
+      "/student/chat",
+      "/student/groups/group-b",
+      "/student/groups/group-b/knowledge",
+      "/student/groups/group-b/voices",
+    ]);
+    expect(
+      within(screen.getByRole("navigation"))
+        .getByRole("link", { name: "Knowledge" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+  });
+
+  it("falls back to the only group on pages that name none", () => {
+    session.user = {
+      display_name: "Kaikai",
+      courses: [{ course_id: "course", role: "student" }],
+      groups: [{ group_id: "group-a", role: "member" }],
+    };
+    session.api = { agent: vi.fn(), version: vi.fn() };
+    renderStudentShell("/student/agents/agent-a");
+    expect(
+      within(screen.getByRole("navigation"))
+        .getByRole("link", { name: "Workspace" })
+        .getAttribute("href"),
+    ).toBe("/student/groups/group-a");
+    expect(session.api.agent).not.toHaveBeenCalled();
+  });
+
+  it("asks which group owns an Agent before linking a member of several groups", async () => {
+    session.user = courseTeacherInTwoGroups;
+    let resolveAgent!: (agent: { id: string; group_id: string }) => void;
+    session.api = {
+      version: vi.fn().mockResolvedValue({ id: "v-b", agent_id: "agent-b" }),
+      agent: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            resolveAgent = resolve;
+          }),
+      ),
+    };
+    renderStudentShell("/student/agent-versions/v-b/edit");
+    const nav = within(screen.getByRole("navigation"));
+    await waitFor(() =>
+      expect(session.api.agent).toHaveBeenCalledWith("agent-b"),
+    );
+    // Until the owner is known there is no group link to follow, rather than
+    // one that leads into the first group.
+    expect(nav.queryByRole("link", { name: "Workspace" })).toBeNull();
+    resolveAgent({ id: "agent-b", group_id: "group-b" });
+    const workspace = await nav.findByRole("link", { name: "Workspace" });
+    expect(workspace.getAttribute("href")).toBe("/student/groups/group-b");
+    expect(workspace.getAttribute("aria-current")).toBe("page");
+    expect(nav.getByRole("link", { name: "Voices" }).getAttribute("href")).toBe(
+      "/student/groups/group-b/voices",
+    );
   });
 });

@@ -15,7 +15,8 @@ real-provider acceptance.
 - Create or use a student account and confirm case-insensitive duplicate usernames
   are rejected without changing the existing session.
 - In **Accounts → Groups**, use **Enter** and confirm the teacher receives full group
-  workspace CRUD under the teacher identity; **Homeward** returns to Accounts.
+  workspace CRUD under the teacher identity; **Mayaform** returns to the teacher
+  home, and Workspace / Knowledge / Voices point at the group on screen.
 - Confirm teacher group access survives a container restart.
 
 ## Agent workspace

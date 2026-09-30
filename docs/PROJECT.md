@@ -216,7 +216,8 @@ that override first, the current session survives the change, and every other
 session is revoked. Migration 0029 enforces canonical username and group uniqueness;
 collisions stop migration, duplicates never alter a login.
 Teacher group access survives catalog sync: Enter grants workspace CRUD under
-the teacher identity; Homeward returns to Accounts. CSRF, publication, course,
+the teacher identity; Mayaform returns teachers home, and group links follow the
+group on screen. CSRF, publication, course,
 provider consent and cost boundaries remain; TTS/Voice configuration is preserved.
 
 ## Classroom display — September 18, 2026

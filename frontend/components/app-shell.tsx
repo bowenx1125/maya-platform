@@ -27,10 +27,53 @@ export function AppShell({
   const router = useRouter();
   const pathname = usePathname();
   const [busy, setBusy] = useState(false);
-  const groupId = user?.groups?.[0]?.group_id;
   const courseId = user?.courses?.[0]?.course_id;
   const [live, setLive] = useState(false);
   const [actions, setActions] = useState<WorkspaceActions>({});
+  const [agentGroup, setAgentGroup] = useState<{
+    route: string;
+    groupId: string;
+  } | null>(null);
+
+  const isStudent = role === "student";
+  // The sidebar's group links follow the group on screen. groups[0] is only a
+  // fallback for pages that belong to no group, or it sends anyone who sits in
+  // several groups into a different one than they are working in. Agent URLs
+  // name no group, so with several to choose from the shell asks which one owns
+  // the Agent and shows no group links until it knows.
+  const [, routeGroupId] = pathname.match(/^\/student\/groups\/([^/]+)/) ?? [];
+  const [agentRoute, agentRouteKind, agentRouteId] =
+    pathname.match(/^\/student\/(agents|agent-versions)\/([^/]+)/) ?? [];
+  const lookUpAgentGroup =
+    isStudent && Boolean(agentRoute) && (user?.groups?.length ?? 0) > 1;
+  const agentGroupId =
+    agentGroup !== null && agentGroup.route === agentRoute
+      ? agentGroup.groupId
+      : undefined;
+  const groupId =
+    routeGroupId ??
+    (lookUpAgentGroup ? agentGroupId : user?.groups?.[0]?.group_id);
+
+  useEffect(() => {
+    if (!lookUpAgentGroup || !agentRoute || !agentRouteId) return;
+    let active = true;
+    void (
+      agentRouteKind === "agents"
+        ? Promise.resolve(agentRouteId)
+        : api.version(agentRouteId).then((version) => version.agent_id)
+    )
+      .then((agentId) => api.agent(agentId))
+      .then((agent) => {
+        if (active)
+          setAgentGroup({ route: agentRoute, groupId: agent.group_id });
+      })
+      // A failed lookup leaves the group links hidden; the page's own Back
+      // still leads to the right group.
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [api, agentRoute, agentRouteId, agentRouteKind, lookUpAgentGroup]);
 
   useEffect(() => {
     if (
@@ -71,10 +114,12 @@ export function AppShell({
     }
   }
 
-  const isStudent = role === "student";
   const isCourseTeacher = user?.courses?.some(
     (membership) => membership.role === "teacher",
   );
+  // The brand mark goes home, and a teacher's home is the teacher side even
+  // while they work inside a group they entered from the roster.
+  const home = isStudent && !isCourseTeacher ? "/student" : "/teacher";
   const links: {
     href: string;
     label: string;
@@ -82,21 +127,9 @@ export function AppShell({
     disabled?: boolean;
   }[] = isStudent
     ? [
-        { href: "/student", label: t("appName"), icon: "home" },
+        { href: home, label: t("appName"), icon: "home" },
         { href: "/student/chat", label: "Chats", icon: "chat" },
         { href: "/student/live", label: "Live", icon: "live", disabled: !live },
-        // Back to the roster, not the dashboard: the roster is the only door
-        // into a group for a teacher, so it is the page they left to get here
-        // and the one that still has the row they are working through.
-        ...(isCourseTeacher
-          ? [
-              {
-                href: "/teacher/roster",
-                label: t("homeward"),
-                icon: "accounts" as const,
-              },
-            ]
-          : []),
         ...(groupId
           ? [
               {
@@ -104,10 +137,6 @@ export function AppShell({
                 label: t("groupWorkspace"),
                 icon: "agents" as const,
               },
-            ]
-          : []),
-        ...(groupId
-          ? [
               {
                 href: `/student/groups/${groupId}/knowledge`,
                 label: t("knowledge"),
@@ -122,30 +151,29 @@ export function AppShell({
           : []),
       ]
     : [
-        { href: "/teacher", label: t("appName"), icon: "home" },
+        { href: home, label: t("appName"), icon: "home" },
         { href: "/teacher/chat", label: "Chats", icon: "chat" },
         { href: "/teacher/debates", label: t("debateList"), icon: "classroom" },
         { href: "/teacher/roster", label: t("accounts"), icon: "accounts" },
       ];
 
   const activePath =
-    isStudent &&
-    groupId &&
-    /^\/student\/(agents|agent-versions)\//.test(pathname)
+    isStudent && groupId && agentRoute
       ? `/student/groups/${groupId}`
       : pathname.startsWith("/teacher/debates-beta/")
         ? pathname.replace("/teacher/debates-beta/", "/teacher/debates/")
         : pathname;
+  // Unmatched pages fall back to home only inside home's own side: a teacher
+  // on a student page is not at home.
   const activeHref =
     links
       .filter(
         (link) =>
           activePath === link.href ||
-          (!["/teacher", "/student"].includes(link.href) &&
-            activePath.startsWith(`${link.href}/`)),
+          (link.href !== home && activePath.startsWith(`${link.href}/`)),
       )
       .sort((left, right) => right.href.length - left.href.length)[0]?.href ??
-    (isStudent ? "/student" : "/teacher");
+    (activePath.startsWith(`${home}/`) ? home : undefined);
 
   return (
     <WorkspaceActionsContext.Provider value={setActions}>

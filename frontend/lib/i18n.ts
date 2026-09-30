@@ -225,7 +225,6 @@ const enMessages = {
   statusPartial: "partial",
   statusInterrupted: "interrupted",
   studentHome: "Home",
-  homeward: "Homeward",
   welcomeBack: "Welcome back",
   studentHomeLede:
     "Build an Agent with a clear identity, a selected evidence set, and a release that a teacher can inspect.",
@@ -978,7 +977,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   statusPartial: "部分完成",
   statusInterrupted: "已中断",
   studentHome: "首页",
-  homeward: "Homeward",
   welcomeBack: "欢迎回来",
   studentHomeLede: "构建清晰的人设、明确的证据集，以及教师可以检查的发布版本。",
   currentCourse: "当前课程",
