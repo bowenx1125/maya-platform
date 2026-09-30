@@ -120,20 +120,37 @@ export function TeacherDashboard() {
     },
   ];
   return (
-    <div className="teacher-home-layout">
-      <section className="mayaform-home-welcome teacher-home-welcome">
-        <div className="home-mascots">
+    <div className="mayaform-home">
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <p className="home-hero-eyebrow">{course?.name ?? t("course")}</p>
+          <h1>{t("homeWelcomeTitle", { name })}</h1>
+        </div>
+        <div className="home-hero-art">
           <AcademyMascots label={t("academyMascotsLabel")} />
         </div>
-        <p className="mayaform-home-eyebrow">{t("appName")}</p>
-        <h1>{t("homeWelcomeTitle", { name })}</h1>
-        <p className="mayaform-home-lede">
-          {t("homeWelcomeCourse", {
-            course: course?.name ?? t("course"),
-          })}
-        </p>
       </section>
-      <section className="home-guide" aria-labelledby="teacher-guide-title">
+      {/* A teacher opens this page to read the class, not their own progress,
+          so the counts come before the guide. A student has one group and
+          needs no such summary, which is what keeps the two homes apart. */}
+      <div className="home-stats">
+        <div className="home-stat">
+          <b>{groups.length}</b>
+          <span>{t("groups")}</span>
+        </div>
+        <div className="home-stat">
+          <b>{published.length}</b>
+          <span>{t("agents")}</span>
+        </div>
+        <div className="home-stat">
+          <b>{debateCount}</b>
+          {/* `debates` is the nav's own word for the section ("Classroom"),
+              which reads wrong over a number; `debateList` is the plural
+              noun. */}
+          <span>{t("debateList")}</span>
+        </div>
+      </div>
+      <section className="home-panel" aria-labelledby="teacher-guide-title">
         <h2 id="teacher-guide-title">{t("guide")}</h2>
         <div className="home-guide-list">
           {guide.map((item, index) => (
@@ -179,7 +196,7 @@ export function TeacherDashboard() {
           </div>
         </SectionCard>
       )}
-      <AccountSettings />
+      <AccountSettings onSaved={() => void load()} />
     </div>
   );
 }

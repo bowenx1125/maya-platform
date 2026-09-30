@@ -70,9 +70,10 @@
 }
 
 .appearance :global(.section-card-header) h2 {
+  font-family: var(--display-serif);
   font-size: 1.35rem;
-  font-weight: 720;
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .appearance

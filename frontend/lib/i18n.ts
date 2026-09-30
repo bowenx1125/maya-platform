@@ -472,7 +472,6 @@ const enMessages = {
   hideConfirm:
     "Hide {filename} from the group workspace? Published snapshots remain available.",
   homeWelcomeTitle: "Welcome {name}",
-  homeWelcomeCourse: "You are in {course}.",
   guide: "Guide",
   guideDone: "Done",
   guideNext: "Next",
@@ -490,16 +489,6 @@ const enMessages = {
   changePassword: "Password",
   currentPassword: "Current password",
   newPassword: "New password",
-  homeSurfaceChats: "Chats — private one-to-one talks with a published Agent.",
-  homeSurfaceWorkspace: "Workspace — build and publish Agents for your group.",
-  homeSurfaceKnowledge:
-    "Knowledge — the shared Markdown library used when drafting Agents.",
-  homeSurfaceVoice: "Voice — custom voices your group can attach to Agents.",
-  homeSurfaceLive:
-    "Live — join the classroom debate when the teacher opens it.",
-  homePrivacyNote:
-    "A published Agent is visible to the group and the teacher. Chats are visible only to yourself. Voice is visible to the group and the teacher.",
-  homeMembersIntro: "People who share this group workspace.",
   draftSavedNotice: "Draft saved. Revision advanced safely.",
   agentMdUploadedNotice:
     "AGENT.md uploaded and saved as the next draft revision.",
@@ -1203,7 +1192,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   hidden: "已隐藏",
   hideConfirm: "从小组工作区隐藏 {filename}？已发布快照仍然可用。",
   homeWelcomeTitle: "欢迎，{name}",
-  homeWelcomeCourse: "你在 {course}。",
   guide: "引导",
   guideDone: "完成",
   guideNext: "下一步",
@@ -1221,14 +1209,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   changePassword: "密码",
   currentPassword: "当前密码",
   newPassword: "新密码",
-  homeSurfaceChats: "Chats — 与已发布智能体的一对一私密对话。",
-  homeSurfaceWorkspace: "Workspace — 为小组创建并发布智能体。",
-  homeSurfaceKnowledge: "Knowledge — 起草智能体时共用的 Markdown 资料库。",
-  homeSurfaceVoice: "Voice — 小组可挂到智能体上的自定义音色。",
-  homeSurfaceLive: "Live — 教师开启课堂辩论时加入旁听。",
-  homePrivacyNote:
-    "已发布的智能体对小组和教师可见。Chats 仅自己可见。Voice 对小组和教师可见。",
-  homeMembersIntro: "共享此小组工作区的成员。",
   draftSavedNotice: "草稿已保存，版本号已安全递增。",
   agentMdUploadedNotice: "AGENT.md 已上传并保存为下一个草稿版本。",
   evidenceUpdatedNotice: "已更新启用的证据集。",

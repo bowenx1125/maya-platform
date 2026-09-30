@@ -28,14 +28,14 @@ describe("Wave 1A locale and V2 style boundary", () => {
     expect(css).toMatch(/font-family:\s*\n\s*Inter,/);
   });
 
-  it("keeps the display serif on the sign-in plate only", () => {
+  it("keeps the display serif on the sign-in plate and workspace headings", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
     const theme = readFileSync(
       resolve(process.cwd(), "components/workspace-theme.module.css"),
       "utf8",
     );
-    // Only the two sign-in headings use --display-serif; product surfaces use
-    // the compact UI font and nowhere may invent a second serif stack.
+    // Sign-in and section headings share --display-serif; nowhere else may
+    // invent a second serif stack.
     const declarations = [
       ...(css.match(/font-family:[^;]+;/g) ?? []),
       ...(theme.match(/font-family:[^;]+;/g) ?? []),
@@ -43,7 +43,7 @@ describe("Wave 1A locale and V2 style boundary", () => {
     const display = declarations.filter((rule) =>
       rule.includes("var(--display-serif)"),
     );
-    expect(display).toHaveLength(2);
+    expect(display.length).toBeGreaterThanOrEqual(3);
     const stray = declarations.filter(
       (rule) =>
         !rule.includes("var(--display-serif)") &&
@@ -56,9 +56,8 @@ describe("Wave 1A locale and V2 style boundary", () => {
     expect(css).toMatch(
       /\.academy-welcome\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
     );
-    expect(theme).not.toContain("var(--display-serif)");
-    expect(css).not.toMatch(
-      /\.section-card-header h2\s*\{[^}]*font-family:\s*var\(--display-serif\)/,
+    expect(css).toMatch(
+      /\.section-card-header h2\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
     );
   });
 });

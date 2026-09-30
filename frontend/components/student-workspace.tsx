@@ -159,71 +159,74 @@ export function StudentDashboard() {
 
   return (
     <div className="mayaform-home">
-      <section className="mayaform-home-welcome">
-        <div className="home-mascots">
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          {/* The course is the eyebrow rather than a sentence underneath: it
+              is one of the four things this page has to answer, and naming it
+              costs less than explaining it. */}
+          <p className="home-hero-eyebrow">{courseName}</p>
+          <h1>{t("homeWelcomeTitle", { name })}</h1>
+        </div>
+        <div className="home-hero-art">
           <AcademyMascots label={t("academyMascotsLabel")} />
         </div>
-        <p className="mayaform-home-eyebrow">{t("appName")}</p>
-        <h1>{t("homeWelcomeTitle", { name })}</h1>
-        <p className="mayaform-home-lede">
-          {t("homeWelcomeCourse", { course: courseName })}
-        </p>
       </section>
-      {guide.length > 0 ? (
-        <section className="home-guide" aria-labelledby="student-guide-title">
-          <h2 id="student-guide-title">{t("guide")}</h2>
-          <div className="home-guide-list">
-            {guide.map((item, index) => (
-              <Link
-                className="home-guide-row"
-                href={item.href}
-                key={item.label}
-              >
-                <span
-                  className="home-guide-marker"
-                  data-complete={item.complete ? "true" : undefined}
-                  aria-hidden="true"
-                >
-                  {item.complete ? "✓" : index + 1}
-                </span>
-                <strong>{item.label}</strong>
-                {item.optional ? <small>{t("guideOptional")}</small> : null}
-                <span className="home-guide-state">
-                  {item.complete ? t("guideDone") : t("guideNext")}
-                </span>
-                <span aria-hidden="true">→</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
-        groups.map((overview) => (
-          <section className="mayaform-home-members" key={overview.group.id}>
-            <header>
-              <h2>{overview.group.name}</h2>
-              <p>{t("homeMembersIntro")}</p>
-            </header>
-            <div className="member-grid">
-              {(overview.group.members ?? []).map((member) => (
-                <div className="member-chip" key={member.user_id}>
-                  <UserAvatar
-                    avatar={member.avatar}
-                    name={member.display_name}
-                    userId={member.user_id}
-                    size="sm"
-                  />
-                  <span>{member.display_name}</span>
-                  <small>{roleLabel(member.role, locale)}</small>
-                </div>
+        <div className="home-columns">
+          <section className="home-panel" aria-labelledby="student-guide-title">
+            <h2 id="student-guide-title">{t("guide")}</h2>
+            <div className="home-guide-list">
+              {guide.map((item, index) => (
+                <Link
+                  className="home-guide-row"
+                  href={item.href}
+                  key={item.label}
+                >
+                  <span
+                    className="home-guide-marker"
+                    data-complete={item.complete ? "true" : undefined}
+                    aria-hidden="true"
+                  >
+                    {item.complete ? "✓" : index + 1}
+                  </span>
+                  <strong>{item.label}</strong>
+                  {item.optional ? <small>{t("guideOptional")}</small> : null}
+                  <span className="home-guide-state">
+                    {item.complete ? t("guideDone") : t("guideNext")}
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </Link>
               ))}
             </div>
           </section>
-        ))
+          {groups.map((overview) => (
+            <section
+              className="home-panel"
+              key={overview.group.id}
+              aria-labelledby={`group-${overview.group.id}`}
+            >
+              <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
+              <ul className="home-people-list">
+                {(overview.group.members ?? []).map((member) => (
+                  <li className="home-person" key={member.user_id}>
+                    <UserAvatar
+                      avatar={member.avatar}
+                      name={member.display_name}
+                      userId={member.user_id}
+                      size="sm"
+                    />
+                    <strong>{member.display_name}</strong>
+                    <small>{roleLabel(member.role, locale)}</small>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
-      <AccountSettings />
+      <AccountSettings onSaved={() => void load()} />
     </div>
   );
 }

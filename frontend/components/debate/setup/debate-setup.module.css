@@ -195,8 +195,9 @@
 
 .debateCard h2 {
   margin: 0;
+  font-family: var(--display-serif);
   font-size: 1.05rem;
-  font-weight: 720;
+  font-weight: 500;
 }
 
 .debateCard p {

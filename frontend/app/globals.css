@@ -716,12 +716,9 @@ details > summary {
   text-transform: uppercase;
 }
 
-.teacher-home-layout {
-  display: grid;
-  gap: var(--workspace-gap);
-  max-width: 780px;
-}
-.teacher-home-layout > * {
+/* Both homes share `.mayaform-home`; the teacher's differs in what it holds,
+   not in how wide it is. */
+.mayaform-home > * {
   margin-bottom: 0;
 }
 
@@ -1043,38 +1040,35 @@ details > summary {
   background: rgba(183, 79, 90, 0.08);
 }
 
+/* Both home pages sit to the right of a fixed sidebar, so nothing here is
+   centred. A centred hero inside a sidebar layout floats away from the one
+   vertical edge the eye is already using, which is what made this page read
+   as "not lined up" even though every block was centred correctly inside its
+   own column. Everything now hangs off the same left margin. */
 .mayaform-home {
   display: grid;
-  gap: 28px;
-  max-width: 780px;
-  padding: 28px 8px 40px;
+  gap: 26px;
+  max-width: 1040px;
+  padding: 26px 0 44px;
 }
 
-.mayaform-home-welcome {
+.home-hero {
   display: grid;
-  justify-items: center;
-  gap: 14px;
-  padding: 8px 0 0;
-  text-align: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 20px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.3);
 }
 
-.teacher-home-welcome {
-  padding-top: 28px;
+.home-hero-copy {
+  display: grid;
+  align-content: end;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 20px;
 }
 
-.home-mascots {
-  position: relative;
-  width: min(310px, 82vw);
-  height: 116px;
-  overflow: hidden;
-}
-
-.home-mascots .academy-mascots {
-  bottom: -2px;
-  width: 100%;
-}
-
-.mayaform-home-eyebrow {
+.home-hero-eyebrow {
   margin: 0;
   color: #8a7350;
   font-size: 0.72rem;
@@ -1083,100 +1077,47 @@ details > summary {
   text-transform: uppercase;
 }
 
-.mayaform-home-welcome h1 {
+.home-hero-copy h1 {
   margin: 0;
+  max-width: 22ch;
   color: #3d3220;
-  font-size: clamp(1.7rem, 3vw, 2.25rem);
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
   font-weight: 720;
   letter-spacing: -0.035em;
-  line-height: 1.25;
+  line-height: 1.15;
 }
 
-.mayaform-home-rule {
-  display: flex;
-  align-items: center;
+/* The scholars are the welcome, so they stand at full height on the rule
+   rather than inside the 116px letterbox that cropped them to a strip. */
+.home-hero-art {
+  position: relative;
+  align-self: end;
+  width: min(330px, 34vw);
+  height: 164px;
+}
+
+.home-hero-art .academy-mascots {
+  bottom: 0;
+  width: 100%;
+}
+
+/* The guide and the group are both required reading, and the page is wide
+   enough to answer both at once instead of stacking them a scroll apart. */
+.home-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.home-panel {
+  display: grid;
+  align-content: start;
   gap: 10px;
-  width: min(220px, 70%);
-  margin: 2px 0 4px;
+  min-width: 0;
 }
 
-.mayaform-home-rule span {
-  flex: 1;
-  height: 1px;
-  background: rgba(201, 162, 39, 0.45);
-}
-
-.mayaform-home-rule i {
-  width: 6px;
-  height: 6px;
-  background: rgba(201, 162, 39, 0.7);
-  transform: rotate(45deg);
-}
-
-.mayaform-home-lede {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-
-.mayaform-home-surfaces {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-  max-width: 34rem;
-  color: var(--ink);
-  font-size: 0.9rem;
-  line-height: 1.55;
-  text-align: left;
-}
-
-.mayaform-home-privacy {
-  margin: 10px 0 0;
-  max-width: 34rem;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.55;
-  text-align: left;
-}
-
-.mayaform-home-members {
-  display: grid;
-  gap: 14px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.mayaform-home-members header {
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.mayaform-home-members h2 {
-  margin: 0;
-  color: #3d3220;
-  font-size: 1.35rem;
-  font-weight: 720;
-  letter-spacing: -0.02em;
-}
-
-.mayaform-home-members header p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-.home-guide {
-  display: grid;
-  gap: 10px;
-}
-
-.home-guide h2 {
+.home-panel > h2 {
   margin: 0;
   color: var(--ink);
   font-size: 0.78rem;
@@ -1184,6 +1125,76 @@ details > summary {
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
+
+.home-people-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-person {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid #e7e0d7;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.home-person strong {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-person small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+/* Three numbers a teacher can read without opening anything: the difference
+   between their home and a student's, which is a single group's progress. */
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.home-stat {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid #e7e0d7;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.home-stat b {
+  color: #3d3220;
+  font-size: 1.5rem;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.home-stat span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* The guide is a `.home-panel` like the group beside it, so its heading and
+   spacing come from there; only the rows are its own. */
 
 .home-guide-list {
   display: grid;
@@ -1330,9 +1341,11 @@ details > summary {
   font-size: 0.78rem;
 }
 
+/* Four across, so the eight read as two rows of a set rather than a ragged
+   five-and-three that looks like an overflow. */
 .avatar-picker {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
   gap: 7px;
   margin: 0;
   padding: 0;
@@ -1403,7 +1416,7 @@ details > summary {
   }
 
   .mayaform-home {
-    gap: 36px;
+    gap: 26px;
     padding-inline: 0;
   }
 
@@ -1418,6 +1431,28 @@ details > summary {
   .home-guide-row small,
   .home-guide-state {
     display: none;
+  }
+}
+
+/* The hero's two halves and the two columns below it need roughly a laptop's
+   width to stay side by side; under that they stack, and the scholars step
+   aside rather than shrink to a smudge. */
+@media (max-width: 880px) {
+  .home-columns,
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-hero-art {
+    display: none;
+  }
+
+  .home-hero-copy {
+    padding-bottom: 14px;
+  }
+
+  .home-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

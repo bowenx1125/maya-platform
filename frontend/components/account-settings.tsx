@@ -8,7 +8,7 @@ import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard } from "./ui";
 import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";
 
-export function AccountSettings() {
+export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
   const t = useT();
   const { api, refresh, user } = useSession();
   const [avatar, setAvatar] = useState<string | null>(user?.avatar ?? null);
@@ -27,6 +27,11 @@ export function AccountSettings() {
     try {
       await api.updateCurrentUser(avatar);
       await refresh();
+      // The session carries the viewer's own avatar, but the roster and the
+      // group's member list were fetched separately and still hold the old
+      // one. Without this the person who just picked a scholar is the only
+      // one on the page who cannot see it.
+      onSaved?.();
       setSaved("avatar");
     } catch (cause) {
       setError(cause);
@@ -94,10 +99,13 @@ export function AccountSettings() {
                   checked={avatar === choice}
                   onChange={() => setAvatar(choice)}
                 />
+                {/* Large enough to tell apart: at 28px the four silhouettes
+                    collapsed into one blob and the picker offered four
+                    colours rather than eight scholars. */}
                 <UserAvatar
                   avatar={choice}
                   name={`${t("userAvatar")} ${index + 1}`}
-                  size="sm"
+                  size="md"
                 />
                 <span className="sr-only">{`${t("userAvatar")} ${index + 1}`}</span>
               </label>
