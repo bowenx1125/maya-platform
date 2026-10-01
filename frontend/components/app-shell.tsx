@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import workspaceStyles from "./workspace-theme.module.css";
 import styles from "./app-shell.module.css";
+import { SecretDoor } from "./card-table/secret-door";
 import { ViewTransition } from "./view-transition";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
 
@@ -239,6 +240,7 @@ export function AppShell({
       >
         {children}
       </main>
+      <SecretDoor />
     </div>
   );
 }

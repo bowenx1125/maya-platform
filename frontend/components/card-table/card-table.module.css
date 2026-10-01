@@ -1,0 +1,613 @@
+/* The card room: black, pixel-edged and a little alive, after Balatro. */
+.room {
+  --felt: #1f5a44;
+  --felt-dark: #1a4e3b;
+  --rail: #5b2a20;
+  --rail-dark: #3a1812;
+  --ink: #f4efe6;
+  --gold: #f0c040;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  color: var(--ink);
+  background: radial-gradient(
+    ellipse 60% 55% at 50% 48%,
+    #12302a 0%,
+    #0a1412 55%,
+    #050506 100%
+  );
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 700;
+  animation: room-in 520ms ease-out both;
+}
+
+.room[data-leaving] {
+  animation: room-out 280ms ease-in both;
+}
+
+/* Scanlines and a vignette, over everything and catching no clicks. */
+.room::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.035) 0 1px,
+      transparent 1px 3px
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 55%,
+      rgba(0, 0, 0, 0.55) 100%
+    );
+}
+
+.room:focus {
+  outline: none;
+}
+
+.layout {
+  position: relative;
+  display: grid;
+  /* Pixel type cannot wrap, so the column must never grow past the screen. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  height: 100%;
+  padding: 16px clamp(12px, 3vw, 32px) 20px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  color: #bfb8a8;
+}
+
+/* The felt: a stadium with a pixel rail, dithered green and a hard drop. */
+.felt {
+  position: relative;
+  align-self: center;
+  justify-self: center;
+  width: min(1040px, 92vw);
+  aspect-ratio: 2.05 / 1;
+  max-height: 100%;
+  border-radius: 999px;
+  background: repeating-conic-gradient(
+      var(--felt) 0 25%,
+      var(--felt-dark) 0 50%
+    )
+    0 0 / 4px 4px;
+  box-shadow:
+    inset 0 0 0 4px #2e7a5d,
+    inset 0 0 60px rgba(0, 0, 0, 0.45),
+    0 0 0 10px var(--rail),
+    0 0 0 14px var(--rail-dark),
+    0 22px 0 14px #000;
+  animation: felt-in 640ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+}
+
+.board {
+  display: flex;
+  gap: 10px;
+}
+
+.slot {
+  width: 64px;
+  height: 90px;
+  border-radius: 6px;
+  outline: 2px dashed rgba(255, 255, 255, 0.12);
+  outline-offset: -2px;
+}
+
+.pot {
+  color: var(--gold);
+  text-shadow: 0 3px 0 #000;
+  filter: drop-shadow(0 3px 0 #000);
+}
+
+/* Cards */
+.card {
+  position: relative;
+  display: inline-block;
+  width: 64px;
+  height: 90px;
+  border-radius: 6px;
+  background: #f6efe1;
+  box-shadow:
+    0 0 0 2px #23232b,
+    0 5px 0 2px rgba(0, 0, 0, 0.5);
+  rotate: var(--tilt);
+  animation:
+    card-deal 460ms cubic-bezier(0.2, 0.9, 0.3, 1.2) calc(var(--order) * 90ms)
+      both,
+    card-float 3.2s ease-in-out calc(var(--order) * -0.7s) infinite;
+  top: 0;
+  transition: top 200ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.cardSmall {
+  width: 40px;
+  height: 56px;
+}
+
+.suitRed {
+  color: #e0443e;
+}
+
+.suitBlack {
+  color: #23232b;
+}
+
+.corner {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+}
+
+.cardSmall .corner {
+  top: 4px;
+  left: 4px;
+  gap: 2px;
+}
+
+.pip {
+  position: absolute;
+  right: 8px;
+  bottom: 9px;
+}
+
+.cardSmall .pip {
+  right: 5px;
+  bottom: 6px;
+}
+
+.cardBack {
+  background: repeating-conic-gradient(#c33d3d 0 25%, #a52f2f 0 50%) 0 0 / 8px
+    8px;
+  box-shadow:
+    inset 0 0 0 3px #f6efe1,
+    0 0 0 2px #23232b,
+    0 5px 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.hole .card:hover {
+  top: -8px;
+}
+
+/* Seats */
+.seat {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  translate: -50% -50%;
+  transition: opacity 200ms ease;
+}
+
+.seat[data-folded] {
+  opacity: 0.4;
+}
+
+.hole {
+  display: flex;
+  gap: 4px;
+  min-height: 56px;
+}
+
+.plate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 8px;
+  background: #15151c;
+  box-shadow:
+    0 0 0 2px #2c2c38,
+    0 4px 0 2px #000;
+  white-space: nowrap;
+}
+
+.seat[data-turn] .plate {
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 18px 2px rgba(240, 192, 64, 0.45),
+    0 4px 0 2px #000;
+  animation: turn-pulse 1s ease-in-out infinite;
+}
+
+.seat[data-winner] .plate {
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 28px 6px rgba(240, 192, 64, 0.6),
+    0 4px 0 2px #000;
+  animation: winner-hop 700ms cubic-bezier(0.34, 1.6, 0.64, 1) 2;
+}
+
+.avatar {
+  position: relative;
+  display: grid;
+  image-rendering: pixelated;
+}
+
+.dealer {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #23232b;
+  background: var(--ink);
+  box-shadow: 0 2px 0 #000;
+}
+
+.who {
+  display: grid;
+  gap: 4px;
+}
+
+.name {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.stack {
+  color: var(--gold);
+}
+
+.said {
+  position: absolute;
+  top: -18px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: #23232b;
+  background: var(--ink);
+  box-shadow: 0 3px 0 #000;
+  animation: said-pop 1.6s ease-out both;
+  pointer-events: none;
+}
+
+.bet {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+}
+
+.chip {
+  width: 14px;
+  height: 14px;
+  border: 3px dashed #f6efe1;
+  border-radius: 50%;
+  background: #e0443e;
+  box-shadow: 0 2px 0 #000;
+}
+
+.banner {
+  display: grid;
+  gap: 12px;
+  padding: 18px 26px;
+  border-radius: 10px;
+  background: #15151c;
+  box-shadow:
+    0 0 0 4px var(--gold),
+    0 0 0 8px #000,
+    0 0 60px 10px rgba(240, 192, 64, 0.35);
+  animation: banner-pop 520ms cubic-bezier(0.34, 1.6, 0.64, 1) both;
+}
+
+.bannerLine {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.handName {
+  color: var(--gold);
+}
+
+/* Controls */
+.controls {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  min-height: 92px;
+}
+
+.actions,
+.raise {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.button {
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #4a4a58;
+  box-shadow:
+    0 0 0 2px #000,
+    0 5px 0 2px #000;
+  cursor: pointer;
+  transition:
+    translate 80ms ease,
+    box-shadow 80ms ease,
+    filter 120ms ease;
+}
+
+.button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.button:active:not(:disabled) {
+  translate: 0 4px;
+  box-shadow:
+    0 0 0 2px #000,
+    0 1px 0 2px #000;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7) brightness(0.6);
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 4px;
+}
+
+.red {
+  background: #e0443e;
+}
+
+.blue {
+  background: #1d8de0;
+}
+
+.orange {
+  background: #f08a1c;
+}
+
+.green {
+  background: #3aa36f;
+}
+
+.purple {
+  background: #8a5cd6;
+}
+
+.grey {
+  background: #3a3a46;
+}
+
+.small {
+  padding: 10px 14px;
+}
+
+.deal {
+  padding: 14px 34px;
+}
+
+.button[data-urgent] {
+  animation: turn-pulse 900ms ease-in-out infinite;
+}
+
+.waiting {
+  color: #6f6a60;
+  animation: turn-pulse 900ms ease-in-out infinite;
+}
+
+/* The way in: the workspace splits at the middle and opens like doors. */
+.door {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 2147483001;
+  height: 50vh;
+  overflow: hidden;
+  background: var(--paper, #fcfaf6);
+  pointer-events: none;
+}
+
+/* The copies are pictures of the page, so nothing in them should animate. */
+.door *,
+.door *::before,
+.door *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+.doorTop {
+  top: 0;
+  animation: door-up 860ms cubic-bezier(0.7, 0, 0.2, 1) 300ms both;
+}
+
+.doorBottom {
+  top: 50vh;
+  animation: door-down 860ms cubic-bezier(0.7, 0, 0.2, 1) 300ms both;
+}
+
+.doorTop::after,
+.doorBottom::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gold, #f0c040);
+  box-shadow: 0 0 22px 4px rgba(240, 192, 64, 0.8);
+  transform-origin: center;
+  animation: seam 320ms ease-out both;
+}
+
+.doorTop::after {
+  bottom: 0;
+}
+
+.doorBottom::before {
+  top: 0;
+}
+
+.door > * {
+  position: absolute;
+  margin: 0;
+}
+
+@keyframes door-up {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes door-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes seam {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes room-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes room-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes felt-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes card-deal {
+  from {
+    opacity: 0;
+    transform: translate(0, -140px) rotate(-24deg) scale(0.6);
+  }
+}
+
+@keyframes card-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -3px;
+  }
+}
+
+@keyframes turn-pulse {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+
+@keyframes winner-hop {
+  40% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes said-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.8);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes banner-pop {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+
+/* On a phone the table keeps its proportions and shrinks as a whole, so the
+   pixel lettering never spills out of a card. */
+@media (max-width: 760px) {
+  .felt {
+    width: 96vw;
+    aspect-ratio: 0.95 / 1;
+  }
+  .title {
+    order: 3;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  .board,
+  .seat,
+  .pot,
+  .banner {
+    zoom: 0.62;
+  }
+  .topbar,
+  .controls {
+    zoom: 0.72;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room,
+  .felt,
+  .card,
+  .seat[data-turn] .plate,
+  .seat[data-winner] .plate,
+  .said,
+  .banner,
+  .button[data-urgent],
+  .waiting {
+    animation: none;
+  }
+}
