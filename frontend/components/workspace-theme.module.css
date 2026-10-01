@@ -26,6 +26,31 @@
   padding: var(--workspace-inset);
 }
 
+/* A page's blocks rise into place one after another, so arriving reads as
+   the page being laid out rather than switched on. The home is one block that
+   holds the page, so its sections take the stagger instead. */
+.surface > :not(:global(.mayaform-home)),
+.surface > :global(.mayaform-home) > * {
+  animation: page-rise 520ms var(--ease-out) both;
+}
+
+.surface > :nth-child(2),
+.surface > :global(.mayaform-home) > :nth-child(2) {
+  animation-delay: 60ms;
+}
+.surface > :nth-child(3),
+.surface > :global(.mayaform-home) > :nth-child(3) {
+  animation-delay: 120ms;
+}
+.surface > :nth-child(4),
+.surface > :global(.mayaform-home) > :nth-child(4) {
+  animation-delay: 180ms;
+}
+.surface > :nth-child(n + 5),
+.surface > :global(.mayaform-home) > :nth-child(n + 5) {
+  animation-delay: 240ms;
+}
+
 .surface :global(.section-card-header) {
   flex-direction: row;
   flex-wrap: wrap;
@@ -275,6 +300,10 @@
   .surface :is(a, button) {
     transition: none;
     transform: none;
+  }
+  .surface > *,
+  .surface > :global(.mayaform-home) > * {
+    animation: none;
   }
 }
 

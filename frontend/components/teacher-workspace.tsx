@@ -1,5 +1,6 @@
 "use client";
 
+import { CountUp } from "./count-up";
 import { PageAction } from "./page-action";
 
 import Link from "next/link";
@@ -135,15 +136,21 @@ export function TeacherDashboard() {
           needs no such summary, which is what keeps the two homes apart. */}
       <div className="home-stats">
         <div className="home-stat">
-          <b>{groups.length}</b>
+          <b>
+            <CountUp value={groups.length} />
+          </b>
           <span>{t("groups")}</span>
         </div>
         <div className="home-stat">
-          <b>{published.length}</b>
+          <b>
+            <CountUp value={published.length} />
+          </b>
           <span>{t("agents")}</span>
         </div>
         <div className="home-stat">
-          <b>{debateCount}</b>
+          <b>
+            <CountUp value={debateCount} />
+          </b>
           {/* `debates` is the nav's own word for the section ("Classroom"),
               which reads wrong over a number; `debateList` is the plural
               noun. */}

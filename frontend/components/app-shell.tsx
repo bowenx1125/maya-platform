@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import workspaceStyles from "./workspace-theme.module.css";
 import styles from "./app-shell.module.css";
+import { ViewTransition } from "./view-transition";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
 
 import { useT } from "./locale";
@@ -194,6 +195,18 @@ export function AppShell({
                 href={link.href}
                 key={link.href}
               >
+                {/* Every page mounts its own shell, so the highlight is one
+                  named element that the browser carries from the old link to
+                  the new one instead of blinking between them. */}
+                {activeHref === link.href ? (
+                  <ViewTransition
+                    name="nav-active"
+                    share="nav-pill"
+                    default="none"
+                  >
+                    <span className={styles.pill} aria-hidden="true" />
+                  </ViewTransition>
+                ) : null}
                 {link.icon === "home" ? (
                   <span
                     className={`brand-dot ${styles.homeMark}`}

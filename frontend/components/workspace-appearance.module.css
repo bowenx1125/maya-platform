@@ -101,7 +101,22 @@
   cursor: pointer;
   transition:
     background 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    scale 160ms var(--ease-out);
+}
+
+/* Buttons give under the finger. `scale` rather than `transform`, so it adds
+   to any transform a button already carries instead of replacing it. */
+.appearance
+  :is(
+    :global(.primary-action),
+    :global(.secondary-action),
+    :global(.inline-button),
+    :global(.text-link),
+    :global(.file-button)
+  ):active:not(:disabled) {
+  scale: 0.97;
+  transition-duration: 80ms;
 }
 
 .appearance :global(.primary-action) {
@@ -337,6 +352,9 @@
     transition: none;
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
+  }
+  .appearance :active {
+    scale: none;
   }
 }
 

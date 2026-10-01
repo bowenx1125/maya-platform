@@ -10,7 +10,13 @@ export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
   return (
     <div className="loading-card" role="status">
-      <span className="spinner" aria-hidden="true" />
+      {/* The sign-in's four scholar blocks, still waiting their turn. */}
+      <span className="academy-loader" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+      </span>
       {label ?? t("loading")}
     </div>
   );
