@@ -137,7 +137,7 @@ afterEach(() => {
 });
 
 describe("private Agent chat", () => {
-  it("starts from the chat's own New and sends consecutive messages with the latest revision", async () => {
+  it("sends consecutive messages with the latest revision, then starts over from the chat's own New", async () => {
     render(
       <LocaleProvider initialLocale="en">
         <AppShell role="teacher">
@@ -147,15 +147,12 @@ describe("private Agent chat", () => {
     );
     await screen.findByTestId("avatar");
     const main = within(screen.getByRole("main"));
+    const newChat = () =>
+      main.getByRole("button", { name: "New" }) as HTMLButtonElement;
     expect(main.queryByText("Back")).toBeNull();
     expect(main.queryByText("Done")).toBeNull();
-    fireEvent.click(await main.findByRole("button", { name: "New" }));
-    expect(state.api.createConversation).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(
-        main.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
+    // A blank chat is already new.
+    expect(newChat().disabled).toBe(true);
     expect(
       within(screen.getByRole("navigation")).queryByRole("button", {
         name: "New",
@@ -197,6 +194,15 @@ describe("private Agent chat", () => {
         (call) => call[1].expected_revision,
       ),
     ).toEqual([0, 1]);
+    expect(state.api.createConversation).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => expect(newChat().disabled).toBe(false));
+    fireEvent.click(newChat());
+    expect(screen.queryByText("Following the earlier reply")).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("textbox", { name: "Message" }),
+    );
+    expect(newChat().disabled).toBe(true);
     expect(state.api.createConversation).toHaveBeenCalledTimes(1);
   });
 

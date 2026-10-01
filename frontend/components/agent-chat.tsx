@@ -42,6 +42,7 @@ export function AgentChat() {
     "idle" | "playing" | "complete" | "incomplete"
   >("idle");
   const endRef = useRef<HTMLDivElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   function syncTtsPlayback() {
@@ -306,20 +307,15 @@ export function AgentChat() {
                 state={busy ? "thinking" : "idle"}
               />
             ) : null}
-            <PageAction
-              name="new"
-              disabled={
-                busy ||
-                character?.available === false ||
-                !agents.some((agent) => agent.version_id === versionId)
-              }
-              onClick={() => start()}
-            />
             <div className={styles.history} aria-label="History">
               {sessions
                 .filter((session) => session.turns.length > 0)
                 .map((session) => (
-                  <div className={styles.historyRow} key={session.id}>
+                  <div
+                    className={styles.historyRow}
+                    data-current={selected?.id === session.id || undefined}
+                    key={session.id}
+                  >
                     <button
                       type="button"
                       className={styles.historySelect}
@@ -357,6 +353,21 @@ export function AgentChat() {
                   </div>
                 ))}
             </div>
+            {/* A blank chat is already new, so New only wakes up once there
+              is a conversation to leave, and then hands over the composer. */}
+            <PageAction
+              name="new"
+              disabled={
+                busy ||
+                !selected ||
+                character?.available === false ||
+                !agents.some((agent) => agent.version_id === versionId)
+              }
+              onClick={() => {
+                start();
+                messageRef.current?.focus();
+              }}
+            />
           </aside>
           <section className={styles.conversation} data-tts-playback={ttsPhase}>
             <audio
@@ -372,6 +383,11 @@ export function AgentChat() {
               aria-live="polite"
               aria-relevant="additions text"
             >
+              {!selected?.turns.length && !pendingMessage && character ? (
+                <div className={styles.welcome} aria-hidden="true">
+                  {character.name}
+                </div>
+              ) : null}
               {selected?.turns.map((turn) => (
                 <div key={turn.id} className={styles.exchange}>
                   <div className={styles.userMessage}>{turn.user_text}</div>
@@ -420,6 +436,7 @@ export function AgentChat() {
               onSubmit={(event) => void send(event)}
             >
               <textarea
+                ref={messageRef}
                 id="chat-message"
                 aria-label="Message"
                 value={draft}
