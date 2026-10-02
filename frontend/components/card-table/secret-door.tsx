@@ -1,61 +1,80 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { Player } from "../../lib/poker/table";
 import { usePrefersReducedMotion } from "../academy/motion";
 import { useSession } from "../session-provider";
 import styles from "./card-table.module.css";
+// Loaded with the page: the door has to be up before the first paint of the
+// room behind it, or the room flashes through.
+import { VaultEntrance } from "./vault-entrance";
 
-// The table only loads for the few who find the way in.
-const CardTable = dynamic(
-  () => import("./card-table").then((module) => module.CardTable),
-  { ssr: false },
-);
+// The room itself only loads for the few who find the way in.
+const loadRoom = () => import("./card-room");
+const CardRoom = dynamic(() => loadRoom().then((module) => module.CardRoom), {
+  ssr: false,
+});
 
-/** Typed anywhere in the workspace, outside a field. */
-export const SECRET = "royalflush";
+/** The home's four scholars, left to right, clicked in turn. */
+export const SEQUENCE = ["scroll", "wreath", "tablet", "wave"];
 /** Seat-fillers when the group is too small for a game. */
 const SCHOLARS = ["Laozi", "Plato", "Socrates", "Confucius", "Hypatia"];
-const DOORS_MS = 1200;
 const LEAVE_MS = 280;
 
-type Phase = "closed" | "opening" | "open" | "leaving";
+type Phase = "closed" | "entering" | "open" | "leaving";
+
+function hop(scholar: Element, wrong: boolean) {
+  scholar.animate?.(
+    wrong
+      ? [
+          { transform: "translateX(0)" },
+          { transform: "translateX(-4px)" },
+          { transform: "translateX(4px)" },
+          { transform: "translateX(0)" },
+        ]
+      : [
+          { transform: "translateY(0)" },
+          { transform: "translateY(-12px)" },
+          { transform: "translateY(0)" },
+        ],
+    { duration: wrong ? 260 : 360, easing: "cubic-bezier(0.34, 1.6, 0.64, 1)" },
+  );
+}
 
 export function SecretDoor() {
   const { api, user } = useSession();
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<Phase>("closed");
   const [players, setPlayers] = useState<Player[] | null>(null);
-  const top = useRef<HTMLDivElement>(null);
-  const bottom = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const isOpen = phase !== "closed";
 
+  // Each scholar answers a click with a hop; the right four in the right
+  // order open the way, a wrong one shakes its head and starts the count over.
   useEffect(() => {
-    let typed = "";
-    const listen = (event: KeyboardEvent) => {
-      if (
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.key.length !== 1
-      )
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest?.("input, textarea, select, [contenteditable]"))
-        return;
-      typed = (typed + event.key.toLowerCase()).slice(-SECRET.length);
-      if (typed !== SECRET) return;
-      typed = "";
+    let progress = 0;
+    const listen = (event: MouseEvent) => {
+      const scholar = (event.target as Element | null)?.closest?.(
+        ".home-hero .academy-scholar",
+      );
+      if (!scholar) return;
+      const id = scholar.getAttribute("data-scholar");
+      const right = id === SEQUENCE[progress];
+      progress = right ? progress + 1 : id === SEQUENCE[0] ? 1 : 0;
+      hop(scholar, !right && progress === 0);
+      // Fetch the room while the rest of the sequence is still being clicked.
+      if (progress === 1) void loadRoom();
+      if (progress < SEQUENCE.length) return;
+      progress = 0;
       setPhase((current) =>
-        current === "closed" ? (reduced ? "open" : "opening") : current,
+        current === "closed" ? (reduced ? "open" : "entering") : current,
       );
     };
-    window.addEventListener("keydown", listen);
-    return () => window.removeEventListener("keydown", listen);
+    document.addEventListener("click", listen);
+    return () => document.removeEventListener("click", listen);
   }, [reduced]);
 
   // Your group takes the other seats; scholars fill in when it is small.
@@ -97,33 +116,6 @@ export function SecretDoor() {
     };
   }, [api, isOpen, players, user]);
 
-  // The doors are two copies of the page as it stands, each showing its half,
-  // so it is the workspace itself that splits and slides apart.
-  useLayoutEffect(() => {
-    if (phase !== "opening") return;
-    const frame = document.getElementById("workspace-content")?.parentElement;
-    const rect = frame?.getBoundingClientRect();
-    const halves = [
-      [top.current, 0],
-      [bottom.current, window.innerHeight / 2],
-    ] as const;
-    for (const [door, offset] of halves) {
-      if (!door || !frame || !rect) continue;
-      const copy = frame.cloneNode(true) as HTMLElement;
-      for (const node of [copy, ...copy.querySelectorAll("[id]")])
-        node.removeAttribute("id");
-      copy.inert = true;
-      Object.assign(copy.style, {
-        left: `${rect.left}px`,
-        top: `${rect.top - offset}px`,
-        width: `${rect.width}px`,
-      });
-      door.replaceChildren(copy);
-    }
-    const timer = window.setTimeout(() => setPhase("open"), DOORS_MS);
-    return () => window.clearTimeout(timer);
-  }, [phase]);
-
   useEffect(() => {
     if (!isOpen) return;
     const html = document.documentElement;
@@ -161,27 +153,20 @@ export function SecretDoor() {
         className={styles.room}
         role="dialog"
         aria-modal="true"
-        aria-label="Card table"
+        aria-label="Card room"
         tabIndex={-1}
         data-leaving={phase === "leaving" ? "" : undefined}
       >
         {players ? (
-          <CardTable players={players} onLeave={() => setPhase("leaving")} />
+          <CardRoom players={players} onLeave={() => setPhase("leaving")} />
         ) : null}
       </div>
-      {phase === "opening" ? (
-        <>
-          <div
-            ref={top}
-            className={`${styles.door} ${styles.doorTop}`}
-            aria-hidden="true"
-          />
-          <div
-            ref={bottom}
-            className={`${styles.door} ${styles.doorBottom}`}
-            aria-hidden="true"
-          />
-        </>
+      {phase === "entering" ? (
+        <VaultEntrance
+          onDone={() =>
+            setPhase((current) => (current === "entering" ? "open" : current))
+          }
+        />
       ) : null}
     </>,
     document.body,

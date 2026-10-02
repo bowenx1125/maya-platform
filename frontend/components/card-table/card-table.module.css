@@ -611,3 +611,410 @@
     animation: none;
   }
 }
+
+/* ---- The card room's menu ---- */
+.menu {
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 34px;
+  height: 100%;
+  padding: 24px;
+}
+
+.menuTitle {
+  color: var(--gold);
+  filter: drop-shadow(0 4px 0 #000);
+}
+
+.menuChoices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 28px;
+}
+
+.menuChoice {
+  display: grid;
+  gap: 18px;
+  width: 240px;
+  padding: 26px 18px 20px;
+}
+
+.menuFan {
+  display: flex;
+  justify-content: center;
+  height: 96px;
+}
+
+.menuFan > * {
+  margin: 0 -10px;
+}
+
+.menuFan > :nth-child(1) {
+  rotate: -12deg;
+}
+
+.menuFan > :nth-child(3) {
+  rotate: 12deg;
+}
+
+/* ---- Jesters ---- */
+.jesters {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
+  gap: 20px;
+  height: 100%;
+  padding: 18px clamp(12px, 2.5vw, 28px) 20px;
+}
+
+.jSide {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #15151c;
+  box-shadow:
+    0 0 0 2px #2c2c38,
+    0 6px 0 2px #000;
+  overflow-y: auto;
+}
+
+.jSide > .button {
+  justify-self: start;
+}
+
+.jBlind,
+.jPanel,
+.jCounters > div {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 12px 10px;
+  border-radius: 8px;
+  background: #101016;
+  box-shadow: inset 0 0 0 2px #26262f;
+}
+
+.jBlind {
+  background: #261c38;
+  box-shadow: inset 0 0 0 2px #4a3a6a;
+}
+
+.jLabel {
+  color: #8d887c;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.jTarget,
+.jGold {
+  color: var(--gold);
+}
+
+.jBlue {
+  color: #4fb0ff;
+}
+
+.jRed {
+  color: #ff6a5e;
+}
+
+.jHand {
+  min-height: 14px;
+  color: var(--ink);
+}
+
+.tally {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chipsBox,
+.multBox {
+  display: grid;
+  place-items: center;
+  min-width: 70px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: 0 4px 0 #000;
+}
+
+.chipsBox {
+  background: #1d8de0;
+}
+
+.multBox {
+  background: #e0443e;
+}
+
+.times {
+  color: #ff6a5e;
+}
+
+.jCounters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.jMain {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 14px;
+  min-width: 0;
+}
+
+.jesterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 156px;
+}
+
+.jester {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 6px;
+  width: 116px;
+  min-height: 156px;
+  padding: 0 8px 8px;
+  overflow: visible;
+  border-radius: 8px;
+  color: #23232b;
+  background: #f6efe1;
+  box-shadow:
+    0 0 0 2px #23232b,
+    0 5px 0 2px rgba(0, 0, 0, 0.5);
+  animation: card-deal 460ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.jester[data-active] {
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 22px 4px rgba(240, 192, 64, 0.55),
+    0 5px 0 2px rgba(0, 0, 0, 0.5);
+  animation: jester-wiggle 420ms cubic-bezier(0.34, 1.6, 0.64, 1);
+}
+
+.jesterBand {
+  height: 26px;
+  margin: 0 -8px 2px;
+  border-radius: 8px 8px 0 0;
+  background: var(--pigment);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+
+.jesterName {
+  color: #23232b;
+}
+
+.jesterText {
+  color: #4a4552;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.jester .button {
+  justify-self: center;
+  padding: 7px 10px;
+}
+
+.jesterSlot {
+  width: 116px;
+  min-height: 156px;
+  border-radius: 8px;
+  outline: 2px dashed rgba(255, 255, 255, 0.1);
+  outline-offset: -2px;
+}
+
+.jStage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.jPlayed {
+  display: flex;
+  gap: 12px;
+}
+
+.jPlayedCard {
+  position: relative;
+  display: grid;
+  transition: translate 220ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.jPlayedCard:not([data-scoring]) {
+  opacity: 0.45;
+}
+
+.jPlayedCard[data-active] {
+  translate: 0 -16px;
+}
+
+.jPop {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  z-index: 2;
+  color: #4fb0ff;
+  filter: drop-shadow(0 3px 0 #000);
+  translate: -50% 0;
+  animation: said-pop 900ms ease-out both;
+  pointer-events: none;
+}
+
+.jester .jPop {
+  top: -22px;
+  color: #ff6a5e;
+}
+
+.jShop {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  padding: 22px 28px;
+  border-radius: 10px;
+  background: #15151c;
+  box-shadow:
+    0 0 0 4px var(--gold),
+    0 0 0 8px #000;
+  animation: banner-pop 520ms cubic-bezier(0.34, 1.6, 0.64, 1) both;
+}
+
+.jOffers {
+  display: flex;
+  gap: 16px;
+}
+
+.jHandRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  min-height: 112px;
+  padding-top: 22px;
+}
+
+.jHandCard {
+  display: grid;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  transition: translate 240ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.jHandCard[aria-pressed="true"] {
+  translate: 0 -22px;
+}
+
+.jHandCard:disabled {
+  cursor: default;
+}
+
+.jHandCard:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 4px;
+}
+
+@keyframes jester-wiggle {
+  30% {
+    rotate: -6deg;
+    scale: 1.08;
+  }
+  60% {
+    rotate: 5deg;
+  }
+}
+
+@media (max-width: 760px) {
+  .jesters {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+  .jSide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .jesterRow,
+  .jHandRow,
+  .jPlayed,
+  .jOffers {
+    zoom: 0.62;
+  }
+}
+
+/* ---- The way in from the home: the scholars step out, spin the wheel, and
+   the page swings open like a vault door. ---- */
+.vault {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483001;
+  overflow: hidden;
+  perspective: 2400px;
+}
+
+.vaultDoor {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--paper, #fcfaf6);
+  transform-origin: left center;
+  backface-visibility: hidden;
+  box-shadow: 30px 0 60px rgba(0, 0, 0, 0.55);
+}
+
+/* The page on the door is a picture of the page; nothing in it should move. */
+.vaultDoor *,
+.vaultDoor *::before,
+.vaultDoor *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+.vaultDoor > :first-child {
+  position: absolute;
+  margin: 0;
+}
+
+.vaultWheel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(46vmin, 360px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  opacity: 0;
+  filter: drop-shadow(0 18px 30px rgba(52, 45, 30, 0.35));
+}
+
+.vaultActors {
+  position: absolute;
+  inset: 0;
+  perspective: 900px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.vaultActor {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+.vaultActor svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}

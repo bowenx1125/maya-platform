@@ -28,36 +28,62 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { CardTable } from "../components/card-table/card-table";
-import { SECRET, SecretDoor } from "../components/card-table/secret-door";
+import { JestersTable } from "../components/card-table/jesters-table";
+import { SEQUENCE, SecretDoor } from "../components/card-table/secret-door";
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
 
+/** The home's hero with its four scholars, as the door listens for them. */
+function Hero() {
+  return (
+    <section className="home-hero">
+      <svg>
+        {SEQUENCE.map((id) => (
+          <g key={id} className="academy-scholar" data-scholar={id}>
+            <rect data-testid={id} width="10" height="10" />
+          </g>
+        ))}
+      </svg>
+    </section>
+  );
+}
+
 describe("the card room", () => {
-  it("opens when the phrase is typed outside a field and closes on Escape", async () => {
-    render(<SecretDoor />);
-    for (const key of SECRET) fireEvent.keyDown(window, { key });
-    const room = await screen.findByRole("dialog", { name: "Card table" });
+  it("opens when the four scholars are clicked in order, and closes on Escape", async () => {
+    render(
+      <>
+        <Hero />
+        <SecretDoor />
+      </>,
+    );
+    for (const id of SEQUENCE) fireEvent.click(screen.getByTestId(id));
+    const room = await screen.findByRole("dialog", { name: "Card room" });
+    fireEvent.click(
+      await within(room).findByRole(
+        "button",
+        { name: /Hold'em/ },
+        { timeout: 5000 },
+      ),
+    );
     // The group sits down, topped up with a scholar to make three.
-    expect(
-      await within(room).findByText("Bowen", {}, { timeout: 5000 }),
-    ).toBeTruthy();
+    expect(await within(room).findByText("Bowen")).toBeTruthy();
     expect(within(room).getByText("Laozi")).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("ignores the phrase typed into a field", () => {
+  it("stays shut when the scholars are clicked out of order", () => {
     render(
       <>
-        <input aria-label="Notes" />
+        <Hero />
         <SecretDoor />
       </>,
     );
-    const field = screen.getByLabelText("Notes");
-    for (const key of SECRET) fireEvent.keyDown(field, { key });
+    for (const id of [...SEQUENCE].reverse())
+      fireEvent.click(screen.getByTestId(id));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -83,5 +109,22 @@ describe("the card room", () => {
     }
     expect(screen.getByRole("button", { name: "Next hand" })).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/wins \d+/);
+  });
+
+  it("plays a Jesters hand and counts the score into the round", () => {
+    vi.useFakeTimers();
+    render(<JestersTable onLeave={vi.fn()} />);
+    const hand = within(screen.getByLabelText("Your hand")).getAllByRole(
+      "button",
+    );
+    expect(hand).toHaveLength(8);
+    fireEvent.click(hand[0]);
+    expect(hand[0].getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    for (let tick = 0; tick < 20; tick += 1)
+      act(() => vi.advanceTimersByTime(400));
+    expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
+    // One hand spent; whatever it scored is now on the board.
+    expect(document.body.textContent).toMatch(/Hands\s*3/);
   });
 });
