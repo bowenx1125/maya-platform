@@ -226,11 +226,6 @@
   box-shadow: none;
 }
 
-.surface :global(.empty-mark) {
-  background: var(--gold-soft);
-  color: var(--ink, #1d1d1f);
-}
-
 .surface :global(.account-row) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

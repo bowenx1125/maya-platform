@@ -17,6 +17,7 @@ import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
+import { HomeGuide } from "./home-guide";
 import { useLocale, useT } from "./locale";
 import { PageAction } from "./page-action";
 import { IconClose } from "./quiet-icons";
@@ -176,29 +177,7 @@ export function StudentDashboard() {
         <div className="home-columns">
           <section className="home-panel" aria-labelledby="student-guide-title">
             <h2 id="student-guide-title">{t("guide")}</h2>
-            <div className="home-guide-list">
-              {guide.map((item, index) => (
-                <Link
-                  className="home-guide-row"
-                  href={item.href}
-                  key={item.label}
-                >
-                  <span
-                    className="home-guide-marker"
-                    data-complete={item.complete ? "true" : undefined}
-                    aria-hidden="true"
-                  >
-                    {item.complete ? "✓" : index + 1}
-                  </span>
-                  <strong>{item.label}</strong>
-                  {item.optional ? <small>{t("guideOptional")}</small> : null}
-                  <span className="home-guide-state">
-                    {item.complete ? t("guideDone") : t("guideNext")}
-                  </span>
-                  <span aria-hidden="true">→</span>
-                </Link>
-              ))}
-            </div>
+            <HomeGuide steps={guide} />
           </section>
           {groups.map((overview) => (
             <section
@@ -209,7 +188,11 @@ export function StudentDashboard() {
               <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
               <ul className="home-people-list">
                 {(overview.group.members ?? []).map((member) => (
-                  <li className="home-person" key={member.user_id}>
+                  <li
+                    className="home-person"
+                    data-role={member.role}
+                    key={member.user_id}
+                  >
                     <UserAvatar
                       avatar={member.avatar}
                       name={member.display_name}

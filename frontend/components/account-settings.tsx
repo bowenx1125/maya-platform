@@ -19,13 +19,18 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState<"avatar" | "password" | null>(null);
 
-  async function saveAvatar(event: FormEvent) {
-    event.preventDefault();
+  // Picking a scholar is the choice, so it saves there and then. With a
+  // separate Save the large preview already showed the new face, and leaving
+  // without saving looked done when it was not.
+  async function pickAvatar(choice: string) {
+    if (busy !== null || choice === avatar) return;
+    const previous = avatar;
+    setAvatar(choice);
     setBusy("avatar");
     setSaved(null);
     setError(null);
     try {
-      await api.updateCurrentUser(avatar);
+      await api.updateCurrentUser(choice);
       await refresh();
       // The session carries the viewer's own avatar, but the roster and the
       // group's member list were fetched separately and still hold the old
@@ -34,6 +39,8 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
       onSaved?.();
       setSaved("avatar");
     } catch (cause) {
+      // The preview never keeps a face the server did not take.
+      setAvatar(previous);
       setError(cause);
     } finally {
       setBusy(null);
@@ -68,10 +75,7 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
     <SectionCard title={t("profile")} className="account-settings-card">
       {error ? <ErrorNotice error={error} /> : null}
       <div className="account-settings-grid">
-        <form
-          className="profile-panel"
-          onSubmit={(event) => void saveAvatar(event)}
-        >
+        <section className="profile-panel" aria-labelledby="profile-avatar">
           <div className="profile-panel-heading">
             <UserAvatar
               avatar={avatar}
@@ -80,9 +84,14 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
               size="lg"
             />
             <div>
-              <h3>{t("userAvatar")}</h3>
+              <h3 id="profile-avatar">{t("userAvatar")}</h3>
               <span>{user.display_name}</span>
             </div>
+            {saved === "avatar" ? (
+              <span className="profile-saved" role="status">
+                {t("saved")}
+              </span>
+            ) : null}
           </div>
           <fieldset className="avatar-picker" disabled={busy !== null}>
             <legend className="sr-only">{t("userAvatar")}</legend>
@@ -97,7 +106,7 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
                   name="user-avatar"
                   value={choice}
                   checked={avatar === choice}
-                  onChange={() => setAvatar(choice)}
+                  onChange={() => void pickAvatar(choice)}
                 />
                 {/* Large enough to tell apart: at 28px the four silhouettes
                     collapsed into one blob and the picker offered four
@@ -111,19 +120,7 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
               </label>
             ))}
           </fieldset>
-          <div className="profile-action-row">
-            <button
-              className="inline-button"
-              type="submit"
-              disabled={busy !== null}
-            >
-              {t("save")}
-            </button>
-            {saved === "avatar" ? (
-              <span role="status">{t("saved")}</span>
-            ) : null}
-          </div>
-        </form>
+        </section>
 
         <form
           className="profile-panel password-panel"
@@ -171,14 +168,16 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
           </label>
           <div className="profile-action-row">
             <button
-              className="inline-button"
+              className="primary-action"
               type="submit"
               disabled={busy !== null}
             >
               {t("save")}
             </button>
             {saved === "password" ? (
-              <span role="status">{t("saved")}</span>
+              <span className="profile-saved" role="status">
+                {t("saved")}
+              </span>
             ) : null}
           </div>
         </form>

@@ -61,9 +61,8 @@ export function EmptyCard({
 }) {
   return (
     <section className="empty-card">
-      <span className="empty-mark" aria-hidden="true">
-        ✦
-      </span>
+      {/* The sign-in rule's gold diamond, not a sparkle. */}
+      <span className="empty-mark" aria-hidden="true" />
       <h2>{title}</h2>
       {children ? <p>{children}</p> : null}
       {action}

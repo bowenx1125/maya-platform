@@ -439,13 +439,11 @@ textarea {
 }
 
 .empty-mark {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--gold);
-  background: var(--gold-soft);
+  width: 9px;
+  height: 9px;
+  margin: 4px 0 2px 2px;
+  background: rgba(201, 162, 39, 0.8);
+  transform: rotate(45deg);
 }
 
 .notice {
@@ -1107,11 +1105,25 @@ details > summary {
 }
 
 .home-hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 20px;
-  border-bottom: 1px solid rgba(201, 162, 39, 0.3);
+  border-bottom: 1px solid rgba(201, 162, 39, 0.5);
+}
+
+/* The sign-in's rule: a gold line with a diamond set on it, here at the
+   margin everything else hangs from. */
+.home-hero::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  background: rgba(201, 162, 39, 0.8);
+  transform: rotate(45deg);
 }
 
 .home-hero-copy {
@@ -1124,21 +1136,24 @@ details > summary {
 
 .home-hero-eyebrow {
   margin: 0;
-  color: #8a7350;
+  color: #5449a6;
   font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
+/* The same face and spacing as the sign-in's "Welcome back", so arriving
+   reads as the next room of the same building. */
 .home-hero-copy h1 {
   margin: 0;
   max-width: 22ch;
   color: #3d3220;
-  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
-  font-weight: 720;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
+  font-family: var(--display-serif);
+  font-size: clamp(2rem, 3.6vw, 2.75rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.12;
 }
 
 /* The scholars are the welcome, so they stand at full height on the rule
@@ -1172,19 +1187,21 @@ details > summary {
 }
 
 .home-panel > h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  margin: 0 0 2px;
+  color: #3d3220;
+  font-family: var(--display-serif);
+  font-size: 1.3rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
 }
 
+/* A register, not a stack of buttons: these rows go nowhere, so they are
+   ruled like the guide beside them instead of boxed like links. */
 .home-people-list {
   display: grid;
-  gap: 7px;
   margin: 0;
   padding: 0;
+  border-top: 1px solid rgba(201, 162, 39, 0.35);
   list-style: none;
 }
 
@@ -1192,59 +1209,69 @@ details > summary {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 8px 12px;
-  border: 1px solid #e7e0d7;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.7);
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 6px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
 }
 
 .home-person strong {
   overflow: hidden;
   min-width: 0;
-  font-size: 0.86rem;
+  font-size: 0.92rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .home-person small {
   color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 650;
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.home-person[data-role="leader"] small {
+  color: #8a6a1f;
 }
 
 /* Three numbers a teacher can read without opening anything: the difference
    between their home and a student's, which is a single group's progress. */
 .home-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 12px;
 }
 
+/* Figures set on the page, divided by gold rules, rather than three cards:
+   nothing here opens, so nothing here should look like it does. */
 .home-stat {
   display: grid;
   gap: 2px;
-  padding: 12px 14px;
-  border: 1px solid #e7e0d7;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.7);
+  margin-right: 36px;
+  padding: 2px 36px 2px 0;
+  border-right: 1px solid rgba(201, 162, 39, 0.4);
+}
+
+.home-stat:last-child {
+  margin-right: 0;
+  padding-right: 0;
+  border-right: 0;
 }
 
 .home-stat b {
   color: #3d3220;
-  font-size: 1.5rem;
-  font-weight: 720;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
+  font-family: var(--display-serif);
+  font-size: 2.5rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
 }
 
 .home-stat > span {
   color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 /* The guide is a `.home-panel` like the group beside it, so its heading and
@@ -1252,73 +1279,104 @@ details > summary {
 
 .home-guide-list {
   display: grid;
-  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid rgba(201, 162, 39, 0.35);
+  list-style: none;
+}
+
+.home-guide-list > li {
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
 }
 
 .home-guide-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto auto;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 8px 12px;
-  border: 1px solid #e7e0d7;
-  border-radius: 13px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.7);
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 10px 10px 4px;
+  border-radius: 4px;
+  color: var(--muted);
   text-decoration: none;
   transition:
-    border-color 150ms ease,
-    box-shadow 240ms ease,
-    transform 320ms var(--ease-spring);
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.home-guide-row:hover,
+.home-guide-row:focus-visible,
+.home-guide-row[data-state="next"] {
+  color: var(--ink);
 }
 
 .home-guide-row:hover,
 .home-guide-row:focus-visible {
-  border-color: #cdbd9e;
-  box-shadow: var(--lift);
-  transform: translateY(-2px);
-}
-
-.home-guide-row:active {
-  transform: translateY(0) scale(0.99);
-  transition-duration: 90ms;
+  background: rgba(211, 167, 74, 0.08);
 }
 
 .home-guide-marker {
   display: grid;
-  width: 26px;
-  height: 26px;
   place-items: center;
-  border: 1px solid #d8cdc0;
-  border-radius: 50%;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  background: #faf7f1;
+  color: #b0904a;
+  font-family: var(--display-serif);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
 }
 
-.home-guide-marker[data-complete="true"] {
-  border-color: #b8d7c3;
-  color: var(--green);
-  background: #e9f6f0;
+.home-guide-row[data-state="next"] .home-guide-marker {
+  color: #3d3220;
+}
+
+/* A finished step is sealed with the rule's diamond. */
+.home-guide-row[data-state="done"] .home-guide-marker::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: rgba(201, 162, 39, 0.8);
+  transform: rotate(45deg);
 }
 
 .home-guide-row strong {
   min-width: 0;
-  font-size: 0.86rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.home-guide-row[data-state="done"] strong {
+  font-weight: 500;
 }
 
 .home-guide-row small,
 .home-guide-state {
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.home-guide-row small {
   color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 650;
 }
 
 .home-guide-state {
-  min-width: 34px;
-  text-align: right;
+  color: #8a6a1f;
+}
+
+/* Only the next step points onward; the others show the way on hover. */
+.home-guide-arrow {
+  color: #b0904a;
+  opacity: 0;
+  translate: -4px 0;
+  transition:
+    opacity 200ms ease,
+    translate 280ms var(--ease-spring);
+}
+
+.home-guide-row[data-state="next"] .home-guide-arrow,
+.home-guide-row:hover .home-guide-arrow,
+.home-guide-row:focus-visible .home-guide-arrow {
+  opacity: 1;
+  translate: 0 0;
 }
 
 .user-avatar {
@@ -1368,29 +1426,36 @@ details > summary {
 .account-settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
 }
 
+/* Two halves of one plate with a gold rule between them, as on the sign-in,
+   rather than two boxes inside a box. */
 .profile-panel {
   display: grid;
   align-content: start;
-  gap: 13px;
+  gap: 16px;
   min-width: 0;
-  padding: 14px;
-  border: 1px solid #ebe5df;
-  border-radius: 14px;
-  background: #fdfaf3;
+  padding: 4px 32px 4px 0;
+}
+
+.password-panel {
+  padding: 4px 0 4px 32px;
+  border-left: 1px solid rgba(201, 162, 39, 0.4);
 }
 
 .profile-panel h3 {
   margin: 0;
-  font-size: 0.9rem;
+  color: #3d3220;
+  font-family: var(--display-serif);
+  font-size: 1.15rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
 }
 
 .profile-panel-heading {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 14px;
 }
 
 .profile-panel-heading > div {
@@ -1399,7 +1464,19 @@ details > summary {
 
 .profile-panel-heading span {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+}
+
+.profile-saved {
+  color: #8a6a1f;
+  font-family: var(--display-serif);
+  font-size: 0.95rem;
+  font-style: italic;
+  animation: page-rise 320ms var(--ease-out) both;
+}
+
+.profile-panel-heading .profile-saved {
+  margin-left: auto;
 }
 
 /* Four across, so the eight read as two rows of a set rather than a ragged
@@ -1407,7 +1484,7 @@ details > summary {
 .avatar-picker {
   display: grid;
   grid-template-columns: repeat(4, max-content);
-  gap: 7px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -1415,40 +1492,54 @@ details > summary {
 
 .avatar-picker label {
   display: grid;
-  padding: 3px;
+  padding: 4px;
   border: 2px solid transparent;
-  border-radius: 11px;
+  border-radius: 14px;
   cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease,
+    translate 280ms var(--ease-spring);
+}
+
+.avatar-picker label:hover {
+  background: rgba(211, 167, 74, 0.1);
+  translate: 0 -2px;
 }
 
 .avatar-picker label[data-selected="true"] {
-  border-color: var(--indigo);
+  border-color: rgba(201, 162, 39, 0.9);
+  background: #fff;
+}
+
+/* The radios are hidden, so the keyboard focus has to show on the scholar. */
+.avatar-picker label:focus-within {
+  outline: 3px solid rgba(201, 162, 39, 0.55);
+  outline-offset: 2px;
+}
+
+.avatar-picker:disabled label {
+  cursor: progress;
 }
 
 .password-panel label {
   display: grid;
   gap: 5px;
   color: var(--ink);
-  font-size: 0.74rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .password-panel input {
-  min-height: 38px;
-  padding-block: 7px;
+  min-height: 40px;
+  padding-block: 8px;
 }
 
 .profile-action-row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
   min-height: 30px;
-}
-
-.profile-action-row > span {
-  color: var(--green);
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 .roster-identity {
@@ -1485,6 +1576,17 @@ details > summary {
     grid-template-columns: 1fr;
   }
 
+  .profile-panel {
+    padding-right: 0;
+  }
+
+  .password-panel {
+    margin-top: 20px;
+    padding: 20px 0 0;
+    border-top: 1px solid rgba(201, 162, 39, 0.4);
+    border-left: 0;
+  }
+
   .home-guide-row {
     grid-template-columns: 28px minmax(0, 1fr) auto;
   }
@@ -1510,10 +1612,6 @@ details > summary {
 
   .home-hero-copy {
     padding-bottom: 14px;
-  }
-
-  .home-stats {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -3276,7 +3374,8 @@ dd {
   }
   .knowledge-tile,
   .agent-tile,
-  .home-guide-row {
+  .home-guide-arrow,
+  .avatar-picker label {
     transition: none;
   }
   .knowledge-tile:hover,
@@ -3285,9 +3384,7 @@ dd {
   .agent-tile:focus-within {
     translate: none;
   }
-  .home-guide-row:hover,
-  .home-guide-row:focus-visible,
-  .home-guide-row:active {
-    transform: none;
+  .avatar-picker label:hover {
+    translate: none;
   }
 }

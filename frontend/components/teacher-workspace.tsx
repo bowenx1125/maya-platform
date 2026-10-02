@@ -1,6 +1,7 @@
 "use client";
 
 import { CountUp } from "./count-up";
+import { HomeGuide } from "./home-guide";
 import { PageAction } from "./page-action";
 
 import Link from "next/link";
@@ -159,24 +160,7 @@ export function TeacherDashboard() {
       </div>
       <section className="home-panel" aria-labelledby="teacher-guide-title">
         <h2 id="teacher-guide-title">{t("guide")}</h2>
-        <div className="home-guide-list">
-          {guide.map((item, index) => (
-            <Link className="home-guide-row" href={item.href} key={item.label}>
-              <span
-                className="home-guide-marker"
-                data-complete={item.complete ? "true" : undefined}
-                aria-hidden="true"
-              >
-                {item.complete ? "✓" : index + 1}
-              </span>
-              <strong>{item.label}</strong>
-              <span className="home-guide-state">
-                {item.complete ? t("guideDone") : t("guideNext")}
-              </span>
-              <span aria-hidden="true">→</span>
-            </Link>
-          ))}
-        </div>
+        <HomeGuide steps={guide} />
       </section>
       <DemoCompositionBadge />
       {error ? <ErrorNotice error={error} /> : null}
