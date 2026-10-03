@@ -78,9 +78,10 @@ the frozen delete contract includes the existing 409 Conflict for a deleted
 Agent.
 
 The non-login visual language uses warm paper cards, display-serif section
-headings and the Mayaform navigation mark. Workspace and Debate actions have
-bilingual hover, focus and touch guidance. Library tiles use quiet edit,
-download, delete and reindex actions. Back/Done remain contextual. Chats keeps
+headings and the Mayaform navigation mark. Selected Workspace and Debate
+controls and section headings carry bilingual hover, focus and touch guidance;
+ordinary controls and headings without guide metadata do not show a tip.
+Library tiles use quiet edit, download, delete and reindex actions. Back/Done remain contextual. Chats keeps
 saved history on reentry; a model switch starts a new conversation.
 Focus-anchored guide tips reposition after page scroll and viewport resize, and
 keep their accessible description when the locale changes. Component tests
@@ -156,10 +157,18 @@ direct image API, the two teacher-provided `future aspects of Chinese
 civilization` PDFs completed the isolated conversion function under the Windows
 Job Object limits: the 12-page deck produced 7,574 Markdown characters with 12
 OCR-marked pages; the 32-page deck produced 13,640 characters with 32
-OCR-marked pages. The source PDFs were read only for this check and were not
-uploaded, stored or committed. The Markdown includes a teacher-review marker on
-every OCR page; the extraction run does not establish that every recognized
-word is correct.
+OCR-marked pages. That conversion run read the source PDFs without uploading
+them. On October 3, the originals were selected through the browser file picker
+in a separate, local isolated Maya test stack: a synthetic teacher account
+uploaded both to group Knowledge, and the page showed the pending
+conversion/indexing state followed by success; both library entries were ready
+with the same character counts. A synthetic student account also uploaded the
+12-page PDF to a draft Agent's Evidence page; the RAG preview showed one ready
+file with 7,574 characters. This was a local Windows browser acceptance run
+using an isolated database and temporary data directory, not a macOS run or a
+production teacher account. No provider request or RAG answer-quality test was
+made. The Markdown includes a teacher-review marker on every OCR page; the
+extraction run does not establish that every recognized word is correct.
 
 The uploader shows a pending status while upload, conversion and indexing run,
 and reports unsupported formats, missing text, size limits and safely stopped
@@ -169,13 +178,18 @@ Teacher courseware is read-only in the shared library; a teacher can retry a
 failed index. Legacy documents predate uploader-role tracking and migration
 0033 conservatively labels them student-owned; their historical authors cannot
 be safely inferred. Current backend and frontend tests cover conversion,
-limits, idempotent replay, role access and Workspace status copy. The public
-roundtable tooltip was visually checked; the camera-control bubble was adjusted
-to avoid covering neighboring controls and rechecked. Tooltip placement also
-avoids nearby controls for hover, focus and touch. The read-only chat composer
-shows and associates its explanation for keyboard and screen-reader users.
-Authenticated Workspace visual acceptance and a real teacher-session courseware
-walkthrough remain unverified.
+limits, idempotent replay, role access and Workspace status copy; the browser
+walkthrough exercised PDF uploads, but did not exercise a live DOCX upload.
+The public roundtable tooltip was visually checked; the camera-control bubble
+was adjusted to avoid covering neighboring controls and rechecked. During the
+October 3 isolated Workspace walkthrough, screenshots at the browser's narrow
+default viewport and at 1366x900 were visually inspected; no obvious overlap or
+clipping was observed in the tested upload and Evidence states. The “New” action
+tooltip appeared on keyboard focus. Tooltip placement and hover, focus and
+touch behavior are also covered by component tests; a separate live pointer
+hover check was not recorded. This does not establish macOS visual acceptance.
+The read-only chat composer shows and associates its explanation for keyboard
+and screen-reader users.
 
 ## Remaining scope
 
