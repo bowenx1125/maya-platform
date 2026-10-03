@@ -18,6 +18,10 @@ const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maya-latin-tables-"));
 const generatedPython = resolve(temporaryRoot, "latin_script_ranges.py");
 const generatedTypeScript = resolve(temporaryRoot, "latin-script-ranges.ts");
 
+function readNormalizedText(path) {
+  return readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+}
+
 try {
   const result = spawnSync(
     process.execPath,
@@ -39,13 +43,16 @@ try {
     process.exit(result.status ?? 1);
   }
 
-  if (!readFileSync(generatedPython).equals(readFileSync(trackedPython))) {
+  if (
+    readNormalizedText(generatedPython) !== readNormalizedText(trackedPython)
+  ) {
     throw new Error(
       "generated Python Latin script table differs from the tracked output",
     );
   }
   if (
-    !readFileSync(generatedTypeScript).equals(readFileSync(trackedTypeScript))
+    readNormalizedText(generatedTypeScript) !==
+    readNormalizedText(trackedTypeScript)
   ) {
     throw new Error(
       "generated TypeScript Latin script table differs from the tracked output",
