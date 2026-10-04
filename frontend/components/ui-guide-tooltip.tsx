@@ -207,6 +207,16 @@ export function UiGuideTooltip() {
             clamp(active.x + 12, active.y - size.height - 12),
             clamp(active.x - size.width - 12, active.y + 12),
             clamp(active.x - size.width - 12, active.y - size.height - 12),
+            clamp(rect.left + (rect.width - size.width) / 2, rect.bottom + 10),
+            clamp(
+              rect.left + (rect.width - size.width) / 2,
+              rect.top - size.height - 10,
+            ),
+            clamp(rect.right + 10, rect.top + (rect.height - size.height) / 2),
+            clamp(
+              rect.left - size.width - 10,
+              rect.top + (rect.height - size.height) / 2,
+            ),
           ]
         : [
             clamp(rect.left + (rect.width - size.width) / 2, rect.bottom + 10),
@@ -219,8 +229,18 @@ export function UiGuideTooltip() {
               rect.left - size.width - 10,
               rect.top + (rect.height - size.height) / 2,
             ),
+            clamp(rect.left + (rect.width - size.width) / 2, rect.bottom),
+            clamp(
+              rect.left + (rect.width - size.width) / 2,
+              rect.top - size.height,
+            ),
+            clamp(rect.right, rect.top + (rect.height - size.height) / 2),
+            clamp(
+              rect.left - size.width,
+              rect.top + (rect.height - size.height) / 2,
+            ),
           ];
-    const obstacles = [
+    const controls = [
       rect,
       ...Array.from(
         document.querySelectorAll<HTMLElement>(
@@ -231,7 +251,26 @@ export function UiGuideTooltip() {
         .map((element) => element.getBoundingClientRect())
         .filter((obstacle) => obstacle.width > 0 && obstacle.height > 0),
     ];
-    const overlapArea = (position: { left: number; top: number }) =>
+    const textObstacles = Array.from(
+      document.querySelectorAll<HTMLElement>("body *"),
+    )
+      .filter(
+        (element) =>
+          element.childElementCount === 0 &&
+          Boolean(element.textContent?.trim()) &&
+          element !== active.target &&
+          !active.target.contains(element) &&
+          !tooltip.contains(element) &&
+          !element.closest(
+            'button, input, select, textarea, a[href], [role="button"], [tabindex]:not([tabindex="-1"])',
+          ),
+      )
+      .map((element) => element.getBoundingClientRect())
+      .filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
+    const overlapArea = (
+      position: { left: number; top: number },
+      obstacles: DOMRect[],
+    ) =>
       obstacles.reduce((total, obstacle) => {
         const width = Math.max(
           0,
@@ -246,7 +285,12 @@ export function UiGuideTooltip() {
         return total + width * height;
       }, 0);
     nextPosition = candidates.reduce((best, candidate) =>
-      overlapArea(candidate) < overlapArea(best) ? candidate : best,
+      overlapArea(candidate, controls) < overlapArea(best, controls) ||
+      (overlapArea(candidate, controls) === overlapArea(best, controls) &&
+        overlapArea(candidate, textObstacles) <
+          overlapArea(best, textObstacles))
+        ? candidate
+        : best,
     );
     setPosition((current) =>
       current.left === nextPosition.left && current.top === nextPosition.top

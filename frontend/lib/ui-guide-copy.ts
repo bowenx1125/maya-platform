@@ -37,6 +37,10 @@ export const uiGuideCopy = {
     en: "Hide this source from the active group library.",
     zh: "从当前小组知识库中隐藏此知识源。",
   },
+  "knowledge.importFile": {
+    en: "Import Markdown, PDF, or Word files. PDF and Word uploads are converted to Markdown for this library.",
+    zh: "导入 Markdown、PDF 或 Word 文件；PDF 和 Word 会转换为 Markdown 后加入此知识库。",
+  },
   "agent.markdown": {
     en: "Write the Agent's identity, teaching style, and response guidance here.",
     zh: "在此编写 Agent 的身份、教学风格和回答指引。",
@@ -64,6 +68,14 @@ export const uiGuideCopy = {
   "agent.download": {
     en: "Download the file shown in this section.",
     zh: "下载此区域显示的文件。",
+  },
+  "agent.uploadMarkdown": {
+    en: "Upload a Markdown file for the next Agent draft revision.",
+    zh: "上传 Markdown 文件，作为 Agent 的下一版草稿。",
+  },
+  "agent.uploadEvidence": {
+    en: "Add Markdown, PDF, or Word files as Agent evidence. PDF and Word uploads are converted to Markdown.",
+    zh: "添加 Markdown、PDF 或 Word 文件作为 Agent 证据；PDF 和 Word 会转换为 Markdown。",
   },
   "roster.openGroup": {
     en: "Open this group's workspace and its shared resources.",
@@ -112,6 +124,10 @@ export const uiGuideCopy = {
   "voice.consent": {
     en: "Confirm that you have permission to upload and clone this speaker's voice.",
     zh: "确认你已获准上传并克隆此说话者的声音。",
+  },
+  "voice.uploadSample": {
+    en: "Choose the audio sample for this voice profile.",
+    zh: "选择此语音配置要使用的音频样本。",
   },
   "camera.scene": {
     en: "Choose a classroom scene.",

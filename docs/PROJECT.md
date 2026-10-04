@@ -170,6 +170,12 @@ production teacher account. No provider request or RAG answer-quality test was
 made. The Markdown includes a teacher-review marker on every OCR page; the
 extraction run does not establish that every recognized word is correct.
 
+On October 4, a separate synthetic DOCX fixture was uploaded through the local
+browser file picker to the isolated group Knowledge page. The page showed the
+converted `isolated_docx_acceptance.docx.md` entry as ready with 219 characters.
+The specified courseware folder contained no DOCX, so this checks the upload
+path with a small synthetic document rather than the teacher's Word courseware.
+
 The uploader shows a pending status while upload, conversion and indexing run,
 and reports unsupported formats, missing text, size limits and safely stopped
 parsing separately. If upload succeeds but the RAG preview refresh fails, the
@@ -178,16 +184,24 @@ Teacher courseware is read-only in the shared library; a teacher can retry a
 failed index. Legacy documents predate uploader-role tracking and migration
 0033 conservatively labels them student-owned; their historical authors cannot
 be safely inferred. Current backend and frontend tests cover conversion,
-limits, idempotent replay, role access and Workspace status copy; the browser
-walkthrough exercised PDF uploads, but did not exercise a live DOCX upload.
+limits, idempotent replay, role access and Workspace status copy; the isolated
+browser walkthrough exercised both the teacher PDF uploads and a synthetic
+DOCX upload. The full frontend suite also checks upload-guide copy and
+description restoration.
 The public roundtable tooltip was visually checked; the camera-control bubble
 was adjusted to avoid covering neighboring controls and rechecked. During the
 October 3 isolated Workspace walkthrough, screenshots at the browser's narrow
 default viewport and at 1366x900 were visually inspected; no obvious overlap or
 clipping was observed in the tested upload and Evidence states. The “New” action
-tooltip appeared on keyboard focus. Tooltip placement and hover, focus and
-touch behavior are also covered by component tests; a separate live pointer
-hover check was not recorded. This does not establish macOS visual acceptance.
+tooltip appeared on keyboard focus. On October 4, a 1280x720 browser check
+confirmed the Knowledge row's Edit tooltip no longer covers the adjacent DOCX
+filename; the Import a file tooltip also moved above its control instead of
+covering the format and OCR guidance. Upload help is now explicitly attached to
+Agent Markdown, Agent Evidence, Knowledge import and voice-sample file controls.
+Guide tooltips still cover selected controls and section headings, not every
+button and heading. Component tests simulate pointer, focus and touch events;
+the browser check does not establish a full pointer-hover sweep, real touch
+behavior or macOS visual acceptance.
 The read-only chat composer shows and associates its explanation for keyboard
 and screen-reader users.
 

@@ -187,7 +187,10 @@ export function MarkdownEditor({
       ) : null}
       {onCreate || onReplace ? (
         <div className="stack-form">
-          <label className="secondary-action file-button">
+          <label
+            className="secondary-action file-button"
+            data-ui-guide="knowledge.importFile"
+          >
             {t("knowledgeImportFile")}
             <input
               type="file"

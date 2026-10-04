@@ -623,7 +623,10 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
                 >
                   {t("insertOutline")}
                 </button>
-                <label className="secondary-action file-button">
+                <label
+                  className="secondary-action file-button"
+                  data-ui-guide="agent.uploadMarkdown"
+                >
                   {t("uploadMd")}
                   <input
                     type="file"
@@ -706,7 +709,10 @@ export function AgentWorkbench({ versionId }: { versionId: string }) {
             title={t("evidenceSet")}
             guide="agent.evidence"
             action={
-              <label className="secondary-action file-button">
+              <label
+                className="secondary-action file-button"
+                data-ui-guide="agent.uploadEvidence"
+              >
                 {t("uploadMarkdown")}
                 <input
                   type="file"
