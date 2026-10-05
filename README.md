@@ -8,11 +8,11 @@ Mayaform 是面向文化互学的 RAG 教学平台。学生编写 Agent 人设�
 - **教师 Accounts**：查看成员、修改显示名、调组、停用/恢复、重置密码。私有 Demo 目录账号由目录管理，自注册账号可在页面编辑。
 - **教师进入小组**：在 Accounts 的 Groups 中点击 **Enter**，以教师身份使用完整学生工作区，包括创建、编辑和删除；使用 **Homeward** 返回 Accounts。访问关系独立保存，重启同步 Demo 目录不会清除它。已发布历史及费用授权规则仍适用。
 - **工作区**：老师、学生和扫码互动页面统一采用系统字体、灰白表面与登录页的暖黄色，保留原版 Logo；Chat 和 Immerse 共用按钮与配色，支持窄屏与键盘操作。登录页不变，移除解释性介绍，保留权限、费用和错误提示。
-- **Chats**：老师和学生与本课程已发布 Agent 私人对话，回复流式显示；保留圆角悬浮输入框与聊天历史，不展示 3D 模型；形象在 Workspace 中编辑。配置可用声音后可朗读回复；历史、引用与版本由服务器保存，其他用户（包括老师）不可读取。
+- **Chats**：Agent、Team 和 Maya Team 使用同一通用聊天界面，文字回复流式显示；保留圆角悬浮输入框与聊天历史，不展示 3D 模型或播放语音。历史、引用与版本由服务器保存，Private 仅本人可读，Public 按实际权限读取；形象在 Workspace 中编辑。
 - **Live**：老师进入 Immerse 后，学生的 Live 入口亮起，同步公开发言、人物和已有音频。学生不获得控制权，观看不额外调用模型；退出或租约过期关闭。Live 画面下方的 Interact 直接打开扫码同款填写页面，弹幕不限发送次数，Final 前自动停止收集。
 - **声音**：Voices 点击文件名可直接改名，Enter／移开焦点保存，Escape 取消；不显示内部 ID。上传页不选择语言，试听默认英语，辩论朗读跟随 Ruleset。克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
 - **3D 课堂**：2–5 位国风人物围绕圆桌站立，气泡和 Transcript 随音频显示；音频失败时仍保留完整文字。实验性高斯院落需要额外的本地生成资源，不是默认课堂依赖。
-- **教学内容**：Topic 与可选 Background 分开保存；中英文 Markdown Ruleset 可编辑，创建辩论时冻结；发言身份和指代要求也在 Ruleset 内，可修改或删除。Agent.md 的总编写预算为 12,000 字符。
+- **教学内容**：Topic 与可选 Background 分开保存；中英文 Markdown Ruleset 可编辑，创建辩论时冻结；发言身份和指代要求也在 Ruleset 内，可修改或删除。Agent.md 和 RAG 不设人为编写字数配额。
 
 当前产品范围是 **单课程本地 Demo**。无需邀请码；登录保留“用户名不存在”和“密码错误”的区分。多课程注册和公共部署尚不属于已验收范围。
 
@@ -34,9 +34,9 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 
 ## 一次课堂
 
-**New / Back / Done** 统一在侧栏，只显示当前可用的操作；主内容区不重复放创建、返回和提交按钮。Chats 只有 New 和输入框内的发送箭头；全屏 Immerse 保留自己的控制键。
+**New / Back / Done** 沿用当前页面的统一操作，只显示当前可用的操作。Chats 保持通用聊天交互；全屏 Immerse 保留自己的控制键。
 
-1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；自由编写中英文 AGENT.md（最多 12,000 字符）、启用 RAG（每文件最多 100,000 字符），配置形象及声音，AGENT.md 首行 `# 名字` 会在保存时同步当前 Agent 名称；侧栏 **Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chats** 与已发布 Agent 多轮对话。点击 Agent 检查当前版本；初始 Draft 和已有 Published 都使用侧栏 **New** 打开草稿编辑（需要时创建下一版），由 **Done** 保存并发布。每个 Workspace 内名称不能重复（忽略大小写、首尾空格及全半角差异）；重名时请换名或先删除重复 Agent。下一版 Draft 可重新选择本人已就绪音色，或切回平台默认音色，旧版本保持不变。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
+1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；自由编写中英文 AGENT.md、启用 RAG，配置形象及声音，AGENT.md 首行 `# 名字` 会在保存时同步当前 Agent 名称；**Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chats** 与已发布 Agent 多轮对话。点击 Agent 检查当前版本；初始 Draft 和已有 Published 都使用 **New** 打开草稿编辑（需要时创建下一版），由 **Done** 保存并发布。每个 Workspace 内名称不能重复（忽略大小写、首尾空格及全半角差异）；重名时请换名或先删除重复 Agent。下一版 Draft 可重新选择本人已就绪音色，或切回平台默认音色，旧版本保持不变。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
 2. **创建辩论**：教师进入 **Debates → New**，填写 Topic / Background，选择 2–5 位 Agent、顺序和立场，确认 Ruleset 的语言及内容后点击 **Done**。
 3. **准备前三轮**：点击 Debates 列表中的辩论卡片进入预览，查看 Background 和各轮发言；页面保留议题标题，不显示额外的“Preview”标题。固定流程为 **Opening → Discussion → Response → Conclusion**；前三轮保存正文及可用音频；自定义音色不可用时使用平台默认音色，默认音色也不可用时保留文字发布与手动 Next，后续发言能看到此前成功完成的发言，包括同轮上下文。
 4. **进入课堂**：准备就绪后点击 **Immerse**。操作键独立放在屏幕最右侧；**Transcript** 展开发言记录侧栏，保留 Public Debate、课堂状态和 Check RAG。**Interact / Hide** 显示或收起消息二维码；Hide 不关闭已有扫码入口。进入 Final 时自动停止接收新弹幕，不设手动暂停按钮。第四轮冻结可用消息后生成回应，并在 Transcript 的回复段落旁展示对应匿名留言；弹幕不是逐条即时回复。
@@ -69,7 +69,7 @@ Report 不因供应商返回的 model/object 标识不同而拒收；usage 缺�
 | 更新后重建     | `docker compose up -d --build --wait` |
 | 查看状态       | `docker compose ps`                   |
 
-后端启动时自动迁移，当前代码版本为 `0033_budget_accounting_unbounded`；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制，`0033` 移除预算与调用序号上限并保留历史账本。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
+后端启动时自动迁移，当前代码版本为 `0053_user_profile`；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制，`0033` 移除预算与调用序号上限并保留历史账本。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
 
 修改 `.env` 后执行 `docker compose up -d --wait` 以重新创建需要更新配置的容器。更换 Wi-Fi 后，可运行：
 
@@ -94,9 +94,11 @@ MAYA_REPORT_PROVIDER=dashscope
 
 Provider 模式、API Key 和连通性检查由维护层管理，教师首页不提供 Components 控件。现有配置和调用账本继续保留，Mock 与真实 Embedding 快照不混用；具体资料外发仍需按当前身份、用途和准确清单完成必要的教师披露确认。
 
-老师和学生均可在 **Chat** 选择已有已发布 Agent；会话与引用仅本人可读，重新进入保留历史。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。界面没有 Refresh 按钮；列表仍自动读取最新状态，断线可重新进入。
+**Chats → New** 支持 Agent、Team 和 Maya Team。教师本人创建的课程内个人 Public Team 保存后自动进入 Maya Team；学生选择教师命名的 Team，再选择 Private/Public，即可开始自己的会话。Private 不进入教师查询，Public 正式测评可以按授权汇总；普通 Public 聊天不自动进入诊断报告。重新进入保留历史，Chats 只输出文字。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。列表自动更新，断线可重新进入。
 
-TTS 与 Voice 默认仍是 mock。需要语音克隆或聊天朗读时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。TTS / Voice 由本地环境配置管理，不能在网页上切换；Real 表示已选择真实适配器，不等于音色已准备好或供应商请求已验收。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
+真实 Maya Team 首次调用前，教师从首页个人 Agents 区域的披露入口，确认该 Team 当前版本的回复与检索资源。发布不替代这项数据外发授权，课程通用确认也不替代具体 Team 资源确认。缺少授权时请求不会发出；确认后由学生明确发送新消息，旧失败请求不会自动重发。
+
+TTS 与 Voice 默认仍是 mock。需要语音克隆或课堂语音播放时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。TTS / Voice 由本地环境配置管理，不能在网页上切换；Real 表示已选择真实适配器，不等于音色已准备好或供应商请求已验收。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
 
 后端不再按请求次数、Token 数或金额预算阻止调用，也不向 LLM / Report 发送固定输出 Token 上限。实际用量、费用、权限、披露确认和去重仍保留；供应商自身的容量限制仍适用。
 

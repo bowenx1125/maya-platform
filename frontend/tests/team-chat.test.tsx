@@ -584,6 +584,72 @@ describe("Chats Team entry", () => {
     ).toBeTruthy();
   });
 
+  it.each([
+    [
+      "student",
+      "A Team member could not reply because the current Team data-use authorization needs Teacher confirmation. Ask a Teacher to review and confirm it, then explicitly send a new message.",
+    ],
+    [
+      "teacher",
+      "A Team member could not reply because the current Team data-use authorization needs confirmation. Review and confirm it, then explicitly send a new message.",
+    ],
+  ] as const)(
+    "explains a provider confirmation failure safely to a %s without retrying",
+    async (role, expectedGuidance) => {
+      state.role = role;
+      state.api.streamTeamConversation.mockResolvedValueOnce({
+        ...teamSession,
+        revision: 1,
+        turns: [
+          {
+            id: "provider-confirmation-turn",
+            user_text: "Compare the two approaches",
+            assistant_text: null,
+            mode: "real" as const,
+            state: "partial" as const,
+            sources: [],
+            safe_error_code: null,
+            routing: { mode: "all" as const, participant_ids: [] },
+            member_results: [
+              {
+                id: "provider-confirmation-result",
+                participant_id: "participant-1",
+                speaker_name: "Bowen",
+                ordinal: 0,
+                state: "failed" as const,
+                assistant_text: null,
+                sources: [],
+                safe_error_code: "provider_confirmation_required",
+              },
+            ],
+          },
+        ],
+      });
+
+      renderChats();
+      await openNewChoices();
+      fireEvent.click(screen.getByRole("button", { name: /Maya Team/ }));
+      fireEvent.click(await screen.findByLabelText(/Course Dialogue Team/));
+      fireEvent.click(screen.getByRole("button", { name: "Start Team Chat" }));
+      fireEvent.change(
+        await screen.findByRole("textbox", { name: "Message" }),
+        {
+          target: { value: "Compare the two approaches" },
+        },
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      expect(await screen.findByText(expectedGuidance)).toBeTruthy();
+      expect(screen.queryByText("provider_confirmation_required")).toBeNull();
+      expect(
+        screen.queryByText(
+          "Team Chat sending is unavailable in the current runtime.",
+        ),
+      ).toBeNull();
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("does not send Enter during Chinese IME composition", async () => {
     renderChats();
     await openNewChoices();
@@ -647,8 +713,74 @@ describe("Chats Team entry", () => {
       ),
     );
     expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByText(/outcome is unknown/i).length).toBeGreaterThan(
-      0,
+    expect(
+      screen.getAllByText(/you can continue with a new message/i).length,
+    ).toBeGreaterThan(0);
+
+    const nextMessage = "Continue with a new message";
+    state.api.streamTeamConversation.mockImplementationOnce(
+      (_conversationId: string, request: { request_id: string }) =>
+        Promise.resolve({
+          ...teamSession,
+          revision: 2,
+          turns: [
+            {
+              id: requestId,
+              user_text: "Do not duplicate this turn",
+              assistant_text: null,
+              mode: "mock" as const,
+              state: "acceptance_unknown" as const,
+              sources: [],
+              safe_error_code: "chat_acceptance_unknown",
+              routing: { mode: "all" as const, participant_ids: [] },
+              member_results: [],
+            },
+            {
+              id: request.request_id,
+              user_text: nextMessage,
+              assistant_text: null,
+              mode: "mock" as const,
+              state: "ready" as const,
+              sources: [],
+              safe_error_code: null,
+              routing: { mode: "all" as const, participant_ids: [] },
+              member_results: [
+                {
+                  id: "reply-after-unknown",
+                  participant_id: "participant-1",
+                  speaker_name: "Bowen",
+                  ordinal: 0,
+                  state: "ready" as const,
+                  assistant_text: "A new message received a reply.",
+                  sources: [],
+                  safe_error_code: null,
+                },
+              ],
+            },
+          ],
+        }),
     );
+    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+      target: { value: nextMessage },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Send" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText("A new message received a reply."),
+    ).toBeTruthy();
+    expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(2);
+    expect(state.api.streamTeamConversation.mock.calls[1][1].message).toBe(
+      nextMessage,
+    );
+    expect(
+      state.api.streamTeamConversation.mock.calls[1][1].request_id,
+    ).not.toBe(requestId);
+    expect(
+      screen.getAllByText(/you can continue with a new message/i).length,
+    ).toBeGreaterThan(0);
   });
 });

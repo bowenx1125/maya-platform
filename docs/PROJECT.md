@@ -292,38 +292,39 @@ Full student/Teacher browser and Provider closure remains pending; no end-to-end
 [BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
 [S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
 
-October5 Maya backend/frontend rebuilt; effective environment/DNS/gateway preserved.
-Backup20261005T042605Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
+October5 e40d2a1 backend/frontend rebuilt;39/8 environment keys/DNS/gateway preserved.
+Backup20261005T093046Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
 All59 original tables/6,423 rows retain content/ledgers; one Debate running→pending
 metadata change is accepted-result startup recovery. Historical unknown3 untouched.
-Real synthetic RAG:1 charged Embedding; exact confirmation resumed the same Knowledge
-run once,1 charged accepted LLM/usable Markdown. Manual edit saved seq2; RAG update
-intent2 blocked before sending, retaining seq2. Full closure/GitHub push pending.
+Real synthetic RAG:1 charged Embedding;2 exact confirmations resumed original Knowledge
+runs once each,2 charged accepted LLM. AI seq3 replaced manual seq2, retaining history.
+Synthetic Public Team saved once/auto-published; Student first Send failed preflight,
+charge0. Auto-review blocked Private-log read and Team Provider confirmation; explicit
+scope requests pending. Full real closure/GitHub push pending.
 Disclosure navigation works without browser competition. UI backup20261005T064211Z OK.
 Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
 UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
 (UI03/04/05 included): actual ancestry merges b648efc/8987cf8 preserve both selected
 refs, Brainform sidebar New and General Chat. d170a96 corrects stale import guidance.
-Latest UI instruction: retain colleagues' MayaForm design, add no replacement elements;
-remove all user-visible Components/Key/Check/mode/status UI; maintenance APIs stay.
-Components removed, no replacement:555 frontend/1 old skip; types/lint/Prettier PASS.
-5 old UI tests removed,1 Dashboard test added; Sol source/25 focused PASS.
-1d92a2f deployed frontend only; real Home DOM/screenshot has no Components/controls.
-Other container IDs/MayaForm UI unchanged; full A–K polish spec is proposal only.
+Retain colleagues' MayaForm UI. Components/Key/Check/mode/status UI removed;
+maintenance APIs stay.1d92a2f frontend555/1 old skip/types/lint/format; Sol25/source PASS.
+5 old UI tests removed,1 Dashboard added; live Home DOM/screenshot confirms removal.
+Other container IDs/MayaForm UI unchanged; full A–K polish spec remains a proposal.
 0052/0053 append only. Types/lint(0 errors/4 old warnings), Prettier,
 Ruff/format493/mypy247,152 actual API semantics/19 negatives, generated/
 privacy/boundary and7 migration/bootstrap/reset gates passed. Agno3.0.11 public SDK.
-Freeze912 files, manifest db6b792d3bb895f6aae42c43f0ce15f3a6c8f791692f0e828d13ac70210a1c56;
-At1d92a2f all502 backend files matched; UI22 had fresh evidence. Query Embedding has
-separate Teacher course-purpose consent.0050 permits llm_agent_chat/embedding_query;
+Query Embedding has separate Teacher course-purpose consent.0050 permits
+llm_agent_chat/embedding_query;
 independent populated0033→0053/18 atomicity tests passed.
 
-Pending rollout: RAG Job hydration/disclosure and historical Team RAG fixes passed
+Deployed: RAG Job hydration/disclosure and historical Team RAG fixes passed
 Sol review (Team75+9 probes). Manual fixture now captures real fences and stable
 baseline members;63 assertions unchanged,37+1 independent cases passed. R2's26
 failures resolved. Frozen R3:1926 passed/21 old skips/exit0 (428.52s), no code drift;
 frontend557/1 old skip/types/lint/contracts and7 migration/script gates passed.
 Real paths and UI-v2 implementation remain pending; no end-to-end acceptance.
+Chat guidance:559 frontend/1 old skip;41 Sol cases, direct new Send after unknown
+works without Check. No new UI; rollout pending. bhk3 handoff fix in progress.
 [UI v2](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) is deferred until functionality
 is verified complete: Studyform=Workform, Agents then Voices; mature RAG in three-column
 Brainform, no page title/sidebar New; preserve Knowledge edit and global hover1500ms.

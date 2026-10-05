@@ -168,6 +168,7 @@ export function AgentChat() {
       courseId={courseId}
       actorId={user?.id ?? ""}
       scopeKey={scopeKey}
+      role={role}
     />
   );
 }
@@ -177,11 +178,13 @@ function AgentChatScope({
   courseId,
   actorId,
   scopeKey,
+  role,
 }: {
   api: PlatformApi;
   courseId: string;
   actorId: string;
   scopeKey: string;
+  role: "teacher" | "student";
 }) {
   const t = useT();
   const memoryRouteSearch =
@@ -196,6 +199,40 @@ function AgentChatScope({
       (parsedMemoryRoute.value.actorId !== actorId ||
         parsedMemoryRoute.value.courseId !== courseId));
   const { locale } = useLocale();
+  const teamFailureText = (
+    code: string | null | undefined,
+    fallback: "teamMemberFailure" | "teamRequestFailure",
+  ) => {
+    if (code === "provider_confirmation_required") {
+      return t(
+        role === "teacher"
+          ? "teamProviderConfirmationTeacher"
+          : "teamProviderConfirmationStudent",
+      );
+    }
+    if (
+      code === "authorization_revoked" ||
+      code === "provider_authorization_revoked" ||
+      code === "tool_not_authorized" ||
+      code === "forbidden"
+    ) {
+      return t("errorForbidden");
+    }
+    return t(fallback);
+  };
+  const teamErrorText = (cause: unknown) => {
+    if (
+      cause instanceof PlatformApiError &&
+      cause.code === "chat_acceptance_unknown"
+    ) {
+      return t("errorChatAcceptanceUnknown");
+    }
+    if (cause instanceof ChatRequestPendingError) return t("teamTurnPending");
+    return teamFailureText(
+      cause instanceof PlatformApiError ? cause.code : null,
+      "teamRequestFailure",
+    );
+  };
   const readOnlyHelp =
     uiGuideText("chat.readOnly", locale) ??
     "This Agent is unavailable for new messages.";
@@ -1925,7 +1962,7 @@ function AgentChatScope({
                   ) : null}
                   {turn.state === "acceptance_unknown" ? (
                     <p className={styles.teamWarning} role="status">
-                      {t("teamUnknownResult")}
+                      {t("errorChatAcceptanceUnknown")}
                     </p>
                   ) : null}
                   {turn.state === "partial" ||
@@ -1961,12 +1998,14 @@ function AgentChatScope({
                             </p>
                           ) : result.state === "acceptance_unknown" ? (
                             <p className={styles.teamWarning} role="status">
-                              {t("teamUnknownResult")}
+                              {t("errorChatAcceptanceUnknown")}
                             </p>
                           ) : (
                             <p className={styles.teamWarning} role="status">
-                              {result.safe_error_code ??
-                                t("teamChatUnavailable")}
+                              {teamFailureText(
+                                result.safe_error_code,
+                                "teamMemberFailure",
+                              )}
                             </p>
                           )}
                         </article>
@@ -1995,14 +2034,7 @@ function AgentChatScope({
                 ) : null}
                 {teamError ? (
                   <div className={styles.teamStatus} role="alert">
-                    <p>
-                      {teamError instanceof PlatformApiError &&
-                      teamError.code === "chat_acceptance_unknown"
-                        ? t("teamUnknownResult")
-                        : teamError instanceof ChatRequestPendingError
-                          ? t("teamTurnPending")
-                          : t("teamChatUnavailable")}
-                    </p>
+                    <p>{teamErrorText(teamError)}</p>
                     <button
                       type="button"
                       className="inline-button"

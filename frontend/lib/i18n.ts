@@ -1092,6 +1092,12 @@ const enMessages = {
   teamStartChat: "Start Team Chat",
   teamChatUnavailable:
     "Team Chat sending is unavailable in the current runtime.",
+  teamRequestFailure: "The Team Chat request could not be completed.",
+  teamMemberFailure: "This Team member could not reply.",
+  teamProviderConfirmationStudent:
+    "A Team member could not reply because the current Team data-use authorization needs Teacher confirmation. Ask a Teacher to review and confirm it, then explicitly send a new message.",
+  teamProviderConfirmationTeacher:
+    "A Team member could not reply because the current Team data-use authorization needs confirmation. Review and confirm it, then explicitly send a new message.",
   teamChatReadOnly: "This Public Team Chat is read-only.",
   teamRecipients: "Recipients",
   teamAllMembers: "All members",
@@ -1099,8 +1105,6 @@ const enMessages = {
   teamReplyFrom: "From {name}",
   teamPartialResult:
     "Some members could not reply. Successful replies are kept.",
-  teamUnknownResult:
-    "The outcome is unknown. Check Chat status before sending again.",
   teamCheckStatus: "Check Team Chat status",
   teamTurnPending:
     "This Team turn is still running. Check its status to resume updates.",
@@ -2098,13 +2102,18 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamChatNotConnectedAction: "Team 聊天尚未接通",
   teamStartChat: "开始 Team 聊天",
   teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
+  teamRequestFailure: "Team 聊天请求无法完成。",
+  teamMemberFailure: "这位 Team 成员未能回复。",
+  teamProviderConfirmationStudent:
+    "Team 成员的回复需要教师确认当前 Team 数据调用授权。请教师先核对并确认该授权，然后显式发送一条新消息。",
+  teamProviderConfirmationTeacher:
+    "Team 成员的回复需要确认当前 Team 数据调用授权。请核对并确认该授权，然后显式发送一条新消息。",
   teamChatReadOnly: "此公开 Team 聊天为只读。",
   teamRecipients: "接收回复的成员",
   teamAllMembers: "全体成员",
   teamAddRecipient: "添加 @ 接收成员",
   teamReplyFrom: "来自 {name}",
   teamPartialResult: "部分成员未能回复；已成功的回复已保留。",
-  teamUnknownResult: "请求结果尚不确定。请先检查聊天状态，再考虑继续发送。",
   teamCheckStatus: "检查 Team 聊天状态",
   teamTurnPending: "Team 回复仍在运行。请检查状态以恢复更新。",
   teamNoRecipient: "请至少选择一位 Team 成员。",

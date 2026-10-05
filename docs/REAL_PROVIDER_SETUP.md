@@ -154,6 +154,16 @@ and does not read this map.
 
 ## Maintenance configuration
 
+For a published Maya Team, open the teacher Home personal Agents disclosure link
+and confirm that Team version's Chat reply and Knowledge retrieval resource
+bindings. Publishing alone does not create these grants; a course-wide disclosure
+does not substitute for a current Team grant. Changing the bound Team version or
+its authorization invalidates obsolete grants. Missing authorization stops before
+dispatch, with no paid request.
+After confirmation, send a new message explicitly; the old failed turn is not
+restarted or silently retried. Confirmation does not expose student messages.
+Chats remains text-only; TTS configuration applies to other voice features.
+
 Components, API Key editing, Real/Mock switches, Check and readiness labels are
 absent from the user interface. Operators manage these through the existing
 maintenance configuration and APIs; no replacement settings panel is added.
