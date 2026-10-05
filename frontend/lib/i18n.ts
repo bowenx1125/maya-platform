@@ -453,14 +453,14 @@ const enMessages = {
     "Only the files you enable below can be retrieved by this draft. Uploading a file enables it here, not for other Agents.",
   uploadMarkdown: "Upload",
   knowledgeImportFormats:
-    "Upload Markdown, PDF, or Word (.docx), up to 10 MB; PDFs can have up to 200 pages and up to 50 scanned pages for local OCR. Maya converts text to Markdown locally and keeps only the Markdown. OCR text is marked for teacher review; text in images embedded in DOCX is not OCR-processed. Extraction is limited to 100,000 characters.",
+    "Upload Markdown, PDF, or Word (.docx). PDF and Word imports are limited to 10 MiB per file; PDFs can have up to 200 pages, with local OCR on up to 50 scanned pages. Maya converts text to Markdown locally and keeps only the Markdown. OCR-extracted text is marked as “OCR-generated text”; images embedded in DOCX are not OCR-processed. Markdown content has no manually imposed total-length limit.",
   knowledgeImportPending:
     "Uploading, converting to Markdown (including local OCR for scanned PDF pages), and indexing…",
   knowledgeUploadPending: "Uploading and indexing the Markdown file…",
   knowledgeImportInvalid:
-    "Use a readable PDF, Word (.docx), or UTF-8 Markdown. Scanned PDF pages are OCR-processed locally and marked for teacher review. Images embedded in DOCX are not OCR-processed.",
+    "Use a readable PDF, Word (.docx), or UTF-8 Markdown. Scanned PDF pages use local OCR, and extracted text is marked as “OCR-generated text.” Images embedded in DOCX are not OCR-processed.",
   knowledgeImportTooLarge:
-    "This file exceeds the 10 MB, 200-page PDF, 50 scanned-page OCR, or 100,000-character extraction limit.",
+    "This PDF/DOCX exceeds an import resource limit: 10 MiB per file, 200 pages per PDF, 50 scanned pages for OCR, or a PDF/DOCX parser safety limit. If the text is readable, extract it and import it as UTF-8 Markdown.",
   knowledgeImportNoText:
     "No readable text was found, even after local OCR. Check the file or provide a text-based copy.",
   knowledgeImportUnsupported:
@@ -1527,14 +1527,14 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "只有下面启用的文件才能被此草稿检索。上传文件只会启用到当前草稿。",
   uploadMarkdown: "上传",
   knowledgeImportFormats:
-    "支持 Markdown、PDF 和 Word（.docx），单文件不超过 10 MB，PDF 最多 200 页，其中最多 50 页可进行本地 OCR。Maya 在本地提取文本并转换为 Markdown，只保留 Markdown。OCR 文本会标记为需教师复核；DOCX 内嵌图片不会进行 OCR。抽取内容上限为 100,000 字符。",
+    "支持导入 Markdown、PDF 和 Word（.docx）。PDF 和 Word 单个文件不超过 10 MiB；PDF 最多 200 页，其中最多 50 页扫描页可进行本地 OCR。Maya 在本地提取文本并保存为 Markdown。OCR 提取的文字会标记为“由 OCR 生成的文字”；DOCX 内嵌图片不会进行 OCR。Markdown 正文没有人为设置的总长度上限。",
   knowledgeImportPending:
     "正在上传、转换为 Markdown（扫描 PDF 页会进行本地 OCR）并建立索引…",
   knowledgeUploadPending: "正在上传并索引 Markdown 文件…",
   knowledgeImportInvalid:
-    "请上传可读取的 PDF、Word（.docx）或 UTF-8 Markdown。扫描 PDF 页会在本地进行 OCR，结果会标记为需教师复核；DOCX 内嵌图片不会进行 OCR。",
+    "请上传可读取的 PDF、Word（.docx）或 UTF-8 Markdown。扫描 PDF 页使用本地 OCR，提取的文字会标记为“由 OCR 生成的文字”；DOCX 内嵌图片不会进行 OCR。",
   knowledgeImportTooLarge:
-    "文件超过 10 MB、PDF 超过 200 页、扫描页 OCR 超过 50 页，或抽取内容超过 100,000 字符。",
+    "此 PDF/DOCX 超出导入资源限制：单个文件 10 MiB、PDF 200 页、扫描页 OCR 50 页或 PDF/DOCX 解析安全限制。若内容可读，请提取文本并改用 UTF-8 Markdown 导入。",
   knowledgeImportNoText:
     "本地 OCR 后仍未找到可读取文本。请检查文件，或提供含文本层的版本。",
   knowledgeImportUnsupported:
