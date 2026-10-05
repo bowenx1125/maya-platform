@@ -293,13 +293,14 @@ Real student/Teacher closure pending; no end-to-end acceptance.
 
 e40d2a1 rollout preserved39/8 env keys/DNS/gateway.
 Backup20261005T093046Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
-59 tables/6,423 rows retained; Debate recovery updated running→pending. Unknown3 untouched.
+Original tables/ledgers retained; unknown3 untouched.
 Real synthetic RAG:1 charged Embedding;2 exact confirmations resumed original Knowledge
 runs once each,2 charged accepted LLM. AI seq3 replaced manual seq2, retaining history.
-Synthetic Public Team saved once/auto-published; Student first Send failed preflight,
-charge0. Auto-review blocked Private-log read and Team Provider confirmation; explicit
-scope requests pending. Full real closure/GitHub push pending.
-Disclosure navigation works; UI backup20261005T064211Z OK.
+Synthetic Public Team saved/auto-published; first Send denied,charge0.
+October5: user authorizes specified synthetic Team Provider payload and new Private
+test-body read; permission blocks resolved. Further Team creation/review is manual.
+New decision: discard abandoned learning records; current retention code unchanged,
+Tool/Agent.md/server cleanup deferred. Real closure/GitHub push pending.
 Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
 UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
 (UI03/04/05 included): actual ancestry merges b648efc/8987cf8 preserve both selected
@@ -322,8 +323,8 @@ failures resolved. Frozen R5:1930 passed/21 old skips/exit0 (398.40s), no code d
 frontend559/1 old skip/types/lint/contracts and7 migration/script gates passed.
 Real paths and UI-v2 implementation remain pending; no end-to-end acceptance.
 Chat guidance41 Sol cases: unknown permits direct new Send without Check.
-Handoff35 Sol cases; fresh-session checks stay. 30db274 deployed to Maya backend/frontend;
-gateway/other containers unchanged. Backup20261005T110321Z and live0053 healthy.
+Handoff35 Sol cases;30db274 deployed to Maya backend/frontend only.
+Backup20261005T110321Z/live0053 healthy.
 New Public Chat e0accc75:4 consent denials, input enabled,0 calls/charges, no ORM error.
 R4's known race failed once; same-source retry passed, no assertion changes.
 [UI v2](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) is deferred until functionality
