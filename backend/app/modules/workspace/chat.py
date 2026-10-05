@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.config import Settings, get_settings
 from app.core.db import Database
@@ -1578,6 +1579,7 @@ def stream_message(
         if not accepts_event_stream(accept):
             raise PlatformError("malformed_request", "Accept text/event-stream is required.", 400)
         actor_id = context.user.id
+        actor_session_id_hash = context.session.id_hash
         owned_id = row.id
         claim = claim_team_turn(
             db,
@@ -1590,6 +1592,11 @@ def stream_message(
             routing=payload.routing,
             actor_context=context,
         )
+        # The claim rolls back this request Session before committing. Keep
+        # only the authenticated identity keys available to the worker; its
+        # current-session and resource checks always re-read durable state.
+        set_committed_value(context.user, "id", actor_id)
+        set_committed_value(context.session, "id_hash", actor_session_id_hash)
         db.close()
         return StreamingResponse(
             stream_team_events(database, owned_id, actor_id, claim, last_event_id),

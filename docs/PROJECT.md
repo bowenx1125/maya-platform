@@ -286,8 +286,7 @@ Resume retains answers/turns; owner answer DTO exposes answer_text/created_at on
 Source-free allows own records/progress/abandon, never resume/hints. Exact legacy
 Teacher/course scope remains; Private Single denies Teacher. General Chat has natural
 lifecycle messages, no assessment controls/composer. BF import14/Setext/HTTP passed.
-Linux backend1909/21 old skips (499.64s, exit0); pre-removal frontend559/1 skip,
-6 independent UI probes.
+Current whole-suite evidence is below.
 Full student/Teacher browser and Provider closure remains pending; no end-to-end acceptance.
 [BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
 [S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
@@ -320,11 +319,12 @@ independent populated0033→0053/18 atomicity tests passed.
 Deployed: RAG Job hydration/disclosure and historical Team RAG fixes passed
 Sol review (Team75+9 probes). Manual fixture now captures real fences and stable
 baseline members;63 assertions unchanged,37+1 independent cases passed. R2's26
-failures resolved. Frozen R3:1926 passed/21 old skips/exit0 (428.52s), no code drift;
-frontend557/1 old skip/types/lint/contracts and7 migration/script gates passed.
+failures resolved. Frozen R5:1930 passed/21 old skips/exit0 (398.40s), no code drift;
+frontend559/1 old skip/types/lint/contracts and7 migration/script gates passed.
 Real paths and UI-v2 implementation remain pending; no end-to-end acceptance.
-Chat guidance:559 frontend/1 old skip;41 Sol cases, direct new Send after unknown
-works without Check. No new UI; rollout pending. bhk3 handoff fix in progress.
+Chat guidance41 Sol cases: unknown permits direct new Send without Check.
+Handoff35 Sol cases; current-session checks stay. Rollout pending.
+R4's known race failed once; same-source retry passed, no assertion changes.
 [UI v2](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) is deferred until functionality
 is verified complete: Studyform=Workform, Agents then Voices; mature RAG in three-column
 Brainform, no page title/sidebar New; preserve Knowledge edit and global hover1500ms.

@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
 from alembic import command
 from app.core.errors import PlatformError
-from app.core.models import Agent, ProviderOperation
+from app.core.models import Agent, ProviderOperation, SessionRecord
+from app.modules.auth.service import session_hash
+from app.modules.workspace import chat_team_context, chat_team_sdk
 from app.modules.workspace import team_runtime as runtime
 from app.modules.workspace.chat_stream import stream_team_events
+from app.modules.workspace.chat_team_context import TeamMemberContext
 from app.modules.workspace.models import (
     Conversation,
     ConversationParticipant,
@@ -22,6 +27,8 @@ from app.modules.workspace.models import (
     TeamTurnResult,
 )
 from app.modules.workspace.schemas import TeamRouting
+from app.providers.control_repository import ProviderRepository
+from app.providers.llm_adapter import DashScopeLLMConfig
 from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.engine import Engine
@@ -37,13 +44,16 @@ from tests.test_mayaform_team_conversations import (
     _make_agent_version,
     _seed_0040,
 )
+from tests.test_wave4_provider_preflight import _digest, _policy
 
 
-def _chat(client: TestClient, database: Any) -> tuple[dict[str, Any], str, str]:
+def _chat(
+    client: TestClient, database: Any, *, member_count: int = 3
+) -> tuple[dict[str, Any], str, str]:
     _, csrf = login(client, "maya")
     versions = [
         _make_agent_version(database, owner_id=MAYA_ID, name=f"Member {index}")[1]
-        for index in range(3)
+        for index in range(member_count)
     ]
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/teams",
@@ -70,6 +80,153 @@ def _body(session: dict[str, Any], mode: str, *, ids: list[str] | None = None) -
         "message": "  中文原文 @someone\nDo not guess textual targets.  ",
         "routing": {"mode": mode, "participant_ids": ids or []},
     }
+
+
+def _configure_team_llm_preflight(settings: Any, database: Any) -> None:
+    settings.llm_provider = "dashscope"
+    settings.dashscope_api_key = "synthetic-key"
+    settings.dashscope_workspace_id = "synthetic-workspace"
+    settings.dashscope_region = "cn-beijing"
+    config = DashScopeLLMConfig(
+        api_key=settings.dashscope_api_key,
+        workspace_id=settings.dashscope_workspace_id,
+        region=settings.dashscope_region,
+        model_key=settings.llm_model,
+        policy_hash=_digest("team-stream-session-handoff"),
+    )
+    policy = _policy(
+        policy_id="team-stream-session-handoff",
+        endpoint=config.resolved_endpoint,
+    )
+    settings.llm_provider_policy_hash = policy.policy_hash
+    ProviderRepository(database).save_policy_snapshot(policy)
+
+
+@pytest.mark.parametrize("session_change", ["none", "revoked", "deleted", "expired"])
+def test_stream_worker_handoff_rechecks_the_request_session_for_every_member(
+    session_change: str,
+    client: TestClient,
+    database: Any,
+    app_bundle: Any,
+    monkeypatch: Any,
+) -> None:
+    session, csrf, _actor_id = _chat(client, database, member_count=4)
+    _app, _database, settings = app_bundle
+    _configure_team_llm_preflight(settings, database)
+    synthetic_context = TeamMemberContext(
+        agent_md="# Synthetic member",
+        knowledge_json="{}",
+        sources=(),
+        content_hash=_digest("synthetic member context"),
+    )
+    monkeypatch.setattr(
+        chat_team_context,
+        "load_member_context",
+        lambda *_args, **_kwargs: synthetic_context,
+    )
+    selected_members: list[str] = []
+    original_run_selected_agent = chat_team_sdk.run_selected_agent
+
+    def record_selected_agent(spec: Any, **kwargs: Any) -> Any:
+        selected_members.append(spec.participant_id)
+        return original_run_selected_agent(spec, **kwargs)
+
+    monkeypatch.setattr(chat_team_sdk, "run_selected_agent", record_selected_agent)
+    transport = Mock(side_effect=AssertionError("Team preflight must not call a Provider"))
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_team_provider.HttpxLLMTransport.post_bytes",
+        transport,
+    )
+
+    raw_session_token = client.cookies.get("maya_session")
+    assert raw_session_token
+    session_id_hash = session_hash(raw_session_token)
+    if session_change != "none":
+        from app.modules.workspace import chat as chat_module
+
+        original_stream = chat_module.stream_team_events
+
+        def change_session_before_worker(
+            selected_database: Any,
+            conversation_id: str,
+            selected_actor_id: str,
+            claim: Any,
+            after_sequence: int = 0,
+        ) -> Any:
+            if not claim.created:
+                return original_stream(
+                    selected_database,
+                    conversation_id,
+                    selected_actor_id,
+                    claim,
+                    after_sequence,
+                )
+            with selected_database.session() as db:
+                auth_session = db.get(SessionRecord, session_id_hash)
+                assert auth_session is not None
+                if session_change == "revoked":
+                    auth_session.revoked_at = datetime.now(UTC)
+                elif session_change == "deleted":
+                    db.delete(auth_session)
+                else:
+                    auth_session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            return original_stream(
+                selected_database,
+                conversation_id,
+                selected_actor_id,
+                claim,
+                after_sequence,
+            )
+
+        monkeypatch.setattr(chat_module, "stream_team_events", change_session_before_worker)
+
+    body = _body(session, "all")
+    url = f"/api/v1/conversations/{session['id']}/messages:stream"
+    headers = {**_headers(csrf), "Accept": "text/event-stream"}
+    response = client.post(url, headers=headers, json=body)
+    assert response.status_code == 200, response.text
+    assert response.text.count("event: member_result") == 4
+    assert response.text.count("event: turn_done") == 1
+
+    member_ids = [member["id"] for member in session["team"]["members"]]
+    with database.session() as db:
+        turn = db.get(ConversationTurn, body["request_id"])
+        row = db.get(Conversation, session["id"])
+        results = db.scalars(
+            select(TeamTurnResult)
+            .where(TeamTurnResult.turn_id == body["request_id"])
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+        assert turn is not None and row is not None
+        assert row.active_request_id is None
+        assert [result.participant_id for result in results] == member_ids
+        if session_change == "none":
+            assert [result.state for result in results] == ["failed"] * 4
+            assert [result.safe_error_code for result in results] == [
+                "provider_confirmation_required"
+            ] * 4
+            assert selected_members == member_ids
+        else:
+            assert [result.state for result in results] == ["failed"] * 4
+            assert [result.safe_error_code for result in results] == ["not_found"] * 4
+            assert selected_members == []
+        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
+        assert (
+            db.scalar(select(func.coalesce(func.sum(ProviderOperation.charged_request_count), 0)))
+            == 0
+        )
+    assert transport.call_count == 0
+
+    previous_execution_count = len(selected_members)
+    if session_change != "none":
+        _actor, csrf = login(client, "bowen")
+        headers = {**_headers(csrf), "Accept": "text/event-stream"}
+    replay = client.post(url, headers=headers, json=body)
+    assert replay.status_code == 200, replay.text
+    assert len(selected_members) == previous_execution_count
+    assert transport.call_count == 0
+    with database.session() as db:
+        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
 
 @pytest.mark.parametrize("mode", ["selected", "all"])
