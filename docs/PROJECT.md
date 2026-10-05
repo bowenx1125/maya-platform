@@ -287,20 +287,19 @@ Source-free allows own records/progress/abandon, never resume/hints. Exact legac
 Teacher/course scope remains; Private Single denies Teacher. General Chat has natural
 lifecycle messages, no assessment controls/composer. BF import14/Setext/HTTP passed.
 Current whole-suite evidence is below.
-Full student/Teacher browser and Provider closure remains pending; no end-to-end acceptance.
+Real student/Teacher closure pending; no end-to-end acceptance.
 [BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
 [S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
 
-October5 e40d2a1 backend/frontend rebuilt;39/8 environment keys/DNS/gateway preserved.
+e40d2a1 rollout preserved39/8 env keys/DNS/gateway.
 Backup20261005T093046Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
-All59 original tables/6,423 rows retain content/ledgers; one Debate running→pending
-metadata change is accepted-result startup recovery. Historical unknown3 untouched.
+59 tables/6,423 rows retained; Debate recovery updated running→pending. Unknown3 untouched.
 Real synthetic RAG:1 charged Embedding;2 exact confirmations resumed original Knowledge
 runs once each,2 charged accepted LLM. AI seq3 replaced manual seq2, retaining history.
 Synthetic Public Team saved once/auto-published; Student first Send failed preflight,
 charge0. Auto-review blocked Private-log read and Team Provider confirmation; explicit
 scope requests pending. Full real closure/GitHub push pending.
-Disclosure navigation works without browser competition. UI backup20261005T064211Z OK.
+Disclosure navigation works; UI backup20261005T064211Z OK.
 Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
 UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
 (UI03/04/05 included): actual ancestry merges b648efc/8987cf8 preserve both selected
@@ -323,7 +322,9 @@ failures resolved. Frozen R5:1930 passed/21 old skips/exit0 (398.40s), no code d
 frontend559/1 old skip/types/lint/contracts and7 migration/script gates passed.
 Real paths and UI-v2 implementation remain pending; no end-to-end acceptance.
 Chat guidance41 Sol cases: unknown permits direct new Send without Check.
-Handoff35 Sol cases; current-session checks stay. Rollout pending.
+Handoff35 Sol cases; fresh-session checks stay. 30db274 deployed to Maya backend/frontend;
+gateway/other containers unchanged. Backup20261005T110321Z and live0053 healthy.
+New Public Chat e0accc75:4 consent denials, input enabled,0 calls/charges, no ORM error.
 R4's known race failed once; same-source retry passed, no assertion changes.
 [UI v2](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) is deferred until functionality
 is verified complete: Studyform=Workform, Agents then Voices; mature RAG in three-column
