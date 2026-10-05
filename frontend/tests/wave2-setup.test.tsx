@@ -677,11 +677,13 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   await screen.findByText("Needs recovery");
   expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   expect(
-    within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
-  ).toBeNull();
+    within(screen.getByRole("main"))
+      .getByRole("link", { name: "New" })
+      .getAttribute("href"),
+  ).toBe("/teacher/debates/new");
   expect(
-    within(screen.getByRole("navigation")).getByRole("link", { name: "New" }),
-  ).toBeTruthy();
+    within(screen.getByRole("navigation")).queryByRole("link", { name: "New" }),
+  ).toBeNull();
   fireEvent.focus(window);
   await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
   expect(api.remakeDebate).not.toHaveBeenCalled();

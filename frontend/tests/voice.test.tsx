@@ -62,11 +62,11 @@ describe("M08 voice library", () => {
         .getByRole("checkbox", { name: consentCopy })
         .closest("[data-ui-guide]"),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(
-      (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    const done = screen.getByRole("button", {
+      name: "Done",
+    }) as HTMLButtonElement;
+    expect(done.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 
     const input = screen.getByLabelText(
       "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
@@ -75,9 +75,9 @@ describe("M08 voice library", () => {
       type: "audio/wav",
     });
     fireEvent.change(input, { target: { files: [file] } });
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(done.disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(await screen.findByRole("button", { name: "Done" })).toBeTruthy();
+    await waitFor(() => expect(done.disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     expect(

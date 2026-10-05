@@ -39,7 +39,7 @@ import {
 } from "../../ui";
 import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
-import { WorkspaceAction } from "../../workspace-actions";
+import { PageAction } from "../../page-action";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
 
@@ -134,21 +134,21 @@ export function TeacherDebateList({
     };
   }, [load]);
 
+  const newDebate = (
+    <PageAction name="new" href="/teacher/debates/new" disabled={!courseId} />
+  );
+
   return (
     <div className={styles.pageStack}>
       <PageIntro title={t("debatePreviewTitle")} />
-      <WorkspaceAction
-        name="new"
-        href="/teacher/debates/new"
-        disabled={!courseId}
-      />
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
-        <SectionCard>
+        <SectionCard action={debates.length > 0 ? newDebate : undefined}>
           {debates.length === 0 ? (
             <div className={styles.emptyState}>
               <strong>{t("debateNoDebates")}</strong>
+              {newDebate}
             </div>
           ) : (
             <div className={styles.list}>
@@ -506,16 +506,7 @@ export function TeacherDebateCreate({
   return (
     <div className={styles.pageStack}>
       <PageIntro title={copy(t, "newDebateTitle")} />
-      {!rulesEditing ? (
-        <WorkspaceAction name="back" href="/teacher/debates" disabled={busy} />
-      ) : null}
-      {!rulesEditing ? (
-        <WorkspaceAction
-          name="done"
-          form="create-debate-form"
-          disabled={busy || candidates.length === 0}
-        />
-      ) : null}
+      <PageAction name="back" href="/teacher/debates" disabled={busy} />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form
         id="create-debate-form"
@@ -718,6 +709,17 @@ export function TeacherDebateCreate({
         {formError ? (
           <div className="form-error" role="alert">
             {formError}
+          </div>
+        ) : null}
+        {/* Creating mid-edit would freeze rules other than the ones on
+          screen, so Done waits until the ruleset edit is saved or discarded. */}
+        {!rulesEditing ? (
+          <div className="button-row">
+            <PageAction
+              name="done"
+              form="create-debate-form"
+              disabled={busy || candidates.length === 0}
+            />
           </div>
         ) : null}
       </form>

@@ -6,9 +6,15 @@ import { type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
+import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
-import { WorkspaceAction } from "../workspace-actions";
-import { ErrorNotice, LoadingCard, SectionCard, StatusBadge } from "../ui";
+import {
+  ErrorNotice,
+  LoadingCard,
+  PageIntro,
+  SectionCard,
+  StatusBadge,
+} from "../ui";
 import { IconCheck, IconClose, IconPlay } from "../quiet-icons";
 import cards from "../library-cards.module.css";
 import styles from "./voice-library.module.css";
@@ -177,29 +183,23 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
   }
 
   if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <LoadingCard />
-      </>
-    );
+    return <LoadingCard />;
   }
   if (error && profiles.length === 0) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <ErrorNotice error={error} onRetry={() => void load()} />
-      </>
-    );
+    return <ErrorNotice error={error} onRetry={() => void load()} />;
   }
+
+  const newVoice = (
+    <PageAction
+      name="new"
+      disabled={busy || creating}
+      onClick={() => setCreating(true)}
+    />
+  );
 
   return (
     <div className={styles.voicePanel}>
-      <WorkspaceAction
-        name="new"
-        disabled={busy || creating}
-        onClick={() => setCreating(true)}
-      />
+      <PageIntro title={t("voices")} />
       {error ? (
         <ErrorNotice error={error} onRetry={() => setError(null)} />
       ) : null}
@@ -210,20 +210,6 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
       ) : null}
       {creating ? (
         <SectionCard className={styles.uploadCard}>
-          <WorkspaceAction
-            name="back"
-            disabled={busy}
-            onClick={() => {
-              setCreating(false);
-              setFile(null);
-              setConsent(false);
-            }}
-          />
-          <WorkspaceAction
-            name="done"
-            disabled={!file || !consent || busy}
-            onClick={() => void submitEnrollment()}
-          />
           <label className={styles.field}>
             <span>{t("voiceSampleFile")}</span>
             <input
@@ -244,9 +230,28 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
             />
             <span>{t("voiceConsent")}</span>
           </label>
+          <div className="button-row">
+            <PageAction
+              name="back"
+              disabled={busy}
+              onClick={() => {
+                setCreating(false);
+                setFile(null);
+                setConsent(false);
+              }}
+            />
+            <PageAction
+              name="done"
+              disabled={!file || !consent || busy}
+              onClick={() => void submitEnrollment()}
+            />
+          </div>
         </SectionCard>
       ) : (
-        <SectionCard title={`${t("voices")} · ${profiles.length}`}>
+        <SectionCard
+          title={`${t("voices")} · ${profiles.length}`}
+          action={newVoice}
+        >
           <div className={`knowledge-tile-grid ${cards.grid}`}>
             {profiles.map((profile) => (
               <article

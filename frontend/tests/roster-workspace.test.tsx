@@ -125,18 +125,19 @@ describe("teacher account management", () => {
     push.mockReset();
   });
 
-  it("retains sidebar Back and Done while editing a member", async () => {
+  it("keeps Back and Done beside the member form while editing", async () => {
     const api = apiForTeacher();
     mount(api, "en");
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
-    const sidebar = screen.getByRole("navigation");
-    await waitFor(() =>
-      expect(
-        within(sidebar).getByRole("button", { name: "Back" }),
-      ).toBeTruthy(),
-    );
-    expect(within(sidebar).getByRole("button", { name: "Done" })).toBeTruthy();
+    const main = within(screen.getByRole("main"));
+    expect(main.getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(main.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "Back",
+      }),
+    ).toBeNull();
     const nameField = screen.getByLabelText("Display name");
     fireEvent.change(nameField, { target: { value: "Ada Lovelace" } });
     fireEvent.click(await screen.findByRole("button", { name: "Done" }));

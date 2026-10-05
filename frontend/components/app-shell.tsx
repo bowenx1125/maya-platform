@@ -113,6 +113,7 @@ export function AppShell({
   const isCourseTeacher = user?.courses?.some(
     (membership) => membership.role === "teacher",
   );
+  const home = isStudent && !isCourseTeacher ? "/student" : "/teacher";
   const links: {
     href: string;
     label: string;
@@ -121,7 +122,7 @@ export function AppShell({
   }[] = isStudent
     ? [
         {
-          href: isCourseTeacher ? "/teacher" : "/student",
+          href: home,
           label: t("appName"),
           icon: "home",
         },
@@ -169,7 +170,7 @@ export function AppShell({
           : []),
       ]
     : [
-        { href: "/teacher", label: t("appName"), icon: "home" },
+        { href: home, label: t("appName"), icon: "home" },
         { href: "/teacher/chat", label: "Chats", icon: "chat" },
         {
           href: "/teacher/knowledge",
@@ -181,9 +182,7 @@ export function AppShell({
       ];
 
   const activePath =
-    isStudent &&
-    groupId &&
-    /^\/student\/(agents|agent-versions)\//.test(pathname)
+    isStudent && groupId && agentRoute
       ? `/student/groups/${groupId}`
       : pathname.startsWith("/teacher/debates-beta/")
         ? pathname.replace("/teacher/debates-beta/", "/teacher/debates/")
@@ -193,11 +192,10 @@ export function AppShell({
       .filter(
         (link) =>
           activePath === link.href ||
-          (!["/teacher", "/student"].includes(link.href) &&
-            activePath.startsWith(`${link.href}/`)),
+          (link.href !== home && activePath.startsWith(`${link.href}/`)),
       )
       .sort((left, right) => right.href.length - left.href.length)[0]?.href ??
-    (isStudent ? "/student" : "/teacher");
+    (activePath.startsWith(`${home}/`) ? home : undefined);
 
   return (
     <WorkspaceActionsContext.Provider value={setActions}>

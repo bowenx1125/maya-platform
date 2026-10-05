@@ -95,7 +95,7 @@ remain unverified. Architecture: [overview](ARCHITECTURE.md), [contracts](../con
 Topic/optional Background are separate(0026); titles show Topic only. Accept visible
 scripts/symbols; NFC/control/whitespace cleanup preserves punctuation. Background is
 unverified scenario data. Draft edits invalidate Preview. Creation uses separate
-cards, sidebar Back/Done and Ruleset language. Budget ceilings were later removed.
+cards, Back/Done and Ruleset language. Budget ceilings were later removed.
 
 ## Frozen Markdown Ruleset and current Report repair
 
@@ -121,9 +121,10 @@ Only `ordered_multi_expert_mutual_learning_v1` remains; new Debates use four-rou
 
 Single-course Demo: open registration/five-character passwords/separate unknown-user
 and wrong-password errors; multi-course deferred, catalog managed. Migration0029
-stops canonical username/group collisions without changing logins. Teacher access
-survives sync; Enter grants teacher CRUD, Homeward returns to Accounts. Auth/CSRF/
-publication/course/consent guards remain.
+stops canonical username/group collisions without changing logins. Teacher course role survives sync; Enter selects group scope without bypassing
+resource-owner ACL. Mayaform returns Home. Self-service password changes retain the
+current session, revoke others and store a DB override without changing the catalog.
+Auth/CSRF/publication/course/consent guards remain.
 
 ## Classroom display — September 18, 2026
 
@@ -133,19 +134,18 @@ uploader-owned; Gaussian packs are optional ADR-007 experiments.
 
 ## Operation panel and browser acceptance — September 22, 2026
 
-Three-Agent acceptance:12 turns, Conclude/Report and Replay; nine Preview speeches
-reused. Seven calls(3 Embedding/3 LLM/1 Report); reopening/replay added none.
-TTS/Voice were Mock; no student messages/votes. Retained turns 5/6 and 8/9 match
-ignoring whitespace; list says “2 Rounds”; neither was rewritten. This dated
-acceptance excludes later changes, RAG quality, real speech and load.
+Historical three-Agent12-turn Conclude/Report/Replay used seven calls and reused
+nine Preview speeches; reopening added none. TTS/Voice were Mock; no student input.
+Old retained turns/list labels were not rewritten. This excludes current changes,
+RAG quality, real speech and load.
 
 ## Working — workspace, private Chats and Live
 
 0030 adds private history, encrypted preferences and 20s Live leases. Chat freezes
 version/snapshot, actor, revision and unknown-state; Live shares history/audio without
 spectator generation/control. Providers are core modules; speech settings are
-environment-managed (TTS120s, generic30s). Avatar editing stays in Workspace; the
-warm-paper/display-serif design remains. Key entry makes no call/mode change; env key
+environment-managed (TTS120s, generic30s). Account settings retain preset avatars and self-service passwords; Workspace
+3D editing stays separate. Warm-paper and compact typography remain. Key entry makes no call/mode change; env key
 wins. Check skips Ready/deferred, confirms calls and stops on failure. Failed creation
 keeps text/retry identity; libraries use pencil/download/X. Dated workspace/Live checks
 used11 calls; concurrent owner work raised the historical ledger to17.
@@ -222,12 +222,11 @@ budget cause. Dated static/Docker/browser checks passed with Mock Voice/four war
 
 ## Preserved adjacent work — September 27, 2026
 
-Voice metadata/text-only Debate preserve owner/SSRF/snapshot guards. Historical
-enrollment/preview/113.12s speech succeeded; saved promotion made no call; earlier
-unknown charges were not retried. Names use NFKC/strip/casefold, duplicate409 and
-immutable old versions. Mobile/SQL Mock and backend1500/frontend420 were dated,
-not current quality acceptance. One Report200 failed content without retry.
-Live retains QR/Final cutoff; Chat has no language field or TTS.
+Historical Voice enrollment/preview/113.12s speech succeeded; promotion reused
+the saved stage and unknown charges were not retried. Owner/SSRF/snapshots,
+normalized names/duplicate409 and old versions remain. Historical Mock checks
+are not current quality proof. A Report200 failed content without retry.
+Live keeps QR/Final cutoff; Chat has no language field or TTS.
 
 ## MayaForm W0 — 2026-09-27
 
@@ -274,8 +273,8 @@ no real Provider/Docker.
 ## MayaForm recovery — 2026-10-03
 
 K2b2 a975e38 and K3-A83de097/evidence1b1bfca remain committed; actual branch
-feat/mayaform-v14, HEAD1b1bfca. K3-B1/B2,0041–0053 and learning/Tools are drafts,
-not deployed acceptance. Lost reviews require revalidation.
+feat/mayaform-v14. K3-B1/B2,0041–0053 and learning/Tools are checkpointed f59df82,
+not deployed acceptance. Lost reviews were replaced by current same-version review.
 Preserve foreign Debate/Voice/UI changes; one writer owns each shared file.
 Main switched to GPT-6.1 Sol on October5; Luna/max implements, independent Sol audits.
 
@@ -302,7 +301,8 @@ created_at only; source-free recovery allows own answers/progress or abandon, ne
 resume/hints. Legacy query scopes retain exact Teacher/course checks; Private Single
 denies Teacher. General Chat uses natural lifecycle messages, no assessment controls
 or special composer. BF MD import14 independent and Setext/HTTP tests passed.
-Final isolated Linux backend1909 passed/21 skipped (499.64s); frontend553/1 skipped.
+Final isolated Linux backend1909 passed/21 skipped (499.64s, exit0); integrated
+frontend559/1 skipped and6 independent UI probes passed;281 frontend hashes stable.
 Browser and real Provider remain pending; no end-to-end acceptance claimed.
 [BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
 [S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
@@ -313,16 +313,17 @@ October5 SQLite backup API/integrity/FK passed. A private backup copy upgraded
 bytes; integrity/FK passed. Final deployment still needs fresh in-flight checks.
 Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
 UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
-(UI03/04/05 included) are merged in source, not ancestry/commits yet.
+(UI03/04/05 included): PDF ancestry merged b648efc; UI source is integrated and
+independently accepted, retaining Brainform sidebar New and General Chat.
 Linux conversion22 and UI Sol102/Roster/Profile probes passed before final delta;
 macOS memory guard remains. Migrations0052/0053 append without rewriting history.
-Final frontend553 passed/1 skipped; types, lint(0 errors/4 existing warnings),
+Final frontend559/1 skipped; types, lint(0 errors/4 existing warnings),
 Prettier, backend Ruff/format493/mypy247, all152 actual API semantics/19 negatives,
 generated/strict privacy/boundary and7 migration/bootstrap/reset gates passed.
 Locked Agno3.0.11 is used through public SDK. Independent runtime source freeze:
 912 files, manifest db6b792d3bb895f6aae42c43f0ce15f3a6c8f791692f0e828d13ac70210a1c56;
-only explanatory/progress docs changed afterward. Single query Embedding
+All502 backend files retain that freeze; UI22 changed files have new evidence. Query Embedding
 uses separate exact Teacher course-purpose consent, not LLM consent or per-message
-approvals. Draft0050 permits only llm_agent_chat/embedding_query; independent
+approvals. Migration0050 permits only llm_agent_chat/embedding_query; independent
 populated0033→0053 and18 atomicity tests passed. Production remains0033 pending rollout;
 latest backup is20261005T033431Z, integrity/FK OK. Historical unknown3 are never resent.

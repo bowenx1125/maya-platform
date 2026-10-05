@@ -1,7 +1,5 @@
 "use client";
 
-import { WorkspaceAction } from "./workspace-actions";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -31,6 +29,7 @@ import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
+import { PageAction } from "./page-action";
 import { IconDownload } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -174,7 +173,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
         />
       ) : null}
       {visible ? (
-        <WorkspaceAction
+        <PageAction
           name="new"
           disabled={busy || agent.status === "archived"}
           href={
@@ -187,10 +186,7 @@ export function AgentOverview({ agentId }: { agentId: string }) {
         <ReadOnlyVersion version={visible} agent={agent} actions={actions} />
       ) : (
         <SectionCard action={actions}>
-          <WorkspaceAction
-            name="back"
-            href={`/student/groups/${agent.group_id}`}
-          />
+          <PageAction name="back" href={`/student/groups/${agent.group_id}`} />
           <EmptyCard title={t("noVersions")} />
         </SectionCard>
       )}
@@ -740,25 +736,11 @@ export function AgentWorkbench({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <WorkspaceAction
-        name="back"
-        href={backHref ?? `/student/agents/${agent.id}`}
-        disabled={saving}
-        onClick={(event) => {
-          if (localDirty && !window.confirm(t("discardDraftConfirm")))
-            event.preventDefault();
-        }}
-      />
       {generationFlow ? (
         <p className="notice notice-info" role="status">
           {t("aiKnowledgeFlowIntro")}
         </p>
       ) : null}
-      <WorkspaceAction
-        name="done"
-        disabled={saving || (!localDirty && blockers.length > 0)}
-        onClick={() => void publish()}
-      />
       {resolvedKnowledgeHref ? (
         <Link className="text-link" href={resolvedKnowledgeHref}>
           {t("agentKnowledgeSets")}
@@ -1126,6 +1108,22 @@ export function AgentWorkbench({
           </SectionCard>
         </aside>
       </div>
+      <div className="button-row">
+        <PageAction
+          name="back"
+          href={backHref ?? `/student/agents/${agent.id}`}
+          disabled={saving}
+          onClick={(event) => {
+            if (localDirty && !window.confirm(t("discardDraftConfirm")))
+              event.preventDefault();
+          }}
+        />
+        <PageAction
+          name="done"
+          disabled={saving || (!localDirty && blockers.length > 0)}
+          onClick={() => void publish()}
+        />
+      </div>
     </>
   );
 }
@@ -1210,7 +1208,7 @@ function ReadOnlyVersion({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <WorkspaceAction
+      <PageAction
         name="back"
         href={backHref ?? `/student/groups/${agent.group_id}`}
       />

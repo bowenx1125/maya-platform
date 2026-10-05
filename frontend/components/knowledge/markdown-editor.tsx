@@ -6,7 +6,7 @@ import type { FormEvent } from "react";
 import type { KnowledgeDocument } from "../../lib/api";
 import { localizeError } from "../../lib/i18n";
 import { useLocale, useT } from "../locale";
-import { WorkspaceAction } from "../workspace-actions";
+import { PageAction } from "../page-action";
 
 /** A narrow editable view with the authoritative replacement CAS fields. */
 export type EditableKnowledgeDocument = Pick<
@@ -177,14 +177,6 @@ export function MarkdownEditor({
       onSubmit={submit}
       data-mode={replacing ? "replace" : "create"}
     >
-      <WorkspaceAction name="done" form={formId} disabled={!canSubmit} />
-      {onCancel ? (
-        <WorkspaceAction
-          name="back"
-          disabled={disabled || submitting}
-          onClick={onCancel}
-        />
-      ) : null}
       {onCreate || onReplace ? (
         <div className="stack-form">
           <label
@@ -252,6 +244,16 @@ export function MarkdownEditor({
           {error}
         </div>
       ) : null}
+      <div className="button-row">
+        {onCancel ? (
+          <PageAction
+            name="back"
+            disabled={disabled || submitting}
+            onClick={onCancel}
+          />
+        ) : null}
+        <PageAction name="done" form={formId} disabled={!canSubmit} />
+      </div>
     </form>
   );
 }

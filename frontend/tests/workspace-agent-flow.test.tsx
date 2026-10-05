@@ -93,12 +93,14 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(screen.queryByText("Info")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
-    const nav = within(screen.getByRole("navigation"));
+    const main = within(screen.getByRole("main"));
     expect(
-      (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
+      (await main.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
     expect(
-      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
+      within(screen.getByRole("navigation")).queryByRole("link", {
+        name: "Back",
+      }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
@@ -144,7 +146,7 @@ describe("Workspace Agent flow", () => {
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
-  it("uses sidebar New to edit an initial draft without inline Edit or Delete", async () => {
+  it("uses page New to edit an initial draft without inline Edit or Delete", async () => {
     api.agent.mockResolvedValue(
       agent({
         current_published_version_id: null,
@@ -161,8 +163,13 @@ describe("Workspace Agent flow", () => {
     );
     const nav = within(screen.getByRole("navigation"));
     expect(
-      (await nav.findByRole("link", { name: "New" })).getAttribute("href"),
+      (
+        await within(screen.getByRole("main")).findByRole("link", {
+          name: "New",
+        })
+      ).getAttribute("href"),
     ).toBe("/student/agent-versions/draft-id/edit");
+    expect(nav.queryByRole("link", { name: "New" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.nextVersion).not.toHaveBeenCalled();

@@ -9,7 +9,7 @@ import {
   type UpdateCourseMemberRequest,
 } from "../lib/api";
 import { useT } from "./locale";
-import { WorkspaceAction } from "./workspace-actions";
+import { PageAction } from "./page-action";
 import { IconArrowRight } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
@@ -218,12 +218,12 @@ export function RosterWorkspace() {
                         />
                       </label>
                       <div className="button-row">
-                        <WorkspaceAction
+                        <PageAction
                           name="back"
                           onClick={() => setEditing(null)}
                           disabled={pending}
                         />
-                        <WorkspaceAction
+                        <PageAction
                           name="done"
                           form={`roster-edit-${entry.user_id}`}
                           disabled={pending}

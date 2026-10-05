@@ -25,7 +25,10 @@ describe("MarkdownEditor", () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(<MarkdownEditor onCreate={onCreate} />);
 
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     fireEvent.change(screen.getByPlaceholderText("evidence.md"), {
       target: { value: "lesson.md" },
     });

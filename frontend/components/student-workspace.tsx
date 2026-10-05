@@ -19,7 +19,7 @@ import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { HomeGuide } from "./home-guide";
 import { useLocale, useT } from "./locale";
-import { WorkspaceAction } from "./workspace-actions";
+import { PageAction } from "./page-action";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
@@ -256,10 +256,7 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
   }, [load]);
 
   const newAgent = (
-    <WorkspaceAction
-      name="new"
-      href={`/student/groups/${groupId}/agents/new`}
-    />
+    <PageAction name="new" href={`/student/groups/${groupId}/agents/new`} />
   );
 
   if (loading) return <LoadingCard />;
@@ -494,11 +491,6 @@ function CreateAgentFormSession({
           {t("aiKnowledgeFlowIntro")}
         </p>
       ) : null}
-      <WorkspaceAction
-        name="back"
-        href={groupId ? `/student/groups/${groupId}` : "/teacher"}
-        disabled={busy}
-      />
       <SectionCard title={t("agentIdentity")}>
         <form
           id="create-agent-form"
@@ -560,11 +552,12 @@ function CreateAgentFormSession({
             />
           ) : null}
           <div className="button-row">
-            <WorkspaceAction
-              name="done"
-              form="create-agent-form"
+            <PageAction
+              name="back"
+              href={groupId ? `/student/groups/${groupId}` : "/teacher"}
               disabled={busy}
             />
+            <PageAction name="done" form="create-agent-form" disabled={busy} />
           </div>
         </form>
       </SectionCard>

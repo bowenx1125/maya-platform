@@ -11,7 +11,13 @@ export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
   return (
     <div className="loading-card" role="status">
-      <span className="spinner" aria-hidden="true" />
+      {/* The sign-in's four scholar blocks, still waiting their turn. */}
+      <span className="academy-loader" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+      </span>
       {label ?? t("loading")}
     </div>
   );
@@ -56,9 +62,8 @@ export function EmptyCard({
 }) {
   return (
     <section className="empty-card">
-      <span className="empty-mark" aria-hidden="true">
-        ✦
-      </span>
+      {/* The sign-in rule's gold diamond, not a sparkle. */}
+      <span className="empty-mark" aria-hidden="true" />
       <h2>{title}</h2>
       {children ? <p>{children}</p> : null}
       {action}
