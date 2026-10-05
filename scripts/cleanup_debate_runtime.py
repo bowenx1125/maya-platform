@@ -30,7 +30,10 @@ K2A_SCHEMA_HEAD = "0037_knowledge_generation_runs"
 K2B1_SCHEMA_HEAD = "0038_knowledge_generation_provider_stage"
 K2B2_SCHEMA_HEAD = "0039_knowledge_generation_materialization"
 K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
-SCHEMA_HEAD = K3A_SCHEMA_HEAD
+K3B1_SCHEMA_HEAD = "0041_team_conversations"
+K3B2_SCHEMA_HEAD = "0042_team_turn_results"
+K4A_SCHEMA_HEAD = "0043_learning_evidence"
+SCHEMA_HEAD = "0053_user_profile"
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
@@ -39,7 +42,48 @@ SUPPORTED_SCHEMA_HEADS = {
     K2B1_SCHEMA_HEAD,
     K2B2_SCHEMA_HEAD,
     K3A_SCHEMA_HEAD,
+    K3B1_SCHEMA_HEAD,
+    K3B2_SCHEMA_HEAD,
+    K4A_SCHEMA_HEAD,
 }
+# These additive tables are outside the Debate cleanup's ownership.
+V14_PRESERVED_BY_HEAD = {
+    "0044_team_provider_stage": (
+        "team_provider_calls",
+        "team_provider_standing_grants",
+        "team_provider_consent_bindings",
+    ),
+    "0045_assessment_attempts": (
+        "assessment_activities",
+        "assessment_activity_questions",
+        "assessment_attempts",
+        "learning_assessment_resource_grants",
+        "assessment_attempt_questions",
+        "assessment_attempt_events",
+        "learning_boundaries",
+        "learning_boundary_revisions",
+        "learning_boundary_evidence",
+        "assessment_course_reports",
+        "assessment_course_report_revisions",
+        "assessment_course_report_evidence",
+        "assessment_course_report_mutations",
+    ),
+    "0046_chat_withdrawal": (),
+    "0047_brainform_markdown": (
+        "knowledge_document_versions",
+        "knowledge_set_markdown_versions",
+    ),
+    "0048_runtime_tool_receipts": ("runtime_tool_receipts",),
+    "0049_runtime_model_call_stages": ("runtime_model_call_stages",),
+    "0050_chat_provider_standing_grants": (
+        "chat_provider_standing_grants",
+        "chat_provider_consent_bindings",
+    ),
+    "0051_chat_memory_entry_actions": ("chat_memory_entry_actions",),
+    "0052_teacher_courseware": (),
+    "0053_user_profile": (),
+}
+SUPPORTED_SCHEMA_HEADS.update(V14_PRESERVED_BY_HEAD)
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 
@@ -127,6 +171,18 @@ PRESERVED_TABLES = (
     "team_version_sets",
     "course_team_publications",
     "team_member_invoke_grants",
+    "conversation_participants",
+    "conversation_participant_sets",
+    "conversation_shared_sets",
+    "team_turn_results",
+    "team_chat_events",
+    "learning_records",
+    "learning_assessments",
+    "learning_assessment_revisions",
+    "learning_assessment_mutations",
+)
+PRESERVED_TABLES += tuple(
+    table for tables in V14_PRESERVED_BY_HEAD.values() for table in tables
 )
 K1_PRESERVED_TABLES = frozenset(
     {
@@ -156,6 +212,22 @@ K3A_PRESERVED_TABLES = frozenset(
         "team_version_sets",
         "course_team_publications",
         "team_member_invoke_grants",
+    }
+)
+K3B1_PRESERVED_TABLES = frozenset(
+    {
+        "conversation_participants",
+        "conversation_participant_sets",
+        "conversation_shared_sets",
+    }
+)
+K3B2_PRESERVED_TABLES = frozenset({"team_turn_results", "team_chat_events"})
+K4A_PRESERVED_TABLES = frozenset(
+    {
+        "learning_records",
+        "learning_assessments",
+        "learning_assessment_revisions",
+        "learning_assessment_mutations",
     }
 )
 
@@ -382,24 +454,51 @@ def _validate_schema(connection: sqlite3.Connection) -> str:
         raise CleanupError("schema_head_invalid")
     schema_head = next(iter(heads))
     required_preserved = set(PRESERVED_TABLES)
+    for introduced_at, additions in V14_PRESERVED_BY_HEAD.items():
+        if int(schema_head[:4]) < int(introduced_at[:4]):
+            required_preserved.difference_update(additions)
     if schema_head == "0035_w1_resource_ownership":
         required_preserved.difference_update(K1_PRESERVED_TABLES)
         required_preserved.difference_update(K2_PRESERVED_TABLES)
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
         required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
     elif schema_head == KNOWLEDGE_SETS_SCHEMA_HEAD:
         required_preserved.difference_update(K2_PRESERVED_TABLES)
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
         required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
     elif schema_head == K2A_SCHEMA_HEAD:
         required_preserved.discard("knowledge_generation_accepted_stages")
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
         required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
     elif schema_head == K2B1_SCHEMA_HEAD:
         required_preserved.difference_update(K2B2_PRESERVED_TABLES)
         required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
     elif schema_head == K2B2_SCHEMA_HEAD:
         required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K3A_SCHEMA_HEAD:
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K3B1_SCHEMA_HEAD:
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K3B2_SCHEMA_HEAD:
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
     required = set(TARGET_TABLES) | required_preserved | {"alembic_version"}
     if required.difference(tables):
         raise CleanupError("schema_tables_missing")
@@ -889,9 +988,7 @@ def _build_plan(
         | cleanup_idempotency_ids
     )
     cleanup_debate_ids = debate_ids | {
-        str(row["entity_id"])
-        for row in cleanup_rows
-        if row["entity_id"]
+        str(row["entity_id"]) for row in cleanup_rows if row["entity_id"]
     }
     if cleanup_debate_ids:
         operation_clause, operation_values = _in(("deleteVoice", "deleteAll"))

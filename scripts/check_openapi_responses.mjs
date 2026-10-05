@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const redocly = resolve(root, "node_modules/.bin/redocly");
+const redocly = resolve(root, "node_modules/@redocly/cli/bin/cli.js");
 const source = resolve(root, "contracts/openapi-v0.1.yaml");
 const allowlistArgument = process.argv.indexOf("--allowlist");
 const allowlistPath = resolve(
@@ -21,8 +21,9 @@ function bundle() {
   const output = resolve(tempDir, "openapi.json");
   try {
     const result = spawnSync(
-      redocly,
+      process.execPath,
       [
+        redocly,
         "bundle",
         source,
         "--ext",

@@ -9,7 +9,7 @@ from datetime import UTC, timedelta
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,6 +36,7 @@ from app.modules.knowledge_sets.models import (
     AgentKnowledgeSet,
     KnowledgeAsset,
     KnowledgeAssetVersion,
+    KnowledgeDocumentVersion,
     KnowledgeGenerationAcceptedStage,
     KnowledgeGenerationItem,
     KnowledgeGenerationRun,
@@ -231,8 +232,10 @@ def _input_payload(
     set_row: KnowledgeSet,
     agent_md_hash: str,
     source_manifest: list[dict[str, Any]],
+    action_id: str | None = None,
+    intent_generation: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "policy_version": GENERATION_POLICY_VERSION,
         "owner_user_id": agent.owner_user_id,
         "course_id": agent.course_id,
@@ -253,6 +256,10 @@ def _input_payload(
         "agent_md_hash": agent_md_hash,
         "sources": source_manifest,
     }
+    if action_id is not None:
+        payload["action_id"] = action_id
+        payload["intent_generation"] = intent_generation
+    return payload
 
 
 def _target_asset_heads(db: Session, set_row: KnowledgeSet) -> str:
@@ -323,6 +330,37 @@ def enqueue_generation_for_publish(
     manifest_json = _canonical_json(source_manifest)
     manifest_hash = _sha256(manifest_json)
     agent_md_hash = _sha256(version.agent_md)
+    base_payload = _input_payload(
+        agent=agent,
+        set_row=set_row,
+        agent_md_hash=agent_md_hash,
+        source_manifest=source_manifest,
+    )
+    base_input_key = _sha256(_canonical_json(base_payload))
+    action_id = str(uuid5(_GENERATION_SET_NAMESPACE, f"publish:{base_input_key}"))
+    existing_run = db.scalar(
+        select(KnowledgeGenerationRun).where(
+            KnowledgeGenerationRun.knowledge_set_id == set_row.id,
+            KnowledgeGenerationRun.action_id == action_id,
+        )
+    )
+    if existing_run is None:
+        # Preserve the original K2 content-addressed replay for a run created
+        # before action IDs were introduced.
+        existing_run = db.scalar(
+            select(KnowledgeGenerationRun).where(
+                KnowledgeGenerationRun.knowledge_set_id == set_row.id,
+                KnowledgeGenerationRun.input_key == base_input_key,
+            )
+        )
+    if existing_run is not None:
+        existing_job = db.get(Job, existing_run.job_id)
+        if existing_job is None:
+            raise RuntimeError("Knowledge generation run lost its Job row.")
+        return GenerationEnqueue(existing_run, existing_job, False)
+
+    previous_intent_generation = set_row.generation_intent_seq
+    intent_generation = previous_intent_generation + 1
     input_key = _sha256(
         _canonical_json(
             _input_payload(
@@ -330,17 +368,26 @@ def enqueue_generation_for_publish(
                 set_row=set_row,
                 agent_md_hash=agent_md_hash,
                 source_manifest=source_manifest,
+                action_id=action_id,
+                intent_generation=intent_generation,
             )
         )
     )
-    existing_run = db.scalar(
-        select(KnowledgeGenerationRun).where(KnowledgeGenerationRun.input_key == input_key)
+    bumped = db.execute(
+        update(KnowledgeSet)
+        .where(
+            KnowledgeSet.id == set_row.id,
+            KnowledgeSet.generation_intent_seq == set_row.generation_intent_seq,
+        )
+        .values(generation_intent_seq=intent_generation, updated_at=now_utc())
+        .execution_options(synchronize_session=False)
     )
-    if existing_run is not None:
-        existing_job = db.get(Job, existing_run.job_id)
-        if existing_job is None:
-            raise RuntimeError("Knowledge generation run lost its Job row.")
-        return GenerationEnqueue(existing_run, existing_job, False)
+    if getattr(bumped, "rowcount", 0) != 1:
+        raise conflict(
+            "knowledge_generation_intent_stale",
+            "A newer Knowledge generation intent was created. Retry the action.",
+        )
+    set_row.generation_intent_seq = intent_generation
 
     timestamp = now_utc()
     target_asset_heads_json = _target_asset_heads(db, set_row)
@@ -349,6 +396,8 @@ def enqueue_generation_for_publish(
         id=str(uuid4()),
         job_id=job_id,
         input_key=input_key,
+        action_id=action_id,
+        intent_generation=intent_generation,
         owner_user_id=context.user.id,
         course_id=agent.course_id,
         agent_id=agent.id,
@@ -389,25 +438,28 @@ def enqueue_generation_for_publish(
                     created_at=timestamp,
                 )
             )
-            for source in source_manifest:
+            for receipt_source in source_manifest:
                 db.add(
                     KnowledgeGenerationSourceReceipt(
                         id=str(uuid4()),
                         run_id=run.id,
-                        source_binding_id=str(source["binding_id"]),
-                        document_id=str(source["document_id"]),
-                        stored_file_id=str(source["stored_file_id"]),
-                        source_content_hash=str(source["content_hash"]),
-                        source_file_sha256=str(source["file_sha256"]),
-                        source_authorization_epoch=int(source["authorization_epoch"]),
-                        source_index_revision=int(source["index_revision"]),
+                        source_binding_id=str(receipt_source["binding_id"]),
+                        document_id=str(receipt_source["document_id"]),
+                        stored_file_id=str(receipt_source["stored_file_id"]),
+                        source_content_hash=str(receipt_source["content_hash"]),
+                        source_file_sha256=str(receipt_source["file_sha256"]),
+                        source_authorization_epoch=int(receipt_source["authorization_epoch"]),
+                        source_index_revision=int(receipt_source["index_revision"]),
                         created_at=timestamp,
                     )
                 )
             db.flush()
     except IntegrityError as exc:
         existing_run = db.scalar(
-            select(KnowledgeGenerationRun).where(KnowledgeGenerationRun.input_key == input_key)
+            select(KnowledgeGenerationRun).where(
+                KnowledgeGenerationRun.knowledge_set_id == set_row.id,
+                KnowledgeGenerationRun.action_id == action_id,
+            )
         )
         if existing_run is None:
             raise
@@ -415,6 +467,221 @@ def enqueue_generation_for_publish(
         if existing_job is None:
             raise RuntimeError("Knowledge generation run lost its Job row.") from exc
         return GenerationEnqueue(existing_run, existing_job, False)
+    return GenerationEnqueue(run, job, True)
+
+
+def enqueue_generation_for_existing_set(
+    db: Session,
+    *,
+    set_id: str,
+    owner_user_id: str,
+    action_id: str,
+    allow_empty_blocked: bool = False,
+) -> GenerationEnqueue:
+    """Enqueue a new explicit or source-save intent for an existing generated Set."""
+
+    existing = db.scalar(
+        select(KnowledgeGenerationRun).where(
+            KnowledgeGenerationRun.knowledge_set_id == set_id,
+            KnowledgeGenerationRun.action_id == action_id,
+        )
+    )
+    if existing is not None:
+        job = db.get(Job, existing.job_id)
+        if job is None:
+            raise RuntimeError("Knowledge generation run lost its Job row.")
+        return GenerationEnqueue(existing, job, False)
+
+    set_row = db.scalar(select(KnowledgeSet).where(KnowledgeSet.id == set_id).with_for_update())
+    prior_run = db.scalar(
+        select(KnowledgeGenerationRun)
+        .where(
+            KnowledgeGenerationRun.knowledge_set_id == set_id,
+            KnowledgeGenerationRun.owner_user_id == owner_user_id,
+        )
+        .order_by(KnowledgeGenerationRun.created_at.desc(), KnowledgeGenerationRun.id.desc())
+        .limit(1)
+    )
+    if (
+        set_row is None
+        or set_row.deleted_at is not None
+        or set_row.owner_user_id != owner_user_id
+        or set_row.ownership_scope != "personal"
+        or set_row.group_id is not None
+        or prior_run is None
+        or prior_run.owner_user_id != owner_user_id
+    ):
+        raise not_found()
+    agent = db.get(Agent, prior_run.agent_id)
+    if (
+        agent is None
+        or agent.deleted_at is not None
+        or agent.status != "active"
+        or agent.owner_user_id != owner_user_id
+        or agent.course_id != set_row.course_id
+        or agent.current_published_version_id is None
+        or course_member_role(db, owner_user_id, agent.course_id) != "teacher"
+        or _agent_workspace_role(db, owner_user_id, agent) != "owner"
+    ):
+        raise not_found()
+    binding = db.get(AgentKnowledgeSet, (agent.id, set_id))
+    if binding is None:
+        raise not_found()
+    version = db.get(AgentVersion, agent.current_published_version_id)
+    if version is None or version.agent_id != agent.id or version.state != "published":
+        raise not_found()
+
+    bindings = _active_sources(db, set_id)
+    if not bindings and not allow_empty_blocked:
+        raise conflict(
+            "knowledge_generation_sources_missing",
+            "Knowledge cannot be regenerated without an available bound source.",
+        )
+    source_manifest: list[dict[str, Any]] = []
+    for source in bindings:
+        if not _source_matches_current(db, owner_user_id, source, role="owner", for_write=True):
+            raise not_found()
+        document = db.get(KnowledgeDocument, source.document_id)
+        stored_file = db.get(StoredFile, source.stored_file_id)
+        if (
+            document is None
+            or stored_file is None
+            or document.course_id != agent.course_id
+            or document.index_status != "ready"
+            or stored_file.state != "active"
+        ):
+            raise not_found()
+        source_manifest.append(
+            {
+                "binding_id": source.id,
+                "document_id": source.document_id,
+                "stored_file_id": source.stored_file_id,
+                "content_hash": source.source_content_hash,
+                "file_sha256": source.source_file_sha256,
+                "authorization_epoch": source.source_authorization_epoch,
+                "index_revision": source.source_index_revision,
+                "order_index": source.order_index,
+            }
+        )
+    manifest_json = _canonical_json(source_manifest)
+    manifest_hash = _sha256(manifest_json)
+    agent_md_hash = _sha256(version.agent_md)
+    previous_intent_generation = set_row.generation_intent_seq
+    intent_generation = previous_intent_generation + 1
+    input_key = _sha256(
+        _canonical_json(
+            _input_payload(
+                agent=agent,
+                set_row=set_row,
+                agent_md_hash=agent_md_hash,
+                source_manifest=source_manifest,
+                action_id=action_id,
+                intent_generation=intent_generation,
+            )
+        )
+    )
+    blocked_for_missing_sources = not source_manifest
+    initial_state = "blocked" if blocked_for_missing_sources else "pending"
+    initial_error = "knowledge_generation_sources_missing" if blocked_for_missing_sources else None
+    timestamp = now_utc()
+    job_id = str(uuid4())
+    run = KnowledgeGenerationRun(
+        id=str(uuid4()),
+        job_id=job_id,
+        input_key=input_key,
+        action_id=action_id,
+        intent_generation=intent_generation,
+        owner_user_id=owner_user_id,
+        course_id=agent.course_id,
+        agent_id=agent.id,
+        agent_version_id=version.id,
+        knowledge_set_id=set_id,
+        agent_md_hash=agent_md_hash,
+        agent_authorization_epoch=agent.authorization_epoch,
+        set_authorization_epoch=set_row.authorization_epoch,
+        source_manifest_json=manifest_json,
+        source_manifest_hash=manifest_hash,
+        state=initial_state,
+        safe_error_code=initial_error,
+        claim_token=None,
+        lease_expires_at=None,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    job = Job(
+        id=job_id,
+        operation=GENERATION_OPERATION,
+        state="failed" if blocked_for_missing_sources else "pending",
+        idempotency_key=input_key,
+        claim_token=None,
+        attempt=0,
+        safe_error_code=initial_error,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    try:
+        with db.begin_nested():
+            # Reserve the intent in the same SAVEPOINT as the action/run's
+            # unique identity. If another request won after our first lookup,
+            # the duplicate insert rolls this counter bump back with the run.
+            bumped = db.execute(
+                update(KnowledgeSet)
+                .where(
+                    KnowledgeSet.id == set_id,
+                    KnowledgeSet.generation_intent_seq == previous_intent_generation,
+                )
+                .values(generation_intent_seq=intent_generation, updated_at=timestamp)
+                .execution_options(synchronize_session=False)
+            )
+            if getattr(bumped, "rowcount", 0) != 1:
+                raise conflict(
+                    "knowledge_generation_intent_stale",
+                    "A newer Knowledge generation intent was created. Retry the action.",
+                )
+            db.add(job)
+            db.add(run)
+            db.flush()
+            db.add(
+                KnowledgeGenerationTargetSnapshot(
+                    run_id=run.id,
+                    asset_heads_json=_target_asset_heads(db, set_row),
+                    created_at=timestamp,
+                )
+            )
+            for receipt_source in source_manifest:
+                db.add(
+                    KnowledgeGenerationSourceReceipt(
+                        id=str(uuid4()),
+                        run_id=run.id,
+                        source_binding_id=str(receipt_source["binding_id"]),
+                        document_id=str(receipt_source["document_id"]),
+                        stored_file_id=str(receipt_source["stored_file_id"]),
+                        source_content_hash=str(receipt_source["content_hash"]),
+                        source_file_sha256=str(receipt_source["file_sha256"]),
+                        source_authorization_epoch=int(receipt_source["authorization_epoch"]),
+                        source_index_revision=int(receipt_source["index_revision"]),
+                        created_at=timestamp,
+                    )
+                )
+            db.flush()
+    except IntegrityError:
+        # The duplicate-action winner owns the current intent. Refresh the
+        # identity map after the SAVEPOINT rolled back the losing bump.
+        db.refresh(set_row)
+        existing = db.scalar(
+            select(KnowledgeGenerationRun).where(
+                KnowledgeGenerationRun.knowledge_set_id == set_id,
+                KnowledgeGenerationRun.action_id == action_id,
+            )
+        )
+        if existing is None:
+            raise
+        existing_job = db.get(Job, existing.job_id)
+        if existing_job is None:
+            raise RuntimeError("Knowledge generation run lost its Job row.") from None
+        return GenerationEnqueue(existing, existing_job, False)
+    set_row.generation_intent_seq = intent_generation
+    set_row.updated_at = timestamp
     return GenerationEnqueue(run, job, True)
 
 
@@ -437,7 +704,7 @@ def _current_source_manifest(
             or binding.knowledge_set_id != set_row.id
             or not binding.is_active
             or binding.document_id != item.get("document_id")
-            or binding.stored_file_id != item.get("stored_file_id")
+            or binding.order_index != item.get("order_index")
         ):
             return None
         document = db.get(KnowledgeDocument, binding.document_id)
@@ -463,18 +730,55 @@ def _current_source_manifest(
             )
         ):
             return None
-        result.append(
-            {
-                "binding_id": binding.id,
-                "document_id": binding.document_id,
-                "stored_file_id": binding.stored_file_id,
-                "content_hash": binding.source_content_hash,
-                "file_sha256": binding.source_file_sha256,
-                "authorization_epoch": binding.source_authorization_epoch,
-                "index_revision": binding.source_index_revision,
-                "order_index": binding.order_index,
-            }
+        source_head_is_exact = (
+            binding.stored_file_id == item.get("stored_file_id")
+            and binding.source_file_sha256 == item.get("file_sha256")
+            and binding.source_content_hash == item.get("content_hash")
+            and binding.source_authorization_epoch == item.get("authorization_epoch")
+            and binding.source_index_revision == item.get("index_revision")
         )
+        if source_head_is_exact:
+            result.append(
+                {
+                    "binding_id": binding.id,
+                    "document_id": binding.document_id,
+                    "stored_file_id": binding.stored_file_id,
+                    "content_hash": binding.source_content_hash,
+                    "file_sha256": binding.source_file_sha256,
+                    "authorization_epoch": binding.source_authorization_epoch,
+                    "index_revision": binding.source_index_revision,
+                    "order_index": binding.order_index,
+                }
+            )
+            continue
+
+        # Newline/byte-representation-only saves may retain a generation
+        # intent: the normalized indexed content, revision and current ACL
+        # must be identical, and the old manifest file/hash must be proven by
+        # an immutable KnowledgeDocumentVersion row.
+        historical = db.scalar(
+            select(KnowledgeDocumentVersion.id).where(
+                KnowledgeDocumentVersion.document_id == binding.document_id,
+                KnowledgeDocumentVersion.stored_file_id == item.get("stored_file_id"),
+                KnowledgeDocumentVersion.content_hash == item.get("content_hash"),
+                KnowledgeDocumentVersion.file_sha256 == item.get("file_sha256"),
+                KnowledgeDocumentVersion.authorization_epoch == item.get("authorization_epoch"),
+                KnowledgeDocumentVersion.index_revision == item.get("index_revision"),
+            )
+        )
+        if (
+            historical is None
+            or document.content_hash != item.get("content_hash")
+            or binding.source_content_hash != item.get("content_hash")
+            or document.authorization_epoch != item.get("authorization_epoch")
+            or binding.source_authorization_epoch != item.get("authorization_epoch")
+            or document.index_revision != item.get("index_revision")
+            or binding.source_index_revision != item.get("index_revision")
+        ):
+            return None
+        # Keep the exact frozen source manifest identity so its accepted
+        # Provider input remains auditable and does not imply a fresh charge.
+        result.append(item)
     return result
 
 
@@ -500,6 +804,7 @@ def _current_generation_authorized(db: Session, run: KnowledgeGenerationRun) -> 
         or set_row.course_id != run.course_id
         or set_row.deleted_at is not None
         or set_row.authorization_epoch != run.set_authorization_epoch
+        or set_row.generation_intent_seq != run.intent_generation
     ):
         return False
     current_manifest = _current_source_manifest(db, run, agent, set_row)
@@ -507,19 +812,27 @@ def _current_generation_authorized(db: Session, run: KnowledgeGenerationRun) -> 
         return False
     if _sha256(_canonical_json(current_manifest)) != run.source_manifest_hash:
         return False
-    return (
-        _sha256(
-            _canonical_json(
-                _input_payload(
-                    agent=agent,
-                    set_row=set_row,
-                    agent_md_hash=run.agent_md_hash,
-                    source_manifest=current_manifest,
-                )
-            )
-        )
-        == run.input_key
+    current_payload = _input_payload(
+        agent=agent,
+        set_row=set_row,
+        agent_md_hash=run.agent_md_hash,
+        source_manifest=current_manifest,
+        action_id=run.action_id,
+        intent_generation=run.intent_generation,
     )
+    if _sha256(_canonical_json(current_payload)) == run.input_key:
+        return True
+    # Runs created before action identity was added retain their exact old
+    # input hash and remain recoverable until a newer intent/source fences them.
+    if run.action_id == run.id and run.intent_generation == 0:
+        legacy_payload = _input_payload(
+            agent=agent,
+            set_row=set_row,
+            agent_md_hash=run.agent_md_hash,
+            source_manifest=current_manifest,
+        )
+        return _sha256(_canonical_json(legacy_payload)) == run.input_key
+    return False
 
 
 def current_generation_authorized_on_connection(

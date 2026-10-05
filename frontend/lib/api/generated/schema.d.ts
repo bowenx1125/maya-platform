@@ -308,7 +308,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Current User */
+        patch: operations["updateCurrentUser"];
         trace?: never;
     };
     "/auth/password-resets": {
@@ -1869,6 +1870,285 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/conversations/memory-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Memory Entry Action
+         * @description Resolve one durable Brainform navigation intent; sending remains explicit Chat work.
+         */
+        post: operations["createMemoryEntryAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/turns/{turn_id}:pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Team Conversation Turn */
+        post: operations["pauseTeamConversationTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/turns/{turn_id}:resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Team Conversation Turn */
+        post: operations["resumeTeamConversationTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/turns/{turn_id}:stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Team Conversation Turn Output */
+        post: operations["stopTeamConversationTurnOutput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/brainform/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Brainform Knowledge */
+        get: operations["listBrainformKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-documents/{document_id}:rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Knowledge Document */
+        post: operations["renameKnowledgeDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Markdown */
+        get: operations["getKnowledgeMarkdown"];
+        /** Save Knowledge Markdown */
+        put: operations["saveKnowledgeMarkdown"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Knowledge Markdown */
+        post: operations["regenerateKnowledgeMarkdown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/activities/{activity_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Assessment Report Route */
+        post: operations["createAssessmentCourseReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/attempts/{attempt_id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Assessment Lifecycle Action Route */
+        post: operations["applyAssessmentLifecycleAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/courses/{course_id}/assessment-activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Assessment Activities Route */
+        get: operations["listAuthorizedAssessmentActivities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/reports/{report_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Assessment Report Route */
+        get: operations["downloadAssessmentCourseReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/chat-standing/disclosure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chat Standing Provider Disclosure
+         * @description Create/reuse a static course Chat disclosure, with no student Chat inputs.
+         */
+        get: operations["getChatStandingProviderDisclosure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/team-standing-grants/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Team Provider Standing Grant */
+        post: operations["confirmTeamProviderStandingGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/team-standing-grants/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Team Provider Standing Grant */
+        post: operations["previewTeamProviderStandingGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Current Password */
+        post: operations["changeCurrentPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1905,15 +2185,42 @@ export interface components {
         ChatSession: {
             agent: components["schemas"]["ChatAgent"];
             /**
+             * Can Send
+             * @default true
+             */
+            can_send: boolean;
+            /**
+             * Chat Visibility
+             * @default private
+             * @enum {string}
+             */
+            chat_visibility: "private" | "public";
+            /**
              * Created At
              * Format: date-time
              */
             created_at: string;
             /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_kind: "agent";
+            /**
              * Id
              * Format: uuid
              */
             id: string;
+            /**
+             * Origin
+             * @default single_agent
+             * @constant
+             */
+            origin: "single_agent";
+            /**
+             * Read Only
+             * @default false
+             */
+            read_only: boolean;
             /** Revision */
             revision: number;
             /** Turns */
@@ -1933,6 +2240,7 @@ export interface components {
         };
         /** ChatTurn */
         ChatTurn: {
+            assessment_result?: components["schemas"]["AssessmentRuntimeResult"] | null;
             /** Assistant Text */
             assistant_text: string | null;
             /**
@@ -1953,7 +2261,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "pending" | "ready" | "failed" | "acceptance_unknown";
+            state: "pending" | "ready" | "partial" | "failed" | "acceptance_unknown" | "paused";
             /** User Text */
             user_text: string;
         };
@@ -1999,10 +2307,15 @@ export interface components {
         /** CreateChat */
         CreateChat: {
             /**
-             * Version Id
-             * Format: uuid
+             * Chat Visibility
+             * @default private
+             * @enum {string}
              */
-            version_id: string;
+            chat_visibility: "private" | "public";
+            /** Entry */
+            entry?: (components["schemas"]["AgentChatEntry"] | components["schemas"]["SavedTeamChatEntry"] | components["schemas"]["MayaTeamChatEntry"]) | null;
+            /** Version Id */
+            version_id?: string | null;
         };
         /** LiveHeartbeat */
         LiveHeartbeat: {
@@ -2133,6 +2446,7 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+            routing?: components["schemas"]["TeamRouting"] | null;
         };
         /** StreamChat */
         StreamChat: {
@@ -2145,6 +2459,7 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+            routing?: components["schemas"]["TeamRouting"] | null;
         };
         /** UpdateProviderSettings */
         UpdateProviderSettings: {
@@ -2180,15 +2495,28 @@ export interface components {
             manifest_hash: string;
             expected_revision: number;
         };
+        /**
+         * ProviderDataCallDisclosureV1
+         * @description Exact teacher-facing data-processing disclosure.
+         */
         ProviderDataCallDisclosureV1: {
-            supplier_display_name: string;
-            /** @constant */
-            region: "cn-beijing";
-            purpose: string;
-            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "teacher_agent_instructions" | "authorized_courseware_text" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
-            storage_fact: string;
+            /** No Training Basis */
             no_training_basis: string;
+            /** Outbound Field Classes */
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "teacher_agent_instructions" | "authorized_courseware_text" | "private_conversation_messages" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
+            /** Purpose */
+            purpose: string;
+            /**
+             * Region
+             * @constant
+             */
+            region: "cn-beijing";
+            /** Retention Setting */
             retention_setting: string;
+            /** Storage Fact */
+            storage_fact: string;
+            /** Supplier Display Name */
+            supplier_display_name: string;
         };
         ProviderDataCallDisclosureResponseV1: {
             disclosure: components["schemas"]["ProviderDataCallDisclosureV1"];
@@ -2245,9 +2573,9 @@ export interface components {
             revision_no: number;
             /** @constant */
             status: "generating";
-            english_markdown?: null;
-            word_count?: null;
-            safe_error_code?: null;
+            english_markdown: null;
+            word_count: null;
+            safe_error_code: null;
             created_at: components["schemas"]["IsoTime"];
         };
         ContinueReadyReportRevision: {
@@ -2257,7 +2585,7 @@ export interface components {
             status: "ready";
             english_markdown: string;
             word_count: number;
-            safe_error_code?: null;
+            safe_error_code: null;
             created_at: components["schemas"]["IsoTime"];
         };
         ContinueFailedReportRevision: {
@@ -2265,8 +2593,8 @@ export interface components {
             revision_no: number;
             /** @constant */
             status: "failed";
-            english_markdown?: null;
-            word_count?: null;
+            english_markdown: null;
+            word_count: null;
             safe_error_code: string;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -2284,7 +2612,7 @@ export interface components {
             password: string;
             group_name: string;
             display_name?: string | null;
-            course_id?: components["schemas"]["Uuid"];
+            course_id?: components["schemas"]["Uuid"] | null;
         };
         PasswordResetRequest: {
             course_id: components["schemas"]["Uuid"];
@@ -2313,12 +2641,23 @@ export interface components {
             csrf_token: string;
             expires_at: components["schemas"]["IsoTime"];
         };
+        /** CurrentUser */
         CurrentUser: {
-            id: components["schemas"]["Uuid"];
-            username: string;
-            display_name: string;
+            /** Avatar */
+            avatar?: string | null;
+            /** Courses */
             courses: components["schemas"]["CourseMembership"][];
+            /** Display Name */
+            display_name: string;
+            /** Groups */
             groups: components["schemas"]["GroupMembership"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string;
         };
         CourseMembership: {
             course_id: components["schemas"]["Uuid"];
@@ -2347,27 +2686,59 @@ export interface components {
         GroupDetail: components["schemas"]["Group"] & {
             members?: components["schemas"]["Member"][];
         };
+        /** Member */
         Member: {
-            user_id: components["schemas"]["Uuid"];
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
             display_name: string;
+            /** Role */
             role: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         GroupRef: {
             id: components["schemas"]["Uuid"];
             name: string;
         };
+        /**
+         * RosterEntry
+         * @description One course member as the teacher's account management view sees it.
+         */
         RosterEntry: {
-            user_id: components["schemas"]["Uuid"];
-            username: string;
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
             display_name: string;
-            role: string;
-            status: string;
-            source: string;
+            /** Editable */
             editable: boolean;
+            /** Groups */
             groups?: components["schemas"]["GroupRef"][];
+            /** Role */
+            role: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Username */
+            username: string;
         };
+        /** CourseRoster */
         CourseRoster: {
-            course_id: components["schemas"]["Uuid"];
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Entries */
             entries?: components["schemas"]["RosterEntry"][];
         };
         UpdateCourseMemberRequest: {
@@ -2421,6 +2792,11 @@ export interface components {
             safe_error_code?: string | null;
             /** Source Filename */
             source_filename: string;
+            /**
+             * Source Owner Role
+             * @enum {string}
+             */
+            source_owner_role: "student" | "teacher";
             /**
              * Visibility
              * @enum {string}
@@ -2762,10 +3138,13 @@ export interface components {
             playback_url: string;
             expires_at: components["schemas"]["IsoTime"];
         };
+        /** PublishedAgentSummary */
         PublishedAgentSummary: {
-            group_name: string;
             agent: components["schemas"]["AgentSummary"];
+            author?: components["schemas"]["PublishedAgentAuthor"] | null;
             current_version: components["schemas"]["AgentVersion"];
+            /** Group Name */
+            group_name: string;
         };
         DebateParticipantInput: {
             agent_id: components["schemas"]["Uuid"];
@@ -4246,6 +4625,800 @@ export interface components {
              */
             created_at: string;
         };
+        /** PublishedAgentAuthor */
+        PublishedAgentAuthor: {
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** UpdateCurrentUserRequest */
+        UpdateCurrentUserRequest: {
+            /** Avatar */
+            avatar: string | null;
+        };
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: {
+            /**
+             * Current Password
+             * Format: password
+             */
+            current_password: string;
+            /**
+             * New Password
+             * Format: password
+             */
+            new_password: string;
+        };
+        /** AgentChatEntry */
+        AgentChatEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+        };
+        /** AssessmentActivityListItem */
+        AssessmentActivityListItem: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Team Name */
+            team_name: string;
+        };
+        /** AssessmentCourseReportReceipt */
+        AssessmentCourseReportReceipt: {
+            report: components["schemas"]["AssessmentCourseReportDTO"];
+        };
+        /** AssessmentLifecycleActionRequest */
+        AssessmentLifecycleActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "pause" | "resume" | "abandon" | "redo";
+            /**
+             * Client Event Id
+             * Format: uuid
+             */
+            client_event_id: string;
+        };
+        /** AssessmentRuntimeResult */
+        AssessmentRuntimeResult: {
+            /** Answers */
+            answers?: components["schemas"]["AssessmentOwnerAnswerDTO"][];
+            context: components["schemas"]["AssessmentRuntimeContext"];
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "recorded" | "transitioned" | "read" | "redirected";
+            /**
+             * Response Key
+             * @enum {string}
+             */
+            response_key: "assessment.started" | "assessment.answer_recorded" | "assessment.answer_recorded_restricted_request" | "assessment.paused" | "assessment.resumed" | "assessment.completed" | "assessment.abandoned" | "assessment.abandoned_and_restarted" | "assessment.progress" | "assessment.answers" | "assessment.results_pending" | "assessment.restart_requires_choice" | "assessment.redirect";
+        };
+        /** BrainformKnowledgeSummary */
+        BrainformKnowledgeSummary: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Can Read
+             * @default true
+             * @constant
+             */
+            can_read: true;
+            /**
+             * Canonical Set Id
+             * Format: uuid
+             */
+            canonical_set_id: string;
+            /** Content Hash */
+            content_hash?: string | null;
+            /**
+             * Generation State
+             * @enum {string|null}
+             */
+            generation_state?: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted" | null;
+            /** Knowledge Display Name */
+            knowledge_display_name: string;
+            /** Safe Error Code */
+            safe_error_code?: string | null;
+            /** Source Agent Display Name */
+            source_agent_display_name: string;
+            /** Version Seq */
+            version_seq?: number | null;
+        };
+        /** CreateAssessmentReportRequest */
+        CreateAssessmentReportRequest: {
+            /**
+             * Client Event Id
+             * Format: uuid
+             */
+            client_event_id: string;
+        };
+        /** KnowledgeMarkdownDocument */
+        KnowledgeMarkdownDocument: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Audience
+             * @enum {string}
+             */
+            audience: "full" | "student";
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Can Read
+             * @default true
+             * @constant
+             */
+            can_read: true;
+            /**
+             * Canonical Set Id
+             * Format: uuid
+             */
+            canonical_set_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Knowledge Display Name */
+            knowledge_display_name: string;
+            /** Markdown */
+            markdown: string;
+            /** Projection Available */
+            projection_available: boolean;
+            /** Source Agent Display Name */
+            source_agent_display_name: string;
+            /** Version Seq */
+            version_seq: number;
+        };
+        /** MayaTeamChatEntry */
+        MayaTeamChatEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "maya_team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+        };
+        /** MemoryEntryRequest */
+        MemoryEntryRequest: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Source */
+            source: components["schemas"]["MemoryConversationSource"] | components["schemas"]["MemoryAgentSource"] | components["schemas"]["MemoryTeamSource"] | components["schemas"]["MemoryMayaTeamSource"];
+        };
+        /** MemoryEntryResponse */
+        MemoryEntryResponse: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Message */
+            message: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Session */
+            session: components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+        };
+        /** RegenerateKnowledgeRequest */
+        RegenerateKnowledgeRequest: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+        };
+        /** RegenerateKnowledgeResponse */
+        RegenerateKnowledgeResponse: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Canonical Set Id
+             * Format: uuid
+             */
+            canonical_set_id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+        };
+        /** RenameKnowledgeDocumentRequest */
+        RenameKnowledgeDocumentRequest: {
+            /** Expected Filename */
+            expected_filename: string;
+            /** Filename */
+            filename: string;
+        };
+        /** SaveKnowledgeMarkdownRequest */
+        SaveKnowledgeMarkdownRequest: {
+            /** Expected Version Seq */
+            expected_version_seq: number;
+            /** Markdown */
+            markdown: string;
+        };
+        /** SavedTeamChatEntry */
+        SavedTeamChatEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+            /** Team Version Id */
+            team_version_id?: string | null;
+        };
+        /** TeamChatSession */
+        TeamChatSession: {
+            /**
+             * Can Send
+             * @default false
+             */
+            can_send: boolean;
+            /**
+             * Chat Visibility
+             * @enum {string}
+             */
+            chat_visibility: "private" | "public";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_kind: "maya_team" | "team";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "custom_team" | "published_course_team";
+            /** Read Only */
+            read_only: boolean;
+            /** Revision */
+            revision: number;
+            team: components["schemas"]["ChatTeam"];
+            /** Turns */
+            turns: components["schemas"]["TeamChatTurn"][];
+        };
+        /** TeamRouting */
+        TeamRouting: {
+            /**
+             * Mode
+             * @default auto
+             * @enum {string}
+             */
+            mode: "auto" | "selected" | "all";
+            /** Participant Ids */
+            participant_ids?: string[];
+        };
+        /**
+         * TeamStandingGrantConfirmationRequestV1
+         * @description CAS values reviewed by the publisher before standing consent.
+         */
+        TeamStandingGrantConfirmationRequestV1: {
+            /** Expected Publication Epoch */
+            expected_publication_epoch: number;
+            /** Expected Resource Hash */
+            expected_resource_hash: string;
+            /** Expected Team Epoch */
+            expected_team_epoch: number;
+            /** Policy Hash */
+            policy_hash: string;
+            /**
+             * Provider Operation
+             * @enum {string}
+             */
+            provider_operation: "llm_agent_chat" | "embedding_query";
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /**
+         * TeamStandingGrantConfirmationV1
+         * @description Safe confirmation receipt for the exact Team resource binding.
+         */
+        TeamStandingGrantConfirmationV1: {
+            /** Confirmed At */
+            confirmed_at: string;
+            /** Knowledge Set Count */
+            knowledge_set_count: number;
+            /** Member Count */
+            member_count: number;
+            /** Policy Hash */
+            policy_hash: string;
+            /** Publication Epoch */
+            publication_epoch: number;
+            /** Resource Hash */
+            resource_hash: string;
+            /** Source Count */
+            source_count: number;
+            /** Standing Grant Id */
+            standing_grant_id: string;
+            /** Team Epoch */
+            team_epoch: number;
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /**
+         * TeamStandingGrantPreviewV1
+         * @description Small reviewable resource summary; never includes Chat text or operations.
+         */
+        TeamStandingGrantPreviewV1: {
+            /** Knowledge Set Count */
+            knowledge_set_count: number;
+            /** Member Count */
+            member_count: number;
+            /** Policy Hash */
+            policy_hash: string;
+            /** Publication Epoch */
+            publication_epoch: number;
+            /** Resource Hash */
+            resource_hash: string;
+            /** Source Count */
+            source_count: number;
+            /** Team Epoch */
+            team_epoch: number;
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /**
+         * TeamStandingGrantRequestV1
+         * @description Publisher-only static Team resource authorization request.
+         */
+        TeamStandingGrantRequestV1: {
+            /** Policy Hash */
+            policy_hash: string;
+            /**
+             * Provider Operation
+             * @enum {string}
+             */
+            provider_operation: "llm_agent_chat" | "embedding_query";
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /** AssessmentAnswerDTO */
+        AssessmentAnswerDTO: {
+            /** Answer Text */
+            answer_text: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Question Ordinal */
+            question_ordinal: number;
+            /**
+             * Question Version Id
+             * Format: uuid
+             */
+            question_version_id: string;
+        };
+        /** AssessmentCourseReportDTO */
+        AssessmentCourseReportDTO: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            content: components["schemas"]["AssessmentReportContent"];
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision Seq */
+            revision_seq: number;
+            /** Source Hash */
+            source_hash: string;
+        };
+        /** AssessmentRuntimeContext */
+        AssessmentRuntimeContext: {
+            attempt: components["schemas"]["AssessmentAttemptSummary"];
+            /**
+             * Canonical Conversation Id
+             * Format: uuid
+             */
+            canonical_conversation_id: string;
+            current_question: components["schemas"]["AssessmentRuntimeQuestion"] | null;
+            progress: components["schemas"]["AssessmentProgressProjection"];
+            /** Redirect To Original Conversation */
+            redirect_to_original_conversation: boolean;
+        };
+        /** ChatTeam */
+        ChatTeam: {
+            /** Available */
+            available: boolean;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Members */
+            members: components["schemas"]["TeamChatParticipant"][];
+            /** Name */
+            name: string;
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+        };
+        /** MemoryAgentSource */
+        MemoryAgentSource: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+        };
+        /** MemoryConversationSource */
+        MemoryConversationSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "conversation";
+        };
+        /** MemoryMayaTeamSource */
+        MemoryMayaTeamSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "maya_team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+        };
+        /** MemoryTeamSource */
+        MemoryTeamSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+        };
+        /** TeamChatTurn */
+        TeamChatTurn: {
+            assessment_result?: components["schemas"]["AssessmentRuntimeResult"] | null;
+            /** Assistant Text */
+            assistant_text: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Member Results */
+            member_results: components["schemas"]["TeamMemberResult"][];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "real" | "mock";
+            routing: components["schemas"]["TeamRouting"];
+            /** Safe Error Code */
+            safe_error_code: string | null;
+            /** Sources */
+            sources: components["schemas"]["ChatSource"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "ready" | "partial" | "failed" | "acceptance_unknown" | "paused";
+            /** User Text */
+            user_text: string;
+        };
+        /** AssessmentAttemptSummary */
+        AssessmentAttemptSummary: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Chat Visibility
+             * @enum {string}
+             */
+            chat_visibility: "private" | "public";
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_progress" | "paused" | "completed" | "abandoned";
+        };
+        /**
+         * AssessmentProgressProjection
+         * @description Student-safe progress contains counts and states, never answers or scores.
+         */
+        AssessmentProgressProjection: {
+            /** Answered Count */
+            answered_count: number;
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Current Ordinal */
+            current_ordinal?: number | null;
+            /** Current Question Version Id */
+            current_question_version_id?: string | null;
+            /** Presented Count */
+            presented_count: number;
+            /** Question Count */
+            question_count: number;
+            /** Resolved Count */
+            resolved_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_progress" | "paused" | "completed" | "abandoned";
+        };
+        /** AssessmentReportContent */
+        AssessmentReportContent: {
+            /** Abandoned Count */
+            abandoned_count: number;
+            /** Activity Name */
+            activity_name: string;
+            /** Actors */
+            actors: components["schemas"]["AssessmentActorReport"][];
+            /** Attempt Count */
+            attempt_count: number;
+            /** Completed Count */
+            completed_count: number;
+            /** Course Name */
+            course_name: string;
+            /** Effective Answer Count */
+            effective_answer_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** In Progress Count */
+            in_progress_count: number;
+            /** Paused Count */
+            paused_count: number;
+            /** Raw Answer Count */
+            raw_answer_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Student Count */
+            student_count: number;
+            /** Team Name */
+            team_name: string;
+        };
+        /**
+         * AssessmentRuntimeQuestion
+         * @description The visible question projection intentionally omits Rubric and reference answer.
+         */
+        AssessmentRuntimeQuestion: {
+            /** Ordinal */
+            ordinal: number;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Question Version Id
+             * Format: uuid
+             */
+            question_version_id: string;
+        };
+        /** TeamChatParticipant */
+        TeamChatParticipant: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            avatar_config: components["schemas"]["AvatarConfig"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Leader */
+            is_leader: boolean;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+        };
+        /** TeamMemberResult */
+        TeamMemberResult: {
+            /** Assistant Text */
+            assistant_text: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Participant Id
+             * Format: uuid
+             */
+            participant_id: string;
+            /** Safe Error Code */
+            safe_error_code: string | null;
+            /** Sources */
+            sources: components["schemas"]["ChatSource"][];
+            /** Speaker Name */
+            speaker_name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "ready" | "failed" | "acceptance_unknown";
+        };
+        /** AssessmentActorReport */
+        AssessmentActorReport: {
+            /** Abandoned Count */
+            abandoned_count: number;
+            /** Attempt Count */
+            attempt_count: number;
+            /** Completed Count */
+            completed_count: number;
+            /** Effective Answer Count */
+            effective_answer_count: number;
+            /** In Progress Count */
+            in_progress_count: number;
+            /** Learner Ref */
+            learner_ref: string;
+            /** Paused Count */
+            paused_count: number;
+            /** Raw Answer Count */
+            raw_answer_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Student Name */
+            student_name: string;
+        };
+        /** AssessmentOwnerAnswerDTO */
+        AssessmentOwnerAnswerDTO: {
+            /** Answer Text */
+            answer_text: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
     };
     responses: {
         /** @description Stable platform error. */
@@ -4331,7 +5504,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"][];
+                    "application/json": (components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"])[];
                 };
             };
             /** @description Unauthorized */
@@ -4391,7 +5564,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"];
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
                 };
             };
             /** @description Unauthorized */
@@ -4449,7 +5622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"];
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
                 };
             };
             /** @description Unauthorized */
@@ -4494,8 +5667,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "X-CSRF-Token": string;
             };
             path: {
                 conversation_id: string;
@@ -4504,7 +5676,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Conversation deleted. */
+            /** @description Successful Response */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -4538,6 +5710,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     sendConversationMessage: {
@@ -4561,7 +5742,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"];
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
                 };
             };
             /** @description Unauthorized */
@@ -4616,6 +5797,7 @@ export interface operations {
             query?: never;
             header: {
                 Accept: string;
+                "Last-Event-ID"?: number;
             };
             path: {
                 conversation_id: string;
@@ -5339,6 +6521,50 @@ export interface operations {
             401: components["responses"]["Error"];
         };
     };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated profile and current session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF failure. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resetStudentPassword: {
         parameters: {
             query?: never;
@@ -5782,6 +7008,15 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            /** @description Invalid RAG replacement. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     downloadKnowledgeDocument: {
@@ -8940,6 +10175,826 @@ export interface operations {
             };
             /** @description Team not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createMemoryEntryAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntryResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    pauseTeamConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resumeTeamConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    stopTeamConversationTurnOutput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listBrainformKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrainformKnowledgeSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renameKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameKnowledgeDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Owned document unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Name changed or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeMarkdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeMarkdownDocument"];
+                };
+            };
+            /** @description Knowledge document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    saveKnowledgeMarkdown: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveKnowledgeMarkdownRequest"];
+            };
+        };
+        responses: {
+            /** @description Markdown version saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeMarkdownDocument"];
+                };
+            };
+            /** @description Knowledge document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Markdown version is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    regenerateKnowledgeMarkdown: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateKnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Generation queued or reused. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegenerateKnowledgeResponse"];
+                };
+            };
+            /** @description Knowledge document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Generation inputs are stale or unavailable. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createAssessmentCourseReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAssessmentReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentCourseReportReceipt"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    applyAssessmentLifecycleAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessmentLifecycleActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentRuntimeResult"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAuthorizedAssessmentActivities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentActivityListItem"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    downloadAssessmentCourseReport: {
+        parameters: {
+            query?: {
+                revision_id?: string | null;
+            };
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getChatStandingProviderDisclosure: {
+        parameters: {
+            query: {
+                course_id: string;
+                provider_operation?: "llm_agent_chat" | "embedding_query";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallDisclosureResponseV1"];
+                };
+            };
+            /** @description Authentication is required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A course Teacher is required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Course or Provider policy was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Provider policy is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    confirmTeamProviderStandingGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamStandingGrantConfirmationRequestV1"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStandingGrantConfirmationV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewTeamProviderStandingGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamStandingGrantRequestV1"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStandingGrantPreviewV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    changeCurrentPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; other sessions revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication or current password failed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF failure. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

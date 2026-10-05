@@ -117,11 +117,7 @@ export function SectionCard({
         <div className="section-card-header">
           <div>
             {title ? (
-              <h2
-                data-ui-guide={guide}
-                data-ui-guide-touch={guide ? "true" : undefined}
-                tabIndex={guide ? 0 : undefined}
-              >
+              <h2 data-ui-guide={guide} tabIndex={guide ? 0 : undefined}>
                 {title}
               </h2>
             ) : null}

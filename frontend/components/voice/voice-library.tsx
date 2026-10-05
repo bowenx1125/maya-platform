@@ -230,6 +230,7 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
               className={styles.fileInput}
               type="file"
               accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+              data-ui-guide="voice.uploadSample"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               aria-label={t("voiceSampleFile")}
             />

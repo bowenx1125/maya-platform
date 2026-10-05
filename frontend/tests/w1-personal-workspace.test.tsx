@@ -63,6 +63,7 @@ function privateDocument(): KnowledgeDocument {
     can_manage_visibility: true,
     authorization_epoch: 0,
     source_filename: "private-notes.md",
+    source_owner_role: "student",
     char_count: 31,
     content_hash: "a".repeat(64),
     index_revision: 1,
@@ -104,6 +105,8 @@ function teacherSession(api: Record<string, unknown>) {
     identityGeneration: 2,
     user: {
       id: "teacher-user",
+      display_name: "Maya",
+      avatar: null,
       courses: [{ course_id: courseId, role: "teacher" }],
     },
   } as never;
@@ -125,6 +128,7 @@ describe("W1 teacher personal workspace", () => {
           { id: courseId, code: "MAYA-101", name: "Cultural exchange" },
         ]),
       publishedAgents: vi.fn().mockResolvedValue([]),
+      debates: vi.fn().mockResolvedValue([]),
       groups: vi.fn().mockResolvedValue([]),
       workspaceAgents: vi.fn().mockResolvedValue([agent]),
     };
@@ -139,6 +143,11 @@ describe("W1 teacher personal workspace", () => {
     expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
     expect(screen.getByText("Private — only me")).toBeTruthy();
     expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
+    expect(
+      screen
+        .getByRole("link", { name: "Create AI Knowledge" })
+        .getAttribute("href"),
+    ).toBe("/teacher/agents/new?flow=ai-knowledge");
     expect(screen.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
       "/teacher/agents/new",
     );

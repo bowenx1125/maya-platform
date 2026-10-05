@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import workspaceStyles from "./workspace-theme.module.css";
 import styles from "./app-shell.module.css";
+import { ViewTransition } from "./view-transition";
 import { WorkspaceIcon, type WorkspaceIconName } from "./workspace-icon";
 import {
   WorkspaceActionsContext,
@@ -23,14 +24,51 @@ export function AppShell({
   role: "student" | "teacher";
 }) {
   const t = useT();
-  const { api, user, logout } = useSession();
+  const { api, user, logout, identityGeneration } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const [busy, setBusy] = useState(false);
-  const groupId = user?.groups?.[0]?.group_id;
   const courseId = user?.courses?.[0]?.course_id;
   const [live, setLive] = useState(false);
   const [actions, setActions] = useState<WorkspaceActions>({});
+  const [agentGroup, setAgentGroup] = useState<{
+    scope: string;
+    groupId: string | null;
+  } | null>(null);
+  const [, routeGroupId] = pathname.match(/^\/student\/groups\/([^/]+)/) ?? [];
+  const [agentRoute, agentRouteKind, agentRouteId] =
+    pathname.match(/^\/student\/(agents|agent-versions)\/([^/]+)/) ?? [];
+  const lookUpAgentGroup =
+    role === "student" &&
+    Boolean(agentRoute) &&
+    (user?.groups?.length ?? 0) > 1;
+  const agentScope = `${user?.id ?? "anonymous"}:${identityGeneration ?? 0}:${agentRoute ?? ""}`;
+  const groupId =
+    routeGroupId ??
+    (lookUpAgentGroup
+      ? agentGroup?.scope === agentScope
+        ? agentGroup.groupId
+        : undefined
+      : user?.groups?.[0]?.group_id);
+
+  useEffect(() => {
+    if (!lookUpAgentGroup || !agentRouteId) return;
+    let active = true;
+    void (
+      agentRouteKind === "agents"
+        ? Promise.resolve(agentRouteId)
+        : api.version(agentRouteId).then((version) => version.agent_id)
+    )
+      .then((agentId) => api.agent(agentId))
+      .then((agent) => {
+        if (active)
+          setAgentGroup({ scope: agentScope, groupId: agent.group_id });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [api, agentRouteId, agentRouteKind, agentScope, lookUpAgentGroup]);
 
   useEffect(() => {
     if (
@@ -82,11 +120,15 @@ export function AppShell({
     disabled?: boolean;
   }[] = isStudent
     ? [
-        { href: "/student", label: t("appName"), icon: "home" },
+        {
+          href: isCourseTeacher ? "/teacher" : "/student",
+          label: t("appName"),
+          icon: "home",
+        },
         { href: "/student/chat", label: "Chats", icon: "chat" },
         {
           href: "/student/knowledge",
-          label: t("knowledgeSets"),
+          label: "Brainform",
           icon: "knowledge",
         },
         { href: "/student/live", label: "Live", icon: "live", disabled: !live },
@@ -131,7 +173,7 @@ export function AppShell({
         { href: "/teacher/chat", label: "Chats", icon: "chat" },
         {
           href: "/teacher/knowledge",
-          label: t("knowledge"),
+          label: "Brainform",
           icon: "knowledge",
         },
         { href: "/teacher/debates", label: t("debateList"), icon: "classroom" },
@@ -182,6 +224,15 @@ export function AppShell({
                   href={link.href}
                   key={link.href}
                 >
+                  {activeHref === link.href ? (
+                    <ViewTransition
+                      name="nav-active"
+                      share="nav-pill"
+                      default="none"
+                    >
+                      <span className={styles.pill} aria-hidden="true" />
+                    </ViewTransition>
+                  ) : null}
                   {link.icon === "home" ? (
                     <span
                       className={`brand-dot ${styles.homeMark}`}
@@ -243,7 +294,7 @@ export function AppShell({
           </nav>
           <div className={styles.account}>
             <span className={styles.credit}>
-              Work With <span className={styles.author}>Bowen</span>
+              Study With <span className={styles.author}>Bowen</span>.
             </span>
             <button
               className={styles.logout}
@@ -262,7 +313,7 @@ export function AppShell({
           tabIndex={-1}
           className={`${styles.main} ${workspaceStyles.surface} ${pathname === "/teacher/chat" || pathname === "/student/chat" ? styles.chatMain : ""}`}
         >
-          {children}
+          <ViewTransition>{children}</ViewTransition>
         </main>
       </div>
     </WorkspaceActionsContext.Provider>

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 class Member(BaseModel):
     user_id: UUID
     display_name: str
+    avatar: str | None = None
     role: str
 
 
@@ -53,6 +54,7 @@ class RosterEntry(BaseModel):
     user_id: UUID
     username: str
     display_name: str
+    avatar: str | None = None
     role: str
     status: str
     # "catalog" or "database"; only the latter is editable.

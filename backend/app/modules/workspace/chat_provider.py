@@ -2,12 +2,15 @@
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
+from agno.models.message import Message
+from agno.models.response import ModelResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, not_found
@@ -31,18 +34,25 @@ from app.modules.knowledge.providers import (
 )
 from app.modules.knowledge.providers.query_manifest import ensure_real_query_export_manifest
 from app.modules.knowledge.services import can_invoke_version, snapshot_sources_are_readable
+from app.modules.learning.schemas import AssessmentRuntimeResult
+from app.modules.provider_disclosure.service import (
+    confirm_chat_manifest_from_standing_grant,
+    single_chat_consent_is_current,
+)
 from app.providers.control import (
     LLM_DEBATE_TURN_BUCKET,
     ExportFieldV1,
     ExportManifestV1,
     ProviderReservationRequestV1,
     ProviderScopeBudgetV1,
+    canonical_json_bytes,
     confirm_export_manifest,
     validate_provider_preflight,
 )
 from app.providers.control_repository import (
     ProviderDispatchRejected,
     ProviderRepository,
+    ProviderRepositoryError,
     ProviderSendingGuard,
 )
 from app.providers.factory import embedding_provider, llm_provider
@@ -72,6 +82,7 @@ CHAT_REPLY_SCHEMA: dict[str, object] = {
     "required": ["reply"],
     "additionalProperties": False,
 }
+logger = logging.getLogger("maya.workspace")
 
 
 def digest(value: object) -> str:
@@ -88,6 +99,9 @@ def confirm_manifest(
     course_id: str,
     group_id: str | None = None,
     version_id: str | None = None,
+    actor_user_id: str | None = None,
+    turn_id: str | None = None,
+    claim_revision: int | None = None,
 ) -> None:
     repository = ProviderRepository(db)
     policy = repository.get_policy_snapshot(manifest.policy_hash)
@@ -107,6 +121,38 @@ def confirm_manifest(
         agent_version_id=version_id,
     )
     if repository.get_export_confirmation(manifest.manifest_hash) is None:
+        granted = False
+        if (
+            manifest.provider_operation in {"llm_agent_chat", "embedding_query"}
+            and actor_user_id is not None
+            and turn_id is not None
+        ):
+            granted = confirm_chat_manifest_from_standing_grant(
+                db,
+                manifest,
+                actor_user_id=actor_user_id,
+                conversation_id=manifest.scope_id,
+                turn_id=turn_id,
+                claim_revision=claim_revision,
+                current_policy_hash=(
+                    settings.provider_policy_hash_for("embedding")
+                    if manifest.provider_operation == "embedding_query"
+                    else None
+                ),
+            )
+        if granted:
+            return
+        if (
+            manifest.provider_operation == "embedding_query"
+            and actor_user_id is not None
+            and turn_id is not None
+        ):
+            raise PlatformError(
+                "provider_confirmation_required",
+                "A current Embedding purpose grant is required.",
+                409,
+                {"manifest_hash": manifest.manifest_hash},
+            )
         if not (settings.demo_mode and settings.demo_auto_confirm_provider):
             raise PlatformError(
                 "provider_confirmation_required",
@@ -135,6 +181,9 @@ def retrieve_sources(
     scope_id: str,
     request_id: str,
     message: str,
+    actor_user_id: str | None = None,
+    turn_id: str | None = None,
+    claim_revision: int | None = None,
     sending_guard: ProviderSendingGuard | None = None,
 ) -> list[ChatSource]:
     if version.knowledge_snapshot_id is None:
@@ -180,7 +229,7 @@ def retrieve_sources(
             db,
             db=db,
             scope_id=scope_id,
-            turn_id=request_id,
+            turn_id=turn_id or request_id,
             course_id=course_id,
             group_id=agent.group_id,
             agent_version_id=version.id,
@@ -198,6 +247,9 @@ def retrieve_sources(
             course_id=course_id,
             group_id=agent.group_id,
             version_id=version.id,
+            actor_user_id=actor_user_id,
+            turn_id=turn_id,
+            claim_revision=claim_revision,
         )
         confirmation = repository.get_export_confirmation(plan.manifest.manifest_hash)
         selected = embedding_provider(settings)
@@ -206,6 +258,26 @@ def retrieve_sources(
             raise PlatformError(
                 "provider_preflight_blocked", "Embedding configuration changed.", 409
             )
+        query_sending_guard = sending_guard
+        if actor_user_id is not None and turn_id is not None and claim_revision is not None:
+
+            def query_sending_guard_with_consent(connection: Any, operation: Any) -> bool:
+                return (
+                    sending_guard is not None
+                    and sending_guard(connection, operation)
+                    and single_chat_consent_is_current(
+                        connection,
+                        manifest_hash=plan.manifest.manifest_hash,
+                        conversation_id=scope_id,
+                        actor_user_id=actor_user_id,
+                        course_id=course_id,
+                        policy_hash=policy.policy_hash,
+                        field_classes=("current_evidence_excerpt",),
+                        provider_operation="embedding_query",
+                    )
+                )
+
+            query_sending_guard = query_sending_guard_with_consent
         control = SqlAlchemyQueryControlAdapter(
             db,
             scope_id=scope_id,
@@ -218,7 +290,7 @@ def retrieve_sources(
             logical_item_id=f"chat:{request_id}",
             max_requests=CONTROL_UNBOUNDED_REQUESTS,
             confirmation_revision=confirmation.confirmation_revision,
-            sending_guard=sending_guard,
+            sending_guard=query_sending_guard,
         )
         query = QueryEmbeddingService(
             provider=controlled_query_provider(
@@ -241,6 +313,48 @@ def retrieve_sources(
     ]
 
 
+def _single_chat_inputs_are_current(
+    db: Session,
+    *,
+    actor_id: str,
+    conversation_id: str,
+    version_id: str,
+) -> bool:
+    conversation = db.get(Conversation, conversation_id)
+    version = db.get(AgentVersion, version_id)
+    if (
+        conversation is None
+        or version is None
+        or conversation.entry_kind != "agent"
+        or conversation.withdrawn_at is not None
+        or conversation.user_id != actor_id
+        or conversation.agent_version_id != version.id
+        or conversation.snapshot_id != version.knowledge_snapshot_id
+    ):
+        return False
+    agent = db.get(Agent, version.agent_id)
+    if (
+        agent is None
+        or agent.deleted_at is not None
+        or agent.status != "active"
+        or (
+            agent.owner_user_id != actor_id
+            and conversation.agent_authorization_epoch != agent.authorization_epoch
+        )
+        or not can_invoke_version(db, actor_id, version, agent)
+    ):
+        return False
+    if conversation.snapshot_id is None:
+        return True
+    return snapshot_sources_are_readable(
+        db,
+        actor_id,
+        conversation.snapshot_id,
+        agent=agent,
+        allow_historical_epoch_for_owner=True,
+    )
+
+
 def real_reply(
     db: Session,
     settings: Settings,
@@ -254,6 +368,9 @@ def real_reply(
     group_id: str | None = None,
     component: str = "llm",
     sending_guard: ProviderSendingGuard | None = None,
+    actor_context: Any | None = None,
+    sources: list[ChatSource] | None = None,
+    allow_not_sent_retry: bool = False,
 ) -> tuple[str, str]:
     selected = llm_provider(settings.model_copy(update={"llm_provider": "dashscope"}))
     if not isinstance(selected, DashScopeLLMAdapter):
@@ -263,140 +380,494 @@ def real_reply(
     policy = repository.get_policy_snapshot(settings.provider_policy_hash_for(component) or "")
     if policy is None or policy.endpoint != config.resolved_endpoint:
         raise PlatformError("provider_preflight_blocked", "LLM policy is unavailable.", 409)
-    body: dict[str, object] = {
-        "model": config.model_key,
-        "messages": messages,
-        "stream": False,
-        "enable_thinking": False,
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "chat_reply",
-                "strict": True,
-                "schema": CHAT_REPLY_SCHEMA,
-            },
-        },
-    }
-    cost = 0.0
-    request_hash = digest(body)
-    manifest = ExportManifestV1(
-        scope_id=scope_id,
-        provider_operation="llm_agent_chat",
-        model_key=config.model_key,
-        policy_hash=policy.policy_hash,
-        build_manifest_hash=request_hash,
-        persona_spec_hash=persona_hash,
-        fields=(
-            ExportFieldV1(
-                "private_conversation_messages" if version_id else "topic_and_platform_rules",
-                digest(messages),
-            ),
-        ),
-        max_total_tokens=CHAT_PER_CALL_MAX_TOKENS,
-        max_cost_cny=cost,
-    )
-    confirm_manifest(
-        db, settings, manifest, course_id=course_id, group_id=group_id, version_id=version_id
-    )
-    confirmation = repository.get_export_confirmation(manifest.manifest_hash)
-    if confirmation is None:
-        raise PlatformError("provider_confirmation_required", "Confirmation is required.", 409)
-    # Chat payloads carry Agent Markdown and RAG excerpts as educational text.
-    # Scanning that prose for credential-shaped substrings rejects legitimate
-    # lessons (observed: SiyaH Agent.md containing "Authorization" -> export_data_forbidden).
-    # Auth headers carry the API key separately; do not weaken credential handling.
-    validate_provider_preflight(
-        policy,
-        manifest,
-        confirmation,
-        scope_id=scope_id,
-        provider_operation="llm_agent_chat",
-        model_key=config.model_key,
-    )
-    repository.save_scope_budget(
-        scope_id,
-        ProviderScopeBudgetV1(
-            max_requests=CONTROL_UNBOUNDED_REQUESTS,
-            max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
-            max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
-            budget_bucket=LLM_DEBATE_TURN_BUCKET,
-        ),
-    )
-    operation = repository.create_prepared(
-        ProviderReservationRequestV1(
+    from .chat_team_sdk import MemberSpec, TeamDispatchError, run_selected_agent
+
+    model_messages = [
+        Message(role=item["role"], content=item["content"])
+        for item in messages
+        if isinstance(item, dict) and isinstance(item.get("role"), str)
+    ]
+    if not model_messages or model_messages[-1].role != "user":
+        raise PlatformError("chat_messages_invalid", "The conversation could not be prepared.", 503)
+    participant_id = version_id or scope_id
+    tools: list[Any] = []
+    if actor_context is not None and version_id is not None:
+        from app.modules.runtime_tools.runtime import build_runtime_tools
+
+        tools = build_runtime_tools(
+            sessionmaker(bind=db.get_bind(), expire_on_commit=False),
+            actor_context.user.id,
+            scope_id,
+            participant_id,
+            request_id,
+            settings,
+            actor_context=actor_context,
+        )
+
+    cursors: dict[str, int] = {}
+    latest_operation: str | None = None
+
+    def dispatch(
+        member_id: str,
+        _invocation_id: str,
+        current_messages: Any,
+        tool_schemas: list[dict[str, Any]] | None,
+        tool_choice: Any,
+        _run_context: Any,
+    ) -> ModelResponse:
+        nonlocal latest_operation
+        if member_id != participant_id:
+            raise TeamDispatchError("chat_context_changed")
+        if actor_context is not None and version_id is not None:
+            if not _single_chat_inputs_are_current(
+                db,
+                actor_id=actor_context.user.id,
+                conversation_id=scope_id,
+                version_id=version_id,
+            ):
+                raise TeamDispatchError("chat_context_changed")
+        dispatch_ordinal = cursors.get(member_id, 0)
+        cursors[member_id] = dispatch_ordinal + 1
+        wire_messages = [_chat_wire_message(item) for item in current_messages]
+        body: dict[str, object] = {
+            "model": config.model_key,
+            "messages": wire_messages,
+            "stream": False,
+            "enable_thinking": False,
+        }
+        if tool_schemas is not None:
+            body["tools"] = tool_schemas
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
+        try:
+            wire = canonical_json_bytes(body)
+        except Exception:
+            raise TeamDispatchError("chat_messages_invalid") from None
+        request_hash = hashlib.sha256(wire).hexdigest()
+        wire_text = wire.decode("utf-8")
+        manifest = ExportManifestV1(
             scope_id=scope_id,
             provider_operation="llm_agent_chat",
-            logical_item_id=request_id,
-            attempt_no=1,
-            request_hash=request_hash,
-            max_tokens=CHAT_PER_CALL_MAX_TOKENS,
-            max_cost_cny=cost,
-            policy_hash=policy.policy_hash,
-            export_manifest_hash=manifest.manifest_hash,
-            build_manifest_hash=request_hash,
             model_key=config.model_key,
-        )
-    )
-    repository.reserve(operation.id)
-    try:
-        repository.transition(
-            operation.id,
-            expected="reserved",
-            state="sending",
-            sending_guard=sending_guard,
-        )
-    except ProviderDispatchRejected as exc:
-        raise PlatformError("chat_request_stale", "This request is no longer active.", 409) from exc
-    try:
-        response = cast(
-            Any,
-            HttpxLLMTransport().post(
-                config.resolved_endpoint,
-                headers={"Authorization": f"Bearer {config.api_key}"},
-                json=body,
-                timeout=HttpxLLMTransport.timeout(),
+            policy_hash=policy.policy_hash,
+            build_manifest_hash=request_hash,
+            persona_spec_hash=persona_hash,
+            fields=(
+                ExportFieldV1(
+                    "authorized_courseware_text",
+                    digest(
+                        [
+                            {"filename": source.filename, "excerpt": source.excerpt}
+                            for source in (sources or [])
+                        ]
+                    ),
+                ),
+                ExportFieldV1(
+                    "private_conversation_messages",
+                    digest(wire_messages[1:]),
+                ),
+                ExportFieldV1("teacher_agent_instructions", persona_hash),
+                ExportFieldV1(
+                    "topic_and_platform_rules",
+                    digest(
+                        {
+                            "system_message": wire_messages[0],
+                            "tool_schemas": tool_schemas or [],
+                        }
+                    ),
+                ),
             ),
+            max_total_tokens=CHAT_PER_CALL_MAX_TOKENS,
+            max_cost_cny=0.0,
         )
-    except LLMTransportError as exc:
-        if exc.acceptance == "not_sent":
-            repository.mark_not_sent(operation.id)
-        else:
-            repository.mark_acceptance_unknown(operation.id)
-        raise PlatformError(
-            exc.safe_error_code, "The request could not be completed safely.", 503
-        ) from None
-    except Exception:
-        repository.mark_acceptance_unknown(operation.id)
-        raise PlatformError(
-            "chat_acceptance_unknown", "The request outcome is unknown.", 503
-        ) from None
-    if response.status_code in {401, 403}:
-        repository.mark_failed(operation.id, safe_error_code="provider_auth_failed")
-        raise PlatformError("provider_auth_failed", "Check the API key and service access.", 503)
+        try:
+            confirm_manifest(
+                db,
+                settings,
+                manifest,
+                course_id=course_id,
+                group_id=group_id,
+                version_id=version_id,
+                actor_user_id=(str(actor_context.user.id) if actor_context is not None else None),
+                turn_id=request_id,
+            )
+            confirmation = repository.get_export_confirmation(manifest.manifest_hash)
+            if confirmation is None:
+                raise PlatformError(
+                    "provider_confirmation_required", "Confirmation is required.", 409
+                )
+            # Chat content and tool schemas are educational text. Authorization
+            # headers carry credentials separately from this exact request body.
+            validate_provider_preflight(
+                policy,
+                manifest,
+                confirmation,
+                scope_id=scope_id,
+                provider_operation="llm_agent_chat",
+                model_key=config.model_key,
+            )
+            field_classes = tuple(field.field_class for field in manifest.fields)
+            if actor_context is not None and not single_chat_consent_is_current(
+                db.connection(),
+                manifest_hash=manifest.manifest_hash,
+                conversation_id=scope_id,
+                actor_user_id=str(actor_context.user.id),
+                course_id=course_id,
+                policy_hash=policy.policy_hash,
+                field_classes=field_classes,
+            ):
+                raise PlatformError(
+                    "provider_confirmation_required",
+                    "The Provider authorization is no longer current.",
+                    409,
+                )
+            previous = repository.get_runtime_model_call_stage(
+                request_id, participant_id, dispatch_ordinal
+            )
+            retry_not_sent = False
+            if previous is not None:
+                if previous.request_hash != request_hash or previous.request_json != wire_text:
+                    raise TeamDispatchError("chat_request_changed")
+                if previous.state == "acceptance_unknown":
+                    raise TeamDispatchError("chat_acceptance_unknown")
+                if previous.state == "not_sent":
+                    if not allow_not_sent_retry:
+                        raise TeamDispatchError("chat_provider_not_sent")
+                    retry_not_sent = True
+                elif previous.state in {"accepted", "succeeded"}:
+                    latest_operation = previous.operation_id
+                    if previous.accepted_response_json is None:
+                        raise TeamDispatchError("chat_response_unavailable")
+                    try:
+                        model_response = _chat_model_response(previous.accepted_response_json)
+                    except PlatformError as exc:
+                        if previous.state == "accepted":
+                            repository.mark_failed(previous.operation_id, safe_error_code=exc.code)
+                        raise
+                    if previous.state == "accepted":
+                        repository.mark_succeeded(previous.operation_id)
+                    return model_response
+                else:
+                    raise TeamDispatchError("chat_call_unavailable")
+
+            ordinal = repository.next_runtime_model_call_ordinal(request_id, participant_id)
+            if previous is not None and not retry_not_sent:
+                raise TeamDispatchError("chat_call_unavailable")
+
+            repository.save_scope_budget(
+                scope_id,
+                ProviderScopeBudgetV1(
+                    max_requests=CONTROL_UNBOUNDED_REQUESTS,
+                    max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
+                    max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
+                    budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                ),
+            )
+            request_record = ProviderReservationRequestV1(
+                scope_id=scope_id,
+                provider_operation="llm_agent_chat",
+                logical_item_id=request_id,
+                attempt_no=ordinal + 1,
+                request_hash=request_hash,
+                # This reserves an estimate only; it is not sent as max_tokens.
+                max_tokens=CHAT_PER_CALL_MAX_TOKENS,
+                max_cost_cny=0.0,
+                policy_hash=policy.policy_hash,
+                export_manifest_hash=manifest.manifest_hash,
+                build_manifest_hash=request_hash,
+                model_key=config.model_key,
+            )
+            effective_sending_guard = sending_guard
+            if actor_context is not None:
+
+                def guarded_sending(connection: Any, operation: Any) -> bool:
+                    return bool(
+                        (sending_guard is None or sending_guard(connection, operation))
+                        and single_chat_consent_is_current(
+                            connection,
+                            manifest_hash=manifest.manifest_hash,
+                            conversation_id=scope_id,
+                            actor_user_id=str(actor_context.user.id),
+                            course_id=course_id,
+                            policy_hash=policy.policy_hash,
+                            field_classes=field_classes,
+                        )
+                    )
+
+                effective_sending_guard = guarded_sending
+
+            operation = repository.create_runtime_model_call_prepared(
+                request_record,
+                conversation_id=scope_id,
+                turn_id=request_id,
+                executor_agent_version_id=participant_id,
+                ordinal=ordinal,
+                dispatch_ordinal=dispatch_ordinal,
+                request_json=wire_text,
+                binding_guard=effective_sending_guard or (lambda _connection, _operation: True),
+            )
+            repository.reserve(operation.id)
+            try:
+                repository.transition(
+                    operation.id,
+                    expected="reserved",
+                    state="sending",
+                    sending_guard=effective_sending_guard,
+                )
+            except ProviderDispatchRejected as exc:
+                raise PlatformError(
+                    "chat_request_stale", "This request is no longer active.", 409
+                ) from exc
+            latest_operation = operation.id
+            try:
+                response = HttpxLLMTransport().post_bytes(
+                    config.resolved_endpoint,
+                    headers={
+                        "Authorization": f"Bearer {config.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    content=wire,
+                    timeout=HttpxLLMTransport.timeout(),
+                )
+            except LLMTransportError as exc:
+                if exc.acceptance == "not_sent":
+                    repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)
+                    raise PlatformError(
+                        "chat_provider_not_sent", "The Provider did not receive this request.", 503
+                    ) from None
+                repository.mark_acceptance_unknown(
+                    operation.id, safe_error_code=exc.safe_error_code
+                )
+                raise PlatformError(
+                    "chat_acceptance_unknown", "The request outcome is unknown.", 503
+                ) from None
+            except Exception:
+                repository.mark_acceptance_unknown(operation.id)
+                raise PlatformError(
+                    "chat_acceptance_unknown", "The request outcome is unknown.", 503
+                ) from None
+            status = getattr(response, "status_code", None)
+            if status in {401, 403}:
+                repository.mark_failed(operation.id, safe_error_code="provider_auth_failed")
+                raise PlatformError(
+                    "provider_auth_failed", "Check the API key and service access.", 503
+                )
+            if status != 200:
+                repository.mark_failed(operation.id, safe_error_code="provider_http_rejected")
+                raise PlatformError(
+                    "chat_provider_rejected", "The Provider rejected the request.", 503
+                )
+            response_json = _raw_chat_response(response)
+            repository.stage_runtime_model_call_accepted(operation.id, response_json=response_json)
+            try:
+                model_response = _chat_model_response(response_json)
+            except PlatformError as exc:
+                repository.mark_failed(operation.id, safe_error_code=exc.code)
+                raise
+            repository.mark_succeeded(operation.id)
+            return model_response
+        except PlatformError:
+            raise
+        except (ProviderDispatchRejected, ProviderRepositoryError, ValueError, TypeError) as exc:
+            logger.warning(
+                "Single Chat dispatch rejected conversation_id=%s request_id=%s error_type=%s",
+                scope_id,
+                request_id,
+                type(exc).__name__,
+            )
+            raise TeamDispatchError("chat_dispatch_unavailable") from None
+        except Exception as exc:
+            logger.warning(
+                "Single Chat dispatch unavailable conversation_id=%s request_id=%s error_type=%s",
+                scope_id,
+                request_id,
+                type(exc).__name__,
+            )
+            raise TeamDispatchError("chat_dispatch_unavailable") from None
+
+    if len(model_messages) < 2 or model_messages[0].role != "system":
+        raise PlatformError("chat_messages_invalid", "The conversation could not be prepared.", 503)
+    system_prompt = model_messages[0].content
+    final_message = model_messages[-1].content
+    if not isinstance(system_prompt, str) or not isinstance(final_message, str):
+        raise PlatformError("chat_messages_invalid", "The conversation could not be prepared.", 503)
     try:
-        if response.status_code != 200:
-            raise ValueError()
-        payload = response.json()
-        if (
-            not isinstance(payload, dict)
-            or not isinstance(payload.get("choices"), list)
-            or len(payload["choices"]) != 1
-        ):
-            raise ValueError()
-        choice = payload["choices"][0]
-        result = json.loads(choice["message"]["content"])
-        if not isinstance(result, dict) or set(result) != {"reply"}:
-            raise ValueError()
-        reply = result.get("reply")
-        if not isinstance(reply, str) or not reply.strip() or choice.get("finish_reason") != "stop":
-            raise ValueError()
-    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
-        repository.mark_failed(operation.id, safe_error_code="chat_response_invalid")
+        output = run_selected_agent(
+            MemberSpec(participant_id, "Maya Chat Agent", system_prompt),
+            model_key=config.model_key,
+            dispatch=dispatch,
+            actor_id=actor_context.user.id if actor_context is not None else scope_id,
+            conversation_id=scope_id,
+            turn_id=request_id,
+            history=model_messages[1:-1],
+            message=final_message,
+            tools=tools,
+        )
+    except TeamDispatchError as exc:
+        code = exc.safe_error_code
+        raise PlatformError(code, "The chat request could not be completed safely.", 503) from None
+    if not isinstance(output.content, str) or not output.content.strip():
+        raise PlatformError("chat_response_invalid", "The reply could not be validated.", 503)
+    if latest_operation is None:
+        raise PlatformError("chat_response_unavailable", "The reply was not saved.", 503)
+    return output.content, latest_operation
+
+
+def _chat_wire_message(message: Message) -> dict[str, Any]:
+    if not isinstance(message.role, str) or not message.role:
+        raise ValueError("invalid role")
+    if message.content is not None and not isinstance(message.content, str):
+        raise ValueError("text-only chat")
+    result: dict[str, Any] = {"role": message.role, "content": message.content}
+    for field in ("name", "tool_call_id", "tool_calls"):
+        value = getattr(message, field, None)
+        if value is not None:
+            result[field] = value
+    return result
+
+
+def _raw_chat_response(response: object) -> str:
+    raw = getattr(response, "content", None)
+    if isinstance(raw, bytes):
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise PlatformError(
+                "chat_response_invalid", "The reply could not be validated.", 503
+            ) from None
+    text = getattr(response, "text", None)
+    if isinstance(text, str):
+        return text
+    json_method = getattr(response, "json", None)
+    if callable(json_method):
+        try:
+            return canonical_json_bytes(json_method()).decode("utf-8")
+        except Exception:
+            pass
+    raise PlatformError("chat_response_invalid", "The reply could not be validated.", 503)
+
+
+def _chat_model_response(response_json: str) -> ModelResponse:
+    try:
+        payload = json.loads(response_json)
+        choices = payload["choices"]
+        if not isinstance(choices, list) or len(choices) != 1:
+            raise ValueError
+        choice = choices[0]
+        message = choice["message"]
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            raise ValueError
+        content = message.get("content")
+        calls = message.get("tool_calls") or []
+        if content is not None and not isinstance(content, str):
+            raise ValueError
+        if not isinstance(calls, list):
+            raise ValueError
+        for call in calls:
+            function = call.get("function") if isinstance(call, dict) else None
+            if (
+                not isinstance(call, dict)
+                or not isinstance(call.get("id"), str)
+                or not call["id"]
+                or call.get("type") != "function"
+                or not isinstance(function, dict)
+                or not isinstance(function.get("name"), str)
+                or not isinstance(function.get("arguments"), str)
+            ):
+                raise ValueError
+        if not calls and (not isinstance(content, str) or not content.strip()):
+            raise ValueError
+        if choice.get("finish_reason") not in {"stop", "tool_calls"}:
+            raise ValueError
+        return ModelResponse(role="assistant", content=content, tool_calls=calls)
+    except (AttributeError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
         raise PlatformError(
             "chat_response_invalid", "The reply could not be validated.", 503
         ) from None
-    repository.mark_accepted(operation.id, response_hash=digest(reply))
-    return reply, operation.id
+
+
+def assessment_safe_reply_text(result: AssessmentRuntimeResult, user_text: str) -> str:
+    """Render only the server's student-safe assessment projection."""
+    chinese = any("\u4e00" <= char <= "\u9fff" for char in user_text)
+    labels = {
+        "assessment.started": ("测评已开始。" if chinese else "Assessment started."),
+        "assessment.answer_recorded": (
+            "已记录你的回答。" if chinese else "Your answer was recorded."
+        ),
+        "assessment.answer_recorded_restricted_request": (
+            "已记录你的回答；暂时无法处理附带的其他请求。"
+            if chinese
+            else (
+                "Your answer was recorded. The additional request cannot be handled "
+                "during this activity."
+            )
+        ),
+        "assessment.paused": ("测评已暂停。" if chinese else "Assessment paused."),
+        "assessment.resumed": ("测评已继续。" if chinese else "Assessment resumed."),
+        "assessment.completed": ("测评已完成。" if chinese else "Assessment completed."),
+        "assessment.abandoned": (
+            "本次测评已结束。" if chinese else "This assessment attempt has ended."
+        ),
+        "assessment.abandoned_and_restarted": (
+            "旧测评已结束，新的测评已开始。"
+            if chinese
+            else "The prior attempt ended and a new one has started."
+        ),
+        "assessment.progress": ("当前测评进度：" if chinese else "Assessment progress:"),
+        "assessment.answers": ("你已提交的回答：" if chinese else "Your submitted answers:"),
+        "assessment.results_pending": (
+            "测评结果正在准备中。" if chinese else "Assessment results are being prepared."
+        ),
+        "assessment.restart_requires_choice": (
+            "如需重新开始，请明确选择结束当前测评并重开。"
+            if chinese
+            else "To restart, explicitly choose to end the current attempt and begin again."
+        ),
+        "assessment.redirect": (
+            "请回到原对话继续测评。"
+            if chinese
+            else "Continue this assessment in its original chat."
+        ),
+    }
+    lines = [labels[result.response_key]]
+    question = result.context.current_question
+    if question is not None:
+        ordinal = question.ordinal + 1
+        lines.append(
+            f"第 {ordinal} 题：{question.prompt}"
+            if chinese
+            else f"Question {ordinal}: {question.prompt}"
+        )
+    progress = result.context.progress
+    if result.response_key == "assessment.progress":
+        if chinese:
+            lines.append(
+                f"已完成 {progress.resolved_count}/{progress.question_count} 题；"
+                f"已回答 {progress.answered_count} 题，跳过 {progress.skipped_count} 题。"
+            )
+        else:
+            lines.append(
+                f"Resolved {progress.resolved_count}/{progress.question_count}; "
+                f"answered {progress.answered_count}, skipped {progress.skipped_count}."
+            )
+    if result.response_key == "assessment.answers":
+        if chinese:
+            lines.append(
+                f"当前进度：已完成 {progress.resolved_count}/{progress.question_count} 题；"
+                f"已回答 {progress.answered_count} 题，跳过 {progress.skipped_count} 题。"
+            )
+        else:
+            lines.append(
+                f"Current progress: resolved {progress.resolved_count}/{progress.question_count}; "
+                f"answered {progress.answered_count}, skipped {progress.skipped_count}."
+            )
+        for answer in result.answers:
+            lines.append(
+                f"你的回答：{answer.answer_text}"
+                if chinese
+                else f"Your answer: {answer.answer_text}"
+            )
+    return "\n\n".join(lines)
 
 
 def chat_messages(
@@ -431,7 +902,8 @@ def chat_messages(
         "Use only the supplied evidence for factual citations; cite [S1] etc only when relevant. "
         "Distinguish evidence from interpretation and acknowledge missing evidence. "
         "Never claim to have access to other people's conversations or private resources. "
-        "Return exactly a JSON object with one nonempty string field named reply.\n"
-        + json.dumps(context, ensure_ascii=False)
+        "Reply directly in natural text. Use any available Maya Tools when the current task "
+        "calls for a saved record or formal activity action; never claim an action succeeded "
+        "unless its Tool returns success.\n" + json.dumps(context, ensure_ascii=False)
     )
     return [{"role": "system", "content": instruction}, *history], markdown_hash(version.agent_md)

@@ -125,6 +125,30 @@ describe("teacher account management", () => {
     push.mockReset();
   });
 
+  it("retains sidebar Back and Done while editing a member", async () => {
+    const api = apiForTeacher();
+    mount(api, "en");
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const sidebar = screen.getByRole("navigation");
+    await waitFor(() =>
+      expect(
+        within(sidebar).getByRole("button", { name: "Back" }),
+      ).toBeTruthy(),
+    );
+    expect(within(sidebar).getByRole("button", { name: "Done" })).toBeTruthy();
+    const nameField = screen.getByLabelText("Display name");
+    fireEvent.change(nameField, { target: { value: "Ada Lovelace" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+
+    await waitFor(() =>
+      expect(api.updateCourseMember).toHaveBeenCalledWith(courseId, studentId, {
+        display_name: "Ada Lovelace",
+        group_name: "Team Aurora",
+      }),
+    );
+  });
+
   it("offers edits only for accounts an edit can outlive a restart", async () => {
     const api = apiForTeacher();
     mount(api, "en");

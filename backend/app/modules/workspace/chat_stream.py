@@ -15,10 +15,14 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError, not_found
+from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import FileBoundaryError, contained_path
 
 from .models import Conversation, ConversationTurn
 from .schemas import ChatSource
+from .team_runtime import TeamClaim
+
+_TEAM_BACKGROUND_RUNS: set[asyncio.Task[None]] = set()
 
 DELTA_CHARS = 48
 
@@ -73,6 +77,7 @@ async def stream_events(
     message: str,
     request_id: str,
     claim_revision: int,
+    actor_context: AuthContext | None = None,
 ) -> AsyncIterator[bytes]:
     """Yield deltas only after the current request has committed its full reply.
 
@@ -121,6 +126,7 @@ async def stream_events(
                 request_id,
                 claim_revision,
                 message,
+                actor_context,
             )
         except Exception as exc:
             code = settle(exc)
@@ -222,6 +228,7 @@ def _reply_segment(
     request_id: str,
     claim_revision: int,
     message: str,
+    actor_context: AuthContext | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     from .chat import generate_reply
 
@@ -229,7 +236,15 @@ def _reply_segment(
         row = db.get(Conversation, conversation_id)
         if row is None:
             raise not_found()
-        return generate_reply(db, settings, row, request_id, claim_revision, message)
+        return generate_reply(
+            db,
+            settings,
+            row,
+            request_id,
+            claim_revision,
+            message,
+            actor_context=actor_context,
+        )
 
 
 def _store_segment(
@@ -285,3 +300,46 @@ def chat_audio_path(settings: Settings, conversation_id: UUID, request_id: UUID)
     if path.is_symlink() or not path.is_file():
         raise not_found()
     return path
+
+
+async def stream_team_events(
+    database: Database,
+    conversation_id: str,
+    actor_id: str,
+    claim: TeamClaim,
+    after_sequence: int = 0,
+) -> AsyncIterator[bytes]:
+    from .team_runtime import (
+        execute_team_turn_with_natural_assessment_resume,
+        poll_team_events,
+    )
+
+    cursor = after_sequence
+
+    def poll() -> tuple[list[tuple[int, str, dict[str, Any]]], str, bool]:
+        return poll_team_events(
+            database.session_factory,
+            conversation_id,
+            claim.turn_id,
+            actor_id,
+            after_sequence=cursor,
+        )
+
+    if claim.created:
+        task = asyncio.create_task(
+            asyncio.to_thread(
+                execute_team_turn_with_natural_assessment_resume,
+                database.session_factory,
+                claim,
+            )
+        )
+        _TEAM_BACKGROUND_RUNS.add(task)
+        task.add_done_callback(_TEAM_BACKGROUND_RUNS.discard)
+    while True:
+        events, state, active = await asyncio.to_thread(poll)
+        for sequence, kind, payload in events:
+            cursor = sequence
+            yield f"id: {sequence}\n".encode() + sse(kind, payload)
+        if not active or state != "pending":
+            return
+        await asyncio.sleep(0.05)

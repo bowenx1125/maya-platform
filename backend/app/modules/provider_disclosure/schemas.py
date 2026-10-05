@@ -18,6 +18,7 @@ DisclosureFieldClass = Literal[
     "confirmed_structured_persona",
     "teacher_agent_instructions",
     "authorized_courseware_text",
+    "private_conversation_messages",
     "public_predecessor_speech",
     "current_evidence_excerpt",
     "opaque_local_id",
@@ -188,6 +189,46 @@ class ProviderDataCallConfirmationRequestV1(BaseModel):
         return self.manifest_hash
 
 
+class TeamStandingGrantRequestV1(BaseModel):
+    """Publisher-only static Team resource authorization request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    team_version_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    provider_operation: Literal["llm_agent_chat", "embedding_query"]
+    policy_hash: str = Field(pattern=_SHA256_PATTERN)
+
+
+class TeamStandingGrantPreviewV1(BaseModel):
+    """Small reviewable resource summary; never includes Chat text or operations."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    team_version_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    policy_hash: str = Field(pattern=_SHA256_PATTERN)
+    resource_hash: str = Field(pattern=_SHA256_PATTERN)
+    team_epoch: int = Field(ge=0)
+    publication_epoch: int = Field(ge=0)
+    member_count: int = Field(ge=1)
+    knowledge_set_count: int = Field(ge=0)
+    source_count: int = Field(ge=0)
+
+
+class TeamStandingGrantConfirmationRequestV1(TeamStandingGrantRequestV1):
+    """CAS values reviewed by the publisher before standing consent."""
+
+    expected_resource_hash: str = Field(pattern=_SHA256_PATTERN)
+    expected_team_epoch: int = Field(ge=0)
+    expected_publication_epoch: int = Field(ge=0)
+
+
+class TeamStandingGrantConfirmationV1(TeamStandingGrantPreviewV1):
+    """Safe confirmation receipt for the exact Team resource binding."""
+
+    standing_grant_id: str = Field(pattern=_SAFE_SCOPE_PATTERN)
+    confirmed_at: str = Field(min_length=1)
+
+
 # Descriptive aliases keep the contract discoverable to the integration
 # window without duplicating any wire shape.
 ProviderDataCallV1 = ProviderDataCallDisclosureV1
@@ -237,4 +278,8 @@ __all__ = [
     "ProviderDataCallPublicationManifestSummaryV1",
     "ProviderDataCallAgentVersionManifestListResponseV1",
     "ProviderDataCallAgentVersionManifestSummaryV1",
+    "TeamStandingGrantRequestV1",
+    "TeamStandingGrantPreviewV1",
+    "TeamStandingGrantConfirmationRequestV1",
+    "TeamStandingGrantConfirmationV1",
 ]

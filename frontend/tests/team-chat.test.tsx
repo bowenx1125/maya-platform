@@ -79,6 +79,7 @@ const team = {
       avatar_config: {},
       position: 0,
       is_leader: true,
+      available: true,
     },
     {
       id: "member-2",
@@ -88,10 +89,56 @@ const team = {
       avatar_config: {},
       position: 1,
       is_leader: false,
+      available: true,
     },
   ],
   shared_knowledge_set_ids: ["set-1"],
   publication_state: "unpublished",
+};
+
+const teamSession = {
+  entry_kind: "team" as const,
+  chat_visibility: "private" as const,
+  origin: "custom_team" as const,
+  read_only: false,
+  can_send: true,
+  id: "conversation-team-1",
+  team: {
+    id: "team-1",
+    version_id: "team-version-3",
+    course_id: "course",
+    name: "Reasoning circle",
+    available: true,
+    members: [
+      {
+        id: "participant-1",
+        name: "Bowen",
+        avatar_config: {},
+        position: 0,
+        is_leader: true,
+        available: true,
+      },
+      {
+        id: "participant-2",
+        name: "Bowen",
+        avatar_config: {},
+        position: 1,
+        is_leader: false,
+        available: true,
+      },
+      {
+        id: "participant-3",
+        name: "Jade",
+        avatar_config: {},
+        position: 2,
+        is_leader: false,
+        available: true,
+      },
+    ],
+  },
+  revision: 0,
+  turns: [],
+  created_at: "2026-09-28T12:00:00Z",
 };
 
 const mayaTeam = {
@@ -141,6 +188,10 @@ beforeEach(() => {
   state.api = {
     chatAgents: vi.fn().mockResolvedValue(agents),
     conversations: vi.fn().mockResolvedValue([]),
+    createTeamConversation: vi.fn().mockResolvedValue(teamSession),
+    conversationSessions: vi.fn().mockResolvedValue([]),
+    conversationSession: vi.fn().mockResolvedValue(teamSession),
+    streamTeamConversation: vi.fn().mockResolvedValue(teamSession),
     createConversation: vi.fn(),
     streamConversation: vi.fn(),
     conversation: vi.fn(),
@@ -205,9 +256,7 @@ describe("Chats Team entry", () => {
       screen.getAllByRole("button", { name: "Create Team" }).at(-1)!,
     );
 
-    await screen.findByText(
-      /Team saved\. Starting Team Chats is not connected yet/,
-    );
+    await screen.findByText(/Team saved\. You can now start a Team Chat\./);
     expect(state.api.createTeam).toHaveBeenCalledWith(
       "course",
       {
@@ -241,9 +290,7 @@ describe("Chats Team entry", () => {
       screen.getByRole("button", { name: "Save new Team version" }),
     );
 
-    await screen.findByText(
-      /Team saved\. Starting Team Chats is not connected yet/,
-    );
+    await screen.findByText(/Team saved\. You can now start a Team Chat\./);
     expect(state.api.updateTeam).toHaveBeenCalledWith(
       "team-1",
       {
@@ -292,9 +339,7 @@ describe("Chats Team entry", () => {
       screen.getByRole("button", { name: /Check save with the same request/ }),
     );
 
-    await screen.findByText(
-      /Team saved\. Starting Team Chats is not connected yet/,
-    );
+    await screen.findByText(/Team saved\. You can now start a Team Chat\./);
     expect(state.api.createTeam.mock.calls[1][0]).toBe("course");
     expect(state.api.createTeam.mock.calls[1][1]).toEqual(firstAttempt[1]);
     expect(state.api.createTeam.mock.calls[1][2].idempotency.key).toBe(
@@ -325,9 +370,7 @@ describe("Chats Team entry", () => {
       screen.getAllByRole("button", { name: "Create Team" }).at(-1)!,
     );
 
-    await screen.findByText(
-      /Team saved\. Starting Team Chats is not connected yet/,
-    );
+    await screen.findByText(/Team saved\. You can now start a Team Chat\./);
     expect(
       await screen.findByText(
         "Team was saved, but the list could not be refreshed.",
@@ -357,14 +400,16 @@ describe("Chats Team entry", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Public" }));
 
     expect(
-      screen.getByText(/Course Dialogue Team · Public Chat selected/),
+      screen.getByRole("button", { name: "Start Team Chat" }),
     ).toBeTruthy();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByText("Shared Knowledge")).toBeNull();
-    const unavailableButton = screen.queryByRole("button", {
-      name: "Team Chat not connected",
-    });
-    expect(unavailableButton?.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Start Team Chat" }));
+    await screen.findByRole("heading", { name: /Reasoning circle/ });
+    expect(state.api.createTeamConversation).toHaveBeenCalledWith(
+      { kind: "maya_team", team_id: "maya-team-1" },
+      "public",
+    );
     expect(state.api.createConversation).not.toHaveBeenCalled();
     expect(state.api.streamConversation).not.toHaveBeenCalled();
   });
@@ -424,5 +469,186 @@ describe("Chats Team entry", () => {
     expect(await screen.findByText("Reasoning circle")).toBeTruthy();
     expect(state.api.mayaTeams).not.toHaveBeenCalled();
     expect(state.api.teams).toHaveBeenCalledWith("course");
+  });
+
+  it("routes typed @ recipients by frozen participant IDs and keeps pasted code mentions as plain text", async () => {
+    renderChats();
+    await openNewChoices();
+    fireEvent.click(screen.getByRole("button", { name: /Maya Team/ }));
+    fireEvent.click(await screen.findByLabelText(/Course Dialogue Team/));
+    fireEvent.click(screen.getByRole("button", { name: "Start Team Chat" }));
+    const message = await screen.findByRole("textbox", { name: "Message" });
+
+    fireEvent.keyDown(message, { key: "@", shiftKey: true });
+    expect(screen.getByRole("group", { name: "Recipients" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "@All members" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /@Bowen · 1/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /@Jade · 3/ }));
+    const recipientGroup = within(
+      screen.getByRole("group", { name: "Recipients" }),
+    );
+    expect(
+      (
+        recipientGroup.getByRole("checkbox", {
+          name: /@Bowen · 1/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    expect(
+      (
+        recipientGroup.getByRole("checkbox", {
+          name: /@Jade · 3/,
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+
+    const pastedText = "```txt\n@All members @Bowen\n``` this is quoted text";
+    fireEvent.change(message, { target: { value: pastedText } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() =>
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1),
+    );
+    expect(state.api.streamTeamConversation.mock.calls[0][0]).toBe(
+      "conversation-team-1",
+    );
+    expect(state.api.streamTeamConversation.mock.calls[0][1]).toMatchObject({
+      message: pastedText,
+      routing: {
+        mode: "selected",
+        participant_ids: ["participant-1", "participant-3"],
+      },
+    });
+  });
+
+  it("shows participant-named partial results without claiming a full reply", async () => {
+    const requestId = "team-request-1";
+    const partialSession = {
+      ...teamSession,
+      revision: 2,
+      turns: [
+        {
+          id: requestId,
+          user_text: "Compare these views",
+          assistant_text: null,
+          mode: "mock" as const,
+          state: "partial" as const,
+          sources: [],
+          safe_error_code: null,
+          routing: { mode: "all" as const, participant_ids: [] },
+          member_results: [
+            {
+              id: "result-1",
+              participant_id: "participant-1",
+              speaker_name: "Bowen",
+              ordinal: 0,
+              state: "ready" as const,
+              assistant_text: "The first view.",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "result-2",
+              participant_id: "participant-2",
+              speaker_name: "Bowen",
+              ordinal: 1,
+              state: "failed" as const,
+              assistant_text: null,
+              sources: [],
+              safe_error_code: "member_reply_failed",
+            },
+          ],
+        },
+      ],
+    };
+    state.api.streamTeamConversation.mockResolvedValue(partialSession);
+    renderChats();
+    await openNewChoices();
+    fireEvent.click(screen.getByRole("button", { name: /Maya Team/ }));
+    fireEvent.click(await screen.findByLabelText(/Course Dialogue Team/));
+    fireEvent.click(screen.getByRole("button", { name: "Start Team Chat" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Message" }), {
+      target: { value: "Compare these views" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("The first view.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Some members could not reply. Successful replies are kept.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("heading", { name: /Bowen/ })).toHaveLength(2);
+    expect(
+      screen.getByRole("heading", { name: /Bowen · leader/ }),
+    ).toBeTruthy();
+  });
+
+  it("does not send Enter during Chinese IME composition", async () => {
+    renderChats();
+    await openNewChoices();
+    fireEvent.click(screen.getByRole("button", { name: /Maya Team/ }));
+    fireEvent.click(await screen.findByLabelText(/Course Dialogue Team/));
+    fireEvent.click(screen.getByRole("button", { name: "Start Team Chat" }));
+    const message = await screen.findByRole("textbox", { name: "Message" });
+    fireEvent.change(message, { target: { value: "你好" } });
+
+    fireEvent.keyDown(message, { key: "Enter", isComposing: true });
+    expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
+    fireEvent.keyDown(message, { key: "Enter", isComposing: false });
+    await waitFor(() =>
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1),
+    );
+    expect(state.api.streamTeamConversation.mock.calls[0][1].message).toBe(
+      "你好",
+    );
+  });
+
+  it("does not resend an unknown Team request when the user checks its status", async () => {
+    state.api.streamTeamConversation.mockRejectedValueOnce(
+      new Error("connection reset"),
+    );
+    renderChats();
+    await openNewChoices();
+    fireEvent.click(screen.getByRole("button", { name: /Maya Team/ }));
+    fireEvent.click(await screen.findByLabelText(/Course Dialogue Team/));
+    fireEvent.click(screen.getByRole("button", { name: "Start Team Chat" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Message" }), {
+      target: { value: "Do not duplicate this turn" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByRole("button", { name: "Check Team Chat status" });
+    const requestId =
+      state.api.streamTeamConversation.mock.calls[0][1].request_id;
+    state.api.conversationSession.mockResolvedValue({
+      ...teamSession,
+      revision: 1,
+      turns: [
+        {
+          id: requestId,
+          user_text: "Do not duplicate this turn",
+          assistant_text: null,
+          mode: "mock",
+          state: "acceptance_unknown",
+          sources: [],
+          safe_error_code: "chat_acceptance_unknown",
+          routing: { mode: "all", participant_ids: [] },
+          member_results: [],
+        },
+      ],
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check Team Chat status" }),
+    );
+    await waitFor(() =>
+      expect(state.api.conversationSession).toHaveBeenCalledWith(
+        "conversation-team-1",
+      ),
+    );
+    expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText(/outcome is unknown/i).length).toBeGreaterThan(
+      0,
+    );
   });
 });

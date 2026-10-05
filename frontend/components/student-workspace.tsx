@@ -1,7 +1,5 @@
 "use client";
 
-import { WorkspaceAction } from "./workspace-actions";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,9 +15,14 @@ import {
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
+import { AcademyMascots } from "./academy/mascots";
+import { AccountSettings } from "./account-settings";
+import { HomeGuide } from "./home-guide";
 import { useLocale, useT } from "./locale";
+import { WorkspaceAction } from "./workspace-actions";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
+import { UserAvatar } from "./user-avatar";
 import {
   EmptyCard,
   ErrorNotice,
@@ -30,6 +33,9 @@ import {
 
 type GroupOverview = {
   group: GroupDetail;
+  agentCount: number;
+  knowledgeCount: number;
+  voiceCount: number;
 };
 
 type AgentListItem = {
@@ -42,9 +48,20 @@ async function loadGroups(
   groupIds: string[],
 ): Promise<GroupOverview[]> {
   return Promise.all(
-    groupIds.map(async (groupId) => ({
-      group: await api.group(groupId),
-    })),
+    groupIds.map(async (groupId) => {
+      const [group, agents, knowledge, voices] = await Promise.all([
+        api.group(groupId),
+        api.agents(groupId, true),
+        api.knowledge(groupId),
+        api.voiceProfiles(groupId),
+      ]);
+      return {
+        group,
+        agentCount: agents.length,
+        knowledgeCount: knowledge.length,
+        voiceCount: voices.length,
+      };
+    }),
   );
 }
 
@@ -75,14 +92,17 @@ export function StudentDashboard() {
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const hasUser = Boolean(user);
+  const groupIdsKey = user?.groups
+    .map((membership) => membership.group_id)
+    .join(",");
+  const courseId = user?.courses[0]?.course_id;
 
   const load = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+    if (!hasUser) return;
     setError(null);
     try {
-      const groupIds = user.groups.map((membership) => membership.group_id);
-      const courseId = user.courses[0]?.course_id;
+      const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
       const [overviews, courses] = await Promise.all([
         loadGroups(api, groupIds),
         courseId ? api.courses() : Promise.resolve([]),
@@ -96,7 +116,7 @@ export function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [api, user]);
+  }, [api, courseId, groupIdsKey, hasUser]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -110,52 +130,85 @@ export function StudentDashboard() {
 
   const name = user?.display_name ?? "";
   const courseName = course?.name ?? t("course");
+  const primary = groups[0];
+  const guide = primary
+    ? [
+        {
+          label: t("studentGuideGroup"),
+          complete: true,
+          href: `/student/groups/${primary.group.id}`,
+        },
+        {
+          label: t("studentGuideAgent"),
+          complete: primary.agentCount > 0,
+          href: `/student/groups/${primary.group.id}/agents/new`,
+        },
+        {
+          label: t("studentGuideKnowledge"),
+          complete: primary.knowledgeCount > 0,
+          href: `/student/groups/${primary.group.id}/knowledge`,
+        },
+        {
+          label: t("studentGuideVoice"),
+          complete: primary.voiceCount > 0,
+          optional: true,
+          href: `/student/groups/${primary.group.id}/voices`,
+        },
+      ]
+    : [];
 
   return (
     <div className="mayaform-home">
-      <section className="mayaform-home-welcome">
-        <p className="mayaform-home-eyebrow">{t("appName")}</p>
-        <h1>{t("homeWelcomeTitle", { name })}</h1>
-        <div className="mayaform-home-rule" aria-hidden="true">
-          <span />
-          <i />
-          <span />
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          {/* The course is the eyebrow rather than a sentence underneath: it
+              is one of the four things this page has to answer, and naming it
+              costs less than explaining it. */}
+          <p className="home-hero-eyebrow">{courseName}</p>
+          <h1>{t("homeWelcomeTitle", { name })}</h1>
         </div>
-        <p className="mayaform-home-lede">
-          {t("homeWelcomeCourse", { course: courseName })}
-        </p>
-        <ul className="mayaform-home-surfaces">
-          <li>{t("homeSurfaceChats")}</li>
-          <li>{t("homeSurfaceWorkspace")}</li>
-          <li>{t("homeSurfaceKnowledge")}</li>
-          <li>{t("homeSurfaceVoice")}</li>
-          <li>{t("homeSurfaceLive")}</li>
-        </ul>
-        <p className="mayaform-home-privacy">{t("homePrivacyNote")}</p>
+        <div className="home-hero-art">
+          <AcademyMascots label={t("academyMascotsLabel")} />
+        </div>
       </section>
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
-        groups.map((overview) => (
-          <section className="mayaform-home-members" key={overview.group.id}>
-            <header>
-              <h2>{overview.group.name}</h2>
-              <p>{t("homeMembersIntro")}</p>
-            </header>
-            <div className="member-grid">
-              {(overview.group.members ?? []).map((member) => (
-                <div className="member-chip" key={member.user_id}>
-                  <span className="avatar-mini">
-                    {member.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>{member.display_name}</span>
-                  <small>{roleLabel(member.role, locale)}</small>
-                </div>
-              ))}
-            </div>
+        <div className="home-columns">
+          <section className="home-panel" aria-labelledby="student-guide-title">
+            <h2 id="student-guide-title">{t("guide")}</h2>
+            <HomeGuide steps={guide} />
           </section>
-        ))
+          {groups.map((overview) => (
+            <section
+              className="home-panel"
+              key={overview.group.id}
+              aria-labelledby={`group-${overview.group.id}`}
+            >
+              <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
+              <ul className="home-people-list">
+                {(overview.group.members ?? []).map((member) => (
+                  <li
+                    className="home-person"
+                    data-role={member.role}
+                    key={member.user_id}
+                  >
+                    <UserAvatar
+                      avatar={member.avatar}
+                      name={member.display_name}
+                      userId={member.user_id}
+                      size="sm"
+                    />
+                    <strong>{member.display_name}</strong>
+                    <small>{roleLabel(member.role, locale)}</small>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
+      <AccountSettings onSaved={() => void load()} />
     </div>
   );
 }
@@ -202,16 +255,14 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const createHref = `/student/groups/${groupId}/agents/new`;
+  const newAgent = (
+    <WorkspaceAction
+      name="new"
+      href={`/student/groups/${groupId}/agents/new`}
+    />
+  );
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" href={createHref} disabled />
-        <LoadingCard />
-      </>
-    );
-  }
+  if (loading) return <LoadingCard />;
   async function deleteAgent(agentId: string, retry = false) {
     if (deleting || (!retry && !window.confirm(t("deleteAgentConfirm"))))
       return;
@@ -237,13 +288,10 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
 
   if (!group)
     return (
-      <>
-        <WorkspaceAction name="new" href={createHref} disabled />
-        <ErrorNotice
-          error={error ?? new Error(t("groupNotFound"))}
-          onRetry={() => void load()}
-        />
-      </>
+      <ErrorNotice
+        error={error ?? new Error(t("groupNotFound"))}
+        onRetry={() => void load()}
+      />
     );
 
   return (
@@ -257,10 +305,12 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           }
         />
       ) : null}
-      <WorkspaceAction name="new" href={createHref} />
-      <SectionCard title={`${t("agents")} · ${items.length}`}>
+      <SectionCard
+        title={`${t("agents")} · ${items.length}`}
+        action={items.length > 0 ? newAgent : undefined}
+      >
         {items.length === 0 ? (
-          <EmptyCard title={t("noAgents")} />
+          <EmptyCard title={t("noAgents")} action={newAgent} />
         ) : (
           <div className="agent-tile-grid">
             {items.map(({ agent, versions }) => (
@@ -449,7 +499,6 @@ function CreateAgentFormSession({
         href={groupId ? `/student/groups/${groupId}` : "/teacher"}
         disabled={busy}
       />
-      <WorkspaceAction name="done" form="create-agent-form" disabled={busy} />
       <SectionCard title={t("agentIdentity")}>
         <form
           id="create-agent-form"
@@ -510,6 +559,13 @@ function CreateAgentFormSession({
               onRetry={retryable ? () => void createAgent() : undefined}
             />
           ) : null}
+          <div className="button-row">
+            <WorkspaceAction
+              name="done"
+              form="create-agent-form"
+              disabled={busy}
+            />
+          </div>
         </form>
       </SectionCard>
     </>

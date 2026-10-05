@@ -157,6 +157,22 @@ export const uiGuideCopy = {
     en: "Switch to the overhead camera view.",
     zh: "切换到俯视镜头。",
   },
+  "knowledge.importFile": {
+    en: "Import Markdown, PDF, or Word files. PDF and Word uploads are converted to Markdown for this library.",
+    zh: "导入 Markdown、PDF 或 Word 文件；PDF 和 Word 会转换为 Markdown 后加入此知识库。",
+  },
+  "agent.uploadMarkdown": {
+    en: "Upload a Markdown file for the next Agent draft revision.",
+    zh: "上传 Markdown 文件，作为 Agent 的下一版草稿。",
+  },
+  "agent.uploadEvidence": {
+    en: "Add Markdown, PDF, or Word files as Agent evidence. PDF and Word uploads are converted to Markdown.",
+    zh: "添加 Markdown、PDF 或 Word 文件作为 Agent 证据；PDF 和 Word 会转换为 Markdown。",
+  },
+  "voice.uploadSample": {
+    en: "Choose the audio sample for this voice profile.",
+    zh: "选择此语音配置要使用的音频样本。",
+  },
 } as const satisfies Record<string, Record<Locale, string>>;
 
 export type UiGuideKey = keyof typeof uiGuideCopy;

@@ -16,7 +16,7 @@ from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
-ALEMBIC_HEAD = "0040_teams_publication_grants"
+ALEMBIC_HEAD = "0053_user_profile"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
@@ -75,7 +75,9 @@ class Database:
         from app.modules.debates import models as _debate_models
         from app.modules.interactions import models as _interaction_models
         from app.modules.knowledge_sets import models as _knowledge_set_models
+        from app.modules.learning import models as _learning_models
         from app.modules.reports import models as _report_models
+        from app.modules.runtime_tools import models as _runtime_tool_models
         from app.modules.teams import models as _team_models
         from app.modules.workspace import models as _workspace_models
 
@@ -83,7 +85,9 @@ class Database:
             _debate_models,
             _interaction_models,
             _knowledge_set_models,
+            _learning_models,
             _report_models,
+            _runtime_tool_models,
             _team_models,
             _workspace_models,
         )

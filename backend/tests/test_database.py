@@ -47,7 +47,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0040_teams_publication_grants"
+    assert ALEMBIC_HEAD == "0053_user_profile"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (

@@ -3,10 +3,12 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
 } from "react";
+import { usePathname } from "next/navigation";
 
 import {
   ChatRequestPendingError,
@@ -14,6 +16,15 @@ import {
   type PlatformApi,
   type ChatAgent,
   type ChatSession,
+  type AgentChatSession,
+  type MemoryEntryResult,
+  type MemoryEntrySource,
+  type ConversationSession,
+  type TeamChatSession,
+  type TeamChatEntry,
+  type TeamChatTurn,
+  type TeamRouting,
+  type TeamMemberResult,
 } from "../lib/api";
 import {
   abandonChatRequest,
@@ -33,7 +44,8 @@ import {
   settleChatRequest,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
-import { useT } from "./locale";
+import { useLocale, useT } from "./locale";
+import { uiGuideText } from "../lib/ui-guide-copy";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -42,6 +54,49 @@ import { WorkspaceAction } from "./workspace-actions";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import styles from "./agent-chat.module.css";
 
+type MemoryRoute = {
+  actionId: string;
+  actorId: string;
+  courseId: string;
+  source: MemoryEntrySource;
+};
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function parseMemoryRoute(
+  search: string,
+):
+  | { kind: "none" }
+  | { kind: "invalid" }
+  | { kind: "valid"; value: MemoryRoute } {
+  const params = new URLSearchParams(search);
+  const actionId = params.get("memory_action_id");
+  if (!actionId) return { kind: "none" };
+  const actorId = params.get("memory_actor_id") ?? "";
+  const courseId = params.get("memory_course_id") ?? "";
+  const sourceKind = params.get("memory_source_kind");
+  const sourceId = params.get("memory_source_id") ?? "";
+  if (
+    !uuidPattern.test(actionId) ||
+    !uuidPattern.test(actorId) ||
+    !uuidPattern.test(courseId) ||
+    !uuidPattern.test(sourceId)
+  ) {
+    return { kind: "invalid" };
+  }
+  let source: MemoryEntrySource;
+  if (sourceKind === "conversation")
+    source = { kind: "conversation", id: sourceId };
+  else if (sourceKind === "agent")
+    source = { kind: "agent", agent_id: sourceId };
+  else if (sourceKind === "team") source = { kind: "team", team_id: sourceId };
+  else if (sourceKind === "maya_team")
+    source = { kind: "maya_team", team_id: sourceId };
+  else return { kind: "invalid" };
+  return { kind: "valid", value: { actionId, actorId, courseId, source } };
+}
+
 function unknownChatOutcomeError() {
   return new PlatformApiError(503, "chat_acceptance_unknown", {
     code: "chat_acceptance_unknown",
@@ -49,11 +104,55 @@ function unknownChatOutcomeError() {
   });
 }
 
+function isAgentSession(
+  session: ConversationSession,
+): session is AgentChatSession {
+  return session.entry_kind === undefined || session.entry_kind === "agent";
+}
+
+function isTeamSession(
+  session: ConversationSession,
+): session is TeamChatSession {
+  return session.entry_kind === "team" || session.entry_kind === "maya_team";
+}
+
+function upsertTeamResult(
+  turns: TeamChatTurn[],
+  requestId: string,
+  result: TeamMemberResult,
+): TeamChatTurn[] {
+  return turns.map((turn) =>
+    turn.id !== requestId
+      ? turn
+      : {
+          ...turn,
+          member_results: [
+            result,
+            ...turn.member_results.filter((item) => item.id !== result.id),
+          ].sort((left, right) => left.ordinal - right.ordinal),
+        },
+  );
+}
+
 export function AgentChat() {
   const { api, identityGeneration, user } = useSession();
-  const courseId = user?.courses[0]?.course_id;
+  const pathname = usePathname();
+  const role = pathname.startsWith("/teacher/") ? "teacher" : "student";
+  const memoryCourseId =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("memory_course_id");
+  const roleCourses = (user?.courses ?? []).filter(
+    (membership) => membership.role === role,
+  );
+  const requestedCourse = roleCourses.find(
+    (membership) => membership.course_id === memoryCourseId,
+  );
+  const courseId = requestedCourse?.course_id ?? roleCourses[0]?.course_id;
   const scopeKey =
-    user && courseId ? `${identityGeneration}:${user.id}:${courseId}` : null;
+    user && courseId
+      ? `${identityGeneration}:${user.id}:${role}:${courseId}`
+      : null;
   if (!scopeKey || !courseId) {
     return (
       <>
@@ -67,6 +166,7 @@ export function AgentChat() {
       key={scopeKey}
       api={api}
       courseId={courseId}
+      actorId={user?.id ?? ""}
       scopeKey={scopeKey}
     />
   );
@@ -75,16 +175,37 @@ export function AgentChat() {
 function AgentChatScope({
   api,
   courseId,
+  actorId,
   scopeKey,
 }: {
   api: PlatformApi;
   courseId: string;
+  actorId: string;
   scopeKey: string;
 }) {
   const t = useT();
+  const memoryRouteSearch =
+    typeof window === "undefined" ? "" : window.location.search;
+  const parsedMemoryRoute = useMemo(
+    () => parseMemoryRoute(memoryRouteSearch),
+    [memoryRouteSearch],
+  );
+  const invalidMemoryRoute =
+    parsedMemoryRoute.kind === "invalid" ||
+    (parsedMemoryRoute.kind === "valid" &&
+      (parsedMemoryRoute.value.actorId !== actorId ||
+        parsedMemoryRoute.value.courseId !== courseId));
+  const { locale } = useLocale();
+  const readOnlyHelp =
+    uiGuideText("chat.readOnly", locale) ??
+    "This Agent is unavailable for new messages.";
   const [agents, setAgents] = useState<ChatAgent[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [selected, setSelected] = useState<ChatSession | null>(null);
+  const [teamSessions, setTeamSessions] = useState<TeamChatSession[]>([]);
+  const [selected, setSelected] = useState<AgentChatSession | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<TeamChatSession | null>(
+    null,
+  );
   const [versionId, setVersionId] = useState("");
   const [draft, setDraft] = useState(() => {
     const pending = getChatRequest(scopeKey);
@@ -114,10 +235,35 @@ function AgentChatScope({
   const [historyRefreshTarget, setHistoryRefreshTarget] =
     useState<ChatSession | null>(null);
   const [showNewEntry, setShowNewEntry] = useState(false);
+  const [teamDraft, setTeamDraft] = useState("");
+  const [teamRecipientMenu, setTeamRecipientMenu] = useState(false);
+  const [teamAllRecipients, setTeamAllRecipients] = useState(true);
+  const [teamRecipientIds, setTeamRecipientIds] = useState<string[]>([]);
+  const [teamBusy, setTeamBusy] = useState(false);
+  const [teamError, setTeamError] = useState<unknown>(null);
+  const [teamLastEventId, setTeamLastEventId] = useState(0);
+  const [memoryRetryEntry, setMemoryRetryEntry] =
+    useState<MemoryEntryResult | null>(null);
+  const [memoryRetryBusy, setMemoryRetryBusy] = useState(false);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const teamSendSequence = useRef(0);
+  const teamPendingRequest = useRef<{
+    conversationId: string;
+    body: {
+      request_id: string;
+      expected_revision: number;
+      message: string;
+      routing: TeamRouting;
+    };
+  } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const sendSequence = useRef(0);
   const uiRevision = useRef(0);
   const historyOpenSequence = useRef(0);
+  const memoryActionHandled = useRef<string | null>(null);
+  const memoryDispatch = useRef<
+    (entry: MemoryEntryResult, retry?: boolean) => Promise<void>
+  >(async () => undefined);
 
   const remember = useCallback(
     (value: ChatSession, activateIfEmpty = false) => {
@@ -137,13 +283,37 @@ function AgentChatScope({
     [scopeKey],
   );
 
+  const rememberTeam = useCallback(
+    (value: TeamChatSession, activateIfEmpty = false) => {
+      if (!isChatRequestScopeActive(scopeKey)) return;
+      setSelectedTeam((current) => {
+        if (!current) return activateIfEmpty ? value : current;
+        if (current.id !== value.id) return current;
+        return current.revision > value.revision ? current : value;
+      });
+      setTeamSessions((current) => {
+        const previous = current.find((item) => item.id === value.id);
+        const next =
+          previous && previous.revision > value.revision ? previous : value;
+        return [next, ...current.filter((item) => item.id !== value.id)];
+      });
+    },
+    [scopeKey],
+  );
+
   useEffect(() => {
     let active = true;
     setChatRequestScope(scopeKey);
-    void Promise.all([api.chatAgents(courseId), api.conversations()])
-      .then(([catalog, history]) => {
+    const historyRequest =
+      typeof api.conversationSessions === "function"
+        ? api.conversationSessions()
+        : api.conversations();
+    void Promise.all([api.chatAgents(courseId), historyRequest])
+      .then(([catalog, allHistory]) => {
         if (!active || !isChatRequestScopeActive(scopeKey)) return;
         setAgents(catalog);
+        const history = allHistory.filter(isAgentSession);
+        setTeamSessions(allHistory.filter(isTeamSession));
         const settled = getSettledChatSession(scopeKey);
         let nextHistory = history;
         if (settled) {
@@ -280,6 +450,7 @@ function AgentChatScope({
         }
         const recent = nextHistory.find((session) => session.turns.length > 0);
         setSelected(recent ?? null);
+        setSelectedTeam(null);
         setVersionId(recent?.agent.version_id ?? catalog[0]?.version_id ?? "");
       })
       .catch((cause) => {
@@ -437,9 +608,55 @@ function AgentChatScope({
     setError(null);
     setHistoryRefreshTarget(null);
     setSelected(null);
+    setSelectedTeam(null);
+    setTeamDraft("");
+    setTeamError(null);
     setDraft("");
     abandonChatRequest(undefined, scopeKey);
     if (nextVersionId) setVersionId(nextVersionId);
+  }
+
+  async function startTeamChat(
+    entry: TeamChatEntry,
+    visibility: "private" | "public",
+  ) {
+    if (teamBusy || !isChatRequestScopeActive(scopeKey)) return;
+    const sequence = ++teamSendSequence.current;
+    setTeamBusy(true);
+    setTeamError(null);
+    try {
+      const session = await api.createTeamConversation(entry, visibility);
+      if (
+        sequence !== teamSendSequence.current ||
+        !isChatRequestScopeActive(scopeKey)
+      ) {
+        return;
+      }
+      setSelected(null);
+      setSelectedTeam(session);
+      rememberTeam(session, true);
+      setDraft("");
+      setTeamDraft("");
+      setTeamAllRecipients(true);
+      setTeamRecipientIds([]);
+      setTeamLastEventId(0);
+      setShowNewEntry(false);
+    } catch (cause) {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeKey)
+      ) {
+        setError(cause);
+        setShowNewEntry(false);
+      }
+    } finally {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeKey)
+      ) {
+        setTeamBusy(false);
+      }
+    }
   }
 
   async function openHistory(session: ChatSession) {
@@ -596,8 +813,286 @@ function AgentChatScope({
     }
   }
 
-  async function removeChat(session: ChatSession) {
-    if (busy) return;
+  async function openTeamHistory(session: TeamChatSession) {
+    if (!scopeKey || loadedScope !== scopeKey || busy || teamBusy) return;
+    const sequence = ++teamSendSequence.current;
+    const scopeAtOpen = scopeKey;
+    setTeamBusy(true);
+    setTeamError(null);
+    try {
+      const refreshed = await api.conversationSession(session.id);
+      if (
+        sequence !== teamSendSequence.current ||
+        !isChatRequestScopeActive(scopeAtOpen) ||
+        !isTeamSession(refreshed)
+      ) {
+        return;
+      }
+      setSelected(null);
+      setSelectedTeam(refreshed);
+      rememberTeam(refreshed, true);
+      setTeamDraft("");
+      setTeamLastEventId(0);
+      setTeamAllRecipients(true);
+      setTeamRecipientIds([]);
+      const lastTurn = refreshed.turns.at(-1);
+      if (lastTurn?.state === "acceptance_unknown") {
+        setTeamError(unknownChatOutcomeError());
+      }
+    } catch (cause) {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeAtOpen)
+      ) {
+        setTeamError(cause);
+      }
+    } finally {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeAtOpen)
+      ) {
+        setTeamBusy(false);
+      }
+    }
+  }
+
+  async function checkTeamStatus() {
+    if (!selectedTeam || teamBusy || !isChatRequestScopeActive(scopeKey))
+      return;
+    const sequence = ++teamSendSequence.current;
+    const conversationId = selectedTeam.id;
+    setTeamBusy(true);
+    try {
+      const refreshed = await api.conversationSession(conversationId);
+      if (
+        sequence !== teamSendSequence.current ||
+        !isChatRequestScopeActive(scopeKey) ||
+        !isTeamSession(refreshed) ||
+        selectedTeam.id !== conversationId
+      ) {
+        return;
+      }
+      rememberTeam(refreshed);
+      setSelectedTeam(refreshed);
+      const lastTurn = refreshed.turns.at(-1);
+      const pending = teamPendingRequest.current;
+      if (
+        lastTurn?.state === "pending" &&
+        pending?.conversationId === conversationId
+      ) {
+        const resumed = await api.streamTeamConversation(
+          conversationId,
+          pending.body,
+          {
+            afterEventId: teamLastEventId,
+            onEvent: (event) => {
+              const eventSequence = Number(event.id);
+              if (Number.isInteger(eventSequence) && eventSequence > 0) {
+                setTeamLastEventId(eventSequence);
+              }
+            },
+          },
+        );
+        if (
+          sequence === teamSendSequence.current &&
+          isChatRequestScopeActive(scopeKey) &&
+          isTeamSession(resumed)
+        ) {
+          rememberTeam(resumed);
+          setSelectedTeam(resumed);
+          const latest = resumed.turns.at(-1);
+          if (latest?.state === "pending") {
+            setTeamError(new ChatRequestPendingError());
+          } else {
+            teamPendingRequest.current = null;
+            setTeamError(
+              latest?.state === "acceptance_unknown"
+                ? unknownChatOutcomeError()
+                : null,
+            );
+          }
+        }
+        return;
+      }
+      if (lastTurn && lastTurn.state !== "pending") {
+        teamPendingRequest.current = null;
+      }
+      setTeamError(
+        lastTurn?.state === "acceptance_unknown"
+          ? unknownChatOutcomeError()
+          : null,
+      );
+    } catch (cause) {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeKey) &&
+        selectedTeam.id === conversationId
+      ) {
+        setTeamError(cause);
+      }
+    } finally {
+      if (sequence === teamSendSequence.current) setTeamBusy(false);
+    }
+  }
+
+  async function sendTeam(
+    event?: FormEvent,
+    preset?: {
+      session: TeamChatSession;
+      requestId: string;
+      expectedRevision: number;
+      message: string;
+    },
+  ) {
+    event?.preventDefault();
+    const session = preset?.session ?? selectedTeam;
+    const message = preset?.message ?? teamDraft.trim();
+    if (
+      !session ||
+      !message ||
+      teamBusy ||
+      session.read_only ||
+      !session.can_send ||
+      !isChatRequestScopeActive(scopeKey)
+    ) {
+      return;
+    }
+    const routing: TeamRouting = preset
+      ? { mode: "auto", participant_ids: [] }
+      : teamAllRecipients
+        ? { mode: "all", participant_ids: [] }
+        : { mode: "selected", participant_ids: teamRecipientIds };
+    if (routing.mode === "selected" && !routing.participant_ids.length) {
+      setTeamError(
+        new PlatformApiError(400, "team_no_recipient", {
+          code: "team_no_recipient",
+          message: "team_no_recipient",
+        }),
+      );
+      return;
+    }
+    const sequence = ++teamSendSequence.current;
+    const requestId = preset?.requestId ?? crypto.randomUUID();
+    const scopeAtSend = scopeKey;
+    const sentSessionId = session.id;
+    const request = {
+      request_id: requestId,
+      expected_revision: preset?.expectedRevision ?? session.revision,
+      message,
+      routing,
+    };
+    teamPendingRequest.current = {
+      conversationId: session.id,
+      body: request,
+    };
+    setTeamBusy(true);
+    setTeamError(null);
+    setTeamLastEventId(0);
+    try {
+      const result = await api.streamTeamConversation(session.id, request, {
+        onEvent: (event) => {
+          if (
+            sequence !== teamSendSequence.current ||
+            !isChatRequestScopeActive(scopeAtSend) ||
+            (!preset && selectedTeam?.id !== sentSessionId)
+          ) {
+            return;
+          }
+          const eventSequence = Number(event.id);
+          if (Number.isInteger(eventSequence) && eventSequence > 0) {
+            setTeamLastEventId(eventSequence);
+          }
+          if (
+            event.event === "member_result" &&
+            event.request_id === requestId &&
+            event.result &&
+            typeof event.result === "object"
+          ) {
+            const resultPayload = event.result as TeamMemberResult;
+            setSelectedTeam((current) =>
+              current?.id === sentSessionId
+                ? {
+                    ...current,
+                    turns: upsertTeamResult(
+                      current.turns,
+                      requestId,
+                      resultPayload,
+                    ),
+                  }
+                : current,
+            );
+          }
+        },
+      });
+      if (
+        sequence !== teamSendSequence.current ||
+        !isChatRequestScopeActive(scopeAtSend) ||
+        !isTeamSession(result) ||
+        result.id !== sentSessionId ||
+        (!preset && selectedTeam?.id !== sentSessionId)
+      ) {
+        return;
+      }
+      rememberTeam(result);
+      setSelectedTeam(result);
+      const savedTurn = result.turns.find((turn) => turn.id === requestId);
+      if (savedTurn?.state === "pending") {
+        setTeamError(new ChatRequestPendingError());
+      } else {
+        setTeamDraft("");
+        teamPendingRequest.current = null;
+        setTeamError(
+          savedTurn?.state === "acceptance_unknown"
+            ? unknownChatOutcomeError()
+            : null,
+        );
+      }
+    } catch (cause) {
+      if (
+        sequence !== teamSendSequence.current ||
+        !isChatRequestScopeActive(scopeAtSend) ||
+        (!preset && selectedTeam?.id !== sentSessionId)
+      ) {
+        return;
+      }
+      try {
+        const refreshed = await api.conversationSession(sentSessionId);
+        if (
+          sequence === teamSendSequence.current &&
+          isChatRequestScopeActive(scopeAtSend) &&
+          isTeamSession(refreshed)
+        ) {
+          rememberTeam(refreshed);
+          setSelectedTeam(refreshed);
+          const turn = refreshed.turns.find((item) => item.id === requestId);
+          setTeamError(
+            turn?.state === "pending"
+              ? new ChatRequestPendingError()
+              : turn?.state === "acceptance_unknown"
+                ? unknownChatOutcomeError()
+                : turn?.safe_error_code
+                  ? new PlatformApiError(503, turn.safe_error_code, {
+                      code: turn.safe_error_code,
+                      message: turn.safe_error_code,
+                    })
+                  : cause,
+          );
+        }
+      } catch {
+        if (sequence === teamSendSequence.current) setTeamError(cause);
+      }
+    } finally {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeAtSend)
+      ) {
+        setTeamBusy(false);
+      }
+    }
+  }
+
+  async function removeChat(session: ChatSession | TeamChatSession) {
+    if (busy || teamBusy) return;
     if (!window.confirm(t("deleteChatConfirm"))) return;
     const removeUiRevision = ++uiRevision.current;
     const removeSendSequence = ++sendSequence.current;
@@ -616,10 +1111,18 @@ function AgentChatScope({
       setSessions((current) =>
         current.filter((item) => item.id !== session.id),
       );
+      setTeamSessions((current) =>
+        current.filter((item) => item.id !== session.id),
+      );
       if (selected?.id === session.id) {
         setSelected(null);
         setDraft("");
         abandonChatRequest(undefined, removeScope);
+      }
+      if (selectedTeam?.id === session.id) {
+        setSelectedTeam(null);
+        setTeamDraft("");
+        teamPendingRequest.current = null;
       }
     } catch (cause) {
       if (
@@ -633,9 +1136,17 @@ function AgentChatScope({
     }
   }
 
-  async function send(event?: FormEvent) {
+  async function send(
+    event?: FormEvent,
+    preset?: {
+      session: AgentChatSession;
+      requestId: string;
+      expectedRevision: number;
+      message: string;
+    },
+  ) {
     event?.preventDefault();
-    const message = draft.trim();
+    const message = preset?.message ?? draft.trim();
     if (
       !message ||
       busy ||
@@ -661,9 +1172,21 @@ function AgentChatScope({
     setDraft("");
     setError(null);
     try {
-      const session = selected ?? (await api.createConversation(versionId));
+      const session =
+        preset?.session ??
+        selected ??
+        (await api.createConversation(versionId));
       if (!ownsSend()) return;
-      if (!selected) remember(session, true);
+      if (!selected || preset) remember(session, true);
+      if (
+        preset &&
+        (preset.session.read_only === true || preset.session.can_send === false)
+      ) {
+        throw new PlatformApiError(403, "chat_read_only", {
+          code: "chat_read_only",
+          message: "chat_read_only",
+        });
+      }
       const pending = getChatRequest(scopeKey);
       const reuse =
         pending &&
@@ -672,8 +1195,10 @@ function AgentChatScope({
         (pending.sessionId === session.id || pending.sessionId === null)
           ? pending
           : null;
-      const requestId = reuse?.requestId ?? crypto.randomUUID();
-      const revision = reuse?.revision ?? session.revision;
+      const requestId =
+        preset?.requestId ?? reuse?.requestId ?? crypto.randomUUID();
+      const revision =
+        preset?.expectedRevision ?? reuse?.revision ?? session.revision;
       const promise = api
         .streamConversation(
           session.id,
@@ -735,7 +1260,7 @@ function AgentChatScope({
         .then((result) => result.session);
       beginChatRequest({
         sessionId: session.id,
-        versionId,
+        versionId: session.agent.version_id,
         message,
         requestId,
         revision,
@@ -851,8 +1376,304 @@ function AgentChatScope({
     }
   }
 
+  async function dispatchMemoryEntry(entry: MemoryEntryResult, retry = false) {
+    if (!isChatRequestScopeActive(scopeKey)) return;
+    const session = entry.session;
+    const key = `${scopeKey}:${entry.action_id}`;
+    const dispatchKey = `maya:brainform-memory:${key}`;
+    const hasStarted = (() => {
+      try {
+        return window.sessionStorage.getItem(dispatchKey) === "sent";
+      } catch {
+        return false;
+      }
+    })();
+
+    if (isTeamSession(session)) {
+      setSelected(null);
+      setSelectedTeam(session);
+      rememberTeam(session, true);
+      const savedTurn = session.turns.find(
+        (turn) => turn.id === entry.request_id,
+      );
+      if (savedTurn) {
+        setMemoryRetryEntry(null);
+        if (savedTurn.state === "acceptance_unknown") {
+          setTeamError(unknownChatOutcomeError());
+        } else if (savedTurn.state === "pending") {
+          setTeamError(new ChatRequestPendingError());
+        } else {
+          setTeamError(null);
+        }
+        return;
+      }
+      if (session.turns.some((turn) => turn.state === "pending")) {
+        setMemoryRetryEntry(entry);
+        setTeamError(new ChatRequestPendingError());
+        return;
+      }
+      if (session.read_only || !session.can_send) {
+        setMemoryRetryEntry(null);
+        setTeamError(
+          new PlatformApiError(403, "chat_read_only", {
+            code: "chat_read_only",
+            message: "chat_read_only",
+          }),
+        );
+        return;
+      }
+      if (hasStarted && !retry) {
+        setMemoryRetryEntry(entry);
+        return;
+      }
+      if (teamPendingRequest.current?.body.request_id === entry.request_id)
+        return;
+      try {
+        window.sessionStorage.setItem(dispatchKey, "sent");
+      } catch {
+        // The server request_id remains the durable deduplication key.
+      }
+      setMemoryRetryEntry(entry);
+      setPendingMessage(entry.message);
+      try {
+        await sendTeam(undefined, {
+          session,
+          requestId: entry.request_id,
+          expectedRevision: session.revision,
+          message: entry.message,
+        });
+      } finally {
+        setPendingMessage("");
+      }
+      try {
+        const refreshed = await api.conversationSession(session.id);
+        if (!isChatRequestScopeActive(scopeKey) || !isTeamSession(refreshed))
+          return;
+        rememberTeam(refreshed);
+        setSelectedTeam(refreshed);
+        const current = refreshed.turns.some(
+          (turn) => turn.id === entry.request_id,
+        );
+        setMemoryRetryEntry(current ? null : { ...entry, session: refreshed });
+      } catch {
+        // Keep the same action and request identity available for a deliberate retry.
+      }
+      return;
+    }
+
+    if (!isAgentSession(session)) return;
+    setSelectedTeam(null);
+    setSelected(session);
+    remember(session, true);
+    setVersionId(session.agent.version_id);
+    const savedTurn = session.turns.find(
+      (turn) => turn.id === entry.request_id,
+    );
+    if (savedTurn) {
+      setMemoryRetryEntry(null);
+      if (savedTurn.state === "pending") {
+        const current = getChatRequest(scopeKey);
+        if (!current || current.requestId === savedTurn.id) {
+          const observed = adoptPendingChatRequest(
+            {
+              sessionId: session.id,
+              versionId: session.agent.version_id,
+              message: savedTurn.user_text,
+              requestId: savedTurn.id,
+              revision: Math.max(0, session.revision - 1),
+            },
+            scopeKey,
+          );
+          setRequestState(observed);
+          setBusy(true);
+        } else {
+          setError(new ChatRequestPendingError());
+        }
+      } else if (savedTurn.state === "acceptance_unknown") {
+        setError(unknownChatOutcomeError());
+        const observed = adoptUncertainChatRequest(
+          {
+            sessionId: session.id,
+            versionId: session.agent.version_id,
+            message: savedTurn.user_text,
+            requestId: savedTurn.id,
+            revision: Math.max(0, session.revision - 1),
+          },
+          scopeKey,
+        );
+        setRequestState(observed);
+      } else if (savedTurn.state === "failed") {
+        const code = savedTurn.safe_error_code ?? "chat_failed";
+        setError(new PlatformApiError(503, code, { code, message: code }));
+      }
+      return;
+    }
+    if (session.turns.some((turn) => turn.state === "pending")) {
+      const pendingTurn = session.turns.find(
+        (turn) => turn.state === "pending",
+      );
+      if (pendingTurn) {
+        const current = getChatRequest(scopeKey);
+        if (!current || current.requestId === pendingTurn.id) {
+          const observed = adoptPendingChatRequest(
+            {
+              sessionId: session.id,
+              versionId: session.agent.version_id,
+              message: pendingTurn.user_text,
+              requestId: pendingTurn.id,
+              revision: Math.max(0, session.revision - 1),
+            },
+            scopeKey,
+          );
+          setRequestState(observed);
+          setBusy(true);
+        }
+      }
+      setMemoryRetryEntry(entry);
+      return;
+    }
+    if (
+      session.read_only === true ||
+      session.can_send === false ||
+      session.agent.available === false
+    ) {
+      setMemoryRetryEntry(null);
+      setError(
+        new PlatformApiError(403, "chat_read_only", {
+          code: "chat_read_only",
+          message: "chat_read_only",
+        }),
+      );
+      return;
+    }
+    if (hasStarted && !retry) {
+      setMemoryRetryEntry(entry);
+      return;
+    }
+    const current = getChatRequest(scopeKey);
+    if (current?.requestId === entry.request_id && current.promise) return;
+    if (current?.promise) {
+      setMemoryRetryEntry(entry);
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(dispatchKey, "sent");
+    } catch {
+      // The request_id still deduplicates the server-side message stage.
+    }
+    setMemoryRetryEntry(entry);
+    await send(undefined, {
+      session,
+      requestId: entry.request_id,
+      expectedRevision: session.revision,
+      message: entry.message,
+    });
+    try {
+      const refreshed = await api.conversationSession(session.id);
+      if (!isChatRequestScopeActive(scopeKey) || !isAgentSession(refreshed))
+        return;
+      remember(refreshed);
+      setSelected(refreshed);
+      const currentTurn = refreshed.turns.some(
+        (turn) => turn.id === entry.request_id,
+      );
+      setMemoryRetryEntry(
+        currentTurn ? null : { ...entry, session: refreshed },
+      );
+    } catch {
+      // Keep the same action and request identity available for a deliberate retry.
+    }
+  }
+
+  useEffect(() => {
+    memoryDispatch.current = dispatchMemoryEntry;
+    // This ref intentionally tracks the latest committed render; dispatch also
+    // closes over the current send/session helpers, which are render-scoped.
+  });
+
+  useEffect(() => {
+    if (loadedScope !== scopeKey || !isChatRequestScopeActive(scopeKey)) return;
+    if (parsedMemoryRoute.kind === "none" || invalidMemoryRoute) return;
+    const marker = `${scopeKey}:${parsedMemoryRoute.value.actionId}`;
+    if (memoryActionHandled.current === marker) return;
+    memoryActionHandled.current = marker;
+    const route = parsedMemoryRoute.value;
+    setMemoryLoading(true);
+    setError(null);
+    void api
+      .memoryEntry({
+        action_id: route.actionId,
+        course_id: route.courseId,
+        source: route.source,
+      })
+      .then(async (entry) => {
+        if (
+          !isChatRequestScopeActive(scopeKey) ||
+          entry.action_id !== route.actionId ||
+          entry.conversation_id !== entry.session.id
+        ) {
+          return;
+        }
+        const sessionCourseId = isTeamSession(entry.session)
+          ? entry.session.team.course_id
+          : entry.session.agent.course_id;
+        if (sessionCourseId !== route.courseId) {
+          setError(
+            new PlatformApiError(400, "memory_entry_invalid", {
+              code: "memory_entry_invalid",
+              message: t("brainformMemoryInvalid"),
+            }),
+          );
+          return;
+        }
+        await memoryDispatch.current(entry);
+      })
+      .catch((cause) => {
+        if (isChatRequestScopeActive(scopeKey)) setError(cause);
+      })
+      .finally(() => {
+        if (isChatRequestScopeActive(scopeKey)) setMemoryLoading(false);
+      });
+  }, [
+    api,
+    courseId,
+    invalidMemoryRoute,
+    loadedScope,
+    parsedMemoryRoute,
+    scopeKey,
+    t,
+  ]);
+
+  async function retryMemoryQuery() {
+    if (
+      !memoryRetryEntry ||
+      memoryRetryBusy ||
+      !isChatRequestScopeActive(scopeKey)
+    )
+      return;
+    const entry = memoryRetryEntry;
+    setMemoryRetryBusy(true);
+    try {
+      const session = await api.conversationSession(entry.conversation_id);
+      if (
+        !isChatRequestScopeActive(scopeKey) ||
+        session.id !== entry.conversation_id
+      )
+        return;
+      await memoryDispatch.current({ ...entry, session }, true);
+    } catch (cause) {
+      if (isChatRequestScopeActive(scopeKey)) setError(cause);
+    } finally {
+      if (isChatRequestScopeActive(scopeKey)) setMemoryRetryBusy(false);
+    }
+  }
+
   const character =
     selected?.agent ?? agents.find((agent) => agent.version_id === versionId);
+  const agentCanSend =
+    selected?.read_only !== true &&
+    selected?.can_send !== false &&
+    character?.available !== false;
   if (!scopeKey || loadedScope !== scopeKey || loading) {
     return (
       <>
@@ -867,9 +1688,37 @@ function AgentChatScope({
       <PageIntro title="Chats" />
       <WorkspaceAction
         name="new"
-        disabled={busy || showNewEntry}
+        disabled={busy || teamBusy || showNewEntry}
         onClick={() => setShowNewEntry(true)}
       />
+      {memoryLoading ? (
+        <p className={styles.memoryStatus} role="status">
+          {t("brainformMemoryLoading")}
+        </p>
+      ) : null}
+      {invalidMemoryRoute ? (
+        <p className={styles.memoryStatus} role="alert">
+          {t("brainformMemoryInvalid")}
+        </p>
+      ) : null}
+      {memoryRetryEntry &&
+      !memoryRetryEntry.session.turns.some(
+        (turn) => turn.id === memoryRetryEntry.request_id,
+      ) ? (
+        <button
+          type="button"
+          className="inline-button"
+          disabled={
+            memoryRetryBusy ||
+            busy ||
+            teamBusy ||
+            selectedTeam?.turns.at(-1)?.state === "pending"
+          }
+          onClick={() => void retryMemoryQuery()}
+        >
+          {t("brainformMemoryRetry")}
+        </button>
+      ) : null}
       {showNewEntry ? (
         <TeamEntryFlow
           api={api}
@@ -880,6 +1729,9 @@ function AgentChatScope({
             setShowNewEntry(false);
             start(nextVersionId);
           }}
+          onStartTeam={(entry, visibility) =>
+            void startTeamChat(entry, visibility)
+          }
         />
       ) : null}
       {!showNewEntry && error ? (
@@ -903,50 +1755,94 @@ function AgentChatScope({
           {t("chatCheckStatus")}
         </button>
       ) : null}
-      {!showNewEntry && !agents.length && !selected ? (
+      {!showNewEntry &&
+      !agents.length &&
+      !selected &&
+      !selectedTeam &&
+      !teamSessions.length ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : null}
-      {!showNewEntry && (agents.length > 0 || selected) ? (
+      {!showNewEntry &&
+      (agents.length > 0 ||
+        selected ||
+        selectedTeam ||
+        teamSessions.length > 0) ? (
         <div className={styles.layout}>
           <aside className={styles.sidebar}>
-            <select
-              id="chat-agent"
-              aria-label="Agent"
-              value={versionId}
-              disabled={busy}
-              onChange={(event) => {
-                start(event.target.value);
-              }}
-            >
-              {selected &&
-              !agents.some(
-                (agent) => agent.version_id === selected.agent.version_id,
-              ) ? (
-                <option value={selected.agent.version_id}>
-                  {selected.agent.name} · {selected.agent.version_label}
-                </option>
-              ) : null}
-              {agents.map((agent) => (
-                <option key={agent.version_id} value={agent.version_id}>
-                  {agent.name} · {agent.version_label}
-                </option>
-              ))}
-            </select>
+            {!selectedTeam ? (
+              <select
+                id="chat-agent"
+                aria-label="Agent"
+                value={versionId}
+                disabled={busy || teamBusy}
+                onChange={(event) => {
+                  start(event.target.value);
+                }}
+              >
+                {selected &&
+                !agents.some(
+                  (agent) => agent.version_id === selected.agent.version_id,
+                ) ? (
+                  <option value={selected.agent.version_id}>
+                    {selected.agent.name} · {selected.agent.version_label}
+                  </option>
+                ) : null}
+                {agents.map((agent) => (
+                  <option key={agent.version_id} value={agent.version_id}>
+                    {agent.name} · {agent.version_label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className={styles.teamChatHeading}>
+                <h2>{selectedTeam.team.name}</h2>
+                <span>
+                  {selectedTeam.entry_kind === "maya_team"
+                    ? "Maya Team"
+                    : "Team"}{" "}
+                  ·{" "}
+                  {t(
+                    selectedTeam.chat_visibility === "private"
+                      ? "teamPrivate"
+                      : "teamPublic",
+                  )}
+                </span>
+              </div>
+            )}
             <div className={styles.history} aria-label="History">
-              {sessions
-                .filter((session) => session.turns.length > 0)
-                .map((session) => (
+              {[
+                ...sessions
+                  .filter((session) => session.turns.length > 0)
+                  .map((session) => ({ kind: "agent" as const, session })),
+                ...teamSessions
+                  .filter((session) => session.turns.length > 0)
+                  .map((session) => ({ kind: "team" as const, session })),
+              ]
+                .sort((left, right) =>
+                  right.session.created_at.localeCompare(
+                    left.session.created_at,
+                  ),
+                )
+                .map(({ kind, session }) => (
                   <div className={styles.historyRow} key={session.id}>
                     <button
                       type="button"
                       className={styles.historySelect}
-                      disabled={busy}
+                      disabled={busy || teamBusy}
                       aria-current={
-                        selected?.id === session.id ? "page" : undefined
+                        (kind === "agent" ? selected?.id : selectedTeam?.id) ===
+                        session.id
+                          ? "page"
+                          : undefined
                       }
-                      title={session.agent.name}
+                      title={
+                        kind === "agent"
+                          ? session.agent.name
+                          : session.team.name
+                      }
                       onClick={() => {
-                        void openHistory(session);
+                        if (kind === "agent") void openHistory(session);
+                        else void openTeamHistory(session);
                       }}
                     >
                       <span>{session.turns[0]?.user_text ?? "New"}</span>
@@ -958,7 +1854,11 @@ function AgentChatScope({
                       <button
                         type="button"
                         className={styles.historyDelete}
-                        disabled={busy}
+                        disabled={
+                          busy ||
+                          teamBusy ||
+                          ("read_only" in session && session.read_only === true)
+                        }
                         aria-label={t("deleteChat")}
                         data-ui-guide="chat.delete"
                         onClick={(event) => {
@@ -1014,6 +1914,67 @@ function AgentChatScope({
                   </div>
                 </div>
               ))}
+              {selectedTeam?.turns.map((turn) => (
+                <div key={turn.id} className={styles.exchange}>
+                  <div className={styles.userMessage}>{turn.user_text}</div>
+                  {turn.state === "pending" ? (
+                    <p className={styles.pending} role="status">
+                      <span className="spinner" aria-hidden="true" />
+                      {t("loading")}
+                    </p>
+                  ) : null}
+                  {turn.state === "acceptance_unknown" ? (
+                    <p className={styles.teamWarning} role="status">
+                      {t("teamUnknownResult")}
+                    </p>
+                  ) : null}
+                  {turn.state === "partial" ||
+                  turn.member_results.some(
+                    (item) =>
+                      item.state === "failed" ||
+                      item.state === "acceptance_unknown",
+                  ) ? (
+                    <p className={styles.teamWarning} role="status">
+                      {t("teamPartialResult")}
+                    </p>
+                  ) : null}
+                  <div className={styles.teamResults}>
+                    {turn.member_results.map((result) => {
+                      const participant = selectedTeam.team.members.find(
+                        (member) => member.id === result.participant_id,
+                      );
+                      return (
+                        <article className={styles.teamResult} key={result.id}>
+                          <h3>
+                            {result.speaker_name}
+                            {participant?.is_leader ? ` · ${t("leader")}` : ""}
+                          </h3>
+                          {result.assistant_text ? (
+                            <ReportMarkdown>
+                              {result.assistant_text}
+                            </ReportMarkdown>
+                          ) : result.state === "pending" ||
+                            result.state === "running" ? (
+                            <p className={styles.pending} role="status">
+                              <span className="spinner" aria-hidden="true" />
+                              {t("loading")}
+                            </p>
+                          ) : result.state === "acceptance_unknown" ? (
+                            <p className={styles.teamWarning} role="status">
+                              {t("teamUnknownResult")}
+                            </p>
+                          ) : (
+                            <p className={styles.teamWarning} role="status">
+                              {result.safe_error_code ??
+                                t("teamChatUnavailable")}
+                            </p>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
               {pendingMessage ? (
                 <div className={styles.exchange}>
                   <div className={styles.userMessage}>{pendingMessage}</div>
@@ -1025,28 +1986,182 @@ function AgentChatScope({
               ) : null}
               <div ref={endRef} />
             </div>
+            {selectedTeam ? (
+              <div className={styles.teamComposerTools}>
+                {selectedTeam.read_only ? (
+                  <p role="status">{t("teamChatReadOnly")}</p>
+                ) : !selectedTeam.can_send ? (
+                  <p role="status">{t("teamChatUnavailable")}</p>
+                ) : null}
+                {teamError ? (
+                  <div className={styles.teamStatus} role="alert">
+                    <p>
+                      {teamError instanceof PlatformApiError &&
+                      teamError.code === "chat_acceptance_unknown"
+                        ? t("teamUnknownResult")
+                        : teamError instanceof ChatRequestPendingError
+                          ? t("teamTurnPending")
+                          : t("teamChatUnavailable")}
+                    </p>
+                    <button
+                      type="button"
+                      className="inline-button"
+                      disabled={teamBusy}
+                      onClick={() => void checkTeamStatus()}
+                    >
+                      {t("teamCheckStatus")}
+                    </button>
+                  </div>
+                ) : selectedTeam.turns.at(-1)?.state === "pending" ? (
+                  <button
+                    type="button"
+                    className="inline-button"
+                    disabled={teamBusy}
+                    onClick={() => void checkTeamStatus()}
+                  >
+                    {t("teamCheckStatus")}
+                  </button>
+                ) : null}
+                {selectedTeam.can_send && !selectedTeam.read_only ? (
+                  <div className={styles.teamRecipients}>
+                    <span>{t("teamRecipients")}</span>
+                    {teamAllRecipients ? (
+                      <span className={styles.recipientChip}>
+                        @{t("teamAllMembers")}
+                      </span>
+                    ) : (
+                      selectedTeam.team.members
+                        .filter((member) =>
+                          teamRecipientIds.includes(member.id),
+                        )
+                        .map((member) => (
+                          <span
+                            className={styles.recipientChip}
+                            key={member.id}
+                          >
+                            @{member.name}
+                            {` · ${member.position + 1}`}
+                            {member.is_leader ? ` · ${t("leader")}` : ""}
+                          </span>
+                        ))
+                    )}
+                    <button
+                      type="button"
+                      className="inline-button"
+                      aria-expanded={teamRecipientMenu}
+                      onClick={() => setTeamRecipientMenu((open) => !open)}
+                    >
+                      {t("teamAddRecipient")}
+                    </button>
+                    {teamRecipientMenu ? (
+                      <div
+                        className={styles.recipientMenu}
+                        role="group"
+                        aria-label={t("teamRecipients")}
+                      >
+                        <p>{t("teamDuplicateNames")}</p>
+                        <label className={styles.entryChoice}>
+                          <input
+                            type="checkbox"
+                            checked={teamAllRecipients}
+                            disabled={teamBusy}
+                            onChange={(event) => {
+                              setTeamAllRecipients(event.target.checked);
+                              if (event.target.checked) setTeamRecipientIds([]);
+                            }}
+                          />
+                          <span>@{t("teamAllMembers")}</span>
+                        </label>
+                        {selectedTeam.team.members.map((member) => (
+                          <label className={styles.entryChoice} key={member.id}>
+                            <input
+                              type="checkbox"
+                              checked={
+                                teamAllRecipients ||
+                                teamRecipientIds.includes(member.id)
+                              }
+                              disabled={teamBusy || !member.available}
+                              onChange={(event) => {
+                                if (teamAllRecipients) {
+                                  setTeamAllRecipients(false);
+                                  setTeamRecipientIds(
+                                    event.target.checked ? [member.id] : [],
+                                  );
+                                } else {
+                                  setTeamRecipientIds((current) =>
+                                    event.target.checked
+                                      ? [...current, member.id]
+                                      : current.filter(
+                                          (id) => id !== member.id,
+                                        ),
+                                  );
+                                }
+                              }}
+                            />
+                            <span>
+                              @{member.name} · {member.position + 1}
+                              {member.is_leader ? ` · ${t("leader")}` : ""}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <form
               className={styles.composer}
-              onSubmit={(event) => void send(event)}
+              onSubmit={(event) =>
+                void (selectedTeam ? sendTeam(event) : send(event))
+              }
             >
+              {character?.available === false ? (
+                <p id="chat-readonly-help" className={styles.readOnlyHelp}>
+                  {readOnlyHelp}
+                </p>
+              ) : null}
               <textarea
                 id="chat-message"
                 aria-label="Message"
-                value={draft}
+                aria-describedby={
+                  character?.available === false
+                    ? "chat-readonly-help"
+                    : undefined
+                }
+                value={selectedTeam ? teamDraft : draft}
                 rows={1}
-                disabled={busy || character?.available === false}
+                disabled={
+                  selectedTeam
+                    ? teamBusy ||
+                      !selectedTeam.can_send ||
+                      selectedTeam.read_only ||
+                      selectedTeam.turns.at(-1)?.state === "pending"
+                    : busy || !agentCanSend
+                }
                 onChange={(event) => {
-                  uiRevision.current += 1;
-                  setDraft(event.target.value);
+                  if (selectedTeam) setTeamDraft(event.target.value);
+                  else {
+                    uiRevision.current += 1;
+                    setDraft(event.target.value);
+                  }
                 }}
                 onKeyDown={(event) => {
+                  if (
+                    selectedTeam &&
+                    event.key === "@" &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    setTeamRecipientMenu(true);
+                  }
                   if (
                     event.key === "Enter" &&
                     !event.shiftKey &&
                     !event.nativeEvent.isComposing
                   ) {
                     event.preventDefault();
-                    void send();
+                    if (selectedTeam) void sendTeam();
+                    else void send();
                   }
                 }}
               />
@@ -1055,23 +2170,53 @@ function AgentChatScope({
                 <button
                   type="submit"
                   className={styles.sendButton}
+                  aria-describedby={
+                    character?.available === false
+                      ? "chat-readonly-help"
+                      : undefined
+                  }
                   aria-label={
-                    character?.available === false ? "Read-only" : "Send"
+                    selectedTeam?.read_only
+                      ? t("teamChatReadOnly")
+                      : selectedTeam && !selectedTeam.can_send
+                        ? t("teamChatUnavailable")
+                        : character?.available === false
+                          ? "Read-only"
+                          : "Send"
                   }
                   data-ui-guide={
-                    character?.available === false
+                    selectedTeam?.read_only ||
+                    (selectedTeam !== null && !selectedTeam.can_send) ||
+                    !agentCanSend
                       ? "chat.readOnly"
                       : "chat.send"
                   }
                   title={
-                    character?.available === false ? "Read-only" : undefined
+                    selectedTeam?.read_only
+                      ? t("teamChatReadOnly")
+                      : selectedTeam && !selectedTeam.can_send
+                        ? t("teamChatUnavailable")
+                        : !agentCanSend
+                          ? "Read-only"
+                          : undefined
                   }
                   disabled={
                     busy ||
+                    teamBusy ||
                     historyRefreshTarget !== null ||
-                    character?.available === false ||
-                    !draft.trim() ||
-                    !versionId ||
+                    Boolean(
+                      selectedTeam &&
+                      (!selectedTeam.can_send || selectedTeam.read_only),
+                    ) ||
+                    selectedTeam?.turns.at(-1)?.state === "pending" ||
+                    !agentCanSend ||
+                    !(selectedTeam ? teamDraft.trim() : draft.trim()) ||
+                    (!selectedTeam && !versionId) ||
+                    Boolean(
+                      selectedTeam &&
+                      !teamAllRecipients &&
+                      !teamRecipientIds.length,
+                    ) ||
                     selected?.turns.some((turn) => turn.state === "pending")
                   }
                 >

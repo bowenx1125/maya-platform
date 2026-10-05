@@ -80,6 +80,10 @@ function makeDocument(): KnowledgeDocument {
     can_manage_visibility: false,
     authorization_epoch: 0,
     source_filename: "evidence.md",
+    source_owner_role: "student",
+    content_hash: "a".repeat(64),
+    created_at: "2026-10-04T00:00:00Z",
+    index_revision: 0,
     char_count: 42,
     workspace_state: "active",
     index_status: "ready",
@@ -578,6 +582,84 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect((secondCall[4] as { idempotency: unknown }).idempotency).toBe(
       firstHandle,
     );
+  });
+
+  it("retries preview refresh after a successful file upload without reuploading", async () => {
+    const { api } = makeApi();
+    let resolvePreview!: (preview: RagPreview) => void;
+    api.uploadKnowledge.mockResolvedValueOnce({
+      agent_version: makeVersion(),
+      document: {
+        ...makeDocument(),
+        id: "uploaded-document-id",
+        source_filename: "lesson.pdf.md",
+      },
+    });
+    api.ragPreview
+      .mockResolvedValueOnce(makePreview())
+      .mockRejectedValueOnce(new Error("preview unavailable"))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePreview = resolve;
+          }),
+      );
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
+    );
+    const file = new File(["lesson"], "lesson.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getAllByLabelText("Upload")[1], {
+      target: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "The file was uploaded successfully, but the evidence preview could not be refreshed.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(
+      screen.getByText(
+        "File converted to Markdown and enabled for this draft.",
+      ),
+    ).toBeTruthy();
+    expect(api.uploadKnowledge).toHaveBeenCalledTimes(1);
+
+    const retryButton = screen.getByRole("button", { name: "Retry" });
+    fireEvent.click(retryButton);
+    expect(screen.getByText("Refreshing the Markdown preview…")).toBeTruthy();
+    expect((retryButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getAllByLabelText("Upload")[1] as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("checkbox")
+        .every((checkbox) => (checkbox as HTMLInputElement).disabled),
+    ).toBe(true);
+    fireEvent.click(retryButton);
+    expect(api.ragPreview).toHaveBeenCalledTimes(3);
+
+    resolvePreview(makePreview());
+
+    await waitFor(() => expect(api.ragPreview).toHaveBeenCalledTimes(3));
+    expect(api.uploadKnowledge).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText(
+        "The file was uploaded successfully, but the evidence preview could not be refreshed.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText("Refreshing the Markdown preview…")).toBeNull();
+    expect(
+      screen.getByText(
+        "File converted to Markdown and enabled for this draft.",
+      ),
+    ).toBeTruthy();
   });
 
   it("keeps a local AGENT.md and revision conflict visible after locale changes", async () => {

@@ -35,6 +35,7 @@ from app.core.models import (
     IdempotencyRecord,
     KnowledgeDocument,
     SnapshotDocument,
+    User,
 )
 from app.modules.agents.persona import (
     agent_name_from_markdown,
@@ -56,6 +57,7 @@ from app.modules.agents.schemas import (
     ConfirmPersonaRequest,
     PersonaCompileResponse,
     PublishAgentVersionRequest,
+    PublishedAgentAuthor,
     PublishedAgentSummary,
     TestChatRequest,
     TestChatResponse,
@@ -1840,6 +1842,7 @@ def list_published_agents_for_teacher(
     return [
         PublishedAgentSummary(
             group_name=group_name,
+            author=_published_author(db, agent, version),
             agent=_summary_with_metadata(
                 db,
                 agent,
@@ -1851,3 +1854,15 @@ def list_published_agents_for_teacher(
         )
         for agent, version, group_name in public_rows
     ]
+
+
+def _published_author(
+    db: Session, agent: Agent, version: AgentVersion
+) -> PublishedAgentAuthor | None:
+    user_id = agent.owner_user_id or version.persona_confirming_user_id
+    user = db.get(User, user_id) if user_id else None
+    if user is None:
+        return None
+    return PublishedAgentAuthor(
+        user_id=UUID(user.id), display_name=user.display_name, avatar=user.avatar
+    )

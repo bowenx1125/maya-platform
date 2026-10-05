@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.metadata
 import json
 from collections.abc import Callable, Sequence
@@ -25,6 +26,8 @@ from app.core.models import (
     ProviderPolicySnapshot,
     StoredFile,
 )
+from app.modules.knowledge.files import FileBoundaryError, read_contained
+from app.modules.knowledge.markdown import MarkdownInputError, normalize_markdown
 from app.modules.knowledge.services import normalized_document_content
 from app.modules.knowledge_sets.generation import (
     _current_generation_authorized,
@@ -38,6 +41,7 @@ from app.modules.knowledge_sets.generation_provider import (
     run_knowledge_generation_agent,
 )
 from app.modules.knowledge_sets.models import (
+    KnowledgeDocumentVersion,
     KnowledgeGenerationAcceptedStage,
     KnowledgeGenerationRun,
     KnowledgeGenerationSourceReceipt,
@@ -410,7 +414,11 @@ def _generation_input(
 
         courseware: list[tuple[str, str, str]] = []
         for index, item in enumerate(source_rows, start=1):
-            if not isinstance(item, dict) or not isinstance(item.get("binding_id"), str):
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("binding_id"), str)
+                or not isinstance(item.get("stored_file_id"), str)
+            ):
                 raise KnowledgeProviderRuntimeError("knowledge_source_manifest_invalid")
             binding = db.get(KnowledgeSetSource, item["binding_id"])
             if (
@@ -418,18 +426,20 @@ def _generation_input(
                 or binding.knowledge_set_id != set_row.id
                 or not binding.is_active
                 or binding.document_id != item.get("document_id")
-                or binding.stored_file_id != item.get("stored_file_id")
+                or binding.order_index != item.get("order_index")
             ):
                 raise KnowledgeProviderRuntimeError("authorization_revoked")
             document = db.get(KnowledgeDocument, binding.document_id)
-            stored_file = db.get(StoredFile, binding.stored_file_id)
             if (
                 document is None
-                or stored_file is None
-                or document.stored_file_id != binding.stored_file_id
-                or stored_file.state != "active"
+                or document.course_id != run.course_id
+                or document.workspace_state != "active"
+                or document.content_hash != item.get("content_hash")
                 or document.content_hash != binding.source_content_hash
-                or stored_file.sha256 != binding.source_file_sha256
+                or document.authorization_epoch != item.get("authorization_epoch")
+                or document.authorization_epoch != binding.source_authorization_epoch
+                or document.index_revision != item.get("index_revision")
+                or document.index_revision != binding.source_index_revision
             ):
                 raise KnowledgeProviderRuntimeError("authorization_revoked")
             receipt = db.scalar(
@@ -441,17 +451,67 @@ def _generation_input(
             if (
                 receipt is None
                 or receipt.document_id != document.id
-                or receipt.stored_file_id != stored_file.id
-                or receipt.source_content_hash != binding.source_content_hash
-                or receipt.source_file_sha256 != stored_file.sha256
-                or receipt.source_authorization_epoch != binding.source_authorization_epoch
-                or receipt.source_index_revision != binding.source_index_revision
+                or receipt.stored_file_id != item.get("stored_file_id")
+                or receipt.source_content_hash != item.get("content_hash")
+                or receipt.source_file_sha256 != item.get("file_sha256")
+                or receipt.source_authorization_epoch != item.get("authorization_epoch")
+                or receipt.source_index_revision != item.get("index_revision")
             ):
                 raise KnowledgeProviderRuntimeError("knowledge_source_receipt_invalid")
-            try:
-                text = normalized_document_content(settings.resolved_data_root, document)
-            except Exception as exc:
-                raise KnowledgeProviderRuntimeError("knowledge_source_unavailable") from exc
+            if binding.stored_file_id == item["stored_file_id"]:
+                stored_file = db.get(StoredFile, binding.stored_file_id)
+                if (
+                    stored_file is None
+                    or document.stored_file_id != stored_file.id
+                    or stored_file.state != "active"
+                    or stored_file.sha256 != item.get("file_sha256")
+                    or binding.source_file_sha256 != item.get("file_sha256")
+                ):
+                    raise KnowledgeProviderRuntimeError("authorization_revoked")
+                try:
+                    text = normalized_document_content(settings.resolved_data_root, document)
+                except Exception as exc:
+                    raise KnowledgeProviderRuntimeError("knowledge_source_unavailable") from exc
+            else:
+                # A newline-only save can advance the live StoredFile while a
+                # not-yet-sent run still owns a frozen manifest for the prior
+                # bytes. The authorization check above proves equal normalized
+                # content and current ACL; use the immutable historical file
+                # and its receipt when reconstructing that exact provider input.
+                historical = db.scalar(
+                    select(KnowledgeDocumentVersion).where(
+                        KnowledgeDocumentVersion.document_id == document.id,
+                        KnowledgeDocumentVersion.stored_file_id == item["stored_file_id"],
+                        KnowledgeDocumentVersion.content_hash == item.get("content_hash"),
+                        KnowledgeDocumentVersion.file_sha256 == item.get("file_sha256"),
+                        KnowledgeDocumentVersion.authorization_epoch
+                        == item.get("authorization_epoch"),
+                        KnowledgeDocumentVersion.index_revision == item.get("index_revision"),
+                    )
+                )
+                stored_file = db.get(StoredFile, item["stored_file_id"])
+                if (
+                    historical is None
+                    or stored_file is None
+                    or stored_file.state != "active"
+                    or stored_file.sha256 != item.get("file_sha256")
+                ):
+                    raise KnowledgeProviderRuntimeError("authorization_revoked")
+                try:
+                    raw_source = read_contained(
+                        settings.resolved_data_root,
+                        stored_file.relative_path,
+                    )
+                    if hashlib.sha256(raw_source).hexdigest() != item.get("file_sha256"):
+                        raise KnowledgeProviderRuntimeError("knowledge_source_unavailable")
+                    normalized_source = normalize_markdown(historical.source_filename, raw_source)
+                    if normalized_source.content_hash != item.get("content_hash"):
+                        raise KnowledgeProviderRuntimeError("authorization_revoked")
+                    text = normalized_source.normalized
+                except KnowledgeProviderRuntimeError:
+                    raise
+                except (FileBoundaryError, MarkdownInputError, OSError) as exc:
+                    raise KnowledgeProviderRuntimeError("knowledge_source_unavailable") from exc
             courseware.append((f"Courseware {index}", receipt.id, text))
         return run, agent, version, courseware
 

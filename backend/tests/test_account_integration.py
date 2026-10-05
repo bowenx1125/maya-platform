@@ -30,9 +30,11 @@ def test_concurrent_username_claim_has_one_winner_and_preserves_login(app_factor
         original, _csrf = login(existing)
 
         def claim(name: str) -> int:
-            with TestClient(app, raise_server_exceptions=False) as client:
-                barrier.wait(timeout=10)
-                return register(client, username=name, password="abcde").status_code
+            # The outer client owns the application's one runtime lifespan;
+            # concurrent requests must not rebind its background event loops.
+            client = TestClient(app, raise_server_exceptions=False)
+            barrier.wait(timeout=10)
+            return register(client, username=name, password="abcde").status_code
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses = list(pool.map(claim, ["ReviewRace", "reviewrace"]))

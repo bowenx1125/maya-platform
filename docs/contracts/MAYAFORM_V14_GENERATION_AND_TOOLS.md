@@ -1,5 +1,13 @@
 # MayaForm v1.4 generation and Tool authorization contract
 
+The adopted [Resume v2 contract](MAYAFORM_V14_BRAINFORM_ASSESSMENT.md) supersedes
+conflicting clauses here. In particular, canonical Markdown is the Knowledge
+source of truth, bound RAG changes enqueue durable generation intents, successful
+new regeneration replaces manual current while preserving history, Brainform has
+a lightweight Memory entry, and active assessment attempts expose no hints.
+Existing same-config deduplication applies to one action/event, not all future
+manual regenerate intents.
+
 This contract records the latest user-authored v1.4 architecture supplement. It
 supersedes conflicting K2b2/K3/K4 design notes. It does not claim these features
 are implemented. K1 Knowledge Sets and the K2a optional, durable generation-intent
@@ -39,21 +47,22 @@ and the asset's own schema, required data and ACL are valid, save the asset
 without that relation. This rule does not weaken K1's source-authenticity check
 for a relation that is saved.
 
-## Maintainer registry and two Tool classes
+## Maintainer registry and current Tool classes
 
 Only the maintenance layer develops, registers, updates or removes Tool code.
 Teachers and students cannot upload handlers, install Toolkits, add arbitrary
 MCP endpoints, or manually attach system Tools to an Agent. There is no Teacher
 Tool configuration page and no Agent.md capability compiler or approval gate.
 
-The runtime registry has exactly two authorization classes:
+The [latest resource authorization correction](MAYAFORM_V14_TOOL_RESOURCE_AUTHORIZATION.md)
+replaces the earlier two-class assumption. The registry has three classes:
 
 | Current actor | Exposed Tool classes         |
 | ------------- | ---------------------------- |
-| Student       | Public Tools                 |
+| Student       | Public Tools + Student Tools |
 | Teacher       | Public Tools + Teacher Tools |
 
-The same teacher-created Agent gets the Student set when invoked by a Student
+The same teacher-created Agent gets Public + Student when invoked by a Student
 and the Teacher set when invoked by a Teacher. Agent owner, Team creator, member
 name, prompt text and a Teacher-published Maya Team never confer Teacher Tools.
 The Agent chooses an exposed Tool using Agent.md, the Leader instruction, the
@@ -69,12 +78,16 @@ course statistics use `aggregate`, and course publication uses `publish`.
 Handlers recheck the resource ACL and transaction preconditions on every call.
 
 Public Tools cover authorized Knowledge read/search/list/create/edit/delete;
-session and workflow state; answer, skip and hint recording; assessment request,
+session and workflow state; answer and skip recording; assessment request,
 read and versioned edit; question selection and session finish; and learning
 evidence/boundary/snapshot operations. They are available to ordinary Agents,
 Student Custom Teams, ordinary Teams and Maya Teams under the current actor's
-ACL. A Student may create or revise an Assessment only in their own or currently
-authorized Conversation, and cannot guess another student's `assessment_id`.
+ACL. Assessment read/edit/create rights are target-resource permissions, distinct from
+Tool availability. A learner can read their own formal safe view without edit rights.
+A server-authorized evaluator may append formal revisions only within its active
+attempt and assigned answers; a summarizer may update only its assigned Boundary.
+A synthetic editable practice resource can succeed from a Custom Team through the
+same generic ACL mechanism. No new practice product is implied.
 A Teacher's Public Assessment Tool does not grant access to another student's
 Private Assessment.
 
@@ -91,6 +104,40 @@ explain the denied action and continue. Fatal run state is reserved for a true
 system-level inability to continue. Tool writes use MayaForm's transaction,
 idempotency and side-effect ledger; Agno completion alone is not business
 success.
+
+Chats uses its existing General Chat messages, errors and composer for Agent,
+Team and Maya Team. Assessment states govern backend operations only; students
+start, pause, continue, abandon, redo and query submitted records through natural
+language. Tool denials do not create a Permission Panel, assessment state card or
+lifecycle button group. Brainform remains the independent information interface.
+
+## Reusable Provider consent and the actual sending boundary
+
+Teacher course consent has separate `llm_agent_chat` and `embedding_query`
+purposes. Each binds the current exact policy and declared outbound field
+classes; an LLM grant does not authorize Embedding. A valid purpose-specific
+grant is reused without per-message Teacher approval. For Single Chat query
+Embedding, the outbound text is the current owner's query; the Teacher course
+disclosure does not expose a student's Private conversation. Team consent binds
+the published Team version and its declared resources. Ordinary non-Chat Teacher
+query consent retains its original exact manifest/Agent/course relationship.
+
+Preparation and consent are insufficient if access changes before transport.
+Immediately before the operation enters `sending`, the same writer transaction
+rechecks the current actor, course, resource access, publication, grant, claim
+and exact request binding. Revocation before this point sends nothing and
+releases the local reservation. A still-readable historical snapshot is valid;
+newer content alone does not invalidate it. Sent or unknown requests retain their
+accounting and are never silently resent.
+
+If assessment sources have been revoked, a separately authorized, closed
+owner-action request may still query the owner's submitted answers/progress or
+abandon the existing attempt. Its wire contains only the current user message,
+fixed public protocol and one constrained Tool schema allowing these three actions:
+no Teacher Agent.md,
+source text, Rubric or earlier history. It cannot resume, redo, answer, score or
+provide hints. The server validates every action and discards unsupported prose;
+the result uses the existing General Chat presentation.
 
 ## Evidence, Assessment and course provenance
 
@@ -119,7 +166,7 @@ user's material or fabricating success.
 
 The following are **acceptance obligations, not current PASS claims**:
 
-1. Student runtime exposes only Public Tools; Teacher runtime exposes Public
+1. Student runtime exposes Public + Student Tools; Teacher runtime exposes Public
    plus Teacher Tools, for the same teacher-created Agent under two actors.
 2. A Public Tool's allowed resource succeeds and a guessed Private resource
    fails without revealing another student's data or locking the Chat.
@@ -136,4 +183,4 @@ The following are **acceptance obligations, not current PASS claims**:
 The [supplement acceptance matrix](../validation/MAYAFORM_V14_SUPPLEMENT.md)
 tracks what has actually passed. K2b2 has passed frozen Fake/DB and isolated
 Teacher UI reviews; a real Provider call, deployment and teaching quality have
-not passed. K3 and K4 remain to be implemented and tested against this contract.
+not passed. K3 and K4 remain pending final integrated acceptance against this contract.

@@ -11,7 +11,7 @@ const output = resolve(
     ? "contracts/fixtures/route-surface-server.json"
     : process.argv[outputArg + 1],
 );
-const redocly = resolve(root, "node_modules/.bin/redocly");
+const redocly = resolve(root, "node_modules/@redocly/cli/bin/cli.js");
 const frozen = resolve(root, "contracts/openapi-v0.1.yaml");
 const temporary = resolve(output, "..", ".route-fixture-source.json");
 const implemented = new Set([
@@ -149,6 +149,24 @@ const implemented = new Set([
   "getTeam",
   "listTeamVersions",
   "saveTeamVersion",
+  "applyAssessmentLifecycleAction",
+  "changeCurrentPassword",
+  "confirmTeamProviderStandingGrant",
+  "createAssessmentCourseReport",
+  "createMemoryEntryAction",
+  "downloadAssessmentCourseReport",
+  "getChatStandingProviderDisclosure",
+  "getKnowledgeMarkdown",
+  "listAuthorizedAssessmentActivities",
+  "listBrainformKnowledge",
+  "pauseTeamConversationTurn",
+  "previewTeamProviderStandingGrant",
+  "regenerateKnowledgeMarkdown",
+  "renameKnowledgeDocument",
+  "resumeTeamConversationTurn",
+  "saveKnowledgeMarkdown",
+  "stopTeamConversationTurnOutput",
+  "updateCurrentUser",
 ]);
 const methods = new Set([
   "get",
@@ -162,8 +180,9 @@ const methods = new Set([
 ]);
 
 const result = spawnSync(
-  redocly,
+  process.execPath,
   [
+    redocly,
     "bundle",
     frozen,
     "--ext",

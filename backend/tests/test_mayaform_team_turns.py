@@ -1,0 +1,463 @@
+"""Durable Team target routing/recovery with synthetic member execution only."""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+import pytest
+from alembic import command
+from app.core.errors import PlatformError
+from app.core.models import Agent, ProviderOperation
+from app.modules.workspace import team_runtime as runtime
+from app.modules.workspace.chat_stream import stream_team_events
+from app.modules.workspace.models import (
+    Conversation,
+    ConversationParticipant,
+    ConversationTurn,
+    TeamChatEvent,
+    TeamTurnResult,
+)
+from app.modules.workspace.schemas import TeamRouting
+from fastapi.testclient import TestClient
+from sqlalchemy import event, func, select
+from sqlalchemy.engine import Engine
+
+from tests.conftest import login
+from tests.test_mayaform_team_conversations import (
+    COURSE_ID,
+    MAYA_ID,
+    _config,
+    _create,
+    _fingerprint,
+    _headers,
+    _make_agent_version,
+    _seed_0040,
+)
+
+
+def _chat(client: TestClient, database: Any) -> tuple[dict[str, Any], str, str]:
+    _, csrf = login(client, "maya")
+    versions = [
+        _make_agent_version(database, owner_id=MAYA_ID, name=f"Member {index}")[1]
+        for index in range(3)
+    ]
+    response = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, f"b2-team-{uuid4()}"),
+        json={
+            "display_name": "Three perspectives",
+            "visibility": "public",
+            "members": [
+                {"agent_version_id": version_id, "position": index, "is_leader": index == 0}
+                for index, version_id in enumerate(versions)
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    user, csrf = login(client, "bowen")
+    session = _create(client, csrf, {"kind": "maya_team", "team_id": response.json()["id"]})
+    return session, csrf, user["user"]["id"]
+
+
+def _body(session: dict[str, Any], mode: str, *, ids: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "request_id": str(uuid4()),
+        "expected_revision": session["revision"],
+        "message": "  中文原文 @someone\nDo not guess textual targets.  ",
+        "routing": {"mode": mode, "participant_ids": ids or []},
+    }
+
+
+@pytest.mark.parametrize("mode", ["selected", "all"])
+def test_explicit_targets_are_frozen_once_and_do_not_add_a_leader_summary(
+    client: TestClient, database: Any, monkeypatch: Any, mode: str
+) -> None:
+    session, csrf, actor_id = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    seen: list[runtime.MemberRequest] = []
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        seen.append(request)
+        return runtime.MemberReply(f"Reply {request.speaker_name}")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    body = _body(session, mode, ids=[ids[2], ids[1], ids[1]])
+    url = f"/api/v1/conversations/{session['id']}/messages"
+    response = client.post(url, headers=_headers(csrf), json=body)
+    assert response.status_code == 200, response.text
+    turn = response.json()["turns"][0]
+    expected = ids if mode == "all" else ids[1:]
+    assert [request.participant_id for request in seen] == expected
+    assert all(request.actor_id == actor_id for request in seen)
+    assert all(request.history == () and request.message == body["message"] for request in seen)
+    assert turn["user_text"] == body["message"] and turn["assistant_text"] is None
+    assert turn["state"] == "ready"
+    assert [result["participant_id"] for result in turn["member_results"]] == expected
+    assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
+    assert len(seen) == len(expected)
+    changed = {**body, "message": body["message"] + "x"}
+    assert client.post(url, headers=_headers(csrf), json=changed).status_code == 409
+    if mode == "selected":
+        changed = {**body, "routing": {"mode": "selected", "participant_ids": [ids[0]]}}
+        assert client.post(url, headers=_headers(csrf), json=changed).status_code == 409
+    with database.session() as db:
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 1
+        parent = db.get(ConversationTurn, body["request_id"])
+        assert parent is not None and parent.assistant_text is None and parent.sources_json == "[]"
+        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == len(expected)
+        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
+
+
+def test_selected_preflight_blocks_revoked_target_without_blocking_other_members(
+    client: TestClient, database: Any, monkeypatch: Any
+) -> None:
+    session, csrf, _actor = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    with database.session() as db:
+        participant = db.get(ConversationParticipant, ids[2])
+        agent = db.get(Agent, participant.agent_id)
+        agent.authorization_epoch += 1
+    current = client.get(f"/api/v1/conversations/{session['id']}").json()
+    assert current["can_send"] is True
+    assert current["team"]["available"] is False
+    assert [member["available"] for member in current["team"]["members"]] == [True, True, False]
+    seen: list[str] = []
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        seen.append(request.participant_id)
+        return runtime.MemberReply("Allowed answer")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    url = f"/api/v1/conversations/{session['id']}/messages"
+    blocked = client.post(url, headers=_headers(csrf), json=_body(session, "selected", ids=ids[1:]))
+    assert blocked.status_code == 404 and seen == []
+    blocked = client.post(
+        url, headers=_headers(csrf), json=_body(session, "selected", ids=[str(uuid4())])
+    )
+    assert blocked.status_code == 404 and seen == []
+    allowed = client.post(
+        url, headers=_headers(csrf), json=_body(session, "selected", ids=[ids[1]])
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert seen == [ids[1]]
+    assert allowed.json()["turns"][0]["state"] == "ready"
+
+
+def test_partial_unknown_replay_followup_full_history_and_late_result_are_isolated(
+    client: TestClient, database: Any, monkeypatch: Any
+) -> None:
+    session, csrf, _actor = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    seen: list[runtime.MemberRequest] = []
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        seen.append(request)
+        if request.participant_id == ids[2]:
+            raise PlatformError("team_acceptance_unknown", "Synthetic unknown receipt.", 503)
+        return runtime.MemberReply("Accepted member answer")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    url = f"/api/v1/conversations/{session['id']}/messages"
+    body = _body(session, "selected", ids=ids[1:])
+    response = client.post(url, headers=_headers(csrf), json=body)
+    assert response.status_code == 200, response.text
+    first = response.json()["turns"][0]
+    assert first["state"] == "partial"
+    assert [result["state"] for result in first["member_results"]] == [
+        "ready",
+        "acceptance_unknown",
+    ]
+    assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
+    assert len(seen) == 2
+    followup = {**_body(response.json(), "selected", ids=[ids[1]]), "message": "Follow-up"}
+    continued = client.post(url, headers=_headers(csrf), json=followup)
+    assert continued.status_code == 200, continued.text
+    assert [turn["state"] for turn in continued.json()["turns"]] == ["partial", "ready"]
+    history = seen[-1].history
+    assert history[0] == {"role": "user", "content": body["message"]}
+    assert history[1]["content"] == "Accepted member answer"
+    assert "acceptance_unknown" in history[2]["content"]
+    assert all(item["content"] != "Follow-up" for item in history)
+    with database.session() as db:
+        old_turn = db.get(ConversationTurn, body["request_id"])
+        token = old_turn.claim_token
+    assert (
+        runtime.settle_member(
+            database.session_factory,
+            body["request_id"],
+            token,
+            first["member_results"][1]["id"],
+            reply=runtime.MemberReply("Late wrong answer"),
+        )
+        is False
+    )
+    assert client.get(f"/api/v1/conversations/{session['id']}").json() == continued.json()
+
+
+def test_sse_events_replay_by_durable_sequence_without_execution(
+    client: TestClient, database: Any, monkeypatch: Any
+) -> None:
+    session, csrf, _actor = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    seen: list[str] = []
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        seen.append(request.participant_id)
+        return runtime.MemberReply("Persisted member answer")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    body = _body(session, "all")
+    url = f"/api/v1/conversations/{session['id']}/messages:stream"
+    headers = {**_headers(csrf), "Accept": "text/event-stream"}
+    first = client.post(url, headers=headers, json=body)
+    assert first.status_code == 200, first.text
+    assert seen == ids
+    assert first.text.count("event: member_result") == 3
+    assert first.text.count("event: turn_done") == 1
+    sequences = [int(line[4:]) for line in first.text.splitlines() if line.startswith("id: ")]
+    assert sequences == [1, 2, 3, 4, 5]
+    replay = client.post(url, headers={**headers, "Last-Event-ID": "2"}, json=body)
+    assert replay.status_code == 200 and seen == ids
+    assert [int(line[4:]) for line in replay.text.splitlines() if line.startswith("id: ")] == [
+        3,
+        4,
+        5,
+    ]
+    with database.session() as db:
+        row = db.get(Conversation, session["id"])
+        assert row.active_request_id is None
+        assert db.scalar(select(func.count()).select_from(TeamChatEvent)) == 5
+
+
+@pytest.mark.asyncio
+async def test_sse_disconnect_keeps_the_durable_team_run_alive(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    session, _csrf, actor_id = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        if request.participant_id == ids[2]:
+            started.set()
+            assert release.wait(5)
+            finished.set()
+        return runtime.MemberReply(
+            "Accepted before disconnect"
+            if request.participant_id == ids[1]
+            else "Late must not publish"
+        )
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    with database.session() as db:
+        claim = runtime.claim_team_turn(
+            db,
+            app_bundle[2],
+            conversation_id=session["id"],
+            actor_id=actor_id,
+            request_id=str(uuid4()),
+            expected_revision=0,
+            message="One original user request",
+            routing=TeamRouting(mode="selected", participant_ids=ids[1:]),
+        )
+    stream = stream_team_events(database, session["id"], actor_id, claim)
+    assert b"turn_started" in await anext(stream)
+    assert b"member_result" in await anext(stream)
+    next_event = asyncio.create_task(anext(stream))
+    assert await asyncio.to_thread(started.wait, 2)
+    next_event.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await next_event
+    release.set()
+    assert await asyncio.to_thread(finished.wait, 2)
+    for _ in range(100):
+        with database.session() as db:
+            results = db.scalars(
+                select(TeamTurnResult)
+                .where(TeamTurnResult.turn_id == claim.turn_id)
+                .order_by(TeamTurnResult.ordinal)
+            ).all()
+            turn = db.get(ConversationTurn, claim.turn_id)
+            row = db.get(Conversation, session["id"])
+            if turn.state == "ready":
+                assert [result.state for result in results] == ["ready", "ready"]
+                assert results[1].assistant_text == "Late must not publish"
+                assert row.active_request_id is None
+                break
+        await asyncio.sleep(0.01)
+    else:
+        pytest.fail("The durable Team run did not settle after its SSE observer disconnected.")
+    await stream.aclose()
+
+
+def test_pause_fences_late_member_and_resume_uses_a_new_claim(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    session, _csrf, actor_id = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    started, release, finished = threading.Event(), threading.Event(), threading.Event()
+    late_calls = 0
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        nonlocal late_calls
+        if request.participant_id == ids[2]:
+            late_calls += 1
+            if late_calls == 1:
+                started.set()
+                assert release.wait(5)
+                finished.set()
+                return runtime.MemberReply("Stale response after pause")
+            return runtime.MemberReply("Response after resume")
+        return runtime.MemberReply("Committed before pause")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    with database.session() as db:
+        claim = runtime.claim_team_turn(
+            db,
+            app_bundle[2],
+            conversation_id=session["id"],
+            actor_id=actor_id,
+            request_id=str(uuid4()),
+            expected_revision=0,
+            message="Keep this request durable",
+            routing=TeamRouting(mode="selected", participant_ids=ids[1:]),
+        )
+    worker = threading.Thread(
+        target=runtime.execute_team_turn,
+        args=(database.session_factory, claim),
+        daemon=True,
+    )
+    worker.start()
+    assert started.wait(2)
+    with database.session() as db:
+        runtime.pause_team_turn(
+            db,
+            conversation_id=session["id"],
+            actor_id=actor_id,
+            turn_id=claim.turn_id,
+        )
+    release.set()
+    worker.join(2)
+    assert finished.is_set() and not worker.is_alive()
+    with database.session() as db:
+        turn = db.get(ConversationTurn, claim.turn_id)
+        results = db.scalars(
+            select(TeamTurnResult)
+            .where(TeamTurnResult.turn_id == claim.turn_id)
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+        assert turn.state == "paused" and turn.claim_token != claim.token
+        assert [result.state for result in results] == ["ready", "running"]
+        assert results[0].assistant_text == "Committed before pause"
+        assert results[1].assistant_text is None
+
+    with database.session() as db:
+        resumed = runtime.resume_team_turn(
+            db,
+            app_bundle[2],
+            conversation_id=session["id"],
+            actor_id=actor_id,
+            turn_id=claim.turn_id,
+        )
+    assert resumed.token != claim.token
+    runtime.execute_team_turn(database.session_factory, resumed)
+    with database.session() as db:
+        turn = db.get(ConversationTurn, claim.turn_id)
+        results = db.scalars(
+            select(TeamTurnResult)
+            .where(TeamTurnResult.turn_id == claim.turn_id)
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+        assert turn.state == "ready"
+        assert [result.assistant_text for result in results] == [
+            "Committed before pause",
+            "Response after resume",
+        ]
+        assert late_calls == 2
+
+
+def test_startup_settles_member_states_without_reexecution(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    session, _csrf, actor_id = _chat(client, database)
+    ids = [member["id"] for member in session["team"]["members"]]
+    with database.session() as db:
+        claim = runtime.claim_team_turn(
+            db,
+            app_bundle[2],
+            conversation_id=session["id"],
+            actor_id=actor_id,
+            request_id=str(uuid4()),
+            expected_revision=0,
+            message="Recover only",
+            routing=TeamRouting(mode="all"),
+        )
+    result_ids = runtime.result_ids(database.session_factory, claim.turn_id)
+    runtime.execute_member(database.session_factory, claim.turn_id, claim.token, result_ids[0])
+    with database.session() as db:
+        turn = db.get(ConversationTurn, claim.turn_id)
+        turn.mode = "real"
+        pending = db.get(TeamTurnResult, result_ids[1])
+        pending.state = "running"
+    monkeypatch.setattr(
+        runtime, "invoke_mock_member", lambda _: pytest.fail("Recovery must not invoke")
+    )
+    with database.session() as db:
+        assert runtime.recover_team_runs(db) == 1
+    with database.session() as db:
+        assert runtime.recover_team_runs(db) == 0
+        turn = db.get(ConversationTurn, claim.turn_id)
+        results = db.scalars(
+            select(TeamTurnResult)
+            .where(TeamTurnResult.turn_id == claim.turn_id)
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+        assert turn.state == "paused"
+        assert [result.state for result in results] == ["ready", "pending", "pending"]
+    assert len(ids) == 3
+
+
+@pytest.mark.parametrize(
+    "failure_match", [None, "CREATE TABLE team_turn_results", "UPDATE alembic_version"]
+)
+def test_0042_populated_single_history_and_atomic_rollback(
+    tmp_path: Path, failure_match: str | None
+) -> None:
+    import sqlite3
+
+    path = tmp_path / "team-turns.sqlite3"
+    _seed_0040(path)
+    command.upgrade(_config(path), "0041_team_conversations")
+    before = _fingerprint(path)
+    with sqlite3.connect(path) as db:
+        old_turns = db.execute("SELECT * FROM agent_conversation_turns ORDER BY id").fetchall()
+        ledger = db.execute("SELECT * FROM provider_operations ORDER BY id").fetchall()
+    if failure_match:
+
+        def fail(_db: Any, _cursor: Any, sql: str, _params: Any, _ctx: Any, _many: bool) -> None:
+            if failure_match in sql:
+                raise RuntimeError("0042 injected failure")
+
+        event.listen(Engine, "before_cursor_execute", fail)
+        try:
+            with pytest.raises(RuntimeError, match="0042 injected failure"):
+                command.upgrade(_config(path), "0042_team_turn_results")
+        finally:
+            event.remove(Engine, "before_cursor_execute", fail)
+        assert _fingerprint(path) == before
+    command.upgrade(_config(path), "0042_team_turn_results")
+    with sqlite3.connect(path) as db:
+        assert (
+            db.execute(
+                "SELECT id,conversation_id,position,user_text,assistant_text,sources_json,mode,"
+                "state,safe_error_code,created_at FROM agent_conversation_turns ORDER BY id"
+            ).fetchall()
+            == old_turns
+        )
+        assert db.execute("SELECT * FROM provider_operations ORDER BY id").fetchall() == ledger
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)

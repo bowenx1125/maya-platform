@@ -112,6 +112,14 @@ export type ProviderDataCallDisclosureResponse =
   components["schemas"]["ProviderDataCallDisclosureResponseV1"];
 export type ProviderDataCallConfirmationRequest =
   components["schemas"]["ProviderDataCallConfirmationRequestV1"];
+export type TeamStandingGrantRequest =
+  components["schemas"]["TeamStandingGrantRequestV1"];
+export type TeamStandingGrantPreview =
+  components["schemas"]["TeamStandingGrantPreviewV1"];
+export type TeamStandingGrantConfirmationRequest =
+  components["schemas"]["TeamStandingGrantConfirmationRequestV1"];
+export type TeamStandingGrantConfirmation =
+  components["schemas"]["TeamStandingGrantConfirmationV1"];
 export type ProviderDataCallManifestListResponse =
   components["schemas"]["ProviderDataCallManifestListResponseV1"];
 export type ProviderDataCallPublicationManifestListResponse =
@@ -145,6 +153,111 @@ export type ProviderDataCallDebateManifestSummaryV1 =
 export type ProviderDataCallDebateManifestListResponseV1 =
   ProviderDataCallDebateManifestListResponse;
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
+export type BrainformKnowledge = {
+  agent_id: string;
+  canonical_set_id: string;
+  source_agent_display_name: string;
+  knowledge_display_name: string;
+  can_read: true;
+  can_edit: boolean;
+  version_seq: number | null;
+  content_hash: string | null;
+  generation_state:
+    | "pending"
+    | "running"
+    | "blocked"
+    | "completed"
+    | "failed"
+    | "interrupted"
+    | null;
+  safe_error_code: string | null;
+};
+export type KnowledgeMarkdown = {
+  audience: "full" | "student";
+  agent_id: string;
+  canonical_set_id: string;
+  source_agent_display_name: string;
+  knowledge_display_name: string;
+  version_seq: number;
+  content_hash: string;
+  markdown: string;
+  projection_available: boolean;
+  can_read: true;
+  can_edit: boolean;
+  created_at: string;
+};
+export type KnowledgeRegeneration = {
+  action_id: string;
+  agent_id: string;
+  canonical_set_id: string;
+  run_id: string;
+  job_id: string;
+  state: NonNullable<BrainformKnowledge["generation_state"]>;
+};
+export type AssessmentRuntimeResult = {
+  disposition: "recorded" | "transitioned" | "read" | "redirected";
+  response_key:
+    | "assessment.started"
+    | "assessment.answer_recorded"
+    | "assessment.answer_recorded_restricted_request"
+    | "assessment.paused"
+    | "assessment.resumed"
+    | "assessment.completed"
+    | "assessment.abandoned"
+    | "assessment.abandoned_and_restarted"
+    | "assessment.progress"
+    | "assessment.answers"
+    | "assessment.results_pending"
+    | "assessment.restart_requires_choice"
+    | "assessment.redirect";
+  context: {
+    attempt: {
+      id: string;
+      activity_id: string;
+      conversation_id: string;
+      chat_visibility: "private" | "public";
+      status: "in_progress" | "paused" | "completed" | "abandoned";
+      revision: number;
+    };
+    progress: {
+      attempt_id: string;
+      status: "in_progress" | "paused" | "completed" | "abandoned";
+      question_count: number;
+      presented_count: number;
+      resolved_count: number;
+      answered_count: number;
+      skipped_count: number;
+      current_ordinal: number | null;
+      current_question_version_id: string | null;
+    };
+    current_question: {
+      ordinal: number;
+      question_version_id: string;
+      prompt: string;
+    } | null;
+    canonical_conversation_id: string;
+    redirect_to_original_conversation: boolean;
+  };
+  answers: Array<{
+    question_ordinal: number;
+    question_version_id: string;
+    answer_text: string;
+    created_at: string;
+  }>;
+};
+export type AssessmentLifecycleAction = "pause" | "resume" | "abandon" | "redo";
+export type MemoryEntrySource =
+  | { kind: "conversation"; id: string }
+  | { kind: "agent"; agent_id: string }
+  | { kind: "team"; team_id: string }
+  | { kind: "maya_team"; team_id: string };
+export type MemoryEntryResult = {
+  action_id: string;
+  conversation_id: string;
+  request_id: string;
+  message: string;
+  session: ConversationSession;
+};
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
 export type DebateSummary = components["schemas"]["DebateSummary"];
@@ -174,7 +287,77 @@ export type DemoComposition = {
   components: DemoComponent[];
 };
 export type ChatAgent = components["schemas"]["ChatAgent"];
-export type ChatSession = components["schemas"]["ChatSession"];
+export type ChatSession = Omit<
+  components["schemas"]["ChatSession"],
+  "turns"
+> & {
+  turns: ChatTurn[];
+};
+export type AgentChatSession = ChatSession & {
+  entry_kind?: "agent";
+  chat_visibility?: "private" | "public";
+  origin?: "single_agent";
+  read_only?: boolean;
+  can_send?: boolean;
+};
+export type ConversationSession = AgentChatSession | TeamChatSession;
+export type TeamChatEntry =
+  | { kind: "team"; team_id: string; team_version_id?: string | null }
+  | { kind: "maya_team"; team_id: string };
+export type TeamRouting = {
+  mode: "auto" | "selected" | "all";
+  participant_ids: string[];
+};
+export type TeamChatParticipant = {
+  id: string;
+  name: string;
+  avatar_config: components["schemas"]["AvatarConfig"];
+  position: number;
+  is_leader: boolean;
+  available: boolean;
+};
+export type TeamMemberResult = {
+  id: string;
+  participant_id: string;
+  speaker_name: string;
+  ordinal: number;
+  state: "pending" | "running" | "ready" | "failed" | "acceptance_unknown";
+  assistant_text: string | null;
+  sources: ChatTurn["sources"];
+  safe_error_code: string | null;
+};
+export type TeamChatTurn = Omit<ChatTurn, "assistant_text" | "state"> & {
+  assistant_text: null;
+  state:
+    | "pending"
+    | "ready"
+    | "partial"
+    | "failed"
+    | "acceptance_unknown"
+    | "paused";
+  routing: TeamRouting;
+  member_results: TeamMemberResult[];
+  assessment_result?: AssessmentRuntimeResult | null;
+};
+export type TeamChatSession = {
+  entry_kind: "team" | "maya_team";
+  chat_visibility: "private" | "public";
+  origin: "custom_team" | "published_course_team";
+  read_only: boolean;
+  can_send: boolean;
+  id: string;
+  team: {
+    id: string;
+    version_id: string;
+    course_id: string;
+    name: string;
+    members: TeamChatParticipant[];
+    available: boolean;
+  };
+  revision: number;
+  turns: TeamChatTurn[];
+  created_at: string;
+};
 export type TeamVisibility =
   components["schemas"]["CreateTeamRequest"]["visibility"];
 export type TeamMemberInput = components["schemas"]["TeamMemberInput"];
@@ -207,7 +390,16 @@ export type ChatStreamHooks = {
   /** Fired when the response is ambiguous and no persisted turn is visible yet. */
   onUncertain?: (session: ChatSession | null, error: PlatformApiError) => void;
 };
-export type ChatTurn = components["schemas"]["ChatTurn"];
+export type ChatTurn = Omit<components["schemas"]["ChatTurn"], "state"> & {
+  state:
+    | "pending"
+    | "ready"
+    | "partial"
+    | "failed"
+    | "acceptance_unknown"
+    | "paused";
+  assessment_result?: AssessmentRuntimeResult | null;
+};
 
 export class ChatRequestPendingError extends Error {
   constructor() {
@@ -348,14 +540,16 @@ export class SseBlockError extends Error {
   }
 }
 
-export type SseEvent = { event: string; [key: string]: unknown };
+export type SseEvent = { event: string; id?: string; [key: string]: unknown };
 
 /** Parse one SSE block. Empty blocks are skipped. Invalid JSON throws. */
 export function parseSseBlock(block: string): SseEvent | null {
   let event = "message";
+  let id: string | undefined;
   const data: string[] = [];
   for (const line of block.split("\n")) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("id:")) id = line.slice(3).trim();
     else if (line.startsWith("data:")) data.push(line.slice(5).trim());
   }
   if (!data.length) return null;
@@ -368,7 +562,11 @@ export function parseSseBlock(block: string): SseEvent | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new SseBlockError();
   }
-  return { event, ...(payload as Record<string, unknown>) };
+  return {
+    event,
+    ...(id ? { id } : {}),
+    ...(payload as Record<string, unknown>),
+  };
 }
 
 export async function readSseEvents(
@@ -747,6 +945,32 @@ export class PlatformApi {
     return session;
   }
 
+  async updateCurrentUser(avatar: string | null): Promise<AuthSession> {
+    const session = await unwrap<AuthSession>(
+      await this.client.PATCH("/auth/me", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: { avatar },
+      }),
+    );
+    this.setCsrfToken(session.csrf_token);
+    return session;
+  }
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    await unwrap<void>(
+      await this.client.POST("/auth/password", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: {
+          current_password: currentPassword,
+          new_password: newPassword,
+        },
+      }),
+    );
+  }
+
   async registrationOptions(): Promise<RegistrationOptions> {
     return unwrap(await this.client.GET("/auth/registration-options"));
   }
@@ -807,7 +1031,11 @@ export class PlatformApi {
     return this.getJson(`courses/${courseId}/chat-agents`);
   }
 
-  conversations(): Promise<ChatSession[]> {
+  conversations(): Promise<ConversationSession[]> {
+    return this.getJson("conversations");
+  }
+
+  conversationSessions(): Promise<ConversationSession[]> {
     return this.getJson("conversations");
   }
 
@@ -852,8 +1080,107 @@ export class PlatformApi {
     return this.postJson("conversations", { version_id: versionId });
   }
 
+  createTeamConversation(
+    entry: TeamChatEntry,
+    chatVisibility: "private" | "public",
+  ): Promise<TeamChatSession> {
+    return this.postJson("conversations", {
+      entry,
+      chat_visibility: chatVisibility,
+    });
+  }
+
   conversation(id: string): Promise<ChatSession> {
     return this.getJson(`conversations/${id}`);
+  }
+
+  conversationSession(id: string): Promise<ConversationSession> {
+    return this.getJson(`conversations/${encodeURIComponent(id)}`);
+  }
+
+  memoryEntry(body: {
+    action_id: string;
+    course_id: string;
+    source: MemoryEntrySource;
+  }): Promise<MemoryEntryResult> {
+    return this.postJson("conversations/memory-entry", body);
+  }
+
+  controlConversationTurn(
+    conversationId: string,
+    turnId: string,
+    action: "pause" | "stop" | "resume",
+  ): Promise<ConversationSession> {
+    return this.postJson(
+      `conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}:${action}`,
+      undefined,
+    );
+  }
+
+  assessmentAttemptAction(
+    attemptId: string,
+    body: { client_event_id: string; action: AssessmentLifecycleAction },
+  ): Promise<AssessmentRuntimeResult> {
+    return this.postJson(
+      `learning/attempts/${encodeURIComponent(attemptId)}/actions`,
+      body,
+    );
+  }
+
+  async streamTeamConversation(
+    id: string,
+    body: {
+      request_id: string;
+      expected_revision: number;
+      message: string;
+      routing: TeamRouting;
+    },
+    options: {
+      afterEventId?: number;
+      onEvent?: (event: SseEvent) => void;
+    } = {},
+  ): Promise<TeamChatSession> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}conversations/${encodeURIComponent(id)}/messages:stream`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "text/event-stream",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": this.csrfToken ?? "",
+          ...(options.afterEventId
+            ? { "Last-Event-ID": String(options.afterEventId) }
+            : {}),
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!response.ok) {
+      const raw = await response.text();
+      let payload: unknown;
+      try {
+        payload = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        payload = undefined;
+      }
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    await readSseEvents(response, (event) => options.onEvent?.(event));
+    const session = await this.conversationSession(id);
+    if (session.entry_kind !== "team" && session.entry_kind !== "maya_team") {
+      throw new PlatformApiError(502, "chat_response_invalid", {
+        code: "chat_response_invalid",
+        message: "chat_response_invalid",
+      });
+    }
+    return session as TeamChatSession;
   }
 
   private async recoverChatResponse(
@@ -1441,11 +1768,43 @@ export class PlatformApi {
     );
   }
 
+  async getChatStandingProviderDisclosure(
+    courseId: string,
+    providerOperation: TeamStandingGrantRequest["provider_operation"] = "llm_agent_chat",
+  ): Promise<ProviderDataCallDisclosureResponse> {
+    const query = `course_id=${encodeURIComponent(courseId)}`;
+    const operation =
+      providerOperation === "llm_agent_chat"
+        ? ""
+        : `&provider_operation=${encodeURIComponent(providerOperation)}`;
+    return this.getJson<ProviderDataCallDisclosureResponse>(
+      `provider/data-call/chat-standing/disclosure?${query}${operation}`,
+    );
+  }
+
   async confirmProviderDataCallDisclosure(
     body: ProviderDataCallConfirmationRequest,
   ): Promise<ProviderDataCallDisclosureResponse> {
     return this.postJson<ProviderDataCallDisclosureResponse>(
       "provider/data-call/disclosure/confirm",
+      body,
+    );
+  }
+
+  async previewTeamProviderStandingGrant(
+    body: TeamStandingGrantRequest,
+  ): Promise<TeamStandingGrantPreview> {
+    return this.postJson<TeamStandingGrantPreview>(
+      "provider/data-call/team-standing-grants/preview",
+      body,
+    );
+  }
+
+  async confirmTeamProviderStandingGrant(
+    body: TeamStandingGrantConfirmationRequest,
+  ): Promise<TeamStandingGrantConfirmation> {
+    return this.postJson<TeamStandingGrantConfirmation>(
+      "provider/data-call/team-standing-grants/confirm",
       body,
     );
   }
@@ -1642,6 +2001,46 @@ export class PlatformApi {
       await this.client.GET("/knowledge-sets/{set_id}", {
         params: { path: { set_id: setId } },
       }),
+    );
+  }
+
+  async brainformKnowledge(courseId: string): Promise<BrainformKnowledge[]> {
+    return this.getJson(
+      `courses/${encodeURIComponent(courseId)}/brainform/knowledge`,
+    );
+  }
+
+  async knowledgeMarkdown(setId: string): Promise<KnowledgeMarkdown> {
+    return this.getJson(`knowledge-sets/${encodeURIComponent(setId)}/markdown`);
+  }
+
+  async saveKnowledgeMarkdown(
+    setId: string,
+    body: { expected_version_seq: number; markdown: string },
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeMarkdown> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "PUT",
+        `knowledge-sets/${encodeURIComponent(setId)}/markdown`,
+        body,
+        key,
+      ),
+    );
+  }
+
+  async regenerateKnowledgeMarkdown(
+    setId: string,
+    actionId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeRegeneration> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "POST",
+        `knowledge-sets/${encodeURIComponent(setId)}/regenerate`,
+        { action_id: actionId },
+        key,
+      ),
     );
   }
 
@@ -1946,6 +2345,21 @@ export class PlatformApi {
     );
   }
 
+  async createWorkspaceKnowledge(
+    courseId: string,
+    file: File,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocumentMutation> {
+    return commitMutation(options.idempotency, (key) =>
+      this.multipart<KnowledgeDocumentMutation>(
+        `/courses/${encodeURIComponent(courseId)}/workspace-documents`,
+        file,
+        {},
+        key,
+      ),
+    );
+  }
+
   async replaceKnowledgeDocument(
     documentId: string,
     file: File,
@@ -1964,6 +2378,21 @@ export class PlatformApi {
         key,
       );
     });
+  }
+
+  async renameKnowledgeDocument(
+    documentId: string,
+    body: { expected_filename: string; filename: string },
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocument> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "POST",
+        `/knowledge-documents/${encodeURIComponent(documentId)}:rename`,
+        body,
+        key,
+      ),
+    );
   }
 
   async replaceKnowledge(
@@ -2623,7 +3052,7 @@ export class PlatformApi {
     revisionId: string,
     body: ContinueRealReportRequest,
   ): Promise<ContinueRealReportResponse> {
-    return unwrap(
+    const response = await unwrap(
       await this.client.POST(
         "/debates/{debate_id}/report/revisions/{revision_id}/continue",
         {
@@ -2635,6 +3064,19 @@ export class PlatformApi {
         },
       ),
     );
+    switch (response.status) {
+      case "generating":
+        return {
+          ...response,
+          english_markdown: null,
+          word_count: null,
+          safe_error_code: null,
+        };
+      case "ready":
+        return { ...response, safe_error_code: null };
+      case "failed":
+        return { ...response, english_markdown: null, word_count: null };
+    }
   }
 
   async downloadCurrentReport(

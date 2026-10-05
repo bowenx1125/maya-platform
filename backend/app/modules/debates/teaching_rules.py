@@ -16,7 +16,7 @@ def default_teaching_prompts() -> dict[str, str]:
     }
 
 
-def compile_system_prompt(markdown: str, round_number: int, language: str) -> str:
+def compile_system_prompt(markdown: str, round_number: int) -> str:
     """Send authored Markdown intact; no heading parser or hidden teaching defaults."""
     routing = (
         "All paragraph reply_to values must be JSON null in this round."
@@ -42,7 +42,6 @@ def compile_system_prompt(markdown: str, round_number: int, language: str) -> st
         + markdown
         + "\n\n# Execution contract\n\n"
         + f"Execute round {round_number} of 4. "
-        + f"Output speech in {'Chinese' if language == 'zh' else 'English'}. "
         "Apply the teaching rules relevant to this round. "
         "Do not execute other rounds in this response. "
         "The execution contract takes priority over conflicting teaching text. "
@@ -74,7 +73,7 @@ def freeze_teaching_rules(prompts: Mapping[str, str] | None = None) -> dict[str,
     return {
         "teaching_prompts": authored,
         "system_prompts": {
-            lang: [compile_system_prompt(authored[lang], turn, lang) for turn in range(1, 5)]
+            lang: [compile_system_prompt(authored[lang], turn) for turn in range(1, 5)]
             for lang in ("zh", "en")
         },
     }
@@ -86,4 +85,4 @@ def frozen_system_prompt(snapshot_json: str, round_number: int, language: str) -
     if stored is not None:
         return str(stored[language][round_number - 1])
     # Only pre-editor records lack a frozen prompt. New creation always stores one.
-    return compile_system_prompt(default_teaching_prompts()[language], round_number, language)
+    return compile_system_prompt(default_teaching_prompts()[language], round_number)

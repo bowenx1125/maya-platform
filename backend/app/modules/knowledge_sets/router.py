@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,7 @@ from app.modules.knowledge_sets.schemas import (
     AgentKnowledgeSets,
     AssetVersionFullDTO,
     AssetVersionStudentDTO,
+    BrainformKnowledgeSummary,
     CreateKnowledgeAssetRequest,
     CreateKnowledgeSetRequest,
     DeleteKnowledgeSetRequest,
@@ -38,13 +39,17 @@ from app.modules.knowledge_sets.schemas import (
     KnowledgeAssetVersionHistoryStudent,
     KnowledgeGenerationStatus,
     KnowledgeGraph,
+    KnowledgeMarkdownDocument,
     KnowledgeSetDetail,
     KnowledgeSetRevocation,
     KnowledgeSetSourceDTO,
     KnowledgeSetSummary,
+    RegenerateKnowledgeRequest,
+    RegenerateKnowledgeResponse,
     RemoveKnowledgeSetSourceRequest,
     ReplaceAgentKnowledgeSetsRequest,
     ReplaceKnowledgeSetSourcesRequest,
+    SaveKnowledgeMarkdownRequest,
     UpdateKnowledgeAssetRequest,
     UpdateKnowledgeSetRequest,
 )
@@ -184,6 +189,112 @@ def list_knowledge_sets(
     return service.list_knowledge_sets(db, context, str(course_id))
 
 
+@router.get(
+    "/courses/{course_id}/brainform/knowledge",
+    response_model=list[BrainformKnowledgeSummary],
+    operation_id="listBrainformKnowledge",
+    responses={404: {"model": Error, "description": "Course not found."}},
+)
+def list_brainform_knowledge(
+    course_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[BrainformKnowledgeSummary]:
+    return service.list_brainform_knowledge(db, context, str(course_id))
+
+
+@router.get(
+    "/knowledge-sets/{set_id}/markdown",
+    response_model=KnowledgeMarkdownDocument,
+    operation_id="getKnowledgeMarkdown",
+    responses={404: {"model": Error, "description": "Knowledge document not found."}},
+)
+def get_knowledge_markdown(
+    set_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> KnowledgeMarkdownDocument:
+    return service.get_brainform_markdown(db, context, str(set_id))
+
+
+@router.put(
+    "/knowledge-sets/{set_id}/markdown",
+    response_model=KnowledgeMarkdownDocument,
+    operation_id="saveKnowledgeMarkdown",
+    responses={
+        200: {"model": KnowledgeMarkdownDocument, "description": "Markdown version saved."},
+        404: {"model": Error, "description": "Knowledge document not found."},
+        409: {"model": Error, "description": "Markdown version is stale."},
+    },
+)
+def save_knowledge_markdown(
+    set_id: UUID,
+    payload: SaveKnowledgeMarkdownRequest,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> KnowledgeMarkdownDocument:
+    return _idempotent_mutation(
+        db,
+        context,
+        operation_id="saveKnowledgeMarkdown",
+        idempotency_key=idempotency_key,
+        scope=[str(set_id)],
+        payload=payload,
+        status_code=200,
+        response_model=KnowledgeMarkdownDocument,
+        operation=lambda: service.save_brainform_markdown(db, context, str(set_id), payload),
+        replay=lambda _body: service.get_brainform_markdown(db, context, str(set_id)),
+    )
+
+
+@router.post(
+    "/knowledge-sets/{set_id}/regenerate",
+    response_model=RegenerateKnowledgeResponse,
+    status_code=202,
+    operation_id="regenerateKnowledgeMarkdown",
+    responses={
+        202: {"model": RegenerateKnowledgeResponse, "description": "Generation queued or reused."},
+        404: {"model": Error, "description": "Knowledge document not found."},
+        409: {"model": Error, "description": "Generation inputs are stale or unavailable."},
+    },
+)
+def regenerate_knowledge_markdown(
+    set_id: UUID,
+    payload: RegenerateKnowledgeRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> RegenerateKnowledgeResponse:
+    result = _idempotent_mutation(
+        db,
+        context,
+        operation_id="regenerateKnowledgeMarkdown",
+        idempotency_key=idempotency_key,
+        scope=[str(set_id)],
+        payload=payload,
+        status_code=202,
+        response_model=RegenerateKnowledgeResponse,
+        operation=lambda: service.enqueue_brainform_regeneration(
+            db, context, str(set_id), str(payload.action_id)
+        ),
+        replay=lambda body: service.enqueue_brainform_regeneration(
+            db,
+            context,
+            str(set_id),
+            str(RegenerateKnowledgeResponse.model_validate(body).action_id),
+        ),
+    )
+    task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+    if task_manager is not None and not settings.is_test:
+        task_manager.wake(str(result.run_id))
+    return result
+
+
 @router.post(
     "/courses/{course_id}/knowledge-sets",
     response_model=KnowledgeSetDetail,
@@ -321,12 +432,15 @@ def delete_knowledge_set(
 def replace_knowledge_set_sources(
     set_id: UUID,
     payload: ReplaceKnowledgeSetSourcesRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> KnowledgeSetDetail:
-    return _idempotent_mutation(
+    enqueued_run_ids: list[str] = []
+    result = _idempotent_mutation(
         db,
         context,
         operation_id="replaceKnowledgeSetSources",
@@ -341,9 +455,15 @@ def replace_knowledge_set_sources(
             str(set_id),
             expected_content_revision=payload.expected_content_revision,
             source_document_ids=payload.source_document_ids,
+            enqueued_generation_run_ids=enqueued_run_ids,
         ),
         replay=lambda body: _replay_set_detail(db, context, body),
     )
+    task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+    if task_manager is not None and not settings.is_test:
+        for run_id in enqueued_run_ids:
+            task_manager.wake(run_id)
+    return result
 
 
 @router.delete(
@@ -359,12 +479,15 @@ def remove_knowledge_set_source(
     set_id: UUID,
     binding_id: UUID,
     payload: RemoveKnowledgeSetSourceRequest,
+    request: Request,
+    settings: Settings = Depends(get_settings),
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> KnowledgeSetDetail:
-    return _idempotent_mutation(
+    enqueued_run_ids: list[str] = []
+    result = _idempotent_mutation(
         db,
         context,
         operation_id="removeKnowledgeSetSource",
@@ -379,9 +502,15 @@ def remove_knowledge_set_source(
             str(set_id),
             str(binding_id),
             expected_content_revision=payload.expected_content_revision,
+            enqueued_generation_run_ids=enqueued_run_ids,
         ),
         replay=lambda body: _replay_set_detail(db, context, body),
     )
+    task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+    if task_manager is not None and not settings.is_test:
+        for run_id in enqueued_run_ids:
+            task_manager.wake(run_id)
+    return result
 
 
 @router.get(

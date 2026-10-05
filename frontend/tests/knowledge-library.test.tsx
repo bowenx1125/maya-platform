@@ -41,6 +41,7 @@ function documentFixture(
     can_manage_visibility: false,
     authorization_epoch: 0,
     source_filename: "lesson.md",
+    source_owner_role: "student",
     char_count: 24,
     content_hash: "a".repeat(64),
     index_revision: 1,
@@ -54,12 +55,16 @@ function documentFixture(
 function renderLibrary(
   api: Record<string, unknown>,
   locale: "en" | "zh" = "en",
+  teacherReadOnly = false,
 ) {
   useSessionMock.mockReturnValue({ api });
   return render(
     <LocaleProvider initialLocale={locale}>
       <AppShell role="student">
-        <KnowledgeLibrary groupId="group-id" />
+        <KnowledgeLibrary
+          groupId="group-id"
+          teacherReadOnly={teacherReadOnly}
+        />
       </AppShell>
     </LocaleProvider>,
   );
@@ -294,5 +299,29 @@ describe("KnowledgeLibrary integration", () => {
     expect(screen.queryByRole("textbox", { name: "Markdown 内容" })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
+  });
+
+  it("does not infer write access from a teacher-owned source in a read-only library", async () => {
+    const reindex = vi.fn().mockResolvedValue({ id: "job-id" });
+    const teacherDocument = documentFixture({
+      source_owner_role: "teacher",
+      index_status: "failed",
+    });
+    renderLibrary(
+      {
+        knowledge: vi.fn().mockResolvedValue([teacherDocument]),
+        reindex,
+        hideKnowledge: vi.fn(),
+        downloadKnowledge: vi.fn(),
+      },
+      "en",
+      true,
+    );
+
+    await screen.findByText("lesson.md");
+    expect(screen.queryByRole("button", { name: "Reindex" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(reindex).not.toHaveBeenCalled();
   });
 });

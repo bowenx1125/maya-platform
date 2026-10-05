@@ -6,13 +6,16 @@ import pytest
 from app.core.models import (
     Agent,
     AgentVersion,
+    FileReference,
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeSnapshot,
     SnapshotDocument,
+    StoredFile,
 )
 from app.modules.agents.markdown import AgentMarkdown, markdown_hash
 from app.modules.debates.generation.segments import SegmentInputSnapshot
+from app.modules.knowledge_sets.models import KnowledgeDocumentVersion
 from app.modules.workspace.chat_provider import chat_messages
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -256,11 +259,14 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
         original_document_id = original_document.id
         expected_content_hash = original_document.content_hash
         expected_index_revision = original_document.index_revision
+        original_source_file_id = original_document.stored_file_id
+        original_source_file_sha = original_document.stored_file.sha256
+        frozen_snapshot_file = db.get(StoredFile, snapshot_documents[0].stored_file_id)
+        assert frozen_snapshot_file is not None
+        frozen_snapshot_sha = frozen_snapshot_file.sha256
         snapshot_fingerprint = (
             snapshot.content_hash,
             snapshot.total_char_count,
-            original_document.content_hash,
-            original_document.stored_file.sha256,
             tuple(
                 (row.id, row.document_id, row.stored_file_id, row.char_count, row.order_index)
                 for row in snapshot_documents
@@ -296,7 +302,7 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
         files={"file": ("replacement.md", replacement_source.encode(), "text/markdown")},
     )
     assert replaced.status_code == 201, replaced.text
-    assert replaced.json()["id"] != original_document_id
+    assert replaced.json()["id"] == original_document_id
 
     with database.session() as db:
         snapshot = db.get(KnowledgeSnapshot, snapshot_id)
@@ -307,13 +313,11 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
             .order_by(SnapshotDocument.order_index)
         ).all()
         old_document = db.get(KnowledgeDocument, original_document_id)
-        assert old_document is not None and old_document.workspace_state == "hidden"
+        assert old_document is not None and old_document.workspace_state == "active"
         assert old_document.stored_file is not None
         actual_fingerprint = (
             snapshot.content_hash,
             snapshot.total_char_count,
-            old_document.content_hash,
-            old_document.stored_file.sha256,
             tuple(
                 (row.id, row.document_id, row.stored_file_id, row.char_count, row.order_index)
                 for row in snapshot_documents
@@ -337,3 +341,35 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
             ),
         )
         assert actual_fingerprint == snapshot_fingerprint
+        assert old_document.content_hash != expected_content_hash
+        assert old_document.index_revision == expected_index_revision + 1
+        assert old_document.content_version_seq == 2
+        assert old_document.stored_file_id != original_source_file_id
+        historical = db.scalars(
+            select(KnowledgeDocumentVersion)
+            .where(KnowledgeDocumentVersion.document_id == original_document_id)
+            .order_by(KnowledgeDocumentVersion.version_seq)
+        ).all()
+        assert [row.version_seq for row in historical] == [1, 2]
+        assert historical[0].stored_file_id == original_source_file_id
+        assert historical[0].content_hash == expected_content_hash
+        assert historical[0].file_sha256 == original_source_file_sha
+        assert historical[1].stored_file_id == old_document.stored_file_id
+        history_reference = db.scalar(
+            select(FileReference).where(
+                FileReference.owner_type == "knowledge_document_version",
+                FileReference.owner_id == historical[0].id,
+                FileReference.purpose == "history",
+            )
+        )
+        assert history_reference is not None
+        assert history_reference.stored_file_id == original_source_file_id
+        frozen_snapshot_file_after = db.get(StoredFile, snapshot_documents[0].stored_file_id)
+        assert frozen_snapshot_file_after is not None
+        assert frozen_snapshot_file_after.sha256 == frozen_snapshot_sha
+
+    frozen_download = client.get(
+        f"/api/v1/knowledge-snapshots/{snapshot_id}/documents/{snapshot_documents[0].id}/download"
+    )
+    assert frozen_download.status_code == 200, frozen_download.text
+    assert first_source in frozen_download.text

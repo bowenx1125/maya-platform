@@ -90,7 +90,9 @@ try {
     "backend/config/credentials.json",
   ])
     if (!output.includes(path))
-      throw new Error(`force-tracked credential probe did not name ${path}`);
+      throw new Error(
+        `force-tracked credential probe did not name ${path}:\n${output}`,
+      );
   if (beforeIndex !== afterIndex)
     throw new Error(
       "force-tracked credential probe changed its temporary Git index",

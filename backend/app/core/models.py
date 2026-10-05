@@ -57,6 +57,7 @@ class User(Base):
         return value
 
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -416,10 +417,14 @@ class KnowledgeDocument(Base):
         Integer, nullable=False, default=0, server_default="0"
     )
     source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_owner_role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="student", server_default="student"
+    )
     stored_file_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False
     )
     char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_version_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     index_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     index_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     workspace_state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
@@ -440,6 +445,10 @@ class KnowledgeDocument(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "source_owner_role IN ('student', 'teacher')",
+            name="ck_knowledge_documents_source_owner_role",
+        ),
         CheckConstraint("char_count >= 1", name="ck_knowledge_documents_char_count"),
         CheckConstraint(
             "((ownership_scope = 'group' AND group_id IS NOT NULL) OR "
@@ -459,6 +468,9 @@ class KnowledgeDocument(Base):
             name="ck_knowledge_documents_authorization_epoch",
         ),
         CheckConstraint("index_revision >= 0", name="ck_knowledge_documents_index_revision"),
+        CheckConstraint(
+            "content_version_seq >= 1", name="ck_knowledge_documents_content_version_seq"
+        ),
         CheckConstraint(
             "index_status IN ('pending', 'indexing', 'ready', 'failed')",
             name="ck_knowledge_documents_index_status",

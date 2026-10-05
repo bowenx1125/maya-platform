@@ -24,6 +24,7 @@ from app.core.models import (
     VoiceProviderOperation,
 )
 from app.modules.knowledge.files import write_atomic
+from app.modules.voices import preview as voice_preview
 from app.modules.voices import service as voice_service
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
@@ -45,6 +46,7 @@ from app.providers.audio import (
     run_ffmpeg_normalize,
 )
 from app.providers.tts import (
+    MockTTSProvider,
     TTSAudioInvalidError,
     TTSHTTPRejectedError,
     TTSProviderError,
@@ -212,6 +214,7 @@ def test_voice_envelope_rejects_every_tampered_component_and_context_swap() -> N
 
 def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, database, settings = voice_client
     _user, csrf = login(client, "bowen")
@@ -238,11 +241,26 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
         assert op is not None and op.state == "succeeded"
     assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
 
+    provider = MockTTSProvider()
+    preview_languages: list[str] = []
+    synthesize = provider.synthesize
+
+    def capture_preview(text: str, voice_id: str, *, language: str = "en") -> TTSResult:
+        preview_languages.append(language)
+        return synthesize(text, voice_id, language=language)
+
+    monkeypatch.setattr(provider, "synthesize", capture_preview)
+    monkeypatch.setattr(voice_preview, "tts_provider", lambda _: provider)
     preview = client.post(
         f"/api/v1/voice-profiles/{profile['id']}/preview",
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
     )
     assert preview.status_code == 200, preview.text
+    assert provider.last_text == (
+        "Should we find each other in the next life, let‘s live on a planet of our own.\n"
+        "我会将花种满山谷，为你而歌，老死方休。"
+    )
+    assert preview_languages == ["auto"]
     media = client.get(preview.json()["playback_url"])
     assert media.status_code == 200
     assert media.headers["cache-control"].startswith("no-store")
@@ -1427,8 +1445,15 @@ def test_dashscope_tts_still_rejects_a_truncated_wav(monkeypatch: pytest.MonkeyP
         )
 
 
-def test_dashscope_tts_sends_chinese_and_refuses_other_languages(
+@pytest.mark.parametrize(
+    "language,language_type,text",
+    [("zh", "Chinese", "你好。"), ("auto", "Auto", "Hello. 你好。")],
+)
+def test_dashscope_tts_sends_supported_languages_and_refuses_other_languages(
     monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    language_type: str,
+    text: str,
 ) -> None:
     capture = _CaptureDashScopeClient(
         [
@@ -1452,16 +1477,16 @@ def test_dashscope_tts_sends_chinese_and_refuses_other_languages(
 
     config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
     dashscope.DashScopeTTSProvider(config, downloader=_WavDownloader()).synthesize(
-        "你好。",
+        text,
         "opaque-voice",
-        language="zh",
+        language=language,
     )
     body = capture.calls[0][1]["json"]
     assert isinstance(body, dict)
     assert body["input"] == {
-        "text": "你好。",
+        "text": text,
         "voice": "opaque-voice",
-        "language_type": "Chinese",
+        "language_type": language_type,
     }
 
     def unexpected_client() -> _CaptureDashScopeClient:

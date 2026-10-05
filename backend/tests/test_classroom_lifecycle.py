@@ -258,7 +258,7 @@ def test_remake_saved_turn_restores_ready_without_new_generation(app_factory):
                 state.updated_at = datetime.now(UTC) - timedelta(seconds=30)
             _, csrf = login(client)
             rows = client.get(f"/api/v1/courses/{COURSE_ID}/debates").json()
-            assert next(row for row in rows if row["id"] == debate_id)["stall"] is not None
+            assert next(row for row in rows if row["id"] == debate_id)["stall"] is None
             response = client.post(
                 f"/api/v1/debates/{debate_id}/remake",
                 json=_body(client, debate_id),

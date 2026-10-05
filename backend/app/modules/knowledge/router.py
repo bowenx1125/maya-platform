@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy import case, delete, or_, select, text, update
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
 from app.core.errors import (
@@ -58,12 +59,17 @@ from app.modules.knowledge.files import (
     stage_atomic,
     verify_staged,
 )
+from app.modules.knowledge.ingest import (
+    INGEST_VERSION,
+    KnowledgeImportError,
+    convert_knowledge_upload,
+)
 from app.modules.knowledge.markdown import (
     MarkdownInputError,
     build_chunks,
     normalize_markdown,
 )
-from app.modules.knowledge.multipart import integer_field, parse_upload
+from app.modules.knowledge.multipart import UploadTooLargeError, integer_field, parse_upload
 from app.modules.knowledge.replacement import replace_document_copy_on_write
 from app.modules.knowledge.schemas import JobStatus, UpdateKnowledgeDocumentVisibility
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
@@ -84,6 +90,7 @@ from app.modules.knowledge.services import (
     parse_json_payload_hash,
     rag_preview,
     recover_operation_now,
+    renew_idempotency_lease,
     replace_document_chunks,
     saga_checkpoint,
     scoped_student_group_role,
@@ -95,8 +102,10 @@ from app.modules.knowledge.services import (
     visible_student_document,
     visible_student_version,
 )
+from app.modules.knowledge_sets.models import KnowledgeDocumentVersion, KnowledgeSetSource
 
 router = APIRouter(tags=["Knowledge"])
+KNOWLEDGE_UPLOAD_LEASE_SECONDS = 90
 
 _UPLOAD_BODY = {
     "required": True,
@@ -115,6 +124,29 @@ _UPLOAD_BODY = {
         }
     },
 }
+
+
+def _raise_knowledge_import_failure(reason: str) -> None:
+    if reason in {"upload_size", "pdf_limit", "docx_limit"}:
+        raise validation_failure(
+            "The document exceeds the local PDF/Word conversion capacity. "
+            "Convert it to Markdown externally and upload that Markdown.",
+            code="knowledge_import_too_large",
+        )
+    if reason == "unsupported_format":
+        raise validation_failure(
+            "Upload Markdown, PDF or Word (.docx).", code="knowledge_import_unsupported"
+        )
+    if reason in {"pdf_no_text", "docx_no_text"}:
+        raise validation_failure(
+            "No readable text could be extracted from this document.",
+            code="knowledge_import_no_text",
+        )
+    raise validation_failure(
+        "The document could not be converted safely. "
+        "Keep the original and upload converted Markdown.",
+        code="knowledge_import_processing_failed",
+    )
 
 
 def _now() -> datetime:
@@ -241,14 +273,20 @@ async def upload_knowledge_document(
             raise not_found()
         resource_course_id = group_course_id
     try:
-        fields, filename, content = await parse_upload(request)
+        fields, source_filename, source_content = await parse_upload(request)
+    except UploadTooLargeError:
+        _raise_knowledge_import_failure("upload_size")
+    except (ValueError, UnicodeDecodeError):
+        _raise_knowledge_import_failure("invalid")
+    source_sha256 = hashlib.sha256(source_content).hexdigest()
+    source_owner_role = course_member_role(db, context.user.id, resource_course_id)
+    try:
         target_id_raw = fields.get("target_agent_version_id")
         target_id = str(UUID(target_id_raw)) if target_id_raw else None
         expected_revision = integer_field(fields, "expected_revision", required=False)
         visibility = fields.get("visibility", "private")
         if visibility not in {"private", "public"}:
             raise ValueError("visibility must be private or public")
-        document = normalize_markdown(filename, content)
     except (ValueError, MarkdownInputError, UnicodeDecodeError):
         raise validation_failure(
             "The Markdown upload is not valid.", code="file_operation_failed"
@@ -293,9 +331,9 @@ async def upload_knowledge_document(
         context,
         [scope_key, "personal" if personal_workspace else "group", target_id or "library"],
         {
-            "filename": document.filename,
-            "content_hash": document.content_hash,
-            "source_sha256": document.source_sha256,
+            "upload_filename": source_filename,
+            "upload_sha256": source_sha256,
+            "ingest_version": INGEST_VERSION,
             "target_agent_version_id": target_id,
             "expected_revision": expected_revision,
             "visibility": visibility,
@@ -340,6 +378,16 @@ async def upload_knowledge_document(
         else:
             current_docs = []
 
+        try:
+            renew_idempotency_lease(db, record, lease_seconds=KNOWLEDGE_UPLOAD_LEASE_SECONDS)
+            filename, content = await run_in_threadpool(
+                convert_knowledge_upload, source_filename, source_content
+            )
+            document = normalize_markdown(filename, content)
+        except KnowledgeImportError as exc:
+            _raise_knowledge_import_failure(exc.reason)
+        except (MarkdownInputError, UnicodeDecodeError, ValueError):
+            _raise_knowledge_import_failure("invalid")
         timestamp = _now()
         document_id = str(uuid4())
         operation_id = str(uuid4())
@@ -499,6 +547,7 @@ async def upload_knowledge_document(
             visibility=visibility,
             authorization_epoch=0,
             source_filename=document.filename,
+            source_owner_role=source_owner_role,
             stored_file_id=stored_file.id,
             char_count=document.char_count,
             index_status="ready" if chunks is not None else "failed",
@@ -660,7 +709,15 @@ async def replace_knowledge_document(
     # concurrent request by its owner must still reach the 409 CAS branch.
     scoped = visible_mutable_document(db, context, str(document_id), require_active=False)
     try:
-        fields, filename, content = await parse_upload(request)
+        fields, source_filename, source_content = await parse_upload(request)
+    except UploadTooLargeError:
+        _raise_knowledge_import_failure("upload_size")
+    except (ValueError, UnicodeDecodeError):
+        _raise_knowledge_import_failure("invalid")
+    try:
+        filename, content = await run_in_threadpool(
+            convert_knowledge_upload, source_filename, source_content
+        )
         replacement = normalize_markdown(filename, content)
         expected_content_hash = fields.get("expected_content_hash")
         if (
@@ -670,15 +727,12 @@ async def replace_knowledge_document(
         ):
             raise ValueError("expected_content_hash is invalid")
         expected_index_revision = integer_field(fields, "expected_index_revision", required=True)
+    except KnowledgeImportError as exc:
+        _raise_knowledge_import_failure(exc.reason)
     except (ValueError, MarkdownInputError, UnicodeDecodeError):
         raise validation_failure(
             "The Markdown replacement is not valid.", code="file_operation_failed"
         ) from None
-    if scoped.document.content_hash != expected_content_hash:
-        raise stale_revision(scoped.document.index_revision)
-    if expected_index_revision is None or scoped.document.index_revision != expected_index_revision:
-        raise stale_revision(scoped.document.index_revision)
-
     body_hash = parse_json_payload_hash(
         "replaceKnowledgeDocument",
         context,
@@ -704,13 +758,21 @@ async def replace_knowledge_document(
         return KnowledgeDocumentDTO.model_validate(json.loads(bytes(replay.body)))
 
     try:
-        if scoped.document.workspace_state != "active":
-            abandon_claim(db, record)
+        # A successful stable-ID write advances the document head, so an
+        # identical retry must resolve from its accepted idempotency record
+        # before comparing the old expected hash/revision with that new head.
+        if (
+            scoped.document.content_hash != expected_content_hash
+            or expected_index_revision is None
+            or scoped.document.index_revision != expected_index_revision
+            or scoped.document.workspace_state != "active"
+        ):
             raise stale_revision(scoped.document.index_revision)
         # ``replace_document_copy_on_write`` re-captures this source and all
         # draft references after the claim, stages/indexes/promotes bytes via
         # its typed journal, and owns the final BEGIN IMMEDIATE transaction.
         db.rollback()
+        enqueued_run_ids: list[str] = []
         new_document, _affected_versions, _operation_id = replace_document_copy_on_write(
             db,
             settings.resolved_data_root,
@@ -722,6 +784,7 @@ async def replace_knowledge_document(
             idempotency_record_id=record.id,
             claim_token=record.claim_token,
             actor_user_id=context.user.id,
+            enqueued_generation_run_ids=enqueued_run_ids,
             checkpoint=saga_checkpoint,
         )
         result = _document_dto(
@@ -732,6 +795,11 @@ async def replace_knowledge_document(
         db.flush()
         db.commit()
         saga_checkpoint("replace.after_final_commit")
+        if not settings.is_test:
+            task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+            if task_manager is not None:
+                for run_id in enqueued_run_ids:
+                    task_manager.wake(run_id)
         return result
     except PlatformError:
         # The service has already recovered its promoted tree for business
@@ -1050,6 +1118,18 @@ def hide_knowledge_document(
         )
     snapshot_bound = (
         db.scalar(
+            select(KnowledgeDocumentVersion.id)
+            .where(KnowledgeDocumentVersion.document_id == scoped.document.id)
+            .limit(1)
+        )
+        is not None
+        or db.scalar(
+            select(KnowledgeSetSource.id)
+            .where(KnowledgeSetSource.document_id == scoped.document.id)
+            .limit(1)
+        )
+        is not None
+        or db.scalar(
             select(SnapshotDocument.id)
             .where(SnapshotDocument.document_id == scoped.document.id)
             .limit(1)

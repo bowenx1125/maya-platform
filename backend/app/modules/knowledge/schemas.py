@@ -17,6 +17,7 @@ class KnowledgeDocument(BaseModel):
     visibility: Literal["private", "public"]
     can_manage_visibility: bool = False
     source_filename: str
+    source_owner_role: Literal["student", "teacher"]
     char_count: int = Field(ge=1)
     authorization_epoch: int = Field(ge=0)
     content_hash: str = Field(

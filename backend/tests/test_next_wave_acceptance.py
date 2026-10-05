@@ -366,6 +366,20 @@ def test_corpus_drift_invalidates_fixture(tmp_path: Path) -> None:
     with pytest.raises(FixtureValidationError) as error:
         load_fixture_bundle(copied)
     assert "manifest_hash_mismatch" not in error.value.codes
+    assert "fixture_file_hash_mismatch" in error.value.codes
+
+
+def test_fixture_hashes_are_stable_across_checkout_line_endings(tmp_path: Path) -> None:
+    copied = tmp_path / "next_wave_rag"
+    shutil.copytree(FIXTURE_ROOT, copied)
+    for path in copied.rglob("*"):
+        if path.is_file() and path.suffix in {".json", ".md"}:
+            content = path.read_bytes().replace(b"\r\n", b"\n")
+            path.write_bytes(content.replace(b"\n", b"\r\n"))
+
+    bundle = load_fixture_bundle(copied)
+    assert len(bundle.sessions) == 37
+    assert len(bundle.rag_cases) == 72
 
 
 def test_real_execution_boundary_is_explicit_and_network_free() -> None:

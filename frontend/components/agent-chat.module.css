@@ -132,6 +132,130 @@
   overflow: hidden;
   background: #fdfaf3;
 }
+.teamChatHeading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 0;
+}
+.teamChatHeading strong {
+  overflow-wrap: anywhere;
+}
+.teamChatHeading h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+}
+.teamChatHeading span,
+.teamComposerTools > p,
+.teamComposerTools .teamStatus p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.teamResults {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+}
+.teamResult {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.teamResult h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.teamWarning {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.memoryStatus {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 13px;
+}
+.teamComposerTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 0;
+}
+.teamComposerTools > p {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.teamStatus {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+.teamStatus p {
+  margin: 0;
+}
+.teamRecipients {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.recipientChip {
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.recipientMenu {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  bottom: calc(100% + 8px);
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 40px));
+  max-height: 50dvh;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.recipientMenu p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.recipientMenu .entryChoice {
+  min-height: 40px;
+}
 .messages {
   overflow-y: auto;
   min-height: 0;
@@ -202,6 +326,12 @@
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.8) inset,
     0 10px 28px rgba(52, 45, 30, 0.06);
+}
+.readOnlyHelp {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 .composer:focus-within {
   outline: none;
@@ -527,6 +657,12 @@
   }
   .composer textarea {
     font-size: 16px;
+  }
+  .teamComposerTools {
+    padding-inline: 12px;
+  }
+  .teamResults {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (prefers-reduced-motion: reduce) {

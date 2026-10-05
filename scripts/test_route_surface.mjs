@@ -73,7 +73,7 @@ try {
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
   // Teams add immutable definitions, versions, and the scoped Maya directory.
-  if (platformOperationCount !== 134 || placeholderCount !== 0) {
+  if (platformOperationCount !== 152 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
@@ -133,6 +133,21 @@ try {
       "missing CSRF parameter",
       (doc) => {
         delete doc.paths["/api/v1/auth/logout"].post.parameters;
+      },
+    ],
+    [
+      "conversation deletion security drift",
+      (doc) => {
+        doc.paths["/api/v1/conversations/{conversation_id}"].delete.security =
+          [];
+      },
+    ],
+    [
+      "streaming request body required drift",
+      (doc) => {
+        doc.paths[
+          "/api/v1/conversations/{conversation_id}/messages:stream"
+        ].post.requestBody.required = false;
       },
     ],
     [
@@ -209,8 +224,51 @@ try {
           ".*";
       },
     ],
+    [
+      "knowledge recovery hash wrong shape",
+      (doc) => {
+        doc.components.schemas.KnowledgeGenerationStatus.properties.provider_manifest_hash.pattern =
+          ".*";
+      },
+      "forbidden browser-visible response field provider_manifest_hash",
+    ],
+    [
+      "knowledge recovery hash wrong operation",
+      (doc) => {
+        doc.components.schemas.AuthSession.properties.provider_manifest_hash = {
+          type: ["string", "null"],
+          pattern: "^[0-9a-f]{64}$",
+        };
+      },
+      "forbidden browser-visible response field provider_manifest_hash",
+    ],
+    [
+      "knowledge recovery hash nested scope",
+      (doc) => {
+        doc.components.schemas.KnowledgeGenerationStatus.properties.detail = {
+          type: "object",
+          properties: {
+            provider_manifest_hash: {
+              type: ["string", "null"],
+              pattern: "^[0-9a-f]{64}$",
+            },
+          },
+        };
+      },
+      "forbidden browser-visible response field provider_manifest_hash",
+    ],
+    [
+      "knowledge recovery hash does not allow provider operation",
+      (doc) => {
+        doc.components.schemas.KnowledgeGenerationStatus.properties.provider_operation =
+          {
+            type: "string",
+          };
+      },
+      "forbidden browser-visible response field provider_operation",
+    ],
   ];
-  for (const [name, mutate] of cases) {
+  for (const [name, mutate, expectedFailure] of cases) {
     const candidate = structuredClone(base);
     mutate(candidate);
     const candidatePath = resolve(
@@ -229,6 +287,13 @@ try {
     ]);
     if (result.status === 0)
       throw new Error(`negative route fixture unexpectedly passed: ${name}`);
+    if (
+      expectedFailure &&
+      !(result.stderr + result.stdout).includes(expectedFailure)
+    )
+      throw new Error(
+        `negative route fixture missed its privacy check: ${name}`,
+      );
   }
   console.log(
     `route semantic comparator: positive fixture and ${cases.length} negative cases passed`,

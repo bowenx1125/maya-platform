@@ -10,7 +10,8 @@ export function TeacherProviderDataCallPage({
 }: {
   manifestHash: string;
 }) {
-  const { api } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const scopeKey = `${user?.id ?? "anonymous"}:${identityGeneration}:${manifestHash}`;
   const controller = useMemo(
     () => ({
       load: () => api.getProviderDataCallDisclosure(manifestHash),
@@ -22,5 +23,11 @@ export function TeacherProviderDataCallPage({
     }),
     [api, manifestHash],
   );
-  return <ProviderDataCallDisclosure controller={controller} />;
+  return (
+    <ProviderDataCallDisclosure
+      key={scopeKey}
+      controller={controller}
+      scopeKey={scopeKey}
+    />
+  );
 }

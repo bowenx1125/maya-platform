@@ -5,15 +5,15 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = resolve(root, "contracts/openapi-v0.1.yaml");
+const source = "contracts/openapi-v0.1.yaml";
 const generated = resolve(root, "frontend/lib/api/generated/schema.d.ts");
 const client = resolve(root, "frontend/lib/api/generated/client.ts");
-const cli = resolve(root, "node_modules/.bin/openapi-typescript");
+const cli = resolve(root, "node_modules/openapi-typescript/bin/cli.js");
 const tempDir = mkdtempSync(resolve(tmpdir(), "maya-openapi-types-"));
 const expected = resolve(tempDir, "schema.d.ts");
 
 try {
-  const result = spawnSync(cli, [source, "-o", expected], {
+  const result = spawnSync(process.execPath, [cli, source, "-o", expected], {
     cwd: root,
     encoding: "utf8",
   });
@@ -24,9 +24,9 @@ try {
     process.exit(result.status ?? 1);
   }
 
-  const expectedBytes = readFileSync(expected);
-  const actualBytes = readFileSync(generated);
-  if (!expectedBytes.equals(actualBytes)) {
+  const expectedText = readFileSync(expected, "utf8").replace(/\r\n/g, "\n");
+  const actualText = readFileSync(generated, "utf8").replace(/\r\n/g, "\n");
+  if (expectedText !== actualText) {
     throw new Error(
       "generated schema.d.ts differs from openapi-typescript 7.13.0 output",
     );

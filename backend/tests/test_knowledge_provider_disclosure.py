@@ -84,6 +84,8 @@ def _prepare(
                     set_row=set_row,
                     agent_md_hash=run.agent_md_hash,
                     source_manifest=json.loads(run.source_manifest_json),
+                    action_id=run.action_id,
+                    intent_generation=run.intent_generation,
                 )
             )
         )

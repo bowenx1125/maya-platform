@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.modules.debates.models import DebateTurn
+import pytest
+from app.modules.debates.models import Debate, DebateTurn, PlaybackState
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -160,5 +162,34 @@ def test_a_failed_turn_with_no_code_still_reports_a_stall(
             "round_no": expected_round,
             "safe_error_code": "turn_generation_failed",
         }
+    finally:
+        client.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize("playback_status", ["ready", "paused", "playing", "completed"])
+def test_playback_age_does_not_create_a_stall(
+    app_factory: Callable[..., Any], playback_status: str
+) -> None:
+    client, database, debate_id = _draft_debate(app_factory)
+    try:
+        first = _materialise_plan(database, debate_id)[0]
+        with database.session() as session:
+            debate = session.get(Debate, debate_id)
+            state = session.scalar(
+                select(PlaybackState).where(PlaybackState.debate_id == debate_id)
+            )
+            assert debate is not None and state is not None
+            debate.status = "debate_finished" if playback_status == "completed" else "running"
+            state.status = playback_status
+            state.mode = "live"
+            state.current_turn_id = first.id
+            state.updated_at = datetime.now(UTC) - timedelta(hours=1)
+            session.commit()
+
+        item = _listed(client, debate_id)
+        assert item["stall"] is None
+        assert item["status"] == (
+            "debate_finished" if playback_status == "completed" else "running"
+        )
     finally:
         client.__exit__(None, None, None)

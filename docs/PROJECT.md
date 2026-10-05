@@ -82,7 +82,7 @@ Audio Ready means retained audio. Failed classroom actions retain rows.
 
 Next.js/FastAPI/SQLite/files/Caddy share8080. Inspect active SQLite inside its container;
 preserve config/knowledge/runtime data. Real core calls require authorization,
-embedding dimension1024. These facts are not real-service acceptance.
+embedding dimension1024. Not real-service acceptance.
 
 ## Remaining scope
 
@@ -172,25 +172,18 @@ downloads and Chats floating composer/separate Send remain.
 
 ## Snapshot publication history — September 23, 2026
 
-Snapshot totals are unbounded; supplier batches remain 10/30,000 estimated tokens.
-罗燕玲 staged one batch before HTTP500; a later build accepted five, timed out at30s and
-left two not_sent. Next clicked sent nothing at attempt2/2; continuation later allowed
-three attempts for unstaged unknown batches and120s timeout. A new draft accepted nine
-batches (text-embedding-v4/1024/12 chunks). SiyaH's two retained stages published after
-commit failure with seven chunks and no new call. Debate uses AGENT.md, not compiled
-Persona. Prompt/output/query/LLM caps and embedding byte rejection were removed; failed
-drafts cannot steal another warmer; proven-not-sent queries get one retry; stages reuse.
+Snapshot totals are unbounded; supplier batches remain10/30,000 estimated tokens.
+Historical 罗燕玲/SiyaH stages retained accepted batches across timeout/commit failure;
+stage promotion reused paid results. Drafts cannot steal another warmer; proven-not-sent
+queries get one retry. Agents use AGENT.md, not compiled Persona. Prompt/output/query/
+LLM caps and embedding byte rejection were removed. Historical success is not current
+Provider acceptance.
 
-## Checked-in streaming and speech capability
+## Chat and speech boundaries
 
-Streaming/JSON Chat commits text once before text_done, releases its lock, and holds
-no DB session across LLM/TTS. One TTS attempt follows; failure retains text,
-tts_ready returns audio_url. Encrypted voice IDs bind drafts. DashScope speech shares
-DASHSCOPE_API_KEY; checked-in defaults Mock. Normalize Qwen RIFF/data placeholders
-near2**31 before validation. TTS uses Chinese/English, enrollment zh/en; Debate's
-English contract is unchanged. BASELINE_DEFAULT_VOICES maps characters to ready
-profiles, else FALLBACK_VOICE_PROFILE_ID. Key rotation needs restart, not row edits.
-Original integration lacked charged acceptance; later technical evidence is below.
+Chats is text-only: no Chat TTS dispatch, audio event or hidden language instruction.
+Streaming saves accepted text and keeps usage separate; unknown acceptance affects
+one request, never subsequent messages. Voice/Debate speech stays separately scoped.
 
 ## Workspace UI/import — September 27, 2026
 
@@ -219,69 +212,22 @@ nine cards/Immerse without title. An older record retained its state error/data.
 
 ## Workspace polish and speech configuration — September 27, 2026
 
-Draft/Published use sidebar New, no inline Edit/Delete; Done saves/publishes, Back
-protects dirty edits. Chats no 3D; Workspace keeps AvatarEditor. History date/Delete
-exclusive hover/focus; touch shows Delete. Knowledge hides Ready, actions top-right.
-Voices reuse Knowledge cards/count/tiles and preview/confirm/delete; New/Back switch
-list/editor. No Empty decoration; v1 consent remains. Help/Immerse clears tooltips on
-leave, route/DOM change, scroll, blur/Escape; Debate links no underline.
+Sidebar New/Done/Back preserve drafts; Chats has no3D, Workspace retains AvatarEditor.
+History date/Delete exclusive on hover/focus; touch supports Delete. Knowledge hides
+Ready; Voices reuse tiles/actions and existing consent. Tooltips clear on leave,
+navigation/DOM change, scroll, blur/Escape. Chats has no820px ceiling; dated desktop/
+mobile overflow checks passed. Voice guidance10–15s differs from server10–20s/10MiB.
+A stalled Debate's Embedding403 retained its charge without retry; no LLM or local
+budget cause. Dated static/Docker/browser checks passed with Mock Voice/four warnings.
 
-Chats has no 820px ceiling (desktop insets48/24px; mobile min max(600px,75dvh));
-desktop/mobile overflow checks passed. Voice guidance is10–15s, 16-bit WAV/MP3/M4A,
-max10MB; server accepts10–20s/10MiB. Wording does not alter upload contract.
+## Preserved adjacent work — September 27, 2026
 
-Stalled Debate: one charged Embedding query (HTTP403), no LLM; no local budget/content
-cause, remote unknown, no retry. Speech selectors offline/unchecked, no profile/
-fallback (enrollment below). UI made no Provider call. Static/contracts/migration/
-boundary, backed-up Docker and responsive browser checks passed. Voice remained Mock;
-four lint warnings.
-
-## Voice filenames, editing and optional Debate audio — September 27, 2026
-
-Multipart names accept UTF-8/legacy Latin-1; a backed-up repair preserved audio,
-mapping and request hashes. Owner-scoped metadata edits keep Voice IDs hidden.
-Enrollment succeeded once (1 charged request). Preview DNS returned rejected Fake-IP;
-the backed-up public-DNS fix kept SSRF checks unchanged. One authorized owner/session
-TTS POST/200 stored 8.72s/418,604B PCM16/24kHz mono; preview awaits owner confirmation.
-Older failed-preview charges are unknown (no ProviderOperation ledger).
-
-Debate uses custom/system voice or explicit text-only playback, never fake media,
-automatic Next or repeated generation. CAS H1 sync preserves old versions/names;
-old identity headings do not rename. Voice63/backend/frontend427/contracts/migration/
-boundary passed; ready200, other containers kept, no real TTS/LLM acceptance. Delete/
-publish retains drafts/RAG/charges/tombstones. Chat language follows the final message;
-Chat50/End12 passed/deployed. No age-based Stalled; End=Completed. Format gate blocked.
-
-## Agent names and next-version voices — September 27, 2026
-
-Names normalize NFKC/strip/casefold; duplicate creates and Markdown H1 renames return 409. Next drafts may use the owner's ready voice or null/platform default; old versions
-stay unchanged. Backed-up normal soft-delete removed only the unpublished duplicate Bowen.
-
-## Interaction and long-speech recovery — September 27, 2026
-
-Interaction uses warm-paper mobile layout, 16px inputs/48px controls; 375×812 and
-812×375 checks passed, no real classroom messages. Retry is an accessible refresh icon.
-SQL/Mock covers HTTP, persisted messages/WS, Final freeze, model input, reply_to and
-public output; replies quote only the referenced frozen anonymous message. Conclusion
-keeps a 300-char input/12-candidate pool. This proves plumbing, not quality.
-
-Speaker/AGENT.md binding is correct; attribution stays in editable zh/en Rulesets,
-not Execution contract, and removal never reinserts it. Backend1500/21 skipped (known
-race rerun), frontend420/1 skipped; Docker/Ruleset views passed, no model calls.
-
-A stalled Debate accepted text but TTS reused a preview 1–60s check. One authorized TTS
-POST returned HTTP200, 113.12s/5,429,804 bytes. After backup, HTTP-disabled promotion
-reused saved bytes/text without Embedding/LLM or adjacent enqueue; old failed-TTS charges
-remain unknown. Speech removes preview duration cap but keeps format/nonempty/quality,
-20MiB and SSRF guards; Retry stays explicit. Docker switched before Preview continued.
-
-## Debate entry and Immerse controls — September 27, 2026
-
-Preview links keep warm hover/focus/press and reduced motion; no manual barrage pause,
-Final freezes collection. Missing grades show No match+0; unscored counts are removed
-without rewriting. Report failed `report_response_resource` after HTTP200; no real retry.
-Student Live reuses QR form (same-course, active, non-replay); Final hides it. Messages
-are uncapped/idempotent. Chats follow each message's language; no UI language field/TTS.
+Voice metadata/text-only Debate preserve owner/SSRF/snapshot guards. Historical
+enrollment/preview/113.12s speech succeeded; saved promotion made no call; earlier
+unknown charges were not retried. Names use NFKC/strip/casefold, duplicate409 and
+immutable old versions. Mobile/SQL Mock and backend1500/frontend420 were dated,
+not current quality acceptance. One Report200 failed content without retry.
+Live retains QR/Final cutoff; Chat has no language field or TTS.
 
 ## MayaForm W0 — 2026-09-27
 
@@ -325,11 +271,58 @@ canonical bytes equal stored hash and `post_bytes`. ACL/disclosure, accounting, 
 and sanitized stage passed. No Assets in K2b1. Full check, populated migration/HTTP and Sol passed;
 no real Provider/Docker.
 
-## MayaForm K2b2-A — implementation, 2026-09-28
+## MayaForm recovery — 2026-10-03
 
-0039 adds source receipts, item journal and generated lineage. Accepted candidates save as
-independent K1 CAS versions; invalid optional citations are unverified, not blockers. Focused
-good/bad/good, concurrent head-CAS, manual-head, ACL revocation, stale claim and zero-network recovery
-pass. Status has accepted/materialized/failed counts; owner Set DTO has `generated_by_agent_id`.
-OpenAPI/TS/hash/94-route compare and frontend typecheck pass. Boundary probe passes; full check/
-backend Sol/HTTP pending. UI focused review passed. No real Provider/Docker.
+K2b2 a975e38 and K3-A83de097/evidence1b1bfca remain committed; actual branch
+feat/mayaform-v14, HEAD1b1bfca. K3-B1/B2,0041–0053 and learning/Tools are drafts,
+not deployed acceptance. Lost reviews require revalidation.
+Preserve foreign Debate/Voice/UI changes; one writer owns each shared file.
+Main switched to GPT-6.1 Sol on October5; Luna/max implements, independent Sol audits.
+
+[Resume v2](contracts/MAYAFORM_V14_BRAINFORM_ASSESSMENT.md) replaces old categories,
+no-Memory entry, manual-head preservation and active-attempt hints. Brainform lists
+RAG/Knowledge/Memory together; canonical Markdown versions bind asset projections.
+Bound RAG saves/manual regenerate replace manual current only after a valid newer
+success, retaining history. Private/Public configured attempts persist independently
+of Chat/run; plain abandon ends only, abandon-and-redo creates a new attempt.
+
+The [latest Tool/resource correction](contracts/MAYAFORM_V14_TOOL_RESOURCE_AUTHORIZATION.md)
+requires Public/Student/Teacher: Student gets Public+Student, Teacher Public+Teacher.
+Tool mounting, target resource ACL and attempt execution grant are separate. Formal
+evaluator/Boundary summarizer grants bind actual participant/version/answer/attempt,
+never names or creator role. Self-read and Teacher Public-read do not grant edit.
+Target-attempt safe projections apply across Agents, Memory and downloads. No new
+practice UI, role Planner, generic database editor or approval ceremony.
+
+Independent R3 passed160 runtime cases,92 boundary probes and47 Provider scope cases
+(overlapping). Authorized sends occur once; late revocation sends nothing/charge0;
+readable old snapshots remain valid. SSE drains one snapshot without replay calls.
+Resume retains original answers/turn identity. Owner answers expose answer_text/
+created_at only; source-free recovery allows own answers/progress or abandon, never
+resume/hints. Legacy query scopes retain exact Teacher/course checks; Private Single
+denies Teacher. General Chat uses natural lifecycle messages, no assessment controls
+or special composer. BF MD import14 independent and Setext/HTTP tests passed.
+Final isolated Linux backend1909 passed/21 skipped (499.64s); frontend553/1 skipped.
+Browser and real Provider remain pending; no end-to-end acceptance claimed.
+[BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
+[S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
+
+Docker remains at0033 with original container IDs; no resumed paid call, rebuild or push.
+October5 SQLite backup API/integrity/FK passed. A private backup copy upgraded
+0033→0053 preserving all59 original tables/6,421 original rows and original-column
+bytes; integrity/FK passed. Final deployment still needs fresh in-flight checks.
+Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
+UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
+(UI03/04/05 included) are merged in source, not ancestry/commits yet.
+Linux conversion22 and UI Sol102/Roster/Profile probes passed before final delta;
+macOS memory guard remains. Migrations0052/0053 append without rewriting history.
+Final frontend553 passed/1 skipped; types, lint(0 errors/4 existing warnings),
+Prettier, backend Ruff/format493/mypy247, all152 actual API semantics/19 negatives,
+generated/strict privacy/boundary and7 migration/bootstrap/reset gates passed.
+Locked Agno3.0.11 is used through public SDK. Independent runtime source freeze:
+912 files, manifest db6b792d3bb895f6aae42c43f0ce15f3a6c8f791692f0e828d13ac70210a1c56;
+only explanatory/progress docs changed afterward. Single query Embedding
+uses separate exact Teacher course-purpose consent, not LLM consent or per-message
+approvals. Draft0050 permits only llm_agent_chat/embedding_query; independent
+populated0033→0053 and18 atomicity tests passed. Production remains0033 pending rollout;
+latest backup is20261005T033431Z, integrity/FK OK. Historical unknown3 are never resent.

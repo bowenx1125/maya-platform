@@ -33,6 +33,7 @@ from app.modules.knowledge.files import (
     content_disposition,
     frozen_download_filename,
 )
+from app.modules.knowledge_sets.models import KnowledgeDocumentVersion
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -167,7 +168,7 @@ def _assert_storage_recovered(database: Any, data_root: Path) -> None:
                 is not None
             )
     disk_paths = {
-        str(path.relative_to(data_root)) for path in data_root.rglob("*.md") if path.is_file()
+        path.relative_to(data_root).as_posix() for path in data_root.rglob("*.md") if path.is_file()
     }
     assert disk_paths <= stored_paths
     publish_root = data_root / "tmp" / "publish"
@@ -375,7 +376,7 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
         )
         assert replaced.status_code == 201, replaced.text
         new_id = replaced.json()["id"]
-        assert new_id != old_id
+        assert new_id == old_id
         assert [
             item["id"]
             for item in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents").json()
@@ -384,13 +385,20 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
     with database.session() as session:
         old = session.get(KnowledgeDocument, old_id)
         new = session.get(KnowledgeDocument, new_id)
-        assert old is not None and old.workspace_state == "hidden"
-        assert new is not None and new.workspace_state == "active"
+        assert old is not None and old.workspace_state == "active"
+        assert new is old
         relations = session.scalars(select(AgentVersionDocument)).all()
         assert {(row.agent_version_id, row.document_id, row.enabled) for row in relations} == {
-            (version_one, new_id, True),
-            (version_two, new_id, False),
+            (version_one, old_id, True),
+            (version_two, old_id, False),
         }
+        source_versions = session.scalars(
+            select(KnowledgeDocumentVersion)
+            .where(KnowledgeDocumentVersion.document_id == old_id)
+            .order_by(KnowledgeDocumentVersion.version_seq)
+        ).all()
+        assert [row.version_seq for row in source_versions] == [1, 2]
+        assert source_versions[0].content_hash == old_hash
         versions = {
             row.id: row.revision
             for row in session.scalars(
@@ -431,8 +439,9 @@ def test_replacement_without_draft_references_becomes_library_document(app_facto
     with database.session() as session:
         old_row = session.get(KnowledgeDocument, old["id"])
         new_row = session.get(KnowledgeDocument, new_id)
-        assert old_row is not None and old_row.workspace_state == "hidden"
-        assert new_row is not None and new_row.workspace_state == "active"
+        assert old_row is not None and old_row.workspace_state == "active"
+        assert new_row is old_row
+        assert new_row.content_version_seq == 2
         assert settings.resolved_data_root.exists()
 
 
@@ -668,9 +677,11 @@ def test_two_database_threads_concurrent_replace_have_one_winner(
             operations = session.scalars(
                 select(FileOperation).where(FileOperation.operation_kind == "document_replace")
             ).all()
-            assert old_row is not None and old_row.workspace_state == "hidden"
+            assert old_row is not None and old_row.workspace_state == "active"
             active = [row for row in documents if row.workspace_state == "active"]
             assert len(active) == 1
+            assert len(documents) == 1
+            assert old_row.content_version_seq == 2
             assert {row.state for row in operations} == {"committed", "recovered"}
             version = session.scalar(
                 select(AgentVersion).where(AgentVersion.id == uploaded["agent_version"]["id"])
@@ -844,7 +855,7 @@ def test_replace_publish_forced_order_has_one_stable_winner(
             ).all()
             assert old_row is not None
             if winner == "replace":
-                assert old_row.workspace_state == "hidden"
+                assert old_row.workspace_state == "active"
                 assert len([row for row in versions if row.state == "published"]) == 0
             else:
                 assert old_row.workspace_state == "active"
@@ -853,7 +864,7 @@ def test_replace_publish_forced_order_has_one_stable_winner(
         _assert_storage_recovered(database, settings.resolved_data_root)
 
 
-def test_large_replacement_is_copy_on_write_for_every_enabled_draft_and_file(
+def test_large_replacement_keeps_stable_source_id_and_preserves_file_history(
     app_factory: Any,
 ) -> None:
     app, database, settings = app_factory()
@@ -922,28 +933,26 @@ def test_large_replacement_is_copy_on_write_for_every_enabled_draft_and_file(
         )
         assert replaced.status_code == 201, replaced.text
         replacement = replaced.json()
-        assert replacement["id"] != old["id"]
+        assert replacement["id"] == old["id"]
         assert replacement["char_count"] == len(oversized.decode("utf-8"))
 
         with database.session() as session:
             old_row = session.get(KnowledgeDocument, old["id"])
-            assert old_row is not None and old_row.workspace_state == "hidden"
-            assert old_row.content_hash == old["content_hash"]
-            assert old_row.index_revision == old["index_revision"]
+            assert old_row is not None and old_row.workspace_state == "active"
+            assert old_row.content_hash != old["content_hash"]
+            assert old_row.index_revision == old["index_revision"] + 1
+            assert old_row.content_version_seq == 2
             assert old_row.stored_file is not None
-            assert old_row.stored_file.id == old_file.id
+            assert old_row.stored_file.id != old_file.id
             new_row = session.get(KnowledgeDocument, replacement["id"])
-            assert new_row is not None and new_row.stored_file is not None
+            assert new_row is old_row and new_row.stored_file is not None
             assert (
                 settings.resolved_data_root / new_row.stored_file.relative_path
             ).read_bytes() == oversized
             assert [
                 (row.agent_version_id, row.document_id, row.enabled, row.order_index)
                 for row in session.scalars(select(AgentVersionDocument)).all()
-            ] == [
-                (version_id, replacement["id"], enabled, order_index)
-                for version_id, _document_id, enabled, order_index in before_relations
-            ]
+            ] == before_relations
             after_versions = {
                 row.id: (row.revision, row.state, row.knowledge_snapshot_id)
                 for row in session.scalars(
@@ -954,7 +963,7 @@ def test_large_replacement_is_copy_on_write_for_every_enabled_draft_and_file(
                 version_id: (revision + 1, state, snapshot_id)
                 for version_id, (revision, state, snapshot_id) in before_versions.items()
             }
-            after_old_chunks = [
+            after_current_chunks = [
                 (
                     row.id,
                     row.document_id,
@@ -970,13 +979,16 @@ def test_large_replacement_is_copy_on_write_for_every_enabled_draft_and_file(
                     )
                 ).all()
             ]
-            assert after_old_chunks == before_chunks
-            new_chunks = session.scalars(
-                select(KnowledgeDocumentChunk).where(
-                    KnowledgeDocumentChunk.document_id == replacement["id"]
-                )
+            assert after_current_chunks != before_chunks
+            assert after_current_chunks
+            source_versions = session.scalars(
+                select(KnowledgeDocumentVersion)
+                .where(KnowledgeDocumentVersion.document_id == old["id"])
+                .order_by(KnowledgeDocumentVersion.version_seq)
             ).all()
-            assert new_chunks
+            assert [row.version_seq for row in source_versions] == [1, 2]
+            assert source_versions[0].stored_file_id == old_file.id
+            assert source_versions[0].file_sha256 == old_file.sha256
         assert (settings.resolved_data_root / old_file.relative_path).read_bytes() == old_bytes
         _assert_storage_recovered(database, settings.resolved_data_root)
 
@@ -1216,7 +1228,9 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
             old_document = session.get(KnowledgeDocument, old_document_id)
             assert draft is not None and draft.revision == 1
             assert new_relation is not None and new_relation.enabled is True
-            assert old_relation is None
-            assert old_document is not None and old_document.workspace_state == "hidden"
+            assert new_document_id == old_document_id
+            assert old_relation is new_relation
+            assert old_document is not None and old_document.workspace_state == "active"
+            assert old_document.content_version_seq == 2
         after = _release_fingerprint(database, settings.resolved_data_root, first_agent)
         assert after == before

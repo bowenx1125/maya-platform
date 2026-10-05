@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
@@ -37,6 +38,8 @@ class KnowledgeSet(Base):
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     content_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_markdown_version_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generation_intent_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -58,7 +61,9 @@ class KnowledgeSet(Base):
         ),
         CheckConstraint("length(trim(display_name)) > 0", name="ck_knowledge_sets_name"),
         CheckConstraint(
-            "metadata_revision >= 0 AND content_revision >= 0 AND authorization_epoch >= 0",
+            "metadata_revision >= 0 AND content_revision >= 0 "
+            "AND current_markdown_version_seq >= 0 AND generation_intent_seq >= 0 "
+            "AND authorization_epoch >= 0",
             name="ck_knowledge_sets_revisions",
         ),
         ForeignKeyConstraint(
@@ -116,6 +121,42 @@ class KnowledgeSetSource(Base):
         Index(
             "ix_knowledge_set_sources_set_active", "knowledge_set_id", "is_active", "order_index"
         ),
+    )
+
+
+class KnowledgeDocumentVersion(Base):
+    """Immutable Markdown version behind one stable KnowledgeDocument ID."""
+
+    __tablename__ = "knowledge_document_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    )
+    version_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    stored_file_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    index_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "version_seq", name="uq_knowledge_document_version_seq"),
+        CheckConstraint("version_seq >= 1", name="ck_knowledge_document_version_seq"),
+        CheckConstraint("char_count >= 1", name="ck_knowledge_document_version_char_count"),
+        CheckConstraint("index_revision >= 0", name="ck_knowledge_document_version_index"),
+        CheckConstraint("authorization_epoch >= 0", name="ck_knowledge_document_version_epoch"),
+        CheckConstraint("length(content_hash) = 64", name="ck_knowledge_document_version_hash"),
+        CheckConstraint("length(file_sha256) = 64", name="ck_knowledge_document_version_file_hash"),
+        Index("ix_knowledge_document_versions_document", "document_id", "version_seq"),
     )
 
 
@@ -276,6 +317,8 @@ class KnowledgeGenerationRun(Base):
         String(36), ForeignKey("jobs.id", ondelete="RESTRICT"), nullable=False, unique=True
     )
     input_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    action_id: Mapped[str] = mapped_column(String(36), nullable=False, default=lambda: str(uuid4()))
+    intent_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     owner_user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
@@ -312,6 +355,8 @@ class KnowledgeGenerationRun(Base):
 
     __table_args__ = (
         CheckConstraint("length(input_key) = 64", name="ck_knowledge_generation_input_key"),
+        CheckConstraint("length(action_id) = 36", name="ck_knowledge_generation_action_id"),
+        CheckConstraint("intent_generation >= 0", name="ck_knowledge_generation_intent_generation"),
         CheckConstraint("length(agent_md_hash) = 64", name="ck_knowledge_generation_agent_hash"),
         CheckConstraint(
             "request_hash IS NULL OR length(request_hash) = 64",
@@ -332,6 +377,59 @@ class KnowledgeGenerationRun(Base):
         Index("ix_knowledge_generation_owner_created", "owner_user_id", "created_at"),
         Index("ix_knowledge_generation_state_lease", "state", "lease_expires_at"),
         Index("ix_knowledge_generation_agent", "agent_id", "created_at"),
+        UniqueConstraint(
+            "knowledge_set_id", "action_id", name="uq_knowledge_generation_set_action"
+        ),
+    )
+
+
+class KnowledgeSetMarkdownVersion(Base):
+    """Immutable author document; structured Assets are projections of this version."""
+
+    __tablename__ = "knowledge_set_markdown_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    knowledge_set_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("knowledge_sets.id", ondelete="RESTRICT"), nullable=False
+    )
+    version_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    student_projection_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    asset_version_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    generation_run_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_generation_runs.id", ondelete="RESTRICT"), nullable=True
+    )
+    generation_intent_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_manifest_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    generator_agent_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "knowledge_set_id", "version_seq", name="uq_knowledge_set_markdown_version_seq"
+        ),
+        UniqueConstraint("generation_run_id", name="uq_knowledge_markdown_generation_run"),
+        CheckConstraint("version_seq >= 1", name="ck_knowledge_markdown_version_seq"),
+        CheckConstraint("length(content_hash) = 64", name="ck_knowledge_markdown_hash"),
+        CheckConstraint(
+            "origin IN ('manual', 'ai', 'legacy')", name="ck_knowledge_markdown_origin"
+        ),
+        CheckConstraint(
+            "generation_intent_seq IS NULL OR generation_intent_seq >= 0",
+            name="ck_knowledge_markdown_intent_generation",
+        ),
+        CheckConstraint(
+            "source_manifest_hash IS NULL OR length(source_manifest_hash) = 64",
+            name="ck_knowledge_markdown_source_hash",
+        ),
+        Index("ix_knowledge_markdown_versions_set", "knowledge_set_id", "version_seq"),
     )
 
 

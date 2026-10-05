@@ -38,6 +38,7 @@ from app.core.models import (
 from app.modules.agents.markdown import markdown_hash
 from app.modules.knowledge.markdown import normalize_markdown
 from app.modules.knowledge.services import document_file_content
+from app.modules.knowledge.source_versions import source_version_filename
 from app.modules.org.access import WorkspaceMember
 from app.providers.control import (
     ExportConfirmationV1,
@@ -268,7 +269,7 @@ def _enabled_documents(
         documents.append(
             SnapshotBuildInputDocument(
                 document_id=document.id,
-                source_filename=document.source_filename,
+                source_filename=source_version_filename(db, document),
                 text=normalized.normalized,
                 order_index=order,
                 source_sha256=source_hash,

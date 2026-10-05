@@ -100,6 +100,7 @@ from app.modules.knowledge.providers.snapshot_build import (
 )
 from app.modules.knowledge.schemas import JobStatus
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
+from app.modules.knowledge.source_versions import source_version_filename
 from app.modules.org.access import WorkspaceMember
 
 
@@ -1048,6 +1049,7 @@ def _document_dto(
         visibility=cast(Literal["private", "public"], document.visibility),
         can_manage_visibility=can_manage_visibility,
         source_filename=document.source_filename,
+        source_owner_role=cast(Literal["student", "teacher"], document.source_owner_role),
         char_count=document.char_count,
         authorization_epoch=document.authorization_epoch,
         content_hash=document.content_hash,
@@ -1644,7 +1646,7 @@ def create_snapshot(
             build_document = build.documents[order]
             if (
                 build_document.document_id != document.id
-                or build_document.source_filename != document.source_filename
+                or build_document.source_filename != source_version_filename(db, document)
                 or build_document.order_index != order
                 or build_document.normalized_text != normalized
                 or build_document.source_sha256 != source_sha

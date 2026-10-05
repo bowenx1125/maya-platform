@@ -76,6 +76,10 @@
   margin: 0.3rem 0 0;
 }
 
+.hash {
+  overflow-wrap: anywhere;
+}
+
 .field ul {
   display: grid;
   gap: 0.2rem;

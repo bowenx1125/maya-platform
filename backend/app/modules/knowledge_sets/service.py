@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
+import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from pydantic import TypeAdapter
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.core.errors import invalid_state, not_found, stale_revision, unprocessable
+from app.core.errors import PlatformError, invalid_state, not_found, stale_revision, unprocessable
 from app.core.models import (
     Agent,
     FileReference,
@@ -32,14 +34,18 @@ from app.modules.knowledge.services import (
     course_member_role,
     document_file_content,
     scoped_group_role_for_user,
+    visible_agent,
 )
 from app.modules.knowledge_sets.models import (
     AgentKnowledgeSet,
     KnowledgeAsset,
     KnowledgeAssetVersion,
     KnowledgeAssetVersionSource,
+    KnowledgeDocumentVersion,
     KnowledgeGenerationRun,
+    KnowledgeGenerationSourceReceipt,
     KnowledgeSet,
+    KnowledgeSetMarkdownVersion,
     KnowledgeSetSource,
 )
 from app.modules.knowledge_sets.schemas import (
@@ -47,6 +53,7 @@ from app.modules.knowledge_sets.schemas import (
     AssetContent,
     AssetVersionFullDTO,
     AssetVersionStudentDTO,
+    BrainformKnowledgeSummary,
     ConceptContent,
     CreateKnowledgeSetRequest,
     KnowledgeAssetFullDTO,
@@ -54,11 +61,16 @@ from app.modules.knowledge_sets.schemas import (
     KnowledgeGraph,
     KnowledgeGraphEdge,
     KnowledgeGraphNode,
+    KnowledgeMarkdownDocument,
     KnowledgeSetDetail,
     KnowledgeSetRevocation,
     KnowledgeSetSourceDTO,
     KnowledgeSetSummary,
     QuestionContent,
+    RegenerateKnowledgeResponse,
+    Rubric,
+    RubricCriterion,
+    SaveKnowledgeMarkdownRequest,
     StudentAssetContent,
     StudentQuestionContent,
 )
@@ -90,6 +102,109 @@ def _canonical_json(value: Any) -> str:
 
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def save_knowledge_markdown_version(
+    db: Session,
+    *,
+    set_id: str,
+    expected_version_seq: int,
+    markdown: str,
+    actor_user_id: str,
+    origin: Literal["manual", "ai"],
+    generation_run_id: str | None = None,
+    generation_intent_seq: int | None = None,
+    source_manifest_hash: str | None = None,
+    generator_agent_version_id: str | None = None,
+    asset_version_ids: list[str] | None = None,
+    student_projection_markdown: str = "",
+) -> KnowledgeSetMarkdownVersion:
+    """Append one immutable Markdown version and atomically advance its Set head."""
+
+    set_row = db.scalar(select(KnowledgeSet).where(KnowledgeSet.id == set_id).with_for_update())
+    if set_row is None or set_row.deleted_at is not None or set_row.owner_user_id != actor_user_id:
+        raise not_found()
+    if set_row.current_markdown_version_seq != expected_version_seq:
+        raise stale_revision(set_row.current_markdown_version_seq)
+    if origin == "ai" and (
+        generation_intent_seq is None
+        or set_row.generation_intent_seq != generation_intent_seq
+        or generation_run_id is None
+    ):
+        raise stale_revision(set_row.current_markdown_version_seq)
+
+    markdown_hash = _sha256(markdown)
+    if expected_version_seq > 0:
+        current = db.scalar(
+            select(KnowledgeSetMarkdownVersion).where(
+                KnowledgeSetMarkdownVersion.knowledge_set_id == set_id,
+                KnowledgeSetMarkdownVersion.version_seq == expected_version_seq,
+            )
+        )
+        if current is None:
+            raise invalid_state("The current Knowledge Markdown version is unavailable.")
+        if origin == "manual" and current.content_hash == markdown_hash:
+            return current
+
+    next_seq = expected_version_seq + 1
+    conditions = [
+        KnowledgeSet.id == set_id,
+        KnowledgeSet.current_markdown_version_seq == expected_version_seq,
+    ]
+    if origin == "ai":
+        conditions.append(KnowledgeSet.generation_intent_seq == generation_intent_seq)
+    advanced = db.execute(
+        update(KnowledgeSet)
+        .where(*conditions)
+        .values(
+            current_markdown_version_seq=next_seq,
+            content_revision=KnowledgeSet.content_revision + 1,
+            updated_at=now_utc(),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(advanced, "rowcount", 0) != 1:
+        current_seq = db.scalar(
+            select(KnowledgeSet.current_markdown_version_seq).where(KnowledgeSet.id == set_id)
+        )
+        raise stale_revision(current_seq)
+    set_row.current_markdown_version_seq = next_seq
+    set_row.content_revision += 1
+    set_row.updated_at = now_utc()
+
+    row = KnowledgeSetMarkdownVersion(
+        id=str(uuid4()),
+        knowledge_set_id=set_id,
+        version_seq=next_seq,
+        markdown=markdown,
+        student_projection_markdown=student_projection_markdown,
+        asset_version_ids_json=_canonical_json(asset_version_ids or []),
+        content_hash=markdown_hash,
+        origin=origin,
+        generation_run_id=generation_run_id,
+        generation_intent_seq=generation_intent_seq,
+        source_manifest_hash=source_manifest_hash,
+        created_by_user_id=actor_user_id,
+        generator_agent_version_id=generator_agent_version_id,
+        created_at=now_utc(),
+    )
+    db.add(row)
+    db.flush()
+    expected_version_ids = set(asset_version_ids or [])
+    if expected_version_ids:
+        available_version_ids = set(
+            db.scalars(
+                select(KnowledgeAssetVersion.id)
+                .join(KnowledgeAsset, KnowledgeAsset.id == KnowledgeAssetVersion.asset_id)
+                .where(
+                    KnowledgeAsset.knowledge_set_id == set_id,
+                    KnowledgeAssetVersion.id.in_(expected_version_ids),
+                )
+            ).all()
+        )
+        if available_version_ids != expected_version_ids:
+            raise invalid_state("A projected Knowledge Asset version is unavailable.")
+    return row
 
 
 def _clean_display_name(value: str) -> str:
@@ -234,23 +349,27 @@ def _summary(
     )
     asset_count = 0
     if role is not None:
-        assets = db.scalars(
-            select(KnowledgeAsset).where(
-                KnowledgeAsset.knowledge_set_id == row.id,
-                KnowledgeAsset.current_version_seq >= 1,
-            )
-        ).all()
-        for asset in assets:
-            current_version = db.scalar(
-                select(KnowledgeAssetVersion).where(
-                    KnowledgeAssetVersion.asset_id == asset.id,
-                    KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+        markdown_version = _current_markdown_version(db, row)
+        if markdown_version is not None:
+            asset_count = len(_markdown_asset_version_ids(markdown_version))
+        else:
+            assets = db.scalars(
+                select(KnowledgeAsset).where(
+                    KnowledgeAsset.knowledge_set_id == row.id,
+                    KnowledgeAsset.current_version_seq >= 1,
                 )
-            )
-            if current_version is not None and _asset_version_sources_readable(
-                db, context, row, role, current_version
-            ):
-                asset_count += 1
+            ).all()
+            for asset in assets:
+                current_version = db.scalar(
+                    select(KnowledgeAssetVersion).where(
+                        KnowledgeAssetVersion.asset_id == asset.id,
+                        KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+                    )
+                )
+                if current_version is not None and _asset_version_sources_readable(
+                    db, context, row, role, current_version
+                ):
+                    asset_count += 1
     return KnowledgeSetSummary(
         id=_uid(row.id),
         owner_user_id=_uid(row.owner_user_id) if can_edit else None,
@@ -321,6 +440,791 @@ def list_knowledge_sets(
         if role is not None and _set_sources_readable(db, context, row, role):
             result.append(_summary(db, context, row, can_edit=role == "owner"))
     return result
+
+
+def _current_markdown_version(
+    db: Session, set_row: KnowledgeSet
+) -> KnowledgeSetMarkdownVersion | None:
+    if set_row.current_markdown_version_seq < 1:
+        return None
+    return db.scalar(
+        select(KnowledgeSetMarkdownVersion).where(
+            KnowledgeSetMarkdownVersion.knowledge_set_id == set_row.id,
+            KnowledgeSetMarkdownVersion.version_seq == set_row.current_markdown_version_seq,
+        )
+    )
+
+
+def _markdown_asset_version_ids(version: KnowledgeSetMarkdownVersion) -> list[str]:
+    try:
+        values = json.loads(version.asset_version_ids_json)
+    except (TypeError, ValueError):
+        return []
+    return (
+        values
+        if isinstance(values, list) and all(isinstance(value, str) for value in values)
+        else []
+    )
+
+
+def _student_projection_is_available(
+    db: Session,
+    context: AuthContext,
+    set_row: KnowledgeSet,
+    version: KnowledgeSetMarkdownVersion,
+) -> bool:
+    """Require trusted structured provenance and current ACL for student Markdown."""
+
+    if version.origin not in {"ai", "legacy", "manual"} or not version.student_projection_markdown:
+        return False
+    asset_version_ids = _markdown_asset_version_ids(version)
+    if not asset_version_ids or len(asset_version_ids) != len(set(asset_version_ids)):
+        return False
+    versions = db.scalars(
+        select(KnowledgeAssetVersion).where(KnowledgeAssetVersion.id.in_(asset_version_ids))
+    ).all()
+    if {asset_version.id for asset_version in versions} != set(asset_version_ids):
+        return False
+    for asset_version in versions:
+        asset = db.get(KnowledgeAsset, asset_version.asset_id)
+        if (
+            asset is None
+            or asset.knowledge_set_id != set_row.id
+            or not _asset_version_sources_readable(db, context, set_row, "student", asset_version)
+        ):
+            return False
+    return True
+
+
+def _markdown_sources_readable_to_teacher(
+    db: Session,
+    context: AuthContext,
+    set_row: KnowledgeSet,
+    version: KnowledgeSetMarkdownVersion,
+) -> bool:
+    """Gate full derived Markdown by the source ACLs recorded for its version."""
+
+    asset_version_ids = _markdown_asset_version_ids(version)
+    if len(asset_version_ids) != len(set(asset_version_ids)):
+        return False
+    if asset_version_ids:
+        asset_versions = db.scalars(
+            select(KnowledgeAssetVersion).where(KnowledgeAssetVersion.id.in_(asset_version_ids))
+        ).all()
+        if {item.id for item in asset_versions} != set(asset_version_ids):
+            return False
+        for asset_version in asset_versions:
+            asset = db.get(KnowledgeAsset, asset_version.asset_id)
+            if (
+                asset is None
+                or asset.knowledge_set_id != set_row.id
+                or not _asset_version_sources_readable(
+                    db,
+                    context,
+                    set_row,
+                    "teacher",
+                    asset_version,
+                )
+            ):
+                return False
+
+    if version.origin == "legacy":
+        # Legacy Markdown is rendered from immutable structured versions. A
+        # missing provenance map cannot prove that a course reader may receive
+        # its full text after source access changes.
+        return bool(asset_version_ids)
+    if version.origin == "manual":
+        if version.source_manifest_hash is None:
+            has_source_history = db.scalar(
+                select(KnowledgeSetSource.id)
+                .where(KnowledgeSetSource.knowledge_set_id == set_row.id)
+                .limit(1)
+            )
+            return has_source_history is None
+        matching_runs = db.scalars(
+            select(KnowledgeGenerationRun).where(
+                KnowledgeGenerationRun.knowledge_set_id == set_row.id,
+                KnowledgeGenerationRun.source_manifest_hash == version.source_manifest_hash,
+            )
+        ).all()
+        return any(
+            _generation_run_sources_readable(db, context, set_row, run) for run in matching_runs
+        )
+    if version.origin != "ai":
+        return True
+    if (
+        version.generation_run_id is None
+        or version.generation_intent_seq is None
+        or version.source_manifest_hash is None
+    ):
+        return False
+
+    run = db.get(KnowledgeGenerationRun, version.generation_run_id)
+    if (
+        run is None
+        or run.knowledge_set_id != set_row.id
+        or run.intent_generation != version.generation_intent_seq
+        or run.source_manifest_hash != version.source_manifest_hash
+    ):
+        return False
+    return _generation_run_sources_readable(db, context, set_row, run)
+
+
+def _generation_run_sources_readable(
+    db: Session,
+    context: AuthContext,
+    set_row: KnowledgeSet,
+    run: KnowledgeGenerationRun,
+) -> bool:
+    if run.knowledge_set_id != set_row.id:
+        return False
+    try:
+        manifest = json.loads(run.source_manifest_json)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(manifest, list):
+        return False
+    receipts = db.scalars(
+        select(KnowledgeGenerationSourceReceipt).where(
+            KnowledgeGenerationSourceReceipt.run_id == run.id
+        )
+    ).all()
+
+    def receipt_key(row: KnowledgeGenerationSourceReceipt) -> tuple[object, ...]:
+        return (
+            row.source_binding_id,
+            row.document_id,
+            row.stored_file_id,
+            row.source_content_hash,
+            row.source_file_sha256,
+            row.source_authorization_epoch,
+            row.source_index_revision,
+        )
+
+    expected: set[tuple[object, ...]] = set()
+    for item in manifest:
+        if not isinstance(item, dict):
+            return False
+        required = (
+            item.get("binding_id"),
+            item.get("document_id"),
+            item.get("stored_file_id"),
+            item.get("content_hash"),
+            item.get("file_sha256"),
+            item.get("authorization_epoch"),
+            item.get("index_revision"),
+        )
+        if not all(value is not None for value in required):
+            return False
+        expected.add(required)
+    if len(expected) != len(manifest) or {receipt_key(row) for row in receipts} != expected:
+        return False
+
+    for receipt in receipts:
+        binding = db.get(KnowledgeSetSource, receipt.source_binding_id)
+        if (
+            binding is None
+            or binding.knowledge_set_id != set_row.id
+            or binding.document_id != receipt.document_id
+            or not binding.is_active
+            or not _source_matches_current(
+                db,
+                context,
+                binding,
+                role="teacher",
+                for_write=False,
+            )
+        ):
+            return False
+    return True
+
+
+def _latest_generation_for_set(db: Session, set_id: str) -> KnowledgeGenerationRun | None:
+    return db.scalar(
+        select(KnowledgeGenerationRun)
+        .where(KnowledgeGenerationRun.knowledge_set_id == set_id)
+        .order_by(KnowledgeGenerationRun.created_at.desc(), KnowledgeGenerationRun.id.desc())
+        .limit(1)
+    )
+
+
+def _visible_source_agents(db: Session, context: AuthContext, set_row: KnowledgeSet) -> list[Agent]:
+    run = _latest_generation_for_set(db, set_row.id)
+    candidates = [run.agent_id] if run is not None else []
+    candidates.extend(
+        db.scalars(
+            select(AgentKnowledgeSet.agent_id)
+            .where(AgentKnowledgeSet.knowledge_set_id == set_row.id)
+            .order_by(AgentKnowledgeSet.order_index, AgentKnowledgeSet.agent_id)
+        ).all()
+    )
+    visible: list[Agent] = []
+    for agent_id in dict.fromkeys(candidates):
+        try:
+            scoped = visible_agent(db, context, agent_id)
+        except PlatformError as error:
+            if error.status_code == 404:
+                continue
+            raise
+        if scoped.agent.course_id == set_row.course_id:
+            visible.append(scoped.agent)
+    return visible
+
+
+def _visible_source_agent(db: Session, context: AuthContext, set_row: KnowledgeSet) -> Agent:
+    agents = _visible_source_agents(db, context, set_row)
+    if agents:
+        return agents[0]
+    raise not_found()
+
+
+def list_brainform_knowledge(
+    db: Session, context: AuthContext, course_id: str
+) -> list[BrainformKnowledgeSummary]:
+    """List only readable canonical documents or real first-generation runs."""
+
+    summaries = list_knowledge_sets(db, context, course_id)
+    candidates: list[tuple[int, BrainformKnowledgeSummary]] = []
+    for summary in summaries:
+        set_row = db.get(KnowledgeSet, str(summary.id))
+        if set_row is None:
+            continue
+        markdown_version = _current_markdown_version(db, set_row)
+        run = _latest_generation_for_set(db, set_row.id)
+        if markdown_version is None and run is None:
+            continue
+        source_agents = _visible_source_agents(db, context, set_row)
+        if not source_agents:
+            continue
+        role = _set_role(db, context, set_row)
+        if role is None:
+            continue
+        generation_state = run.state if run is not None else None
+        safe_error_code = run.safe_error_code if run is not None and summary.can_edit else None
+        if run is not None and run.state in {"pending", "running"}:
+            from app.modules.knowledge_sets.generation import _current_generation_authorized
+
+            if not _current_generation_authorized(db, run):
+                generation_state = "blocked"
+                safe_error_code = "authorization_revoked" if summary.can_edit else None
+        content_hash = None
+        if markdown_version is not None:
+            if role in {"owner", "teacher"}:
+                content_hash = markdown_version.content_hash
+            elif _student_projection_is_available(db, context, set_row, markdown_version):
+                content_hash = _sha256(markdown_version.student_projection_markdown)
+        for source_agent in source_agents:
+            row = BrainformKnowledgeSummary(
+                agent_id=_uid(source_agent.id),
+                canonical_set_id=summary.id,
+                source_agent_display_name=source_agent.name,
+                knowledge_display_name=summary.display_name,
+                can_read=True,
+                can_edit=summary.can_edit,
+                version_seq=markdown_version.version_seq if markdown_version is not None else None,
+                content_hash=content_hash,
+                generation_state=cast(Any, generation_state),
+                safe_error_code=safe_error_code,
+            )
+            # Emit every visible Agent reference to this canonical document.
+            # If an Agent has several Sets, its generating Set sorts first and
+            # the first readable canonical document becomes its stable entry.
+            priority = 0 if run is not None and run.agent_id == source_agent.id else 1
+            candidates.append((priority, row))
+    candidates.sort(
+        key=lambda entry: (entry[0], str(entry[1].agent_id), str(entry[1].canonical_set_id))
+    )
+    seen_agents: set[str] = set()
+    result: list[BrainformKnowledgeSummary] = []
+    for _priority, row in candidates:
+        agent_id = str(row.agent_id)
+        if agent_id in seen_agents:
+            continue
+        seen_agents.add(agent_id)
+        result.append(row)
+    return result
+
+
+def get_brainform_markdown(
+    db: Session, context: AuthContext, set_id: str
+) -> KnowledgeMarkdownDocument:
+    access = _access(db, context, set_id)
+    version = _current_markdown_version(db, access.knowledge_set)
+    if version is None:
+        raise not_found()
+    agent = _visible_source_agent(db, context, access.knowledge_set)
+    if access.role == "teacher" and not _markdown_sources_readable_to_teacher(
+        db,
+        context,
+        access.knowledge_set,
+        version,
+    ):
+        raise not_found()
+    full = access.role in {"owner", "teacher"}
+    projection_available = _student_projection_is_available(
+        db, context, access.knowledge_set, version
+    )
+    markdown = (
+        version.markdown
+        if full
+        else version.student_projection_markdown
+        if projection_available
+        else ""
+    )
+    return KnowledgeMarkdownDocument(
+        audience="full" if full else "student",
+        agent_id=_uid(agent.id),
+        canonical_set_id=_uid(set_id),
+        source_agent_display_name=agent.name,
+        knowledge_display_name=access.knowledge_set.display_name,
+        version_seq=version.version_seq,
+        content_hash=version.content_hash if full else _sha256(markdown),
+        markdown=markdown,
+        projection_available=full or projection_available,
+        can_read=True,
+        can_edit=access.can_edit,
+        created_at=version.created_at,
+    )
+
+
+_QUESTION_HEADING = re.compile(r"^(?:Question\s+|Q)(\d+)\s*$", re.IGNORECASE)
+_RUBRIC_CRITERION = re.compile(
+    r"^-\s+\*\*(?P<label>.+?)\*\*\s+\((?P<points>(?:\d+(?:\.\d*)?|\.\d+))\):\s*(?P<guidance>.*)$"
+)
+_RUBRIC_TOTAL = re.compile(
+    r"^Total:\s*(?P<points>(?:\d+(?:\.\d*)?|\.\d+))\s+points?\.?$",
+    re.IGNORECASE,
+)
+
+
+def _markdown_headings(markdown: str) -> list[tuple[int, int, str]]:
+    """Return ATX and Setext headings outside fenced code blocks."""
+
+    fence: tuple[str, int] | None = None
+    visible_lines: list[str | None] = []
+    for line in markdown.splitlines():
+        fence_match = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+        if fence is not None:
+            visible_lines.append(None)
+            if fence_match and fence_match.group(1)[0] == fence[0]:
+                marker = fence_match.group(1)
+                if len(marker) >= fence[1] and line[fence_match.end() :].strip() == "":
+                    fence = None
+            continue
+        if fence_match:
+            visible_lines.append(None)
+            marker = fence_match.group(1)
+            fence = (marker[0], len(marker))
+            continue
+        visible_lines.append(line)
+
+    headings: list[tuple[int, int, str]] = []
+    setext = re.compile(r"^\s{0,3}(=+|-+)\s*$")
+    atx = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
+    for index, visible_line in enumerate(visible_lines):
+        if visible_line is None:
+            continue
+        heading = atx.match(visible_line)
+        if heading:
+            headings.append((index, len(heading.group(1)), heading.group(2).strip()))
+        underline = setext.fullmatch(visible_line)
+        if underline is None or index == 0:
+            continue
+        title = visible_lines[index - 1]
+        if title is None or not title.strip() or atx.fullmatch(title):
+            continue
+        headings.append((index - 1, 1 if underline.group(1).startswith("=") else 2, title.strip()))
+    headings.sort(key=lambda item: item[0])
+    return headings
+
+
+def _parse_markdown_questions(markdown: str) -> list[QuestionContent] | None:
+    """Parse only the explicit generated Question/Rubric Markdown shape.
+
+    Unrecognized or incomplete sections remain lossless document text but do
+    not become active assessment content.
+    """
+
+    lines = markdown.splitlines()
+    headings = _markdown_headings(markdown)
+    question_sections = [
+        heading for heading in headings if heading[1] == 2 and heading[2].casefold() == "questions"
+    ]
+    if not question_sections:
+        return []
+    if len(question_sections) != 1:
+        return None
+    section_index = question_sections[0][0]
+    section_end = next(
+        (index for index, level, _title in headings if index > section_index and level == 2),
+        len(lines),
+    )
+    section_headings = [
+        (index, level, title)
+        for index, level, title in headings
+        if section_index < index < section_end
+    ]
+    question_headings = [(index, title) for index, level, title in section_headings if level == 3]
+    if not question_headings:
+        return []
+    numbered: list[tuple[int, int]] = []
+    for index, title in question_headings:
+        match = _QUESTION_HEADING.fullmatch(title)
+        if match is None:
+            return None
+        numbered.append((index, int(match.group(1))))
+    if [number for _index, number in numbered] != list(range(1, len(numbered) + 1)):
+        return None
+
+    questions: list[QuestionContent] = []
+    for item_index, (heading_index, _number) in enumerate(numbered):
+        block_end = numbered[item_index + 1][0] if item_index + 1 < len(numbered) else section_end
+        block_headings = [
+            (index, level, title)
+            for index, level, title in section_headings
+            if heading_index < index < block_end
+        ]
+        nested_headings = [
+            (index, level, title.casefold()) for index, level, title in block_headings
+        ]
+        if any(
+            level != 4 or title not in {"rubric", "reference answer"}
+            for _index, level, title in nested_headings
+        ):
+            return None
+        subsection_headings = [(index, title) for index, _level, title in nested_headings]
+        rubric_heads = [index for index, title in subsection_headings if title == "rubric"]
+        answer_heads = [
+            index for index, title in subsection_headings if title == "reference answer"
+        ]
+        if len(rubric_heads) != 1 or len(answer_heads) > 1:
+            return None
+        prompt_end = min([*rubric_heads, *answer_heads], default=block_end)
+        prompt = "\n".join(lines[heading_index + 1 : prompt_end]).strip()
+        if not prompt:
+            return None
+
+        rubric_start = rubric_heads[0] + 1
+        rubric_end = next(
+            (index for index, _title in subsection_headings if index > rubric_heads[0]),
+            block_end,
+        )
+        criteria: list[RubricCriterion] = []
+        total_points: float | None = None
+        for line in lines[rubric_start:rubric_end]:
+            value = line.strip()
+            if not value:
+                continue
+            total = _RUBRIC_TOTAL.fullmatch(value)
+            if total is not None:
+                if total_points is not None:
+                    return None
+                total_points = float(total.group("points"))
+                continue
+            criterion = _RUBRIC_CRITERION.fullmatch(value)
+            if criterion is None or not criterion.group("label").strip():
+                return None
+            criteria.append(
+                RubricCriterion(
+                    label=criterion.group("label").strip(),
+                    points=float(criterion.group("points")),
+                    guidance=criterion.group("guidance").strip(),
+                )
+            )
+        if not criteria or (
+            total_points is not None
+            and abs(total_points - sum(item.points for item in criteria)) > 0.000001
+        ):
+            return None
+
+        reference_answer: str | None = None
+        if answer_heads:
+            answer_start = answer_heads[0] + 1
+            answer_end = next(
+                (index for index, _title in subsection_headings if index > answer_heads[0]),
+                block_end,
+            )
+            reference_answer = "\n".join(lines[answer_start:answer_end]).strip() or None
+        try:
+            questions.append(
+                QuestionContent(
+                    kind="question",
+                    prompt=prompt,
+                    reference_answer=reference_answer,
+                    rubric=Rubric(criteria=criteria, total_points=total_points),
+                )
+            )
+        except ValueError:
+            return None
+    return questions
+
+
+def _current_question_projection(
+    db: Session,
+    set_row: KnowledgeSet,
+    markdown_version: KnowledgeSetMarkdownVersion | None,
+) -> list[tuple[KnowledgeAsset, KnowledgeAssetVersion, QuestionContent]]:
+    if markdown_version is None:
+        return []
+    current: list[tuple[KnowledgeAsset, KnowledgeAssetVersion, QuestionContent]] = []
+    for version_id in _markdown_asset_version_ids(markdown_version):
+        version = db.get(KnowledgeAssetVersion, version_id)
+        asset = db.get(KnowledgeAsset, version.asset_id) if version is not None else None
+        if (
+            version is None
+            or asset is None
+            or asset.knowledge_set_id != set_row.id
+            or asset.kind != "question"
+        ):
+            continue
+        try:
+            content = QuestionContent.model_validate_json(version.content_json)
+        except ValueError:
+            continue
+        current.append((asset, version, content))
+    return current
+
+
+def _question_version_references(
+    db: Session,
+    set_row: KnowledgeSet,
+    version: KnowledgeAssetVersion,
+) -> list[tuple[KnowledgeSetSource, AssetCitation]]:
+    references: list[tuple[KnowledgeSetSource, AssetCitation]] = []
+    for source in _version_sources(db, version.id):
+        binding = db.get(KnowledgeSetSource, source.source_binding_id)
+        if binding is None or binding.knowledge_set_id != set_row.id:
+            continue
+        try:
+            citation = AssetCitation.model_validate(
+                {
+                    "source_binding_id": source.source_binding_id,
+                    "location": json.loads(source.source_location_json),
+                }
+            )
+        except (TypeError, ValueError):
+            continue
+        references.append((binding, citation))
+    return references
+
+
+def _safe_question_markdown(questions: list[QuestionContent]) -> str:
+    if not questions:
+        return ""
+    blocks: list[str] = []
+    for index, question in enumerate(questions, start=1):
+        quoted_prompt = "\n".join(
+            "> " + html.escape(line, quote=False) for line in question.prompt.splitlines()
+        )
+        blocks.append(f"### Question {index}\n\n{quoted_prompt}")
+    return "## Questions\n\n" + "\n\n".join(blocks)
+
+
+def _without_question_section(markdown: str) -> str:
+    lines = markdown.splitlines()
+    headings = _markdown_headings(markdown)
+    question_sections = [
+        index for index, level, title in headings if level == 2 and title.casefold() == "questions"
+    ]
+    if len(question_sections) != 1:
+        return markdown.strip()
+    start = question_sections[0]
+    end = next(
+        (index for index, level, _title in headings if index > start and level == 2),
+        len(lines),
+    )
+    return "\n".join([*lines[:start], *lines[end:]]).strip()
+
+
+def _replace_question_section(markdown: str, replacement: str) -> str:
+    lines = markdown.splitlines()
+    headings = _markdown_headings(markdown)
+    question_sections = [
+        index for index, level, title in headings if level == 2 and title.casefold() == "questions"
+    ]
+    if len(question_sections) > 1:
+        return replacement
+    if not question_sections:
+        if not replacement:
+            return markdown.strip()
+        return "\n\n".join(part for part in (markdown.strip(), replacement) if part)
+    start = question_sections[0]
+    end = next(
+        (index for index, level, _title in headings if index > start and level == 2),
+        len(lines),
+    )
+    updated = [*lines[:start], *replacement.splitlines(), *lines[end:]]
+    return "\n".join(updated).strip()
+
+
+def _save_manual_question_projection(
+    db: Session,
+    *,
+    set_row: KnowledgeSet,
+    current_markdown: KnowledgeSetMarkdownVersion | None,
+    markdown: str,
+    actor_user_id: str,
+) -> tuple[list[str], str]:
+    parsed = _parse_markdown_questions(markdown)
+    if not parsed:
+        return [], ""
+
+    previous = _current_question_projection(db, set_row, current_markdown)
+    version_ids: list[str] = []
+    projected_questions: list[QuestionContent] = []
+    for index, parsed_question in enumerate(parsed):
+        asset: KnowledgeAsset
+        references: list[tuple[KnowledgeSetSource, AssetCitation]] = []
+        if index < len(previous):
+            asset, previous_version, previous_content = previous[index]
+            if previous_content.prompt == parsed_question.prompt:
+                parsed_question = parsed_question.model_copy(
+                    update={
+                        "concept_ids": previous_content.concept_ids,
+                        "citations": previous_content.citations,
+                    }
+                )
+                references = _question_version_references(db, set_row, previous_version)
+            expected_seq = asset.current_version_seq
+            next_seq = expected_seq + 1
+            advanced = db.execute(
+                update(KnowledgeAsset)
+                .where(
+                    KnowledgeAsset.id == asset.id,
+                    KnowledgeAsset.knowledge_set_id == set_row.id,
+                    KnowledgeAsset.current_version_seq == expected_seq,
+                )
+                .values(current_version_seq=next_seq, updated_at=now_utc())
+                .execution_options(synchronize_session=False)
+            )
+            if getattr(advanced, "rowcount", 0) != 1:
+                current_seq = db.scalar(
+                    select(KnowledgeAsset.current_version_seq).where(KnowledgeAsset.id == asset.id)
+                )
+                raise stale_revision(current_seq)
+            asset.current_version_seq = next_seq
+            asset.updated_at = now_utc()
+        else:
+            timestamp = now_utc()
+            asset = KnowledgeAsset(
+                id=str(uuid4()),
+                knowledge_set_id=set_row.id,
+                kind="question",
+                generation_lineage_key=None,
+                current_version_seq=1,
+                created_by_user_id=actor_user_id,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            db.add(asset)
+            db.flush()
+            next_seq = 1
+
+        content_json = _canonical_json(parsed_question.model_dump(mode="json"))
+        version = _store_version(
+            db,
+            actor_user_id,
+            set_row,
+            asset,
+            content_json,
+            references,
+            next_seq,
+            origin="manual",
+        )
+        version_ids.append(version.id)
+        projected_questions.append(parsed_question)
+    return version_ids, _safe_question_markdown(projected_questions)
+
+
+def save_brainform_markdown(
+    db: Session,
+    context: AuthContext,
+    set_id: str,
+    request: SaveKnowledgeMarkdownRequest,
+) -> KnowledgeMarkdownDocument:
+    access = _editable_access(db, context, set_id)
+    set_row = access.knowledge_set
+    current_markdown = _current_markdown_version(db, set_row)
+    if current_markdown is not None and current_markdown.content_hash == _sha256(request.markdown):
+        save_knowledge_markdown_version(
+            db,
+            set_id=set_id,
+            expected_version_seq=request.expected_version_seq,
+            markdown=request.markdown,
+            actor_user_id=context.user.id,
+            origin="manual",
+        )
+        return get_brainform_markdown(db, context, set_id)
+
+    question_asset_version_ids, student_projection = _save_manual_question_projection(
+        db,
+        set_row=set_row,
+        current_markdown=current_markdown,
+        markdown=request.markdown,
+        actor_user_id=context.user.id,
+    )
+    asset_version_ids = question_asset_version_ids
+    if current_markdown is not None and _without_question_section(
+        current_markdown.markdown
+    ) == _without_question_section(request.markdown):
+        previous_asset_version_ids = _markdown_asset_version_ids(current_markdown)
+        previous_versions = db.scalars(
+            select(KnowledgeAssetVersion).where(
+                KnowledgeAssetVersion.id.in_(previous_asset_version_ids)
+            )
+        ).all()
+        previous_by_id = {version.id: version for version in previous_versions}
+        non_question_version_ids = [
+            version_id
+            for version_id in previous_asset_version_ids
+            if (version := previous_by_id.get(version_id)) is not None
+            and (asset := db.get(KnowledgeAsset, version.asset_id)) is not None
+            and asset.kind != "question"
+        ]
+        asset_version_ids = non_question_version_ids + question_asset_version_ids
+        student_projection = _replace_question_section(
+            current_markdown.student_projection_markdown,
+            student_projection,
+        )
+    save_knowledge_markdown_version(
+        db,
+        set_id=set_id,
+        expected_version_seq=request.expected_version_seq,
+        markdown=request.markdown,
+        actor_user_id=context.user.id,
+        origin="manual",
+        source_manifest_hash=(
+            current_markdown.source_manifest_hash if current_markdown is not None else None
+        ),
+        asset_version_ids=asset_version_ids,
+        student_projection_markdown=student_projection,
+    )
+    return get_brainform_markdown(db, context, set_id)
+
+
+def enqueue_brainform_regeneration(
+    db: Session,
+    context: AuthContext,
+    set_id: str,
+    action_id: str,
+) -> RegenerateKnowledgeResponse:
+    _editable_access(db, context, set_id)
+    from app.modules.knowledge_sets.generation import enqueue_generation_for_existing_set
+
+    queued = enqueue_generation_for_existing_set(
+        db,
+        set_id=set_id,
+        owner_user_id=context.user.id,
+        action_id=action_id,
+    )
+    return RegenerateKnowledgeResponse(
+        action_id=UUID(queued.run.action_id),
+        agent_id=_uid(queued.run.agent_id),
+        canonical_set_id=_uid(queued.run.knowledge_set_id),
+        run_id=_uid(queued.run.id),
+        job_id=_uid(queued.job.id),
+        state=cast(Any, queued.run.state),
+    )
 
 
 def create_knowledge_set(
@@ -590,6 +1494,45 @@ def _advance_set_content(
     row.updated_at = now_utc()
 
 
+def _enqueue_source_binding_generation(
+    db: Session,
+    context: AuthContext,
+    set_row: KnowledgeSet,
+    *,
+    allow_empty_blocked: bool,
+) -> str | None:
+    has_generation_relation = db.scalar(
+        select(KnowledgeGenerationRun.id)
+        .where(KnowledgeGenerationRun.knowledge_set_id == set_row.id)
+        .limit(1)
+    )
+    if has_generation_relation is None:
+        return None
+    from app.modules.knowledge_sets.generation import enqueue_generation_for_existing_set
+
+    action_id = str(
+        uuid5(
+            UUID("efdf85a2-3c5f-4f52-8f52-b4dd45e22d90"),
+            f"binding:{set_row.id}:{set_row.content_revision}",
+        )
+    )
+    try:
+        queued = enqueue_generation_for_existing_set(
+            db,
+            set_id=set_row.id,
+            owner_user_id=context.user.id,
+            action_id=action_id,
+            allow_empty_blocked=allow_empty_blocked,
+        )
+    except PlatformError as error:
+        if error.status_code == 404:
+            # The source edit remains valid even if an old generator relation
+            # has since lost its own authorization.
+            return None
+        raise
+    return queued.run.id
+
+
 def replace_knowledge_set_sources(
     db: Session,
     context: AuthContext,
@@ -597,6 +1540,7 @@ def replace_knowledge_set_sources(
     *,
     expected_content_revision: int,
     source_document_ids: list[UUID],
+    enqueued_generation_run_ids: list[str] | None = None,
 ) -> KnowledgeSetDetail:
     access = _editable_access(db, context, set_id)
     row = access.knowledge_set
@@ -692,6 +1636,9 @@ def replace_knowledge_set_sources(
             )
         )
     db.flush()
+    run_id = _enqueue_source_binding_generation(db, context, row, allow_empty_blocked=True)
+    if run_id is not None and enqueued_generation_run_ids is not None:
+        enqueued_generation_run_ids.append(run_id)
     return get_knowledge_set(db, context, set_id)
 
 
@@ -702,6 +1649,7 @@ def remove_knowledge_set_source(
     binding_id: str,
     *,
     expected_content_revision: int,
+    enqueued_generation_run_ids: list[str] | None = None,
 ) -> KnowledgeSetDetail:
     access = _editable_access(db, context, set_id)
     row = access.knowledge_set
@@ -714,6 +1662,9 @@ def remove_knowledge_set_source(
         _advance_set_content(db, row, expected_content_revision)
         binding.is_active = False
         db.flush()
+        run_id = _enqueue_source_binding_generation(db, context, row, allow_empty_blocked=True)
+        if run_id is not None and enqueued_generation_run_ids is not None:
+            enqueued_generation_run_ids.append(run_id)
     return get_knowledge_set(db, context, set_id)
 
 
@@ -742,21 +1693,44 @@ def _asset_version_sources_readable(
             return False
         if role != "owner" and not binding.is_active:
             return False
-        if (
-            binding.document_id != reference.document_id
-            or binding.stored_file_id != reference.stored_file_id
-            or binding.source_content_hash != reference.source_content_hash
-            or binding.source_file_sha256 != reference.source_file_sha256
-            or binding.source_authorization_epoch != reference.source_authorization_epoch
-        ):
+        if binding.document_id != reference.document_id:
             return False
-        if not _source_matches_current(
-            db,
-            context,
-            binding,
-            role=role,
-            for_write=False,
-        ):
+        historical = db.scalar(
+            select(KnowledgeDocumentVersion).where(
+                KnowledgeDocumentVersion.document_id == reference.document_id,
+                KnowledgeDocumentVersion.stored_file_id == reference.stored_file_id,
+                KnowledgeDocumentVersion.content_hash == reference.source_content_hash,
+                KnowledgeDocumentVersion.file_sha256 == reference.source_file_sha256,
+            )
+        )
+        if historical is None:
+            # Older isolated databases may not have run the history migration;
+            # accept only a byte-for-byte match to the current source head.
+            # Authorization epochs belong to the live ACL checks below, not to
+            # the immutable identity of the historical content bytes.
+            document = db.get(KnowledgeDocument, reference.document_id)
+            stored_file = db.get(StoredFile, reference.stored_file_id)
+            if (
+                document is None
+                or stored_file is None
+                or document.stored_file_id != reference.stored_file_id
+                or document.content_hash != reference.source_content_hash
+                or stored_file.sha256 != reference.source_file_sha256
+            ):
+                return False
+        document = db.get(KnowledgeDocument, reference.document_id)
+        if document is None:
+            return False
+        if role == "owner":
+            actor_id = context.user.id if isinstance(context, AuthContext) else context
+            if (
+                set_row.ownership_scope == "personal"
+                and document.ownership_scope == "group"
+                and document.group_id is not None
+                and scoped_group_role_for_user(db, actor_id, document.group_id) != "student"
+            ) or not can_read_source(db, context, document, require_active=False):
+                return False
+        elif not _source_matches_current(db, context, binding, role=role, for_write=False):
             return False
     return True
 
@@ -1041,7 +2015,7 @@ def save_generated_knowledge_asset(
                 KnowledgeAssetVersion.version_seq == expected_asset_version_seq,
             )
         )
-        if current_version is None or current_version.origin != "ai":
+        if current_version is None:
             raise stale_revision(asset.current_version_seq)
         _advance_set_content(db, set_row, set_row.content_revision)
         next_seq = expected_asset_version_seq + 1
@@ -1161,7 +2135,7 @@ def _asset_dto(
         id=_uid(asset.id),
         knowledge_set_id=_uid(set_row.id),
         kind=asset.kind,  # type: ignore[arg-type]
-        current_version_seq=asset.current_version_seq if role == "owner" else None,
+        current_version_seq=actual_version.version_seq if role == "owner" else None,
         current_version=_full_version_dto(actual_version, expose_version_seq=role == "owner"),
         can_edit=role == "owner",
         created_at=asset.created_at if role == "owner" else None,
@@ -1187,13 +2161,30 @@ def list_knowledge_assets(
         statement.order_by(KnowledgeAsset.kind, KnowledgeAsset.created_at, KnowledgeAsset.id)
     ).all()
     result: list[KnowledgeAssetFullDTO | KnowledgeAssetStudentDTO] = []
+    markdown_version = _current_markdown_version(db, access.knowledge_set)
+    projected_ids = (
+        set(_markdown_asset_version_ids(markdown_version)) if markdown_version else set()
+    )
+    projected_versions = (
+        {
+            version.asset_id: version
+            for version in db.scalars(
+                select(KnowledgeAssetVersion).where(KnowledgeAssetVersion.id.in_(projected_ids))
+            ).all()
+        }
+        if projected_ids
+        else {}
+    )
     for asset in rows:
-        version = db.scalar(
-            select(KnowledgeAssetVersion).where(
-                KnowledgeAssetVersion.asset_id == asset.id,
-                KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+        if markdown_version is None:
+            version = db.scalar(
+                select(KnowledgeAssetVersion).where(
+                    KnowledgeAssetVersion.asset_id == asset.id,
+                    KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+                )
             )
-        )
+        else:
+            version = projected_versions.get(asset.id)
         if version is None:
             continue
         if not _asset_version_sources_readable(
@@ -1226,6 +2217,11 @@ def create_knowledge_asset(
     set_row = access.knowledge_set
     if set_row.content_revision != expected_content_revision:
         raise stale_revision(set_row.content_revision)
+    if set_row.current_markdown_version_seq > 0:
+        raise unprocessable(
+            "knowledge_markdown_is_canonical",
+            "Edit the canonical Knowledge Markdown to change its content.",
+        )
     content_json, references = _validated_content(
         db,
         context,
@@ -1269,6 +2265,11 @@ def update_knowledge_asset(
     set_row = access.knowledge_set
     if set_row.content_revision != expected_content_revision:
         raise stale_revision(set_row.content_revision)
+    if set_row.current_markdown_version_seq > 0:
+        raise unprocessable(
+            "knowledge_markdown_is_canonical",
+            "Edit the canonical Knowledge Markdown to change its content.",
+        )
     if asset.current_version_seq != expected_asset_version_seq:
         raise stale_revision(asset.current_version_seq)
     if content.kind != asset.kind:
@@ -1342,7 +2343,20 @@ def get_knowledge_asset(
     if asset is None:
         raise not_found()
     access = _access(db, context, asset.knowledge_set_id)
-    return _asset_dto(db, context, access.knowledge_set, access.role, asset)
+    markdown_version = _current_markdown_version(db, access.knowledge_set)
+    if markdown_version is None:
+        version = None
+    else:
+        projected_ids = set(_markdown_asset_version_ids(markdown_version))
+        version = db.scalar(
+            select(KnowledgeAssetVersion).where(
+                KnowledgeAssetVersion.asset_id == asset.id,
+                KnowledgeAssetVersion.id.in_(projected_ids),
+            )
+        )
+        if version is None:
+            raise not_found()
+    return _asset_dto(db, context, access.knowledge_set, access.role, asset, version=version)
 
 
 def get_knowledge_asset_version(
@@ -1400,6 +2414,10 @@ def list_knowledge_asset_versions(
 
 def get_knowledge_graph(db: Session, context: AuthContext, set_id: str) -> KnowledgeGraph:
     access = _access(db, context, set_id)
+    markdown_version = _current_markdown_version(db, access.knowledge_set)
+    projected_ids = (
+        set(_markdown_asset_version_ids(markdown_version)) if markdown_version else set()
+    )
     rows = db.scalars(
         select(KnowledgeAsset).where(
             KnowledgeAsset.knowledge_set_id == set_id,
@@ -1412,12 +2430,22 @@ def get_knowledge_graph(db: Session, context: AuthContext, set_id: str) -> Knowl
     visible_ids: set[str] = set()
     current_payloads: dict[str, ConceptContent] = {}
     for asset in rows:
-        version = db.scalar(
-            select(KnowledgeAssetVersion).where(
-                KnowledgeAssetVersion.asset_id == asset.id,
-                KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+        if markdown_version is None:
+            version = db.scalar(
+                select(KnowledgeAssetVersion).where(
+                    KnowledgeAssetVersion.asset_id == asset.id,
+                    KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+                )
             )
-        )
+        else:
+            version = db.scalar(
+                select(KnowledgeAssetVersion).where(
+                    KnowledgeAssetVersion.asset_id == asset.id,
+                    KnowledgeAssetVersion.id.in_(projected_ids),
+                )
+            )
+            if version is not None and version.id not in projected_ids:
+                version = None
         if version is None or not _asset_version_sources_readable(
             db, context, access.knowledge_set, access.role, version
         ):

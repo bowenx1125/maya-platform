@@ -26,6 +26,7 @@ from app.modules.auth.dependencies import (
     require_demo_mode,
     require_demo_quick_login,
 )
+from app.modules.auth.profile import change_password, update_avatar
 from app.modules.auth.registration import (
     register_student,
     reset_student_password,
@@ -42,11 +43,13 @@ from app.modules.auth.schemas import (
     DemoSwitchRequest,
     GroupMembership,
     LoginRequest,
+    PasswordChangeRequest,
     PasswordResetRequest,
     PasswordResetResult,
     RegisterRequest,
     RegistrationGroup,
     RegistrationOptions,
+    UpdateCurrentUserRequest,
 )
 from app.modules.auth.service import (
     SESSION_COOKIE_NAME,
@@ -97,6 +100,7 @@ def _current_user(db: Session, user: User) -> CurrentUser:
         id=UUID(user.id),
         username=user.username,
         display_name=user.display_name,
+        avatar=user.avatar,
         courses=[
             CourseMembership(course_id=UUID(row.course_id), role=row.role) for row in course_rows
         ],
@@ -174,9 +178,9 @@ def login(
     # The read-only Demo catalog stays authoritative for the fixed
     # identities; self-registered accounts resolve from the database source
     # only after that lookup misses.
-    user_id = verify_password(settings, payload.username, payload.password)
-    if user_id is None:
-        user_id = verify_database_password(db, payload.username, payload.password)
+    database_owned, user_id = verify_database_password(db, payload.username, payload.password)
+    if not database_owned:
+        user_id = verify_password(settings, payload.username, payload.password)
     if user_id is None:
         # Which half was wrong is reported on purpose. A student who has
         # mistyped their name should not spend the lesson guessing at their
@@ -224,6 +228,57 @@ def me(
     db: Session = Depends(get_db),
 ) -> AuthSession:
     return _auth_response(db, context)
+
+
+@router.patch(
+    "/me",
+    response_model=AuthSession,
+    operation_id="updateCurrentUser",
+    responses={
+        200: {"model": AuthSession, "description": "Updated profile and current session."},
+        401: {"model": Error, "description": "Authentication required."},
+        403: {"model": Error, "description": "CSRF failure."},
+        422: {"model": Error, "description": "Avatar choice is invalid."},
+    },
+)
+def update_current_user(
+    payload: UpdateCurrentUserRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> AuthSession:
+    update_avatar(context.user, payload.avatar)
+    db.flush()
+    return _auth_response(db, context)
+
+
+@router.post(
+    "/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="changeCurrentPassword",
+    responses={
+        204: {"description": "Password changed; other sessions revoked."},
+        401: {"model": Error, "description": "Authentication or current password failed."},
+        403: {"model": Error, "description": "CSRF failure."},
+        422: {"model": Error, "description": "New password is invalid."},
+    },
+)
+def change_current_password(
+    payload: PasswordChangeRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    change_password(
+        db,
+        settings,
+        user=context.user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+        current_session_id_hash=context.session.id_hash,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

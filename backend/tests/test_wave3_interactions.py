@@ -980,13 +980,13 @@ def test_prewarm_yields_at_a_turn_boundary_and_never_resumes_an_ended_debate() -
         scheduler.bind_running_loop()
         scheduler.focus("a")
         await asyncio.sleep(0)
-        for _ in range(40):
-            await asyncio.sleep(0)
-            if scheduler._task is None or scheduler._task.done():
-                break
-        task = scheduler._task
-        if task is not None:
-            await task
+        # The planner runs in a worker thread, so a fixed number of zero-delay
+        # loop turns does not guarantee that its task has finished.  Await each
+        # task the scheduler hands off to, including the newly focused draft.
+        while scheduler.busy:
+            task = scheduler._task
+            if task is not None:
+                await task
         await scheduler.close()
 
     asyncio.run(run())

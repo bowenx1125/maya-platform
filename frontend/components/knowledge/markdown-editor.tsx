@@ -1,10 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import type { KnowledgeDocument } from "../../lib/api";
-import { useT } from "../locale";
+import { localizeError } from "../../lib/i18n";
+import { useLocale, useT } from "../locale";
 import { WorkspaceAction } from "../workspace-actions";
 
 /** A narrow editable view with the authoritative replacement CAS fields. */
@@ -75,6 +76,7 @@ export function MarkdownEditor({
   onChange,
 }: MarkdownEditorProps) {
   const t = useT();
+  const { locale } = useLocale();
   const formId = useId();
   const replacing = Boolean(document);
   const [filename, setFilename] = useState(
@@ -82,7 +84,10 @@ export function MarkdownEditor({
   );
   const [content, setContent] = useState(initialContent);
   const [submitting, setSubmitting] = useState(false);
+  const [importingFile, setImportingFile] = useState(false);
+  const [importingConversion, setImportingConversion] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastImportedFile = useRef<string | null>(null);
 
   const trimmedFilename = filename.trim();
   const validFilename =
@@ -127,9 +132,41 @@ export function MarkdownEditor({
         await onCreate(file);
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("requestFallback"));
+      setError(localizeError(cause, locale));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function importFile(file: File) {
+    if (disabled || submitting) return;
+    const signature = `${file.name}:${file.size}:${file.lastModified}`;
+    if (lastImportedFile.current !== signature) {
+      onChange?.();
+      lastImportedFile.current = signature;
+    }
+    setSubmitting(true);
+    setImportingFile(true);
+    setImportingConversion(/\.(pdf|docx)$/i.test(file.name));
+    setError(null);
+    try {
+      if (replacing && document && onReplace) {
+        await onReplace({
+          documentId: document.id,
+          file,
+          expectedContentHash: expectedContentHash ?? document.content_hash,
+          expectedIndexRevision:
+            expectedIndexRevision ?? document.index_revision,
+        });
+      } else if (!replacing && onCreate) {
+        await onCreate(file);
+      }
+    } catch (cause) {
+      setError(localizeError(cause, locale));
+    } finally {
+      setSubmitting(false);
+      setImportingFile(false);
+      setImportingConversion(false);
     }
   }
 
@@ -147,6 +184,40 @@ export function MarkdownEditor({
           disabled={disabled || submitting}
           onClick={onCancel}
         />
+      ) : null}
+      {onCreate || onReplace ? (
+        <div className="stack-form">
+          <label
+            className="secondary-action file-button"
+            data-ui-guide="knowledge.importFile"
+          >
+            {t("knowledgeImportFile")}
+            <input
+              type="file"
+              accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              aria-describedby="knowledge-import-formats"
+              disabled={disabled || submitting}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file) void importFile(file);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+          <p id="knowledge-import-formats" className="muted-copy">
+            {t("knowledgeImportFormats")}
+          </p>
+          {submitting && importingFile ? (
+            <p className="muted-copy" role="status" aria-live="polite">
+              <span className="spinner" aria-hidden="true" />
+              {t(
+                importingConversion
+                  ? "knowledgeImportPending"
+                  : "knowledgeUploadPending",
+              )}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       <label>
         <span>{t("knowledgeFilename")}</span>

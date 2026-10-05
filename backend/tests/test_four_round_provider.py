@@ -186,7 +186,7 @@ def test_structure_repair_uses_frozen_rules_and_completed_output_is_reused(
     from app.modules.debates.teaching_rules import compile_system_prompt
 
     frozen = replace(
-        snapshot(), frozen_system_prompt=compile_system_prompt("# Per-lesson repair rule", 1, "en")
+        snapshot(), frozen_system_prompt=compile_system_prompt("# Per-lesson repair rule", 1)
     )
     second = output(65) if repair_success else {"segments": []}
     provider = OfflineAdapter([{"segments": []}, second])

@@ -1,5 +1,7 @@
 "use client";
 
+import { CountUp } from "./count-up";
+import { HomeGuide } from "./home-guide";
 import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
@@ -25,9 +27,12 @@ import { useIdempotencyStore } from "../lib/idempotency";
 import { useT } from "./locale";
 import { IconClose, IconDownload } from "./quiet-icons";
 import { useSession } from "./session-provider";
+import { AcademyMascots } from "./academy/mascots";
+import { AccountSettings } from "./account-settings";
 import { AvatarPreview } from "./avatar";
 import { DemoCompositionBadge } from "./demo-composition";
 import { ReportMarkdown } from "./report/report-markdown";
+import { UserAvatar } from "./user-avatar";
 import detailStyles from "./teacher-agent-detail.module.css";
 import { AgentWorkbench } from "./agent-workspace";
 import { CreateAgentForm } from "./student-workspace";
@@ -56,6 +61,7 @@ export function TeacherDashboard() {
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const [debateCount, setDebateCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -67,15 +73,15 @@ export function TeacherDashboard() {
       const courses = await api.courses();
       if (workspaceScopeRef.current !== requestScope) return;
       const courseId = teacherCourseId;
-      const [nextPublished, nextGroups, nextPersonalAgents] = await Promise.all(
-        [
+      const [nextPublished, nextGroups, nextPersonalAgents, debates] =
+        await Promise.all([
           courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
           courseId ? api.groups(courseId) : Promise.resolve([]),
           courseId && typeof api.workspaceAgents === "function"
             ? api.workspaceAgents(courseId)
             : Promise.resolve([]),
-        ],
-      );
+          courseId ? api.debates(courseId) : Promise.resolve([]),
+        ]);
       if (workspaceScopeRef.current !== requestScope) return;
       setCourse(
         courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
@@ -83,6 +89,7 @@ export function TeacherDashboard() {
       setPublished(nextPublished);
       setGroups(nextGroups);
       setPersonalAgents(nextPersonalAgents);
+      setDebateCount(debates.length);
     } catch (cause) {
       if (workspaceScopeRef.current === requestScope) setError(cause);
     } finally {
@@ -120,15 +127,70 @@ export function TeacherDashboard() {
   if (loading || loadedScope !== workspaceScope) return <LoadingCard />;
   if (error && published.length === 0 && personalAgents.length === 0)
     return <ErrorNotice error={error} onRetry={() => void load()} />;
+  const name = user?.display_name ?? "";
+  const guide = [
+    {
+      label: t("teacherGuideCourse"),
+      complete: Boolean(course),
+      href: "/teacher/roster",
+    },
+    {
+      label: t("teacherGuideGroups"),
+      complete: groups.length > 0,
+      href: "/teacher/roster",
+    },
+    {
+      label: t("teacherGuideAgents"),
+      complete: published.length > 0,
+      href: "/teacher",
+    },
+    {
+      label: t("teacherGuideDebate"),
+      complete: debateCount > 0,
+      href: "/teacher/debates/new",
+    },
+  ];
   return (
-    <div className="teacher-home-layout">
-      <PageIntro
-        title={
-          course?.name === "Maya Cultural Exchange Demo"
-            ? t("appName")
-            : (course?.name ?? t("appName"))
-        }
-      />
+    <div className="mayaform-home">
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <p className="home-hero-eyebrow">{course?.name ?? t("course")}</p>
+          <h1>{t("homeWelcomeTitle", { name })}</h1>
+        </div>
+        <div className="home-hero-art">
+          <AcademyMascots label={t("academyMascotsLabel")} />
+        </div>
+      </section>
+      {/* A teacher opens this page to read the class, not their own progress,
+          so the counts come before the guide. A student has one group and
+          needs no such summary, which is what keeps the two homes apart. */}
+      <div className="home-stats">
+        <div className="home-stat">
+          <b>
+            <CountUp value={groups.length} />
+          </b>
+          <span>{t("groups")}</span>
+        </div>
+        <div className="home-stat">
+          <b>
+            <CountUp value={published.length} />
+          </b>
+          <span>{t("agents")}</span>
+        </div>
+        <div className="home-stat">
+          <b>
+            <CountUp value={debateCount} />
+          </b>
+          {/* `debates` is the nav's own word for the section ("Classroom"),
+              which reads wrong over a number; `debateList` is the plural
+              noun. */}
+          <span>{t("debateList")}</span>
+        </div>
+      </div>
+      <section className="home-panel" aria-labelledby="teacher-guide-title">
+        <h2 id="teacher-guide-title">{t("guide")}</h2>
+        <HomeGuide steps={guide} />
+      </section>
       <DemoCompositionBadge />
       {error ? <ErrorNotice error={error} /> : null}
       <SectionCard
@@ -137,9 +199,23 @@ export function TeacherDashboard() {
         className="published-section"
         action={
           course ? (
-            <Link className="primary-action" href="/teacher/agents/new">
-              {t("newAgent")}
-            </Link>
+            <div className="row-actions">
+              <Link
+                className="text-link"
+                href={`/teacher/provider-approvals/chats?course_id=${encodeURIComponent(course.id)}`}
+              >
+                {t("openProviderDisclosure")}
+              </Link>
+              <Link
+                className="text-link"
+                href="/teacher/agents/new?flow=ai-knowledge"
+              >
+                {t("createAiKnowledge")}
+              </Link>
+              <Link className="primary-action" href="/teacher/agents/new">
+                {t("newAgent")}
+              </Link>
+            </div>
           ) : null
         }
       >
@@ -185,6 +261,7 @@ export function TeacherDashboard() {
           </div>
         </SectionCard>
       )}
+      <AccountSettings onSaved={() => void load()} />
     </div>
   );
 }
@@ -260,6 +337,17 @@ function PublishedAgentTile({
         {item.agent.name}
       </Link>
       {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
+      {item.author ? (
+        <span className="agent-tile-author">
+          <UserAvatar
+            avatar={item.author.avatar}
+            name={item.author.display_name}
+            userId={item.author.user_id}
+            size="sm"
+          />
+          <span>{item.author.display_name}</span>
+        </span>
+      ) : null}
       <button
         type="button"
         className="agent-pill agent-pill-action"
@@ -598,27 +686,37 @@ export function TeacherAgentDetail({
         title="RAG"
         className={detailStyles.card}
         action={
-          snapshot?.documents.length ? (
-            <button
-              className="icon-action"
-              type="button"
-              aria-label={`${t("download")} RAG`}
-              title={t("download")}
-              onClick={() => {
-                void (async () => {
-                  for (const document of snapshot.documents) {
-                    const result = await api.downloadSnapshotDocument(
-                      snapshot.id,
-                      document.id,
-                    );
-                    downloadText(result.content, result.filename);
-                  }
-                })();
-              }}
-            >
-              <IconDownload />
-            </button>
-          ) : null
+          <div className={detailStyles.actions}>
+            {group ? (
+              <Link
+                className="secondary-action"
+                href={`/teacher/groups/${group.id}/knowledge`}
+              >
+                {t("knowledgeImportLink")}
+              </Link>
+            ) : null}
+            {snapshot?.documents.length ? (
+              <button
+                className="icon-action"
+                type="button"
+                aria-label={`${t("download")} RAG`}
+                title={t("download")}
+                onClick={() => {
+                  void (async () => {
+                    for (const document of snapshot.documents) {
+                      const result = await api.downloadSnapshotDocument(
+                        snapshot.id,
+                        document.id,
+                      );
+                      downloadText(result.content, result.filename);
+                    }
+                  })();
+                }}
+              >
+                <IconDownload />
+              </button>
+            ) : null}
+          </div>
         }
       >
         {snapshot?.documents.length ? (

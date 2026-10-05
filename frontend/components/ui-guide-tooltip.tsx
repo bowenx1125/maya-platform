@@ -30,24 +30,33 @@ export function UiGuideTooltip() {
   const [active, setActive] = useState<ActiveGuide | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const localeRef = useRef(locale);
+  const text = active ? uiGuideText(active.key, locale) : null;
+
+  useLayoutEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
 
   useEffect(() => {
     let described: HTMLElement | null = null;
+    let descriptionTarget: HTMLElement | null = null;
     let previousDescription: string | null = null;
     let currentKey: UiGuideKey | null = null;
     let hovered: HTMLElement | null = null;
     let focused: HTMLElement | null = null;
+    let focusedDescriptionElement: HTMLElement | null = null;
     let touchPinned = false;
     let pointerInput = false;
 
     const restoreDescription = () => {
-      if (!described) return;
+      if (!descriptionTarget) return;
       if (previousDescription === null) {
-        described.removeAttribute("aria-describedby");
+        descriptionTarget.removeAttribute("aria-describedby");
       } else {
-        described.setAttribute("aria-describedby", previousDescription);
+        descriptionTarget.setAttribute("aria-describedby", previousDescription);
       }
       described = null;
+      descriptionTarget = null;
       previousDescription = null;
     };
 
@@ -63,22 +72,28 @@ export function UiGuideTooltip() {
     const show = (
       target: HTMLElement,
       point: { x: number; y: number; anchor: ActiveGuide["anchor"] },
+      descriptionElement: HTMLElement = focused === target &&
+      focusedDescriptionElement
+        ? focusedDescriptionElement
+        : target,
     ) => {
       const key = target.dataset.uiGuide;
-      if (!key || !uiGuideText(key, locale)) {
+      if (!key || !uiGuideText(key, localeRef.current)) {
         hide();
         return;
       }
-      if (described !== target) {
+      if (described !== target || descriptionTarget !== descriptionElement) {
         restoreDescription();
-        previousDescription = target.getAttribute("aria-describedby");
+        previousDescription =
+          descriptionElement.getAttribute("aria-describedby");
         const ids = new Set(
           (previousDescription ?? "").split(/\s+/).filter(Boolean),
         );
         ids.add(tooltipId);
-        target.setAttribute("aria-describedby", [...ids].join(" "));
-        described = target;
+        descriptionElement.setAttribute("aria-describedby", [...ids].join(" "));
+        descriptionTarget = descriptionElement;
       }
+      described = target;
       currentKey = key as UiGuideKey;
       setActive({ ...point, key: key as UiGuideKey, target, pathname });
     };
@@ -95,12 +110,15 @@ export function UiGuideTooltip() {
     const onPointerOver = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
       pointerInput = true;
-      focused = null;
       touchPinned = false;
       const target = guideTarget(event.target);
       if (!target) {
         hide();
         return;
+      }
+      if (focused !== target) {
+        focused = null;
+        focusedDescriptionElement = null;
       }
       hovered = target;
       show(target, { x: event.clientX, y: event.clientY, anchor: "pointer" });
@@ -136,7 +154,7 @@ export function UiGuideTooltip() {
     const onPointerUp = (event: PointerEvent) => {
       if (event.pointerType !== "touch") return;
       const target = guideTarget(event.target);
-      if (!target || target.dataset.uiGuideTouch !== "true") return;
+      if (!target) return;
       if (touchPinned && described === target) {
         hide();
         return;
@@ -154,7 +172,9 @@ export function UiGuideTooltip() {
         return;
       }
       focused = target;
-      show(target, anchorPoint(target));
+      focusedDescriptionElement =
+        event.target instanceof HTMLElement ? event.target : target;
+      show(target, anchorPoint(target), focusedDescriptionElement);
     };
 
     const onFocusOut = (event: FocusEvent) => {
@@ -163,6 +183,7 @@ export function UiGuideTooltip() {
       if (!target || target !== focused || (next && target.contains(next)))
         return;
       focused = null;
+      focusedDescriptionElement = null;
       if (hovered !== target && !touchPinned) hide();
     };
 
@@ -223,33 +244,14 @@ export function UiGuideTooltip() {
       observer.disconnect();
       hide();
     };
-  }, [locale, pathname]);
+  }, [pathname]);
 
   useLayoutEffect(() => {
     const tooltip = tooltipRef.current;
-    if (!active || !tooltip) return;
+    if (!active || !text || !tooltip) return;
     const size = tooltip.getBoundingClientRect();
     const edge = 8;
-    let left: number;
-    let top: number;
-    if (active.anchor === "pointer") {
-      left = active.x + 12;
-      if (left + size.width + edge > window.innerWidth) {
-        left = active.x - size.width - 12;
-      }
-      top = active.y + 12;
-      if (top + size.height + edge > window.innerHeight) {
-        top = active.y - size.height - 12;
-      }
-    } else {
-      const rect = active.target.getBoundingClientRect();
-      left = rect.left + (rect.width - size.width) / 2;
-      top = rect.bottom + 10;
-      if (top + size.height + edge > window.innerHeight) {
-        top = rect.top - size.height - 10;
-      }
-    }
-    setPosition({
+    const clamp = (left: number, top: number) => ({
       left: Math.max(
         edge,
         Math.min(left, window.innerWidth - size.width - edge),
@@ -259,9 +261,107 @@ export function UiGuideTooltip() {
         Math.min(top, window.innerHeight - size.height - edge),
       ),
     });
-  }, [active]);
+    let nextPosition: { left: number; top: number };
+    const rect = active.target.getBoundingClientRect();
+    const candidates =
+      active.anchor === "pointer"
+        ? [
+            clamp(active.x + 12, active.y + 12),
+            clamp(active.x + 12, active.y - size.height - 12),
+            clamp(active.x - size.width - 12, active.y + 12),
+            clamp(active.x - size.width - 12, active.y - size.height - 12),
+            clamp(rect.left + (rect.width - size.width) / 2, rect.bottom + 10),
+            clamp(
+              rect.left + (rect.width - size.width) / 2,
+              rect.top - size.height - 10,
+            ),
+            clamp(rect.right + 10, rect.top + (rect.height - size.height) / 2),
+            clamp(
+              rect.left - size.width - 10,
+              rect.top + (rect.height - size.height) / 2,
+            ),
+          ]
+        : [
+            clamp(rect.left + (rect.width - size.width) / 2, rect.bottom + 10),
+            clamp(
+              rect.left + (rect.width - size.width) / 2,
+              rect.top - size.height - 10,
+            ),
+            clamp(rect.right + 10, rect.top + (rect.height - size.height) / 2),
+            clamp(
+              rect.left - size.width - 10,
+              rect.top + (rect.height - size.height) / 2,
+            ),
+            clamp(rect.left + (rect.width - size.width) / 2, rect.bottom),
+            clamp(
+              rect.left + (rect.width - size.width) / 2,
+              rect.top - size.height,
+            ),
+            clamp(rect.right, rect.top + (rect.height - size.height) / 2),
+            clamp(
+              rect.left - size.width,
+              rect.top + (rect.height - size.height) / 2,
+            ),
+          ];
+    const controls = [
+      rect,
+      ...Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'button, input, select, textarea, a[href], [role="button"], [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+        .filter((element) => element !== active.target)
+        .map((element) => element.getBoundingClientRect())
+        .filter((obstacle) => obstacle.width > 0 && obstacle.height > 0),
+    ];
+    const textObstacles = Array.from(
+      document.querySelectorAll<HTMLElement>("body *"),
+    )
+      .filter(
+        (element) =>
+          element.childElementCount === 0 &&
+          Boolean(element.textContent?.trim()) &&
+          element !== active.target &&
+          !active.target.contains(element) &&
+          !tooltip.contains(element) &&
+          !element.closest(
+            'button, input, select, textarea, a[href], [role="button"], [tabindex]:not([tabindex="-1"])',
+          ),
+      )
+      .map((element) => element.getBoundingClientRect())
+      .filter((obstacle) => obstacle.width > 0 && obstacle.height > 0);
+    const overlapArea = (
+      position: { left: number; top: number },
+      obstacles: DOMRect[],
+    ) =>
+      obstacles.reduce((total, obstacle) => {
+        const width = Math.max(
+          0,
+          Math.min(position.left + size.width, obstacle.right) -
+            Math.max(position.left, obstacle.left),
+        );
+        const height = Math.max(
+          0,
+          Math.min(position.top + size.height, obstacle.bottom) -
+            Math.max(position.top, obstacle.top),
+        );
+        return total + width * height;
+      }, 0);
+    nextPosition = candidates.reduce((best, candidate) =>
+      overlapArea(candidate, controls) < overlapArea(best, controls) ||
+      (overlapArea(candidate, controls) === overlapArea(best, controls) &&
+        overlapArea(candidate, textObstacles) <
+          overlapArea(best, textObstacles))
+        ? candidate
+        : best,
+    );
+    setPosition((current) =>
+      current.left === nextPosition.left && current.top === nextPosition.top
+        ? current
+        : nextPosition,
+    );
+  }, [active, text]);
 
-  const text = active ? uiGuideText(active.key, locale) : null;
   if (!active || !text || active.pathname !== pathname) return null;
   return createPortal(
     <div

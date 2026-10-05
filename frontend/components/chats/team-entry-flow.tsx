@@ -82,12 +82,21 @@ export function TeamEntryFlow({
   agents,
   onClose,
   onStartAgent,
+  onStartTeam,
 }: {
   api: PlatformApi;
   courseId: string;
   agents: ChatAgent[];
   onClose: () => void;
   onStartAgent: (versionId: string) => void;
+  onStartTeam: (
+    entry: {
+      kind: "team" | "maya_team";
+      team_id: string;
+      team_version_id?: string;
+    },
+    visibility: TeamVisibility,
+  ) => void;
 }) {
   const t = useT();
   const apiForTeams = teamApi(api);
@@ -105,6 +114,7 @@ export function TeamEntryFlow({
   const [teamListRefreshing, setTeamListRefreshing] = useState(false);
   const [teamListRefreshError, setTeamListRefreshError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const requestSeq = useRef(0);
@@ -314,6 +324,20 @@ export function TeamEntryFlow({
     await refreshTeamList();
   }
 
+  async function startTeam(entry: {
+    kind: "team" | "maya_team";
+    team_id: string;
+    team_version_id?: string;
+  }) {
+    if (starting) return;
+    setStarting(true);
+    try {
+      await onStartTeam(entry, chatVisibility);
+    } finally {
+      setStarting(false);
+    }
+  }
+
   const selectedDirectoryTeam = directory.find(
     (item) => item.id === selectedMayaTeam,
   );
@@ -335,7 +359,7 @@ export function TeamEntryFlow({
           className="inline-button"
           type="button"
           onClick={onClose}
-          disabled={mutationUnknown}
+          disabled={mutationUnknown || starting}
         >
           {t("cancel")}
         </button>
@@ -442,6 +466,20 @@ export function TeamEntryFlow({
                     onClick={() => void editTeam(team.id)}
                   >
                     {t("edit")}
+                  </button>
+                  <button
+                    className="inline-button"
+                    type="button"
+                    disabled={loading || starting || !team.current_version_id}
+                    onClick={() =>
+                      void startTeam({
+                        kind: "team",
+                        team_id: team.id,
+                        team_version_id: team.current_version_id,
+                      })
+                    }
+                  >
+                    {t("teamStartChat")}
                   </button>
                 </li>
               ))}
@@ -691,16 +729,18 @@ export function TeamEntryFlow({
                   </label>
                 ))}
               </fieldset>
-              <p className={styles.entryNotice} role="status">
-                {t("teamChatNotConnected", {
-                  team: selectedDirectoryTeam.display_name,
-                  visibility: t(
-                    chatVisibility === "private" ? "teamPrivate" : "teamPublic",
-                  ),
-                })}
-              </p>
-              <button className="primary-button" type="button" disabled>
-                {t("teamChatNotConnectedAction")}
+              <button
+                className="primary-button"
+                type="button"
+                disabled={starting}
+                onClick={() =>
+                  void startTeam({
+                    kind: "maya_team",
+                    team_id: selectedDirectoryTeam.id,
+                  })
+                }
+              >
+                {starting ? t("loading") : t("teamStartChat")}
               </button>
             </>
           ) : null}

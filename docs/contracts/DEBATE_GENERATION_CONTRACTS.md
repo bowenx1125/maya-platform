@@ -102,8 +102,8 @@ structured provider view, never raw `AGENT.md`.
 
 ### Strict Markdown grammar
 
-The deterministic compiler accepts UTF-8 Markdown no longer than 12,000 characters
-after CRLF normalization. The only accepted document shape is:
+The deterministic legacy compiler accepts UTF-8 Markdown without a whole-document
+character ceiling. The only accepted document shape is:
 
 ```markdown
 ## <Agent display name>
@@ -156,11 +156,9 @@ Rules are exact after trimming surrounding whitespace:
   never become instructions.
 
 The September 8 owner revision removes per-field character and list-count caps.
-All authored fields share the 12,000-character Markdown limit, including headings,
-spaces and punctuation after newline normalization. Compiler, stored/provider
-schemas and paragraph-input conversion use this same policy. Nonempty values and
-section structure remain required. Control and format characters other than
-normalized newline/tab are rejected.
+There is no whole-document character ceiling; nonempty values and section structure
+remain required. Control and format characters other than normalized newline/tab are
+rejected.
 
 ### Closed stored schema
 

@@ -52,13 +52,57 @@ def main() -> None:
 
         target = root.parent / "target-data"
         target.mkdir()
+        sentinel = target / "sentinel.txt"
+        sentinel.write_text("external target remains untouched", encoding="utf-8")
+        quarantines_before_link_check = {
+            item.name
+            for item in root.iterdir()
+            if item.name.startswith("data.quarantine-")
+        }
         linked = root / "data"
         if linked.exists():
             linked.rmdir()
-        linked.symlink_to(target, target_is_directory=True)
+        try:
+            linked.symlink_to(target, target_is_directory=True)
+        except OSError as error:
+            if sys.platform != "win32" or getattr(error, "winerror", None) != 1314:
+                raise
+            # Creating a symbolic link requires a Windows privilege unless
+            # Developer Mode is enabled. A junction exercises the same
+            # directory-redirection safety rule without that privilege.
+            junction = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(linked), str(target)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if junction.returncode != 0:
+                raise AssertionError(
+                    "could not create the junction safety fixture"
+                ) from error
+            if not linked.is_junction():
+                raise AssertionError("the Windows fallback fixture must be a junction")
         result = _run(script, root, linked)
-        if result.returncode == 0:
-            raise AssertionError("reset accepted a symlinked runtime directory")
+        if (
+            result.returncode == 0
+            or "refusing to reset a symlinked runtime directory" not in result.stderr
+        ):
+            raise AssertionError("reset did not reject a redirected runtime directory")
+        if not sentinel.is_file() or sentinel.read_text(encoding="utf-8") != (
+            "external target remains untouched"
+        ):
+            raise AssertionError(
+                "reset changed the external target behind a rejected link"
+            )
+        quarantines_after_link_check = {
+            item.name
+            for item in root.iterdir()
+            if item.name.startswith("data.quarantine-")
+        }
+        if quarantines_after_link_check != quarantines_before_link_check:
+            raise AssertionError(
+                "reset created a quarantine directory for a rejected link"
+            )
 
     print("reset_demo_runtime safety probe passed: exact path, containment, and symlink guards")
 

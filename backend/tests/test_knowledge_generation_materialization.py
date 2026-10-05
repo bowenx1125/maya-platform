@@ -17,6 +17,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeGenerationItem,
     KnowledgeGenerationRun,
     KnowledgeSet,
+    KnowledgeSetMarkdownVersion,
 )
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -127,7 +128,7 @@ def _create_generation_run(client: TestClient, database: Any) -> tuple[str, str,
     return agent_id, document_id, run_id, set_id
 
 
-def test_manual_asset_head_wins_over_later_explicit_generation(
+def test_manual_markdown_edit_is_overwritten_by_later_successful_generation(
     client: TestClient, app_bundle: Any
 ) -> None:
     _app, database, settings = app_bundle
@@ -151,26 +152,19 @@ def test_manual_asset_head_wins_over_later_explicit_generation(
     detail = client.get(f"/api/v1/knowledge-sets/{set_id}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["generated_by_agent_id"] == agent_id
-    assets = client.get(f"/api/v1/knowledge-sets/{set_id}/assets")
-    assert assets.status_code == 200, assets.text
-    assert len(assets.json()) == 1
-    asset = assets.json()[0]
-    assert asset["current_version_seq"] == 1
-    manual = client.patch(
-        f"/api/v1/knowledge-assets/{asset['id']}",
+    current = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
+    assert current.status_code == 200, current.text
+    assert current.json()["version_seq"] == 1
+    manual = client.put(
+        f"/api/v1/knowledge-sets/{set_id}/markdown",
         headers=_headers(csrf, **{"Idempotency-Key": f"k2b2-manual-{uuid4()}"}),
         json={
-            "expected_content_revision": detail.json()["content_revision"],
-            "expected_asset_version_seq": 1,
-            "content": {
-                "kind": "note",
-                "title": "Teacher's edit",
-                "body": "A human saved this newer version.",
-            },
+            "expected_version_seq": 1,
+            "markdown": "# Teacher's edit\n\nA human saved this newer version.",
         },
     )
     assert manual.status_code == 200, manual.text
-    assert manual.json()["current_version_seq"] == 2
+    assert manual.json()["version_seq"] == 2
 
     next_draft = client.post(
         f"/api/v1/agents/{agent_id}/versions",
@@ -208,7 +202,7 @@ def test_manual_asset_head_wins_over_later_explicit_generation(
             {
                 "kind": "note",
                 "title": "New generated candidate",
-                "body": "This must not replace the teacher's version.",
+                "body": "A successful newer generation replaces the manual head.",
             }
         ],
     )
@@ -220,28 +214,105 @@ def test_manual_asset_head_wins_over_later_explicit_generation(
         data_root=settings.resolved_data_root,
     )
 
-    current = client.get(f"/api/v1/knowledge-assets/{asset['id']}")
+    current = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
     assert current.status_code == 200, current.text
-    assert current.json()["current_version_seq"] == 2
-    assert current.json()["current_version"]["content"]["title"] == "Teacher's edit"
+    assert current.json()["version_seq"] == 3
+    assert "New generated candidate" in current.json()["markdown"]
+    assert "Teacher's edit" not in current.json()["markdown"]
     with database.session() as db:
         item = db.scalar(
             select(KnowledgeGenerationItem).where(KnowledgeGenerationItem.run_id == second_run_id)
         )
-        assert item is not None and item.state == "skipped"
-        assert item.safe_error_code == "manual_head_preserved"
+        assert item is not None and item.state == "applied"
+        markdown_versions = db.scalars(
+            select(KnowledgeSetMarkdownVersion)
+            .where(KnowledgeSetMarkdownVersion.knowledge_set_id == set_id)
+            .order_by(KnowledgeSetMarkdownVersion.version_seq)
+        ).all()
+        assert [version.origin for version in markdown_versions] == ["ai", "manual", "ai"]
         assert (
             db.scalar(
                 select(KnowledgeAssetVersion.origin).where(
-                    KnowledgeAssetVersion.asset_id == asset["id"],
-                    KnowledgeAssetVersion.version_seq == 2,
+                    KnowledgeAssetVersion.id == item.asset_version_id,
                 )
             )
-            == "manual"
+            == "ai"
         )
 
 
-def test_older_run_cannot_replace_newer_run_head_but_saves_nonconflicting_item(
+def test_partial_refresh_keeps_previous_complete_markdown_version(
+    client: TestClient, app_bundle: Any
+) -> None:
+    _app, database, settings = app_bundle
+    _agent_id, _document_id, initial_run_id, set_id = _create_generation_run(client, database)
+    _accept_stage(
+        database,
+        initial_run_id,
+        [
+            {
+                "kind": "note",
+                "title": "Complete current guide",
+                "body": "This is the last complete generated document.",
+            }
+        ],
+    )
+    materialize_accepted_knowledge_generation(
+        database.session_factory,
+        initial_run_id,
+        _run_claim(database, initial_run_id),
+        data_root=settings.resolved_data_root,
+    )
+    _teacher, csrf = login(client, "maya")
+    before = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
+    assert before.status_code == 200, before.text
+    before_document = before.json()
+
+    action_id = str(uuid4())
+    queued = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/regenerate",
+        headers=_headers(csrf, **{"Idempotency-Key": f"k2b2-partial-refresh-{uuid4()}"}),
+        json={"action_id": action_id},
+    )
+    assert queued.status_code == 202, queued.text
+    _accept_stage(
+        database,
+        queued.json()["run_id"],
+        [
+            {
+                "kind": "note",
+                "title": "Incomplete candidate",
+                "body": "One valid item does not make the whole refresh complete.",
+            },
+            {"_item_error": "provider_asset_invalid"},
+        ],
+    )
+    materialize_accepted_knowledge_generation(
+        database.session_factory,
+        queued.json()["run_id"],
+        _run_claim(database, queued.json()["run_id"]),
+        data_root=settings.resolved_data_root,
+    )
+
+    after = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
+    assert after.status_code == 200, after.text
+    assert after.json()["version_seq"] == before_document["version_seq"]
+    assert after.json()["content_hash"] == before_document["content_hash"]
+    assert after.json()["markdown"] == before_document["markdown"]
+    assert "Incomplete candidate" not in after.json()["markdown"]
+    with database.session() as db:
+        failed_run = db.get(KnowledgeGenerationRun, queued.json()["run_id"])
+        versions = db.scalars(
+            select(KnowledgeSetMarkdownVersion)
+            .where(KnowledgeSetMarkdownVersion.knowledge_set_id == set_id)
+            .order_by(KnowledgeSetMarkdownVersion.version_seq)
+        ).all()
+        assert failed_run is not None
+        assert failed_run.state == "failed"
+        assert failed_run.safe_error_code == "knowledge_generation_partial_failure"
+        assert [version.version_seq for version in versions] == [1]
+
+
+def test_newer_intent_fences_older_run_before_provider_acceptance(
     client: TestClient, app_bundle: Any
 ) -> None:
     _app, database, settings = app_bundle
@@ -273,18 +344,16 @@ def test_older_run_cannot_replace_newer_run_head_but_saves_nonconflicting_item(
     newer_run_id = newer.json()["knowledge_generation"]["run_id"]
     assert newer.json()["knowledge_generation"]["knowledge_set_id"] == set_id
 
-    older_token = _accept_stage(
-        database,
-        older_run_id,
-        [
-            {"kind": "note", "title": "Stale old head", "body": "Must not overwrite."},
-            {"kind": "note", "title": "Older unique item", "body": "Still useful."},
-        ],
-    )
+    with database.session() as db:
+        assert claim_generation_run(db, older_run_id) is None
+        older_run = db.get(KnowledgeGenerationRun, older_run_id)
+        assert older_run is not None
+        assert older_run.state == "blocked"
+        assert older_run.safe_error_code == "authorization_revoked"
     newer_token = _accept_stage(
         database,
         newer_run_id,
-        [{"kind": "note", "title": "Newer head", "body": "This wins by head CAS."}],
+        [{"kind": "note", "title": "Newer head", "body": "This is the latest intent."}],
     )
     materialize_accepted_knowledge_generation(
         database.session_factory,
@@ -292,28 +361,18 @@ def test_older_run_cannot_replace_newer_run_head_but_saves_nonconflicting_item(
         newer_token,
         data_root=settings.resolved_data_root,
     )
-    materialize_accepted_knowledge_generation(
-        database.session_factory,
-        older_run_id,
-        older_token,
-        data_root=settings.resolved_data_root,
-    )
-
     assets = client.get(f"/api/v1/knowledge-sets/{set_id}/assets")
     assert assets.status_code == 200, assets.text
     notes = {asset["current_version"]["content"]["title"]: asset for asset in assets.json()}
     assert "Newer head" in notes
-    assert "Older unique item" in notes
-    assert "Stale old head" not in notes
+    assert set(notes) == {"Newer head"}
     with database.session() as db:
         old_items = db.scalars(
             select(KnowledgeGenerationItem)
             .where(KnowledgeGenerationItem.run_id == older_run_id)
             .order_by(KnowledgeGenerationItem.item_index)
         ).all()
-        assert [item.state for item in old_items] == ["skipped", "applied"]
-        assert old_items[0].safe_error_code == "target_head_changed"
-        assert old_items[1].safe_error_code is None
+        assert old_items == []
         assert (
             db.scalar(
                 select(KnowledgeAssetVersion.origin).where(

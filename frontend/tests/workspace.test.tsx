@@ -1236,10 +1236,25 @@ describe("private Agent chat", () => {
       "disabled",
       true,
     );
-    expect(screen.getByRole("button", { name: "Read-only" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(
+      screen.getByRole("button", {
+        name: "Read-only",
+      }),
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen
+        .getByRole("button", { name: "Read-only" })
+        .getAttribute("aria-describedby"),
+    ).toBe("chat-readonly-help");
+    expect(
+      screen
+        .getByRole("textbox", { name: "Message" })
+        .getAttribute("aria-describedby"),
+    ).toBe("chat-readonly-help");
+    expect(
+      screen.getByText("This Agent is unavailable for new messages.")
+        .textContent,
+    ).toBe("This Agent is unavailable for new messages.");
     expect(state.api.streamConversation).not.toHaveBeenCalled();
   });
 });

@@ -610,7 +610,19 @@ def test_playback_default_keeps_legacy_ungraded_reads_compatible() -> None:
     )
 
 
-def test_http_transport_emits_real_multipart_body_without_network() -> None:
+def test_http_transport_emits_real_multipart_body_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for variable in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+
     captured: dict[str, httpx.Request] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

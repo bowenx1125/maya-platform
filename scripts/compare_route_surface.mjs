@@ -14,7 +14,7 @@ const responseAllowlistPath = resolve(
   root,
   "contracts/response-contract-allowlist.json",
 );
-const redocly = resolve(root, "node_modules/.bin/redocly");
+const redocly = resolve(root, "node_modules/@redocly/cli/bin/cli.js");
 const implementedOperationIds = new Set([
   "login",
   "switchDemoIdentity",
@@ -103,6 +103,8 @@ const implementedOperationIds = new Set([
   "createConversation",
   "getConversation",
   "sendConversationMessage",
+  "streamConversationMessage",
+  "deleteConversation",
   "getProviderSettings",
   "updateProviderSettings",
   "checkProvider",
@@ -110,6 +112,62 @@ const implementedOperationIds = new Set([
   "getClassroomLive",
   "getLiveSnapshot",
   "getLiveAudio",
+  "applyAssessmentLifecycleAction",
+  "changeCurrentPassword",
+  "confirmTeamProviderStandingGrant",
+  "createAssessmentCourseReport",
+  "createMemoryEntryAction",
+  "downloadAssessmentCourseReport",
+  "getChatStandingProviderDisclosure",
+  "getKnowledgeMarkdown",
+  "listAuthorizedAssessmentActivities",
+  "listBrainformKnowledge",
+  "pauseTeamConversationTurn",
+  "previewTeamProviderStandingGrant",
+  "regenerateKnowledgeMarkdown",
+  "renameKnowledgeDocument",
+  "resumeTeamConversationTurn",
+  "saveKnowledgeMarkdown",
+  "stopTeamConversationTurnOutput",
+  "updateCurrentUser",
+  "closeInteraction",
+  "confirmProviderDataCallDisclosure",
+  "createTeam",
+  "downloadCurrentReport",
+  "finishDebate",
+  "getClassroomInteractionForm",
+  "getCourseRoster",
+  "getCurrentReport",
+  "getKnowledgeGenerationJob",
+  "getProviderDataCallDisclosure",
+  "getRegistrationOptions",
+  "getReportRevision",
+  "getTeacherInteraction",
+  "getTeam",
+  "joinGroupAsTeacher",
+  "leaveGroupAsTeacher",
+  "listCourseTeams",
+  "listMayaTeams",
+  "listProviderDataCallDebateManifests",
+  "listProviderDataCallManifests",
+  "listProviderDataCallPublicationManifests",
+  "listReportRevisions",
+  "listTeamVersions",
+  "openInteraction",
+  "pauseDebate",
+  "rebirthDebate",
+  "regenerateReport",
+  "registerStudent",
+  "releaseDebate",
+  "remakeDebate",
+  "renameVoiceProfile",
+  "resetStudentPassword",
+  "resumeDebate",
+  "retryDebatePreparation",
+  "saveTeamVersion",
+  "submitBarrage",
+  "submitVote",
+  "updateCourseMember",
 ]);
 const methods = new Set([
   "get",
@@ -148,8 +206,9 @@ function bundleToJson(inputPath) {
   const output = resolve(tempDir, "openapi.json");
   try {
     const result = spawnSync(
-      redocly,
+      process.execPath,
       [
+        redocly,
         "bundle",
         inputPath,
         "--ext",
@@ -323,7 +382,17 @@ function findForbiddenResponseFields(
     return;
   }
   for (const [name, child] of Object.entries(schema.properties ?? {})) {
-    if (forbiddenResponseFieldPattern.test(normaliseFieldName(name)))
+    const ownerRecoveryHash =
+      context === "getKnowledgeGenerationJob.response.200.application/json" &&
+      name === "provider_manifest_hash" &&
+      child.pattern === "^[0-9a-f]{64}$" &&
+      Array.isArray(child.type) &&
+      JSON.stringify([...child.type].sort()) ===
+        JSON.stringify(["null", "string"]);
+    if (
+      forbiddenResponseFieldPattern.test(normaliseFieldName(name)) &&
+      !ownerRecoveryHash
+    )
       failures.push(
         `${context}: forbidden browser-visible response field ${name}`,
       );

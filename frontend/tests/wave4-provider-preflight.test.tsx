@@ -51,8 +51,8 @@ describe("Wave 4 ProviderDataCallV1 teacher disclosure", () => {
     expect(
       screen.queryByText(/qwen|https?:\/\/|workspace|api[_-]?key/i),
     ).toBeNull();
-    expect(screen.queryByText(initial.policy_hash)).toBeNull();
-    expect(screen.queryByText(initial.manifest_hash)).toBeNull();
+    expect(screen.getByText(initial.policy_hash)).toBeTruthy();
+    expect(screen.getByText(initial.manifest_hash)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm disclosure" }));
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));

@@ -4,7 +4,13 @@ import { WorkspaceAction } from "./workspace-actions";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -211,7 +217,9 @@ export function AgentWorkbench({
   const { api } = useSession();
   const workbenchScope = actorScopeKey ?? `agent-version:${versionId}`;
   const workbenchScopeRef = useRef(workbenchScope);
-  workbenchScopeRef.current = workbenchScope;
+  useLayoutEffect(() => {
+    workbenchScopeRef.current = workbenchScope;
+  }, [workbenchScope]);
   const workbenchMounted = useRef(true);
   useEffect(() => {
     workbenchMounted.current = true;
@@ -234,6 +242,12 @@ export function AgentWorkbench({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [knowledgeUploadError, setKnowledgeUploadError] =
+    useState<unknown>(null);
+  const [knowledgePreviewRefreshFailed, setKnowledgePreviewRefreshFailed] =
+    useState(false);
+  const [knowledgePreviewRefreshing, setKnowledgePreviewRefreshing] =
+    useState(false);
   const [conflict, setConflict] = useState(false);
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const mutationStore = useIdempotencyStore();
@@ -253,6 +267,21 @@ export function AgentWorkbench({
   const [visibilityBusy, setVisibilityBusy] = useState(false);
   const uploadIntent = `${workbenchScope}:upload-knowledge:${versionId}`;
   const publishIntent = `${workbenchScope}:publish-agent-version:${versionId}`;
+
+  async function refreshKnowledgePreview() {
+    const requestScope = workbenchScope;
+    setKnowledgePreviewRefreshing(true);
+    try {
+      const nextPreview = await api.ragPreview(currentVersion.id);
+      if (!isCurrentScope(requestScope)) return;
+      setPreview(nextPreview);
+      setKnowledgePreviewRefreshFailed(false);
+    } catch {
+      if (isCurrentScope(requestScope)) setKnowledgePreviewRefreshFailed(true);
+    } finally {
+      if (isCurrentScope(requestScope)) setKnowledgePreviewRefreshing(false);
+    }
+  }
 
   function abandonUploadIntent() {
     mutationStore.abandon(uploadIntent);
@@ -297,6 +326,7 @@ export function AgentWorkbench({
         setAgent(nextAgent);
         setDocuments(nextDocuments);
         setPreview(nextPreview);
+        setKnowledgePreviewRefreshFailed(false);
         setAvatarTemplates(nextAvatarTemplates);
         setVoiceProfiles(nextVoiceProfiles);
         if (!keepLocal) {
@@ -516,6 +546,8 @@ export function AgentWorkbench({
     setPendingKnowledgeUpload({ file, signature });
     setSaving(true);
     setError(null);
+    setKnowledgeUploadError(null);
+    setKnowledgePreviewRefreshFailed(false);
     setNotice(null);
     setConflict(false);
     let mutationCompleted = false;
@@ -550,8 +582,12 @@ export function AgentWorkbench({
           ? current
           : [...current, mutation.document.id],
       );
-      setNotice("markdownUploadedNotice");
-      setPreview(await api.ragPreview(currentVersion.id));
+      setNotice(
+        /\.(pdf|docx)$/i.test(file.name)
+          ? "knowledgeEvidenceImported"
+          : "markdownUploadedNotice",
+      );
+      await refreshKnowledgePreview();
     } catch (cause) {
       if (!isCurrentScope(requestScope)) return;
       if (!mutationCompleted && isConflict(cause)) {
@@ -571,6 +607,7 @@ export function AgentWorkbench({
       }
       if (isConflict(cause)) setConflict(true);
       setError(cause);
+      setKnowledgeUploadError(cause);
     } finally {
       if (isCurrentScope(requestScope)) setSaving(false);
     }
@@ -731,7 +768,7 @@ export function AgentWorkbench({
         <StatusBadge status="draft" />
       </div>
       {conflict ? <DraftConflictNotice /> : null}
-      {error && !conflict ? (
+      {error && !conflict && error !== knowledgeUploadError ? (
         <>
           <ErrorNotice
             error={error}
@@ -790,7 +827,10 @@ export function AgentWorkbench({
                 >
                   {t("insertOutline")}
                 </button>
-                <label className="secondary-action file-button">
+                <label
+                  className="secondary-action file-button"
+                  data-ui-guide="agent.uploadMarkdown"
+                >
                   {t("uploadMd")}
                   <input
                     type="file"
@@ -884,12 +924,16 @@ export function AgentWorkbench({
             title={t("evidenceSet")}
             guide="agent.evidence"
             action={
-              <label className="secondary-action file-button">
+              <label
+                className="secondary-action file-button"
+                data-ui-guide="agent.uploadEvidence"
+              >
                 {t("uploadMarkdown")}
                 <input
                   type="file"
-                  accept=".md,text/markdown"
-                  disabled={saving}
+                  accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  aria-describedby="knowledge-import-help"
+                  disabled={saving || knowledgePreviewRefreshing}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
                     if (file) void uploadKnowledge(file);
@@ -899,6 +943,48 @@ export function AgentWorkbench({
               </label>
             }
           >
+            <p id="knowledge-import-help" className="muted-copy">
+              {t("knowledgeImportFormats")}
+            </p>
+            {saving && pendingKnowledgeUpload ? (
+              <p className="muted-copy" role="status" aria-live="polite">
+                <span className="spinner" aria-hidden="true" />
+                {t(
+                  /\.(pdf|docx)$/i.test(pendingKnowledgeUpload.file.name)
+                    ? "knowledgeImportPending"
+                    : "knowledgeUploadPending",
+                )}
+              </p>
+            ) : null}
+            {knowledgePreviewRefreshing ? (
+              <p className="muted-copy" role="status" aria-live="polite">
+                <span className="spinner" aria-hidden="true" />
+                {t("knowledgePreviewRefreshing")}
+              </p>
+            ) : null}
+            {knowledgeUploadError && error === knowledgeUploadError ? (
+              <ErrorNotice
+                error={knowledgeUploadError}
+                onRetry={
+                  retryAction === "uploadKnowledge" && pendingKnowledgeUpload
+                    ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
+                    : undefined
+                }
+              />
+            ) : null}
+            {knowledgePreviewRefreshFailed ? (
+              <div className="notice notice-warning" role="alert">
+                <strong>{t("knowledgePreviewRefreshFailed")}</strong>
+                <button
+                  className="inline-button"
+                  type="button"
+                  disabled={saving || knowledgePreviewRefreshing}
+                  onClick={() => void refreshKnowledgePreview()}
+                >
+                  {t("retry")}
+                </button>
+              </div>
+            ) : null}
             {documents.length === 0 ? (
               <p className="muted-copy">{t("noGroupMarkdown")}</p>
             ) : (
@@ -913,7 +999,9 @@ export function AgentWorkbench({
                         type="checkbox"
                         checked={selectedDocumentIds.includes(document.id)}
                         disabled={
-                          saving || document.workspace_state === "hidden"
+                          saving ||
+                          knowledgePreviewRefreshing ||
+                          document.workspace_state === "hidden"
                         }
                         onChange={(event) =>
                           void toggleDocument(document.id, event.target.checked)

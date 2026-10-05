@@ -27,7 +27,6 @@ from app.modules.org.access import WorkspaceMember
 from app.modules.voices.crypto import VoiceEncryptionError
 from app.modules.voices.schemas import PlaybackResource, VoiceProfileResponse
 from app.modules.voices.service import (
-    PREVIEW_TEXT,
     PREVIEW_TTL,
     EffectiveVoice,
     _profile_external_id,
@@ -49,6 +48,10 @@ from app.providers.tts import TTSProvider, TTSProviderError
 from app.seed import COURSE_ID
 
 LOGGER = logging.getLogger("maya.voices")
+VOICE_PREVIEW_TEXT = (
+    "Should we find each other in the next life, let‘s live on a planet of our own.\n"
+    "我会将花种满山谷，为你而歌，老死方休。"
+)
 _SAFE_PREVIEW_ERRORS = frozenset(
     {
         "tts_http_rejected",
@@ -145,7 +148,7 @@ def create_voice_preview(
     tts = provider or tts_provider(settings)
     external_id = _tts_external_id(profile, settings)
     try:
-        output = tts.synthesize(PREVIEW_TEXT, external_id, language="en")
+        output = tts.synthesize(VOICE_PREVIEW_TEXT, external_id, language="auto")
         raw = read_pcm16_wav_bytes(output.audio_bytes)
         validate_technical_audio(raw)
     except (TTSProviderError, AudioValidationError, OSError) as exc:

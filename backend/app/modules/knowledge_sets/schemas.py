@@ -152,6 +152,52 @@ class KnowledgeSetDetail(KnowledgeSetSummary):
     sources: list[KnowledgeSetSourceDTO]
 
 
+class BrainformKnowledgeSummary(StrictModel):
+    agent_id: UUID
+    canonical_set_id: UUID
+    source_agent_display_name: str
+    knowledge_display_name: str
+    can_read: Literal[True] = True
+    can_edit: bool
+    version_seq: int | None = Field(default=None, ge=1)
+    content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    generation_state: KnowledgeGenerationState | None = None
+    safe_error_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+
+
+class KnowledgeMarkdownDocument(StrictModel):
+    audience: Literal["full", "student"]
+    agent_id: UUID
+    canonical_set_id: UUID
+    source_agent_display_name: str
+    knowledge_display_name: str
+    version_seq: int
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    markdown: str
+    projection_available: bool
+    can_read: Literal[True] = True
+    can_edit: bool
+    created_at: datetime
+
+
+class SaveKnowledgeMarkdownRequest(StrictModel):
+    expected_version_seq: int = Field(ge=0)
+    markdown: str
+
+
+class RegenerateKnowledgeRequest(StrictModel):
+    action_id: UUID
+
+
+class RegenerateKnowledgeResponse(StrictModel):
+    action_id: UUID
+    agent_id: UUID
+    canonical_set_id: UUID
+    run_id: UUID
+    job_id: UUID
+    state: KnowledgeGenerationState
+
+
 class KnowledgeSetRevocation(StrictModel):
     id: UUID
     deleted: Literal[True] = True

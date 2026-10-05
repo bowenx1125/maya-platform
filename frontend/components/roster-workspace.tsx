@@ -9,9 +9,10 @@ import {
   type UpdateCourseMemberRequest,
 } from "../lib/api";
 import { useT } from "./locale";
+import { WorkspaceAction } from "./workspace-actions";
 import { IconArrowRight } from "./quiet-icons";
 import { useSession } from "./session-provider";
-import { WorkspaceAction } from "./workspace-actions";
+import { UserAvatar } from "./user-avatar";
 import {
   EmptyCard,
   ErrorNotice,
@@ -186,16 +187,6 @@ export function RosterWorkspace() {
                         });
                       }}
                     >
-                      <WorkspaceAction
-                        name="done"
-                        form={`roster-edit-${entry.user_id}`}
-                        disabled={pending}
-                      />
-                      <WorkspaceAction
-                        name="back"
-                        onClick={() => setEditing(null)}
-                        disabled={pending}
-                      />
                       <label>
                         <span>{t("displayNameLabel")}</span>
                         <input
@@ -226,29 +217,48 @@ export function RosterWorkspace() {
                           }
                         />
                       </label>
+                      <div className="button-row">
+                        <WorkspaceAction
+                          name="back"
+                          onClick={() => setEditing(null)}
+                          disabled={pending}
+                        />
+                        <WorkspaceAction
+                          name="done"
+                          form={`roster-edit-${entry.user_id}`}
+                          disabled={pending}
+                        />
+                      </div>
                     </form>
                   </div>
                 );
               }
               return (
                 <div className="list-row account-row" key={entry.user_id}>
-                  <span>
-                    <span className="roster-headline">
-                      <strong>{entry.username}</strong>
-                      <StatusBadge
-                        status={entry.status}
-                        tone={entry.status === "active" ? "good" : "neutral"}
-                      />
+                  <span className="roster-identity">
+                    <UserAvatar
+                      avatar={entry.avatar}
+                      name={entry.display_name}
+                      userId={entry.user_id}
+                    />
+                    <span>
+                      <span className="roster-headline">
+                        <strong>{entry.username}</strong>
+                        <StatusBadge
+                          status={entry.status}
+                          tone={entry.status === "active" ? "good" : "neutral"}
+                        />
+                      </span>
+                      <span className="group-label">{groupSummary(entry)}</span>
+                      {issued && issued.user_id === entry.user_id ? (
+                        <small role="status">
+                          {t("resetPasswordIssued", {
+                            username: issued.username,
+                          })}
+                          : <code>{issued.password}</code>{" "}
+                        </small>
+                      ) : null}
                     </span>
-                    <span className="group-label">{groupSummary(entry)}</span>
-                    {issued && issued.user_id === entry.user_id ? (
-                      <small role="status">
-                        {t("resetPasswordIssued", {
-                          username: issued.username,
-                        })}
-                        : <code>{issued.password}</code>{" "}
-                      </small>
-                    ) : null}
                   </span>
                   {entry.editable ? (
                     <div className="button-row">

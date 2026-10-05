@@ -1,5 +1,5 @@
 import { AppShell } from "../../../components/app-shell";
-import { KnowledgeSetWorkspace } from "../../../components/knowledge/knowledge-set-workspace";
+import { BrainformWorkspace } from "../../../components/knowledge/brainform-workspace";
 import { RouteGuard } from "../../../components/session-provider";
 
 export default async function TeacherKnowledgePage({
@@ -9,16 +9,19 @@ export default async function TeacherKnowledgePage({
     agent_id?: string;
     set_id?: string;
     job_id?: string;
+    course_id?: string;
   }>;
 }) {
   const query = await searchParams;
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
-        <KnowledgeSetWorkspace
-          agentId={query.agent_id}
+        <BrainformWorkspace
+          role="teacher"
+          initialAgentId={query.agent_id}
           initialSetId={query.set_id}
-          generationJobId={query.job_id}
+          initialCourseId={query.course_id}
+          initialJobId={query.job_id}
         />
       </AppShell>
     </RouteGuard>

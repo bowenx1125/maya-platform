@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -32,10 +33,120 @@ from app.modules.knowledge_sets.models import (
     KnowledgeSet,
     KnowledgeSetSource,
 )
-from app.modules.knowledge_sets.schemas import AssetCitation, AssetContent
-from app.modules.knowledge_sets.service import now_utc, save_generated_knowledge_asset
+from app.modules.knowledge_sets.schemas import (
+    AssetCitation,
+    AssetContent,
+    ConceptContent,
+    NoteContent,
+    QuestionContent,
+)
+from app.modules.knowledge_sets.service import (
+    now_utc,
+    save_generated_knowledge_asset,
+    save_knowledge_markdown_version,
+)
 
 _ASSET_CONTENT: TypeAdapter[AssetContent] = TypeAdapter(AssetContent)
+
+
+def _heading(value: str) -> str:
+    return " ".join(value.split()) or "Knowledge"
+
+
+def _quoted(value: str) -> str:
+    escaped = html.escape(value, quote=False)
+    return "\n".join("> " + line for line in escaped.splitlines())
+
+
+def _render_asset_versions(
+    db: Session,
+    set_row: KnowledgeSet,
+    items: Sequence[KnowledgeGenerationItem],
+) -> tuple[str, str, list[str]]:
+    concepts: list[tuple[str, ConceptContent]] = []
+    questions: list[tuple[str, QuestionContent]] = []
+    notes: list[tuple[str, NoteContent]] = []
+    version_ids: list[str] = []
+    for item in items:
+        if item.asset_version_id is None or item.asset_id is None:
+            raise ValueError("applied generation item has no Asset version")
+        version = db.get(KnowledgeAssetVersion, item.asset_version_id)
+        if version is None or version.asset_id != item.asset_id:
+            raise ValueError("generation item Asset version is unavailable")
+        content = _ASSET_CONTENT.validate_python(json.loads(version.content_json))
+        if content.kind == "concept":
+            concepts.append((item.asset_id, content))
+        elif content.kind == "question":
+            questions.append((item.asset_id, content))
+        else:
+            notes.append((item.asset_id, content))
+        version_ids.append(version.id)
+
+    full_sections = [f"# {_heading(set_row.display_name)}"]
+    student_sections = [f"# {_heading(set_row.display_name)}"]
+    if concepts:
+        full_sections.append(
+            "## Concepts\n\n"
+            + "\n\n".join(
+                f"### {_heading(content.title)}\n\n{content.description}".rstrip()
+                for _asset_id, content in concepts
+            )
+        )
+        student_sections.append(
+            "## Concepts\n\n"
+            + "\n\n".join(
+                f"### {_heading(content.title)}\n\n{_quoted(content.description)}".rstrip()
+                for _asset_id, content in concepts
+            )
+        )
+        titles = {asset_id: content.title for asset_id, content in concepts}
+        graph_edges = [
+            f"- {_heading(content.title)} → {_heading(titles[target])}"
+            for _asset_id, content in concepts
+            for target in map(str, content.prerequisite_ids)
+            if target in titles
+        ]
+        if graph_edges:
+            full_sections.append("## Graph\n\n" + "\n".join(graph_edges))
+            student_sections.append("## Graph\n\n" + "\n".join(graph_edges))
+    if questions:
+        full_question_blocks: list[str] = []
+        student_question_blocks: list[str] = []
+        for index, (_asset_id, content) in enumerate(questions, start=1):
+            block = f"### Question {index}\n\n{content.prompt}"
+            if content.rubric.criteria:
+                block += "\n\n#### Rubric\n\n" + "\n".join(
+                    f"- **{criterion.label}** ({criterion.points:g}): {criterion.guidance}"
+                    for criterion in content.rubric.criteria
+                )
+                if content.rubric.total_points is not None:
+                    block += f"\n\nTotal: {content.rubric.total_points:g} points"
+            if content.reference_answer is not None:
+                block += f"\n\n#### Reference answer\n\n{content.reference_answer}"
+            full_question_blocks.append(block)
+            student_question_blocks.append(f"### Question {index}\n\n{_quoted(content.prompt)}")
+        full_sections.append("## Questions\n\n" + "\n\n".join(full_question_blocks))
+        student_sections.append("## Questions\n\n" + "\n\n".join(student_question_blocks))
+    if notes:
+        full_sections.append(
+            "## Notes\n\n"
+            + "\n\n".join(
+                f"### {_heading(content.title)}\n\n{content.body}".rstrip()
+                for _asset_id, content in notes
+            )
+        )
+        student_sections.append(
+            "## Notes\n\n"
+            + "\n\n".join(
+                f"### {_heading(content.title)}\n\n{_quoted(content.body)}".rstrip()
+                for _asset_id, content in notes
+            )
+        )
+    return (
+        "\n\n".join(full_sections),
+        "\n\n".join(student_sections),
+        version_ids,
+    )
 
 
 def _canonical(value: object) -> str:
@@ -427,23 +538,7 @@ def _materialize_one(
                         KnowledgeAssetVersion.version_seq == asset.current_version_seq,
                     )
                 )
-                if current_version is not None and current_version.origin == "manual":
-                    item.state = "skipped"
-                    item.safe_error_code = "manual_head_preserved"
-                    item.asset_id = asset.id
-                    item.expected_asset_version_seq = asset.current_version_seq
-                    item.citation_unverified_count = unverified_count
-                    item.updated_at = now_utc()
-                    db.commit()
-                    return "skipped"
-                if (
-                    target_head is None
-                    or target_head[0] != asset.id
-                    or target_head[1] != asset.current_version_seq
-                    or target_head[2] != "ai"
-                    or current_version is None
-                    or current_version.origin != "ai"
-                ):
+                if target_head is None or target_head[0] != asset.id or current_version is None:
                     item.state = "skipped"
                     item.safe_error_code = "target_head_changed"
                     item.asset_id = asset.id
@@ -452,7 +547,10 @@ def _materialize_one(
                     item.updated_at = now_utc()
                     db.commit()
                     return "skipped"
-                expected_seq = target_head[1]
+                # Content edits do not cancel an authorized generation intent.
+                # The next generated version follows whatever version is
+                # current when this item reaches its serialized save.
+                expected_seq = asset.current_version_seq
             elif cast(str, lineage_key) in target_heads:
                 item.state = "skipped"
                 item.safe_error_code = "target_head_missing"
@@ -528,24 +626,73 @@ def _finish_materialization(
             _finish_blocked(db, run, job, "knowledge_target_snapshot_invalid")
             db.commit()
             return
-        item_states = db.scalars(
-            select(KnowledgeGenerationItem.state).where(
+        items = db.scalars(
+            select(KnowledgeGenerationItem)
+            .where(
                 KnowledgeGenerationItem.run_id == run.id,
                 KnowledgeGenerationItem.stage_hash == stage.canonical_stage_hash,
             )
+            .order_by(KnowledgeGenerationItem.item_index)
         ).all()
+        item_states = [item.state for item in items]
         if len(item_states) != stage.item_count or any(state == "pending" for state in item_states):
             _finish_blocked(db, run, job, "knowledge_materialization_incomplete")
             db.commit()
             return
         applied_count = sum(1 for state in item_states if state == "applied")
         failed_count = sum(1 for state in item_states if state in {"failed", "skipped"})
+        if stage.item_count == 0:
+            failed_count = 1
+        set_row = db.get(KnowledgeSet, run.knowledge_set_id)
+        if set_row is None:
+            _finish_blocked(db, run, job, "authorization_revoked")
+            db.commit()
+            return
+        # A complete document is promoted as one version. Per-item Assets are
+        # already durable historical projections, but a failed/partial refresh
+        # cannot replace an existing complete Markdown head with half a result.
+        promote_document = failed_count == 0 or (
+            set_row.current_markdown_version_seq == 0 and applied_count > 0
+        )
+        if promote_document:
+            applied_items = [item for item in items if item.state == "applied"]
+            try:
+                markdown, student_projection, asset_version_ids = _render_asset_versions(
+                    db, set_row, applied_items
+                )
+            except (TypeError, ValueError, ValidationError):
+                applied_items = []
+                failed_count = max(failed_count, 1)
+            else:
+                try:
+                    save_knowledge_markdown_version(
+                        db,
+                        set_id=set_row.id,
+                        expected_version_seq=set_row.current_markdown_version_seq,
+                        markdown=markdown,
+                        actor_user_id=run.owner_user_id,
+                        origin="ai",
+                        generation_run_id=run.id,
+                        generation_intent_seq=run.intent_generation,
+                        source_manifest_hash=run.source_manifest_hash,
+                        generator_agent_version_id=run.agent_version_id,
+                        asset_version_ids=asset_version_ids,
+                        student_projection_markdown=student_projection,
+                    )
+                except PlatformError as exc:
+                    if exc.code in {"stale_revision", "authorization_revoked"}:
+                        _finish_blocked(db, run, job, "authorization_revoked")
+                        db.commit()
+                        return
+                    raise
         now = now_utc()
         if failed_count:
             run.state = "failed"
             run.safe_error_code = (
                 "knowledge_generation_partial_failure"
                 if applied_count
+                else "knowledge_generation_no_assets"
+                if stage.item_count == 0
                 else "knowledge_generation_items_failed"
             )
             job.state = "failed"
