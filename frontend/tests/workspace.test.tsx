@@ -13,12 +13,14 @@ const state = vi.hoisted(() => ({
   api: {} as Record<string, ReturnType<typeof vi.fn>>,
   role: "teacher",
   userId: "test-user",
+  displayName: undefined as string | undefined,
 }));
 vi.mock("../components/session-provider", () => ({
   useSession: () => ({
     api: state.api,
     user: {
       id: state.userId,
+      display_name: state.displayName,
       courses: [{ course_id: "course", role: state.role }],
       groups: [],
     },
@@ -40,8 +42,8 @@ vi.mock("../components/stage3d/scholar-scene", () => ({
 import { AgentChat } from "../components/agent-chat";
 import { AppShell } from "../components/app-shell";
 import { ClassroomLive } from "../components/classroom-live";
-import { DemoCompositionBadge } from "../components/demo-composition";
 import { LocaleProvider } from "../components/locale";
+import { TeacherDashboard } from "../components/teacher-workspace";
 import { abandonChatRequest, getChatRequest } from "../lib/chat-request-store";
 import {
   ChatRequestPendingError,
@@ -81,19 +83,11 @@ const completedConversation = {
     },
   ],
 };
-const settings = {
-  revision: 0,
-  credential_ready: false,
-  components: [
-    { key: "llm", mode: "mock", switchable: true, status: "unchecked" },
-    { key: "tts", mode: "mock", switchable: false, status: "deferred" },
-  ],
-};
-
 beforeEach(() => {
   abandonChatRequest();
   state.userId = `test-user-${Date.now()}-${Math.random()}`;
   state.role = "teacher";
+  state.displayName = undefined;
   state.api = {
     chatAgents: vi.fn().mockResolvedValue([agent]),
     conversations: vi.fn().mockResolvedValue([]),
@@ -107,20 +101,15 @@ beforeEach(() => {
     }),
     conversation: vi.fn().mockResolvedValue(conversation),
     deleteConversation: vi.fn().mockResolvedValue(undefined),
-    providerSettings: vi.fn().mockResolvedValue(settings),
-    updateProviderSettings: vi
-      .fn()
-      .mockResolvedValue({ ...settings, revision: 1, credential_ready: true }),
-    checkProvider: vi.fn().mockResolvedValue(settings),
-    demoStatus: vi.fn().mockResolvedValue({
-      baseline: { system_baseline: true, immutable: true, usable: true },
-      composition: {
-        components: [
-          { key: "llm", mode: "mock" },
-          { key: "tts", mode: "mock" },
-        ],
-      },
-    }),
+    courses: vi.fn().mockResolvedValue([]),
+    publishedAgents: vi.fn().mockResolvedValue([]),
+    groups: vi.fn().mockResolvedValue([]),
+    workspaceAgents: vi.fn().mockResolvedValue([]),
+    debates: vi.fn().mockResolvedValue([]),
+    providerSettings: vi.fn(),
+    updateProviderSettings: vi.fn(),
+    checkProvider: vi.fn(),
+    demoStatus: vi.fn(),
     classroomLive: vi.fn().mockResolvedValue({
       debate_id: "debate",
       course_id: "course",
@@ -1259,113 +1248,32 @@ describe("private Agent chat", () => {
   });
 });
 
-describe("provider controls", () => {
-  it("opens the credential dialog without enabling Real, and Check skips Ready components", async () => {
+describe("teacher workspace access", () => {
+  it("keeps provider disclosure but renders no Components UI or settings calls", async () => {
+    state.displayName = "Teacher";
+    state.api.courses.mockResolvedValue([{ id: "course", name: "Course" }]);
+
     render(
       <LocaleProvider initialLocale="en">
-        <DemoCompositionBadge />
+        <AppShell role="teacher">
+          <TeacherDashboard />
+        </AppShell>
       </LocaleProvider>,
     );
-    const select = await screen.findByRole("combobox", {
-      name: "Debate LLM mode",
-    });
-    fireEvent.change(select, { target: { value: "real" } });
-    const dialog = await screen.findByRole("dialog");
+
+    const disclosure = await screen.findByRole("link", { name: "Review" });
+    expect(disclosure.getAttribute("href")).toBe(
+      "/teacher/provider-approvals/chats?course_id=course",
+    );
+    expect(screen.queryByText("Components")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Check" })).toBeNull();
+    expect(screen.queryByLabelText("DashScope API Key")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /mode/i })).toBeNull();
+    expect(state.api.demoStatus).not.toHaveBeenCalled();
+    expect(state.api.providerSettings).not.toHaveBeenCalled();
     expect(state.api.updateProviderSettings).not.toHaveBeenCalled();
-    fireEvent.change(within(dialog).getByLabelText("DashScope API Key"), {
-      target: { value: "test-only-key" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(state.api.updateProviderSettings).toHaveBeenCalledWith("course", {
-        expected_revision: 0,
-        component: "llm",
-        mode: "real",
-        api_key: "test-only-key",
-      }),
-    );
-    state.api.providerSettings.mockResolvedValue({
-      ...settings,
-      components: settings.components.map((item) =>
-        item.switchable ? { ...item, status: "ready" } : item,
-      ),
-    });
-    expect(screen.getAllByRole("button", { name: "Check" })).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Check" }));
-    await waitFor(() =>
-      expect(state.api.providerSettings).toHaveBeenCalledTimes(2),
-    );
     expect(state.api.checkProvider).not.toHaveBeenCalled();
-    expect(
-      (screen.getByRole("combobox", { name: "TTS mode" }) as HTMLSelectElement)
-        .disabled,
-    ).toBe(true);
-  });
-
-  it("saves a teacher DashScope key without switching modes or checking providers", async () => {
-    render(
-      <LocaleProvider initialLocale="en">
-        <DemoCompositionBadge />
-      </LocaleProvider>,
-    );
-    await screen.findByRole("combobox", { name: "Debate LLM mode" });
-    fireEvent.click(screen.getByRole("button", { name: "Set API Key" }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText("DashScope API Key"), {
-      target: { value: "teacher-owned-test-key" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(state.api.updateProviderSettings).toHaveBeenCalledWith("course", {
-        expected_revision: 0,
-        component: null,
-        mode: null,
-        api_key: "teacher-owned-test-key",
-      }),
-    );
-    expect(state.api.checkProvider).not.toHaveBeenCalled();
-  });
-
-  it("checks only unchecked or changed components and leaves Ready and deferred ones alone", async () => {
-    let current = {
-      ...settings,
-      components: [
-        { key: "llm", mode: "mock", switchable: true, status: "ready" },
-        {
-          key: "embedding",
-          mode: "mock",
-          switchable: true,
-          status: "unchecked",
-        },
-        { key: "report", mode: "mock", switchable: true, status: "failed" },
-        { key: "tts", mode: "mock", switchable: false, status: "deferred" },
-      ],
-    };
-    state.api.providerSettings.mockResolvedValue(current);
-    state.api.checkProvider.mockImplementation(async (_course, key) => {
-      current = {
-        ...current,
-        components: current.components.map((item) =>
-          item.key === key ? { ...item, status: "ready" } : item,
-        ),
-      };
-      return current;
-    });
-    render(
-      <LocaleProvider initialLocale="en">
-        <DemoCompositionBadge />
-      </LocaleProvider>,
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Check" }));
-    await waitFor(() =>
-      expect(state.api.checkProvider).toHaveBeenCalledTimes(2),
-    );
-    expect(state.api.checkProvider.mock.calls.map((call) => call[1])).toEqual([
-      "embedding",
-      "report",
-    ]);
   });
 });
 

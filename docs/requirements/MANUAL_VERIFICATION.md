@@ -60,16 +60,16 @@ real-provider acceptance.
   Conclusion uses only eligible frozen classroom messages.
 - Complete playback and confirm **Conclude** opens Evaluation and Report.
 
-## Chat, Components and Live
+## Chat, maintenance configuration and Live
 
 - In teacher and student **Chat**, choose an existing published Agent.
   Send two messages, inspect **Check RAG**, leave/reenter, and confirm the
   conversation and bound version survive. Another identity must not read it.
-- In **Components**, one **Check** skips Ready/deferred items and asks for the
-  maximum paid requests before checking the rest; stop on the first failure.
-  All-Ready Check makes no provider call. Mode changes invalidate only that item;
-  key changes invalidate all. Changes require idle generation and current revision.
-  A missing key opens the dialog without selecting Real. TTS/Voice stay **Deferred**.
+- Teacher Home has no Components, API Key editor, Check, Real/Mock selector or
+  provider readiness badges, and opening it sends no configuration/check request.
+  Preserve the existing guide, profile, Agents and other page actions. Provider
+  configuration stays in the maintenance layer; exact data-call disclosure remains
+  accessible where required. Removing controls must not change saved settings.
 - With two identities, enter teacher **Immerse**, then student **Live**. Verify the
   current speaker and speech follow **Next**, including late entry and manual
   reentry. The area below the scene shows all published speeches without Refresh.

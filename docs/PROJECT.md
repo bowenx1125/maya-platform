@@ -185,16 +185,11 @@ Chats is text-only: no Chat TTS dispatch, audio event or hidden language instruc
 Streaming saves accepted text and keeps usage separate; unknown acceptance affects
 one request, never subsequent messages. Voice/Debate speech stays separately scoped.
 
-## Workspace UI/import — September 27, 2026
+## Workspace/integration history — September 27, 2026
 
-Bilingual help covers workspace/Debate. Uploads remain Markdown-only;
-PDF/Word extraction/OCR is deferred.
-
-## Local/GitHub integration — September 27, 2026
-
-Merged local7236a97/checkpoint4fd1968, GitHub main a2b397d and entaiaki dfac2b4;
-excluded sibling/revert branches. Fixed delete fixture/ledger, stale budgets and
-Compose voice mapping; README/AGENTS updated.
+Bilingual help covered workspace/Debate; imports were then Markdown-only.
+Merged local7236a97/checkpoint4fd1968, main a2b397d/entaiaki dfac2b4;
+excluded sibling/revert branches. Delete ledger, budgets and Compose voice mapping fixed.
 
 ## Unbounded provider accounting — September 27, 2026
 
@@ -222,11 +217,10 @@ budget cause. Dated static/Docker/browser checks passed with Mock Voice/four war
 
 ## Preserved adjacent work — September 27, 2026
 
-Historical Voice enrollment/preview/113.12s speech succeeded; promotion reused
-the saved stage and unknown charges were not retried. Owner/SSRF/snapshots,
-normalized names/duplicate409 and old versions remain. Historical Mock checks
-are not current quality proof. A Report200 failed content without retry.
-Live keeps QR/Final cutoff; Chat has no language field or TTS.
+Historical Voice enrollment/preview/113.12s succeeded; promotion reused paid stages,
+unknown charges never retried. Owner/SSRF/snapshot/name/duplicate409 guards remain.
+Mock history is not current quality proof; one Report200 failed content without retry.
+Live keeps QR/Final cutoff; Chat has no language field/TTS.
 
 ## MayaForm W0 — 2026-09-27
 
@@ -273,8 +267,8 @@ no real Provider/Docker.
 ## MayaForm recovery — 2026-10-03
 
 K2b2 a975e38 and K3-A83de097/evidence1b1bfca remain committed; actual branch
-feat/mayaform-v14. K3-B1/B2,0041–0053 and learning/Tools are checkpointed f59df82,
-not deployed acceptance. Lost reviews were replaced by current same-version review.
+feat/mayaform-v14. K3-B1/B2,0041–0053 and learning/Tools are checkpointed f59df82 and
+deployed; deployment is not end-to-end acceptance. Lost reviews have current replacements.
 Preserve foreign Debate/Voice/UI changes; one writer owns each shared file.
 Main switched to GPT-6.1 Sol on October5; Luna/max implements, independent Sol audits.
 
@@ -293,37 +287,41 @@ never names or creator role. Self-read and Teacher Public-read do not grant edit
 Target-attempt safe projections apply across Agents, Memory and downloads. No new
 practice UI, role Planner, generic database editor or approval ceremony.
 
-Independent R3 passed160 runtime cases,92 boundary probes and47 Provider scope cases
-(overlapping). Authorized sends occur once; late revocation sends nothing/charge0;
-readable old snapshots remain valid. SSE drains one snapshot without replay calls.
-Resume retains original answers/turn identity. Owner answers expose answer_text/
-created_at only; source-free recovery allows own answers/progress or abandon, never
-resume/hints. Legacy query scopes retain exact Teacher/course checks; Private Single
-denies Teacher. General Chat uses natural lifecycle messages, no assessment controls
-or special composer. BF MD import14 independent and Setext/HTTP tests passed.
-Final isolated Linux backend1909 passed/21 skipped (499.64s, exit0); integrated
-frontend559/1 skipped and6 independent UI probes passed;281 frontend hashes stable.
-Browser and real Provider remain pending; no end-to-end acceptance claimed.
+Independent R3:160 runtime/92 boundary/47 Provider cases (overlapping); late revocation
+sends nothing/charge0, old readable snapshots remain valid, SSE drains without replay.
+Resume retains answers/turns; owner answer DTO exposes answer_text/created_at only.
+Source-free allows own records/progress/abandon, never resume/hints. Exact legacy
+Teacher/course scope remains; Private Single denies Teacher. General Chat has natural
+lifecycle messages, no assessment controls/composer. BF import14/Setext/HTTP passed.
+Final Linux backend1909/21 old skips (499.64s, exit0); frontend559/1 old skip,
+6 independent UI probes;281 frontend hashes stable.
+Full student/Teacher browser and Provider closure remains pending; no end-to-end acceptance.
 [BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
 [S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
 
-Docker remains at0033 with original container IDs; no resumed paid call, rebuild or push.
-October5 SQLite backup API/integrity/FK passed. A private backup copy upgraded
-0033→0053 preserving all59 original tables/6,421 original rows and original-column
-bytes; integrity/FK passed. Final deployment still needs fresh in-flight checks.
+October5 Maya backend/frontend rebuilt; effective environment/DNS/gateway preserved.
+Backup20261005T042605Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
+All59 original tables/6,423 rows retain content/ledgers; one Debate running→pending
+metadata change is accepted-result startup recovery. Historical unknown3 untouched.
+Real browser imported synthetic314-character Markdown; one charged Embedding success.
+Knowledge LLM awaits exact confirmation; navigation needs recheck after parallel-browser
+interference. Full closure and GitHub push pending. UI-only backup20261005T064211Z OK.
 Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
 UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
-(UI03/04/05 included): PDF ancestry merged b648efc; UI source is integrated and
-independently accepted, retaining Brainform sidebar New and General Chat.
-Linux conversion22 and UI Sol102/Roster/Profile probes passed before final delta;
-macOS memory guard remains. Migrations0052/0053 append without rewriting history.
-Final frontend559/1 skipped; types, lint(0 errors/4 existing warnings),
-Prettier, backend Ruff/format493/mypy247, all152 actual API semantics/19 negatives,
-generated/strict privacy/boundary and7 migration/bootstrap/reset gates passed.
-Locked Agno3.0.11 is used through public SDK. Independent runtime source freeze:
+(UI03/04/05 included): actual ancestry merges b648efc/8987cf8 preserve both selected
+refs, Brainform sidebar New and General Chat. d170a96 corrects stale import guidance.
+Latest UI instruction: retain colleagues' MayaForm design, add no replacement elements;
+remove all user-visible Components/Key/Check/mode/status UI; maintenance APIs stay.
+Components removed, no replacement:555 frontend/1 old skip; types/lint/Prettier PASS.
+5 old UI tests removed,1 Dashboard test added; Sol source/25 focused PASS.
+Other MayaForm UI unchanged; browser update pending.
+Earlier conversion22/UI102/Roster/Profile passed; macOS memory guard remains.
+0052/0053 append only. Types/lint(0 errors/4 old warnings), Prettier,
+Ruff/format493/mypy247,152 actual API semantics/19 negatives, generated/
+privacy/boundary and7 migration/bootstrap/reset gates passed. Agno3.0.11 public SDK.
+Independent runtime source freeze:
 912 files, manifest db6b792d3bb895f6aae42c43f0ce15f3a6c8f791692f0e828d13ac70210a1c56;
-All502 backend files retain that freeze; UI22 changed files have new evidence. Query Embedding
-uses separate exact Teacher course-purpose consent, not LLM consent or per-message
-approvals. Migration0050 permits only llm_agent_chat/embedding_query; independent
-populated0033→0053 and18 atomicity tests passed. Production remains0033 pending rollout;
-latest backup is20261005T033431Z, integrity/FK OK. Historical unknown3 are never resent.
+All502 backend files retain the freeze; UI22 changes have fresh evidence. Query Embedding
+has separate Teacher course-purpose consent.0050 permits only llm_agent_chat/
+embedding_query; independent populated0033→0053/18 atomicity tests passed.
+Read-only UI Polish Spec distinguishes browser/source; other polish is proposal only.

@@ -208,12 +208,7 @@
 }
 
 .appearance
-  :is(
-    :global(.demo-mode-mock),
-    :global(.role-pill),
-    :global(.current-label),
-    :global(.dirty-label)
-  ) {
+  :is(:global(.role-pill), :global(.current-label), :global(.dirty-label)) {
   color: var(--muted);
   background: var(--surface-hover);
   font-weight: 500;
@@ -231,7 +226,6 @@
   font-weight: 640;
 }
 
-.appearance :global(.demo-mode-real),
 .appearance :global(.status-good) {
   color: var(--green);
   background: #eaf5ee;

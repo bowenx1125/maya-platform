@@ -30,7 +30,6 @@ import { useSession } from "./session-provider";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { AvatarPreview } from "./avatar";
-import { DemoCompositionBadge } from "./demo-composition";
 import { ReportMarkdown } from "./report/report-markdown";
 import { UserAvatar } from "./user-avatar";
 import detailStyles from "./teacher-agent-detail.module.css";
@@ -191,7 +190,6 @@ export function TeacherDashboard() {
         <h2 id="teacher-guide-title">{t("guide")}</h2>
         <HomeGuide steps={guide} />
       </section>
-      <DemoCompositionBadge />
       {error ? <ErrorNotice error={error} /> : null}
       <SectionCard
         title={`${t("personalAgents")} · ${personalAgents.length}`}

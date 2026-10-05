@@ -723,39 +723,6 @@ details > summary {
   padding: 52px 0 88px;
 }
 
-.demo-mode {
-  flex: 0 0 auto;
-  padding: 3px 6px;
-  border-radius: 999px;
-  font-size: 0.64rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.demo-mode-real {
-  color: var(--green);
-  background: #e9f6f0;
-}
-
-.demo-mode-mock {
-  color: #765d1c;
-  background: var(--gold-soft);
-}
-
-/* A real component running under a locally derived policy. Deliberately plain
-   and adjacent to the REAL badge, so the qualification is read with it. */
-.demo-mode-unreviewed {
-  flex: 0 0 auto;
-  margin-left: 4px;
-  padding: 3px 6px;
-  border: 1px solid var(--gold-soft);
-  border-radius: 999px;
-  color: #765d1c;
-  font-size: 0.6rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
 /* Both homes share `.mayaform-home`; the teacher's differs in what it holds,
    not in how wide it is. */
 .mayaform-home > * {

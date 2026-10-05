@@ -92,7 +92,7 @@ MAYA_REPORT_PROVIDER=dashscope
 
 首次启用还需要配置本地凭据、区域、`LLM_MODEL` 和已审核的 Provider policy，并完成教师披露确认；详见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。仅修改上述选择项或填写 API Key 不足以完成配置。聊天、辩论和报告共用 `LLM_MODEL`，改这一项即可换模型。
 
-教师首页的 Components 可切换 LLM、Embedding、Report 的 Real/Mock；**API Key** 入口可主动填写，服务器加密保存，不回传 Key，服务器环境中的 Key 优先。**Check** 只检查尚未 Ready 或已更改的能力；真实检测先确认本批最多请求数，失败即停止。改模式仅使该项检查失效，改 Key 使全部检查失效。活跃生成期间禁止切换，网页配置重启后保留。Mock 与真实 Embedding 快照不混用。
+Provider 模式、API Key 和连通性检查由维护层管理，教师首页不提供 Components 控件。现有配置和调用账本继续保留，Mock 与真实 Embedding 快照不混用；具体资料外发仍需按当前身份、用途和准确清单完成必要的教师披露确认。
 
 老师和学生均可在 **Chat** 选择已有已发布 Agent；会话与引用仅本人可读，重新进入保留历史。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。界面没有 Refresh 按钮；列表仍自动读取最新状态，断线可重新进入。
 
