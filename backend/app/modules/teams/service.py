@@ -14,8 +14,10 @@ from app.core.models import (
     Agent,
     AgentVersion,
     CourseMember,
+    FileReference,
     Group,
     KnowledgeDocument,
+    KnowledgeSnapshot,
     SnapshotDocument,
     StoredFile,
 )
@@ -28,7 +30,11 @@ from app.modules.knowledge.services import (
     scoped_group_role_for_user,
 )
 from app.modules.knowledge_sets import service as knowledge_set_service
-from app.modules.knowledge_sets.models import KnowledgeSet, KnowledgeSetSource
+from app.modules.knowledge_sets.models import (
+    KnowledgeDocumentVersion,
+    KnowledgeSet,
+    KnowledgeSetSource,
+)
 from app.modules.knowledge_sets.service import _source_matches_current
 from app.modules.teams.models import (
     CourseTeamPublication,
@@ -144,8 +150,14 @@ def _validate_members(
             raise not_found("An Agent version is not available to the current user.")
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")
-        raw_source_fences = _capture_raw_source_fences(db, version)
-        if not _raw_source_fences_current(db, user_id, raw_source_fences):
+        raw_source_fences = _capture_raw_source_fences(db, version, course_id)
+        if not _raw_source_fences_current(
+            db,
+            user_id,
+            raw_source_fences,
+            agent_version_id=version.id,
+            course_id=course_id,
+        ):
             raise not_found("An Agent source is not currently available to the Team owner.")
         _metadata_revision, own_sets = knowledge_set_service.get_agent_knowledge_sets(
             db, actor, agent.id
@@ -233,46 +245,380 @@ def _knowledge_set_currently_readable(db: Session, user_id: str, row: KnowledgeS
     )
 
 
-def _capture_raw_source_fences(db: Session, version: AgentVersion) -> list[dict[str, object]]:
+def _has_file_reference(
+    db: Session, stored_file_id: str, owner_type: str, owner_id: str, purpose: str
+) -> bool:
+    return (
+        db.scalar(
+            select(FileReference.id).where(
+                FileReference.stored_file_id == stored_file_id,
+                FileReference.owner_type == owner_type,
+                FileReference.owner_id == owner_id,
+                FileReference.purpose == purpose,
+            )
+        )
+        is not None
+    )
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _valid_authorization_epoch(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _capture_raw_source_fences(
+    db: Session, version: AgentVersion, course_id: str
+) -> list[dict[str, object]]:
     if version.knowledge_snapshot_id is None:
         return []
+    snapshot = db.get(KnowledgeSnapshot, version.knowledge_snapshot_id)
+    if snapshot is None or snapshot.agent_version_id != version.id:
+        raise not_found("An Agent snapshot is not available to the Team owner.")
+    snapshot_file = db.get(StoredFile, snapshot.stored_file_id)
+    if (
+        snapshot_file is None
+        or snapshot_file.kind != "snapshot_rag"
+        or snapshot_file.state != "active"
+        or snapshot_file.sha256 != snapshot.content_hash
+        or not _is_sha256(snapshot.content_hash)
+        or not _has_file_reference(db, snapshot_file.id, "knowledge_snapshot", snapshot.id, "rag")
+    ):
+        raise not_found("An Agent snapshot is not available to the Team owner.")
     rows = db.execute(
         select(SnapshotDocument, KnowledgeDocument, StoredFile)
         .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
         .join(StoredFile, StoredFile.id == SnapshotDocument.stored_file_id)
-        .where(SnapshotDocument.snapshot_id == version.knowledge_snapshot_id)
+        .where(SnapshotDocument.snapshot_id == snapshot.id)
         .order_by(SnapshotDocument.order_index, SnapshotDocument.id)
     ).all()
-    return [
-        {
-            "document_id": snapshot_document.document_id,
-            "stored_file_id": snapshot_document.stored_file_id,
-            "content_hash": document.content_hash,
-            "file_sha256": stored_file.sha256,
-            "authorization_epoch": snapshot_document.source_authorization_epoch,
-        }
-        for snapshot_document, document, stored_file in rows
+    fences: list[dict[str, object]] = []
+    for snapshot_document, document, stored_file in rows:
+        if (
+            document.course_id != course_id
+            or document.workspace_state != "active"
+            or document.authorization_epoch != snapshot_document.source_authorization_epoch
+            or stored_file.kind != "snapshot_source"
+            or stored_file.state != "active"
+            or not _is_sha256(stored_file.sha256)
+            or not _has_file_reference(
+                db,
+                stored_file.id,
+                "snapshot_document",
+                snapshot_document.id,
+                "source",
+            )
+        ):
+            raise not_found("An Agent source is not currently available to the Team owner.")
+
+        source_versions = db.execute(
+            select(KnowledgeDocumentVersion, StoredFile)
+            .join(StoredFile, StoredFile.id == KnowledgeDocumentVersion.stored_file_id)
+            .where(
+                KnowledgeDocumentVersion.document_id == document.id,
+                KnowledgeDocumentVersion.file_sha256 == stored_file.sha256,
+                KnowledgeDocumentVersion.authorization_epoch
+                == snapshot_document.source_authorization_epoch,
+            )
+            .order_by(KnowledgeDocumentVersion.version_seq.desc())
+        ).all()
+        source_version_id: str | None = None
+        source_content_hash: str | None = None
+        if source_versions:
+            content_hashes = {version_row.content_hash for version_row, _file in source_versions}
+            if len(content_hashes) != 1 or any(
+                version_row.version_seq > document.content_version_seq
+                or not _is_sha256(version_row.content_hash)
+                or version_file.sha256 != version_row.file_sha256
+                for version_row, version_file in source_versions
+            ):
+                raise not_found("An Agent source is not currently available to the Team owner.")
+            version_row, _version_file = source_versions[0]
+            source_version_id = version_row.id
+            source_content_hash = version_row.content_hash
+
+        fences.append(
+            {
+                "agent_version_id": version.id,
+                "snapshot_id": snapshot.id,
+                "snapshot_file_id": snapshot_file.id,
+                "snapshot_content_hash": snapshot.content_hash,
+                "snapshot_document_id": snapshot_document.id,
+                "document_id": document.id,
+                "course_id": course_id,
+                "stored_file_id": stored_file.id,
+                "source_version_id": source_version_id,
+                "content_hash": source_content_hash,
+                "file_sha256": stored_file.sha256,
+                "authorization_epoch": snapshot_document.source_authorization_epoch,
+            }
+        )
+    return fences
+
+
+def _raw_source_fences_current(
+    db: Session,
+    user_id: str,
+    fences: list[dict[str, object]],
+    *,
+    agent_version_id: str,
+    course_id: str,
+) -> bool:
+    if any(not isinstance(fence, dict) for fence in fences):
+        return False
+    version = db.get(AgentVersion, agent_version_id)
+    if version is None:
+        return False
+    # Rebuild the complete source set from the member's immutable AgentVersion
+    # on both create and send. This makes an empty or partial persisted fence fail closed.
+    canonical_fences = _capture_raw_source_fences(db, version, course_id)
+    canonical_identities = [
+        (
+            str(fence["agent_version_id"]),
+            str(fence["snapshot_id"]),
+            str(fence["snapshot_document_id"]),
+            str(fence["document_id"]),
+            str(fence["course_id"]),
+            str(fence["stored_file_id"]),
+            str(fence["file_sha256"]),
+            cast(int, fence["authorization_epoch"]),
+        )
+        for fence in canonical_fences
     ]
+    if len(set(canonical_identities)) != len(canonical_identities):
+        return False
 
+    legacy_fields = {
+        "document_id",
+        "stored_file_id",
+        "content_hash",
+        "file_sha256",
+        "authorization_epoch",
+    }
+    current_fields = {
+        "agent_version_id",
+        "snapshot_id",
+        "snapshot_file_id",
+        "snapshot_content_hash",
+        "snapshot_document_id",
+        "document_id",
+        "course_id",
+        "stored_file_id",
+        "source_version_id",
+        "content_hash",
+        "file_sha256",
+        "authorization_epoch",
+    }
+    is_legacy = bool(fences and "snapshot_id" not in fences[0])
+    if fences and any(("snapshot_id" not in fence) != is_legacy for fence in fences):
+        return False
+    expected_fields = legacy_fields if is_legacy else current_fields
+    if any(set(fence) != expected_fields for fence in fences):
+        return False
 
-def _raw_source_fences_current(db: Session, user_id: str, fences: list[dict[str, object]]) -> bool:
+    supplied_identities: list[tuple[str, ...]] = []
+    canonical_identity_values: list[tuple[str, ...]]
+    if is_legacy:
+        for fence in fences:
+            document_id = fence.get("document_id")
+            stored_file_id = fence.get("stored_file_id")
+            file_sha256 = fence.get("file_sha256")
+            authorization_epoch = fence.get("authorization_epoch")
+            if (
+                not isinstance(document_id, str)
+                or not isinstance(stored_file_id, str)
+                or not _is_sha256(file_sha256)
+                or not _valid_authorization_epoch(authorization_epoch)
+                or not _is_sha256(fence.get("content_hash"))
+            ):
+                return False
+            supplied_identities.append(
+                (
+                    document_id,
+                    stored_file_id,
+                    cast(str, file_sha256),
+                    str(authorization_epoch),
+                )
+            )
+        canonical_identity_values = [
+            (
+                str(fence["document_id"]),
+                str(fence["stored_file_id"]),
+                str(fence["file_sha256"]),
+                str(fence["authorization_epoch"]),
+            )
+            for fence in canonical_fences
+        ]
+    else:
+        for fence in fences:
+            string_fields = (
+                "agent_version_id",
+                "snapshot_id",
+                "snapshot_file_id",
+                "snapshot_content_hash",
+                "snapshot_document_id",
+                "document_id",
+                "course_id",
+                "stored_file_id",
+                "file_sha256",
+            )
+            if (
+                any(not isinstance(fence.get(key), str) for key in string_fields)
+                or not _is_sha256(fence.get("snapshot_content_hash"))
+                or not _is_sha256(fence.get("file_sha256"))
+                or not _valid_authorization_epoch(fence.get("authorization_epoch"))
+            ):
+                return False
+            supplied_identities.append(
+                (
+                    cast(str, fence["agent_version_id"]),
+                    cast(str, fence["snapshot_id"]),
+                    cast(str, fence["snapshot_document_id"]),
+                    cast(str, fence["document_id"]),
+                    cast(str, fence["course_id"]),
+                    cast(str, fence["stored_file_id"]),
+                    cast(str, fence["file_sha256"]),
+                    str(fence["authorization_epoch"]),
+                )
+            )
+        canonical_identity_values = [
+            tuple(
+                str(fence[key])
+                for key in (
+                    "agent_version_id",
+                    "snapshot_id",
+                    "snapshot_document_id",
+                    "document_id",
+                    "course_id",
+                    "stored_file_id",
+                    "file_sha256",
+                    "authorization_epoch",
+                )
+            )
+            for fence in canonical_fences
+        ]
+    if (
+        len(set(supplied_identities)) != len(supplied_identities)
+        or len(supplied_identities) != len(canonical_identity_values)
+        or set(supplied_identities) != set(canonical_identity_values)
+    ):
+        return False
+    if is_legacy:
+        # Old Team rows mixed the current content hash with frozen file identity.
+        # Keep the stored JSON untouched and validate through the exact SnapshotDocument set.
+        fences = canonical_fences
+
     for fence in fences:
+        fenced_agent_version_id = fence.get("agent_version_id")
+        snapshot_id = fence.get("snapshot_id")
+        snapshot_document_id = fence.get("snapshot_document_id")
         document_id = fence.get("document_id")
-        document = db.get(KnowledgeDocument, str(document_id)) if document_id else None
         stored_file_id = fence.get("stored_file_id")
+        expected_file_sha = fence.get("file_sha256")
+        authorization_epoch = fence.get("authorization_epoch")
+        if (
+            not all(
+                isinstance(value, str) and value
+                for value in (
+                    fenced_agent_version_id,
+                    snapshot_id,
+                    snapshot_document_id,
+                    document_id,
+                    stored_file_id,
+                )
+            )
+            or not _is_sha256(expected_file_sha)
+            or not _valid_authorization_epoch(authorization_epoch)
+        ):
+            return False
+        if fenced_agent_version_id != agent_version_id:
+            return False
+        if fence.get("course_id") != course_id:
+            return False
+        agent_version = db.get(AgentVersion, fenced_agent_version_id)
+        snapshot = db.get(KnowledgeSnapshot, snapshot_id)
+        snapshot_file_id = fence.get("snapshot_file_id")
+        snapshot_file = (
+            db.get(StoredFile, snapshot_file_id) if isinstance(snapshot_file_id, str) else None
+        )
+        snapshot_document = db.get(SnapshotDocument, snapshot_document_id)
+        document = db.get(KnowledgeDocument, str(document_id)) if document_id else None
         stored_file = db.get(StoredFile, str(stored_file_id)) if stored_file_id else None
+        if (
+            agent_version is None
+            or agent_version.knowledge_snapshot_id != snapshot_id
+            or snapshot is None
+            or snapshot.agent_version_id != agent_version.id
+            or snapshot.stored_file_id != snapshot_file_id
+            or snapshot.content_hash != fence.get("snapshot_content_hash")
+            or not _is_sha256(snapshot.content_hash)
+            or snapshot_file is None
+            or snapshot_file.kind != "snapshot_rag"
+            or snapshot_file.state != "active"
+            or snapshot_file.sha256 != snapshot.content_hash
+            or not _has_file_reference(
+                db, snapshot_file.id, "knowledge_snapshot", snapshot.id, "rag"
+            )
+            or snapshot_document is None
+            or snapshot_document.snapshot_id != snapshot.id
+            or snapshot_document.document_id != document_id
+            or snapshot_document.stored_file_id != stored_file_id
+            or snapshot_document.source_authorization_epoch != authorization_epoch
+        ):
+            return False
         if (
             document is None
             or stored_file is None
+            or document.course_id != course_id
             or document.workspace_state != "active"
-            or document.authorization_epoch != fence.get("authorization_epoch")
-            or document.stored_file_id != fence.get("stored_file_id")
-            or document.content_hash != fence.get("content_hash")
-            or stored_file.sha256 != fence.get("file_sha256")
-            or stored_file.state == "deleted"
+            or document.authorization_epoch != authorization_epoch
+            or stored_file.kind != "snapshot_source"
+            or stored_file.sha256 != expected_file_sha
+            or stored_file.state != "active"
+            or not _has_file_reference(
+                db,
+                stored_file.id,
+                "snapshot_document",
+                snapshot_document.id,
+                "source",
+            )
             or not can_read_source(db, user_id, document, require_active=True)
         ):
             return False
+        source_version_id = fence.get("source_version_id")
+        content_hash = fence.get("content_hash")
+        if source_version_id is None:
+            # Pre-0047 snapshots have no per-source version row. Their exact
+            # SnapshotDocument reference and active frozen-file SHA remain authoritative.
+            if content_hash is not None:
+                return False
+        else:
+            if not isinstance(source_version_id, str) or not source_version_id:
+                return False
+            source_version = db.get(KnowledgeDocumentVersion, str(source_version_id))
+            source_version_file = (
+                db.get(StoredFile, source_version.stored_file_id)
+                if source_version is not None
+                else None
+            )
+            if (
+                source_version is None
+                or source_version_file is None
+                or source_version.document_id != document.id
+                or source_version.authorization_epoch != authorization_epoch
+                or source_version.content_hash != content_hash
+                or source_version.file_sha256 != expected_file_sha
+                or source_version_file.sha256 != source_version.file_sha256
+                or source_version.version_seq > document.content_version_seq
+                or not _is_sha256(content_hash)
+            ):
+                return False
     return True
 
 
@@ -1022,7 +1368,11 @@ def _validate_member_current(
     except (TypeError, ValueError):
         raise not_found() from None
     if not isinstance(source_fences, list) or not _raw_source_fences_current(
-        db, resource_owner_id, cast(list[dict[str, object]], source_fences)
+        db,
+        resource_owner_id,
+        cast(list[dict[str, object]], source_fences),
+        agent_version_id=member.agent_version_id,
+        course_id=team.course_id,
     ):
         raise not_found()
     if publication is not None:

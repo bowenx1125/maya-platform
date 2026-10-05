@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import PlatformError, invalid_state, not_found, stale_revision, unprocessable
 from app.core.models import (
     Agent,
+    AgentVersion,
     FileReference,
     Group,
     KnowledgeDocument,
@@ -714,11 +715,31 @@ def list_brainform_knowledge(
             elif _student_projection_is_available(db, context, set_row, markdown_version):
                 content_hash = _sha256(markdown_version.student_projection_markdown)
         for source_agent in source_agents:
+            generation_job_id = None
+            run_agent = db.get(Agent, run.agent_id) if run is not None else None
+            run_agent_version = (
+                db.get(AgentVersion, run.agent_version_id) if run is not None else None
+            )
+            if (
+                run is not None
+                and run_agent is not None
+                and run_agent_version is not None
+                and run_agent_version.agent_id == run.agent_id
+                and summary.can_edit
+                and run.owner_user_id == context.user.id
+                and run.course_id == course_id
+                and course_member_role(db, context.user.id, course_id) == "teacher"
+                and run_agent.course_id == course_id
+                and run_agent.owner_user_id == context.user.id
+                and _agent_workspace_role(db, context.user.id, run_agent) == "owner"
+            ):
+                generation_job_id = _uid(run.job_id)
             row = BrainformKnowledgeSummary(
                 agent_id=_uid(source_agent.id),
                 canonical_set_id=summary.id,
                 source_agent_display_name=source_agent.name,
                 knowledge_display_name=summary.display_name,
+                generation_job_id=generation_job_id,
                 can_read=True,
                 can_edit=summary.can_edit,
                 version_seq=markdown_version.version_seq if markdown_version is not None else None,

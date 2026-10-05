@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -343,7 +344,7 @@ describe("Brainform workspace actions", () => {
     state.userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     sessionStorage.setItem(
       'maya:brainform-generation-job:["cccccccc-cccc-4ccc-8ccc-cccccccccccc","teacher","course-1"]:set-1',
-      "job-1",
+      "stale-job",
     );
     state.api.brainformKnowledge.mockResolvedValue([
       {
@@ -355,6 +356,7 @@ describe("Brainform workspace actions", () => {
         can_edit: true,
         version_seq: null,
         content_hash: null,
+        generation_job_id: "job-1",
         generation_state: "failed",
         safe_error_code: "provider_confirmation_required",
       },
@@ -371,6 +373,147 @@ describe("Brainform workspace actions", () => {
     await waitFor(() =>
       expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-1"),
     );
+  });
+
+  it("hydrates the current auto-enqueued RAG generation and recovers its exact disclosure", async () => {
+    state.role = "teacher";
+    state.userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    state.api.brainformKnowledge.mockResolvedValue([
+      {
+        agent_id: "agent-1",
+        canonical_set_id: "set-1",
+        source_agent_display_name: "Socrates",
+        knowledge_display_name: "Socrates Knowledge",
+        can_read: true,
+        can_edit: true,
+        version_seq: 2,
+        content_hash: "b".repeat(64),
+        generation_state: "blocked",
+        safe_error_code: "provider_confirmation_required",
+        generation_job_id: "job-2",
+      },
+    ]);
+    state.api.knowledgeGenerationJob.mockResolvedValue({
+      run_id: "run-2",
+      job_id: "job-2",
+      knowledge_set_id: "set-1",
+      state: "blocked",
+      provider_manifest_hash: "c".repeat(64),
+      safe_error_code: "provider_confirmation_required",
+      accepted_item_count: 0,
+      materialized_item_count: 0,
+      failed_item_count: 0,
+      created_at: "2026-10-05T00:00:00Z",
+      updated_at: "2026-10-05T00:00:00Z",
+    });
+
+    renderWorkspace("teacher");
+
+    const recovery = await screen.findByRole("link", {
+      name: "Open provider disclosure",
+    });
+    expect(recovery.getAttribute("href")).toBe(
+      `/teacher/provider-disclosures/${"c".repeat(64)}`,
+    );
+    expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-2");
+    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
+  });
+
+  it("keeps a late old Job response from replacing the disclosure for a newer RAG update", async () => {
+    state.role = "teacher";
+    state.userId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
+    const row = (
+      jobId: string,
+      generationState: "running" | "blocked",
+      safeErrorCode: string | null,
+    ) => ({
+      agent_id: "agent-1",
+      canonical_set_id: "set-1",
+      source_agent_display_name: "Socrates",
+      knowledge_display_name: "Socrates Knowledge",
+      can_read: true,
+      can_edit: true,
+      version_seq: 2,
+      content_hash: "b".repeat(64),
+      generation_job_id: jobId,
+      generation_state: generationState,
+      safe_error_code: safeErrorCode,
+    });
+    state.api.brainformKnowledge
+      .mockResolvedValueOnce([row("job-1", "running", null)])
+      .mockResolvedValue([
+        row("job-2", "blocked", "provider_confirmation_required"),
+      ]);
+    state.api.replaceKnowledgeDocument.mockResolvedValue({
+      ...source,
+      content_hash: "c".repeat(64),
+      index_revision: 5,
+      source_filename: "lesson.md",
+    });
+    let finishOldJob!: (status: object) => void;
+    state.api.knowledgeGenerationJob.mockImplementation((jobId: string) => {
+      if (jobId === "job-1") {
+        return new Promise((resolve) => {
+          finishOldJob = resolve;
+        });
+      }
+      return Promise.resolve({
+        run_id: "run-2",
+        job_id: "job-2",
+        knowledge_set_id: "set-1",
+        state: "blocked",
+        provider_manifest_hash: "d".repeat(64),
+        safe_error_code: "provider_confirmation_required",
+        accepted_item_count: 0,
+        materialized_item_count: 0,
+        failed_item_count: 0,
+        created_at: "2026-10-05T00:00:00Z",
+        updated_at: "2026-10-05T00:00:00Z",
+      });
+    });
+
+    renderWorkspace("teacher");
+    await waitFor(() =>
+      expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-1"),
+    );
+    const editButtons = await screen.findAllByRole("button", {
+      name: "Edit lesson.md",
+    });
+    fireEvent.click(editButtons[1]);
+    const editor = await screen.findByRole("textbox", {
+      name: "Markdown content",
+    });
+    fireEvent.change(editor, { target: { value: "# Updated lesson\n" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(state.api.replaceKnowledgeDocument).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-2"),
+    );
+    const recovery = await screen.findByRole("link", {
+      name: "Open provider disclosure",
+    });
+    expect(recovery.getAttribute("href")).toBe(
+      `/teacher/provider-disclosures/${"d".repeat(64)}`,
+    );
+
+    await act(async () => {
+      finishOldJob({
+        run_id: "run-1",
+        job_id: "job-1",
+        knowledge_set_id: "set-1",
+        state: "blocked",
+        provider_manifest_hash: "a".repeat(64),
+        safe_error_code: "provider_confirmation_required",
+      });
+    });
+    expect(recovery.getAttribute("href")).toBe(
+      `/teacher/provider-disclosures/${"d".repeat(64)}`,
+    );
+    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
   });
 
   it("opens the same canonical Markdown document from an Agent-specific entry", async () => {

@@ -158,6 +158,7 @@ export type BrainformKnowledge = {
   canonical_set_id: string;
   source_agent_display_name: string;
   knowledge_display_name: string;
+  generation_job_id: string | null;
   can_read: true;
   can_edit: boolean;
   version_seq: number | null;

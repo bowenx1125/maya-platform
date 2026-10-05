@@ -4740,6 +4740,8 @@ export interface components {
             canonical_set_id: string;
             /** Content Hash */
             content_hash?: string | null;
+            /** Generation Job Id */
+            generation_job_id?: string | null;
             /**
              * Generation State
              * @enum {string|null}

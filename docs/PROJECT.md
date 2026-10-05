@@ -207,13 +207,11 @@ nine cards/Immerse without title. An older record retained its state error/data.
 
 ## Workspace polish and speech configuration — September 27, 2026
 
-Sidebar New/Done/Back preserve drafts; Chats has no3D, Workspace retains AvatarEditor.
-History date/Delete exclusive on hover/focus; touch supports Delete. Knowledge hides
-Ready; Voices reuse tiles/actions and existing consent. Tooltips clear on leave,
-navigation/DOM change, scroll, blur/Escape. Chats has no820px ceiling; dated desktop/
-mobile overflow checks passed. Voice guidance10–15s differs from server10–20s/10MiB.
-A stalled Debate's Embedding403 retained its charge without retry; no LLM or local
-budget cause. Dated static/Docker/browser checks passed with Mock Voice/four warnings.
+Drafts preserved; text-only Chats, Workspace AvatarEditor. History date/Delete exclusive
+on hover/focus, touch supported; Knowledge hid Ready, Voices retained consent.
+Tooltip clears on leave/navigation/DOM/scroll/blur/Escape; dated desktop/mobile PASS.
+Voice guidance10–15s vs server10–20s/10MiB. Debate Embedding403 charge retained without
+retry; dated Mock Voice/static/Docker/browser PASS with4 warnings.
 
 ## Preserved adjacent work — September 27, 2026
 
@@ -229,10 +227,9 @@ history; direct `Message[]` drops assistant turns.
 
 ## MayaForm W2a Chat reliability — 2026-09-27
 
-Unknown timeouts never auto-resend; same-ID replay/new-ID follow-up. History/status,
-usage-fault handling, CAS/refund/save/SSE and GET recovery persist. Actor/course switch
-clears Chat; same-actor navigation retains. R4: 40 files, 42 focused, 449 frontend/1
-skip; full check/boundary0, Sol clean. Mock recovery only; 0 real calls.
+No automatic unknown resend; same-ID replay/new-ID follow-up, history/usage/CAS/refund/
+SSE/GET recovery retained. Actor/course switch clears Chat; same-actor navigation retains.
+R4:42 focused/449 frontend+1skip, full check/boundary/Sol PASS; Mock only,0 real calls.
 
 ## MayaForm W2b authored lengths — 2026-09-27
 
@@ -242,27 +239,23 @@ tokens via codepoint chunks. Sol/check/boundary passed; no Provider; IME NOT_RUN
 
 ## MayaForm W1 owner-first workspace — accepted R5
 
-0035 adds owner/course/scope/visibility epochs, personal Agents/sources and frozen Chat names;
-legacy Group owner remains NULL. Private-derived drafts stay owner-only until owner Done; source
-ACL gates sharing. Teacher personal/no-RAG, withdrawal history/send fence and group-only Debate
-passed. Student Agent.md is allowed; no Toolkit/approval. R5: 70 files, full check/boundary, Sol
-ACL/migration, 80 Mock requests and Teacher Chat/mobile passed; no Provider/Docker; IME NOT_RUN.
-K1: four immutable types, teacher-only Rubric/reference answer, read-only Graph in Concepts, one
-store across entry points. P09/source verification/0036 cleanup/replay passed; see
+0035: personal ownership/epochs/frozen Chat names; legacy Group owner NULL. Private drafts
+stay owner-only until Done; sharing checks source ACL. Student Agent.md allowed, no Toolkit
+approval. R5: full check/boundary/Sol ACL+migration/80 Mock/Teacher Chat+mobile PASS;
+no Provider/Docker, IME NOT_RUN. K1: immutable types, Teacher Rubric/reference,
+read-only Graph/one store; P09/source/0036/replay PASS. See
 `docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`.
 
 ## MayaForm K2a — accepted
 
-0037 adds owner-only Jobs/runs, stable input reuse and leases. Only explicit intent enqueues;
-ordinary Done with RAG creates no Job. Publish, Private Set/link and run are atomic. No Provider
-means zero calls/assets. R2 check, Sol and HTTP/browser passed.
+0037: owner-only Jobs/runs/reuse/leases; explicit intent only, ordinary Done creates no
+Job. Publish/Private Set/link/run atomic; no Provider→zero calls/assets. R2/Sol/HTTP/browser PASS.
 
 ## MayaForm K2b1 — accepted Provider stage
 
-0038 binds one confirmed `llm_knowledge_generate` operation to the run. Agno 3.0.11 calls once;
-canonical bytes equal stored hash and `post_bytes`. ACL/disclosure, accounting, unknown recovery
-and sanitized stage passed. No Assets in K2b1. Full check, populated migration/HTTP and Sol passed;
-no real Provider/Docker.
+0038: confirmed llm_knowledge_generate, public Agno3.0.11 once; bytes/hash/post_bytes
+match. ACL/disclosure/accounting/unknown/sanitized stage, check/migration/HTTP/Sol PASS;
+K2b1 had no Assets or real Provider/Docker.
 
 ## MayaForm recovery — 2026-10-03
 
@@ -293,8 +286,8 @@ Resume retains answers/turns; owner answer DTO exposes answer_text/created_at on
 Source-free allows own records/progress/abandon, never resume/hints. Exact legacy
 Teacher/course scope remains; Private Single denies Teacher. General Chat has natural
 lifecycle messages, no assessment controls/composer. BF import14/Setext/HTTP passed.
-Final Linux backend1909/21 old skips (499.64s, exit0); frontend559/1 old skip,
-6 independent UI probes;281 frontend hashes stable.
+Linux backend1909/21 old skips (499.64s, exit0); pre-removal frontend559/1 skip,
+6 independent UI probes.
 Full student/Teacher browser and Provider closure remains pending; no end-to-end acceptance.
 [BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
 [S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
@@ -303,9 +296,10 @@ October5 Maya backend/frontend rebuilt; effective environment/DNS/gateway preser
 Backup20261005T042605Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
 All59 original tables/6,423 rows retain content/ledgers; one Debate running→pending
 metadata change is accepted-result startup recovery. Historical unknown3 untouched.
-Real browser imported synthetic314-character Markdown; one charged Embedding success.
-Knowledge LLM awaits exact confirmation; navigation needs recheck after parallel-browser
-interference. Full closure and GitHub push pending. UI-only backup20261005T064211Z OK.
+Real synthetic RAG:1 charged Embedding; exact confirmation resumed the same Knowledge
+run once,1 charged accepted LLM/usable Markdown. Manual edit saved seq2; RAG update
+intent2 blocked before sending, retaining seq2. Full closure/GitHub push pending.
+Disclosure navigation works without browser competition. UI backup20261005T064211Z OK.
 Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
 UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
 (UI03/04/05 included): actual ancestry merges b648efc/8987cf8 preserve both selected
@@ -314,14 +308,22 @@ Latest UI instruction: retain colleagues' MayaForm design, add no replacement el
 remove all user-visible Components/Key/Check/mode/status UI; maintenance APIs stay.
 Components removed, no replacement:555 frontend/1 old skip; types/lint/Prettier PASS.
 5 old UI tests removed,1 Dashboard test added; Sol source/25 focused PASS.
-Other MayaForm UI unchanged; browser update pending.
-Earlier conversion22/UI102/Roster/Profile passed; macOS memory guard remains.
+1d92a2f deployed frontend only; real Home DOM/screenshot has no Components/controls.
+Other container IDs/MayaForm UI unchanged; full A–K polish spec is proposal only.
 0052/0053 append only. Types/lint(0 errors/4 old warnings), Prettier,
 Ruff/format493/mypy247,152 actual API semantics/19 negatives, generated/
 privacy/boundary and7 migration/bootstrap/reset gates passed. Agno3.0.11 public SDK.
-Independent runtime source freeze:
-912 files, manifest db6b792d3bb895f6aae42c43f0ce15f3a6c8f791692f0e828d13ac70210a1c56;
-All502 backend files retain the freeze; UI22 changes have fresh evidence. Query Embedding
-has separate Teacher course-purpose consent.0050 permits only llm_agent_chat/
-embedding_query; independent populated0033→0053/18 atomicity tests passed.
-Read-only UI Polish Spec distinguishes browser/source; other polish is proposal only.
+Freeze912 files, manifest db6b792d3bb895f6aae42c43f0ce15f3a6c8f791692f0e828d13ac70210a1c56;
+At1d92a2f all502 backend files matched; UI22 had fresh evidence. Query Embedding has
+separate Teacher course-purpose consent.0050 permits llm_agent_chat/embedding_query;
+independent populated0033→0053/18 atomicity tests passed.
+
+Pending rollout: RAG Job hydration/disclosure and historical Team RAG fixes passed
+Sol review (Team75+9 probes). Manual fixture now captures real fences and stable
+baseline members;63 assertions unchanged,37+1 independent cases passed. R2's26
+failures resolved. Frozen R3:1926 passed/21 old skips/exit0 (428.52s), no code drift;
+frontend557/1 old skip/types/lint/contracts and7 migration/script gates passed.
+Real paths and UI-v2 implementation remain pending; no end-to-end acceptance.
+[UI v2](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) is deferred until functionality
+is verified complete: Studyform=Workform, Agents then Voices; mature RAG in three-column
+Brainform, no page title/sidebar New; preserve Knowledge edit and global hover1500ms.

@@ -157,6 +157,7 @@ class BrainformKnowledgeSummary(StrictModel):
     canonical_set_id: UUID
     source_agent_display_name: str
     knowledge_display_name: str
+    generation_job_id: UUID | None = None
     can_read: Literal[True] = True
     can_edit: bool
     version_seq: int | None = Field(default=None, ge=1)

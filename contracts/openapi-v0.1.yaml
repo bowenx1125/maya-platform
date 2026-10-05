@@ -11023,6 +11023,12 @@ components:
           type:
           - string
           - 'null'
+        generation_job_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Generation Job Id
         generation_state:
           enum:
           - pending

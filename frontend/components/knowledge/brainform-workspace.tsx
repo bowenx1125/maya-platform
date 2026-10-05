@@ -332,16 +332,6 @@ function rememberGenerationJobs(scope: string, jobs: Record<string, string>) {
   }
 }
 
-function readStoredGenerationJob(scope: string, setId: string): string | null {
-  const inMemory = getGenerationJobs(scope)[setId];
-  if (inMemory) return inMemory;
-  try {
-    return window.sessionStorage.getItem(generationStorageKey(scope, setId));
-  } catch {
-    return null;
-  }
-}
-
 function isGenerationActive(
   state: BrainformKnowledge["generation_state"],
 ): boolean {
@@ -480,6 +470,10 @@ function BrainformWorkspaceBody({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const initialKnowledgeOpened = useRef(false);
   const initialJobRead = useRef<string | null>(null);
+  const latestGenerationJobs = useRef<{
+    scope: string;
+    jobs: Record<string, string | null>;
+  } | null>(null);
 
   useEffect(() => {
     currentScope.current = identityScope;
@@ -491,6 +485,18 @@ function BrainformWorkspaceBody({
   const scopeIsCurrent = useCallback(
     (scope = identityScope) => currentScope.current === scope,
     [identityScope],
+  );
+
+  const generationJobIsCurrent = useCallback(
+    (scope: string, setId: string, jobId: string) => {
+      const latest = latestGenerationJobs.current;
+      return (
+        latest?.scope !== scope ||
+        !Object.prototype.hasOwnProperty.call(latest.jobs, setId) ||
+        latest.jobs[setId] === jobId
+      );
+    },
+    [],
   );
 
   const loadRagDocuments = useCallback(
@@ -548,6 +554,10 @@ function BrainformWorkspaceBody({
       setKnowledgeRows([]);
       setChatAgents([]);
       setGroups([]);
+      latestGenerationJobs.current = { scope, jobs: {} };
+      rememberGenerationJobs(scope, {});
+      setGenerationJobs({});
+      setGenerationStatuses({});
       setLoading(false);
       setLoadError(null);
       return;
@@ -589,20 +599,48 @@ function BrainformWorkspaceBody({
       setGroups(nextGroups);
       setTeams(nextTeams);
       setMayaTeams(nextMayaTeams);
-      const restoredJobs = { ...getGenerationJobs(scope) };
+      const latestJobs: Record<string, string | null> = {};
       for (const row of nextKnowledge) {
-        if (!row.can_edit || restoredJobs[row.canonical_set_id]) continue;
-        const jobId = readStoredGenerationJob(scope, row.canonical_set_id);
-        if (jobId) restoredJobs[row.canonical_set_id] = jobId;
+        const setId = row.canonical_set_id;
+        if (!Object.prototype.hasOwnProperty.call(latestJobs, setId)) {
+          latestJobs[setId] = null;
+        }
+        if (role === "teacher" && row.can_edit && row.generation_job_id) {
+          latestJobs[setId] = row.generation_job_id;
+        }
       }
-      const previousJobs = getGenerationJobs(scope);
-      const jobsChanged = Object.entries(restoredJobs).some(
-        ([setId, jobId]) => previousJobs[setId] !== jobId,
+      latestGenerationJobs.current = { scope, jobs: latestJobs };
+      const restoredJobs = Object.fromEntries(
+        Object.entries(latestJobs).filter(
+          (entry): entry is [string, string] => entry[1] !== null,
+        ),
       );
+      const previousJobs = getGenerationJobs(scope);
+      const jobsChanged =
+        Object.keys(previousJobs).length !== Object.keys(restoredJobs).length ||
+        Object.entries(restoredJobs).some(
+          ([setId, jobId]) => previousJobs[setId] !== jobId,
+        );
       if (jobsChanged) {
         rememberGenerationJobs(scope, restoredJobs);
-        setGenerationJobs(restoredJobs);
       }
+      setGenerationJobs((current) => {
+        const currentEntries = Object.entries(current);
+        return currentEntries.length === Object.keys(restoredJobs).length &&
+          currentEntries.every(
+            ([setId, jobId]) => restoredJobs[setId] === jobId,
+          )
+          ? current
+          : restoredJobs;
+      });
+      setGenerationStatuses((current) => {
+        const retained = Object.entries(current).filter(
+          ([setId, status]) => restoredJobs[setId] === status.job_id,
+        );
+        return retained.length === Object.keys(current).length
+          ? current
+          : Object.fromEntries(retained);
+      });
       setNotice("");
     } catch (cause) {
       if (scopeIsCurrent(scope) && sequence === loadSequence.current) {
@@ -620,6 +658,7 @@ function BrainformWorkspaceBody({
     identityScope,
     loadGroups,
     loadRagDocuments,
+    role,
     scopeIsCurrent,
   ]);
 
@@ -670,31 +709,86 @@ function BrainformWorkspaceBody({
     void api
       .knowledgeGenerationJob(initialJobId)
       .then((status) => {
-        if (!scopeIsCurrent(scope)) return;
-        setGenerationStatuses((current) => ({
-          ...current,
-          [status.knowledge_set_id]: status,
-        }));
+        if (
+          !scopeIsCurrent(scope) ||
+          status.job_id !== initialJobId ||
+          !generationJobIsCurrent(scope, status.knowledge_set_id, status.job_id)
+        )
+          return;
+        setGenerationStatuses((current) => {
+          if (
+            !scopeIsCurrent(scope) ||
+            !generationJobIsCurrent(
+              scope,
+              status.knowledge_set_id,
+              status.job_id,
+            )
+          )
+            return current;
+          return { ...current, [status.knowledge_set_id]: status };
+        });
         setGenerationJobs((current) => {
-          const next = { ...current, [status.knowledge_set_id]: status.job_id };
+          if (
+            !scopeIsCurrent(scope) ||
+            !generationJobIsCurrent(
+              scope,
+              status.knowledge_set_id,
+              status.job_id,
+            )
+          )
+            return current;
+          const next = {
+            ...getGenerationJobs(scope),
+            [status.knowledge_set_id]: status.job_id,
+          };
           rememberGenerationJobs(scope, next);
           return next;
         });
+        const latest = latestGenerationJobs.current;
+        latestGenerationJobs.current = {
+          scope,
+          jobs: {
+            ...(latest?.scope === scope ? latest.jobs : {}),
+            [status.knowledge_set_id]: status.job_id,
+          },
+        };
       })
       .catch(() => {
         // The owner-only Job endpoint decides whether a routed job is visible.
       });
-  }, [api, identityScope, initialJobId, role, scopeIsCurrent]);
+  }, [
+    api,
+    generationJobIsCurrent,
+    identityScope,
+    initialJobId,
+    role,
+    scopeIsCurrent,
+  ]);
 
   useEffect(() => {
     if (role !== "teacher") return;
     let active = true;
     const timers = new Set<number>();
+    const scope = identityScope;
     const poll = async (setId: string, jobId: string) => {
       try {
         const status = await api.knowledgeGenerationJob(jobId);
-        if (!active || !scopeIsCurrent()) return;
-        setGenerationStatuses((current) => ({ ...current, [setId]: status }));
+        if (
+          !active ||
+          !scopeIsCurrent(scope) ||
+          status.job_id !== jobId ||
+          getGenerationJobs(scope)[setId] !== jobId ||
+          !generationJobIsCurrent(scope, setId, jobId)
+        )
+          return;
+        setGenerationStatuses((current) => {
+          if (
+            getGenerationJobs(scope)[setId] !== jobId ||
+            !generationJobIsCurrent(scope, setId, jobId)
+          )
+            return current;
+          return { ...current, [setId]: status };
+        });
         if (status.state === "pending" || status.state === "running") {
           const timer = window.setTimeout(() => {
             timers.delete(timer);
@@ -712,7 +806,14 @@ function BrainformWorkspaceBody({
       active = false;
       for (const timer of timers) window.clearTimeout(timer);
     };
-  }, [api, generationJobs, role, scopeIsCurrent]);
+  }, [
+    api,
+    generationJobs,
+    generationJobIsCurrent,
+    identityScope,
+    role,
+    scopeIsCurrent,
+  ]);
 
   const closePane = useCallback(() => {
     operationSequence.current += 1;
@@ -1114,8 +1215,16 @@ function BrainformWorkspaceBody({
       mutationStore.finish(intent, handle);
       if (!scopeIsCurrent()) return;
       if (role === "teacher") {
+        const latest = latestGenerationJobs.current;
+        latestGenerationJobs.current = {
+          scope: identityScope,
+          jobs: {
+            ...(latest?.scope === identityScope ? latest.jobs : {}),
+            [pending.documentId]: regeneration.job_id,
+          },
+        };
         const nextJobs = {
-          ...generationJobs,
+          ...getGenerationJobs(identityScope),
           [pending.documentId]: regeneration.job_id,
         };
         rememberGenerationJobs(identityScope, nextJobs);

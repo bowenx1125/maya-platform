@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
-from app.core.models import Agent, KnowledgeDocument
+from app.core.models import Agent, AgentVersion, Course, CourseMember, KnowledgeDocument
 from app.modules.knowledge_sets.generation import (
     _current_generation_authorized,
     claim_generation_run,
@@ -122,10 +122,15 @@ def test_brainform_keeps_failed_first_generation_visible_and_markdown_lossless(
     client: TestClient, database: Any
 ) -> None:
     _agent_id, _document_id, run_id, set_id = _create_generation_run(client, database)
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        job_id = run.job_id
     pending = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
     assert pending.status_code == 200, pending.text
     row = next(item for item in pending.json() if item["canonical_set_id"] == set_id)
     assert row["generation_state"] == "pending"
+    assert row["generation_job_id"] == job_id
     assert row["version_seq"] is None
     assert row["can_read"] is True and row["can_edit"] is True
     assert client.get(f"/api/v1/knowledge-sets/{set_id}/markdown").status_code == 404
@@ -140,6 +145,7 @@ def test_brainform_keeps_failed_first_generation_visible_and_markdown_lossless(
     failed_row = next(item for item in failed.json() if item["canonical_set_id"] == set_id)
     assert failed_row["generation_state"] == "failed"
     assert failed_row["safe_error_code"] == "knowledge_generation_no_assets"
+    assert failed_row["generation_job_id"] == job_id
     assert client.get(f"/api/v1/knowledge-sets/{set_id}/markdown").status_code == 404
 
     markdown = (
@@ -171,8 +177,132 @@ def test_brainform_keeps_failed_first_generation_visible_and_markdown_lossless(
     assert all(item["canonical_set_id"] != set_id for item in listed.json())
 
 
+def test_brainform_generation_job_id_requires_current_owner_course_and_agent_scope(
+    client: TestClient, database: Any
+) -> None:
+    _agent_id, _document_id, run_id, set_id = _create_generation_run(client, database)
+    _teacher, csrf = login(client, "maya")
+    assert csrf
+
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        other_agent_id = str(uuid4())
+        other_course_id = str(uuid4())
+        now = datetime.now(UTC)
+        db.add(
+            Course(
+                id=other_course_id,
+                code=f"brainform-scope-{uuid4()}",
+                name="Other course",
+                current_audio_debate_id=None,
+                created_at=now,
+            )
+        )
+        db.flush()
+        db.add(
+            Agent(
+                id=other_agent_id,
+                group_id=None,
+                owner_user_id=run.owner_user_id,
+                course_id=other_course_id,
+                ownership_scope="personal",
+                visibility="private",
+                authorization_epoch=0,
+                name="Other Knowledge generator",
+                description="",
+                metadata_revision=0,
+                status="active",
+                deleted_at=None,
+                current_published_version_id=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db.add(
+            CourseMember(
+                course_id=other_course_id,
+                user_id=run.owner_user_id,
+                role="teacher",
+                created_at=now,
+            )
+        )
+        original = {
+            "owner_user_id": run.owner_user_id,
+            "course_id": run.course_id,
+            "agent_id": run.agent_id,
+            "agent_version_id": run.agent_version_id,
+            "job_id": run.job_id,
+        }
+        db.commit()
+
+    alias_response = client.post(
+        f"/api/v1/courses/{COURSE_ID}/workspace-agents",
+        headers=_headers(csrf, f"k3-brainform-alias-{uuid4()}"),
+        json={"name": "Knowledge alias", "description": "Uses the same canonical Set."},
+    )
+    assert alias_response.status_code == 201, alias_response.text
+    alias_agent = alias_response.json()
+    bound_alias = client.put(
+        f"/api/v1/agents/{alias_agent['id']}/knowledge-sets",
+        headers=_headers(csrf, f"k3-brainform-alias-set-{uuid4()}"),
+        json={
+            "expected_agent_metadata_revision": alias_agent["metadata_revision"],
+            "set_ids": [set_id],
+        },
+    )
+    assert bound_alias.status_code == 200, bound_alias.text
+    alias_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    alias_rows = [
+        item
+        for item in alias_listing.json()
+        if item["canonical_set_id"] == set_id and item["agent_id"] == alias_agent["id"]
+    ]
+    assert alias_rows
+    assert all(item["generation_job_id"] == original["job_id"] for item in alias_rows)
+
+    mismatch_values = (
+        ("owner_user_id", "60541c78-30f1-55c5-b2aa-207b6a766883"),
+        ("course_id", other_course_id),
+        ("agent_id", other_agent_id),
+    )
+    for field, value in mismatch_values:
+        with database.session() as db:
+            run = db.get(KnowledgeGenerationRun, run_id)
+            assert run is not None
+            setattr(run, field, value)
+            db.commit()
+
+        listed = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+        assert listed.status_code == 200, listed.text
+        rows = [item for item in listed.json() if item["canonical_set_id"] == set_id]
+        assert rows
+        assert all(item["generation_job_id"] is None for item in rows)
+
+        with database.session() as db:
+            run = db.get(KnowledgeGenerationRun, run_id)
+            assert run is not None
+            setattr(run, field, original[field])
+            if field == "agent_id":
+                run.agent_version_id = original["agent_version_id"]
+            db.commit()
+
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        run.agent_id = other_agent_id
+        run.agent_version_id = original["agent_version_id"]
+        db.commit()
+
+    mismatched_agent = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert mismatched_agent.status_code == 200, mismatched_agent.text
+    rows = [item for item in mismatched_agent.json() if item["canonical_set_id"] == set_id]
+    assert rows
+    assert all(item["generation_job_id"] is None for item in rows)
+
+
 def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_closed(
-    client: TestClient,
+    client: TestClient, database: Any
 ) -> None:
     _student, student_csrf = login(client, "bowen")
     private_set = _create_set(client, student_csrf, "My private study guide")
@@ -188,6 +318,13 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
     assert saved_private.json()["audience"] == "full"
     assert saved_private.json()["can_edit"] is True
     assert saved_private.json()["markdown"] == private_markdown
+    student_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert student_listing.status_code == 200, student_listing.text
+    private_row = next(
+        item for item in student_listing.json() if item["canonical_set_id"] == private_set["id"]
+    )
+    assert private_row["can_edit"] is True
+    assert private_row["generation_job_id"] is None
 
     public_set = _create_set(
         client,
@@ -231,6 +368,35 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
     assert saved_public.status_code == 200, saved_public.text
     assert saved_public.json()["audience"] == "full"
     assert saved_public.json()["markdown"] == full_markdown
+
+    with database.session() as db:
+        agent = db.get(Agent, first_public_agent["id"])
+        assert agent is not None
+        version = db.scalar(
+            select(AgentVersion).where(
+                AgentVersion.agent_id == agent.id,
+                AgentVersion.state == "draft",
+            )
+        )
+        assert version is not None
+        version.version_seq = 1
+        version.state = "published"
+        version.published_visibility = "public"
+        version.published_at = datetime.now(UTC)
+        agent.current_published_version_id = version.id
+        db.commit()
+
+    _teacher, _teacher_csrf = login(client, "maya")
+    teacher_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert teacher_listing.status_code == 200, teacher_listing.text
+    teacher_row = next(
+        item
+        for item in teacher_listing.json()
+        if item["canonical_set_id"] == public_set["id"]
+        and item["agent_id"] == first_public_agent["id"]
+    )
+    assert teacher_row["can_edit"] is False
+    assert teacher_row["generation_job_id"] is None
 
     peer, _peer_csrf = login(client, "kaikai")
     assert peer

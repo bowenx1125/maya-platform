@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -13,7 +14,11 @@ from alembic import command
 from app.core.errors import PlatformError
 from app.core.models import Agent, AgentVersion
 from app.modules.auth.service import AuthContext, get_auth_context
-from app.modules.demo_baseline.service import BASELINE_VERSION_ID, ensure_demo_baseline
+from app.modules.demo_baseline.service import (
+    BASELINE_VERSION_ID,
+    BASELINE_VERSION_IDS,
+    ensure_demo_baseline,
+)
 from app.modules.learning.models import (
     LearningAssessment,
     LearningAssessmentMutation,
@@ -36,6 +41,7 @@ from app.modules.learning.service import (
     record_learning_event,
 )
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion, TeamVersionMember
+from app.modules.teams.service import _capture_raw_source_fences
 from app.modules.workspace.models import Conversation
 from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
@@ -98,6 +104,7 @@ def _team_conversation(
         .where(
             Agent.course_id == COURSE_ID,
             AgentVersion.state == "published",
+            AgentVersion.id.in_(BASELINE_VERSION_IDS),
         )
         .order_by(AgentVersion.version_seq, AgentVersion.id)
         .limit(2)
@@ -147,7 +154,11 @@ def _team_conversation(
                 display_name=agent.name,
                 avatar_config_json=agent_version.avatar_config_json,
                 own_knowledge_set_snapshots_json="[]",
-                raw_source_fences_json="[]",
+                raw_source_fences_json=json.dumps(
+                    _capture_raw_source_fences(db, agent_version, COURSE_ID),
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                ),
                 created_at=now,
             )
         )

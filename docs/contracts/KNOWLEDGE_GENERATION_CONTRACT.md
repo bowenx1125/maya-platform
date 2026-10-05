@@ -44,6 +44,18 @@ never returns Markdown, source content, Provider request/response data or other
 owners' rows. Owner Set summaries expose `generated_by_agent_id` only for a
 generation-owned Set; manual Sets and non-owner projections return null.
 
+Brainform summaries expose nullable `generation_job_id` only to the current
+Teacher owner who can edit the canonical Set and still access the actual
+generation Agent/version in the same course. An alias opens that same Set; it
+does not become the generator. Student/shared rows and rows whose generator,
+owner or course access is revoked return null. A still-authorized Teacher owner
+can read a blocked job after source revocation. Reloading Brainform hydrates the
+existing owner-only job status;
+reading status never creates or retries a run. Missing exact disclosure consent
+uses the existing disclosure link. Confirmation resumes that same blocked job
+only; sending or unknown acceptance never authorizes a resend. Late list/status
+responses cannot replace a newer job or another actor/course's state.
+
 ## K2a worker and K2b1 Provider boundary
 
 Jobs are durable; the process-local task manager is only a wake mechanism.
