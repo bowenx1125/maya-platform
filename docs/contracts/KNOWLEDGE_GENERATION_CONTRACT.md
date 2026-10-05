@@ -1,5 +1,7 @@
 # Knowledge generation durability and Provider stage contract (K2a/K2b)
 
+Latest product override (2026-10-05, implementation in progress): Teacher save or explicit generate/regenerate expresses the exact Knowledge-generation intent. No separate “provider confirmation required / Open provider disclosure” step is permitted. Record the current actor-authorized exact payload under the registered reviewed policy; preserve course/source ACL, privacy, idempotency, accounting, current usable content and unknown no-resend. This replaces the historical separate-confirmation and separate Create AI Knowledge UI descriptions below. Agent creation and AI Knowledge creation use one Agent flow with Brainform RAG/Knowledge selection; canonical references use current Knowledge for future work without rewriting historical attempts.
+
 K2a persists an explicitly supplied Teacher Knowledge intent. K2b1 adds a
 confirmed, owner-authorized one-shot Provider operation and immutable sanitized
 stage. K2b2-A materializes accepted candidates into the same K1 Set, one

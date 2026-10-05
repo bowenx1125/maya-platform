@@ -154,7 +154,7 @@ and does not read this map.
 
 ## Maintenance configuration
 
-For a published Maya Team, open the teacher Home personal Agents disclosure link
+For a published Maya Team, open the Brainform data-use disclosure entry
 and confirm that Team version's Chat reply and Knowledge retrieval resource
 bindings. Publishing alone does not create these grants; a course-wide disclosure
 does not substitute for a current Team grant. Changing the bound Team version or

@@ -1,5 +1,7 @@
 # MayaForm Final UI Polish Spec
 
+最新执行以 [v2覆盖规范](MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) 为准：用户已批准现在实施 UI；所有提示即时显示，取消1500ms等待。以下保留原始设计观察，不覆盖新决定。
+
 只读规范，2026-10-05；基线 `feat/mayaform-v14` / `d170a96b98a6e8ecaedc0959a86c386a3725e624`。供主工程窗口执行，本文未修改仓库、提交、重构、构建、启动服务或调用 Provider。
 
 ## 适用范围与证据

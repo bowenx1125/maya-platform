@@ -257,76 +257,72 @@ Job. Publish/Private Set/link/run atomic; no Provider→zero calls/assets. R2/So
 match. ACL/disclosure/accounting/unknown/sanitized stage, check/migration/HTTP/Sol PASS;
 K2b1 had no Assets or real Provider/Docker.
 
-## MayaForm recovery — 2026-10-03
+## MayaForm recovery — current October5
 
-K2b2 a975e38 and K3-A83de097/evidence1b1bfca remain committed; actual branch
-feat/mayaform-v14. K3-B1/B2,0041–0053 and learning/Tools are checkpointed f59df82 and
-deployed; deployment is not end-to-end acceptance. Lost reviews have current replacements.
-Preserve foreign Debate/Voice/UI changes; one writer owns each shared file.
-Main switched to GPT-6.1 Sol on October5; Luna/max implements, independent Sol audits.
+Branch feat/mayaform-v14; committed K2b2 a975e38, K3-A83de097/evidence1b1bfca retained.
+K3-B1/B2,0041–0053 and learning/Tools checkpoint f59df82, later fixes e40d2a1,
+0eafea9/30db274; implementation baseline36f10cb for ongoing UI/backend work. Foreign
+Debate/Voice/UI edits protected. Main GPT-6.1 Sol, Luna/max writes, independent Sol
+reviews. One writer per file; no new Astra subtask.
 
-[Resume v2](contracts/MAYAFORM_V14_BRAINFORM_ASSESSMENT.md) replaces old categories,
-no-Memory entry, manual-head preservation and active-attempt hints. Brainform lists
-RAG/Knowledge/Memory together; canonical Markdown versions bind asset projections.
-Bound RAG saves/manual regenerate replace manual current only after a valid newer
-success, retaining history. Private/Public configured attempts persist independently
-of Chat/run; plain abandon ends only, abandon-and-redo creates a new attempt.
+Resume v2 preserves Brainform RAG/Knowledge/Memory, canonical Markdown and versions;
+bound RAG/manual regenerate may replace manual head only on valid newer success,
+history retained. Current actor/source read/edit checks, task-specific evaluator and
+Boundary grants remain; Student Public+Student tools, Teacher Public+Teacher.
+Private excluded from Teacher queries/reports; ordinary Public excluded from formal
+reports. General Chat stays text-only with natural-language attempt actions, no state
+cards/dashboard/lifecycle buttons. Owner records/progress are phase-safe; histories
+and completed evidence stay immutable. Latest abandoned-attempt rule:
+discard abandoned learning records; existing retention code still needs later change.
 
-The [latest Tool/resource correction](contracts/MAYAFORM_V14_TOOL_RESOURCE_AUTHORIZATION.md)
-requires Public/Student/Teacher: Student gets Public+Student, Teacher Public+Teacher.
-Tool mounting, target resource ACL and attempt execution grant are separate. Formal
-evaluator/Boundary summarizer grants bind actual participant/version/answer/attempt,
-never names or creator role. Self-read and Teacher Public-read do not grant edit.
-Target-attempt safe projections apply across Agents, Memory and downloads. No new
-practice UI, role Planner, generic database editor or approval ceremony.
+Integrated PDF eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and selected colleague UI
+817282e7c53313e2c2e5233dc5be64d404dab90a via b648efc/8987cf8; UI03/04/05 preserved.
+Components UI removed1d92a2f; maintenance APIs stay. No GitHub final push yet.
 
-Independent R3:160 runtime/92 boundary/47 Provider cases (overlapping); late revocation
-sends nothing/charge0, old readable snapshots remain valid, SSE drains without replay.
-Resume retains answers/turns; owner answer DTO exposes answer_text/created_at only.
-Source-free allows own records/progress/abandon, never resume/hints. Exact legacy
-Teacher/course scope remains; Private Single denies Teacher. General Chat has natural
-lifecycle messages, no assessment controls/composer. BF import14/Setext/HTTP passed.
-Current whole-suite evidence is below.
-Real student/Teacher closure pending; no end-to-end acceptance.
-[BF/AT/RS](validation/MAYAFORM_V14_INTEGRATED_ACCEPTANCE.md) and
-[S01–22](validation/MAYAFORM_V14_SUPPLEMENT.md) separate current targets from history.
+Same frozen R5 source:1930 passed/21 existing skips/exit0,398.40s; R4 known race
+passed unchanged in retry and R5. Frontend559/1 skip/types/lint/format, Ruff/format493,
+mypy247,152 API semantics/19 negatives, privacy/boundary/generated and7 migration/
+bootstrap/reset gates passed. Sol independently reviewed KB recovery52backend/20front,
+Team75+9, learning fixture37+1 (63 assertions retained), Chat guidance41, identity
+handoff35. These are code/deterministic evidence, not complete real product acceptance.
 
-e40d2a1 rollout preserved39/8 env keys/DNS/gateway.
-Backup20261005T093046Z preceded rollout; sending0. Live0053/readiness200/integrity/FK OK.
-Original tables/ledgers retained; unknown3 untouched.
-Real synthetic RAG:1 charged Embedding;2 exact confirmations resumed original Knowledge
-runs once each,2 charged accepted LLM. AI seq3 replaced manual seq2, retaining history.
-Synthetic Public Team saved/auto-published; first Send denied,charge0.
-October5: user authorizes specified synthetic Team Provider payload and new Private
-test-body read; permission blocks resolved. Further Team creation/review is manual.
-New decision: discard abandoned learning records; current retention code unchanged,
-Tool/Agent.md/server cleanup deferred. Real closure/GitHub push pending.
-Selected PDF origin/entaiaki eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and
-UI origin/w5/ui/06-home-academy817282e7c53313e2c2e5233dc5be64d404dab90a
-(UI03/04/05 included): actual ancestry merges b648efc/8987cf8 preserve both selected
-refs, Brainform sidebar New and General Chat. d170a96 corrects stale import guidance.
-Retain colleagues' MayaForm UI. Components/Key/Check/mode/status UI removed;
-maintenance APIs stay.1d92a2f frontend555/1 old skip/types/lint/format; Sol25/source PASS.
-5 old UI tests removed,1 Dashboard added; live Home DOM/screenshot confirms removal.
-Other container IDs/MayaForm UI unchanged; full A–K polish spec remains a proposal.
-0052/0053 append only. Types/lint(0 errors/4 old warnings), Prettier,
-Ruff/format493/mypy247,152 actual API semantics/19 negatives, generated/
-privacy/boundary and7 migration/bootstrap/reset gates passed. Agno3.0.11 public SDK.
-Query Embedding has separate Teacher course-purpose consent.0050 permits
-llm_agent_chat/embedding_query;
-independent populated0033→0053/18 atomicity tests passed.
+Maya backend/frontend30db274 deployed only; other containers/env preserved. Schema0053,
+readiness200/integrity/FK passed, Agno3.0.11 public SDK. Backup20261005T110321Z healthy;
+sending/pending0, historical unknown3 not retried. Real synthetic RAG used1 charged
+Embedding and2 accepted charged Knowledge LLM calls. Gen2 resumed same run; AIseq3
+replaced manualseq2, preserving history. Public synthetic first send denied uniformly
+for consent,4 member failures/no ORM error/input enabled/0calls/charges. Real natural
+Team/assessment/Teacher statistics/download and Private exclusion still unaccepted.
+User explicitly authorized specified synthetic Team payload and new Private test-body
+read; old auto-review permission blocks resolved. User now performs Team creation/review.
 
-Deployed: RAG Job hydration/disclosure and historical Team RAG fixes passed
-Sol review (Team75+9 probes). Manual fixture now captures real fences and stable
-baseline members;63 assertions unchanged,37+1 independent cases passed. R2's26
-failures resolved. Frozen R5:1930 passed/21 old skips/exit0 (398.40s), no code drift;
-frontend559/1 old skip/types/lint/contracts and7 migration/script gates passed.
-Real paths and UI-v2 implementation remain pending; no end-to-end acceptance.
-Chat guidance41 Sol cases: unknown permits direct new Send without Check.
-Handoff35 Sol cases;30db274 deployed to Maya backend/frontend only.
-Backup20261005T110321Z/live0053 healthy.
-New Public Chat e0accc75:4 consent denials, input enabled,0 calls/charges, no ORM error.
-R4's known race failed once; same-source retry passed, no assertion changes.
-[UI v2](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) is deferred until functionality
-is verified complete: Studyform=Workform, Agents then Voices; mature RAG in three-column
-Brainform, no page title/sidebar New; preserve Knowledge edit and global hover1500ms.
+User requested cleanup: backup20261005T130151Z via SQLite backup API/integrity/FK OK.
+Precisely1 synthetic Team+publication,1Set,4Agents,2failed testChats withdrawn/archived;
+1blocked generation cancelled. Source RAG already referenced by nonfixture Agent draft
+was preserved. Provider ledger unchanged457 operations/457 total charged requests;
+these are whole-runtime accounting totals, not this validation run's cost. Only exact
+fixture IDs touched; no user/colleague records or original evidence physically purged.
+
+[Current UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) overrides prior UI
+planning: same Studyform/Brainform structure for both roles, permissions differ.
+Studyform owns Agent/Team creation; Chats selects existing resources. Reuse sidebar
+New/Back/Done; New bright when useful/dim otherwise, Back/Done only contextual. Voice
+New is module-right exception; Home Voices Guide goes directly to its new form.
+Colleague Mayaform Home preserved except Components, Guide destinations and data-use
+entry moved to Brainform. All decorative heading explanations become immediate help;
+no1500ms wait. Brainform three columns, no page title/eyebrow; RAG fully reuses original
+Knowledge view/edit/download/delete and PDF/DOCX. View/New/edit replaces main content
+in independent deep-link mode, not a bottom panel. Knowledge uses asset-name entry,
+shows authorized Agent consumers, edits one canonical object; Agent Knowledge entry
+also remains. Create AI Knowledge/New Agent one flow, Private/Public labels only;
+Brainform source picker accepts RAG or Knowledge. Updates affect future Agent use; active/paused Team attempts announce changed
+Knowledge and require answering again; old answers/late results cannot evaluate.
+Completed attempts stay unchanged; invalidation hook not yet implemented. Current frontend changes uncommitted/unaccepted.
+
+Teacher explicit save/generate/regenerate must authorize exact Knowledge generation
+without additional provider confirmation page. Current ACL/policy/manifest/accounting/
+idempotency/unknown protections remain; backend implementation in progress, not yet
+deployed. Existing AgentKnowledgeSet references/current asset heads support future
+updates; manual Markdown vs live asset heads/partial generation needs focused probe.
+UI and backend writers own separate files; independent current-version audit and actual
+browser desktop/mobile checks still required. No pending path is labelled complete.
