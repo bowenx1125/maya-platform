@@ -1116,6 +1116,7 @@ describe("Chatform", () => {
     await waitFor(() =>
       expect((message as HTMLTextAreaElement).value).toBe(""),
     );
+    expect(screen.queryByRole("button", { name: "Remove All" })).toBeNull();
 
     fireEvent.keyDown(message, { key: "@", shiftKey: true });
     const menu = screen.getByRole("menu", { name: "Recipients" });
