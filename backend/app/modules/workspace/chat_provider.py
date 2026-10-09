@@ -814,60 +814,123 @@ def _chat_model_response(response_json: str) -> ModelResponse:
         ) from None
 
 
-def assessment_safe_reply_text(result: AssessmentRuntimeResult, user_text: str) -> str:
-    """Render only the server's student-safe assessment projection."""
-    chinese = any("\u4e00" <= char <= "\u9fff" for char in user_text)
+def conversation_user_texts(db: Session, conversation_id: str) -> list[str]:
+    from .models import ConversationTurn
+
+    return list(
+        db.scalars(
+            select(ConversationTurn.user_text)
+            .where(ConversationTurn.conversation_id == conversation_id)
+            .order_by(ConversationTurn.position, ConversationTurn.id)
+        )
+    )
+
+
+def prefers_chinese(user_texts: list[str]) -> bool:
+    """Follow the language the learner has used across the Chat, not one message."""
+
+    votes = [
+        any("\u4e00" <= char <= "\u9fff" for char in text)
+        for text in user_texts
+        if any(char.isalpha() for char in text)
+    ]
+    if not votes:
+        return False
+    chinese_count = sum(votes)
+    if chinese_count * 2 == len(votes):
+        return votes[0]
+    return chinese_count * 2 > len(votes)
+
+
+def assessment_safe_reply_text(
+    result: AssessmentRuntimeResult,
+    user_texts: list[str],
+    *,
+    prose: str | None = None,
+    follow_up: bool = False,
+) -> str:
+    """Render the server's student-safe assessment projection.
+
+    ``prose`` is accepted only for read-only progress replies, where the member
+    may answer an unrelated or formatting question before the server restates
+    progress and the current Question.
+    """
+    chinese = prefers_chinese(user_texts)
+    context = result.context
+    if result.response_key == "assessment.redirect":
+        if context.redirect_to_original_conversation:
+            redirect = (
+                "请回到原对话继续测试。" if chinese else "Continue this test in its original chat."
+            )
+        elif result.disposition == "read":
+            redirect = (
+                "测试进行中，不能提供答案、提示或评判。"
+                if chinese
+                else "Answers, hints and judgments aren't available during the test."
+            )
+        else:
+            redirect = "我们继续测试。" if chinese else "Let's continue the test."
+    else:
+        redirect = ""
     labels = {
-        "assessment.started": ("测评已开始。" if chinese else "Assessment started."),
-        "assessment.answer_recorded": (
-            "已记录你的回答。" if chinese else "Your answer was recorded."
+        "assessment.started": (
+            "正式测试开始，你的作答会保存到学习记录。"
+            if chinese
+            else "Formal test started. Your answers will be saved to your learning record."
         ),
+        "assessment.answer_recorded": ("已记录你的回答。" if chinese else "Answer saved."),
         "assessment.answer_recorded_restricted_request": (
-            "已记录你的回答；暂时无法处理附带的其他请求。"
+            "已记录你的回答。测试中不能提供答案、提示或评判。"
+            if chinese
+            else "Answer saved. Answers, hints and judgments aren't available during the test."
+        ),
+        "assessment.paused": (
+            "测试已暂停，说“继续”即可接着答。"
+            if chinese
+            else 'Test paused. Say "continue" to pick up where you left off.'
+        ),
+        "assessment.resumed": ("测试继续。" if chinese else "Test resumed."),
+        "assessment.completed": (
+            "测试结束，恭喜完成！作答记录已保存。你可以继续聊天，之后的对话不会计入这次测试。"
             if chinese
             else (
-                "Your answer was recorded. The additional request cannot be handled "
-                "during this activity."
+                "Test complete. Congratulations! Your answers are saved. You can keep "
+                "chatting; nothing after this counts toward the test."
             )
         ),
-        "assessment.paused": ("测评已暂停。" if chinese else "Assessment paused."),
-        "assessment.resumed": ("测评已继续。" if chinese else "Assessment resumed."),
-        "assessment.completed": ("测评已完成。" if chinese else "Assessment completed."),
         "assessment.abandoned": (
-            "本次测评已结束。" if chinese else "This assessment attempt has ended."
+            "已放弃本次测试，作答记录不会保留。"
+            if chinese
+            else "Test abandoned. Its answers were not kept."
         ),
         "assessment.abandoned_and_restarted": (
-            "旧测评已结束，新的测评已开始。"
+            "已放弃上一次测试并重新开始，旧的作答不会保留。"
             if chinese
-            else "The prior attempt ended and a new one has started."
+            else (
+                "The previous test was abandoned without keeping its answers. "
+                "A new test has started."
+            )
         ),
-        "assessment.progress": ("当前测评进度：" if chinese else "Assessment progress:"),
+        "assessment.progress": ("当前进度：" if chinese else "Progress:"),
         "assessment.answers": ("你已提交的回答：" if chinese else "Your submitted answers:"),
         "assessment.results_pending": (
-            "测评结果正在准备中。" if chinese else "Assessment results are being prepared."
+            "好的，正在保存并评估你的作答。"
+            if chinese
+            else "Okay. Saving and reviewing your answers."
         ),
         "assessment.restart_requires_choice": (
-            "如需重新开始，请明确选择结束当前测评并重开。"
+            "要重新开始，请明确说“放弃并重做”。"
             if chinese
-            else "To restart, explicitly choose to end the current attempt and begin again."
+            else 'To start over, say "abandon and redo".'
         ),
-        "assessment.redirect": (
-            "请回到原对话继续测评。"
-            if chinese
-            else "Continue this assessment in its original chat."
-        ),
+        "assessment.redirect": redirect,
     }
-    lines = [labels[result.response_key]]
-    question = result.context.current_question
-    if question is not None:
-        ordinal = question.ordinal + 1
-        lines.append(
-            f"第 {ordinal} 题：{question.prompt}"
-            if chinese
-            else f"Question {ordinal}: {question.prompt}"
-        )
-    progress = result.context.progress
-    if result.response_key == "assessment.progress":
+    lines = []
+    if prose and prose.strip():
+        lines.append(prose.strip())
+    lines.append(labels[result.response_key])
+    progress = context.progress
+    if result.response_key in {"assessment.progress", "assessment.answers"}:
         if chinese:
             lines.append(
                 f"已完成 {progress.resolved_count}/{progress.question_count} 题；"
@@ -879,22 +942,22 @@ def assessment_safe_reply_text(result: AssessmentRuntimeResult, user_text: str) 
                 f"answered {progress.answered_count}, skipped {progress.skipped_count}."
             )
     if result.response_key == "assessment.answers":
-        if chinese:
-            lines.append(
-                f"当前进度：已完成 {progress.resolved_count}/{progress.question_count} 题；"
-                f"已回答 {progress.answered_count} 题，跳过 {progress.skipped_count} 题。"
-            )
-        else:
-            lines.append(
-                f"Current progress: resolved {progress.resolved_count}/{progress.question_count}; "
-                f"answered {progress.answered_count}, skipped {progress.skipped_count}."
-            )
         for answer in result.answers:
             lines.append(
                 f"你的回答：{answer.answer_text}"
                 if chinese
                 else f"Your answer: {answer.answer_text}"
             )
+    question = context.current_question
+    if question is not None:
+        if follow_up:
+            lines.append("下面是追问。" if chinese else "Next, a follow-up question.")
+        ordinal = question.ordinal + 1
+        lines.append(
+            f"第 {ordinal} 题：{question.prompt}"
+            if chinese
+            else f"Question {ordinal}: {question.prompt}"
+        )
     return "\n\n".join(lines)
 
 

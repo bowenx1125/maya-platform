@@ -51,7 +51,7 @@ describe("M08 voice library", () => {
         screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
       ).toBe(false),
     );
-    expect(screen.queryByText("Empty")).toBeNull();
+    expect(screen.getByText("No voices yet.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New" }));
     const consentCopy =
       "I confirm this is my voice and authorize this course to create a reusable profile.";

@@ -5394,6 +5394,8 @@ export interface components {
             abandoned_count: number;
             /** Attempt Count */
             attempt_count: number;
+            /** Boundary Summary */
+            boundary_summary?: string | null;
             /** Completed Count */
             completed_count: number;
             /** Effective Answer Count */
@@ -5402,6 +5404,10 @@ export interface components {
             in_progress_count: number;
             /** Learner Ref */
             learner_ref: string;
+            /** Mastery Evidence */
+            mastery_evidence?: string[];
+            /** Not Yet Verified */
+            not_yet_verified?: string[];
             /** Paused Count */
             paused_count: number;
             /** Raw Answer Count */
@@ -5410,6 +5416,8 @@ export interface components {
             skipped_count: number;
             /** Student Name */
             student_name: string;
+            /** Weak Points */
+            weak_points?: string[];
         };
         /** AssessmentOwnerAnswerDTO */
         AssessmentOwnerAnswerDTO: {

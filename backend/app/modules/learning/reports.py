@@ -36,6 +36,7 @@ from .schemas import (
     AssessmentCourseReportReceipt,
     AssessmentReportContent,
     AssessmentReportDownload,
+    BoundarySummaryContent,
 )
 from .service import _canonical, _hash, _now
 
@@ -272,11 +273,30 @@ def _build_snapshot(
         if actor_id is not None:
             actor_questions[actor_id].append(question)
 
+    from .execution import _boundary_for_attempt, attempt_has_final_evidence
+
+    # Each learner's newest completed attempt with intact final evidence speaks
+    # for their current boundary; earlier attempts stay in the counts only.
+    latest_boundaries: dict[str, tuple[str, str, BoundarySummaryContent]] = {}
+    for attempt in attempts:
+        boundary = _boundary_for_attempt(db, attempt) if attempt.status == "completed" else None
+        if boundary is None:
+            continue
+        try:
+            if not attempt_has_final_evidence(db, attempt):
+                continue
+            summary = BoundarySummaryContent.model_validate_json(boundary[1].content_json)
+        except (PlatformError, ValueError):
+            continue
+        latest_boundaries[attempt.actor_user_id] = (attempt.id, boundary[1].id, summary)
+
     actor_rows: list[AssessmentActorReport] = []
     valid_record_ids = {record.id for record in valid_records}
     for actor_id, actor_attempt_list in sorted(actor_attempts.items()):
         questions_for_actor = actor_questions[actor_id]
         user = db.get(User, actor_id)
+        latest = latest_boundaries.get(actor_id)
+        boundary_content = latest[2] if latest is not None else None
         actor_rows.append(
             AssessmentActorReport(
                 student_name=user.display_name if user is not None else "Student",
@@ -297,6 +317,10 @@ def _build_snapshot(
                     and "skip" in valid_question_records.get(row.id, set())
                     for row in questions_for_actor
                 ),
+                boundary_summary=boundary_content.summary if boundary_content else None,
+                mastery_evidence=boundary_content.strengths if boundary_content else [],
+                weak_points=boundary_content.areas_to_explore if boundary_content else [],
+                not_yet_verified=boundary_content.not_yet_verified if boundary_content else [],
             )
         )
     course = db.get(Course, activity.course_id)
@@ -356,6 +380,10 @@ def _build_snapshot(
                 valid_records, key=lambda item: (item.attempt_id or "", item.created_at, item.id)
             )
             if row.record_kind == "answer"
+        ],
+        "boundaries": [
+            {"attempt_id": attempt_id, "revision_id": revision_id}
+            for attempt_id, revision_id, _summary in sorted(latest_boundaries.values())
         ],
     }
     source_hash = _hash(_canonical(source_manifest))
@@ -563,6 +591,19 @@ def _report_markdown(report: AssessmentCourseReportDTO) -> str:
             f"{row.abandoned_count} | {row.in_progress_count} | {row.paused_count} | "
             f"{row.effective_answer_count} | {row.raw_answer_count} | {row.skipped_count} |"
         )
+    lines.extend(["", "## Knowledge boundaries"])
+    for row in content.actors:
+        lines.extend(["", f"### {row.student_name} ({row.learner_ref})", ""])
+        if row.boundary_summary is None:
+            lines.append("No completed diagnosis yet.")
+            continue
+        lines.extend([row.boundary_summary, ""])
+        for label, items in (
+            ("Mastery evidence", row.mastery_evidence),
+            ("Weak points", row.weak_points),
+            ("Not yet verified", row.not_yet_verified),
+        ):
+            lines.append(f"- {label}: {'; '.join(items) if items else 'None recorded.'}")
     return "\n".join(lines) + "\n"
 
 

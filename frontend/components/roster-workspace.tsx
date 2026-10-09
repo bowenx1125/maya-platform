@@ -276,27 +276,31 @@ export function RosterWorkspace() {
                       >
                         {t("editMember")}
                       </button>
-                      <button
-                        className="inline-button"
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                          if (
-                            entry.status === "active" &&
-                            !window.confirm(t("deactivateConfirm"))
-                          ) {
-                            return;
-                          }
-                          void mutate(entry, {
-                            status:
-                              entry.status === "active" ? "inactive" : "active",
-                          });
-                        }}
-                      >
-                        {entry.status === "active"
-                          ? t("deactivateAccount")
-                          : t("reactivateAccount")}
-                      </button>
+                      {entry.user_id === user?.id ? null : (
+                        <button
+                          className="inline-button"
+                          type="button"
+                          disabled={pending}
+                          onClick={() => {
+                            if (
+                              entry.status === "active" &&
+                              !window.confirm(t("deactivateConfirm"))
+                            ) {
+                              return;
+                            }
+                            void mutate(entry, {
+                              status:
+                                entry.status === "active"
+                                  ? "inactive"
+                                  : "active",
+                            });
+                          }}
+                        >
+                          {entry.status === "active"
+                            ? t("deactivateAccount")
+                            : t("reactivateAccount")}
+                        </button>
+                      )}
                       <button
                         className="inline-button"
                         type="button"
@@ -321,7 +325,7 @@ export function RosterWorkspace() {
 
       <SectionCard title={`${t("groups")} · ${groups.length}`}>
         {groups.length === 0 ? (
-          <EmptyCard title={t("rosterNoGroup")} />
+          <EmptyCard title={t("rosterNoGroups")} />
         ) : (
           <div className="compact-list">
             {groups.map((group) => {

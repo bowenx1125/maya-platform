@@ -132,8 +132,12 @@ Boundary grants remain; Student Public+Student tools, Teacher Public+Teacher.
 Private excluded from Teacher queries/reports; ordinary Public excluded from formal
 reports. General Chat stays text-only with natural-language attempt actions, no state
 cards/dashboard/lifecycle buttons. Owner records/progress are phase-safe; histories
-and completed evidence stay immutable. Latest abandoned-attempt rule:
-discard abandoned learning records; existing retention code still needs later change.
+and completed evidence stay immutable. October9 diagnosis decisions (implemented,
+0055 `submitted_at`, not yet real-accepted): survey round (all ≤3, else half), then
+evaluator-chosen server-validated follow-ups before Boundary; "end" submits answered
+work, only abandon/redo deletes that attempt's learning records (accounting kept);
+Boundary and reports separate mastery/weak/not-yet-verified; server replies follow the
+student's majority language; off-topic/progress questions get help, never answers.
 
 Integrated PDF eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and selected colleague UI
 817282e7c53313e2c2e5233dc5be64d404dab90a via b648efc/8987cf8; UI03/04/05 preserved.

@@ -65,10 +65,12 @@ results in `docs/PROJECT.md` after each run.
    Test natural-language start, pause, continue and query in the ordinary General
    Chat; no assessment card, panel, dedicated composer or lifecycle button group.
    Private participation completes normally but stays excluded from Teacher
-   statistics/report/download. The latest abandoned-record disposition is a
-   separately deferred Tool/prompt change; do not claim current retention meets
-   it or delete billing/history while testing. Missing permission affects only
-   that operation and leaves lawful subsequent messages available.
+   statistics/report/download. Check that the reply language follows the student,
+   that a survey round leads to an evaluator-chosen follow-up round before the
+   Boundary, that ending early keeps answered work and completes, and that abandon
+   removes that attempt's learning records while billing history stays. Missing
+   permission affects only that operation and leaves lawful subsequent messages
+   available.
 
 Teacher Chat approvals must be checked separately for LLM and query Embedding.
 Confirm each exact purpose/policy disclosure once in its valid course scope;

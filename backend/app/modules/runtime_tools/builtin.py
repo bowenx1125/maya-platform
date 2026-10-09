@@ -152,7 +152,12 @@ def runtime_registry() -> dict[str, ToolSpec]:
             (
                 "Apply the user's explicit assessment action. Classify the saved current message; "
                 "for answers provide only its exact answer span. Never invent an answer. "
-                "redo_request means explicit abandonment AND redo, never a plain restart request. "
+                "complete_request means the user ends the test now: unanswered Questions are "
+                "saved as skipped and the attempt is submitted. abandon_request discards the "
+                "attempt's answers. redo_request means explicit abandonment AND redo, never a "
+                "plain restart request. Use progress_request for time left or progress, "
+                "restricted_request for answers, hints or judgments, and off_topic for anything "
+                "else, including how to format an answer. "
                 "Only a configured assessment recipe is affected. Return the server's safe result."
             ),
             AssessmentActionArguments,

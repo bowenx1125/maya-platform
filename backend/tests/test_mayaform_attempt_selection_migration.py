@@ -40,8 +40,7 @@ def _mark_revision(database: Database) -> None:
             "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"
         )
         connection.exec_driver_sql(
-            "INSERT INTO alembic_version (version_num) VALUES "
-            "('0054_assessment_attempt_question_selection')"
+            "INSERT INTO alembic_version (version_num) VALUES (?)", (ALEMBIC_HEAD,)
         )
 
 
@@ -118,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0054_assessment_attempt_question_selection"
+    assert ALEMBIC_HEAD == "0055_assessment_attempt_submission"
     _assert_foreign_keys(database)
 
 
@@ -149,6 +148,7 @@ def test_downgrade_refuses_to_resurrect_answers_after_zero_question_selection(
 
     _mark_revision(database)
     database.dispose()
+    command.downgrade(_config(database.database_url), "0054_assessment_attempt_question_selection")
     with pytest.raises(RuntimeError, match="Cannot downgrade assessment question generations"):
         command.downgrade(_config(database.database_url), "0053_user_profile")
     assert "question_selection_revision" in {

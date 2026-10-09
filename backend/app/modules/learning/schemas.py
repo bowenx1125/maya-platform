@@ -160,6 +160,7 @@ class BoundarySummaryContent(StrictModel):
     summary: str = Field(min_length=1)
     strengths: list[str] = Field(default_factory=list)
     areas_to_explore: list[str] = Field(default_factory=list)
+    not_yet_verified: list[str] = Field(default_factory=list)
     next_step: str | None = None
 
 
@@ -249,6 +250,10 @@ class AssessmentActorReport(StrictModel):
     effective_answer_count: int = Field(ge=0)
     raw_answer_count: int = Field(ge=0)
     skipped_count: int = Field(ge=0)
+    boundary_summary: str | None = None
+    mastery_evidence: list[str] = Field(default_factory=list)
+    weak_points: list[str] = Field(default_factory=list)
+    not_yet_verified: list[str] = Field(default_factory=list)
 
 
 class AssessmentReportContent(StrictModel):

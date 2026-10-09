@@ -18382,6 +18382,13 @@
             "title": "Attempt Count",
             "type": "integer"
           },
+          "boundary_summary": {
+            "title": "Boundary Summary",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "completed_count": {
             "minimum": 0,
             "title": "Completed Count",
@@ -18402,6 +18409,20 @@
             "title": "Learner Ref",
             "type": "string"
           },
+          "mastery_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mastery Evidence",
+            "type": "array"
+          },
+          "not_yet_verified": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Not Yet Verified",
+            "type": "array"
+          },
           "paused_count": {
             "minimum": 0,
             "title": "Paused Count",
@@ -18421,6 +18442,13 @@
             "minLength": 1,
             "title": "Student Name",
             "type": "string"
+          },
+          "weak_points": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Weak Points",
+            "type": "array"
           }
         },
         "required": [

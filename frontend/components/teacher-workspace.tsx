@@ -816,7 +816,7 @@ export function TeacherAgentDetail({
             ))}
           </div>
         ) : (
-          <p className={detailStyles.empty}>No files</p>
+          <p className={detailStyles.empty}>No files yet.</p>
         )}
       </SectionCard>
       {versions.length > 1 ? (

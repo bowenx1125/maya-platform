@@ -559,6 +559,21 @@ def _scope_answers(
     return tuple(effective), tuple(sorted(set(evidence_ids)))
 
 
+def _evaluation_covers_questions(
+    revision: LearningAssessmentRevision, question_rows: list[AssessmentAttemptQuestion]
+) -> bool:
+    """A follow-up round makes the previous evaluation incomplete until it is redone."""
+
+    try:
+        content = AssessmentEvaluationContent.model_validate_json(revision.content_json)
+    except ValueError:
+        return False
+    offset = question_rows[0].ordinal if question_rows else 0
+    return {item.question_ordinal for item in content.questions} == {
+        row.ordinal - offset for row in question_rows
+    }
+
+
 def _assessment_for_attempt(
     db: Session, attempt: AssessmentAttempt
 ) -> tuple[LearningAssessment, LearningAssessmentRevision] | None:
@@ -624,8 +639,13 @@ def attempt_has_final_evidence(db: Session, attempt: AssessmentAttempt) -> bool:
     ):
         return False
     question_rows = _current_attempt_question_rows(db, attempt)
-    if not question_rows or any(
-        question.presented_at is None or question.content_json is None for question in question_rows
+    if (
+        not question_rows
+        or any(
+            question.presented_at is None or question.content_json is None
+            for question in question_rows
+        )
+        or not _evaluation_covers_questions(assessment[1], question_rows)
     ):
         return False
     for question in question_rows:
@@ -743,17 +763,26 @@ def get_assessment_executor_context(
             entry["rubric"] = question.rubric.model_dump(mode="json")
         material.append(entry)
 
+    from .attempts import follow_up_candidates, unasked_questions
+
     if purpose == "assessment_evaluate":
-        task_payload: dict[str, Any] = {"questions": material}
+        task_payload: dict[str, Any] = {
+            "questions": material,
+            "follow_up_candidates": [
+                {"ref": row.id, "prompt": content.prompt}
+                for row, content in follow_up_candidates(db, attempt)
+            ],
+        }
     else:
         evaluation = _assessment_for_attempt(db, attempt)
-        if evaluation is None:
+        if evaluation is None or not _evaluation_covers_questions(evaluation[1], question_rows):
             raise conflict(
                 "assessment_evaluation_missing", "Save the Assessment before updating the Boundary."
             )
         task_payload = {
             "responses": material,
             "assessment": json.loads(evaluation[1].content_json),
+            "not_asked": [content.prompt for _row, content in unasked_questions(db, attempt)],
         }
     return AssessmentExecutorContext(
         purpose=purpose,
@@ -811,7 +840,9 @@ def mint_runtime_execution_scope(
     )
     effective_answers, evidence_ids = _scope_answers(db, attempt, question_rows)
     evaluation = _assessment_for_attempt(db, attempt)
-    if purpose == "boundary_summarize" and evaluation is None:
+    if purpose == "boundary_summarize" and (
+        evaluation is None or not _evaluation_covers_questions(evaluation[1], question_rows)
+    ):
         raise conflict(
             "assessment_evaluation_missing", "Save the Assessment before updating the Boundary."
         )
@@ -867,6 +898,43 @@ def authorize_assessment_edit(
             raise not_found()
         return
     _authorize_practice_assessment_edit(db, actor, identity, assessment)
+
+
+def authorize_assessment_edit_replay(
+    db: Session,
+    actor: AuthContext,
+    conversation: Conversation,
+    payload: Any,
+    identity: ToolCallIdentity,
+    saved_result: dict[str, Any],
+) -> None:
+    """Replay a saved formal evaluation read-only after it opened a follow-up round."""
+
+    if saved_result != {"ok": True, "result": {"saved": True}}:
+        raise conflict("tool_receipt_invalid", "The saved Assessment result is unavailable.")
+    _accepted_tool_call_name(db, identity, expected_tool_name="edit_assessment")
+    revision = db.scalar(
+        select(LearningAssessmentRevision).where(
+            LearningAssessmentRevision.source_model_call_id == identity.model_call_id,
+            LearningAssessmentRevision.source_tool_call_id == identity.tool_call_id,
+        )
+    )
+    if revision is None or revision.attempt_id is None:
+        authorize_assessment_edit(db, actor, conversation, payload, identity)
+        return
+    attempt = db.get(AssessmentAttempt, revision.attempt_id)
+    if (
+        attempt is None
+        or attempt.actor_user_id != actor.user.id
+        or attempt.source_conversation_id != conversation.id
+        or revision.conversation_id != conversation.id
+        or attempt.status not in {"in_progress", "completed"}
+    ):
+        raise conflict("tool_run_inactive", "This Assessment result cannot be replayed now.")
+    activity = db.get(AssessmentActivity, attempt.activity_id)
+    if activity is None:
+        raise not_found()
+    _assert_live_activity(db, actor, conversation, activity)
 
 
 def authorize_boundary_update(
@@ -935,6 +1003,7 @@ def write_formal_assessment(
     actor: AuthContext,
     identity: ToolCallIdentity,
     content: dict[str, Any],
+    follow_up_question_refs: list[str] | None = None,
 ) -> dict[str, bool]:
     scope = mint_runtime_execution_scope(
         db,
@@ -980,6 +1049,9 @@ def write_formal_assessment(
                 "assessment_score_out_of_range",
                 "A Question score exceeds the points in its pinned Rubric.",
             )
+    from .attempts import append_follow_up_questions, validated_follow_ups
+
+    refs = list(follow_up_question_refs or [])
     normalized_evaluation = evaluation.model_dump(mode="json")
     content_json = _canonical(normalized_evaluation)
     request_hash = _hash(
@@ -988,6 +1060,7 @@ def write_formal_assessment(
             "model_call_id": scope.model_call_id,
             "tool_call_id": scope.tool_call_id,
             "content": normalized_evaluation,
+            **({"follow_up_question_refs": refs} if refs else {}),
         }
     )
     event_id = _assessment_mutation_id(identity.tool_call_id)
@@ -1012,6 +1085,7 @@ def write_formal_assessment(
     activity = db.get(AssessmentActivity, scope.activity_id)
     if attempt is None or activity is None:
         raise not_found()
+    follow_ups = validated_follow_ups(db, attempt, refs)
     provenance = _authorized_provenance(db, actor, scope.conversation_id)[1]
     timestamp = _now()
     assessment = db.scalar(
@@ -1085,6 +1159,7 @@ def write_formal_assessment(
     db.flush()
     db.add(mutation)
     db.flush()
+    append_follow_up_questions(db, actor, attempt, follow_ups)
     return {"saved": True}
 
 
@@ -1095,11 +1170,12 @@ def write_assessment_revision(
     content: dict[str, Any],
     *,
     assessment_id: str | UUID | None = None,
+    follow_up_question_refs: list[str] | None = None,
 ) -> dict[str, bool]:
     """Write the formal target or the explicitly granted synthetic target."""
 
     if assessment_id is None:
-        return write_formal_assessment(db, actor, identity, content)
+        return write_formal_assessment(db, actor, identity, content, follow_up_question_refs)
     assessment = db.get(LearningAssessment, str(assessment_id))
     if assessment is None:
         raise not_found()
@@ -1113,7 +1189,12 @@ def write_assessment_revision(
         )
         if assessment.attempt_id != scope.attempt_id:
             raise not_found()
-        return write_formal_assessment(db, actor, identity, content)
+        return write_formal_assessment(db, actor, identity, content, follow_up_question_refs)
+    if follow_up_question_refs:
+        raise conflict(
+            "assessment_follow_up_invalid",
+            "Follow-up Questions apply only to an active formal attempt.",
+        )
     provenance, member_id, agent_version_id = _authorize_practice_assessment_edit(
         db, actor, identity, assessment
     )

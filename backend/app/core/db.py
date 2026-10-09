@@ -16,7 +16,7 @@ from app.core.models import Base
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
 
-ALEMBIC_HEAD = "0054_assessment_attempt_question_selection"
+ALEMBIC_HEAD = "0055_assessment_attempt_submission"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:

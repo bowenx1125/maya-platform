@@ -235,10 +235,10 @@ describe("private Agent chat", () => {
     await startNewAgentChat();
     expect(state.api.createConversation).not.toHaveBeenCalled();
     expect(
-      within(screen.getByRole("main")).queryByRole("button", {
-        name: "New",
-      }),
-    ).toBeNull();
+      within(screen.getByRole("main"))
+        .getByRole("button", { name: "New" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
     });

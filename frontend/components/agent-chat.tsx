@@ -57,6 +57,7 @@ import { useSession } from "./session-provider";
 import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
+import { WorkspaceIcon } from "./workspace-icon";
 import styles from "./agent-chat.module.css";
 
 type MemoryRoute = {
@@ -2152,7 +2153,23 @@ function AgentChatScope({
       ) : null}
       <div className={styles.layout}>
         <aside className={styles.sidebar}>
+          <div className={styles.historyHead}>
+            <h2>{t("chatHistory")}</h2>
+            <button
+              type="button"
+              className={styles.historyNew}
+              aria-label="New"
+              title="New"
+              disabled={busy || teamBusy || newChatRoute}
+              onClick={openNewEntry}
+            >
+              <WorkspaceIcon name="new" />
+            </button>
+          </div>
           <div className={styles.history} aria-label="History">
+            {historyItems.length ? null : (
+              <p className={styles.historyEmpty}>{t("chatHistoryEmpty")}</p>
+            )}
             {historyItems.map(({ kind, session }) => (
               <div className={styles.historyRow} key={session.id}>
                 <button
@@ -2217,12 +2234,21 @@ function AgentChatScope({
           ) : !hasTarget && !newChatRoute ? (
             <div className={styles.emptyState}>
               <p>{t("chatEmptyPrompt")}</p>
+              <button
+                type="button"
+                className={styles.startButton}
+                disabled={busy || teamBusy}
+                onClick={openNewEntry}
+              >
+                <WorkspaceIcon name="new" />
+                New
+              </button>
             </div>
           ) : (
             <>
               <header className={styles.chatHeader}>
                 <div className={styles.chatTitle}>
-                  {chatTitle ? <h2>{chatTitle}</h2> : null}
+                  <h2>{chatTitle || t("chatNewTitle")}</h2>
                   {hasTarget ? (
                     <span
                       className={styles.kindChip}
@@ -2504,8 +2530,12 @@ function AgentChatScope({
                   ) : null}
                 </div>
               ) : null}
-              <div className={styles.targetRow}>
+              <form
+                className={styles.composer}
+                onSubmit={(event) => submitMessage(event)}
+              >
                 <select
+                  className={styles.targetSelect}
                   aria-label={t("chatTarget")}
                   value={pickerValue}
                   disabled={busy || teamBusy}
@@ -2570,11 +2600,6 @@ function AgentChatScope({
                   ) : null}
                   <option value="new-team">{t("chatTargetNewTeam")}</option>
                 </select>
-              </div>
-              <form
-                className={styles.composer}
-                onSubmit={(event) => submitMessage(event)}
-              >
                 {!teamMode && character?.available === false ? (
                   <p id="chat-readonly-help" className={styles.readOnlyHelp}>
                     {readOnlyHelp}
@@ -2583,6 +2608,7 @@ function AgentChatScope({
                 <textarea
                   id="chat-message"
                   aria-label="Message"
+                  placeholder={t("chatMessagePlaceholder")}
                   aria-describedby={
                     !teamMode && character?.available === false
                       ? "chat-readonly-help"
@@ -2626,7 +2652,6 @@ function AgentChatScope({
                   }}
                 />
                 <div className={styles.composerBar}>
-                  <span className={styles.composerHint} aria-hidden="true" />
                   <button
                     type="submit"
                     className={styles.sendButton}

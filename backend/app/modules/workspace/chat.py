@@ -49,6 +49,7 @@ from .access import course_member
 from .chat_provider import (
     assessment_safe_reply_text,
     chat_messages,
+    conversation_user_texts,
     real_reply,
     retrieve_sources,
 )
@@ -747,7 +748,16 @@ def generate_reply(
             409,
         )
     if assessment_result is not None:
-        reply = assessment_safe_reply_text(assessment_result, message)
+        reply = assessment_safe_reply_text(
+            assessment_result,
+            conversation_user_texts(db, row.id),
+            prose=(
+                reply
+                if assessment_result.disposition == "read"
+                and assessment_result.response_key == "assessment.progress"
+                else None
+            ),
+        )
     return reply, sources, operation_id
 
 

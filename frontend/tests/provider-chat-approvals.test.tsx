@@ -188,12 +188,14 @@ describe("teacher Chat Provider approval page", () => {
     );
     render(<TeacherChatProviderApprovalsPage courseId="course-1" />);
 
+    // Role queries rebuild the accessibility tree on every retry; wait on text
+    // first so a loaded machine does not exhaust the async timeout.
+    await screen.findByText("Published Team · Chat reply");
     await waitFor(() =>
       expect(
         screen.getAllByRole("heading", { name: "External data disclosure" }),
       ).toHaveLength(2),
     );
-    await screen.findByText("Published Team · Chat reply");
     expect(fixtures.api.getChatStandingProviderDisclosure).toHaveBeenCalledWith(
       "course-1",
     );

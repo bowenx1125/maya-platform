@@ -7,7 +7,7 @@ import json
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,7 +32,12 @@ from .models import (
     AssessmentAttempt,
     AssessmentAttemptEvent,
     AssessmentAttemptQuestion,
+    LearningAssessment,
+    LearningAssessmentMutation,
+    LearningAssessmentResourceGrant,
+    LearningAssessmentRevision,
     LearningBoundary,
+    LearningBoundaryEvidence,
     LearningBoundaryRevision,
     LearningRecord,
 )
@@ -313,6 +318,38 @@ def _context(
     )
 
 
+def owner_attempt_context(
+    db: Session, actor_user_id: str, conversation_id: str, attempt_id: str
+) -> AssessmentRuntimeContext | None:
+    """Re-read the owner's in-progress attempt after a server step changed it."""
+
+    attempt = db.get(AssessmentAttempt, attempt_id)
+    if (
+        attempt is None
+        or attempt.actor_user_id != actor_user_id
+        or attempt.source_conversation_id != conversation_id
+        or attempt.status != "in_progress"
+    ):
+        return None
+    try:
+        return _context(db, attempt, conversation_id)
+    except PlatformError:
+        return None
+
+
+def has_open_question(db: Session, actor_user_id: str, conversation_id: str) -> bool:
+    attempt = db.scalar(
+        select(AssessmentAttempt).where(
+            AssessmentAttempt.source_conversation_id == conversation_id,
+            AssessmentAttempt.actor_user_id == actor_user_id,
+            AssessmentAttempt.status == "in_progress",
+        )
+    )
+    return attempt is not None and any(
+        row.required and row.status != "resolved" for row in _attempt_question_rows(db, attempt.id)
+    )
+
+
 def _lifecycle_context(
     db: Session, attempt: AssessmentAttempt, current_conversation_id: str
 ) -> AssessmentRuntimeContext:
@@ -413,10 +450,19 @@ def get_assessment_lifecycle_context(
     return _lifecycle_context(db, attempt, conversation.id)
 
 
-def _copy_activity_questions(
+def _survey_rows(rows: list[AssessmentActivityQuestion]) -> list[AssessmentActivityQuestion]:
+    """Sample the catalog evenly; the remainder feeds evaluator-chosen follow-ups."""
+
+    if len(rows) <= 3:
+        return rows
+    size = (len(rows) + 1) // 2
+    return [rows[index * len(rows) // size] for index in range(size)]
+
+
+def _add_attempt_questions(
     db: Session,
-    activity: AssessmentActivity,
     attempt: AssessmentAttempt,
+    sources: list[AssessmentActivityQuestion],
 ) -> None:
     previous_max_ordinal = db.scalar(
         select(func.max(AssessmentAttemptQuestion.ordinal)).where(
@@ -424,25 +470,17 @@ def _copy_activity_questions(
         )
     )
     ordinal_offset = int(previous_max_ordinal) + 1 if previous_max_ordinal is not None else 0
-    source_rows = db.scalars(
-        select(AssessmentActivityQuestion)
-        .where(
-            AssessmentActivityQuestion.activity_id == activity.id,
-            AssessmentActivityQuestion.selection_revision == activity.question_selection_revision,
-        )
-        .order_by(AssessmentActivityQuestion.ordinal)
-    ).all()
-    for source in source_rows:
+    for index, source in enumerate(sources):
         db.add(
             AssessmentAttemptQuestion(
                 id=str(uuid4()),
                 attempt_id=attempt.id,
-                activity_id=activity.id,
+                activity_id=attempt.activity_id,
                 activity_question_id=source.id,
                 question_version_id=None,
                 # The legacy per-attempt ordinal uniqueness constraint is kept
                 # intact; current projections normalize each selection to zero.
-                ordinal=ordinal_offset + source.ordinal,
+                ordinal=ordinal_offset + index,
                 required=source.required,
                 content_json=None,
                 content_hash=None,
@@ -453,6 +491,106 @@ def _copy_activity_questions(
                 effective_answer_record_id=None,
             )
         )
+
+
+def _copy_activity_questions(
+    db: Session,
+    activity: AssessmentActivity,
+    attempt: AssessmentAttempt,
+) -> None:
+    source_rows = list(
+        db.scalars(
+            select(AssessmentActivityQuestion)
+            .where(
+                AssessmentActivityQuestion.activity_id == activity.id,
+                AssessmentActivityQuestion.selection_revision
+                == activity.question_selection_revision,
+            )
+            .order_by(AssessmentActivityQuestion.ordinal)
+        ).all()
+    )
+    _add_attempt_questions(db, attempt, _survey_rows(source_rows))
+
+
+def follow_up_candidates(
+    db: Session, attempt: AssessmentAttempt
+) -> list[tuple[AssessmentActivityQuestion, QuestionContent]]:
+    """Unasked Questions the evaluator may choose until the learner submits."""
+
+    if attempt.status != "in_progress" or attempt.submitted_at is not None:
+        return []
+    return unasked_questions(db, attempt)
+
+
+def unasked_questions(
+    db: Session, attempt: AssessmentAttempt
+) -> list[tuple[AssessmentActivityQuestion, QuestionContent]]:
+    """Readable catalog Questions this attempt has not asked yet."""
+
+    asked = set(
+        db.scalars(
+            select(AssessmentAttemptQuestion.activity_question_id).where(
+                AssessmentAttemptQuestion.attempt_id == attempt.id
+            )
+        ).all()
+    )
+    candidates: list[tuple[AssessmentActivityQuestion, QuestionContent]] = []
+    for row in db.scalars(
+        select(AssessmentActivityQuestion)
+        .where(
+            AssessmentActivityQuestion.activity_id == attempt.activity_id,
+            AssessmentActivityQuestion.selection_revision == attempt.question_selection_revision,
+            AssessmentActivityQuestion.required.is_(True),
+        )
+        .order_by(AssessmentActivityQuestion.ordinal)
+    ).all():
+        if row.id in asked:
+            continue
+        try:
+            _version, content = _verify_question_source(db, row, require_current=False)
+        except PlatformError:
+            continue
+        candidates.append((row, content))
+    return candidates
+
+
+def validated_follow_ups(
+    db: Session, attempt: AssessmentAttempt, refs: list[str]
+) -> list[AssessmentActivityQuestion]:
+    if not refs:
+        return []
+    offered = {row.id: row for row, _content in follow_up_candidates(db, attempt)}
+    if len(set(refs)) != len(refs) or any(ref not in offered for ref in refs):
+        raise conflict(
+            "assessment_follow_up_invalid",
+            "Follow-up Questions must be chosen from the offered candidates.",
+        )
+    return [offered[ref] for ref in refs]
+
+
+def append_follow_up_questions(
+    db: Session,
+    actor: AuthContext,
+    attempt: AssessmentAttempt,
+    follow_ups: list[AssessmentActivityQuestion],
+) -> bool:
+    """Start the next round with evaluator-chosen Questions from the offered remainder."""
+
+    if not follow_ups:
+        return False
+    _add_attempt_questions(db, attempt, follow_ups)
+    attempt.revision += 1
+    attempt.updated_at = _now()
+    db.flush()
+    context = _context(db, attempt, attempt.source_conversation_id)
+    if context.current_question is not None:
+        mark_attempt_question_presented(
+            db,
+            actor,
+            attempt.source_conversation_id,
+            question_version_id=context.current_question.question_version_id,
+        )
+    return True
 
 
 def invalidate_assessment_attempts_for_knowledge_update(
@@ -1035,6 +1173,83 @@ def _record_answer_or_skip(
     return record
 
 
+def _submit_unfinished_attempt(
+    db: Session,
+    actor: AuthContext,
+    attempt: AssessmentAttempt,
+    *,
+    event_id: str,
+) -> None:
+    """End the test now: shown Questions become skips and unshown ones leave the attempt.
+
+    The submission mark stops further follow-up rounds, so evaluation and the
+    Boundary summary run on what was actually asked; the rest stays unverified.
+    """
+
+    rows = [row for row in _attempt_question_rows(db, attempt.id) if row.required]
+    if not any(row.presented_at is not None for row in rows):
+        return
+    if attempt.submitted_at is None:
+        attempt.submitted_at = _now()
+        attempt.updated_at = attempt.submitted_at
+    for row in rows:
+        if row.status == "resolved":
+            continue
+        if row.presented_at is None:
+            db.delete(row)
+            continue
+        _record_answer_or_skip(
+            db,
+            actor=actor,
+            attempt=attempt,
+            question=row,
+            event_id=str(uuid5(UUID(event_id), f"submit:{row.id}")),
+            kind="skip",
+            payload={"question_version_id": row.question_version_id, "reason": "submitted"},
+            classification="complete_request",
+            request_hash=_hash(
+                _canonical({"attempt_id": attempt.id, "question_id": row.id, "submit": event_id})
+            ),
+        )
+    db.flush()
+
+
+def _discard_abandoned_learning(db: Session, attempt_id: str) -> None:
+    """Delete a student-abandoned attempt's learning records in its transaction.
+
+    The attempt row and its lifecycle events stay so replay, redo chains, report
+    counts and Provider accounting still resolve. Late results cannot recreate
+    the records because evaluation scopes require an in-progress attempt.
+    """
+
+    db.flush()
+    assessment_ids = select(LearningAssessment.id).where(
+        LearningAssessment.attempt_id == attempt_id
+    )
+    for statement in (
+        delete(LearningBoundaryEvidence).where(LearningBoundaryEvidence.attempt_id == attempt_id),
+        delete(LearningBoundaryRevision).where(LearningBoundaryRevision.attempt_id == attempt_id),
+        delete(LearningBoundary).where(LearningBoundary.attempt_id == attempt_id),
+        delete(LearningAssessmentMutation).where(
+            LearningAssessmentMutation.assessment_id.in_(assessment_ids)
+        ),
+        delete(LearningAssessmentResourceGrant).where(
+            LearningAssessmentResourceGrant.assessment_id.in_(assessment_ids)
+        ),
+        delete(LearningAssessmentRevision).where(
+            LearningAssessmentRevision.assessment_id.in_(assessment_ids)
+        ),
+        delete(LearningAssessment).where(LearningAssessment.attempt_id == attempt_id),
+        delete(AssessmentAttemptEvent).where(
+            AssessmentAttemptEvent.attempt_id == attempt_id,
+            AssessmentAttemptEvent.event_kind.in_(("answer", "skip")),
+        ),
+        delete(AssessmentAttemptQuestion).where(AssessmentAttemptQuestion.attempt_id == attempt_id),
+        delete(LearningRecord).where(LearningRecord.attempt_id == attempt_id),
+    ):
+        db.execute(statement)
+
+
 def _new_replacement_attempt(
     db: Session,
     old: AssessmentAttempt,
@@ -1093,6 +1308,7 @@ def _new_replacement_attempt(
             request_hash=request_hash,
         )
     )
+    _discard_abandoned_learning(db, old.id)
     return new
 
 
@@ -1267,6 +1483,8 @@ def _apply_lifecycle_transition(
                 )
             )
             db.flush()
+            if event_kind == "abandon":
+                _discard_abandoned_learning(db, attempt.id)
     except IntegrityError:
         replay = _event_replay(
             db,
@@ -2106,6 +2324,7 @@ def apply_assessment_decision(
     with db.begin_nested():
         timestamp = _now()
         if decision.classification == "complete_request" and attempt.status == "in_progress":
+            _submit_unfinished_attempt(db, actor, attempt, event_id=event_id)
             required = [row for row in _attempt_question_rows(db, attempt.id) if row.required]
             if required and all(
                 row.status == "resolved" and row.presented_at is not None for row in required
@@ -2154,8 +2373,10 @@ def apply_assessment_decision(
                         )
                     )
                     response_key, disposition = "assessment.completed", "transitioned"
-        elif decision.classification == "progress_request":
+        elif decision.classification in {"progress_request", "off_topic"}:
             response_key, disposition = "assessment.progress", "read"
+        elif decision.classification == "restricted_request":
+            disposition = "read"
         elif decision.classification == "answers_request":
             response_key, disposition = "assessment.answers", "read"
         db.flush()

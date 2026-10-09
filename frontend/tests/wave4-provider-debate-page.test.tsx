@@ -78,9 +78,7 @@ describe("teacher debate turn approval route controller", () => {
 
     render(<TeacherProviderDataCallDebatePage debateId={fixtures.debateId} />);
 
-    expect(
-      await screen.findByText("No turn disclosure is waiting for review."),
-    ).toBeTruthy();
+    expect(await screen.findByText("No disclosures yet.")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
   });
 

@@ -172,6 +172,31 @@ describe("teacher account management", () => {
     expect(screen.queryByText("Demo catalog")).toBeNull();
   });
 
+  it("does not offer the teacher a status change on their own account", async () => {
+    const api = apiForTeacher();
+    const base = roster();
+    api.courseRoster.mockResolvedValue({
+      ...base,
+      entries: (base.entries ?? []).map((item) =>
+        item.user_id === teacherId
+          ? { ...item, source: "database", editable: true }
+          : item,
+      ),
+    });
+    mount(api, "en");
+
+    const own = (await screen.findByText("maya")).closest(
+      ".account-row",
+    ) as HTMLElement;
+    expect(within(own).getByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(
+      within(own).queryByRole("button", { name: "Deactivate" }),
+    ).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Deactivate" })).toHaveLength(
+      1,
+    );
+  });
+
   it("saves a renamed student", async () => {
     const api = apiForTeacher();
     mount(api, "en");

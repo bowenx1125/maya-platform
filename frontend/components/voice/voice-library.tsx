@@ -257,7 +257,7 @@ export function VoiceLibrary({
         </select>
       </label>
     ) : (
-      <EmptyCard title={t("rosterNoGroup")} />
+      <EmptyCard title={t("rosterNoGroups")} />
     );
 
   const groupScopeReady = Boolean(
@@ -340,6 +340,9 @@ export function VoiceLibrary({
           {loading ? <LoadingCard /> : null}
           {error && profiles.length === 0 && groupOptions !== undefined ? (
             <ErrorNotice error={error} onRetry={() => void load()} />
+          ) : null}
+          {groupScopeReady && !error && profiles.length === 0 ? (
+            <EmptyCard title={t("voiceNone")} />
           ) : null}
           {!loading && groupId ? (
             <div className={`knowledge-tile-grid ${cards.grid}`}>

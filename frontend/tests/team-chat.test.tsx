@@ -388,9 +388,7 @@ describe("Studyform Maya Team", () => {
   it("publishes a Maya Team as a public personal Team from the Studyform sidebar", async () => {
     renderTeamManagement();
     await screen.findByRole("heading", { level: 2, name: "Maya Team" });
-    expect(
-      screen.getByText("No Maya Team yet. Press New to create one."),
-    ).toBeTruthy();
+    expect(screen.getByText("No Maya Teams yet.")).toBeTruthy();
     await startNewTeam();
     await fillTeamForm("Reasoning circle", "Mencius");
     fireEvent.click(

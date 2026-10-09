@@ -160,7 +160,8 @@ def _seed_prior_final_evidence(
     activity: AssessmentActivity,
     conversation: Conversation,
 ) -> tuple[set[str], str]:
-    effective, evidence_ids = _scope_answers(db, attempt, _attempt_question_rows(db, attempt.id))
+    question_rows = _attempt_question_rows(db, attempt.id)
+    effective, evidence_ids = _scope_answers(db, attempt, question_rows)
     assert effective and evidence_ids
     assessment_id = str(uuid4())
     assessment = LearningAssessment(
@@ -174,7 +175,19 @@ def _seed_prior_final_evidence(
         updated_at=datetime.now(UTC),
     )
     content_json = json.dumps(
-        {"overall_feedback": "Old generation evaluation", "questions": []},
+        {
+            "overall_feedback": "Old generation evaluation",
+            "questions": [
+                {
+                    "question_ordinal": row.ordinal - question_rows[0].ordinal,
+                    "feedback": "Old generation feedback",
+                    "points_awarded": None,
+                }
+                for row in question_rows
+            ],
+            "strengths": [],
+            "next_steps": [],
+        },
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

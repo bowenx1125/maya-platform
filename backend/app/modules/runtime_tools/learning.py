@@ -5,12 +5,13 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.modules.auth.service import AuthContext
 from app.modules.learning.execution import (
     authorize_assessment_edit,
+    authorize_assessment_edit_replay,
     authorize_boundary_update,
     authorize_boundary_update_replay,
     read_authorized_assessment,
@@ -44,6 +45,7 @@ class AssessmentEditArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
     content: AssessmentEvaluationContent
     assessment_id: UUID | None = None
+    follow_up_question_refs: list[str] = Field(default_factory=list)
 
 
 class BoundaryEditArguments(BaseModel):
@@ -130,6 +132,7 @@ def edit_assessment(
         identity,
         arguments.content.model_dump(mode="json"),
         assessment_id=arguments.assessment_id,
+        follow_up_question_refs=arguments.follow_up_question_refs,
     )
 
 
@@ -180,11 +183,14 @@ def learning_tools() -> dict[str, ToolSpec]:
             "Public",
             "Save an Assessment revision with explicit target edit permission. Formal results "
             "require this invocation's server-issued evaluator grant. "
+            "follow_up_question_refs may list only refs offered in follow_up_candidates; "
+            "leave it empty when none are offered. "
             "Owning an attempt, being a teacher or naming an evaluator does not grant editing.",
             AssessmentEditArguments,
             _execution_only,
             edit_assessment,
             authorize_execution=authorize_assessment_edit,
+            authorize_replay=authorize_assessment_edit_replay,
         ),
         "update_learning_boundary": ToolSpec(
             "update_learning_boundary",

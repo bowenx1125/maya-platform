@@ -738,6 +738,8 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
             and "BOUNDARY_RAW_CANARY" not in (result.assistant_text or "")
             for result in results
         )
+        assert results[1].assistant_text == "This round's answers have been reviewed."
+        assert any("Congratulations" in (result.assistant_text or "") for result in results)
         child_stages = list(
             db.scalars(
                 select(TeamProviderCall).where(
@@ -1025,7 +1027,8 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
             select(TeamTurnResult).where(TeamTurnResult.turn_id == progress_id)
         )
         assert progress_result is not None and progress_result.assistant_text is not None
-        assert "Assessment progress" in progress_result.assistant_text
+        assert "Progress:" in progress_result.assistant_text
+        assert progress_result.assistant_text.endswith("Question 1: Question one")
         assert "Rubric" not in progress_result.assistant_text
         assert progress_session["turns"][-1]["id"] == progress_id
 
@@ -1387,7 +1390,7 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         )
         assert answer_result is not None
         assert saved_answer in (answer_result.assistant_text or "")
-        assert "resolved 1/2" in (answer_result.assistant_text or "")
+        assert "Resolved 1/2" in (answer_result.assistant_text or "")
         assert "Question one" not in (answer_result.assistant_text or "")
         answer_receipt = db.scalar(
             select(RuntimeToolReceipt).where(
@@ -1456,7 +1459,10 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         assert old_turn is not None and old_turn.state == "paused"
         assert action_turn is not None and action_turn.state == "ready"
         result = db.scalar(select(TeamTurnResult).where(TeamTurnResult.turn_id == request_id))
-        assert result is not None and result.assistant_text == "This assessment attempt has ended."
+        assert (
+            result is not None
+            and result.assistant_text == "Test abandoned. Its answers were not kept."
+        )
         receipt = db.scalar(
             select(RuntimeToolReceipt).where(
                 RuntimeToolReceipt.turn_id == request_id,
