@@ -89,26 +89,25 @@ public HTTPS origin. The base Compose file is the private Demo: gateway port
 not publish the Demo, do not point public DNS at it, and do not reuse its data
 directory, account catalog or password for the public site.
 
-Four values are still unset. This document does not choose them:
+The owner set these on October 9, 2026. Recording them is not a claim that
+the public site is serving or that a certificate has been issued.
 
-- **Domain.** `MAYA_DOMAIN`, a DNS name the owner controls. No name is recorded
-  here.
+- **Domain.** `MAYA_DOMAIN=app.mayaform.net`. DNS A for `app` was observed at
+  `8.210.57.144`.
 - **TLS.** No certificate or private key is in git. Caddy requests one for
-  `MAYA_DOMAIN` after that name resolves to the new server and `ACME_EMAIL` is
-  set. Certificate state stays in the `maya_caddy_data` volume.
-- **Server.** The machine is not chosen, and no address is recorded here. It
-  needs Docker Compose and public TCP 80 and 443 for this project only. Do not
+  `MAYA_DOMAIN` after the production stack starts and `ACME_EMAIL` is set.
+  Certificate state stays in the `maya_caddy_data` volume. That request has
+  not been made yet.
+- **Server.** `8.210.57.144`, Ubuntu 24.04, Docker Engine and Compose
+  installed, public TCP 80 and 443 intended for this project only. Do not
   run the command below against an existing local classroom, including a
   `maya-production` project already published on port 8090.
-- **Public base URL.** `CLASSROOM_PUBLIC_BASE_URL`. The production override sets
-  it to `https://${MAYA_DOMAIN}` and omits a port, because this profile
-  publishes 443. The origin check treats `:443` as the same origin as an
-  omitted port. A path, query, fragment or trailing slash is rejected. If the
-  published origin uses any other port, that port must be included
-  (`https://<domain>:<port>`) and the gateway, Caddy site and this value must
-  be the same origin; the current override does not publish another port.
-  Classroom QR links are that origin plus `/classroom/{token}`. CSRF accepts
-  only that exact origin.
+- **Public base URL.** The production override sets
+  `CLASSROOM_PUBLIC_BASE_URL` to `https://app.mayaform.net` and omits a port.
+  The origin check treats `:443` as the same origin as an omitted port. A
+  path, query, fragment or trailing slash is rejected. Classroom QR links are
+  that origin plus `/classroom/{token}`. CSRF accepts only that exact origin.
+  The origin has not been verified in a browser.
 
 The protected operator file is not in git. It must set `MAYA_DOMAIN`,
 `ACME_EMAIL`, a `SESSION_SECRET` of at least 32 bytes, and absolute
@@ -119,8 +118,9 @@ them. Provider keys, when used, follow
 file. Putting `CLASSROOM_PUBLIC_BASE_URL` in the file does not change the
 production service: the override replaces it with `https://${MAYA_DOMAIN}`.
 
-Until the domain, TLS path, server and public base URL exist, do not start the
-public stack and do not invent a stand-in name, address or certificate.
+The domain and server exist. Start the public stack only with the protected
+operator file on that server. Do not invent a certificate; Caddy obtains it
+at start, and that had not happened as of this record.
 
 ## Production startup
 

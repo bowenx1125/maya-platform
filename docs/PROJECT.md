@@ -141,7 +141,8 @@ student's majority language; off-topic/progress questions get help, never answer
 
 Integrated PDF eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and selected colleague UI
 817282e7c53313e2c2e5233dc5be64d404dab90a via b648efc/8987cf8; UI03/04/05 preserved.
-Components UI removed1d92a2f; maintenance APIs stay. No GitHub final push yet.
+Components UI removed1d92a2f; maintenance APIs stay. October 9 pushed the v14
+line, including the colleague merges below; `main` is that same line.
 
 R4/R5 gate counts and Sol review counts are superseded by the October9 gates below.
 
@@ -250,9 +251,25 @@ Public/Private Maya Team Chats and save real answers/evaluations/Boundary eviden
 Teacher Maya Chat reads activity-scoped Public statistics/report/download with Private
 excluded. Inputs are prepared, not uploaded. Historical paid calls are not acceptance.
 
-Latest remote fetch confirms selected PDF eb7e142 and UI03/04/05/06 refs already
-included in HEAD. Older avatar/Voice siblings were outside the selected integration;
-old Chat-TTS/schema0033 and revert branches conflict with the current text-only/UI
-contract and must not overwrite it. Final push and Maya backend/frontend rollout wait
-for combined acceptance. Preserve unrelated containers, env, private config, data and
-colleague UI; clear only obsolete code/docs and specifically disposable test fixtures.
+October 9 colleague integration, pushed as `15f5450` on the v14 line:
+
+- `entaiaki-avatar-pose` (`e9b000a`): relaxed standing pose is applied inside the
+  current `setAsset` load. The branch's per-model canvas remount was not taken;
+  one canvas stays bound for a framing and receives the next model.
+- `entaiaki-plato-voice` (`b8f65e7`): migration is `0056_preset_voice_profiles`
+  after `0055`. Debate, preview, fallback and the TTS gate send the profile's
+  allowlisted model. Preview speech stays the fixed line. Chat stays text-only,
+  so that branch's chat-TTS edits were not taken.
+- `entaiaki-tts-fix` (`054f420`, ours): chat voice bar and autoplay were not
+  taken. Owner decision: chat is not read aloud.
+- `revert-task-001-merges` (`15f5450`, ours): current avatars and text-only Chat
+  stay. The revert was not applied.
+
+On that merge tree, preset-voice and debate voice-fallback tests passed, and
+ruff, format and mypy passed. The full backend suite was not run. This is not
+classroom acceptance.
+
+Server facts, not a launch: `app.mayaform.net` resolved to `8.210.57.144`.
+That host is Ubuntu 24.04 with Docker 29.9 and Compose 5.6; a 4 GiB swap file
+is on. The production stack was not started, no certificate was issued, and no
+real Provider call was made. The cloud machine's local site remains Mock.
