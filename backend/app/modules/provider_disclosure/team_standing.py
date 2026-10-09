@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -77,6 +78,8 @@ from app.providers.control_repository import (
     _manifest_from_row,
     _policy_from_row,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 StandingOperation = Literal["llm_agent_chat", "embedding_query"]
 RevokedAssessmentSourceError = Literal[
@@ -926,11 +929,13 @@ def authorize_team_dispatch(
     revoked_assessment_scope: RevokedAssessmentCommandScope | None = None,
     serialized_request: bytes | None = None,
     current_policy_hash: str | None = None,
+    operator_consent: bool = False,
 ) -> TeamDispatchAuthorization:
     """Bind the sender's current Chat action to its exact outbound bytes.
 
     Published Team resources additionally need the Teacher's current standing
-    authorization. This keeps student Chat contents outside that approval.
+    authorization, or the operator's standing consent recorded as that grant.
+    This keeps student Chat contents outside that approval.
     """
 
     result = db.get(TeamTurnResult, result_id)
@@ -1017,6 +1022,15 @@ def authorize_team_dispatch(
                 manifest.policy_hash,
                 manifest.provider_operation,
             )
+            if standing_grant is None and operator_consent:
+                standing_grant = operator_standing_grant(
+                    db,
+                    actor_user_id,
+                    selection,
+                    selected_binding_ids,
+                    manifest.policy_hash,
+                    manifest.provider_operation,
+                )
             if standing_grant is None:
                 raise PlatformError(
                     "provider_confirmation_required",
@@ -1181,6 +1195,57 @@ def current_standing_grant(
         except (TypeError, ValueError):
             continue
     return None
+
+
+def operator_standing_grant(
+    db: Session,
+    actor_id: str,
+    frozen_selection: FrozenTeamSelection,
+    selected_binding_ids: set[str],
+    policy_hash: str,
+    provider_operation: str,
+) -> TeamProviderStandingGrant | None:
+    """Record the operator's standing consent as the publisher's Team grant.
+
+    The grant is prepared and confirmed exactly as the publisher's own action
+    would be, then rechecked against the selected members before dispatch.
+    """
+
+    if not frozen_selection.require_publication:
+        return None
+    try:
+        plan = prepare_team_standing_grant(
+            db,
+            frozen_selection.owner_user_id,
+            team_version_id=frozen_selection.team_version_id,
+            policy_hash=policy_hash,
+            provider_operation=provider_operation,
+        )
+        confirm_team_standing_grant(
+            db,
+            frozen_selection.owner_user_id,
+            team_version_id=frozen_selection.team_version_id,
+            policy_hash=policy_hash,
+            provider_operation=provider_operation,
+            expected_resource_hash=plan.resource_hash,
+            expected_team_epoch=plan.team_epoch,
+            expected_publication_epoch=plan.publication_epoch,
+        )
+    except PlatformError as error:
+        LOGGER.warning("Team operator consent unavailable code=%s", error.code)
+        return None
+    LOGGER.warning(
+        "Team Provider grant recorded by standing operator consent operation=%s",
+        provider_operation,
+    )
+    return current_standing_grant(
+        db,
+        actor_id,
+        frozen_selection,
+        selected_binding_ids,
+        policy_hash,
+        provider_operation,
+    )
 
 
 def current_team_dispatch_is_authorized(

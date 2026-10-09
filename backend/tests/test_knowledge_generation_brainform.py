@@ -7,7 +7,8 @@ from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
-from app.core.models import Agent, AgentVersion, Course, CourseMember, KnowledgeDocument
+from app.core.models import Agent, AgentVersion, Course, CourseMember, KnowledgeDocument, User
+from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.generation import (
     _current_generation_authorized,
     claim_generation_run,
@@ -30,7 +31,9 @@ from app.modules.knowledge_sets.models import (
 )
 from app.modules.knowledge_sets.provider_runtime import _generation_input
 from app.modules.knowledge_sets.schemas import QuestionContent
+from app.modules.knowledge_sets.service import get_agent_runtime_knowledge
 from app.modules.learning.recipes import current_question_version_for_asset
+from app.modules.workspace.chat_provider import chat_messages
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -299,6 +302,38 @@ def test_brainform_generation_job_id_requires_current_owner_course_and_agent_sco
     rows = [item for item in mismatched_agent.json() if item["canonical_set_id"] == set_id]
     assert rows
     assert all(item["generation_job_id"] is None for item in rows)
+
+
+def test_unbound_generation_agent_is_not_listed_as_a_knowledge_consumer(
+    client: TestClient, database: Any
+) -> None:
+    agent_id, _document_id, _run_id, set_id = _create_generation_run(client, database)
+    _teacher, csrf = login(client, "maya")
+    initial_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert initial_listing.status_code == 200, initial_listing.text
+    assert any(
+        item["canonical_set_id"] == set_id and item["agent_id"] == agent_id
+        for item in initial_listing.json()
+    )
+
+    with database.session() as db:
+        agent = db.get(Agent, agent_id)
+        assert agent is not None
+        metadata_revision = agent.metadata_revision
+    unbound = client.put(
+        f"/api/v1/agents/{agent_id}/knowledge-sets",
+        headers=_headers(csrf, f"k3-brainform-unbind-generator-{uuid4()}"),
+        json={
+            "expected_agent_metadata_revision": metadata_revision,
+            "set_ids": [],
+        },
+    )
+    assert unbound.status_code == 200, unbound.text
+    assert unbound.json()["sets"] == []
+
+    detached_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert detached_listing.status_code == 200, detached_listing.text
+    assert all(item["canonical_set_id"] != set_id for item in detached_listing.json())
 
 
 def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_closed(
@@ -586,6 +621,258 @@ def test_manual_markdown_question_projection_is_safe_for_public_students_and_own
     assert owner_read.status_code == 200, owner_read.text
     assert owner_read.json()["audience"] == "full"
     assert owner_read.json()["markdown"] == markdown
+
+
+def test_public_manual_notes_update_student_chat_without_exposing_rubric_or_answer(
+    client: TestClient, database: Any
+) -> None:
+    _owner, owner_csrf = login(client, "bowen")
+    knowledge_set = _create_set(
+        client,
+        owner_csrf,
+        "Public notes and assessment",
+        group_id=GROUP_ID,
+    )
+    shared = client.patch(
+        f"/api/v1/knowledge-sets/{knowledge_set['id']}",
+        headers=_headers(owner_csrf, f"k3-public-notes-share-{uuid4()}"),
+        json={"expected_metadata_revision": 0, "visibility": "public"},
+    )
+    assert shared.status_code == 200, shared.text
+
+    agent = _create_agent_and_bind(
+        client,
+        owner_csrf,
+        knowledge_set["id"],
+        name="Public notes Agent",
+        visibility="public",
+    )
+
+    markdown_v1 = (
+        "# Public study\n\n## Notes\n\nPUBLIC_NOTE_VERSION_ONE\n\n"
+        "## Questions\n\n### Question 1\n\nPUBLIC_QUESTION_PROMPT\n\n"
+        "#### Reference answer\n\nPUBLIC_REFERENCE_SECRET\n\n"
+        "#### Rubric\n\n- **Reasoning** (2): PUBLIC_RUBRIC_SECRET\nTotal: 2 points\n"
+    )
+    saved_v1 = _save(client, owner_csrf, knowledge_set["id"], markdown_v1)
+    assert saved_v1.status_code == 200, saved_v1.text
+
+    with database.session() as db:
+        agent_row = db.get(Agent, agent["id"])
+        assert agent_row is not None
+        version = db.scalar(
+            select(AgentVersion).where(
+                AgentVersion.agent_id == agent_row.id,
+                AgentVersion.state == "draft",
+            )
+        )
+        assert version is not None
+        version.version_seq = 1
+        version.state = "published"
+        version.published_visibility = "public"
+        version.published_at = datetime.now(UTC)
+        agent_row.current_published_version_id = version.id
+        db.commit()
+
+    markdown_v2 = markdown_v1.replace("PUBLIC_NOTE_VERSION_ONE", "PUBLIC_NOTE_VERSION_TWO")
+    saved_v2 = _save(
+        client,
+        owner_csrf,
+        knowledge_set["id"],
+        markdown_v2,
+        expected_version_seq=1,
+    )
+    assert saved_v2.status_code == 200, saved_v2.text
+
+    _peer, _peer_csrf = login(client, "kaikai")
+    with database.session() as db:
+        peer = db.scalar(select(User).where(User.username == "kaikai"))
+        assert peer is not None
+        peer_context = AuthContext("", None, peer, "")
+        agent_version = db.scalar(
+            select(AgentVersion).where(
+                AgentVersion.agent_id == agent["id"],
+                AgentVersion.state == "published",
+            )
+        )
+        assert agent_version is not None
+        student_knowledge = get_agent_runtime_knowledge(db, peer_context, agent["id"])
+        student_messages, _ = chat_messages(
+            agent_version,
+            [{"role": "user", "content": "Use the public study notes."}],
+            [],
+            canonical_knowledge=student_knowledge,
+        )
+        student_prompt = json.loads(student_messages[0]["content"].split("\n", 1)[1])
+        projected_markdown = student_prompt["canonical_knowledge"][0]["markdown"]
+        assert "PUBLIC_NOTE_VERSION_TWO" in projected_markdown
+        assert "PUBLIC_NOTE_VERSION_ONE" not in projected_markdown
+        assert "PUBLIC_QUESTION_PROMPT" in projected_markdown
+        assert "PUBLIC_REFERENCE_SECRET" not in projected_markdown
+        assert "PUBLIC_RUBRIC_SECRET" not in projected_markdown
+
+    _owner, owner_csrf = login(client, "bowen")
+    with database.session() as db:
+        owner = db.scalar(select(User).where(User.username == "bowen"))
+        assert owner is not None
+        owner_context = AuthContext("", None, owner, "")
+        owner_version = db.scalar(
+            select(AgentVersion).where(
+                AgentVersion.agent_id == agent["id"],
+                AgentVersion.state == "published",
+            )
+        )
+        assert owner_version is not None
+        owner_knowledge = get_agent_runtime_knowledge(db, owner_context, agent["id"])
+        owner_messages, _ = chat_messages(
+            owner_version,
+            [{"role": "user", "content": "Use the public study notes."}],
+            [],
+            canonical_knowledge=owner_knowledge,
+        )
+        owner_prompt = json.loads(owner_messages[0]["content"].split("\n", 1)[1])
+        owner_markdown = owner_prompt["canonical_knowledge"][0]["markdown"]
+        assert owner_markdown == markdown_v2
+        assert "PUBLIC_REFERENCE_SECRET" in owner_markdown
+        assert "PUBLIC_RUBRIC_SECRET" in owner_markdown
+
+    markdown_v3 = "# Public study\n\n## Notes\n\nPUBLIC_NOTE_VERSION_THREE\n"
+    saved_v3 = _save(
+        client,
+        owner_csrf,
+        knowledge_set["id"],
+        markdown_v3,
+        expected_version_seq=2,
+    )
+    assert saved_v3.status_code == 200, saved_v3.text
+    _peer, _peer_csrf = login(client, "kaikai")
+    with database.session() as db:
+        peer = db.scalar(select(User).where(User.username == "kaikai"))
+        agent_version = db.scalar(
+            select(AgentVersion).where(
+                AgentVersion.agent_id == agent["id"],
+                AgentVersion.state == "published",
+            )
+        )
+        assert peer is not None and agent_version is not None
+        student_knowledge_v3 = get_agent_runtime_knowledge(
+            db,
+            AuthContext("", None, peer, ""),
+            agent["id"],
+        )
+        messages_v3, _ = chat_messages(
+            agent_version,
+            [{"role": "user", "content": "Use only the current free notes."}],
+            [],
+            canonical_knowledge=student_knowledge_v3,
+        )
+        prompt_v3 = json.loads(messages_v3[0]["content"].split("\n", 1)[1])
+        student_markdown_v3 = prompt_v3["canonical_knowledge"][0]["markdown"]
+        assert student_markdown_v3.strip() == markdown_v3.strip()
+        assert "PUBLIC_NOTE_VERSION_TWO" not in student_markdown_v3
+        assert "PUBLIC_QUESTION_PROMPT" not in student_markdown_v3
+        assert "PUBLIC_REFERENCE_SECRET" not in student_markdown_v3
+        assert "PUBLIC_RUBRIC_SECRET" not in student_markdown_v3
+
+
+def test_brainform_lists_every_readable_agent_set_relationship_without_private_leak(
+    client: TestClient, database: Any
+) -> None:
+    _owner, csrf = login(client, "bowen")
+    sets = [
+        _create_set(client, csrf, f"Relationship Knowledge {index}", group_id=GROUP_ID)
+        for index in range(2)
+    ]
+    for index, knowledge_set in enumerate(sets):
+        shared = client.patch(
+            f"/api/v1/knowledge-sets/{knowledge_set['id']}",
+            headers=_headers(csrf, f"k3-relation-share-{index}-{uuid4()}"),
+            json={"expected_metadata_revision": 0, "visibility": "public"},
+        )
+        assert shared.status_code == 200, shared.text
+
+    created_first_agent = client.post(
+        f"/api/v1/groups/{GROUP_ID}/agents",
+        headers=_headers(csrf, f"k3-relation-agent-a-{uuid4()}"),
+        json={"name": "Relationship public A", "visibility": "public"},
+    )
+    assert created_first_agent.status_code == 201, created_first_agent.text
+    first_agent = created_first_agent.json()
+    bound_first_agent = client.put(
+        f"/api/v1/agents/{first_agent['id']}/knowledge-sets",
+        headers=_headers(csrf, f"k3-relation-agent-a-sets-{uuid4()}"),
+        json={
+            "expected_agent_metadata_revision": first_agent["metadata_revision"],
+            "set_ids": [sets[0]["id"], sets[1]["id"]],
+        },
+    )
+    assert bound_first_agent.status_code == 200, bound_first_agent.text
+    second_agent = _create_agent_and_bind(
+        client,
+        csrf,
+        sets[0]["id"],
+        name="Relationship public B",
+        visibility="public",
+    )
+    private_agent = _create_agent_and_bind(
+        client,
+        csrf,
+        sets[0]["id"],
+        name="Relationship private Agent",
+        visibility="private",
+    )
+
+    for index, knowledge_set in enumerate(sets):
+        saved = _save(
+            client,
+            csrf,
+            knowledge_set["id"],
+            f"# Relationship notes {index}\n\nPUBLIC_RELATIONSHIP_NOTE_{index}\n",
+        )
+        assert saved.status_code == 200, saved.text
+
+    with database.session() as db:
+        for agent_payload in (first_agent, second_agent, private_agent):
+            agent = db.get(Agent, agent_payload["id"])
+            assert agent is not None
+            version = db.scalar(
+                select(AgentVersion).where(
+                    AgentVersion.agent_id == agent.id,
+                    AgentVersion.state == "draft",
+                )
+            )
+            assert version is not None
+            version.version_seq = 1
+            version.state = "published"
+            version.published_visibility = agent.visibility
+            version.published_at = datetime.now(UTC)
+            agent.current_published_version_id = version.id
+        db.commit()
+
+    _teacher, _teacher_csrf = login(client, "maya")
+    teacher_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert teacher_listing.status_code == 200, teacher_listing.text
+    teacher_pairs = {
+        (item["canonical_set_id"], item["agent_id"])
+        for item in teacher_listing.json()
+        if item["canonical_set_id"] in {row["id"] for row in sets}
+    }
+    assert teacher_pairs == {
+        (sets[0]["id"], first_agent["id"]),
+        (sets[0]["id"], second_agent["id"]),
+        (sets[1]["id"], first_agent["id"]),
+    }
+    assert all(agent_id != private_agent["id"] for _set_id, agent_id in teacher_pairs)
+
+    _peer, _peer_csrf = login(client, "kaikai")
+    student_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert student_listing.status_code == 200, student_listing.text
+    student_pairs = {
+        (item["canonical_set_id"], item["agent_id"])
+        for item in student_listing.json()
+        if item["canonical_set_id"] in {row["id"] for row in sets}
+    }
+    assert student_pairs == teacher_pairs
 
 
 def test_unknown_question_headings_fail_closed_and_reference_order_is_bounded(
@@ -1705,7 +1992,7 @@ def test_revoked_generator_does_not_rollback_authorized_rag_source_save(
         assert run is not None and _current_generation_authorized(db, run) is False
 
 
-def test_source_owner_edit_enqueues_as_existing_generator_owner(
+def test_source_owner_edit_does_not_authorize_teacher_generation(
     client: TestClient, database: Any
 ) -> None:
     _student, student_csrf = login(client, "bowen")
@@ -1774,9 +2061,29 @@ def test_source_owner_edit_enqueues_as_existing_generator_owner(
             .where(KnowledgeGenerationRun.knowledge_set_id == initial_run.knowledge_set_id)
             .order_by(KnowledgeGenerationRun.intent_generation)
         ).all()
+        assert len(runs) == 1
+        assert runs[0].id == initial_run.id
+        assert runs[0].owner_user_id == generation_owner_id
+        assert _current_generation_authorized(db, runs[0]) is False
+
+    _teacher, teacher_csrf = login(client, "maya")
+    regenerated = client.post(
+        f"/api/v1/knowledge-sets/{initial_run.knowledge_set_id}/regenerate",
+        headers=_headers(teacher_csrf, f"k3-bf-cross-owner-teacher-regen-{uuid4()}"),
+        json={"action_id": str(uuid4())},
+    )
+    assert regenerated.status_code == 202, regenerated.text
+    with database.session() as db:
+        runs = db.scalars(
+            select(KnowledgeGenerationRun)
+            .where(KnowledgeGenerationRun.knowledge_set_id == initial_run.knowledge_set_id)
+            .order_by(KnowledgeGenerationRun.intent_generation)
+        ).all()
         assert len(runs) == 2
-        assert all(run.owner_user_id == generation_owner_id for run in runs)
-        assert runs[-1].state == "pending"
+        assert runs[0].id == initial_run.id
+        assert runs[1].id == regenerated.json()["run_id"]
+        assert runs[1].owner_user_id == generation_owner_id
+        assert runs[1].state == "pending"
 
 
 def test_hide_edited_unbound_rag_soft_hides_but_preserves_source_versions(

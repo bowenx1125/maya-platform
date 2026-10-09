@@ -18,6 +18,7 @@ from app.core.errors import conflict, not_found
 from app.core.models import (
     Agent,
     AgentVersion,
+    IdempotencyRecord,
     Job,
     KnowledgeDocument,
     ProviderOperation,
@@ -59,6 +60,7 @@ GENERATION_POLICY_VERSION = "knowledge_set_generation_v1"
 _GENERATION_SET_NAMESPACE = UUID("ae685827-e790-4a04-a751-464238414263")
 _LEASE_SECONDS = 60
 _GenerationState = Literal["pending", "running", "blocked", "completed", "failed", "interrupted"]
+_GENERATION_ACTION_OPERATION = "knowledgeGenerationAction"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,251 @@ class GenerationEnqueue:
     run: KnowledgeGenerationRun
     job: Job
     created: bool
+    action_id: str | None = None
+
+
+def _generation_action_key(action_id: str) -> str:
+    return f"action:{action_id}"
+
+
+def _generation_action_request_hash(
+    owner_user_id: str, set_id: str, action_id: str, payload_hash: str
+) -> str:
+    return _sha256(
+        _canonical_json(
+            {
+                "owner_user_id": owner_user_id,
+                "knowledge_set_id": set_id,
+                "action_id": action_id,
+                "payload_hash": payload_hash,
+            }
+        )
+    )
+
+
+def _generation_action_replay(
+    db: Session,
+    *,
+    owner_user_id: str,
+    set_id: str,
+    action_id: str,
+    payload_hash: str,
+) -> GenerationEnqueue | None:
+    record = db.scalar(
+        select(IdempotencyRecord).where(
+            IdempotencyRecord.actor_user_id == owner_user_id,
+            IdempotencyRecord.operation == _GENERATION_ACTION_OPERATION,
+            IdempotencyRecord.key == _generation_action_key(action_id),
+        )
+    )
+    if record is None:
+        return None
+    expected_hash = _generation_action_request_hash(owner_user_id, set_id, action_id, payload_hash)
+    if record.request_hash != expected_hash or record.state != "completed":
+        raise conflict(
+            "knowledge_generation_action_conflict",
+            "This Knowledge generation action is already bound to another request.",
+        )
+    try:
+        response = json.loads(record.response_json or "{}")
+        run_id = response["run_id"]
+    except (TypeError, ValueError, KeyError):
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The saved Knowledge generation action is unavailable.",
+        ) from None
+    if response.get("action_id") != action_id:
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The saved Knowledge generation action is unavailable.",
+        )
+    run = db.get(KnowledgeGenerationRun, run_id)
+    if run is None or run.knowledge_set_id != set_id or run.owner_user_id != owner_user_id:
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The saved Knowledge generation action is unavailable.",
+        )
+    job = db.get(Job, run.job_id)
+    if job is None or response.get("job_id") != job.id:
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The saved Knowledge generation action is unavailable.",
+        )
+    return GenerationEnqueue(run, job, False, action_id)
+
+
+def _record_generation_action(
+    db: Session,
+    *,
+    owner_user_id: str,
+    set_id: str,
+    action_id: str,
+    payload_hash: str,
+    run: KnowledgeGenerationRun,
+    job: Job,
+) -> None:
+    """Persist an explicit action-to-run alias independently of HTTP request keys."""
+
+    timestamp = now_utc()
+    record = IdempotencyRecord(
+        id=str(uuid4()),
+        actor_user_id=owner_user_id,
+        operation=_GENERATION_ACTION_OPERATION,
+        key=_generation_action_key(action_id),
+        request_hash=_generation_action_request_hash(
+            owner_user_id, set_id, action_id, payload_hash
+        ),
+        state="completed",
+        claim_token=str(uuid4()),
+        lease_expires_at=timestamp,
+        status_code=202,
+        response_json=_canonical_json({"run_id": run.id, "job_id": job.id, "action_id": action_id}),
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    try:
+        with db.begin_nested():
+            db.add(record)
+            db.flush()
+    except IntegrityError:
+        existing = db.scalar(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.actor_user_id == owner_user_id,
+                IdempotencyRecord.operation == _GENERATION_ACTION_OPERATION,
+                IdempotencyRecord.key == _generation_action_key(action_id),
+            )
+        )
+        if (
+            existing is None
+            or existing.request_hash != record.request_hash
+            or existing.state != "completed"
+        ):
+            raise
+        try:
+            response = json.loads(existing.response_json or "{}")
+        except (TypeError, ValueError):
+            raise conflict(
+                "knowledge_generation_action_conflict",
+                "This Knowledge generation action is already bound to another run.",
+            ) from None
+        if (
+            not isinstance(response, dict)
+            or response.get("run_id") != run.id
+            or response.get("job_id") != job.id
+            or response.get("action_id") != action_id
+        ):
+            raise conflict(
+                "knowledge_generation_action_conflict",
+                "This Knowledge generation action is already bound to another run.",
+            ) from None
+
+
+def record_generation_action_alias_for_run(
+    db: Session,
+    *,
+    owner_user_id: str,
+    action_id: str,
+    run: KnowledgeGenerationRun,
+) -> None:
+    """Bind a stable teacher-action identity to an already-created exact run."""
+
+    agent = db.get(Agent, run.agent_id)
+    version = db.get(AgentVersion, run.agent_version_id)
+    set_row = db.get(KnowledgeSet, run.knowledge_set_id)
+    job = db.get(Job, run.job_id)
+    try:
+        source_manifest = json.loads(run.source_manifest_json)
+    except (TypeError, ValueError):
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The Knowledge generation inputs are unavailable.",
+        ) from None
+    if (
+        agent is None
+        or version is None
+        or set_row is None
+        or job is None
+        or run.owner_user_id != owner_user_id
+        or run.course_id != agent.course_id
+        or run.agent_id != agent.id
+        or run.agent_version_id != version.id
+        or version.agent_id != agent.id
+        or run.knowledge_set_id != set_row.id
+        or set_row.course_id != agent.course_id
+        or not isinstance(source_manifest, list)
+        or _sha256(_canonical_json(source_manifest)) != run.source_manifest_hash
+    ):
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The Knowledge generation inputs are unavailable.",
+        )
+    payload_hash = _generation_action_payload_hash(
+        agent=agent,
+        version=version,
+        set_row=set_row,
+        agent_md_hash=run.agent_md_hash,
+        source_manifest=source_manifest,
+    )
+    _record_generation_action(
+        db,
+        owner_user_id=owner_user_id,
+        set_id=set_row.id,
+        action_id=action_id,
+        payload_hash=payload_hash,
+        run=run,
+        job=job,
+    )
+
+
+def replay_generation_action_alias_for_run(
+    db: Session,
+    *,
+    owner_user_id: str,
+    action_id: str,
+    run: KnowledgeGenerationRun,
+) -> GenerationEnqueue | None:
+    """Replay a teacher action only when it is bound to these exact inputs."""
+
+    agent = db.get(Agent, run.agent_id)
+    version = db.get(AgentVersion, run.agent_version_id)
+    set_row = db.get(KnowledgeSet, run.knowledge_set_id)
+    try:
+        source_manifest = json.loads(run.source_manifest_json)
+    except (TypeError, ValueError):
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The Knowledge generation inputs are unavailable.",
+        ) from None
+    if (
+        agent is None
+        or version is None
+        or set_row is None
+        or run.owner_user_id != owner_user_id
+        or run.agent_id != agent.id
+        or run.agent_version_id != version.id
+        or version.agent_id != agent.id
+        or run.knowledge_set_id != set_row.id
+        or not isinstance(source_manifest, list)
+        or _sha256(_canonical_json(source_manifest)) != run.source_manifest_hash
+    ):
+        raise conflict(
+            "knowledge_generation_action_unavailable",
+            "The Knowledge generation inputs are unavailable.",
+        )
+    payload_hash = _generation_action_payload_hash(
+        agent=agent,
+        version=version,
+        set_row=set_row,
+        agent_md_hash=run.agent_md_hash,
+        source_manifest=source_manifest,
+    )
+    return _generation_action_replay(
+        db,
+        owner_user_id=owner_user_id,
+        set_id=set_row.id,
+        action_id=action_id,
+        payload_hash=payload_hash,
+    )
 
 
 def _canonical_json(value: Any) -> str:
@@ -262,6 +509,49 @@ def _input_payload(
     return payload
 
 
+def _generation_action_payload_hash(
+    *,
+    agent: Agent,
+    version: AgentVersion,
+    set_row: KnowledgeSet,
+    agent_md_hash: str,
+    source_manifest: list[dict[str, Any]],
+) -> str:
+    payload = _input_payload(
+        agent=agent,
+        set_row=set_row,
+        agent_md_hash=agent_md_hash,
+        source_manifest=source_manifest,
+    )
+    payload["agent_version_id"] = version.id
+    return _sha256(_canonical_json(payload))
+
+
+def _generation_run_matches_action_payload(
+    run: KnowledgeGenerationRun,
+    *,
+    owner_user_id: str,
+    agent: Agent,
+    version: AgentVersion,
+    set_row: KnowledgeSet,
+    agent_md_hash: str,
+    source_manifest_json: str,
+    source_manifest_hash: str,
+) -> bool:
+    return (
+        run.owner_user_id == owner_user_id
+        and run.course_id == agent.course_id
+        and run.agent_id == agent.id
+        and run.agent_version_id == version.id
+        and run.knowledge_set_id == set_row.id
+        and run.agent_md_hash == agent_md_hash
+        and run.agent_authorization_epoch == agent.authorization_epoch
+        and run.set_authorization_epoch == set_row.authorization_epoch
+        and run.source_manifest_json == source_manifest_json
+        and run.source_manifest_hash == source_manifest_hash
+    )
+
+
 def _target_asset_heads(db: Session, set_row: KnowledgeSet) -> str:
     """Freeze each generated lineage's exact head before a later AI write."""
 
@@ -293,6 +583,60 @@ def _target_asset_heads(db: Session, set_row: KnowledgeSet) -> str:
             }
         )
     return _canonical_json(heads)
+
+
+def _resume_unconfirmed_blocked_generation(
+    db: Session,
+    run: KnowledgeGenerationRun,
+    job: Job | None,
+    *,
+    owner_user_id: str,
+    agent: Agent,
+    set_row: KnowledgeSet,
+    agent_md_hash: str,
+    source_manifest_json: str,
+    source_manifest_hash: str,
+) -> bool:
+    """Resume only an exact run that stopped before creating a Provider operation."""
+
+    if (
+        job is None
+        or job.operation != GENERATION_OPERATION
+        or job.state != "failed"
+        or job.safe_error_code != "provider_confirmation_required"
+        or run.state != "blocked"
+        or run.safe_error_code != "provider_confirmation_required"
+        or run.owner_user_id != owner_user_id
+        or run.agent_id != agent.id
+        or run.course_id != agent.course_id
+        or run.knowledge_set_id != set_row.id
+        or run.agent_md_hash != agent_md_hash
+        or run.source_manifest_json != source_manifest_json
+        or run.source_manifest_hash != source_manifest_hash
+        or run.agent_authorization_epoch != agent.authorization_epoch
+        or run.set_authorization_epoch != set_row.authorization_epoch
+        or run.intent_generation != set_row.generation_intent_seq
+        or run.provider_operation_id is not None
+        or run.request_hash is not None
+    ):
+        return False
+    if db.scalar(select(ProviderOperation.id).where(ProviderOperation.scope_id == run.id).limit(1)):
+        return False
+    if not _current_generation_authorized(db, run):
+        return False
+
+    timestamp = now_utc()
+    run.state = "pending"
+    run.safe_error_code = None
+    run.claim_token = None
+    run.lease_expires_at = None
+    run.updated_at = timestamp
+    job.state = "pending"
+    job.safe_error_code = None
+    job.claim_token = None
+    job.updated_at = timestamp
+    db.flush()
+    return True
 
 
 def enqueue_generation_for_publish(
@@ -477,20 +821,10 @@ def enqueue_generation_for_existing_set(
     owner_user_id: str,
     action_id: str,
     allow_empty_blocked: bool = False,
+    resume_blocked_unconfirmed: bool = False,
+    selected_source_document_ids: list[str] | None = None,
 ) -> GenerationEnqueue:
-    """Enqueue a new explicit or source-save intent for an existing generated Set."""
-
-    existing = db.scalar(
-        select(KnowledgeGenerationRun).where(
-            KnowledgeGenerationRun.knowledge_set_id == set_id,
-            KnowledgeGenerationRun.action_id == action_id,
-        )
-    )
-    if existing is not None:
-        job = db.get(Job, existing.job_id)
-        if job is None:
-            raise RuntimeError("Knowledge generation run lost its Job row.")
-        return GenerationEnqueue(existing, job, False)
+    """Enqueue an explicit intent, optionally limited to current Agent sources."""
 
     set_row = db.scalar(select(KnowledgeSet).where(KnowledgeSet.id == set_id).with_for_update())
     prior_run = db.scalar(
@@ -532,13 +866,30 @@ def enqueue_generation_for_existing_set(
         raise not_found()
 
     bindings = _active_sources(db, set_id)
-    if not bindings and not allow_empty_blocked:
+    if selected_source_document_ids is None:
+        source_bindings = bindings
+    else:
+        current_selection = [document.id for document in _enabled_documents(db, version.id)]
+        if selected_source_document_ids != current_selection:
+            raise conflict(
+                "generation_source_selection_stale",
+                "The selected courseware changed before this Agent was finished.",
+            )
+        active_by_document = {source.document_id: source for source in bindings}
+        source_bindings = []
+        for document_id in selected_source_document_ids:
+            source = active_by_document.get(document_id)
+            if source is None:
+                raise not_found()
+            source_bindings.append(source)
+
+    if not source_bindings and not allow_empty_blocked:
         raise conflict(
             "knowledge_generation_sources_missing",
             "Knowledge cannot be regenerated without an available bound source.",
         )
     source_manifest: list[dict[str, Any]] = []
-    for source in bindings:
+    for source in source_bindings:
         if not _source_matches_current(db, owner_user_id, source, role="owner", for_write=True):
             raise not_found()
         document = db.get(KnowledgeDocument, source.document_id)
@@ -566,6 +917,101 @@ def enqueue_generation_for_existing_set(
     manifest_json = _canonical_json(source_manifest)
     manifest_hash = _sha256(manifest_json)
     agent_md_hash = _sha256(version.agent_md)
+    action_payload_hash = _generation_action_payload_hash(
+        agent=agent,
+        version=version,
+        set_row=set_row,
+        agent_md_hash=agent_md_hash,
+        source_manifest=source_manifest,
+    )
+    if resume_blocked_unconfirmed:
+        replay = _generation_action_replay(
+            db,
+            owner_user_id=owner_user_id,
+            set_id=set_id,
+            action_id=action_id,
+            payload_hash=action_payload_hash,
+        )
+        if replay is not None:
+            return replay
+
+    existing = db.scalar(
+        select(KnowledgeGenerationRun).where(
+            KnowledgeGenerationRun.knowledge_set_id == set_id,
+            KnowledgeGenerationRun.action_id == action_id,
+        )
+    )
+    if existing is not None:
+        job = db.get(Job, existing.job_id)
+        if job is None:
+            raise RuntimeError("Knowledge generation run lost its Job row.")
+        if not _generation_run_matches_action_payload(
+            existing,
+            owner_user_id=owner_user_id,
+            agent=agent,
+            version=version,
+            set_row=set_row,
+            agent_md_hash=agent_md_hash,
+            source_manifest_json=manifest_json,
+            source_manifest_hash=manifest_hash,
+        ):
+            raise conflict(
+                "knowledge_generation_action_conflict",
+                "This Knowledge generation action is already bound to another request.",
+            )
+        if resume_blocked_unconfirmed:
+            _record_generation_action(
+                db,
+                owner_user_id=owner_user_id,
+                set_id=set_id,
+                action_id=action_id,
+                payload_hash=action_payload_hash,
+                run=existing,
+                job=job,
+            )
+        return GenerationEnqueue(
+            existing,
+            job,
+            False,
+            action_id if resume_blocked_unconfirmed else None,
+        )
+
+    if resume_blocked_unconfirmed:
+        blocked_run = db.scalar(
+            select(KnowledgeGenerationRun)
+            .where(
+                KnowledgeGenerationRun.knowledge_set_id == set_id,
+                KnowledgeGenerationRun.owner_user_id == owner_user_id,
+                KnowledgeGenerationRun.state == "blocked",
+                KnowledgeGenerationRun.safe_error_code == "provider_confirmation_required",
+            )
+            .order_by(KnowledgeGenerationRun.created_at.desc(), KnowledgeGenerationRun.id.desc())
+            .limit(1)
+        )
+        if blocked_run is not None:
+            blocked_job = db.get(Job, blocked_run.job_id)
+            if _resume_unconfirmed_blocked_generation(
+                db,
+                blocked_run,
+                blocked_job,
+                owner_user_id=owner_user_id,
+                agent=agent,
+                set_row=set_row,
+                agent_md_hash=agent_md_hash,
+                source_manifest_json=manifest_json,
+                source_manifest_hash=manifest_hash,
+            ):
+                assert blocked_job is not None
+                _record_generation_action(
+                    db,
+                    owner_user_id=owner_user_id,
+                    set_id=set_id,
+                    action_id=action_id,
+                    payload_hash=action_payload_hash,
+                    run=blocked_run,
+                    job=blocked_job,
+                )
+                return GenerationEnqueue(blocked_run, blocked_job, False, action_id)
     previous_intent_generation = set_row.generation_intent_seq
     intent_generation = previous_intent_generation + 1
     input_key = _sha256(
@@ -634,6 +1080,47 @@ def enqueue_generation_for_existing_set(
                 .execution_options(synchronize_session=False)
             )
             if getattr(bumped, "rowcount", 0) != 1:
+                db.refresh(set_row)
+                duplicate_action = db.scalar(
+                    select(KnowledgeGenerationRun).where(
+                        KnowledgeGenerationRun.knowledge_set_id == set_id,
+                        KnowledgeGenerationRun.action_id == action_id,
+                    )
+                )
+                if duplicate_action is not None:
+                    duplicate_job = db.get(Job, duplicate_action.job_id)
+                    if duplicate_job is None:
+                        raise RuntimeError("Knowledge generation run lost its Job row.")
+                    if not _generation_run_matches_action_payload(
+                        duplicate_action,
+                        owner_user_id=owner_user_id,
+                        agent=agent,
+                        version=version,
+                        set_row=set_row,
+                        agent_md_hash=agent_md_hash,
+                        source_manifest_json=manifest_json,
+                        source_manifest_hash=manifest_hash,
+                    ):
+                        raise conflict(
+                            "knowledge_generation_action_conflict",
+                            "This Knowledge generation action is already bound to another request.",
+                        )
+                    if resume_blocked_unconfirmed:
+                        _record_generation_action(
+                            db,
+                            owner_user_id=owner_user_id,
+                            set_id=set_id,
+                            action_id=action_id,
+                            payload_hash=action_payload_hash,
+                            run=duplicate_action,
+                            job=duplicate_job,
+                        )
+                    return GenerationEnqueue(
+                        duplicate_action,
+                        duplicate_job,
+                        False,
+                        action_id if resume_blocked_unconfirmed else None,
+                    )
                 raise conflict(
                     "knowledge_generation_intent_stale",
                     "A newer Knowledge generation intent was created. Retry the action.",
@@ -679,10 +1166,49 @@ def enqueue_generation_for_existing_set(
         existing_job = db.get(Job, existing.job_id)
         if existing_job is None:
             raise RuntimeError("Knowledge generation run lost its Job row.") from None
-        return GenerationEnqueue(existing, existing_job, False)
+        if not _generation_run_matches_action_payload(
+            existing,
+            owner_user_id=owner_user_id,
+            agent=agent,
+            version=version,
+            set_row=set_row,
+            agent_md_hash=agent_md_hash,
+            source_manifest_json=manifest_json,
+            source_manifest_hash=manifest_hash,
+        ):
+            raise conflict(
+                "knowledge_generation_action_conflict",
+                "This Knowledge generation action is already bound to another request.",
+            ) from None
+        if resume_blocked_unconfirmed:
+            _record_generation_action(
+                db,
+                owner_user_id=owner_user_id,
+                set_id=set_id,
+                action_id=action_id,
+                payload_hash=action_payload_hash,
+                run=existing,
+                job=existing_job,
+            )
+        return GenerationEnqueue(
+            existing,
+            existing_job,
+            False,
+            action_id if resume_blocked_unconfirmed else None,
+        )
     set_row.generation_intent_seq = intent_generation
     set_row.updated_at = timestamp
-    return GenerationEnqueue(run, job, True)
+    if resume_blocked_unconfirmed:
+        _record_generation_action(
+            db,
+            owner_user_id=owner_user_id,
+            set_id=set_id,
+            action_id=action_id,
+            payload_hash=action_payload_hash,
+            run=run,
+            job=job,
+        )
+    return GenerationEnqueue(run, job, True, action_id if resume_blocked_unconfirmed else None)
 
 
 def _current_source_manifest(

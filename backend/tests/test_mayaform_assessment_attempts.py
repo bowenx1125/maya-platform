@@ -78,6 +78,7 @@ from app.modules.teams.models import (
 from app.modules.workspace.models import (
     Conversation,
     ConversationParticipant,
+    ConversationSharedSet,
     ConversationTurn,
     TeamProviderCall,
     TeamTurnResult,
@@ -648,6 +649,13 @@ def _create_formal_conversation(
             authorization_epoch=0,
             position=0,
             created_at=now,
+        )
+    )
+    db.add(
+        ConversationSharedSet(
+            conversation_id=conversation_id,
+            knowledge_set_id=set_id,
+            position=0,
         )
     )
     db.flush()
@@ -1981,7 +1989,7 @@ def test_paused_attempt_cannot_resume_after_source_revocation_but_can_abandon(
         assert abandoned.context.attempt.status == "abandoned"
 
 
-def test_presented_question_survives_real_rag_source_replacement(
+def test_teacher_knowledge_update_requires_reanswer_after_real_rag_source_replacement(
     attempt_env: Any,
     app_bundle: Any,
 ) -> None:
@@ -2059,6 +2067,14 @@ def test_presented_question_survives_real_rag_source_replacement(
         assert team_set is not None and source_set is not None
         team_set.knowledge_set_id = knowledge_set_id
         team_set.authorization_epoch = source_set.authorization_epoch
+        conversation_set = db.scalar(
+            select(ConversationSharedSet).where(
+                ConversationSharedSet.conversation_id == conversation_id,
+                ConversationSharedSet.knowledge_set_id == fixture_set_id,
+            )
+        )
+        assert conversation_set is not None
+        conversation_set.knowledge_set_id = knowledge_set_id
         db.flush()
 
         initial_question_versions = db.scalars(
@@ -2183,34 +2199,57 @@ def test_presented_question_survives_real_rag_source_replacement(
         actor = _service_actor(db, settings, STUDENT_ID)
         refreshed = get_assessment_runtime_context(db, actor, conversation_id)
         assert refreshed is not None and refreshed.current_question is not None
-        assert refreshed.current_question.question_version_id == first_question_version_id
-        assert refreshed.current_question.prompt == "Original first question"
-        pinned_content = QuestionContent.model_validate_json(
-            db.get(KnowledgeAssetVersion, str(first_question_version_id)).content_json
+        assert refreshed.current_question.question_version_id != first_question_version_id
+        assert refreshed.current_question.prompt == "Updated first question"
+        assert read_attempt_answers(db, actor, conversation_id) == []
+        stale_answer = apply_assessment_decision(
+            db,
+            actor,
+            conversation_id,
+            user_message="An answer to the old first Question.",
+            decision=_answer_decision(uuid4(), first_question_version_id, "seven"),
         )
-        assert pinned_content.rubric.criteria[0].guidance == "RAG_RUBRIC_V1_FIRST"
-
+        assert stale_answer is not None and stale_answer.disposition == "redirected"
+        generated_first_question_version_id = refreshed.current_question.question_version_id
+        mark_attempt_question_presented(
+            db,
+            actor,
+            conversation_id,
+            question_version_id=generated_first_question_version_id,
+        )
         first_answer = apply_assessment_decision(
             db,
             actor,
             conversation_id,
-            user_message="The first answer is seven.",
-            decision=_answer_decision(uuid4(), first_question_version_id, "seven"),
+            user_message="The new first answer is seven.",
+            decision=_answer_decision(uuid4(), generated_first_question_version_id, "seven"),
         )
         assert first_answer is not None and first_answer.context.current_question is not None
-        generated_unpresented_question_version_id = (
+        assert first_answer.context.current_question.prompt == "Updated second question"
+        generated_second_question_version_id = (
             first_answer.context.current_question.question_version_id
         )
-        assert first_answer.context.current_question.prompt == "Updated second question"
-        assert generated_unpresented_question_version_id == UUID(
-            generated_second_question_version_id
+        assert generated_second_question_version_id == UUID(
+            generated_catalog[1].question_version_id
         )
-        generated_unpresented_content = QuestionContent.model_validate_json(
-            db.get(
-                KnowledgeAssetVersion, str(generated_unpresented_question_version_id)
-            ).content_json
+        mark_attempt_question_presented(
+            db,
+            actor,
+            conversation_id,
+            question_version_id=generated_second_question_version_id,
         )
-        assert generated_unpresented_content.rubric.criteria[0].guidance == "RAG_RUBRIC_V2_SECOND"
+        second_answer = apply_assessment_decision(
+            db,
+            actor,
+            conversation_id,
+            user_message="The new second answer is eight.",
+            decision=_answer_decision(uuid4(), generated_second_question_version_id, "eight"),
+        )
+        assert second_answer is not None and second_answer.context.progress.answered_count == 2
+        generated_second_question = QuestionContent.model_validate_json(
+            db.get(KnowledgeAssetVersion, str(generated_second_question_version_id)).content_json
+        )
+        assert generated_second_question.rubric.criteria[0].guidance == "RAG_RUBRIC_V2_SECOND"
 
     current_markdown = client.get(f"/api/v1/knowledge-sets/{knowledge_set_id}/markdown")
     assert current_markdown.status_code == 200, current_markdown.text
@@ -2262,28 +2301,47 @@ def test_presented_question_survives_real_rag_source_replacement(
             manual_second_question_version.content_json
         )
         assert manual_second_question.rubric.criteria[0].guidance == "MANUAL_RUBRIC_SECOND"
-        manual_second_question_version_id = manual_second_question_version.id
+        manual_second_canonical_version_id = manual_second_question_version.id
 
         refreshed = get_assessment_runtime_context(db, actor, conversation_id)
         assert refreshed is not None and refreshed.current_question is not None
-        assert refreshed.current_question.prompt == "Updated second question"
-        second_question_version_id = refreshed.current_question.question_version_id
-        assert second_question_version_id == UUID(manual_second_question_version_id)
-        assert second_question_version_id != generated_unpresented_question_version_id
+        assert refreshed.current_question.prompt == "Updated first question"
+        manual_first_question_version_id = refreshed.current_question.question_version_id
+        assert read_attempt_answers(db, actor, conversation_id) == []
         mark_attempt_question_presented(
             db,
             actor,
             conversation_id,
-            question_version_id=second_question_version_id,
+            question_version_id=manual_first_question_version_id,
         )
-        second_answer = apply_assessment_decision(
+        manual_first_answer = apply_assessment_decision(
             db,
             actor,
             conversation_id,
-            user_message="The second answer is two.",
-            decision=_answer_decision(uuid4(), second_question_version_id, "two"),
+            user_message="The manual first answer is two.",
+            decision=_answer_decision(uuid4(), manual_first_question_version_id, "two"),
         )
-        assert second_answer is not None
+        assert manual_first_answer is not None
+        assert manual_first_answer.context.current_question is not None
+        manual_second_question_version_id = (
+            manual_first_answer.context.current_question.question_version_id
+        )
+        assert manual_first_answer.context.current_question.prompt == "Updated second question"
+        assert manual_second_question_version_id == UUID(manual_second_canonical_version_id)
+        mark_attempt_question_presented(
+            db,
+            actor,
+            conversation_id,
+            question_version_id=manual_second_question_version_id,
+        )
+        manual_second_answer = apply_assessment_decision(
+            db,
+            actor,
+            conversation_id,
+            user_message="The manual second answer is three.",
+            decision=_answer_decision(uuid4(), manual_second_question_version_id, "three"),
+        )
+        assert manual_second_answer is not None
 
         activity = db.get(AssessmentActivity, str(started.attempt.activity_id))
         assert activity is not None
@@ -2318,13 +2376,13 @@ def test_presented_question_survives_real_rag_source_replacement(
         assert evaluator_context is not None
         evaluation_questions = json.loads(evaluator_context.task_payload_json)["questions"]
         assert [question["prompt"] for question in evaluation_questions] == [
-            "Original first question",
+            "Updated first question",
             "Updated second question",
         ]
         assert [
             question["rubric"]["criteria"][0]["guidance"] for question in evaluation_questions
         ] == [
-            "RAG_RUBRIC_V1_FIRST",
+            "MANUAL_RUBRIC_FIRST",
             "MANUAL_RUBRIC_SECOND",
         ]
         evaluator_identity = _accepted_tool_identity(
@@ -2347,10 +2405,10 @@ def test_presented_question_survives_real_rag_source_replacement(
             actor,
             evaluator_identity,
             {
-                "overall_feedback": "The original and updated questions were both answered.",
+                "overall_feedback": "The current Knowledge questions were answered.",
                 "questions": [
-                    {"question_ordinal": 0, "feedback": "Used the original rubric."},
-                    {"question_ordinal": 1, "feedback": "Used the updated rubric."},
+                    {"question_ordinal": 0, "feedback": "Used the current first rubric."},
+                    {"question_ordinal": 1, "feedback": "Used the current second rubric."},
                 ],
             },
         ) == {"saved": True}
@@ -2412,15 +2470,25 @@ def test_presented_question_survives_real_rag_source_replacement(
         assert current_activity is not None
         assert current_activity.question_selection_revision == 3
         original_attempt_questions = db.scalars(
-            select(AssessmentAttemptQuestion).where(
-                AssessmentAttemptQuestion.attempt_id == str(started.attempt.id)
-            )
+            select(AssessmentAttemptQuestion)
+            .where(AssessmentAttemptQuestion.attempt_id == str(started.attempt.id))
+            .order_by(AssessmentAttemptQuestion.ordinal)
         ).all()
-        assert len(original_attempt_questions) == 2
+        assert len(original_attempt_questions) == 7
         assert all(
             db.get(AssessmentActivityQuestion, question.activity_question_id).selection_revision
             == 1
-            for question in original_attempt_questions
+            for question in original_attempt_questions[:2]
+        )
+        assert all(
+            db.get(AssessmentActivityQuestion, question.activity_question_id).selection_revision
+            == 2
+            for question in original_attempt_questions[2:5]
+        )
+        assert all(
+            db.get(AssessmentActivityQuestion, question.activity_question_id).selection_revision
+            == 3
+            for question in original_attempt_questions[5:]
         )
         next_attempt_questions = db.scalars(
             select(AssessmentAttemptQuestion)

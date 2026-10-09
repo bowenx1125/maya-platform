@@ -1141,7 +1141,6 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
     client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
 ) -> None:
     app, _database, base_settings = app_bundle
-    token, csrf = _login(client, "bowen")
     settings = base_settings.model_copy(
         update={
             "llm_provider": "dashscope",
@@ -1163,6 +1162,7 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
     settings = settings.model_copy(update={"llm_provider_policy_hash": policy.policy_hash})
     app.state.settings = settings
     ProviderRepository(database).save_policy_snapshot(policy)
+    token, csrf = _login(client, "bowen")
 
     with database.session() as db:
         ensure_demo_baseline(db, settings.resolved_data_root)
@@ -1174,15 +1174,10 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
             source_set_id,
             _questions,
         ) = _create_formal_conversation(db, visibility="private")
-        db.add(
-            ConversationSharedSet(
-                conversation_id=conversation_id,
-                knowledge_set_id=source_set_id,
-                position=0,
-            )
-        )
+        shared_binding = db.get(ConversationSharedSet, (conversation_id, source_set_id))
+        assert shared_binding is not None and shared_binding.position == 0
         actor = get_auth_context(db, settings, token)
-        assert actor is not None
+        assert actor is not None and actor.csrf_token == csrf
         started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
         assert started is not None
         attempt_id = str(started.attempt.id)
@@ -1252,9 +1247,12 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         source.deleted_at = datetime.now(UTC)
         db.commit()
 
+    assert client.cookies.get("maya_session") == token
+    pause_headers = _headers(csrf)
+    pause_headers["Origin"] = settings.classroom_public_base_url or "http://testserver"
     pause = client.post(
         f"/api/v1/conversations/{conversation_id}/turns/{old_claim.turn_id}:pause",
-        headers=_headers(csrf),
+        headers=pause_headers,
     )
     assert pause.status_code == 200, pause.text
     assert pause.json()["turns"][0]["state"] == "paused"
@@ -1370,7 +1368,7 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
     answers_request_id = str(uuid4())
     answers_response = client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
-        headers=_headers(csrf),
+        headers=pause_headers,
         json={
             "request_id": answers_request_id,
             "expected_revision": current.json()["revision"],
@@ -1413,7 +1411,7 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
     continue_request_id = str(uuid4())
     continue_response = client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
-        headers=_headers(csrf),
+        headers=pause_headers,
         json={
             "request_id": continue_request_id,
             "expected_revision": current.json()["revision"],
@@ -1441,7 +1439,7 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
     request_id = str(uuid4())
     response = client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
-        headers=_headers(csrf),
+        headers=pause_headers,
         json={
             "request_id": request_id,
             "expected_revision": current.json()["revision"],

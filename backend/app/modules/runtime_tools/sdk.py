@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from typing import Any
@@ -21,9 +22,10 @@ from app.modules.workspace.models import (
 )
 
 from .models import RuntimeModelCallStage
-from .registry import ToolCallIdentity, ToolSpec, execute_tool, exposed_tools
+from .registry import ToolCallIdentity, ToolPostCommit, ToolSpec, execute_tool, exposed_tools
 
 SessionFactory = Callable[[], Session]
+LOGGER = logging.getLogger(__name__)
 
 
 def _call_identity(
@@ -101,6 +103,7 @@ def bind_runtime_functions(
     participant_id: str,
     turn_id: str,
     registry: Mapping[str, ToolSpec],
+    post_commit: ToolPostCommit | None = None,
 ) -> list[Function]:
     with factory() as db:
         specs = exposed_tools(db, actor, conversation_id, registry)
@@ -121,6 +124,7 @@ def bind_runtime_functions(
             registry,
             conversation_revision,
             claim_token,
+            post_commit,
         )
         for spec in specs
     ]
@@ -136,6 +140,7 @@ def _bind_one(
     registry: Mapping[str, ToolSpec],
     conversation_revision: int,
     claim_token: str | None,
+    post_commit: ToolPostCommit | None,
 ) -> Function:
     current_call: ContextVar[FunctionCall | None] = ContextVar(
         f"maya_tool_{spec.name}", default=None
@@ -167,7 +172,16 @@ def _bind_one(
                 )
                 result = execute_tool(db, actor, identity, spec.name, arguments, registry)
                 db.commit()
-                return result
+            if post_commit is not None:
+                try:
+                    post_commit(spec, result)
+                except Exception as exc:
+                    LOGGER.error(
+                        "Runtime Tool post-commit hook failed tool_name=%s error_type=%s",
+                        spec.name,
+                        type(exc).__name__,
+                    )
+            return result
         except PlatformError as exc:
             return {"ok": False, "code": exc.code, "message": exc.message}
         finally:

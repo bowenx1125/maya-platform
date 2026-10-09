@@ -113,6 +113,14 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _current_attempt_question_rows(
+    db: Session, attempt: AssessmentAttempt
+) -> list[AssessmentAttemptQuestion]:
+    from .attempts import _attempt_question_rows
+
+    return _attempt_question_rows(db, attempt.id)
+
+
 def _accepted_tool_call_name(
     db: Session,
     identity: ToolCallIdentity,
@@ -463,6 +471,7 @@ def _scope_answers(
 ) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
     effective: list[tuple[str, str]] = []
     evidence_ids: list[str] = []
+    current_question_ids = {question.id for question in question_rows}
     events = db.execute(
         select(AssessmentAttemptEvent, LearningRecord)
         .join(LearningRecord, LearningRecord.id == AssessmentAttemptEvent.learning_record_id)
@@ -481,6 +490,8 @@ def _scope_answers(
     ).all()
     events_by_question: dict[str, list[tuple[AssessmentAttemptEvent, LearningRecord]]] = {}
     for event, record in events:
+        if event.question_id not in current_question_ids:
+            continue
         try:
             payload = json.loads(record.payload_json)
         except (TypeError, ValueError):
@@ -612,13 +623,7 @@ def attempt_has_final_evidence(db: Session, attempt: AssessmentAttempt) -> bool:
         and _digest(boundary[1].content_json) == boundary[1].content_hash
     ):
         return False
-    question_rows = list(
-        db.scalars(
-            select(AssessmentAttemptQuestion).where(
-                AssessmentAttemptQuestion.attempt_id == attempt.id
-            )
-        ).all()
-    )
+    question_rows = _current_attempt_question_rows(db, attempt)
     if not question_rows or any(
         question.presented_at is None or question.content_json is None for question in question_rows
     ):
@@ -704,15 +709,10 @@ def get_assessment_executor_context(
         db, conversation, activity, purpose, participant_id
     )
     _assert_live_activity(db, actor, conversation, activity)
-    question_rows = list(
-        db.scalars(
-            select(AssessmentAttemptQuestion)
-            .where(AssessmentAttemptQuestion.attempt_id == attempt.id)
-            .order_by(AssessmentAttemptQuestion.ordinal)
-        ).all()
-    )
+    question_rows = _current_attempt_question_rows(db, attempt)
     if not question_rows or any(not question.required for question in question_rows):
         raise conflict("assessment_recipe_invalid", "The assessment Question set is unavailable.")
+    selection_ordinal_offset = question_rows[0].ordinal
     if any(
         question.presented_at is None or question.status != "resolved" for question in question_rows
     ):
@@ -733,7 +733,7 @@ def get_assessment_executor_context(
         answer_payload = answers_by_record_id.get(answer_record_id) if answer_record_id else None
         answer_text = answer_payload.get("answer_text") if answer_payload else None
         entry: dict[str, Any] = {
-            "question_ordinal": attempt_question.ordinal,
+            "question_ordinal": attempt_question.ordinal - selection_ordinal_offset,
             "prompt": question.prompt,
             "answer_text": answer_text,
             "skipped": attempt_question.resolution == "skipped",
@@ -803,13 +803,7 @@ def mint_runtime_execution_scope(
         db, conversation, activity, purpose, identity.participant_id
     )
 
-    question_rows = list(
-        db.scalars(
-            select(AssessmentAttemptQuestion)
-            .where(AssessmentAttemptQuestion.attempt_id == attempt.id)
-            .order_by(AssessmentAttemptQuestion.ordinal)
-        ).all()
-    )
+    question_rows = _current_attempt_question_rows(db, attempt)
     if not question_rows or any(not row.required for row in question_rows):
         raise conflict("assessment_recipe_invalid", "The assessment Question set is unavailable.")
     question_payloads = tuple(
@@ -950,14 +944,14 @@ def write_formal_assessment(
         tool_name="edit_assessment",
     )
     evaluation = AssessmentEvaluationContent.model_validate(content)
-    questions = list(
-        db.scalars(
-            select(AssessmentAttemptQuestion)
-            .where(AssessmentAttemptQuestion.attempt_id == scope.attempt_id)
-            .order_by(AssessmentAttemptQuestion.ordinal)
-        ).all()
-    )
-    expected_ordinals = {question.ordinal for question in questions if question.required}
+    target_attempt = db.get(AssessmentAttempt, scope.attempt_id)
+    if target_attempt is None:
+        raise not_found()
+    questions = _current_attempt_question_rows(db, target_attempt)
+    selection_ordinal_offset = questions[0].ordinal if questions else 0
+    expected_ordinals = {
+        question.ordinal - selection_ordinal_offset for question in questions if question.required
+    }
     provided_ordinals = [item.question_ordinal for item in evaluation.questions]
     if set(provided_ordinals) != expected_ordinals or len(provided_ordinals) != len(
         set(provided_ordinals)
@@ -967,7 +961,11 @@ def write_formal_assessment(
             "The Assessment result must cover every Question in this attempt exactly once.",
         )
     for item in evaluation.questions:
-        question = next(row for row in questions if row.ordinal == item.question_ordinal)
+        question = next(
+            row
+            for row in questions
+            if row.ordinal - selection_ordinal_offset == item.question_ordinal
+        )
         _version_id, question_json = _pinned_question_currently_readable(db, question)
         parsed = QuestionContent.model_validate_json(question_json)
         maximum = parsed.rubric.total_points
@@ -1428,13 +1426,8 @@ def read_own_formal_attempt(
         or target_conversation.course_id != current_conversation.course_id
     ):
         raise not_found()
-    question_rows = list(
-        db.scalars(
-            select(AssessmentAttemptQuestion)
-            .where(AssessmentAttemptQuestion.attempt_id == target.id)
-            .order_by(AssessmentAttemptQuestion.ordinal)
-        ).all()
-    )
+    question_rows = _current_attempt_question_rows(db, target)
+    selection_ordinal_offset = question_rows[0].ordinal if question_rows else 0
     progress = {
         "status": target.status,
         "question_count": sum(row.required for row in question_rows),
@@ -1455,43 +1448,49 @@ def read_own_formal_attempt(
         content = QuestionContent.model_validate_json(question_json)
         questions.append(
             {
-                "ordinal": question.ordinal,
+                "ordinal": question.ordinal - selection_ordinal_offset,
                 "prompt": content.prompt,
                 "status": question.status,
                 "resolution": question.resolution,
             }
         )
-    events = db.execute(
-        select(AssessmentAttemptEvent, LearningRecord, AssessmentAttemptQuestion)
-        .join(
-            LearningRecord,
-            LearningRecord.id == AssessmentAttemptEvent.learning_record_id,
-        )
-        .join(
-            AssessmentAttemptQuestion,
-            AssessmentAttemptQuestion.id == AssessmentAttemptEvent.question_id,
-        )
-        .where(
-            AssessmentAttemptEvent.attempt_id == target.id,
-            AssessmentAttemptEvent.activity_id == target.activity_id,
-            AssessmentAttemptEvent.actor_user_id == target.actor_user_id,
-            AssessmentAttemptEvent.event_kind == "answer",
-            LearningRecord.attempt_id == target.id,
-            LearningRecord.activity_id == target.activity_id,
-            LearningRecord.record_kind == "answer",
-            LearningRecord.actor_user_id == target.actor_user_id,
-            LearningRecord.course_id == target_conversation.course_id,
-            LearningRecord.conversation_id == target_conversation.id,
-            LearningRecord.team_id == target.team_id,
-            LearningRecord.team_version_id == target_conversation.team_version_id,
-            LearningRecord.origin == "published_course_team",
-            LearningRecord.chat_visibility == target.chat_visibility,
-        )
-        .order_by(LearningRecord.created_at, LearningRecord.id)
-    ).all()
+    active_question_ids = {question.id for question in question_rows}
+    events = (
+        db.execute(
+            select(AssessmentAttemptEvent, LearningRecord, AssessmentAttemptQuestion)
+            .join(
+                LearningRecord,
+                LearningRecord.id == AssessmentAttemptEvent.learning_record_id,
+            )
+            .join(
+                AssessmentAttemptQuestion,
+                AssessmentAttemptQuestion.id == AssessmentAttemptEvent.question_id,
+            )
+            .where(
+                AssessmentAttemptEvent.attempt_id == target.id,
+                AssessmentAttemptEvent.activity_id == target.activity_id,
+                AssessmentAttemptEvent.actor_user_id == target.actor_user_id,
+                AssessmentAttemptEvent.event_kind == "answer",
+                LearningRecord.attempt_id == target.id,
+                LearningRecord.activity_id == target.activity_id,
+                LearningRecord.record_kind == "answer",
+                LearningRecord.actor_user_id == target.actor_user_id,
+                LearningRecord.course_id == target_conversation.course_id,
+                LearningRecord.conversation_id == target_conversation.id,
+                LearningRecord.team_id == target.team_id,
+                LearningRecord.team_version_id == target_conversation.team_version_id,
+                LearningRecord.origin == "published_course_team",
+                LearningRecord.chat_visibility == target.chat_visibility,
+                AssessmentAttemptQuestion.id.in_(active_question_ids),
+            )
+            .order_by(LearningRecord.created_at, LearningRecord.id)
+        ).all()
+        if active_question_ids
+        else []
+    )
     answers = [
         {
-            "question_ordinal": question.ordinal,
+            "question_ordinal": question.ordinal - selection_ordinal_offset,
             "answer_text": json.loads(record.payload_json).get("answer_text", ""),
             "created_at": record.created_at.isoformat(),
         }
@@ -1570,11 +1569,8 @@ def _teacher_public_attempt(
         course_id=activity.course_id,
         activity_id=activity.id,
     )
-    for question in db.scalars(
-        select(AssessmentAttemptQuestion).where(
-            AssessmentAttemptQuestion.attempt_id == attempt.id,
-            AssessmentAttemptQuestion.presented_at.is_not(None),
-        )
+    for question in (
+        row for row in _current_attempt_question_rows(db, attempt) if row.presented_at is not None
     ):
         _pinned_question_currently_readable(db, question)
     return attempt, activity

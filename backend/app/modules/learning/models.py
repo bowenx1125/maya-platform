@@ -553,6 +553,16 @@ class AssessmentAttempt(Base):
     chat_visibility: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    question_selection_revision: Mapped[int] = mapped_column(
+        Integer,
+        CheckConstraint(
+            "question_selection_revision >= 1",
+            name="ck_assessment_attempt_question_selection_revision",
+        ),
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

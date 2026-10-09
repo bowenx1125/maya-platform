@@ -315,6 +315,136 @@ def _append_event(
     db.flush()
 
 
+def persist_assessment_knowledge_update_notice(
+    db: Session,
+    *,
+    attempt: AssessmentAttempt,
+    conversation: Conversation,
+    has_questions: bool,
+) -> ConversationTurn:
+    """Persist a no-cost Teacher Knowledge update notice and fence older runs."""
+
+    if (
+        conversation.id != attempt.source_conversation_id
+        or conversation.entry_kind != "maya_team"
+        or conversation.origin != "published_course_team"
+        or attempt.status not in {"in_progress", "paused"}
+    ):
+        raise conflict("assessment_attempt_inactive", "This assessment is no longer active.")
+    notice_id = str(
+        uuid5(
+            UUID(attempt.id),
+            f"knowledge-update-notice:{attempt.question_selection_revision}",
+        )
+    )
+    existing = db.get(ConversationTurn, notice_id)
+    if existing is not None:
+        if existing.conversation_id != conversation.id:
+            raise conflict("assessment_state_invalid", "The Knowledge update notice is invalid.")
+        return existing
+
+    participants = db.scalars(
+        select(ConversationParticipant)
+        .where(ConversationParticipant.conversation_id == conversation.id)
+        .order_by(ConversationParticipant.position)
+    ).all()
+    leader = next((participant for participant in participants if participant.is_leader), None)
+    if leader is None:
+        raise not_found()
+
+    now = datetime.now(UTC)
+    stale_turns = db.scalars(
+        select(ConversationTurn).where(
+            ConversationTurn.conversation_id == conversation.id,
+            ConversationTurn.state.in_(("pending", "paused")),
+        )
+    ).all()
+    for stale_turn in stale_turns:
+        stale_results = db.scalars(
+            select(TeamTurnResult).where(
+                TeamTurnResult.turn_id == stale_turn.id,
+                TeamTurnResult.state.in_(("pending", "running")),
+            )
+        ).all()
+        for result in stale_results:
+            result.state = "failed"
+            result.safe_error_code = "assessment_knowledge_updated"
+            result.completed_at = now
+            _append_event(db, stale_turn, "member_result", result.id)
+        stale_turn.state = "failed"
+        stale_turn.safe_error_code = "assessment_knowledge_updated"
+        stale_turn.claim_token = str(uuid4())
+        if conversation.active_request_id == stale_turn.id:
+            conversation.active_request_id = None
+        _append_event(db, stale_turn, "turn_done")
+
+    position = (
+        max(
+            conversation.revision,
+            int(
+                db.scalar(
+                    select(func.coalesce(func.max(ConversationTurn.position), 0)).where(
+                        ConversationTurn.conversation_id == conversation.id
+                    )
+                )
+                or 0
+            ),
+        )
+        + 1
+    )
+    conversation.revision = position
+    message = "老师已更改当前回合的 Knowledge，请重新答题。"
+    if not has_questions:
+        message += " 当前没有可作答题，请等待老师补充后再继续。"
+    routing = TeamRouting(mode="selected", participant_ids=[UUID(leader.id)])
+    claim_token = str(uuid5(UUID(notice_id), "knowledge-update-notice"))
+    request_hash = hashlib.sha256(
+        _canonical(
+            {
+                "attempt_id": attempt.id,
+                "question_selection_revision": attempt.question_selection_revision,
+                "message": message,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    turn = ConversationTurn(
+        id=notice_id,
+        conversation_id=conversation.id,
+        position=position,
+        user_text="",
+        assistant_text=None,
+        sources_json="[]",
+        mode="mock",
+        state="ready",
+        safe_error_code=None,
+        routing_json=_canonical(routing.model_dump(mode="json")),
+        request_hash=request_hash,
+        claim_token=claim_token,
+        created_at=now,
+    )
+    db.add(turn)
+    db.flush()
+    result = TeamTurnResult(
+        id=str(uuid5(UUID(notice_id), leader.id)),
+        turn_id=notice_id,
+        conversation_id=conversation.id,
+        participant_id=leader.id,
+        ordinal=0,
+        state="ready",
+        assistant_text=message,
+        sources_json="[]",
+        safe_error_code=None,
+        created_at=now,
+        completed_at=now,
+    )
+    db.add(result)
+    db.flush()
+    _append_event(db, turn, "turn_started")
+    _append_event(db, turn, "member_result", result.id)
+    _append_event(db, turn, "turn_done")
+    return turn
+
+
 def claim_team_turn(
     db: Session,
     settings: Settings,
@@ -649,16 +779,36 @@ def team_history(
     db: Session, conversation_id: str, before_position: int
 ) -> tuple[dict[str, str], ...]:
     history: list[dict[str, str]] = []
-    turns = db.scalars(
-        select(ConversationTurn)
+    active_attempt = db.scalar(
+        select(AssessmentAttempt)
         .where(
-            ConversationTurn.conversation_id == conversation_id,
-            ConversationTurn.position < before_position,
+            AssessmentAttempt.source_conversation_id == conversation_id,
+            AssessmentAttempt.status.in_(("in_progress", "paused")),
         )
-        .order_by(ConversationTurn.position, ConversationTurn.id)
+        .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id.desc())
+        .limit(1)
     )
+    first_position: int | None = None
+    if active_attempt is not None:
+        notice_id = str(
+            uuid5(
+                UUID(active_attempt.id),
+                f"knowledge-update-notice:{active_attempt.question_selection_revision}",
+            )
+        )
+        notice = db.get(ConversationTurn, notice_id)
+        if notice is not None and notice.conversation_id == conversation_id:
+            first_position = notice.position
+    statement = select(ConversationTurn).where(
+        ConversationTurn.conversation_id == conversation_id,
+        ConversationTurn.position < before_position,
+    )
+    if first_position is not None:
+        statement = statement.where(ConversationTurn.position >= first_position)
+    turns = db.scalars(statement.order_by(ConversationTurn.position, ConversationTurn.id))
     for turn in turns:
-        history.append({"role": "user", "content": turn.user_text})
+        if turn.user_text:
+            history.append({"role": "user", "content": turn.user_text})
         rows = db.execute(
             select(TeamTurnResult, ConversationParticipant)
             .join(

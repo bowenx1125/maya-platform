@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, not_found
-from app.core.models import Agent, AgentVersion, CourseMember, KnowledgeChunk, KnowledgeSnapshot
+from app.core.models import Agent, AgentVersion, KnowledgeChunk, KnowledgeSnapshot
 from app.modules.agents.markdown import markdown_hash
 from app.modules.debates.playback.generation_adapter import SqlSnapshotSearch
 from app.modules.knowledge.ports import VectorMatch
@@ -25,17 +25,11 @@ from app.modules.knowledge.providers import (
     persisted_snapshot_identity,
 )
 from app.modules.knowledge.providers.query_manifest import ensure_real_query_export_manifest
-from app.modules.knowledge_sets.models import (
-    KnowledgeAsset,
-    KnowledgeAssetVersion,
-    KnowledgeAssetVersionSource,
-    KnowledgeSet,
-    KnowledgeSetSource,
-)
-from app.modules.knowledge_sets.service import _student_content
+from app.modules.knowledge_sets.service import runtime_knowledge_projection
 from app.providers.control import validate_provider_preflight
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider
+from app.providers.standing_consent import standing_consent_enabled
 
 from .models import Conversation, ConversationParticipant
 from .schemas import ChatSource
@@ -106,6 +100,7 @@ def _team_query_embeddings(
         manifest=plan.manifest,
         selected_binding_ids=selected_binding_ids,
         claim_token=claim_token,
+        operator_consent=standing_consent_enabled(settings),
     )
     # The control adapter's sending fence reads the durable confirmation and
     # binding through a separate connection, so commit them before reserving.
@@ -204,53 +199,24 @@ def load_member_context(
     set_ids = tuple(
         dict.fromkeys((*member.own_knowledge_set_ids, *selection.shared_knowledge_set_ids))
     )
-    actor_role = db.scalar(
-        select(CourseMember.role).where(
-            CourseMember.course_id == row.course_id, CourseMember.user_id == row.user_id
-        )
-    )
-    if actor_role is None:
-        raise not_found()
+    knowledge_sets: list[dict[str, Any]] = []
     assets: list[dict[str, Any]] = []
     for set_id in set_ids:
-        set_row = db.get(KnowledgeSet, set_id)
-        if set_row is None:
-            raise not_found()
-        current_assets = db.execute(
-            select(KnowledgeAsset, KnowledgeAssetVersion)
-            .join(
-                KnowledgeAssetVersion,
-                (KnowledgeAssetVersion.asset_id == KnowledgeAsset.id)
-                & (KnowledgeAssetVersion.version_seq == KnowledgeAsset.current_version_seq),
-            )
-            .where(KnowledgeAsset.knowledge_set_id == set_id)
-            .order_by(KnowledgeAsset.created_at, KnowledgeAsset.id)
+        projection = runtime_knowledge_projection(
+            db,
+            set_id,
+            row.user_id,
+            execution_owner_user_id=selection.owner_user_id,
         )
-        for asset, asset_version in current_assets:
-            if asset_version.set_authorization_epoch != set_row.authorization_epoch:
-                raise not_found()
-            for reference in db.scalars(
-                select(KnowledgeAssetVersionSource).where(
-                    KnowledgeAssetVersionSource.asset_version_id == asset_version.id
-                )
-            ):
-                binding = db.get(KnowledgeSetSource, reference.source_binding_id)
-                if (
-                    binding is None
-                    or not binding.is_active
-                    or binding.knowledge_set_id != set_id
-                    or binding.document_id != reference.document_id
-                    or binding.stored_file_id != reference.stored_file_id
-                    or binding.source_content_hash != reference.source_content_hash
-                    or binding.source_file_sha256 != reference.source_file_sha256
-                    or binding.source_authorization_epoch != reference.source_authorization_epoch
-                ):
-                    raise not_found()
-            payload = json.loads(asset_version.content_json)
-            if actor_role != "teacher":
-                payload = _student_content(payload).model_dump(mode="json")
-            assets.append(
-                {"asset_id": asset.id, "version_id": asset_version.id, "content": payload}
+        set_assets = list(projection.assets)
+        assets.extend(set_assets)
+        if projection.canonical_markdown is not None or set_assets:
+            knowledge_sets.append(
+                {
+                    "canonical_set_id": set_id,
+                    "markdown": projection.canonical_markdown,
+                    "assets": set_assets,
+                }
             )
     sources: tuple[ChatSource, ...] = ()
     if participant.snapshot_id is not None:
@@ -307,6 +273,7 @@ def load_member_context(
     knowledge_json = json.dumps(
         {
             "raw_evidence": [source.model_dump(mode="json") for source in sources],
+            "knowledge_sets": knowledge_sets,
             "knowledge_assets": assets,
         },
         ensure_ascii=False,

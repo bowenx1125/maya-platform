@@ -71,6 +71,7 @@ from app.providers.control import (
 )
 from app.providers.llm_price_card import LLM_RESERVED_OUTPUT_TOKEN_CAP
 from app.providers.llm_privacy import LLM_ANONYMOUS_BARRAGE_FIELD_CLASS
+from app.providers.standing_consent import standing_consent_enabled
 
 from .models import (
     BarrageInsightAssignment,
@@ -2418,15 +2419,12 @@ def _standing_report_consent(
     """Confirm one report disclosure under the operator's standing consent.
 
     The same owner decision recorded for debate turns, and the same limits: it
-    only applies while DEMO_MODE and DEMO_AUTO_CONFIRM_PROVIDER are both on,
-    every check that guards a hand confirmation still runs, and a refusal still
-    parks the report. It is standing consent, not an absence of consent.
+    only applies under the operator's standing consent, every check that guards
+    a hand confirmation still runs, and a refusal still parks the report. It is
+    standing consent, not an absence of consent.
     """
 
-    settings = get_settings()
-    if not getattr(settings, "demo_mode", False):
-        return False
-    if not getattr(settings, "demo_auto_confirm_provider", False):
+    if not standing_consent_enabled(get_settings()):
         return False
     get_manifest_id = getattr(runtime.repository, "get_export_manifest_id", None)
     get_confirmation = getattr(runtime.repository, "get_export_confirmation", None)

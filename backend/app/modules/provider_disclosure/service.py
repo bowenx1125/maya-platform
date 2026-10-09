@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -73,6 +74,8 @@ from .schemas import (
     ProviderDataCallReportManifestSummaryV1,
 )
 
+LOGGER = logging.getLogger(__name__)
+
 PROVIDER_DISCLOSURE_VERSION = "ProviderDataCallV1"
 SUPPLIER_DISPLAY_NAME = "Alibaba Cloud Model Studio"
 STORAGE_FACT = "The supplier stores call data as required by applicable law."
@@ -111,6 +114,7 @@ def confirm_chat_manifest_from_standing_grant(
     turn_id: str,
     claim_revision: int | None = None,
     current_policy_hash: str | None = None,
+    operator_consent: bool = False,
 ) -> bool:
     """Persist exact Chat consent under the current operation's course grant."""
 
@@ -121,6 +125,7 @@ def confirm_chat_manifest_from_standing_grant(
         turn_id=turn_id,
         claim_revision=claim_revision,
         current_policy_hash=current_policy_hash,
+        operator_consent=operator_consent,
     )
 
 
@@ -2026,6 +2031,63 @@ class SqlAlchemyProviderDisclosureStore:
                 return grant
         return None
 
+    def _operator_chat_grant(
+        self,
+        *,
+        course_id: str,
+        provider_operation: str,
+        policy_hash: str,
+        field_classes: tuple[str, ...],
+    ) -> Any | None:
+        """Record the operator's standing consent as the course's Chat grant.
+
+        The grant table binds consent to an active course teacher, so the
+        operator's decision is recorded on that teacher's behalf; the exact
+        per-turn binding and every later currency check stay unchanged.
+        """
+
+        from app.core.models import User
+        from app.modules.workspace.models import ChatProviderStandingGrant
+
+        teacher_id = self.db.scalar(
+            select(CourseMember.user_id)
+            .join(User, User.id == CourseMember.user_id)
+            .where(
+                CourseMember.course_id == course_id,
+                CourseMember.role == "teacher",
+                User.status == "active",
+            )
+            .order_by(CourseMember.user_id)
+            .limit(1)
+        )
+        if teacher_id is None:
+            return None
+        classes = tuple(sorted(set(field_classes)))
+        self.db.add(
+            ChatProviderStandingGrant(
+                id=str(uuid4()),
+                course_id=course_id,
+                provider_operation=provider_operation,
+                policy_hash=policy_hash,
+                field_classes_json=json.dumps(classes, separators=(",", ":")),
+                field_classes_hash=chat_field_classes_hash(classes),
+                confirmed_by_user_id=teacher_id,
+                confirmed_at=datetime.now(UTC),
+                revoked_at=None,
+            )
+        )
+        self.db.flush()
+        LOGGER.warning(
+            "Chat Provider grant recorded by standing operator consent operation=%s",
+            provider_operation,
+        )
+        return self._active_chat_grant(
+            course_id=course_id,
+            provider_operation=provider_operation,
+            policy_hash=policy_hash,
+            field_classes=field_classes,
+        )
+
     def bind_chat_standing_confirmation(self, user_id: str, manifest_hash: str) -> None:
         from app.modules.workspace.models import ChatProviderStandingGrant
 
@@ -2151,6 +2213,7 @@ class SqlAlchemyProviderDisclosureStore:
         turn_id: str,
         claim_revision: int | None,
         current_policy_hash: str | None,
+        operator_consent: bool = False,
     ) -> bool:
         from app.core.models import User
         from app.modules.workspace.models import (
@@ -2337,6 +2400,13 @@ class SqlAlchemyProviderDisclosureStore:
             policy_hash=manifest.policy_hash,
             field_classes=fields,
         )
+        if grant is None and operator_consent:
+            grant = self._operator_chat_grant(
+                course_id=conversation.course_id,
+                provider_operation=provider_operation,
+                policy_hash=manifest.policy_hash,
+                field_classes=fields,
+            )
         if grant is None:
             return False
         if self.get_export_confirmation(manifest.manifest_hash) is not None:

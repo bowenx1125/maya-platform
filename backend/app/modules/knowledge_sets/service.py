@@ -89,6 +89,13 @@ class SetAccess:
         return self.role == "owner"
 
 
+@dataclass(frozen=True)
+class RuntimeKnowledgeProjection:
+    canonical_markdown: str | None
+    assets: tuple[dict[str, Any], ...]
+    full_access: bool
+
+
 def now_utc() -> datetime:
     return datetime.now(UTC)
 
@@ -103,6 +110,18 @@ def _canonical_json(value: Any) -> str:
 
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _begin_knowledge_write_transaction(db: Session) -> None:
+    """Acquire SQLite's writer lock unless this Session already owns it."""
+
+    if db.get_bind().dialect.name != "sqlite":
+        return
+    from app.modules.knowledge_sets.generation import _start_immediate
+
+    connection = db.connection().connection.driver_connection
+    if connection is None or not connection.in_transaction:
+        _start_immediate(db)
 
 
 def save_knowledge_markdown_version(
@@ -205,6 +224,15 @@ def save_knowledge_markdown_version(
         )
         if available_version_ids != expected_version_ids:
             raise invalid_state("A projected Knowledge Asset version is unavailable.")
+    from app.modules.learning.attempts import (
+        invalidate_assessment_attempts_for_knowledge_update,
+    )
+
+    invalidate_assessment_attempts_for_knowledge_update(
+        db,
+        knowledge_set_id=set_id,
+        actor_user_id=actor_user_id,
+    )
     return row
 
 
@@ -215,8 +243,7 @@ def _clean_display_name(value: str) -> str:
     return result
 
 
-def _set_role(db: Session, context: AuthContext, row: KnowledgeSet) -> SetRole | None:
-    user_id = context.user.id
+def _set_role_for_user(db: Session, user_id: str, row: KnowledgeSet) -> SetRole | None:
     if row.deleted_at is not None:
         return None
     if course_member_role(db, user_id, row.course_id) is None:
@@ -234,6 +261,10 @@ def _set_role(db: Session, context: AuthContext, row: KnowledgeSet) -> SetRole |
         return None
     # A course Teacher is read-only; a group member sees a student projection.
     return cast(SetRole, group_role)
+
+
+def _set_role(db: Session, context: AuthContext, row: KnowledgeSet) -> SetRole | None:
+    return _set_role_for_user(db, context.user.id, row)
 
 
 def _source_matches_current(
@@ -283,7 +314,7 @@ def _source_matches_current(
 
 
 def _set_sources_readable(
-    db: Session, context: AuthContext, row: KnowledgeSet, role: SetRole
+    db: Session, context: AuthContext | str, row: KnowledgeSet, role: SetRole
 ) -> bool:
     if role == "owner":
         return True
@@ -470,17 +501,35 @@ def _markdown_asset_version_ids(version: KnowledgeSetMarkdownVersion) -> list[st
 
 def _student_projection_is_available(
     db: Session,
-    context: AuthContext,
+    context: AuthContext | str,
     set_row: KnowledgeSet,
     version: KnowledgeSetMarkdownVersion,
+    *,
+    source_role: SetRole = "student",
 ) -> bool:
     """Require trusted structured provenance and current ACL for student Markdown."""
 
     if version.origin not in {"ai", "legacy", "manual"} or not version.student_projection_markdown:
         return False
-    asset_version_ids = _markdown_asset_version_ids(version)
-    if not asset_version_ids or len(asset_version_ids) != len(set(asset_version_ids)):
+    if not _student_markdown_has_body(version.student_projection_markdown):
         return False
+    asset_version_ids = _markdown_asset_version_ids(version)
+    if len(asset_version_ids) != len(set(asset_version_ids)):
+        return False
+    if not asset_version_ids:
+        if version.origin != "manual" or version.source_manifest_hash is not None:
+            return False
+        # A hand-authored document with no structured source history can still
+        # be safely projected. Sets with source history need asset provenance
+        # or a generation receipt before derived text is visible to Students.
+        return (
+            db.scalar(
+                select(KnowledgeSetSource.id)
+                .where(KnowledgeSetSource.knowledge_set_id == set_row.id)
+                .limit(1)
+            )
+            is None
+        )
     versions = db.scalars(
         select(KnowledgeAssetVersion).where(KnowledgeAssetVersion.id.in_(asset_version_ids))
     ).all()
@@ -491,15 +540,25 @@ def _student_projection_is_available(
         if (
             asset is None
             or asset.knowledge_set_id != set_row.id
-            or not _asset_version_sources_readable(db, context, set_row, "student", asset_version)
+            or not _asset_version_sources_readable(db, context, set_row, source_role, asset_version)
         ):
             return False
     return True
 
 
+def _student_markdown_has_body(markdown: str) -> bool:
+    setext = re.compile(r"^\s{0,3}(?:=+|-+)\s*$")
+    for line in markdown.splitlines():
+        value = line.strip()
+        if not value or re.match(r"^#{1,6}\s+", value) or setext.fullmatch(value):
+            continue
+        return True
+    return False
+
+
 def _markdown_sources_readable_to_teacher(
     db: Session,
-    context: AuthContext,
+    context: AuthContext | str,
     set_row: KnowledgeSet,
     version: KnowledgeSetMarkdownVersion,
 ) -> bool:
@@ -573,7 +632,7 @@ def _markdown_sources_readable_to_teacher(
 
 def _generation_run_sources_readable(
     db: Session,
-    context: AuthContext,
+    context: AuthContext | str,
     set_row: KnowledgeSet,
     run: KnowledgeGenerationRun,
 ) -> bool:
@@ -649,16 +708,24 @@ def _latest_generation_for_set(db: Session, set_id: str) -> KnowledgeGenerationR
     )
 
 
-def _visible_source_agents(db: Session, context: AuthContext, set_row: KnowledgeSet) -> list[Agent]:
-    run = _latest_generation_for_set(db, set_row.id)
-    candidates = [run.agent_id] if run is not None else []
-    candidates.extend(
-        db.scalars(
-            select(AgentKnowledgeSet.agent_id)
-            .where(AgentKnowledgeSet.knowledge_set_id == set_row.id)
-            .order_by(AgentKnowledgeSet.order_index, AgentKnowledgeSet.agent_id)
-        ).all()
+def knowledge_set_has_generation_history(db: Session, set_row: KnowledgeSet) -> bool:
+    return (
+        set_row.generation_intent_seq > 0
+        or db.scalar(
+            select(KnowledgeGenerationRun.id)
+            .where(KnowledgeGenerationRun.knowledge_set_id == set_row.id)
+            .limit(1)
+        )
+        is not None
     )
+
+
+def _visible_source_agents(db: Session, context: AuthContext, set_row: KnowledgeSet) -> list[Agent]:
+    candidates = db.scalars(
+        select(AgentKnowledgeSet.agent_id)
+        .where(AgentKnowledgeSet.knowledge_set_id == set_row.id)
+        .order_by(AgentKnowledgeSet.order_index, AgentKnowledgeSet.agent_id)
+    ).all()
     visible: list[Agent] = []
     for agent_id in dict.fromkeys(candidates):
         try:
@@ -747,21 +814,20 @@ def list_brainform_knowledge(
                 generation_state=cast(Any, generation_state),
                 safe_error_code=safe_error_code,
             )
-            # Emit every visible Agent reference to this canonical document.
-            # If an Agent has several Sets, its generating Set sorts first and
-            # the first readable canonical document becomes its stable entry.
+            # Keep every readable Agent/Set pair; the generator sorts first
+            # only within the Set it originally generated.
             priority = 0 if run is not None and run.agent_id == source_agent.id else 1
             candidates.append((priority, row))
     candidates.sort(
         key=lambda entry: (entry[0], str(entry[1].agent_id), str(entry[1].canonical_set_id))
     )
-    seen_agents: set[str] = set()
+    seen_relations: set[tuple[str, str]] = set()
     result: list[BrainformKnowledgeSummary] = []
     for _priority, row in candidates:
-        agent_id = str(row.agent_id)
-        if agent_id in seen_agents:
+        relation = (str(row.canonical_set_id), str(row.agent_id))
+        if relation in seen_relations:
             continue
-        seen_agents.add(agent_id)
+        seen_relations.add(relation)
         result.append(row)
     return result
 
@@ -805,6 +871,160 @@ def get_brainform_markdown(
         can_read=True,
         can_edit=access.can_edit,
         created_at=version.created_at,
+    )
+
+
+def runtime_knowledge_projection(
+    db: Session,
+    set_id: str,
+    actor_user_id: str,
+    *,
+    execution_owner_user_id: str | None = None,
+) -> RuntimeKnowledgeProjection:
+    """Load current canonical content under direct read or a frozen Team grant.
+
+    Team callers pass the owner of the already-validated frozen selection. That
+    identity only rechecks the resource grant; the returned audience still
+    follows the current actor's direct read role and otherwise uses the trusted
+    student projection.
+    """
+
+    set_row = db.get(KnowledgeSet, set_id)
+    if set_row is None or set_row.deleted_at is not None:
+        raise not_found()
+    actor_role = _set_role_for_user(db, actor_user_id, set_row)
+    source_user_id = actor_user_id
+    source_role = actor_role
+    if source_role is None and execution_owner_user_id is not None:
+        source_user_id = execution_owner_user_id
+        source_role = _set_role_for_user(db, source_user_id, set_row)
+    if source_role is None or not _set_sources_readable(db, source_user_id, set_row, source_role):
+        raise not_found()
+
+    full_access = actor_role in {"owner", "teacher"}
+    markdown_version = _current_markdown_version(db, set_row)
+    if markdown_version is not None:
+        if full_access:
+            if actor_role == "teacher" and not _markdown_sources_readable_to_teacher(
+                db, actor_user_id, set_row, markdown_version
+            ):
+                raise not_found()
+            markdown = markdown_version.markdown
+            content_is_full = True
+        elif _student_projection_is_available(
+            db,
+            source_user_id,
+            set_row,
+            markdown_version,
+            source_role=source_role,
+        ):
+            markdown = markdown_version.student_projection_markdown
+            content_is_full = False
+        else:
+            # A present canonical version is authoritative even when its
+            # student-safe projection cannot be proven. Never fall back to
+            # independently advanced Asset heads in that case.
+            return RuntimeKnowledgeProjection(canonical_markdown="", assets=(), full_access=False)
+
+        version_ids = _markdown_asset_version_ids(markdown_version)
+        if len(version_ids) != len(set(version_ids)):
+            if not content_is_full:
+                return RuntimeKnowledgeProjection(
+                    canonical_markdown="", assets=(), full_access=False
+                )
+            version_ids = []
+        versions = (
+            db.scalars(
+                select(KnowledgeAssetVersion).where(KnowledgeAssetVersion.id.in_(version_ids))
+            ).all()
+            if version_ids
+            else []
+        )
+        by_id = {version.id: version for version in versions}
+        if set(by_id) != set(version_ids):
+            if not content_is_full:
+                return RuntimeKnowledgeProjection(
+                    canonical_markdown="", assets=(), full_access=False
+                )
+            version_ids = []
+        assets: list[dict[str, Any]] = []
+        for version_id in version_ids:
+            asset_version = by_id[version_id]
+            asset = db.get(KnowledgeAsset, asset_version.asset_id)
+            if asset is None or asset.knowledge_set_id != set_row.id:
+                if not content_is_full:
+                    return RuntimeKnowledgeProjection(
+                        canonical_markdown="", assets=(), full_access=False
+                    )
+                continue
+            content = json.loads(asset_version.content_json)
+            if not content_is_full:
+                content = _student_content(content).model_dump(mode="json")
+            assets.append(
+                {
+                    "asset_id": asset.id,
+                    "version_id": asset_version.id,
+                    "content": content,
+                }
+            )
+        return RuntimeKnowledgeProjection(
+            canonical_markdown=markdown,
+            assets=tuple(assets),
+            full_access=full_access,
+        )
+
+    has_generation_history = knowledge_set_has_generation_history(db, set_row)
+    current_assets = db.execute(
+        select(KnowledgeAsset, KnowledgeAssetVersion)
+        .join(
+            KnowledgeAssetVersion,
+            (KnowledgeAssetVersion.asset_id == KnowledgeAsset.id)
+            & (KnowledgeAssetVersion.version_seq == KnowledgeAsset.current_version_seq),
+        )
+        .where(KnowledgeAsset.knowledge_set_id == set_row.id)
+        .order_by(KnowledgeAsset.created_at, KnowledgeAsset.id)
+    )
+    assets = []
+    for asset, current_version in current_assets:
+        fallback_version: KnowledgeAssetVersion | None = current_version
+        if has_generation_history and (
+            current_version.generation_job_id is not None or current_version.origin == "ai"
+        ):
+            # Per-item AI versions stay durable for history, but do not become
+            # runtime content until a complete canonical Markdown head points
+            # at them. Preserve an earlier manually authored head if present.
+            fallback_version = db.scalar(
+                select(KnowledgeAssetVersion)
+                .where(
+                    KnowledgeAssetVersion.asset_id == asset.id,
+                    KnowledgeAssetVersion.generation_job_id.is_(None),
+                    KnowledgeAssetVersion.origin.in_(("manual", "legacy")),
+                )
+                .order_by(KnowledgeAssetVersion.version_seq.desc())
+                .limit(1)
+            )
+            if fallback_version is None:
+                continue
+        if fallback_version is None:
+            continue
+        if not _asset_version_sources_readable(
+            db, source_user_id, set_row, source_role, fallback_version
+        ):
+            raise not_found()
+        content = json.loads(fallback_version.content_json)
+        if not full_access:
+            content = _student_content(content).model_dump(mode="json")
+        assets.append(
+            {
+                "asset_id": asset.id,
+                "version_id": fallback_version.id,
+                "content": content,
+            }
+        )
+    return RuntimeKnowledgeProjection(
+        canonical_markdown=None,
+        assets=tuple(assets),
+        full_access=full_access,
     )
 
 
@@ -1029,16 +1249,171 @@ def _question_version_references(
     return references
 
 
-def _safe_question_markdown(questions: list[QuestionContent]) -> str:
-    if not questions:
-        return ""
-    blocks: list[str] = []
-    for index, question in enumerate(questions, start=1):
-        quoted_prompt = "\n".join(
-            "> " + html.escape(line, quote=False) for line in question.prompt.splitlines()
+_DANGEROUS_HTML_OPEN = re.compile(
+    r"<\s*(?P<tag>script|style|iframe|object|embed|svg|math|form|textarea|button)\b",
+    re.IGNORECASE,
+)
+_STUDENT_HIDDEN_HEADING_TITLES = frozenset(
+    {"rubric", "reference answer", "private answer", "model answer", "answer key"}
+)
+
+
+def _student_safe_markdown(markdown: str, parsed_questions: list[QuestionContent] | None) -> str:
+    """Keep authored notes while removing answer/rubric and unsafe HTML sections."""
+
+    lines = markdown.splitlines()
+    headings = _markdown_headings(markdown)
+    removed_lines: set[int] = set()
+
+    def section_end(start: int, level: int) -> int:
+        return next(
+            (
+                index
+                for index, next_level, _title in headings
+                if index > start and next_level <= level
+            ),
+            len(lines),
         )
-        blocks.append(f"### Question {index}\n\n{quoted_prompt}")
-    return "## Questions\n\n" + "\n\n".join(blocks)
+
+    def remove_range(start: int, end: int) -> None:
+        removed_lines.update(range(start, end))
+
+    def is_sensitive_heading(title: str) -> bool:
+        return title.casefold().strip() in _STUDENT_HIDDEN_HEADING_TITLES
+
+    def question_section_end(start: int) -> int:
+        for index, level, title in headings:
+            if index <= start:
+                continue
+            if level == 2:
+                return index
+            if level == 1 and not is_sensitive_heading(title):
+                return index
+        return len(lines)
+
+    question_sections = [
+        (index, question_section_end(index))
+        for index, level, title in headings
+        if level == 2 and title.casefold() == "questions"
+    ]
+    sensitive_headings = [
+        (index, level)
+        for index, level, title in headings
+        if level >= 1 and is_sensitive_heading(title)
+    ]
+
+    if parsed_questions is None:
+        for start, end in question_sections:
+            remove_range(start, end)
+        for index, level in sensitive_headings:
+            if any(start <= index < end for start, end in question_sections):
+                continue
+            remove_range(index, section_end(index, level))
+        if not question_sections:
+            for index, level, _title in headings:
+                if level != 2:
+                    continue
+                end = section_end(index, level)
+                descendants = [
+                    (child_level, child_title)
+                    for child_index, child_level, child_title in headings
+                    if index < child_index < end
+                ]
+                has_sensitive = any(
+                    is_sensitive_heading(child_title) for _level, child_title in descendants
+                )
+                has_question = any(child_level == 3 for child_level, _child_title in descendants)
+                if has_sensitive and has_question:
+                    remove_range(index, end)
+    elif parsed_questions:
+        for index, level in sensitive_headings:
+            if any(start <= index < end for start, end in question_sections):
+                remove_range(index, section_end(index, level))
+    else:
+        for start, end in question_sections:
+            question_descendants = [
+                (index, level, title) for index, level, title in headings if start < index < end
+            ]
+            question_like = any(
+                _QUESTION_HEADING.fullmatch(title) is not None or is_sensitive_heading(title)
+                for _index, _level, title in question_descendants
+            )
+            if question_like:
+                remove_range(start, end)
+        if not question_sections:
+            for index, level, _title in headings:
+                if level != 2:
+                    continue
+                end = section_end(index, level)
+                descendants = [
+                    (child_level, child_title)
+                    for child_index, child_level, child_title in headings
+                    if index < child_index < end
+                ]
+                has_sensitive = any(
+                    is_sensitive_heading(child_title) for _level, child_title in descendants
+                )
+                has_question = any(child_level == 3 for child_level, _child_title in descendants)
+                if has_sensitive and has_question:
+                    remove_range(index, end)
+
+    sanitized_lines: list[str] = []
+    fence: tuple[str, int] | None = None
+    hidden_html_tag: str | None = None
+    for line_index, line in enumerate(lines):
+        if line_index in removed_lines:
+            sanitized_lines.append("")
+            continue
+        fence_match = re.match(r"^\s{0,3}(`{3,}|~{3,})", line)
+        if fence is not None:
+            sanitized_lines.append(line)
+            if (
+                fence_match
+                and fence_match.group(1)[0] == fence[0]
+                and len(fence_match.group(1)) >= fence[1]
+                and line[fence_match.end() :].strip() == ""
+            ):
+                fence = None
+            continue
+        if fence_match:
+            sanitized_lines.append(line)
+            marker = fence_match.group(1)
+            fence = (marker[0], len(marker))
+            continue
+
+        remaining = line
+        visible = ""
+        while remaining:
+            if hidden_html_tag is not None:
+                closing = re.search(
+                    rf"</\s*{re.escape(hidden_html_tag)}\s*>", remaining, re.IGNORECASE
+                )
+                if closing is None:
+                    remaining = ""
+                    break
+                remaining = remaining[closing.end() :]
+                hidden_html_tag = None
+                continue
+            opening = _DANGEROUS_HTML_OPEN.search(remaining)
+            if opening is None:
+                visible += remaining
+                break
+            visible += remaining[: opening.start()]
+            hidden_html_tag = opening.group("tag").casefold()
+            closing = re.search(
+                rf"</\s*{re.escape(hidden_html_tag)}\s*>",
+                remaining[opening.end() :],
+                re.IGNORECASE,
+            )
+            if closing is None:
+                remaining = ""
+            else:
+                remaining = remaining[opening.end() + closing.end() :]
+                hidden_html_tag = None
+        sanitized_lines.append(html.escape(visible, quote=False))
+
+    result = "\n".join(sanitized_lines).strip()
+    return result if _student_markdown_has_body(result) else ""
 
 
 def _without_question_section(markdown: str) -> str:
@@ -1087,8 +1462,10 @@ def _save_manual_question_projection(
     actor_user_id: str,
 ) -> tuple[list[str], str]:
     parsed = _parse_markdown_questions(markdown)
+    if parsed is None:
+        return [], _student_safe_markdown(markdown, parsed)
     if not parsed:
-        return [], ""
+        return [], _student_safe_markdown(markdown, parsed)
 
     previous = _current_question_projection(db, set_row, current_markdown)
     version_ids: list[str] = []
@@ -1154,7 +1531,7 @@ def _save_manual_question_projection(
         )
         version_ids.append(version.id)
         projected_questions.append(parsed_question)
-    return version_ids, _safe_question_markdown(projected_questions)
+    return version_ids, _student_safe_markdown(markdown, parsed)
 
 
 def save_brainform_markdown(
@@ -1163,6 +1540,7 @@ def save_brainform_markdown(
     set_id: str,
     request: SaveKnowledgeMarkdownRequest,
 ) -> KnowledgeMarkdownDocument:
+    _begin_knowledge_write_transaction(db)
     access = _editable_access(db, context, set_id)
     set_row = access.knowledge_set
     current_markdown = _current_markdown_version(db, set_row)
@@ -1229,17 +1607,25 @@ def enqueue_brainform_regeneration(
     set_id: str,
     action_id: str,
 ) -> RegenerateKnowledgeResponse:
+    from app.modules.knowledge_sets.generation import (
+        enqueue_generation_for_existing_set,
+    )
+
+    # Idempotency claims are committed separately. Begin the domain writer
+    # transaction before the first access read so concurrent business-action
+    # aliases are serialized with their GenerationRun and intent writes.
+    _begin_knowledge_write_transaction(db)
     _editable_access(db, context, set_id)
-    from app.modules.knowledge_sets.generation import enqueue_generation_for_existing_set
 
     queued = enqueue_generation_for_existing_set(
         db,
         set_id=set_id,
         owner_user_id=context.user.id,
         action_id=action_id,
+        resume_blocked_unconfirmed=True,
     )
     return RegenerateKnowledgeResponse(
-        action_id=UUID(queued.run.action_id),
+        action_id=UUID(queued.action_id or queued.run.action_id),
         agent_id=_uid(queued.run.agent_id),
         canonical_set_id=_uid(queued.run.knowledge_set_id),
         run_id=_uid(queued.run.id),
@@ -2531,6 +2917,31 @@ def get_agent_knowledge_sets(
             continue
         sets.append(_summary(db, context, row, can_edit=role == "owner"))
     return agent.metadata_revision, sets
+
+
+def get_agent_runtime_knowledge(
+    db: Session, context: AuthContext, agent_id: str
+) -> list[dict[str, Any]]:
+    """Resolve this Agent's currently readable canonical Knowledge for one run."""
+
+    _revision, summaries = get_agent_knowledge_sets(db, context, agent_id)
+    result: list[dict[str, Any]] = []
+    for summary in summaries:
+        projection = runtime_knowledge_projection(
+            db,
+            str(summary.id),
+            context.user.id,
+        )
+        if projection.canonical_markdown is None and not projection.assets:
+            continue
+        result.append(
+            {
+                "canonical_set_id": str(summary.id),
+                "markdown": projection.canonical_markdown,
+                "assets": list(projection.assets),
+            }
+        )
+    return result
 
 
 def replace_agent_knowledge_sets(

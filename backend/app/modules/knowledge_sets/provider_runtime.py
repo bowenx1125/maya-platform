@@ -1,4 +1,4 @@
-"""One-shot DashScope Provider runtime for confirmed Knowledge generation."""
+"""One-shot DashScope Provider runtime for Teacher-intended Knowledge generation."""
 
 from __future__ import annotations
 
@@ -48,6 +48,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeSet,
     KnowledgeSetSource,
 )
+from app.modules.provider_disclosure.schemas import ProviderDataCallConfirmationRequestV1
 from app.modules.provider_disclosure.service import (
     LLM_KNOWLEDGE_OPERATION,
     ProviderDisclosureError,
@@ -784,6 +785,23 @@ def run_claimed_knowledge_generation(
         with session_factory() as db:
             disclosure = ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
             try:
+                exact_disclosure = disclosure.disclose(
+                    run.owner_user_id,
+                    manifest_ref=manifest.manifest_hash,
+                )
+                disclosure.confirm(
+                    ProviderDataCallConfirmationRequestV1(
+                        policy_hash=exact_disclosure.policy_hash,
+                        manifest_hash=exact_disclosure.manifest_hash,
+                        expected_revision=exact_disclosure.confirmation_revision,
+                    ),
+                    actor_user_id=run.owner_user_id,
+                    manifest_ref=manifest.manifest_hash,
+                )
+                # The existing disclosure API owns the exact-manifest CAS; the
+                # worker commits that record before its separate preflight and
+                # provider-ledger transactions begin.
+                db.commit()
                 disclosure.preflight(
                     actor_user_id=run.owner_user_id,
                     provider_operation=LLM_KNOWLEDGE_OPERATION,
@@ -792,8 +810,6 @@ def run_claimed_knowledge_generation(
                     manifest_ref=manifest.manifest_hash,
                 )
             except ProviderDisclosureError as exc:
-                if exc.code == "provider_confirmation_required":
-                    raise KnowledgeProviderRuntimeError("provider_confirmation_required") from exc
                 raise KnowledgeProviderRuntimeError(exc.code) from exc
 
         config = DashScopeLLMConfig(

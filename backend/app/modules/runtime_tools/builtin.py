@@ -23,6 +23,7 @@ from app.modules.learning.schemas import (
 from app.modules.learning.service import read_learning_records
 from app.modules.workspace.models import Conversation, ConversationTurn
 
+from .knowledge import knowledge_tools
 from .learning import learning_tools
 from .registry import ToolCallIdentity, ToolSpec
 from .teacher import teacher_tools
@@ -143,6 +144,7 @@ def read_memory(
 def runtime_registry() -> dict[str, ToolSpec]:
     return {
         **teacher_tools(),
+        **knowledge_tools(),
         **learning_tools(),
         "assessment_action": ToolSpec(
             "assessment_action",

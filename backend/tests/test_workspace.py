@@ -11,18 +11,24 @@ from uuid import UUID, uuid4
 import pytest
 from app.core.errors import PlatformError
 from app.core.models import (
+    Agent,
     AgentVersion,
     CourseMember,
     ProviderExportManifest,
     ProviderOperation,
     ProviderReservation,
     ProviderScopeBudget,
+    User,
 )
+from app.modules.auth.service import AuthContext
 from app.modules.debates.models import Debate, PlaybackState
 from app.modules.demo_baseline.service import BASELINE_VERSION_ID, ensure_demo_baseline
 from app.modules.interactions.service import ensure_closed_window
 from app.modules.interactions.tokens import issue_token
 from app.modules.knowledge.providers.query_embedding import QueryEmbeddingError
+from app.modules.knowledge_sets.models import AgentKnowledgeSet, KnowledgeSet
+from app.modules.knowledge_sets.schemas import SaveKnowledgeMarkdownRequest
+from app.modules.knowledge_sets.service import get_agent_runtime_knowledge, save_brainform_markdown
 from app.modules.workspace.chat import (
     _chat_sending_guard,
     _saved_chat_history,
@@ -50,6 +56,7 @@ from httpx import Response
 from sqlalchemy import delete, func, select
 
 from tests.conftest import login
+from tests.test_mayaform_team_conversations import _make_agent_version
 from tests.test_wave4_llm_adapter import _adapter
 from tests.test_wave4_llm_ledger import _valid_policy
 
@@ -467,6 +474,77 @@ def test_static_course_chat_disclosure_creates_standing_grant_before_any_student
         assert db.scalar(select(func.count()).select_from(ChatProviderStandingGrant)) == 1
         assert db.scalar(select(func.count()).select_from(ChatProviderConsentBinding)) == 1
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 1
+
+
+@pytest.mark.parametrize("operator_consent", [False, True])
+def test_operator_standing_consent_records_course_chat_grant_without_disclosure_screen(
+    workspace: Any, monkeypatch: Any, operator_consent: bool
+) -> None:
+    app, database, client = workspace
+    adapter = _adapter(None)
+    policy = replace(_valid_policy(), endpoint=adapter.config.resolved_endpoint)
+    ProviderRepository(database).save_policy_snapshot(policy)
+    app.state.settings = app.state.settings.model_copy(
+        update={
+            "llm_provider": "dashscope",
+            "llm_provider_policy_hash": policy.policy_hash,
+            "demo_mode": False,
+            "demo_auto_confirm_provider": False,
+            "provider_standing_consent": operator_consent,
+        }
+    )
+    monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
+    monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", lambda *a, **kw: [])
+    transport = Mock(
+        return_value=Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "A considered reply"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": None,
+            },
+        )
+    )
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_provider.HttpxLLMTransport.post_bytes", transport
+    )
+
+    _, student_csrf = login(client, "bowen")
+    created = client.post(
+        "/api/v1/conversations",
+        headers={"X-CSRF-Token": student_csrf},
+        json={"version_id": BASELINE_VERSION_ID},
+    ).json()
+    sent = client.post(
+        f"/api/v1/conversations/{created['id']}/messages",
+        headers={"X-CSRF-Token": student_csrf},
+        json={
+            "request_id": str(uuid4()),
+            "expected_revision": 0,
+            "message": "A private student question",
+        },
+    )
+
+    with database.session() as db:
+        grants = db.scalars(select(ChatProviderStandingGrant)).all()
+        bindings = db.scalar(select(func.count()).select_from(ChatProviderConsentBinding))
+        operations = db.scalar(select(func.count()).select_from(ProviderOperation))
+    assert sent.status_code == 200, sent.text
+    if not operator_consent:
+        assert sent.json()["turns"][0]["safe_error_code"] == "provider_confirmation_required"
+        assert transport.call_count == 0
+        assert (len(grants), bindings, operations) == (0, 0, 0)
+        return
+    assert sent.json()["turns"][0]["state"] == "ready"
+    assert transport.call_count == 1
+    assert [(grant.course_id, grant.confirmed_by_user_id) for grant in grants] == [
+        (COURSE_ID, TEACHER_ID)
+    ]
+    assert (bindings, operations) == (1, 1)
 
 
 def test_single_retrieval_uses_purpose_specific_embedding_grant(
@@ -988,8 +1066,8 @@ def test_real_chat_allows_educational_authorization_word(workspace: Any, monkeyp
     monkeypatch.setattr("app.modules.workspace.chat_provider.llm_provider", lambda _: adapter)
     monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", lambda *a, **kw: [])
 
-    def messages_with_authorization(version: Any, history: Any, sources: Any) -> Any:
-        packed, fingerprint = chat_messages(version, history, sources)
+    def messages_with_authorization(version: Any, history: Any, sources: Any, **kwargs: Any) -> Any:
+        packed, fingerprint = chat_messages(version, history, sources, **kwargs)
         packed[0]["content"] = packed[0]["content"] + "\nAuthorization is a lesson topic."
         return packed, fingerprint
 
@@ -1034,6 +1112,113 @@ def test_real_chat_allows_educational_authorization_word(workspace: Any, monkeyp
     assert turn["safe_error_code"] is None
     assert transport.call_count == 1
     assert "Authorization" in _last_wire_payload(transport)["messages"][0]["content"]
+
+
+def test_single_chat_model_input_uses_current_canonical_knowledge_version(workspace: Any) -> None:
+    _app, database, _client = workspace
+    agent_id, agent_version_id = _make_agent_version(
+        database,
+        owner_id=TEACHER_ID,
+        name="Single Chat canonical Knowledge",
+    )
+    version_one = "# Teacher notes\n\nMANUAL_NOTE_VERSION_ONE is now current.\n"
+    version_two = "# Teacher notes\n\nMANUAL_NOTE_VERSION_TWO is now current.\n"
+    with database.session() as db:
+        agent = db.get(Agent, agent_id)
+        assert agent is not None and agent.owner_user_id is not None
+        owner_user_id = agent.owner_user_id
+        owner = db.get(User, agent.owner_user_id)
+        assert owner is not None
+        context = AuthContext(
+            raw_session_token="",
+            session=None,
+            user=owner,
+            csrf_token="",
+        )
+        knowledge_set = KnowledgeSet(
+            id=str(uuid4()),
+            owner_user_id=owner.id,
+            course_id=agent.course_id,
+            group_id=None,
+            ownership_scope="personal",
+            visibility="private",
+            display_name="Single Chat dynamic Knowledge",
+            metadata_revision=0,
+            content_revision=0,
+            current_markdown_version_seq=0,
+            generation_intent_seq=0,
+            authorization_epoch=0,
+            deleted_at=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        db.add(knowledge_set)
+        db.flush()
+        current_order = db.scalar(
+            select(func.max(AgentKnowledgeSet.order_index)).where(
+                AgentKnowledgeSet.agent_id == agent_id
+            )
+        )
+        db.add(
+            AgentKnowledgeSet(
+                agent_id=agent_id,
+                knowledge_set_id=knowledge_set.id,
+                order_index=(current_order or -1) + 1,
+                created_by_user_id=owner.id,
+                created_at=datetime.now(UTC),
+            )
+        )
+        save_brainform_markdown(
+            db,
+            context,
+            knowledge_set.id,
+            SaveKnowledgeMarkdownRequest(expected_version_seq=0, markdown=version_one),
+        )
+        db.commit()
+
+    with database.session() as db:
+        agent_version = db.get(AgentVersion, agent_version_id)
+        assert agent_version is not None
+        owner = db.get(User, owner_user_id)
+        assert owner is not None
+        context = AuthContext("", None, owner, "")
+        history = [{"role": "user", "content": "Use the saved notes."}]
+        knowledge_v1 = get_agent_runtime_knowledge(db, context, agent_id)
+        messages_v1, _ = chat_messages(agent_version, history, [], canonical_knowledge=knowledge_v1)
+        payload_v1 = json.loads(messages_v1[0]["content"].split("\n", 1)[1])
+        assert payload_v1["canonical_knowledge"][0]["markdown"] == version_one
+        assert len(payload_v1["canonical_knowledge"]) == 1
+        db.commit()
+
+    with database.session() as db:
+        owner = db.get(User, owner_user_id)
+        assert owner is not None
+        context = AuthContext("", None, owner, "")
+        save_brainform_markdown(
+            db,
+            context,
+            knowledge_set.id,
+            SaveKnowledgeMarkdownRequest(expected_version_seq=1, markdown=version_two),
+        )
+        db.commit()
+
+    with database.session() as db:
+        agent_version = db.get(AgentVersion, agent_version_id)
+        owner = db.get(User, owner_user_id)
+        assert agent_version is not None and owner is not None
+        context = AuthContext("", None, owner, "")
+        knowledge_v2 = get_agent_runtime_knowledge(db, context, agent_id)
+        messages_v2, _ = chat_messages(
+            agent_version,
+            [{"role": "user", "content": "Use the saved notes."}],
+            [],
+            canonical_knowledge=knowledge_v2,
+        )
+        payload_v2 = json.loads(messages_v2[0]["content"].split("\n", 1)[1])
+        serialized_markdown = payload_v2["canonical_knowledge"][0]["markdown"]
+        assert serialized_markdown == version_two
+        assert version_one not in serialized_markdown
+        assert payload_v2["canonical_knowledge"][0]["canonical_set_id"] == knowledge_set.id
 
 
 def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
@@ -2245,6 +2430,7 @@ async def test_chat_sse_releases_claim_before_terminal_events(
         _claim_revision: int,
         message: str,
         _actor_context: Any | None = None,
+        _generation_waker: Any | None = None,
     ) -> tuple[str, list[Any], None]:
         if message == "Terminal failure":
             raise PlatformError("chat_acceptance_unknown", "Unknown outcome.", 503)

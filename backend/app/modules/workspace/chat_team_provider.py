@@ -42,6 +42,7 @@ from app.providers.factory import llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import LLM_INPUT_TOKEN_CAP, LLM_RESERVED_OUTPUT_TOKEN_CAP
 from app.providers.llm_transport import HttpxLLMTransport, LLMTransport, LLMTransportError
+from app.providers.standing_consent import standing_consent_enabled
 
 from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
 from .chat_team_sdk import TeamDispatchError
@@ -487,6 +488,7 @@ def dispatch_team_model(
             manifest=manifest,
             selected_binding_ids=selected_binding_ids,
             claim_token=request.claim_token,
+            operator_consent=standing_consent_enabled(settings),
         )
     db.commit()
     confirmation = repository.get_export_confirmation(manifest.manifest_hash)

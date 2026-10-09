@@ -433,17 +433,28 @@ async def test_sse_disconnect_keeps_the_durable_team_run_alive(
     assert await asyncio.to_thread(finished.wait, 2)
     for _ in range(100):
         with database.session() as db:
-            results = db.scalars(
-                select(TeamTurnResult)
-                .where(TeamTurnResult.turn_id == claim.turn_id)
+            # SQLite does not begin a read transaction for SELECTs here; keep
+            # turn and member states in one committed snapshot.
+            snapshot = db.execute(
+                select(
+                    ConversationTurn.state,
+                    Conversation.active_request_id,
+                    TeamTurnResult.state,
+                    TeamTurnResult.assistant_text,
+                )
+                .join(Conversation, Conversation.id == ConversationTurn.conversation_id)
+                .join(TeamTurnResult, TeamTurnResult.turn_id == ConversationTurn.id)
+                .where(
+                    ConversationTurn.id == claim.turn_id,
+                    Conversation.id == session["id"],
+                )
                 .order_by(TeamTurnResult.ordinal)
             ).all()
-            turn = db.get(ConversationTurn, claim.turn_id)
-            row = db.get(Conversation, session["id"])
-            if turn.state == "ready":
-                assert [result.state for result in results] == ["ready", "ready"]
-                assert results[1].assistant_text == "Late must not publish"
-                assert row.active_request_id is None
+            if snapshot and snapshot[0][0] == "ready":
+                assert {record[0] for record in snapshot} == {"ready"}
+                assert all(record[1] is None for record in snapshot)
+                assert [record[2] for record in snapshot] == ["ready", "ready"]
+                assert snapshot[1][3] == "Late must not publish"
                 break
         await asyncio.sleep(0.01)
     else:

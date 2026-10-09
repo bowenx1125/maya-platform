@@ -22,6 +22,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeAssetVersion,
     KnowledgeAssetVersionSource,
     KnowledgeDocumentVersion,
+    KnowledgeGenerationRun,
     KnowledgeSet,
     KnowledgeSetMarkdownVersion,
     KnowledgeSetSource,
@@ -233,6 +234,37 @@ def _canonical_markdown_asset_versions(
     return result
 
 
+def _has_generation_history(db: Session, set_row: KnowledgeSet) -> bool:
+    return (
+        set_row.generation_intent_seq > 0
+        or db.scalar(
+            select(KnowledgeGenerationRun.id)
+            .where(KnowledgeGenerationRun.knowledge_set_id == set_row.id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _manual_or_legacy_question_version(
+    db: Session, set_row: KnowledgeSet, asset: KnowledgeAsset, version: KnowledgeAssetVersion
+) -> KnowledgeAssetVersion | None:
+    if not _has_generation_history(db, set_row) or (
+        version.generation_job_id is None and version.origin != "ai"
+    ):
+        return version
+    return db.scalar(
+        select(KnowledgeAssetVersion)
+        .where(
+            KnowledgeAssetVersion.asset_id == asset.id,
+            KnowledgeAssetVersion.generation_job_id.is_(None),
+            KnowledgeAssetVersion.origin.in_(("manual", "legacy")),
+        )
+        .order_by(KnowledgeAssetVersion.version_seq.desc())
+        .limit(1)
+    )
+
+
 def current_question_version_for_asset(
     db: Session,
     set_row: KnowledgeSet,
@@ -273,6 +305,12 @@ def current_question_version_for_asset(
             KnowledgeAssetVersion.version_seq == fallback_asset.current_version_seq,
         )
     )
+    if fallback_version is not None:
+        fallback_version = _manual_or_legacy_question_version(
+            db, set_row, fallback_asset, fallback_version
+        )
+    if fallback_version is None:
+        return None
     if fallback_version is None or not _question_sources_current(db, set_row, fallback_version):
         raise conflict(
             "assessment_question_source_stale",
@@ -299,23 +337,25 @@ def _selected_questions(
         projected = _canonical_markdown_asset_versions(db, set_row)
         assets: list[tuple[KnowledgeAsset, KnowledgeAssetVersion]]
         if projected is None:
-            assets = [
-                (asset, version)
-                for asset, version in db.execute(
-                    select(KnowledgeAsset, KnowledgeAssetVersion)
-                    .join(
-                        KnowledgeAssetVersion,
-                        (KnowledgeAssetVersion.asset_id == KnowledgeAsset.id)
-                        & (KnowledgeAssetVersion.version_seq == KnowledgeAsset.current_version_seq),
-                    )
-                    .where(
-                        KnowledgeAsset.knowledge_set_id == set_id,
-                        KnowledgeAsset.kind == "question",
-                        KnowledgeAsset.current_version_seq >= 1,
-                    )
-                    .order_by(KnowledgeAsset.created_at, KnowledgeAsset.id)
-                ).all()
-            ]
+            assets = []
+            current_heads = db.execute(
+                select(KnowledgeAsset, KnowledgeAssetVersion)
+                .join(
+                    KnowledgeAssetVersion,
+                    (KnowledgeAssetVersion.asset_id == KnowledgeAsset.id)
+                    & (KnowledgeAssetVersion.version_seq == KnowledgeAsset.current_version_seq),
+                )
+                .where(
+                    KnowledgeAsset.knowledge_set_id == set_id,
+                    KnowledgeAsset.kind == "question",
+                    KnowledgeAsset.current_version_seq >= 1,
+                )
+                .order_by(KnowledgeAsset.created_at, KnowledgeAsset.id)
+            ).all()
+            for asset, version in current_heads:
+                available_version = _manual_or_legacy_question_version(db, set_row, asset, version)
+                if available_version is not None:
+                    assets.append((asset, available_version))
         else:
             assets = projected
         for asset, version in assets:
@@ -342,6 +382,10 @@ def refresh_assessment_activity_questions(
     actor: AuthContext,
     conversation_id: str,
     activity: AssessmentActivity,
+    *,
+    force_new_revision: bool = False,
+    allow_empty: bool = False,
+    selected_knowledge_set_ids: tuple[str, ...] | None = None,
 ) -> list[AssessmentActivityQuestion]:
     """Append a new immutable Question selection revision from the live canonical Markdown."""
 
@@ -355,28 +399,37 @@ def refresh_assessment_activity_questions(
         or conversation.course_id != activity.course_id
     ):
         raise not_found()
-    selection = resolve_chat_entry(
-        db,
-        actor,
-        conversation.team_id,
-        conversation.team_version_id,
-        require_publication=True,
-    )
-    if (
-        selection.publication_id != activity.publication_id
-        or selection.course_id != activity.course_id
-        or selection.team_id != activity.team_id
-        or selection.team_version_id != activity.team_version_id
-    ):
-        raise not_found()
-    set_ids = tuple(
-        dict.fromkeys(
-            tuple(set_id for member in selection.members for set_id in member.own_knowledge_set_ids)
-            + selection.shared_knowledge_set_ids
+    if selected_knowledge_set_ids is None:
+        selection = resolve_chat_entry(
+            db,
+            actor,
+            conversation.team_id,
+            conversation.team_version_id,
+            require_publication=True,
         )
-    )
+        if (
+            selection.publication_id != activity.publication_id
+            or selection.course_id != activity.course_id
+            or selection.team_id != activity.team_id
+            or selection.team_version_id != activity.team_version_id
+        ):
+            raise not_found()
+        set_ids = tuple(
+            dict.fromkeys(
+                tuple(
+                    set_id
+                    for member in selection.members
+                    for set_id in member.own_knowledge_set_ids
+                )
+                + selection.shared_knowledge_set_ids
+            )
+        )
+    else:
+        # Knowledge-update callers validate the persisted Team execution grant
+        # before passing the original conversation's exact frozen bindings.
+        set_ids = tuple(dict.fromkeys(selected_knowledge_set_ids))
     questions = _selected_questions(db, set_ids)
-    if not questions:
+    if not questions and not allow_empty:
         raise conflict(
             "assessment_questions_unavailable",
             "This assessment recipe has no current authorized Questions.",
@@ -404,7 +457,7 @@ def refresh_assessment_activity_questions(
         for row in current_rows
     ]
     requested_manifest = [(*question, True) for question in questions]
-    if current_manifest == requested_manifest:
+    if current_manifest == requested_manifest and not force_new_revision:
         return current_rows
 
     new_revision = activity.question_selection_revision + 1

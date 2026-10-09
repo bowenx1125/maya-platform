@@ -651,9 +651,7 @@ def _finish_materialization(
         # A complete document is promoted as one version. Per-item Assets are
         # already durable historical projections, but a failed/partial refresh
         # cannot replace an existing complete Markdown head with half a result.
-        promote_document = failed_count == 0 or (
-            set_row.current_markdown_version_seq == 0 and applied_count > 0
-        )
+        promote_document = failed_count == 0
         if promote_document:
             applied_items = [item for item in items if item.state == "applied"]
             try:

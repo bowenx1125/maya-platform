@@ -7,17 +7,24 @@ import json
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import conflict, idempotency_conflict, not_found
-from app.core.models import CourseMember
+from app.core.errors import PlatformError, conflict, idempotency_conflict, not_found
+from app.core.models import CourseMember, SessionRecord, User
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.models import KnowledgeAsset, KnowledgeAssetVersion, KnowledgeSet
 from app.modules.knowledge_sets.schemas import QuestionContent
 from app.modules.runtime_tools.registry import ToolCallIdentity
-from app.modules.workspace.models import Conversation, ConversationTurn, TeamProviderCall
+from app.modules.workspace.models import (
+    Conversation,
+    ConversationParticipant,
+    ConversationParticipantSet,
+    ConversationSharedSet,
+    ConversationTurn,
+    TeamProviderCall,
+)
 
 from .models import (
     AssessmentActivity,
@@ -123,10 +130,20 @@ def find_active_assessment_conversation(
 
 
 def _attempt_question_rows(db: Session, attempt_id: str) -> list[AssessmentAttemptQuestion]:
+    attempt = db.get(AssessmentAttempt, attempt_id)
+    if attempt is None:
+        return []
     return list(
         db.scalars(
             select(AssessmentAttemptQuestion)
+            .join(
+                AssessmentActivityQuestion,
+                AssessmentActivityQuestion.id == AssessmentAttemptQuestion.activity_question_id,
+            )
             .where(AssessmentAttemptQuestion.attempt_id == attempt_id)
+            .where(
+                AssessmentActivityQuestion.selection_revision == attempt.question_selection_revision
+            )
             .order_by(AssessmentAttemptQuestion.ordinal, AssessmentAttemptQuestion.id)
         ).all()
     )
@@ -143,6 +160,12 @@ def _summary(attempt: AssessmentAttempt) -> AssessmentAttemptSummary:
     )
 
 
+def _selection_ordinal(
+    question_rows: list[AssessmentAttemptQuestion], question: AssessmentAttemptQuestion
+) -> int:
+    return question.ordinal - question_rows[0].ordinal if question_rows else question.ordinal
+
+
 def _progress(db: Session, attempt: AssessmentAttempt) -> AssessmentProgressProjection:
     questions = _attempt_question_rows(db, attempt.id)
     required = [row for row in questions if row.required]
@@ -155,7 +178,9 @@ def _progress(db: Session, attempt: AssessmentAttempt) -> AssessmentProgressProj
         resolved_count=sum(row.status == "resolved" for row in required),
         answered_count=sum(row.resolution == "answered" for row in required),
         skipped_count=sum(row.resolution == "skipped" for row in required),
-        current_ordinal=unresolved.ordinal if unresolved is not None else None,
+        current_ordinal=(
+            _selection_ordinal(questions, unresolved) if unresolved is not None else None
+        ),
         current_question_version_id=(
             UUID(unresolved.question_version_id)
             if unresolved is not None and unresolved.question_version_id
@@ -275,7 +300,7 @@ def _context(
             version_id = version.id
         if version_id is not None:
             current = AssessmentRuntimeQuestion(
-                ordinal=unresolved.ordinal,
+                ordinal=_selection_ordinal(questions, unresolved),
                 question_version_id=UUID(version_id),
                 prompt=content.prompt,
             )
@@ -393,6 +418,12 @@ def _copy_activity_questions(
     activity: AssessmentActivity,
     attempt: AssessmentAttempt,
 ) -> None:
+    previous_max_ordinal = db.scalar(
+        select(func.max(AssessmentAttemptQuestion.ordinal)).where(
+            AssessmentAttemptQuestion.attempt_id == attempt.id
+        )
+    )
+    ordinal_offset = int(previous_max_ordinal) + 1 if previous_max_ordinal is not None else 0
     source_rows = db.scalars(
         select(AssessmentActivityQuestion)
         .where(
@@ -409,7 +440,9 @@ def _copy_activity_questions(
                 activity_id=activity.id,
                 activity_question_id=source.id,
                 question_version_id=None,
-                ordinal=source.ordinal,
+                # The legacy per-attempt ordinal uniqueness constraint is kept
+                # intact; current projections normalize each selection to zero.
+                ordinal=ordinal_offset + source.ordinal,
                 required=source.required,
                 content_json=None,
                 content_hash=None,
@@ -420,6 +453,189 @@ def _copy_activity_questions(
                 effective_answer_record_id=None,
             )
         )
+
+
+def invalidate_assessment_attempts_for_knowledge_update(
+    db: Session,
+    *,
+    knowledge_set_id: str,
+    actor_user_id: str,
+) -> int:
+    """Move only live formal attempts bound to this exact frozen Knowledge Set."""
+    knowledge_set = db.get(KnowledgeSet, knowledge_set_id)
+    actor_membership = (
+        db.get(CourseMember, (knowledge_set.course_id, actor_user_id))
+        if knowledge_set is not None
+        else None
+    )
+    if actor_membership is None or actor_membership.role != "teacher":
+        return 0
+    shared_binding = select(ConversationSharedSet.conversation_id).where(
+        ConversationSharedSet.conversation_id == Conversation.id,
+        ConversationSharedSet.knowledge_set_id == knowledge_set_id,
+    )
+    participant_binding = (
+        select(ConversationParticipantSet.participant_id)
+        .join(
+            ConversationParticipant,
+            ConversationParticipant.id == ConversationParticipantSet.participant_id,
+        )
+        .where(
+            ConversationParticipant.conversation_id == Conversation.id,
+            ConversationParticipantSet.knowledge_set_id == knowledge_set_id,
+        )
+    )
+    attempts = db.scalars(
+        select(AssessmentAttempt)
+        .join(AssessmentActivity, AssessmentActivity.id == AssessmentAttempt.activity_id)
+        .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
+        .where(
+            AssessmentAttempt.status.in_(("in_progress", "paused")),
+            AssessmentAttempt.actor_user_id == Conversation.user_id,
+            AssessmentAttempt.team_id == AssessmentActivity.team_id,
+            AssessmentAttempt.recipe_id == AssessmentActivity.recipe_id,
+            Conversation.course_id == AssessmentActivity.course_id,
+            Conversation.team_id == AssessmentActivity.team_id,
+            Conversation.team_version_id == AssessmentActivity.team_version_id,
+            Conversation.publication_id == AssessmentActivity.publication_id,
+            Conversation.entry_kind == "maya_team",
+            Conversation.origin == "published_course_team",
+            Conversation.withdrawn_at.is_(None),
+            (shared_binding.exists() | participant_binding.exists()),
+        )
+        .order_by(AssessmentAttempt.id)
+        .with_for_update()
+    ).all()
+    invalidated = 0
+    refreshed_activities: dict[str, tuple[int, bool, tuple[str, ...]]] = {}
+    for attempt in attempts:
+        conversation = db.get(Conversation, attempt.source_conversation_id)
+        activity = db.get(AssessmentActivity, attempt.activity_id)
+        learner = db.get(User, attempt.actor_user_id)
+        membership = (
+            db.get(CourseMember, (activity.course_id, attempt.actor_user_id))
+            if activity is not None
+            else None
+        )
+        if (
+            conversation is None
+            or activity is None
+            or learner is None
+            or learner.status != "active"
+            or membership is None
+            or membership.role != "student"
+            or conversation.user_id != attempt.actor_user_id
+            or conversation.entry_kind != "maya_team"
+            or conversation.origin != "published_course_team"
+            or conversation.withdrawn_at is not None
+            or conversation.course_id != activity.course_id
+            or conversation.team_id != activity.team_id
+            or conversation.team_version_id != activity.team_version_id
+            or conversation.publication_id != activity.publication_id
+        ):
+            continue
+
+        from app.modules.teams.service import resolve_frozen_chat_selection
+        from app.modules.workspace.team_conversation import frozen_team_selection
+        from app.modules.workspace.team_runtime import (
+            persist_assessment_knowledge_update_notice,
+        )
+
+        selection = frozen_team_selection(db, conversation)
+        target_binding_ids = {member.binding_id for member in selection.members}
+        student_actor = AuthContext("", cast(SessionRecord, None), learner, "")
+        try:
+            resolve_frozen_chat_selection(db, student_actor, selection, target_binding_ids)
+        except PlatformError as error:
+            if error.status_code == 404:
+                continue
+            raise
+        selected_set_ids = tuple(
+            dict.fromkeys(
+                tuple(
+                    set_id
+                    for member in selection.members
+                    for set_id in member.own_knowledge_set_ids
+                )
+                + selection.shared_knowledge_set_ids
+            )
+        )
+        if knowledge_set_id not in selected_set_ids:
+            continue
+
+        refreshed = refreshed_activities.get(activity.id)
+        if refreshed is None:
+            refresh_assessment_activity_questions(
+                db,
+                student_actor,
+                conversation.id,
+                activity,
+                force_new_revision=True,
+                allow_empty=True,
+                selected_knowledge_set_ids=selected_set_ids,
+            )
+            next_selection_revision = activity.question_selection_revision
+            has_questions = (
+                db.scalar(
+                    select(AssessmentActivityQuestion.id)
+                    .where(
+                        AssessmentActivityQuestion.activity_id == activity.id,
+                        AssessmentActivityQuestion.selection_revision == next_selection_revision,
+                        AssessmentActivityQuestion.required.is_(True),
+                    )
+                    .limit(1)
+                )
+                is not None
+            )
+            refreshed_activities[activity.id] = (
+                next_selection_revision,
+                has_questions,
+                selected_set_ids,
+            )
+        else:
+            next_selection_revision, has_questions, original_set_ids = refreshed
+            if selected_set_ids != original_set_ids:
+                raise conflict(
+                    "assessment_team_selection_changed",
+                    "The published assessment Team selection changed.",
+                )
+
+        expected_revision = attempt.revision
+        expected_selection_revision = attempt.question_selection_revision
+        expected_status = attempt.status
+        changed = db.execute(
+            update(AssessmentAttempt)
+            .where(
+                AssessmentAttempt.id == attempt.id,
+                AssessmentAttempt.status == expected_status,
+                AssessmentAttempt.revision == expected_revision,
+                AssessmentAttempt.question_selection_revision == expected_selection_revision,
+            )
+            .values(
+                question_selection_revision=next_selection_revision,
+                revision=expected_revision + 1,
+                updated_at=_now(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if getattr(changed, "rowcount", 0) != 1:
+            raise conflict(
+                "assessment_attempt_changed",
+                "The assessment changed while its Knowledge was being updated.",
+            )
+        attempt.question_selection_revision = next_selection_revision
+        attempt.revision = expected_revision + 1
+        attempt.updated_at = _now()
+        _copy_activity_questions(db, activity, attempt)
+        db.flush()
+        persist_assessment_knowledge_update_notice(
+            db,
+            attempt=attempt,
+            conversation=conversation,
+            has_questions=has_questions,
+        )
+        invalidated += 1
+    return invalidated
 
 
 def _event(
@@ -529,6 +745,7 @@ def start_or_resume_attempt(
         chat_visibility=conversation.chat_visibility,
         status="in_progress",
         revision=0,
+        question_selection_revision=activity.question_selection_revision,
         started_at=timestamp,
         updated_at=timestamp,
         completed_at=None,
@@ -643,6 +860,11 @@ def mark_attempt_question_presented(
 
 
 def _raw_answers(db: Session, attempt: AssessmentAttempt) -> list[AssessmentAnswerDTO]:
+    question_rows = _attempt_question_rows(db, attempt.id)
+    question_ids = {row.id for row in question_rows}
+    if not question_ids:
+        return []
+    ordinal_offset = question_rows[0].ordinal
     rows = db.execute(
         select(LearningRecord, AssessmentAttemptQuestion)
         .join(
@@ -656,12 +878,13 @@ def _raw_answers(db: Session, attempt: AssessmentAttempt) -> list[AssessmentAnsw
         .where(
             LearningRecord.attempt_id == attempt.id,
             LearningRecord.record_kind == "answer",
+            AssessmentAttemptQuestion.id.in_(question_ids),
         )
         .order_by(LearningRecord.created_at, LearningRecord.id)
     ).all()
     return [
         AssessmentAnswerDTO(
-            question_ordinal=question.ordinal,
+            question_ordinal=question.ordinal - ordinal_offset,
             question_version_id=UUID(question.question_version_id or ""),
             answer_text=str(json.loads(record.payload_json)["answer_text"]),
             created_at=record.created_at,
@@ -820,6 +1043,9 @@ def _new_replacement_attempt(
     event_id: str,
     request_hash: str,
 ) -> AssessmentAttempt:
+    activity = db.get(AssessmentActivity, old.activity_id)
+    if activity is None:
+        raise conflict("assessment_state_invalid", "The activity source is unavailable.")
     old.status = "abandoned"
     old.abandoned_at = _now()
     old.abandonment_reason = "user_redo"
@@ -835,6 +1061,7 @@ def _new_replacement_attempt(
         chat_visibility=old.chat_visibility,
         status="in_progress",
         revision=0,
+        question_selection_revision=activity.question_selection_revision,
         started_at=_now(),
         updated_at=_now(),
         completed_at=None,
@@ -843,9 +1070,6 @@ def _new_replacement_attempt(
     )
     db.add(new)
     db.flush()
-    activity = db.get(AssessmentActivity, old.activity_id)
-    if activity is None:
-        raise conflict("assessment_state_invalid", "The activity source is unavailable.")
     _copy_activity_questions(db, activity, new)
     db.flush()
     db.add(
@@ -1240,16 +1464,15 @@ def apply_assessment_action(
             raise conflict(
                 "assessment_not_started", "Start this assessment before submitting an answer."
             )
-        question = db.scalar(
-            select(AssessmentAttemptQuestion)
-            .where(
-                AssessmentAttemptQuestion.attempt_id == str(context.attempt.id),
-                AssessmentAttemptQuestion.required.is_(True),
-                AssessmentAttemptQuestion.presented_at.is_not(None),
-                AssessmentAttemptQuestion.presented_at <= turn.created_at,
-            )
-            .order_by(AssessmentAttemptQuestion.ordinal.desc())
-            .limit(1)
+        question = next(
+            (
+                row
+                for row in reversed(_attempt_question_rows(db, str(context.attempt.id)))
+                if row.required
+                and row.presented_at is not None
+                and row.presented_at <= turn.created_at
+            ),
+            None,
         )
         if question is None or question.question_version_id is None:
             raise conflict(
@@ -1892,10 +2115,34 @@ def apply_assessment_decision(
                 if not attempt_has_final_evidence(db, attempt):
                     response_key, disposition = "assessment.results_pending", "read"
                 else:
+                    expected_revision = attempt.revision
+                    expected_selection_revision = attempt.question_selection_revision
+                    changed = db.execute(
+                        update(AssessmentAttempt)
+                        .where(
+                            AssessmentAttempt.id == attempt.id,
+                            AssessmentAttempt.status == "in_progress",
+                            AssessmentAttempt.revision == expected_revision,
+                            AssessmentAttempt.question_selection_revision
+                            == expected_selection_revision,
+                        )
+                        .values(
+                            status="completed",
+                            completed_at=timestamp,
+                            updated_at=timestamp,
+                            revision=expected_revision + 1,
+                        )
+                        .execution_options(synchronize_session=False)
+                    )
+                    if getattr(changed, "rowcount", 0) != 1:
+                        raise conflict(
+                            "assessment_attempt_inactive",
+                            "This assessment changed before it could complete.",
+                        )
                     attempt.status = "completed"
                     attempt.completed_at = timestamp
                     attempt.updated_at = timestamp
-                    attempt.revision += 1
+                    attempt.revision = expected_revision + 1
                     db.add(
                         _event(
                             attempt=attempt,

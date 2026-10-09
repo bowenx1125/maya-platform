@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -59,6 +60,7 @@ from app.providers.factory import embedding_provider, llm_provider
 from app.providers.llm_adapter import DashScopeLLMAdapter
 from app.providers.llm_price_card import LLM_INPUT_TOKEN_CAP, LLM_RESERVED_OUTPUT_TOKEN_CAP
 from app.providers.llm_transport import HttpxLLMTransport, LLMTransportError
+from app.providers.standing_consent import standing_consent_enabled
 
 from .models import Conversation
 from .schemas import ChatSource
@@ -139,6 +141,7 @@ def confirm_manifest(
                     if manifest.provider_operation == "embedding_query"
                     else None
                 ),
+                operator_consent=standing_consent_enabled(settings),
             )
         if granted:
             return
@@ -153,7 +156,7 @@ def confirm_manifest(
                 409,
                 {"manifest_hash": manifest.manifest_hash},
             )
-        if not (settings.demo_mode and settings.demo_auto_confirm_provider):
+        if not standing_consent_enabled(settings):
             raise PlatformError(
                 "provider_confirmation_required",
                 "The teacher must confirm this disclosure.",
@@ -370,7 +373,9 @@ def real_reply(
     sending_guard: ProviderSendingGuard | None = None,
     actor_context: Any | None = None,
     sources: list[ChatSource] | None = None,
+    canonical_knowledge: list[dict[str, Any]] | None = None,
     allow_not_sent_retry: bool = False,
+    generation_waker: Callable[[str], None] | None = None,
 ) -> tuple[str, str]:
     selected = llm_provider(settings.model_copy(update={"llm_provider": "dashscope"}))
     if not isinstance(selected, DashScopeLLMAdapter):
@@ -402,6 +407,7 @@ def real_reply(
             request_id,
             settings,
             actor_context=actor_context,
+            generation_waker=generation_waker,
         )
 
     cursors: dict[str, int] = {}
@@ -426,6 +432,20 @@ def real_reply(
                 version_id=version_id,
             ):
                 raise TeamDispatchError("chat_context_changed")
+            if canonical_knowledge is not None:
+                version = db.get(AgentVersion, version_id)
+                if version is None:
+                    raise TeamDispatchError("chat_context_changed")
+                from app.modules.knowledge_sets.service import get_agent_runtime_knowledge
+
+                try:
+                    current_knowledge = get_agent_runtime_knowledge(
+                        db, actor_context, version.agent_id
+                    )
+                except PlatformError:
+                    raise TeamDispatchError("chat_context_changed") from None
+                if current_knowledge != canonical_knowledge:
+                    raise TeamDispatchError("chat_context_changed")
         dispatch_ordinal = cursors.get(member_id, 0)
         cursors[member_id] = dispatch_ordinal + 1
         wire_messages = [_chat_wire_message(item) for item in current_messages]
@@ -456,7 +476,15 @@ def real_reply(
                 ExportFieldV1(
                     "authorized_courseware_text",
                     digest(
-                        [
+                        {
+                            "evidence": [
+                                {"filename": source.filename, "excerpt": source.excerpt}
+                                for source in (sources or [])
+                            ],
+                            "canonical_knowledge": canonical_knowledge,
+                        }
+                        if canonical_knowledge
+                        else [
                             {"filename": source.filename, "excerpt": source.excerpt}
                             for source in (sources or [])
                         ]
@@ -871,10 +899,15 @@ def assessment_safe_reply_text(result: AssessmentRuntimeResult, user_text: str) 
 
 
 def chat_messages(
-    version: AgentVersion, history: list[dict[str, str]], sources: list[ChatSource]
+    version: AgentVersion,
+    history: list[dict[str, str]],
+    sources: list[ChatSource],
+    *,
+    canonical_knowledge: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, str]], str]:
     context = {
         "agent_markdown": version.agent_md,
+        "canonical_knowledge": canonical_knowledge or [],
         "evidence": [
             {"label": f"S{index + 1}", "text": item.excerpt} for index, item in enumerate(sources)
         ],

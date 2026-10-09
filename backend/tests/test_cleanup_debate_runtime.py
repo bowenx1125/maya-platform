@@ -39,6 +39,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeSet,
     KnowledgeSetSource,
 )
+from app.modules.learning.models import AssessmentActivity, AssessmentAttempt
 from app.modules.reports import models as _report_models
 from app.modules.teams.models import (
     CourseTeamPublication,
@@ -48,6 +49,7 @@ from app.modules.teams.models import (
     TeamVersionMember,
     TeamVersionSet,
 )
+from app.modules.workspace.models import Conversation
 from sqlalchemy import text
 
 del DemoAccountBinding, _debate_models, _interaction_models, _report_models
@@ -1253,6 +1255,71 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
                     created_at=now,
                 )
             )
+            session.flush()
+            session.add(
+                Conversation(
+                    id=_uid(137),
+                    user_id=_uid(1),
+                    course_id=_uid(10),
+                    agent_version_id=None,
+                    snapshot_id=None,
+                    agent_name_snapshot="",
+                    agent_authorization_epoch=0,
+                    entry_kind="maya_team",
+                    chat_visibility="private",
+                    origin="published_course_team",
+                    team_id=_uid(130),
+                    team_version_id=_uid(131),
+                    team_owner_user_id=_uid(2),
+                    team_name_snapshot="Preserved Team",
+                    team_authorization_epoch=0,
+                    publication_id=_uid(134),
+                    publication_epoch=0,
+                    revision=0,
+                    active_request_id=None,
+                    withdrawn_at=None,
+                    created_at=now,
+                )
+            )
+            session.add(
+                AssessmentActivity(
+                    id=_uid(136),
+                    course_id=_uid(10),
+                    team_id=_uid(130),
+                    team_version_id=_uid(131),
+                    publication_id=_uid(134),
+                    recipe_id="mayaform.cleanup.test",
+                    recipe_version_id=str(agent_version_id),
+                    evaluator_team_member_id=_uid(132),
+                    evaluator_agent_version_id=str(agent_version_id),
+                    boundary_team_member_id=_uid(132),
+                    boundary_agent_version_id=str(agent_version_id),
+                    publisher_user_id=_uid(2),
+                    questions_hash=_hash("m"),
+                    question_selection_revision=2,
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                AssessmentAttempt(
+                    id=_uid(138),
+                    activity_id=_uid(136),
+                    team_id=_uid(130),
+                    recipe_id="mayaform.cleanup.test",
+                    actor_user_id=_uid(1),
+                    source_conversation_id=_uid(137),
+                    chat_visibility="private",
+                    status="in_progress",
+                    revision=3,
+                    question_selection_revision=2,
+                    started_at=now,
+                    updated_at=now,
+                    completed_at=None,
+                    abandoned_at=None,
+                    abandonment_reason=None,
+                )
+            )
             session.add(
                 Job(
                     id=job_id,
@@ -1359,6 +1426,8 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             "team_version_sets",
             "course_team_publications",
             "team_member_invoke_grants",
+            "assessment_activities",
+            "assessment_attempts",
         )
         before = _table_rows(database_path, preserved_tables)
         with sqlite3.connect(database_path) as connection:
@@ -1375,6 +1444,11 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
 
         assert _table_rows(database_path, preserved_tables) == before
         with sqlite3.connect(database_path) as connection:
+            assert connection.execute(
+                "SELECT question_selection_revision FROM assessment_attempts WHERE id=?",
+                (_uid(138),),
+            ).fetchone() == (2,)
+        with sqlite3.connect(database_path) as connection:
             file_reference_after = connection.execute(
                 "SELECT * FROM file_references WHERE id=?", (file_reference_id,)
             ).fetchone()
@@ -1382,6 +1456,18 @@ def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
             assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     finally:
         database.dispose()
+
+
+def test_cleanup_accepts_current_0054_schema_head(migrated_database):
+    database_path, data_root = migrated_database
+    with sqlite3.connect(database_path) as connection:
+        version = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    assert version == ("0054_assessment_attempt_question_selection",)
+    assert cleanup.SCHEMA_HEAD == version[0]
+    assert version[0] in cleanup.SUPPORTED_SCHEMA_HEADS
+
+    plan = cleanup.inspect_cleanup(database_path, data_root)
+    assert plan.schema_head == version[0]
 
 
 def test_cleanup_rejects_unknown_schema_head(migrated_database):

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from typing import Any
 from uuid import uuid4
 
@@ -14,10 +16,14 @@ from app.core.models import (
     Job,
     KnowledgeDocument,
     ProviderOperation,
+    User,
 )
+from app.modules.agents.schemas import KnowledgeGenerationIntent
+from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.generation import (
     block_claimed_generation,
     claim_generation_run,
+    enqueue_generation_for_publish,
     recover_generation_runs_at_startup,
 )
 from app.modules.knowledge_sets.materialization import materialize_accepted_knowledge_generation
@@ -509,14 +515,13 @@ def test_provider_accepted_stage_is_atomic_and_suppresses_revoked_content(
         ("unknown", None),
     ],
 )
-def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
+def test_teacher_generation_intent_confirms_exact_manifest_and_dispatches_once(
     client: TestClient,
     app_bundle: Any,
-    monkeypatch: pytest.MonkeyPatch,
     transport_outcome: str,
     usage_payload: dict[str, int] | None,
 ) -> None:
-    app, database, base_settings = app_bundle
+    _app, database, base_settings = app_bundle
     _teacher, csrf = login(client, "maya")
     _agent_id, version_id, revision, document_id = _teacher_agent_with_source(
         client,
@@ -654,8 +659,7 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
 
     with database.session() as db:
         run = db.get(KnowledgeGenerationRun, run_id)
-        assert run is not None and run.state == "blocked"
-        assert run.safe_error_code == "provider_confirmation_required"
+        assert run is not None
         assert run.provider_manifest_hash is not None
         manifest_hash = run.provider_manifest_hash
         assert (
@@ -664,9 +668,9 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
                 .select_from(ProviderOperation)
                 .where(ProviderOperation.provider_operation == "llm_knowledge_generate")
             )
-            == 0
+            == 1
         )
-    assert fake.calls == []
+    assert len(fake.calls) == 1
     job_id = published.json()["knowledge_generation"]["job_id"]
     owner_status = client.get(f"/api/v1/knowledge-generation-jobs/{job_id}")
     assert owner_status.status_code == 200, owner_status.text
@@ -676,41 +680,14 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
     _teacher, csrf = login(client, "maya")
 
     manifest = repository.get_export_manifest(manifest_hash)
-    assert manifest is not None
-    manager = app.state.knowledge_generation_task_manager
-    wake_calls: list[str] = []
-    monkeypatch.setattr(manager, "wake", lambda value: wake_calls.append(value))
-    disclosed = client.get(
-        "/api/v1/provider/data-call/disclosure",
-        params={"manifest_hash": manifest_hash},
-    )
-    assert disclosed.status_code == 200, disclosed.text
-    confirmed = client.post(
-        "/api/v1/provider/data-call/disclosure/confirm",
-        headers=_headers(csrf),
-        json={
-            "policy_hash": policy.policy_hash,
-            "manifest_hash": manifest_hash,
-            "expected_revision": disclosed.json()["confirmation_revision"],
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    assert wake_calls == [run_id]
-    with database.session() as db:
-        run = db.get(KnowledgeGenerationRun, run_id)
-        assert run is not None and run.state == "pending"
-        assert run.safe_error_code is None
-        job = db.get(Job, run.job_id)
-        assert job is not None and job.state == "pending"
+    assert manifest is not None and manifest.scope_id == run_id
+    assert manifest.provider_operation == "llm_knowledge_generate"
+    assert manifest.policy_hash == policy.policy_hash
+    confirmation = repository.get_export_confirmation(manifest_hash)
+    assert confirmation is not None
+    assert confirmation.manifest_hash == manifest_hash
+    assert confirmation.policy_hash == policy.policy_hash
 
-    run_claimed_knowledge_generation(
-        database.session_factory,
-        run_id,
-        settings,
-        transport=fake,
-    )
-
-    assert len(fake.calls) == 1
     called_url, headers, wire_bytes = fake.calls[0]
     assert called_url == endpoint
     assert headers == {"Authorization": "Bearer fixture-key"}
@@ -741,6 +718,14 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
                 if transport_outcome == "not_sent"
                 else "acceptance_unknown"
             )
+        run_claimed_knowledge_generation(
+            database.session_factory,
+            run_id,
+            settings,
+            transport=fake,
+        )
+        assert len(fake.calls) == 1
+        assert len(repository.operations(scope_id=run_id)) == 1
         return
     assert operation.state == "accepted"
     assert operation.request_count == operation.charged_request_count == 1
@@ -793,6 +778,409 @@ def test_confirmed_generation_dispatches_once_with_safe_terminal_or_stage_state(
         assert status.json()["accepted_item_count"] == 3
         assert status.json()["materialized_item_count"] == 2
         assert status.json()["failed_item_count"] == 1
+
+
+def test_new_teacher_regeneration_resumes_exact_unconfirmed_run_once(
+    client: TestClient,
+    app_bundle: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _app, database, base_settings = app_bundle
+    _teacher, csrf = login(client, "maya")
+    _agent_id, version_id, revision, document_id = _teacher_agent_with_source(client, csrf)
+    publish_key = f"k2b1-unconfirmed-publish-{uuid4()}"
+    published = _publish(client, csrf, version_id, revision, document_id, publish_key)
+    assert published.status_code == 200, published.text
+    run_id = published.json()["knowledge_generation"]["run_id"]
+    job_id = published.json()["knowledge_generation"]["job_id"]
+    set_id = published.json()["knowledge_generation"]["knowledge_set_id"]
+    with database.session() as db:
+        initial_intent_generation = db.get(KnowledgeSet, set_id).generation_intent_seq
+
+    workspace = "syntheticknowledgeworkspace"
+    endpoint = (
+        f"https://{workspace}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+    )
+    policy = _provider_policy(endpoint)
+    repository = ProviderRepository(database)
+    repository.save_policy_snapshot(policy, snapshot_id=f"k2b1-unconfirmed-policy-{uuid4()}")
+    settings = base_settings.model_copy(
+        update={
+            "llm_provider": "dashscope",
+            "llm_provider_policy_hash": policy.policy_hash,
+            "dashscope_api_key": "fixture-key",
+            "dashscope_workspace_id": workspace,
+            "dashscope_region": "cn-beijing",
+        }
+    )
+
+    from app.modules.knowledge_sets.provider_runtime import run_claimed_knowledge_generation
+    from app.modules.provider_disclosure.service import (
+        ProviderDisclosureError,
+        ProviderDisclosureService,
+    )
+    from app.providers.llm_transport import LLMTransportResponse
+
+    class FakeTransport:
+        def __init__(self) -> None:
+            self.calls: list[bytes] = []
+
+        def post_bytes(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+            content: bytes,
+            timeout: object,
+        ) -> LLMTransportResponse:
+            del timeout
+            assert url == endpoint
+            assert headers == {"Authorization": "Bearer fixture-key"}
+            self.calls.append(content)
+            return LLMTransportResponse(
+                status_code=200,
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": json.dumps(
+                                    {
+                                        "assets": [
+                                            {
+                                                "kind": "note",
+                                                "title": "Generated note",
+                                                "body": "One exact run was resumed.",
+                                            }
+                                        ]
+                                    }
+                                ),
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ]
+                },
+            )
+
+    def require_new_teacher_intent(
+        _service: Any,
+        _request: Any,
+        *,
+        actor_user_id: str,
+        manifest_ref: str | None = None,
+        **_kwargs: Any,
+    ) -> Any:
+        del actor_user_id, manifest_ref
+        raise ProviderDisclosureError(
+            "provider_confirmation_required",
+            "A newer explicit Teacher action is required.",
+        )
+
+    original_confirm = ProviderDisclosureService.confirm
+    monkeypatch.setattr(ProviderDisclosureService, "confirm", require_new_teacher_intent)
+    fake = FakeTransport()
+    run_claimed_knowledge_generation(
+        database.session_factory,
+        run_id,
+        settings,
+        transport=fake,
+    )
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        job = db.get(Job, job_id)
+        assert run is not None and run.state == "blocked"
+        assert run.safe_error_code == "provider_confirmation_required"
+        assert run.provider_manifest_hash is not None
+        assert run.provider_operation_id is None and run.request_hash is None
+        assert job is not None and job.state == "failed"
+        assert job.attempt == 1
+        manifest_hash = run.provider_manifest_hash
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(ProviderOperation)
+                .where(ProviderOperation.scope_id == run_id)
+            )
+            == 0
+        )
+    assert fake.calls == []
+
+    replayed_publish = _publish(client, csrf, version_id, revision, document_id, publish_key)
+    assert replayed_publish.status_code == 200, replayed_publish.text
+    assert replayed_publish.json()["knowledge_generation"]["run_id"] == run_id
+    with database.session() as db:
+        agent = db.get(Agent, _agent_id)
+        version = db.get(AgentVersion, version_id)
+        assert agent is not None and version is not None
+        context = AuthContext(
+            raw_session_token="",
+            session=None,
+            user=db.get(User, agent.owner_user_id),
+            csrf_token="",
+        )
+        queued_publish = enqueue_generation_for_publish(
+            db,
+            context,
+            agent,
+            version,
+            KnowledgeGenerationIntent(source_document_ids=[document_id]),
+        )
+        assert queued_publish.run.id == run_id
+        assert queued_publish.run.state == "blocked"
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        job = db.get(Job, job_id)
+        assert run is not None and run.state == "blocked"
+        assert job is not None and job.state == "failed"
+    run_claimed_knowledge_generation(
+        database.session_factory,
+        run_id,
+        settings,
+        transport=fake,
+    )
+    assert fake.calls == []
+    assert repository.operations(scope_id=run_id) == ()
+
+    monkeypatch.setattr(ProviderDisclosureService, "confirm", original_confirm)
+    explicit_action_id = str(uuid4())
+    regenerated = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/regenerate",
+        headers=_headers(
+            csrf,
+            **{"Idempotency-Key": f"k2b1-unconfirmed-explicit-regen-{uuid4()}"},
+        ),
+        json={"action_id": explicit_action_id},
+    )
+    assert regenerated.status_code == 202, regenerated.text
+    assert regenerated.json()["run_id"] == run_id
+    assert regenerated.json()["job_id"] == job_id
+    assert regenerated.json()["action_id"] == explicit_action_id
+    replayed_regeneration = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/regenerate",
+        headers=_headers(
+            csrf,
+            **{"Idempotency-Key": f"k2b1-unconfirmed-explicit-regen-retry-{uuid4()}"},
+        ),
+        json={"action_id": explicit_action_id},
+    )
+    assert replayed_regeneration.status_code == 202, replayed_regeneration.text
+    assert replayed_regeneration.json()["run_id"] == run_id
+    assert replayed_regeneration.json()["job_id"] == job_id
+    assert replayed_regeneration.json()["action_id"] == explicit_action_id
+    _student, student_csrf = login(client, "bowen")
+    other_actor_replay = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/regenerate",
+        headers=_headers(
+            student_csrf,
+            **{"Idempotency-Key": f"k2b1-unconfirmed-cross-actor-{uuid4()}"},
+        ),
+        json={"action_id": explicit_action_id},
+    )
+    assert other_actor_replay.status_code == 404, other_actor_replay.text
+    from app.core.errors import PlatformError
+    from app.modules.knowledge_sets.generation import _generation_action_replay
+
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        with pytest.raises(PlatformError) as changed_scope:
+            _generation_action_replay(
+                db,
+                owner_user_id=run.owner_user_id,
+                set_id=str(uuid4()),
+                action_id=explicit_action_id,
+                payload_hash="0" * 64,
+            )
+        assert changed_scope.value.code == "knowledge_generation_action_conflict"
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        job = db.get(Job, job_id)
+        set_row = db.get(KnowledgeSet, set_id)
+        assert run is not None and run.state == "pending"
+        assert run.safe_error_code is None
+        assert job is not None and job.state == "pending"
+        assert job.attempt == 1
+        assert set_row is not None
+        assert set_row.generation_intent_seq == initial_intent_generation
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(KnowledgeGenerationRun)
+                .where(KnowledgeGenerationRun.knowledge_set_id == set_id)
+            )
+            == 1
+        )
+
+    run_claimed_knowledge_generation(
+        database.session_factory,
+        run_id,
+        settings,
+        transport=fake,
+    )
+    assert len(fake.calls) == 1
+    operations = repository.operations(scope_id=run_id)
+    assert len(operations) == 1
+    assert operations[0].state == "accepted"
+    assert operations[0].charged_request_count == 1
+    confirmation = repository.get_export_confirmation(manifest_hash)
+    assert confirmation is not None and confirmation.manifest_hash == manifest_hash
+    with database.session() as db:
+        version = db.get(AgentVersion, version_id)
+        set_row = db.get(KnowledgeSet, set_id)
+        assert version is not None and set_row is not None
+        version.agent_md += "\n\n# Different generation input\n"
+        intent_generation_before_conflict = set_row.generation_intent_seq
+        db.commit()
+    _teacher, changed_payload_csrf = login(client, "maya")
+    changed_payload_replay = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/regenerate",
+        headers=_headers(
+            changed_payload_csrf,
+            **{"Idempotency-Key": f"k2b1-unconfirmed-payload-conflict-{uuid4()}"},
+        ),
+        json={"action_id": explicit_action_id},
+    )
+    assert changed_payload_replay.status_code == 409, changed_payload_replay.text
+    assert changed_payload_replay.json()["code"] == "knowledge_generation_action_conflict"
+    assert fake.calls and len(fake.calls) == 1
+    with database.session() as db:
+        set_row = db.get(KnowledgeSet, set_id)
+        assert set_row is not None
+        assert set_row.generation_intent_seq == intent_generation_before_conflict
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(KnowledgeGenerationRun)
+                .where(KnowledgeGenerationRun.knowledge_set_id == set_id)
+            )
+            == 1
+        )
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(ProviderOperation)
+                .where(ProviderOperation.scope_id == run_id)
+            )
+            == 1
+        )
+    with database.session() as db:
+        owner_membership = db.scalar(
+            select(CourseMember).where(
+                CourseMember.user_id == db.get(Agent, _agent_id).owner_user_id,
+                CourseMember.course_id == COURSE_ID,
+            )
+        )
+        assert owner_membership is not None
+        owner_membership.role = "student"
+        db.commit()
+    _demoted_owner, demoted_csrf = login(client, "maya")
+    demoted_owner_replay = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/regenerate",
+        headers=_headers(
+            demoted_csrf,
+            **{"Idempotency-Key": f"k2b1-unconfirmed-demoted-{uuid4()}"},
+        ),
+        json={"action_id": explicit_action_id},
+    )
+    assert demoted_owner_replay.status_code == 404, demoted_owner_replay.text
+
+
+def test_concurrent_regeneration_business_action_replays_under_http_writer_lock(
+    app_factory: Any,
+) -> None:
+    first_app, database, _settings = app_factory()
+    second_app, second_database, _second_settings = app_factory()
+    assert database.engine.url == second_database.engine.url
+    with TestClient(first_app) as first_client, TestClient(second_app) as second_client:
+        _teacher, first_csrf = login(first_client, "maya")
+        _teacher, second_csrf = login(second_client, "maya")
+        agent_id, version_id, revision, document_id = _teacher_agent_with_source(
+            first_client, first_csrf
+        )
+        published = _publish(
+            first_client,
+            first_csrf,
+            version_id,
+            revision,
+            document_id,
+            f"k2b1-concurrent-regeneration-publish-{uuid4()}",
+        )
+        assert published.status_code == 200, published.text
+        set_id = published.json()["knowledge_generation"]["knowledge_set_id"]
+        action_ids: list[str] = []
+
+        def regenerate(
+            client: TestClient,
+            csrf: str,
+            key: str,
+            action_id: str,
+            barrier: Barrier,
+        ) -> Any:
+            barrier.wait(timeout=10)
+            return client.post(
+                f"/api/v1/knowledge-sets/{set_id}/regenerate",
+                headers=_headers(csrf, **{"Idempotency-Key": key}),
+                json={"action_id": action_id},
+            )
+
+        for iteration in range(6):
+            action_id = str(uuid4())
+            action_ids.append(action_id)
+            barrier = Barrier(2)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(
+                    regenerate,
+                    first_client,
+                    first_csrf,
+                    f"k2b1-race-{iteration}-first-{uuid4()}",
+                    action_id,
+                    barrier,
+                )
+                second = executor.submit(
+                    regenerate,
+                    second_client,
+                    second_csrf,
+                    f"k2b1-race-{iteration}-second-{uuid4()}",
+                    action_id,
+                    barrier,
+                )
+                responses = [first.result(timeout=30), second.result(timeout=30)]
+            assert [response.status_code for response in responses] == [202, 202], [
+                response.text for response in responses
+            ]
+            payloads = [response.json() for response in responses]
+            assert payloads[0]["run_id"] == payloads[1]["run_id"]
+            assert payloads[0]["job_id"] == payloads[1]["job_id"]
+            assert payloads[0]["action_id"] == payloads[1]["action_id"] == action_id
+
+        with database.session() as db:
+            agent = db.get(Agent, agent_id)
+            set_row = db.get(KnowledgeSet, set_id)
+            assert agent is not None and set_row is not None
+            all_runs = db.scalars(
+                select(KnowledgeGenerationRun).where(
+                    KnowledgeGenerationRun.knowledge_set_id == set_id
+                )
+            ).all()
+            assert len(all_runs) == 7
+            assert set_row.generation_intent_seq == 7
+            for intent_generation, action_id in enumerate(action_ids, start=2):
+                action_runs = db.scalars(
+                    select(KnowledgeGenerationRun).where(
+                        KnowledgeGenerationRun.knowledge_set_id == set_id,
+                        KnowledgeGenerationRun.action_id == action_id,
+                    )
+                ).all()
+                assert len(action_runs) == 1
+                assert action_runs[0].intent_generation == intent_generation
+                assert (
+                    db.scalar(
+                        select(func.count())
+                        .select_from(ProviderOperation)
+                        .where(ProviderOperation.scope_id == action_runs[0].id)
+                    )
+                    == 0
+                )
 
 
 def test_generation_source_mismatch_and_non_teacher_owner_fail_before_enqueue(

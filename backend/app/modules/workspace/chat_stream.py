@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -78,6 +78,7 @@ async def stream_events(
     request_id: str,
     claim_revision: int,
     actor_context: AuthContext | None = None,
+    generation_waker: Callable[[str], None] | None = None,
 ) -> AsyncIterator[bytes]:
     """Yield deltas only after the current request has committed its full reply.
 
@@ -127,6 +128,7 @@ async def stream_events(
                 claim_revision,
                 message,
                 actor_context,
+                generation_waker,
             )
         except Exception as exc:
             code = settle(exc)
@@ -229,6 +231,7 @@ def _reply_segment(
     claim_revision: int,
     message: str,
     actor_context: AuthContext | None = None,
+    generation_waker: Callable[[str], None] | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     from .chat import generate_reply
 
@@ -244,6 +247,7 @@ def _reply_segment(
             claim_revision,
             message,
             actor_context=actor_context,
+            generation_waker=generation_waker,
         )
 
 

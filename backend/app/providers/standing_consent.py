@@ -1,4 +1,4 @@
-"""Demo-only standing consent for exact provider export manifests."""
+"""Operator standing consent for exact provider export manifests."""
 
 from __future__ import annotations
 
@@ -24,17 +24,15 @@ def apply_standing_provider_consent(
 ) -> bool:
     """Record standing consent for one exact, owner-bound manifest.
 
-    The operator flag is deliberately narrow: both Demo switches must be on,
-    and the same manifest/policy validation used by an explicit teacher action
-    still runs before the confirmation row is written. Callers re-run
+    The operator decision is explicit configuration, and the same
+    manifest/policy validation used by an explicit teacher action still runs
+    before the confirmation row is written. Callers re-run
     ``require_exact_confirmation`` with their owner scope after this helper
     returns so a standing consent can never bypass the course/group/version
     binding.
     """
 
-    if not getattr(settings, "demo_mode", False):
-        return False
-    if not getattr(settings, "demo_auto_confirm_provider", False):
+    if not standing_consent_enabled(settings):
         return False
     try:
         revision = int(manifest.operation_revision)
@@ -60,10 +58,19 @@ def apply_standing_provider_consent(
     except Exception:
         return False
     LOGGER.warning(
-        "Provider disclosure confirmed by standing Demo consent manifest=%s",
+        "Provider disclosure confirmed by standing operator consent manifest=%s",
         manifest.manifest_hash,
     )
     return True
 
 
-__all__ = ["apply_standing_provider_consent"]
+def standing_consent_enabled(settings: object) -> bool:
+    if getattr(settings, "provider_standing_consent", False) is True:
+        return True
+    return (
+        getattr(settings, "demo_mode", False) is True
+        and getattr(settings, "demo_auto_confirm_provider", False) is True
+    )
+
+
+__all__ = ["apply_standing_provider_consent", "standing_consent_enabled"]

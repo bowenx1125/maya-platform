@@ -226,15 +226,11 @@ def _build_snapshot(
         else []
     )
     events_by_record = {event.learning_record_id: event for event in evidence_events}
-    questions = (
-        db.scalars(
-            select(AssessmentAttemptQuestion).where(
-                AssessmentAttemptQuestion.attempt_id.in_(attempt_ids)
-            )
-        ).all()
-        if attempt_ids
-        else []
-    )
+    from .attempts import _attempt_question_rows
+
+    questions = [
+        question for attempt in attempts for question in _attempt_question_rows(db, attempt.id)
+    ]
     questions_by_id = {question.id: question for question in questions}
     valid_records: list[LearningRecord] = []
     valid_question_records: dict[str, set[str]] = defaultdict(set)
@@ -338,6 +334,7 @@ def _build_snapshot(
                 "actor_user_id": row.actor_user_id,
                 "status": row.status,
                 "revision": row.revision,
+                "question_selection_revision": row.question_selection_revision,
                 "chat_visibility": row.chat_visibility,
                 "source_conversation_id": row.source_conversation_id,
             }

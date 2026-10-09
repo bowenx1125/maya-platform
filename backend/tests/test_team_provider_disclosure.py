@@ -26,6 +26,10 @@ from app.modules.provider_disclosure.service import (
     ProviderDisclosureService,
     SqlAlchemyProviderDisclosureStore,
 )
+from app.modules.provider_disclosure.team_standing import (
+    current_standing_grant,
+    operator_standing_grant,
+)
 from app.modules.teams.models import CourseTeamPublication, Team, TeamMemberInvokeGrant
 from app.modules.workspace.models import (
     ChatProviderStandingGrant,
@@ -35,6 +39,7 @@ from app.modules.workspace.models import (
     TeamTurnResult,
 )
 from app.modules.workspace.schemas import TeamRouting
+from app.modules.workspace.team_conversation import frozen_team_selection
 from app.modules.workspace.team_runtime import claim_team_turn, result_ids
 from app.providers.control import ExportFieldV1, ExportManifestV1, authorized_provider_model
 from app.providers.control_repository import ProviderRepository
@@ -613,6 +618,37 @@ def test_publisher_can_confirm_static_team_resources_once_without_student_chat_t
         json=payload,
     )
     assert denied.status_code == 404
+
+
+@pytest.mark.parametrize("operation", ["llm_agent_chat", "embedding_query"])
+def test_operator_standing_consent_records_publisher_grant_once(
+    client: TestClient, app_bundle: Any, operation: str
+) -> None:
+    _app, database, settings = app_bundle
+    result_id, manifest, _document, _set_id = _prepared(client, database, settings, operation)
+    with database.session() as db:
+        result = db.get(TeamTurnResult, result_id)
+        conversation = db.get(Conversation, result.conversation_id)
+        participant = db.get(ConversationParticipant, result.participant_id)
+        selection = frozen_team_selection(db, conversation)
+        args = (
+            db,
+            BOWEN_ID,
+            selection,
+            {participant.team_member_id},
+            manifest.policy_hash,
+            manifest.provider_operation,
+        )
+        assert current_standing_grant(*args) is None
+        grant = operator_standing_grant(*args)
+        assert grant is not None
+        assert grant.publisher_user_id == MAYA_ID
+        assert grant.provider_operation == operation
+        assert "PRIVATE_STUDENT_MESSAGE_CANARY" not in grant.resource_manifest_json
+        assert current_standing_grant(*args) == grant
+        again = operator_standing_grant(*args)
+        assert again is not None and again.id == grant.id
+        assert db.scalar(select(func.count()).select_from(TeamProviderStandingGrant)) == 1
 
 
 def test_teacher_can_confirm_embedding_chat_policy_for_single_queries(

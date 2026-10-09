@@ -7,7 +7,15 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from app.core.models import CourseMember, Job, KnowledgeDocument, ProviderOperation
+from app.core.models import (
+    AgentVersion,
+    CourseMember,
+    Job,
+    KnowledgeDocument,
+    ProviderOperation,
+    User,
+)
+from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.generation import claim_generation_run
 from app.modules.knowledge_sets.materialization import materialize_accepted_knowledge_generation
 from app.modules.knowledge_sets.models import (
@@ -19,6 +27,13 @@ from app.modules.knowledge_sets.models import (
     KnowledgeSet,
     KnowledgeSetMarkdownVersion,
 )
+from app.modules.knowledge_sets.schemas import NoteContent, QuestionContent
+from app.modules.knowledge_sets.service import (
+    get_agent_runtime_knowledge,
+    runtime_knowledge_projection,
+)
+from app.modules.learning.recipes import _selected_questions, current_question_version_for_asset
+from app.modules.workspace.chat_provider import chat_messages
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -293,6 +308,28 @@ def test_partial_refresh_keeps_previous_complete_markdown_version(
         data_root=settings.resolved_data_root,
     )
 
+    with database.session() as db:
+        current_run = db.get(KnowledgeGenerationRun, queued.json()["run_id"])
+        assert current_run is not None
+        owner = db.get(User, current_run.owner_user_id)
+        version = db.get(AgentVersion, current_run.agent_version_id)
+        assert owner is not None and version is not None
+        runtime_knowledge = get_agent_runtime_knowledge(
+            db,
+            AuthContext("", None, owner, ""),
+            current_run.agent_id,
+        )
+        messages, _ = chat_messages(
+            version,
+            [{"role": "user", "content": "Use the current guide."}],
+            [],
+            canonical_knowledge=runtime_knowledge,
+        )
+        chat_prompt = json.loads(messages[0]["content"].split("\n", 1)[1])
+        canonical_markdown = chat_prompt["canonical_knowledge"][0]["markdown"]
+        assert "This is the last complete generated document." in canonical_markdown
+        assert "Incomplete candidate" not in canonical_markdown
+
     after = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
     assert after.status_code == 200, after.text
     assert after.json()["version_seq"] == before_document["version_seq"]
@@ -310,6 +347,143 @@ def test_partial_refresh_keeps_previous_complete_markdown_version(
         assert failed_run.state == "failed"
         assert failed_run.safe_error_code == "knowledge_generation_partial_failure"
         assert [version.version_seq for version in versions] == [1]
+
+
+def test_first_partial_generation_heads_are_not_available_to_chat_or_assessment(
+    client: TestClient, app_bundle: Any
+) -> None:
+    _app, database, settings = app_bundle
+    _agent_id, _document_id, run_id, set_id = _create_generation_run(client, database)
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        assert run is not None
+        timestamp = datetime.now(UTC)
+        legacy_contents = [
+            NoteContent(
+                kind="note",
+                title="Existing K1 notes",
+                body="LEGACY_K1_NOTE_REMAINS_AVAILABLE",
+            ),
+            QuestionContent(
+                kind="question",
+                prompt="LEGACY_K1_QUESTION_REMAINS_AVAILABLE",
+                reference_answer=None,
+                rubric={
+                    "criteria": [{"label": "Reasoning", "points": 1, "guidance": "Explain."}],
+                    "total_points": 1,
+                },
+            ),
+        ]
+        manual_question_asset_id: str | None = None
+        for content in legacy_contents:
+            asset_id = str(uuid4())
+            content_json = content.model_dump_json()
+            asset = KnowledgeAsset(
+                id=asset_id,
+                knowledge_set_id=set_id,
+                kind=content.kind,
+                generation_lineage_key=None,
+                current_version_seq=1,
+                created_by_user_id=run.owner_user_id,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+            db.add(asset)
+            db.add(
+                KnowledgeAssetVersion(
+                    id=str(uuid4()),
+                    asset_id=asset_id,
+                    version_seq=1,
+                    content_json=content_json,
+                    content_hash=_digest(content_json),
+                    source_dependency_hash=None,
+                    dependency_authorization_epoch=None,
+                    set_authorization_epoch=0,
+                    origin="manual",
+                    created_by_user_id=run.owner_user_id,
+                    generator_agent_version_id=None,
+                    generation_job_id=None,
+                    created_at=timestamp,
+                )
+            )
+            if content.kind == "question":
+                manual_question_asset_id = asset_id
+        db.commit()
+
+    _accept_stage(
+        database,
+        run_id,
+        [
+            {
+                "kind": "question",
+                "prompt": "UNPROMOTED_PARTIAL_QUESTION",
+                "reference_answer": "UNPROMOTED_PARTIAL_REFERENCE",
+                "rubric": {
+                    "criteria": [
+                        {"label": "Reasoning", "points": 1, "guidance": "UNPROMOTED_RUBRIC"}
+                    ],
+                    "total_points": 1,
+                },
+            },
+            {"_item_error": "provider_asset_invalid"},
+        ],
+    )
+    materialize_accepted_knowledge_generation(
+        database.session_factory,
+        run_id,
+        _run_claim(database, run_id),
+        data_root=settings.resolved_data_root,
+    )
+
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, run_id)
+        set_row = db.get(KnowledgeSet, set_id)
+        assert run is not None and set_row is not None
+        asset = db.scalar(
+            select(KnowledgeAsset).where(
+                KnowledgeAsset.knowledge_set_id == set_id,
+                KnowledgeAsset.kind == "question",
+                KnowledgeAsset.generation_lineage_key.is_not(None),
+            )
+        )
+        assert asset is not None
+        current_version = db.scalar(
+            select(KnowledgeAssetVersion).where(
+                KnowledgeAssetVersion.asset_id == asset.id,
+                KnowledgeAssetVersion.version_seq == asset.current_version_seq,
+            )
+        )
+        assert current_version is not None and current_version.origin == "ai"
+        projection = runtime_knowledge_projection(db, set_id, run.owner_user_id)
+        assert projection.canonical_markdown is None
+        assert {item["content"]["kind"] for item in projection.assets} == {"note", "question"}
+        assert any(
+            "LEGACY_K1_NOTE_REMAINS_AVAILABLE" in str(item["content"]) for item in projection.assets
+        )
+        assert all("UNPROMOTED_PARTIAL_" not in str(item["content"]) for item in projection.assets)
+        owner = db.get(User, run.owner_user_id)
+        agent_version = db.get(AgentVersion, run.agent_version_id)
+        assert owner is not None and agent_version is not None
+        runtime_knowledge = get_agent_runtime_knowledge(
+            db, AuthContext("", None, owner, ""), run.agent_id
+        )
+        messages, _ = chat_messages(
+            agent_version,
+            [{"role": "user", "content": "Use any complete guide."}],
+            [],
+            canonical_knowledge=runtime_knowledge,
+        )
+        chat_prompt = json.loads(messages[0]["content"].split("\n", 1)[1])
+        assert len(chat_prompt["canonical_knowledge"]) == 1
+        serialized_knowledge = json.dumps(chat_prompt["canonical_knowledge"], ensure_ascii=False)
+        assert "LEGACY_K1_NOTE_REMAINS_AVAILABLE" in serialized_knowledge
+        assert "LEGACY_K1_QUESTION_REMAINS_AVAILABLE" in serialized_knowledge
+        assert "UNPROMOTED_PARTIAL_" not in messages[0]["content"]
+        assert current_question_version_for_asset(db, set_row, asset.id) is None
+        selected = _selected_questions(db, (set_id,))
+        assert len(selected) == 1
+        assert selected[0][1] == manual_question_asset_id
+        assert set_row.current_markdown_version_seq == 0
 
 
 def test_newer_intent_fences_older_run_before_provider_acceptance(

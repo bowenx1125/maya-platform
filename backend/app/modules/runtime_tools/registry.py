@@ -34,6 +34,7 @@ ToolAuthorization = Callable[[Session, AuthContext, Conversation, BaseModel], No
 ToolReplayAuthorization = Callable[
     [Session, AuthContext, Conversation, BaseModel, "ToolCallIdentity", dict[str, Any]], None
 ]
+ToolPostCommit = Callable[["ToolSpec", dict[str, Any]], None]
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class ToolSpec:
     authorize_replay: ToolReplayAuthorization | None = None
     replay_read: ToolHandler | None = None
     stop_after_tool_call: bool = False
+    entry_kinds: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -98,12 +100,13 @@ def _scope(db: Session, actor: AuthContext, conversation_id: str) -> tuple[Conve
 def exposed_tools(
     db: Session, actor: AuthContext, conversation_id: str, registry: Mapping[str, ToolSpec]
 ) -> tuple[ToolSpec, ...]:
-    _row, role = _scope(db, actor, conversation_id)
+    row, role = _scope(db, actor, conversation_id)
     return tuple(
         spec
         for spec in registry.values()
         if spec.authorization_class
         in ({"Public", "Teacher"} if role == "teacher" else {"Public", "Student"})
+        and (spec.entry_kinds is None or row.entry_kind in spec.entry_kinds)
     )
 
 

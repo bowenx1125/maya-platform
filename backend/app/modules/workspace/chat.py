@@ -2,11 +2,12 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.engine import CursorResult
@@ -632,6 +633,12 @@ def _saved_chat_history(
     return history
 
 
+def _knowledge_generation_waker(request: Request) -> Callable[[str], None] | None:
+    task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+    wake = getattr(task_manager, "wake", None)
+    return wake if callable(wake) else None
+
+
 def generate_reply(
     db: Session,
     settings: Settings,
@@ -642,6 +649,7 @@ def generate_reply(
     *,
     actor_context: AuthContext | None = None,
     allow_not_sent_retry: bool = False,
+    generation_waker: Callable[[str], None] | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     """Produce one full reply in memory.  This does not store assistant text."""
 
@@ -703,7 +711,17 @@ def generate_reply(
     history = _saved_chat_history(db, row.id, current_turn.position)
     history.append({"role": "user", "content": message})
     require_current_chat_claim(db, row.id, request_id, claim_revision)
-    messages, persona_hash = chat_messages(version, history, sources)
+    canonical_knowledge: list[dict[str, Any]] = []
+    if actor_context is not None:
+        from app.modules.knowledge_sets.service import get_agent_runtime_knowledge
+
+        canonical_knowledge = get_agent_runtime_knowledge(db, actor_context, agent.id)
+    messages, persona_hash = chat_messages(
+        version,
+        history,
+        sources,
+        canonical_knowledge=canonical_knowledge,
+    )
     reply, operation_id = real_reply(
         db,
         effective_settings,
@@ -717,7 +735,9 @@ def generate_reply(
         sending_guard=sending_guard,
         actor_context=actor_context,
         sources=sources,
+        canonical_knowledge=canonical_knowledge,
         allow_not_sent_retry=allow_not_sent_retry,
+        generation_waker=generation_waker,
     )
     assessment_result = _assessment_result_for_turn(db, row.id, request_id, row.user_id)
     if assessment_active and assessment_result is None:
@@ -1480,6 +1500,7 @@ def delete_conversation(
 def send_message(
     conversation_id: UUID,
     payload: SendChat,
+    request: Request,
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -1538,6 +1559,7 @@ def send_message(
             claim_revision,
             message,
             actor_context=context,
+            generation_waker=_knowledge_generation_waker(request),
         )
         store_assistant_text(db, row.id, request_id, claim_revision, reply, sources, operation_id)
     except Exception as exc:
@@ -1566,6 +1588,7 @@ def send_message(
 def stream_message(
     conversation_id: UUID,
     payload: StreamChat,
+    request: Request,
     accept: str = Header(..., alias="Accept"),
     last_event_id: int = Header(0, alias="Last-Event-ID", ge=0),
     context: AuthContext = Depends(require_authenticated_mutation),
@@ -1642,6 +1665,7 @@ def stream_message(
             request_id=request_id,
             claim_revision=claim_revision,
             actor_context=context,
+            generation_waker=_knowledge_generation_waker(request),
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
@@ -1727,6 +1751,7 @@ def stop_team_conversation_turn_output(
 def resume_team_conversation_turn(
     conversation_id: UUID,
     turn_id: UUID,
+    request: Request,
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -1751,6 +1776,7 @@ def resume_team_conversation_turn(
                 turn.user_text,
                 actor_context=context,
                 allow_not_sent_retry=True,
+                generation_waker=_knowledge_generation_waker(request),
             )
             store_assistant_text(
                 db,

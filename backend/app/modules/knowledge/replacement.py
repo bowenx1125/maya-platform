@@ -576,7 +576,7 @@ def replace_document_copy_on_write(
                     )
                     .limit(1)
                 )
-                if prior_generation is None:
+                if prior_generation is None or prior_generation.owner_user_id != actor_user_id:
                     continue
                 action_id = str(
                     uuid5(
@@ -588,7 +588,7 @@ def replace_document_copy_on_write(
                     queued = enqueue_generation_for_existing_set(
                         db,
                         set_id=set_id,
-                        owner_user_id=prior_generation.owner_user_id,
+                        owner_user_id=actor_user_id,
                         action_id=action_id,
                     )
                 except PlatformError as exc:

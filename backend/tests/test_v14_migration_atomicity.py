@@ -25,6 +25,7 @@ _REVISIONS = (
     ("0050_chat_provider_standing_grants", "0051_chat_memory_entry_actions"),
     ("0051_chat_memory_entry_actions", "0052_teacher_courseware"),
     ("0052_teacher_courseware", "0053_user_profile"),
+    ("0053_user_profile", "0054_assessment_attempt_question_selection"),
 )
 
 
