@@ -1,7 +1,10 @@
 import * as THREE from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { applyAvatarConfigMaterials } from "../components/avatar/avatar-renderer";
+import {
+  applyAvatarConfigMaterials,
+  releaseAvatarWebGL,
+} from "../components/avatar/avatar-renderer";
 import type { AvatarConfig } from "../components/avatar/types";
 
 const config: AvatarConfig = {
@@ -24,6 +27,26 @@ function triangleGeometry(): THREE.BufferGeometry {
   );
   return geometry;
 }
+
+describe("avatar webgl teardown", () => {
+  it("does not force-lose a canvas the next viewer will reuse", () => {
+    const dispose = vi.fn();
+    const forceContextLoss = vi.fn();
+    releaseAvatarWebGL({ dispose, forceContextLoss }, { isConnected: true });
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(forceContextLoss).not.toHaveBeenCalled();
+  });
+
+  it("force-loses a canvas that has already left the document", () => {
+    const dispose = vi.fn();
+    const forceContextLoss = vi.fn();
+    releaseAvatarWebGL({ dispose, forceContextLoss }, { isConnected: false });
+    expect(dispose.mock.invocationCallOrder[0]).toBeLessThan(
+      forceContextLoss.mock.invocationCallOrder[0],
+    );
+    expect(forceContextLoss).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("avatar material shape", () => {
   it("keeps an ungrouped single-primitive mesh renderable after config", () => {
