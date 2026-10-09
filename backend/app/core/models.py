@@ -24,6 +24,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import (
+    text as sql_text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.core.identity import group_name_key, username_key
@@ -1106,11 +1109,17 @@ class VoiceProfile(Base):
             name="ck_voice_profiles_scope_group",
         ),
         Index("ix_voice_profiles_group_status", "group_id", "status"),
+        # One enrolled system fallback. A preset sets provenance kind to
+        # "preset" and stays outside this index, so it can share the system
+        # scope without becoming a second fallback.
         Index(
             "uq_voice_profiles_one_system",
             "scope",
             unique=True,
-            sqlite_where=(scope == "system"),
+            sqlite_where=sql_text(
+                "scope = 'system' AND COALESCE(json_extract(provenance_json, '$.kind'), '') "
+                "!= 'preset'"
+            ),
         ),
     )
 

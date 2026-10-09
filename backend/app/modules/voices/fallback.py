@@ -36,6 +36,7 @@ from app.core.models import VoiceProfile, VoiceProviderOperation
 from app.modules.knowledge.files import contained_path, ensure_private_dir
 from app.modules.voices.crypto import VoiceEncryptionError, encrypt_external_voice_id
 from app.modules.voices.lease_lock import lock_exclusive, unlock
+from app.modules.voices.preset import is_preset_profile
 from app.modules.voices.service import (
     PREVIEW_TEXT,
     TARGET_MODEL_KEY,
@@ -192,9 +193,17 @@ def _profile_external_id(profile: VoiceProfile, settings: Settings) -> str:
 
 
 def _system_profile(session: Session) -> VoiceProfile | None:
-    profiles = session.scalars(
-        select(VoiceProfile).where(VoiceProfile.scope == "system").order_by(VoiceProfile.created_at)
-    ).all()
+    # A preset shares the system scope but is not the enrolled fallback.
+    # Counting it would make one fallback look ambiguous.
+    profiles = [
+        profile
+        for profile in session.scalars(
+            select(VoiceProfile)
+            .where(VoiceProfile.scope == "system")
+            .order_by(VoiceProfile.created_at)
+        ).all()
+        if not is_preset_profile(profile)
+    ]
     if len(profiles) > 1:
         raise FallbackEnrollmentError("system fallback state is ambiguous")
     return profiles[0] if profiles else None
@@ -529,7 +538,12 @@ def _verify_stage(settings: Settings, *, allow_real: bool) -> str:
                 while operation.attempt <= max_attempts:
                     _dispatch(session, operation, charged=getattr(tts, "key", "mock") != "mock")
                     try:
-                        result = tts.synthesize(PREVIEW_TEXT, external_id, language="en")
+                        result = tts.synthesize(
+                            PREVIEW_TEXT,
+                            external_id,
+                            language="en",
+                            target_model_key=profile.target_model_key,
+                        )
                         validate_technical_audio(result.audio_bytes)
                     except (TTSProviderError, AudioValidationError, OSError) as exc:
                         if operation.attempt >= max_attempts:

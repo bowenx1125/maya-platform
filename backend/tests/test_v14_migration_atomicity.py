@@ -27,6 +27,7 @@ _REVISIONS = (
     ("0052_teacher_courseware", "0053_user_profile"),
     ("0053_user_profile", "0054_assessment_attempt_question_selection"),
     ("0054_assessment_attempt_question_selection", "0055_assessment_attempt_submission"),
+    ("0055_assessment_attempt_submission", "0056_preset_voice_profiles"),
 )
 
 

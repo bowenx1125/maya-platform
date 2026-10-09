@@ -261,7 +261,9 @@ class SqlPlaybackRepository(PlaybackRepository):
     ) -> ResolvedTurnVoice:
         """Resolve custom/system audio; an empty real token means text-only."""
 
-        def ready_profile(profile_id: str | None, *, system_only: bool = False) -> str | None:
+        def ready_profile(
+            profile_id: str | None, *, system_only: bool = False
+        ) -> tuple[str, str] | None:
             if not profile_id:
                 return None
             scope_guard = " AND scope='system' AND group_id IS NULL" if system_only else ""
@@ -279,33 +281,37 @@ class SqlPlaybackRepository(PlaybackRepository):
             )
             if row is None:
                 return None
+            model = row["target_model_key"]
+            if not isinstance(model, str) or not model:
+                return None
             if getattr(settings, "tts_provider", "mock") == "mock":
-                return str(profile_id)
+                return str(profile_id), model
             if row["provider_key"] != "dashscope" or not row["external_id_encrypted"]:
                 return None
             from app.modules.voices.crypto import VoiceEncryptionError, decrypt_external_voice_id
 
             try:
-                return decrypt_external_voice_id(
+                token = decrypt_external_voice_id(
                     row["external_id_encrypted"],
                     settings.secret_bytes,
                     profile_id=str(profile_id),
                     scope=row["scope"],
                     group_id=row["group_id"],
                     provider_key=row["provider_key"],
-                    target_model_key=row["target_model_key"],
+                    target_model_key=model,
                 )
             except VoiceEncryptionError:
                 return None
+            return token, model
 
         frozen_id = getattr(participant, "effective_voice_profile_id", None)
         if getattr(participant, "effective_voice_kind", None) == "platform_profile" and (
-            token := ready_profile(frozen_id)
+            ready := ready_profile(frozen_id)
         ):
-            return ResolvedTurnVoice("platform_profile", str(frozen_id), token)
+            return ResolvedTurnVoice("platform_profile", str(frozen_id), *ready)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
-        if token := ready_profile(fallback_id, system_only=True):
-            return ResolvedTurnVoice("platform_profile", str(fallback_id), token)
+        if ready := ready_profile(fallback_id, system_only=True):
+            return ResolvedTurnVoice("platform_profile", str(fallback_id), *ready)
         if getattr(settings, "tts_provider", "mock") == "mock":
             return ResolvedTurnVoice("mock_sentinel", None, "mock")
         return ResolvedTurnVoice("mock_sentinel", None, "")

@@ -245,9 +245,15 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     preview_languages: list[str] = []
     synthesize = provider.synthesize
 
-    def capture_preview(text: str, voice_id: str, *, language: str = "en") -> TTSResult:
+    def capture_preview(
+        text: str,
+        voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
         preview_languages.append(language)
-        return synthesize(text, voice_id, language=language)
+        return synthesize(text, voice_id, language=language, target_model_key=target_model_key)
 
     monkeypatch.setattr(provider, "synthesize", capture_preview)
     monkeypatch.setattr(voice_preview, "tts_provider", lambda _: provider)
@@ -1894,8 +1900,15 @@ class _FlakyFallbackTTS:
     def __init__(self) -> None:
         self.calls = 0
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
-        del text, external_voice_id, language
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        del text, external_voice_id, language, target_model_key
         self.calls += 1
         if self.calls == 1:
             raise TTSProviderTimeout("transient preview timeout")

@@ -69,7 +69,7 @@ Report 不因供应商返回的 model/object 标识不同而拒收；usage 缺�
 | 更新后重建     | `docker compose up -d --build --wait` |
 | 查看状态       | `docker compose ps`                   |
 
-后端启动时自动迁移，当前代码迁移 head 为 `0055_assessment_attempt_submission`（实际部署版本见 PROJECT）；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制，`0033` 移除预算与调用序号上限并保留历史账本。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
+后端启动时自动迁移，当前代码迁移 head 为 `0056_preset_voice_profiles`（实际部署版本见 PROJECT）；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制，`0033` 移除预算与调用序号上限并保留历史账本。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
 
 修改 `.env` 后执行 `docker compose up -d --wait` 以重新创建需要更新配置的容器。更换 Wi-Fi 后，可运行：
 
@@ -106,7 +106,7 @@ v1.4 的 Agent 和 Voice 在 **Studyform** 创建；普通 Team 由师生在 Cha
 4. 学生打开 **Chatform → New**，在 **Chat with** 中选择带 Maya Team 标签的 Team，再选 **Private/Public**，开始自己的会话。这里不重新选择成员、Leader 或 Knowledge。
 5. 测评中用自然语言作答、暂停、继续或放弃。老师成功更新相关 Knowledge 后，进行中或已暂停的回合会在普通 Chat 提示重新答题；旧作答不再参与重答评估，已完成回合不追溯修改。
 
-TTS 与 Voice 默认仍是 mock。需要语音克隆或课堂语音播放时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。TTS / Voice 由本地环境配置管理，不能在网页上切换；Real 表示已选择真实适配器，不等于音色已准备好或供应商请求已验收。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
+TTS 与 Voice 默认仍是 mock。需要语音克隆或课堂语音播放时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。柏拉图的预置音色 Eldric Sage 用 `scripts/seed_preset_voice.py` 写入，再把打印的档案 id 配成 `plato=<id>`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。TTS / Voice 由本地环境配置管理，不能在网页上切换；Real 表示已选择真实适配器，不等于音色已准备好或供应商请求已验收。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
 
 后端不再按请求次数、Token 数或金额预算阻止调用，也不向 LLM / Report 发送固定输出 Token 上限。实际用量、费用、权限、披露确认和去重仍保留；供应商自身的容量限制仍适用。
 

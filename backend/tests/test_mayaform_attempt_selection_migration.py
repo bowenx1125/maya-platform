@@ -117,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0055_assessment_attempt_submission"
+    assert ALEMBIC_HEAD == "0056_preset_voice_profiles"
     _assert_foreign_keys(database)
 
 

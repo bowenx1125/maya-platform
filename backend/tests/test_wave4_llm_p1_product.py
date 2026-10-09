@@ -145,8 +145,15 @@ class _FakeDashScopeAdapter(DashScopeLLMAdapter):
 
 
 class _FailingTTS(MockTTSProvider):
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> object:
-        del text, external_voice_id, language
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> object:
+        del text, external_voice_id, language, target_model_key
         self.synthesize_calls += 1
         raise TTSProviderTimeout("local test interruption", safe_code="tts_timeout")
 

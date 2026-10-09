@@ -148,7 +148,12 @@ def create_voice_preview(
     tts = provider or tts_provider(settings)
     external_id = _tts_external_id(profile, settings)
     try:
-        output = tts.synthesize(VOICE_PREVIEW_TEXT, external_id, language="auto")
+        output = tts.synthesize(
+            VOICE_PREVIEW_TEXT,
+            external_id,
+            language="auto",
+            target_model_key=profile.target_model_key,
+        )
         raw = read_pcm16_wav_bytes(output.audio_bytes)
         validate_technical_audio(raw)
     except (TTSProviderError, AudioValidationError, OSError) as exc:

@@ -33,7 +33,7 @@ K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
 K3B1_SCHEMA_HEAD = "0041_team_conversations"
 K3B2_SCHEMA_HEAD = "0042_team_turn_results"
 K4A_SCHEMA_HEAD = "0043_learning_evidence"
-SCHEMA_HEAD = "0055_assessment_attempt_submission"
+SCHEMA_HEAD = "0056_preset_voice_profiles"
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
@@ -84,6 +84,7 @@ V14_PRESERVED_BY_HEAD = {
     "0053_user_profile": (),
     "0054_assessment_attempt_question_selection": (),
     "0055_assessment_attempt_submission": (),
+    "0056_preset_voice_profiles": (),
 }
 SUPPORTED_SCHEMA_HEADS.update(V14_PRESERVED_BY_HEAD)
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
