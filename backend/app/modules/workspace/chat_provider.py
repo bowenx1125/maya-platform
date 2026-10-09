@@ -961,6 +961,17 @@ def assessment_safe_reply_text(
     return "\n\n".join(lines)
 
 
+AGENT_LIMIT_REPLY_RULE = (
+    "If the user asks to see records, statistics, reports or another person's work that this "
+    "role or this chat is not allowed to see, your entire reply is exactly 看不到。 when the "
+    "user has been writing in Chinese, or exactly Can't see that. when they have been writing "
+    "in English. If the user asks for a function you do not have, your entire reply is exactly "
+    "做不到。 when the user has been writing in Chinese, or exactly Can't. when they have been "
+    "writing in English. Do not call a tool for either case, and do not repeat a tool call that "
+    "already returned the same denial or the same result."
+)
+
+
 def chat_messages(
     version: AgentVersion,
     history: list[dict[str, str]],
@@ -1000,6 +1011,7 @@ def chat_messages(
         "Never claim to have access to other people's conversations or private resources. "
         "Reply directly in natural text. Use any available Maya Tools when the current task "
         "calls for a saved record or formal activity action; never claim an action succeeded "
-        "unless its Tool returns success.\n" + json.dumps(context, ensure_ascii=False)
+        "unless its Tool returns success. "
+        f"{AGENT_LIMIT_REPLY_RULE}\n" + json.dumps(context, ensure_ascii=False)
     )
     return [{"role": "system", "content": instruction}, *history], markdown_hash(version.agent_md)

@@ -2133,8 +2133,9 @@ function AgentChatScope({
     character?.available !== false;
   const teamMode = Boolean(selectedTeam || teamTarget);
   const activeSession = selectedTeam ?? selected;
-  // A Chat's privacy is fixed once it exists: Private Chats stay out of
-  // teacher statistics and reports, so switching starts a new Chat instead.
+  // Privacy and the target are chosen only while creating a Chat. Afterwards
+  // both controls hide: an existing Chat keeps the privacy it was created with.
+  const showCreationControls = !activeSession;
   const shownVisibility: ChatVisibility = activeSession
     ? (activeSession.chat_visibility ?? "private")
     : chatVisibility;
@@ -2211,19 +2212,6 @@ function AgentChatScope({
     (selectedTeam && selectedTeam.can_send && !selectedTeam.read_only) ||
     (!selectedTeam && teamTarget),
   );
-
-  function stoppedReply(code: string | null | undefined) {
-    if (
-      code === "tool_not_authorized" ||
-      code === "forbidden" ||
-      code === "authorization_revoked" ||
-      code === "provider_authorization_revoked"
-    ) {
-      return t("chatCannotSee");
-    }
-    if (code === "team_no_progress" || code == null) return t("chatCannot");
-    return teamFailureText(code, "teamMemberFailure");
-  }
 
   function chooseAllRecipients() {
     setTeamRecipientExplicit(true);
@@ -2441,72 +2429,27 @@ function AgentChatScope({
                     </span>
                   ) : null}
                 </div>
-                <select
-                  className={styles.targetSelect}
-                  aria-label={t("chatTarget")}
-                  value={pickerValue}
-                  disabled={busy || teamBusy}
-                  onChange={(event) => chooseTarget(event.target.value)}
-                >
-                  <option value="" disabled>
-                    {t("chatTargetPlaceholder")}
-                  </option>
-                  {agents.length || selected ? (
-                    <optgroup label={t("agents")}>
-                      {selected &&
-                      !agents.some(
-                        (agent) =>
-                          agent.version_id === selected.agent.version_id,
-                      ) ? (
-                        <option value={`agent:${selected.agent.version_id}`}>
-                          {selected.agent.name} · {selected.agent.version_label}
-                        </option>
-                      ) : null}
-                      {agents.map((agent) => (
-                        <option
-                          key={agent.version_id}
-                          value={`agent:${agent.version_id}`}
-                          disabled={agent.available === false}
-                        >
-                          {agent.name} · {agent.version_label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {teamOptions.length || currentTeam?.kind === "team" ? (
-                    <optgroup label={t("chatTargetTeams")}>
-                      {currentTeam?.kind === "team" &&
-                      !teamOptions.some(
-                        (team) => team.id === currentTeam.id,
-                      ) ? (
-                        <option value={`team:${currentTeam.id}`}>
-                          {currentTeam.name}
-                        </option>
-                      ) : null}
-                      {teamOptions.map((team) => (
-                        <option key={team.id} value={`team:${team.id}`}>
-                          {team.display_name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {mayaChoices.length || currentTeam?.kind === "maya_team" ? (
-                    <optgroup label="Maya Team">
-                      {currentTeam?.kind === "maya_team" &&
-                      !mayaIds.has(currentTeam.id) ? (
-                        <option value={`maya_team:${currentTeam.id}`}>
-                          {currentTeam.name}
-                        </option>
-                      ) : null}
-                      {mayaChoices.map((team) => (
-                        <option key={team.id} value={`maya_team:${team.id}`}>
-                          {team.display_name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  <option value="new-team">{t("chatTargetNewTeam")}</option>
-                </select>
+                {showCreationControls ? (
+                  <div
+                    className={styles.visibilityToggle}
+                    role="group"
+                    aria-label={t("chatPrivacy")}
+                    data-ui-guide="chat.privacy"
+                    data-ui-guide-text={t("chatPrivacyHelp")}
+                  >
+                    {(["private", "public"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={shownVisibility === option}
+                        disabled={busy || teamBusy}
+                        onClick={() => chooseVisibility(option)}
+                      >
+                        {t(option === "private" ? "teamPrivate" : "teamPublic")}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </header>
               <div
                 className={styles.messages}
@@ -2612,23 +2555,16 @@ function AgentChatScope({
                                   />
                                   {t("loading")}
                                 </p>
-                              ) : (
-                                <p className={styles.teamWarning} role="status">
-                                  {stoppedReply(
-                                    result.safe_error_code ??
-                                      turn.safe_error_code,
-                                  )}
-                                </p>
-                              )
+                              ) : null
                             ) : result.state === "acceptance_unknown" ? (
                               <p className={styles.teamWarning} role="status">
                                 {t("errorChatAcceptanceUnknown")}
                               </p>
                             ) : (
                               <p className={styles.teamWarning} role="status">
-                                {stoppedReply(
-                                  result.safe_error_code ??
-                                    turn.safe_error_code,
+                                {teamFailureText(
+                                  result.safe_error_code,
+                                  "teamMemberFailure",
                                 )}
                               </p>
                             )}
@@ -2782,30 +2718,75 @@ function AgentChatScope({
                     ))}
                   </div>
                 ) : null}
-                <div
-                  className={styles.visibilityToggle}
-                  role="group"
-                  aria-label={t("chatPrivacy")}
-                  data-ui-guide="chat.privacy"
-                  data-ui-guide-text={t("chatPrivacyHelp")}
-                >
-                  {(["private", "public"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      aria-pressed={shownVisibility === option}
-                      disabled={
-                        busy ||
-                        teamBusy ||
-                        activeSession?.read_only === true ||
-                        Boolean(activeSession)
-                      }
-                      onClick={() => chooseVisibility(option)}
-                    >
-                      {t(option === "private" ? "teamPrivate" : "teamPublic")}
-                    </button>
-                  ))}
-                </div>
+                {showCreationControls ? (
+                  <select
+                    className={styles.targetSelect}
+                    aria-label={t("chatTarget")}
+                    value={pickerValue}
+                    disabled={busy || teamBusy}
+                    onChange={(event) => chooseTarget(event.target.value)}
+                  >
+                    <option value="" disabled>
+                      {t("chatTargetPlaceholder")}
+                    </option>
+                    {agents.length || selected ? (
+                      <optgroup label={t("agents")}>
+                        {selected &&
+                        !agents.some(
+                          (agent) =>
+                            agent.version_id === selected.agent.version_id,
+                        ) ? (
+                          <option value={`agent:${selected.agent.version_id}`}>
+                            {selected.agent.name} ·{" "}
+                            {selected.agent.version_label}
+                          </option>
+                        ) : null}
+                        {agents.map((agent) => (
+                          <option
+                            key={agent.version_id}
+                            value={`agent:${agent.version_id}`}
+                            disabled={agent.available === false}
+                          >
+                            {agent.name} · {agent.version_label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {teamOptions.length || currentTeam?.kind === "team" ? (
+                      <optgroup label={t("chatTargetTeams")}>
+                        {currentTeam?.kind === "team" &&
+                        !teamOptions.some(
+                          (team) => team.id === currentTeam.id,
+                        ) ? (
+                          <option value={`team:${currentTeam.id}`}>
+                            {currentTeam.name}
+                          </option>
+                        ) : null}
+                        {teamOptions.map((team) => (
+                          <option key={team.id} value={`team:${team.id}`}>
+                            {team.display_name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {mayaChoices.length || currentTeam?.kind === "maya_team" ? (
+                      <optgroup label="Maya Team">
+                        {currentTeam?.kind === "maya_team" &&
+                        !mayaIds.has(currentTeam.id) ? (
+                          <option value={`maya_team:${currentTeam.id}`}>
+                            {currentTeam.name}
+                          </option>
+                        ) : null}
+                        {mayaChoices.map((team) => (
+                          <option key={team.id} value={`maya_team:${team.id}`}>
+                            {team.display_name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    <option value="new-team">{t("chatTargetNewTeam")}</option>
+                  </select>
+                ) : null}
                 {!teamMode && character?.available === false ? (
                   <p id="chat-readonly-help" className={styles.readOnlyHelp}>
                     {readOnlyHelp}

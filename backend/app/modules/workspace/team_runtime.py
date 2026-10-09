@@ -1180,6 +1180,10 @@ def _member_system(
             "If the action tool cannot return a safe result, do not provide student-facing prose.\n"
             "</active_assessment_action_protocol>"
         )
+    else:
+        from .chat_provider import AGENT_LIMIT_REPLY_RULE
+
+        message += f"\n{AGENT_LIMIT_REPLY_RULE}"
     return message
 
 
@@ -1227,6 +1231,18 @@ def _finish_run(db: Session, row: Conversation, turn: ConversationTurn) -> None:
         turn.state, turn.safe_error_code = "failed", "team_failed"
     row.active_request_id = None
     _append_event(db, turn, "turn_done")
+
+
+def _spoken_refusal(code: str, user_text: str) -> str | None:
+    """The Agent's own reply when a repeated tool cannot be seen or done."""
+    if code not in {"agent_cannot_see", "agent_cannot"}:
+        return None
+    from .chat_provider import prefers_chinese
+
+    chinese = prefers_chinese([user_text]) if user_text.strip() else False
+    if code == "agent_cannot_see":
+        return "看不到。" if chinese else "Can't see that."
+    return "做不到。" if chinese else "Can't."
 
 
 def _safe_code(exc: Exception) -> str:
@@ -2087,6 +2103,7 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
     from .chat_team_provider import has_repeated_no_progress_tool_cycle
     from .chat_team_sdk import MemberSpec, TeamDispatchError, run_selected_agent
 
+    request: MemberRequest | None = None
     try:
         request = _start_member(
             factory,
@@ -2169,8 +2186,20 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
                 assessment_revoked_scope=request.assessment_revoked_scope,
             )
     except Exception as exc:
-        if _safe_code(exc) == "team_no_progress":
+        code = _safe_code(exc)
+        spoken = _spoken_refusal(code, request.message) if request is not None else None
+        if code == "team_no_progress":
             pause_team_for_no_progress(factory, claim)
+        elif spoken is not None and request is not None:
+            settle_member(
+                factory,
+                claim.turn_id,
+                claim.token,
+                result_id,
+                reply=MemberReply(spoken),
+                actor_context=claim.actor_context,
+                assessment_revoked_scope=request.assessment_revoked_scope,
+            )
         else:
             settle_member(factory, claim.turn_id, claim.token, result_id, error=exc)
 
@@ -2181,10 +2210,11 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
     from app.modules.learning.attempts import has_open_question
 
     from .chat_team_context import load_member_context
-    from .chat_team_provider import has_repeated_no_progress_tool_cycle
+    from .chat_team_provider import has_repeated_no_progress_tool_cycle, stalled_refusal_code
     from .chat_team_sdk import MemberSpec, TeamDispatchError, run_coordinate_team
 
     leader_result = result_ids(factory, claim.turn_id)[0]
+    leader: MemberRequest | None = None
     invocations: dict[str, MemberRequest] = {}
     participant_occurrences: dict[str, int] = {}
     call_cursors: dict[str, int] = {}
@@ -2361,8 +2391,12 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     )
                 repeated_cycle = has_repeated_no_progress_tool_cycle(member_messages, tools)
                 allow_cycle = repeated_cycle and no_progress_resume_remaining
-                if repeated_cycle and not allow_cycle:
-                    raise TeamDispatchError("team_no_progress")
+                if not allow_cycle:
+                    refusal = stalled_refusal_code(member_messages, tools)
+                    if refusal is not None:
+                        raise TeamDispatchError(refusal)
+                    if repeated_cycle:
+                        raise TeamDispatchError("team_no_progress")
                 if allow_cycle:
                     no_progress_resume_remaining = False
                 if claim.settings.llm_provider == "dashscope":
@@ -2450,7 +2484,19 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                             raise TeamDispatchError("chat_interrupted")
                 return response
             except Exception as exc:
-                if member_id != leader.participant_id and _safe_code(exc) != "team_no_progress":
+                code = _safe_code(exc)
+                spoken = _spoken_refusal(code, request.message)
+                if spoken is not None and member_id != leader.participant_id:
+                    if not request.already_ready and not settle_member(
+                        factory,
+                        claim.turn_id,
+                        claim.token,
+                        request.result_id,
+                        reply=MemberReply(spoken),
+                    ):
+                        raise TeamDispatchError("chat_interrupted") from None
+                    return ModelResponse(role="assistant", content=spoken)
+                if member_id != leader.participant_id and code != "team_no_progress":
                     settle_member(factory, claim.turn_id, claim.token, request.result_id, error=exc)
                 raise
 
@@ -2479,7 +2525,17 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                 reply=MemberReply(output.content, leader.sources),
             )
     except Exception as exc:
-        if _safe_code(exc) == "team_no_progress":
+        code = _safe_code(exc)
+        spoken = _spoken_refusal(code, leader.message if leader is not None else "")
+        if spoken is not None:
+            settle_member(
+                factory,
+                claim.turn_id,
+                claim.token,
+                leader_result,
+                reply=MemberReply(spoken),
+            )
+        elif code == "team_no_progress":
             pause_team_for_no_progress(factory, claim)
         else:
             settle_member(factory, claim.turn_id, claim.token, leader_result, error=exc)

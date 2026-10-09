@@ -183,7 +183,13 @@ def _accepted_call(
         and tool["function"].get("name") == name
         for tool in requested_tools
     ):
-        raise conflict("tool_not_available", "This Tool was not provided to this invocation.")
+        raise conflict(
+            "tool_not_available",
+            "This Tool was not provided to this invocation. "
+            "If the student asked for this function, reply with exactly 做不到。 when they "
+            "have been writing in Chinese, or exactly Can't. when they have been writing "
+            "in English.",
+        )
     if not isinstance(response, dict):
         raise conflict("tool_call_unverified", "The saved model result is unavailable.")
     message = response
@@ -238,7 +244,12 @@ def execute_tool(
             return {
                 "ok": False,
                 "code": "tool_not_authorized",
-                "message": "This Tool is not available for your current course role.",
+                "message": (
+                    "This Tool is not available for your current course role. "
+                    "Reply to the student with exactly 看不到。 when they have been writing "
+                    "in Chinese, or exactly Can't see that. when they have been writing "
+                    "in English."
+                ),
             }
         payload = spec.payload_model.model_validate(arguments)
         spec.authorize(db, actor, row, payload)

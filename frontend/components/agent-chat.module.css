@@ -255,9 +255,12 @@
 }
 /* The shared appearance theme styles every select at (0,4,1) specificity
    through :is(input:not()...), so the pill shape must be forced here. */
-.chatHeader .targetSelect {
+.composer .targetSelect {
+  grid-area: picker;
+  align-self: center;
+  justify-self: start;
   width: auto !important;
-  max-width: min(280px, 46vw);
+  max-width: 100%;
   min-height: 36px !important;
   padding: 6px 34px 6px 14px !important;
   border: 1px solid var(--line) !important;
@@ -268,14 +271,9 @@
   font-weight: 650;
   cursor: pointer;
 }
-.chatHeader .targetSelect:focus-visible {
+.composer .targetSelect:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-.composer .visibilityToggle {
-  grid-area: privacy;
-  align-self: center;
-  justify-self: start;
 }
 .teamComposerTools > p,
 .teamComposerTools .teamStatus p {
@@ -486,7 +484,7 @@
   grid-template-areas:
     "help help"
     "text text"
-    "privacy send";
+    "picker send";
   gap: 6px 8px;
   width: min(100% - 40px, 720px);
   margin: 8px auto 22px;

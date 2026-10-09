@@ -9,7 +9,10 @@ from uuid import uuid4
 from agno.models.message import Message
 from agno.models.response import ModelResponse
 from app.modules.workspace import team_runtime as runtime
-from app.modules.workspace.chat_team_provider import has_repeated_no_progress_tool_cycle
+from app.modules.workspace.chat_team_provider import (
+    has_repeated_no_progress_tool_cycle,
+    stalled_refusal_code,
+)
 from fastapi.testclient import TestClient
 
 from tests.test_mayaform_team_conversations import _headers
@@ -62,6 +65,52 @@ def test_loop_fingerprint_requires_same_available_tool_arguments_and_result() ->
     assert has_repeated_no_progress_tool_cycle(different_args, tools) is False
     assert has_repeated_no_progress_tool_cycle(different_result, tools) is False
     assert has_repeated_no_progress_tool_cycle(same, []) is False
+    assert stalled_refusal_code(same, tools) == "agent_cannot"
+    denied = _cycle(
+        {"scope": "own"},
+        '{"ok":false,"code":"tool_not_authorized"}',
+        {"scope": "own"},
+        '{"ok":false,"code":"tool_not_authorized"}',
+    )
+    assert stalled_refusal_code(denied, tools) == "agent_cannot_see"
+    delegated = [
+        Message(
+            role="assistant",
+            tool_calls=[
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {
+                        "name": "delegate_task_to_member",
+                        "arguments": json.dumps({"member_id": "m", "task": "same"}),
+                    },
+                }
+            ],
+        ),
+        Message(role="tool", tool_call_id="call-1", content='{"ok":true}'),
+        Message(
+            role="assistant",
+            tool_calls=[
+                {
+                    "id": "call-2",
+                    "type": "function",
+                    "function": {
+                        "name": "delegate_task_to_member",
+                        "arguments": json.dumps({"member_id": "m", "task": "same"}),
+                    },
+                }
+            ],
+        ),
+        Message(role="tool", tool_call_id="call-2", content='{"ok":true}'),
+    ]
+    delegate_tools = [
+        {
+            "type": "function",
+            "function": {"name": "delegate_task_to_member", "parameters": {"type": "object"}},
+        }
+    ]
+    assert has_repeated_no_progress_tool_cycle(delegated, delegate_tools) is True
+    assert stalled_refusal_code(delegated, delegate_tools) is None
 
 
 def test_coordinate_cycle_pauses_and_explicit_resume_continues_saved_run(

@@ -105,10 +105,19 @@ def team_request_bytes(
         raise TeamDispatchError("team_messages_invalid") from None
 
 
-def has_repeated_no_progress_tool_cycle(
+_VISIBILITY_DENIAL_CODES = frozenset(
+    {
+        "tool_not_authorized",
+        "forbidden",
+        "authorization_revoked",
+        "provider_authorization_revoked",
+    }
+)
+
+
+def _completed_tool_calls(
     messages: list[Message], tools: list[dict[str, Any]] | None
-) -> bool:
-    """Detect two adjacent identical completed calls with the same saved result."""
+) -> list[tuple[str, str, str]]:
     available = {
         function.get("name")
         for tool in (tools or [])
@@ -117,7 +126,7 @@ def has_repeated_no_progress_tool_cycle(
         and isinstance(function.get("name"), str)
     }
     if not available:
-        return False
+        return []
     waiting: dict[str, tuple[str, str]] = {}
     completed: list[tuple[str, str, str]] = []
     for message in messages:
@@ -153,7 +162,43 @@ def has_repeated_no_progress_tool_cycle(
             call = waiting.pop(call_id, None)
             if call is not None:
                 completed.append((*call, result))
+    return completed
+
+
+def has_repeated_no_progress_tool_cycle(
+    messages: list[Message], tools: list[dict[str, Any]] | None
+) -> bool:
+    """Detect two adjacent identical completed calls with the same saved result."""
+    completed = _completed_tool_calls(messages, tools)
     return len(completed) > 1 and completed[-1] == completed[-2]
+
+
+def _payload_denies_visibility(payload: object) -> bool:
+    if isinstance(payload, dict):
+        code = payload.get("code")
+        if isinstance(code, str) and code in _VISIBILITY_DENIAL_CODES:
+            return True
+        return any(_payload_denies_visibility(value) for value in payload.values())
+    if isinstance(payload, list):
+        return any(_payload_denies_visibility(item) for item in payload)
+    return False
+
+
+def stalled_refusal_code(messages: list[Message], tools: list[dict[str, Any]] | None) -> str | None:
+    """Spoken refusal for a repeated non-delegation tool. Delegation still pauses."""
+    completed = _completed_tool_calls(messages, tools)
+    if len(completed) < 2 or completed[-1] != completed[-2]:
+        return None
+    name, _arguments, result = completed[-1]
+    if name == "delegate_task_to_member":
+        return None
+    try:
+        payload = json.loads(result)
+    except ValueError:
+        payload = None
+    if payload is not None and _payload_denies_visibility(payload):
+        return "agent_cannot_see"
+    return "agent_cannot"
 
 
 def _raw_response_text(response: object) -> str:
@@ -418,8 +463,12 @@ def dispatch_team_model(
         raise TeamDispatchError("provider_preflight_blocked")
 
     wire = team_request_bytes(config.model_key, messages, tools, tool_choice)
-    if has_repeated_no_progress_tool_cycle(messages, tools) and not allow_no_progress_once:
-        raise TeamDispatchError("team_no_progress")
+    if not allow_no_progress_once:
+        refusal = stalled_refusal_code(messages, tools)
+        if refusal is not None:
+            raise TeamDispatchError(refusal)
+        if has_repeated_no_progress_tool_cycle(messages, tools):
+            raise TeamDispatchError("team_no_progress")
     request_hash = hashlib.sha256(wire).hexdigest()
     wire_text = wire.decode("utf-8")
     message_wire = [_wire_message(message) for message in messages]
