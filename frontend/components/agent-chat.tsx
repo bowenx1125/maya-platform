@@ -1261,6 +1261,51 @@ function AgentChatScope({
     }
   }
 
+  async function resumePausedTeam() {
+    const turn = selectedTeam?.turns.at(-1);
+    if (
+      !selectedTeam ||
+      !turn ||
+      turn.state !== "paused" ||
+      teamBusy ||
+      !isChatRequestScopeActive(scopeKey)
+    )
+      return;
+    const sequence = ++teamSendSequence.current;
+    setTeamBusy(true);
+    setTeamError(null);
+    try {
+      const refreshed = await api.controlConversationTurn(
+        selectedTeam.id,
+        turn.id,
+        "resume",
+      );
+      if (
+        sequence !== teamSendSequence.current ||
+        !isChatRequestScopeActive(scopeKey) ||
+        !isTeamSession(refreshed)
+      ) {
+        return;
+      }
+      rememberTeam(refreshed);
+      setSelectedTeam(refreshed);
+    } catch (cause) {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeKey)
+      ) {
+        setTeamError(cause);
+      }
+    } finally {
+      if (
+        sequence === teamSendSequence.current &&
+        isChatRequestScopeActive(scopeKey)
+      ) {
+        setTeamBusy(false);
+      }
+    }
+  }
+
   async function checkTeamStatus() {
     if (!selectedTeam || teamBusy || !isChatRequestScopeActive(scopeKey))
       return;
@@ -2501,10 +2546,19 @@ function AgentChatScope({
                               </ReportMarkdown>
                             ) : result.state === "pending" ||
                               result.state === "running" ? (
-                              <p className={styles.pending} role="status">
-                                <span className="spinner" aria-hidden="true" />
-                                {t("loading")}
-                              </p>
+                              turn.state === "paused" ? (
+                                <p className={styles.teamWarning} role="status">
+                                  {t("statusPaused")}
+                                </p>
+                              ) : (
+                                <p className={styles.pending} role="status">
+                                  <span
+                                    className="spinner"
+                                    aria-hidden="true"
+                                  />
+                                  {t("loading")}
+                                </p>
+                              )
                             ) : result.state === "acceptance_unknown" ? (
                               <p className={styles.teamWarning} role="status">
                                 {t("errorChatAcceptanceUnknown")}
@@ -2553,6 +2607,15 @@ function AgentChatScope({
                         {t("teamCheckStatus")}
                       </button>
                     </div>
+                  ) : selectedTeam.turns.at(-1)?.state === "paused" ? (
+                    <button
+                      type="button"
+                      className="inline-button"
+                      disabled={teamBusy}
+                      onClick={() => void resumePausedTeam()}
+                    >
+                      {t("teamResume")}
+                    </button>
                   ) : selectedTeam.turns.at(-1)?.state === "pending" ? (
                     <button
                       type="button"

@@ -1061,6 +1061,10 @@ def authorize_team_dispatch(
         )
         confirmer_kind = "published_chat_owner"
 
+    # The grant flush holds SQLite's writer lock. Repository writes use a
+    # second connection and BEGIN IMMEDIATE, so commit first or that
+    # connection waits until busy_timeout and fails closed as database locked.
+    db.commit()
     repository = ProviderRepository(db)
     policy = repository.get_policy_snapshot(manifest.policy_hash)
     policy_id = db.scalar(

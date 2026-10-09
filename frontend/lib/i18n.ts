@@ -714,6 +714,7 @@ const enMessages = {
   teamPartialResult:
     "Some members could not reply. Successful replies are kept.",
   teamCheckStatus: "Check Team Chat status",
+  teamResume: "Resume",
   teamTurnPending:
     "This Team turn is still running. Check its status to resume updates.",
 } as const;
@@ -1388,6 +1389,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamAllMembers: "All",
   teamPartialResult: "部分成员未能回复；已成功的回复已保留。",
   teamCheckStatus: "检查 Team 聊天状态",
+  teamResume: "继续",
   teamTurnPending: "Team 回复仍在运行。请检查状态以恢复更新。",
 };
 

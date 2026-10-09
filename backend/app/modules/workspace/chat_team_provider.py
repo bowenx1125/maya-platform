@@ -562,6 +562,9 @@ def dispatch_team_model(
         serialized_request=wire,
         current_policy_hash=policy.policy_hash,
     )
+    # The session's snapshot must not still hold SQLite's writer when the
+    # repository opens a second connection for BEGIN IMMEDIATE.
+    db.rollback()
     try:
         operation = repository.create_team_prepared(
             request_record,
