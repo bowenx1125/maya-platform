@@ -282,21 +282,21 @@
   line-height: 1.45;
 }
 .teamResults {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 .teamResult {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
   overflow-wrap: anywhere;
 }
 .teamResult h3 {
-  margin: 0 0 8px;
-  font-size: 15px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-family: var(--display-serif);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 .teamWarning {
   margin: 0;

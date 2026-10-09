@@ -481,73 +481,23 @@ def test_teacher_canonical_save_invalidates_current_evidence_and_fences_old_team
         )
 
     with database.session() as db:
-        attempt = db.get(AssessmentAttempt, str(started.attempt.id))
-        activity = db.get(AssessmentActivity, str(started.attempt.activity_id))
+        assert db.get(AssessmentAttempt, str(started.attempt.id)) is None
         conversation = db.get(Conversation, conversation_id)
-        assert attempt is not None and activity is not None and conversation is not None
-        assert attempt.status == "in_progress"
-        assert attempt.question_selection_revision == 2
-        current_questions = _attempt_question_rows(db, attempt.id)
-        assert len(current_questions) == 2
-        assert all(question.status == "not_presented" for question in current_questions)
-        assert all(question.question_version_id is None for question in current_questions)
-        assert all(question.activity_question_id for question in current_questions)
-        context = get_assessment_runtime_context(db, learner, conversation_id)
-        assert context is not None and context.current_question is not None
-        assert context.current_question.prompt == "Updated question one"
-        assert context.current_question.question_version_id != old_question_version_id
-        assert read_attempt_answers(db, learner, conversation_id) == []
-        projection = read_own_formal_attempt(
-            db,
-            learner,
-            conversation_id,
-            attempt_id=attempt.id,
-        )
-        assert projection["answers"] == []
-        assert not attempt_has_final_evidence(db, attempt)
-        current_question_ids = {question.id for question in current_questions}
-        old_answer_events = db.scalars(
-            select(AssessmentAttemptEvent).where(
-                AssessmentAttemptEvent.learning_record_id.in_(old_answer_ids)
-            )
-        ).all()
-        assert old_answer_events
-        assert all(event.question_id not in current_question_ids for event in old_answer_events)
-        old_evidence = db.scalars(
-            select(LearningBoundaryEvidence).where(
-                LearningBoundaryEvidence.boundary_revision_id == old_boundary_revision_id
-            )
-        ).all()
-        assert old_answer_ids.issubset(
-            {row.learning_record_id for row in old_evidence if row.learning_record_id}
-        )
-        saved_answer_count = db.scalar(
-            select(func.count(LearningRecord.id)).where(
-                LearningRecord.attempt_id == attempt.id,
-                LearningRecord.record_kind == "answer",
-            )
-        )
-        rejected_old_answer = apply_assessment_decision(
-            db,
-            learner,
-            conversation_id,
-            user_message="An answer to the old Question.",
-            decision=_answer_decision(
-                uuid4(), UUID(str(old_question_version_id)), "old Question answer"
-            ),
-        )
-        assert rejected_old_answer is not None
-        assert rejected_old_answer.disposition == "redirected"
+        assert conversation is not None
         assert (
             db.scalar(
                 select(func.count(LearningRecord.id)).where(
-                    LearningRecord.attempt_id == attempt.id,
+                    LearningRecord.attempt_id == str(started.attempt.id),
                     LearningRecord.record_kind == "answer",
                 )
             )
-            == saved_answer_count
-        )
-
+            or 0
+        ) == 0
+        assert db.scalar(
+            select(func.count(LearningBoundaryEvidence.id)).where(
+                LearningBoundaryEvidence.boundary_revision_id == old_boundary_revision_id
+            )
+        ) in {0, None}
         stale_turn = db.get(ConversationTurn, old_chat_turn_id)
         assert stale_turn is not None and stale_turn.state == "failed"
         assert stale_turn.claim_token != old_claim_token
@@ -636,6 +586,11 @@ def test_teacher_canonical_save_invalidates_current_evidence_and_fences_old_team
     assert response.status_code == 200, response.text
     assert "老师已更改当前回合的 Knowledge，请重新答题。" in response.text
     with database.session() as db:
+        restarted = start_or_resume_attempt(
+            db, learner, conversation_id, client_event_id=uuid4()
+        )
+        assert restarted is not None
+        assert str(restarted.attempt.id) != str(started.attempt.id)
         context = get_assessment_runtime_context(db, learner, conversation_id)
         assert context is not None and context.current_question is not None
         assert context.current_question.prompt == "Updated question one"
@@ -659,7 +614,7 @@ def test_teacher_canonical_save_invalidates_current_evidence_and_fences_old_team
         assert accepted_new_answer.disposition == "recorded"
 
 
-def test_empty_current_question_selection_keeps_paused_attempt_open(
+def test_empty_current_question_selection_deletes_paused_attempt(
     attempt_env: Any,
 ) -> None:
     _app, database, settings, _client = attempt_env
@@ -694,15 +649,8 @@ def test_empty_current_question_selection_keeps_paused_attempt_open(
         )
 
     with database.session() as db:
-        attempt = db.get(AssessmentAttempt, str(started.attempt.id))
-        assert attempt is not None
-        assert attempt.status == "paused"
-        assert attempt.question_selection_revision == 2
-        assert _attempt_question_rows(db, attempt.id) == []
-        context = get_assessment_runtime_context(db, student, conversation_id)
-        assert context is not None
-        assert context.current_question is None
-        assert context.progress.question_count == 0
+        assert db.get(AssessmentAttempt, str(started.attempt.id)) is None
+        assert get_assessment_runtime_context(db, student, conversation_id) is None
         notice = db.scalar(
             select(ConversationTurn).where(
                 ConversationTurn.conversation_id == conversation_id,

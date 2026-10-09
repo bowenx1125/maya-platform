@@ -799,6 +799,19 @@ def team_history(
         notice = db.get(ConversationTurn, notice_id)
         if notice is not None and notice.conversation_id == conversation_id:
             first_position = notice.position
+    if first_position is None:
+        # The unfinished attempt is gone. Later turns still start at the
+        # Leader's re-answer message, so old answers stay out of the next run.
+        first_position = db.scalar(
+            select(func.max(ConversationTurn.position))
+            .join(TeamTurnResult, TeamTurnResult.turn_id == ConversationTurn.id)
+            .where(
+                ConversationTurn.conversation_id == conversation_id,
+                ConversationTurn.user_text == "",
+                TeamTurnResult.state == "ready",
+                TeamTurnResult.assistant_text.contains("老师已更改当前回合的 Knowledge"),
+            )
+        )
     statement = select(ConversationTurn).where(
         ConversationTurn.conversation_id == conversation_id,
         ConversationTurn.position < before_position,

@@ -1408,16 +1408,28 @@ function AgentChatScope({
     ) {
       return;
     }
+    const leaderId = session.team.members.find(
+      (member) => member.is_leader,
+    )?.id;
     const routing: TeamRouting = preset
-      ? { mode: "auto", participant_ids: [] }
-      : teamRecipientExplicit && !teamAllRecipients
-        ? {
-            mode: "selected",
-            participant_ids: teamRecipientIds.length
-              ? teamRecipientIds
-              : resolveNamedRecipients(session, teamRecipientNames),
-          }
-        : { mode: "all", participant_ids: [] };
+      ? leaderId
+        ? { mode: "selected", participant_ids: [leaderId] }
+        : { mode: "auto", participant_ids: [] }
+      : teamRecipientExplicit && teamAllRecipients
+        ? { mode: "all", participant_ids: [] }
+        : teamRecipientExplicit
+          ? {
+              mode: "selected",
+              participant_ids: teamRecipientIds.length
+                ? teamRecipientIds.slice(0, 1)
+                : resolveNamedRecipients(session, teamRecipientNames).slice(
+                    0,
+                    1,
+                  ),
+            }
+          : leaderId
+            ? { mode: "selected", participant_ids: [leaderId] }
+            : { mode: "auto", participant_ids: [] };
     if (routing.mode === "selected" && !routing.participant_ids.length) {
       setTeamError(
         new PlatformApiError(400, "team_no_recipient", {
@@ -2213,19 +2225,9 @@ function AgentChatScope({
     (!selectedTeam && teamTarget),
   );
 
-  function chooseAllRecipients() {
-    setTeamRecipientExplicit(true);
-    setTeamAllRecipients(true);
-    setTeamRecipientIds([]);
-    setTeamRecipientNames([]);
-  }
-
   function addTeamRecipient(memberId: string) {
     setTeamRecipientExplicit(true);
-    setTeamRecipientIds((current) => {
-      const base = teamAllRecipients ? [] : current;
-      return base.includes(memberId) ? base : [...base, memberId];
-    });
+    setTeamRecipientIds([memberId]);
     setTeamAllRecipients(false);
     setTeamRecipientNames([]);
   }
@@ -2234,9 +2236,7 @@ function AgentChatScope({
     setTeamRecipientExplicit(true);
     setTeamAllRecipients(false);
     setTeamRecipientIds([]);
-    setTeamRecipientNames((current) =>
-      current.includes(name) ? current : [...current, name],
-    );
+    setTeamRecipientNames([name]);
   }
 
   function removeTeamRecipient(memberId: string) {
@@ -2526,51 +2526,53 @@ function AgentChatScope({
                       </p>
                     ) : null}
                     <div className={styles.teamResults}>
-                      {turn.member_results.map((result) => {
-                        const participant = selectedTeam.team.members.find(
-                          (member) => member.id === result.participant_id,
-                        );
-                        return (
-                          <article
-                            className={styles.teamResult}
-                            key={result.id}
-                          >
-                            <h3>
-                              {result.speaker_name}
-                              {participant?.is_leader
-                                ? ` · ${t("leader")}`
-                                : ""}
-                            </h3>
-                            {result.assistant_text ? (
-                              <ReportMarkdown>
-                                {result.assistant_text}
-                              </ReportMarkdown>
-                            ) : result.state === "pending" ||
-                              result.state === "running" ? (
-                              turn.state === "pending" ? (
-                                <p className={styles.pending} role="status">
-                                  <span
-                                    className="spinner"
-                                    aria-hidden="true"
-                                  />
-                                  {t("loading")}
+                      {[...turn.member_results]
+                        .sort((left, right) => left.ordinal - right.ordinal)
+                        .map((result) => {
+                          const participant = selectedTeam.team.members.find(
+                            (member) => member.id === result.participant_id,
+                          );
+                          return (
+                            <article
+                              className={styles.teamResult}
+                              key={result.id}
+                            >
+                              <h3>
+                                {result.speaker_name}
+                                {participant?.is_leader
+                                  ? ` · ${t("leader")}`
+                                  : ""}
+                              </h3>
+                              {result.assistant_text ? (
+                                <ReportMarkdown>
+                                  {result.assistant_text}
+                                </ReportMarkdown>
+                              ) : result.state === "pending" ||
+                                result.state === "running" ? (
+                                turn.state === "pending" ? (
+                                  <p className={styles.pending} role="status">
+                                    <span
+                                      className="spinner"
+                                      aria-hidden="true"
+                                    />
+                                    {t("loading")}
+                                  </p>
+                                ) : null
+                              ) : result.state === "acceptance_unknown" ? (
+                                <p className={styles.teamWarning} role="status">
+                                  {t("errorChatAcceptanceUnknown")}
                                 </p>
-                              ) : null
-                            ) : result.state === "acceptance_unknown" ? (
-                              <p className={styles.teamWarning} role="status">
-                                {t("errorChatAcceptanceUnknown")}
-                              </p>
-                            ) : (
-                              <p className={styles.teamWarning} role="status">
-                                {teamFailureText(
-                                  result.safe_error_code,
-                                  "teamMemberFailure",
-                                )}
-                              </p>
-                            )}
-                          </article>
-                        );
-                      })}
+                              ) : (
+                                <p className={styles.teamWarning} role="status">
+                                  {teamFailureText(
+                                    result.safe_error_code,
+                                    "teamMemberFailure",
+                                  )}
+                                </p>
+                              )}
+                            </article>
+                          );
+                        })}
                     </div>
                   </div>
                 ))}
@@ -2693,14 +2695,6 @@ function AgentChatScope({
                     role="menu"
                     aria-label={t("teamRecipients")}
                   >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      disabled={teamBusy}
-                      onClick={chooseAllRecipients}
-                    >
-                      {t("teamAllMembers")}
-                    </button>
                     {mentionMembers.map((member) => (
                       <button
                         key={member.key}

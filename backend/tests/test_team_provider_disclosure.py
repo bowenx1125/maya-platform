@@ -113,7 +113,7 @@ def _prepared(
             conversation_id=session["id"],
             actor_id=BOWEN_ID,
             request_id=str(uuid4()),
-            expected_revision=0,
+            expected_revision=session["revision"],
             message="PRIVATE_STUDENT_MESSAGE_CANARY",
             routing=TeamRouting(
                 mode="selected", participant_ids=[session["team"]["members"][0]["id"]]

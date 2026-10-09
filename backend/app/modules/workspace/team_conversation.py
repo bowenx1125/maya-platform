@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Literal, cast
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,6 +27,7 @@ from .models import (
     ConversationParticipantSet,
     ConversationSharedSet,
     ConversationTurn,
+    TeamTurnResult,
 )
 from .schemas import (
     ChatTeam,
@@ -34,6 +36,10 @@ from .schemas import (
     SavedTeamChatEntry,
     TeamChatParticipant,
     TeamChatSession,
+)
+
+MAYA_TEAM_OPENING = (
+    "我是 Leader。直接发消息，由我来带。要叫某一位成员，输入 @ 再选。要正式测评，直接说你要测评。"
 )
 
 
@@ -145,6 +151,7 @@ def create_team_conversation(
     )
     db.add(row)
     db.flush()
+    leader_participant: ConversationParticipant | None = None
     for member in selection.members:
         version = db.get(AgentVersion, member.agent_version_id)
         agent = db.get(Agent, member.agent_id)
@@ -167,6 +174,8 @@ def create_team_conversation(
         )
         db.add(participant)
         db.flush()
+        if participant.is_leader:
+            leader_participant = participant
         for position, set_id in enumerate(member.own_knowledge_set_ids):
             db.add(
                 ConversationParticipantSet(
@@ -179,8 +188,63 @@ def create_team_conversation(
                 conversation_id=row.id, knowledge_set_id=set_id, position=position
             )
         )
+    if entry.kind == "maya_team":
+        if leader_participant is None:
+            raise not_found()
+        _persist_maya_team_opening(db, row, leader_participant)
     db.flush()
     return row
+
+
+def _persist_maya_team_opening(
+    db: Session, row: Conversation, leader: ConversationParticipant
+) -> None:
+    """The Leader's first message is stored with the Chat, before any model call."""
+
+    now = datetime.now(UTC)
+    turn_id = str(uuid5(UUID(row.id), "maya-team-opening"))
+    routing = {"mode": "selected", "participant_ids": [leader.id]}
+    request_hash = hashlib.sha256(
+        json.dumps(
+            {"conversation_id": row.id, "message": MAYA_TEAM_OPENING},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    turn = ConversationTurn(
+        id=turn_id,
+        conversation_id=row.id,
+        position=1,
+        user_text="",
+        assistant_text=None,
+        sources_json="[]",
+        mode="mock",
+        state="ready",
+        safe_error_code=None,
+        routing_json=json.dumps(routing, ensure_ascii=False, separators=(",", ":")),
+        request_hash=request_hash,
+        claim_token=str(uuid5(UUID(turn_id), "maya-team-opening")),
+        created_at=now,
+    )
+    db.add(turn)
+    db.flush()
+    db.add(
+        TeamTurnResult(
+            id=str(uuid5(UUID(turn_id), leader.id)),
+            turn_id=turn_id,
+            conversation_id=row.id,
+            participant_id=leader.id,
+            ordinal=0,
+            state="ready",
+            assistant_text=MAYA_TEAM_OPENING,
+            sources_json="[]",
+            safe_error_code=None,
+            created_at=now,
+            completed_at=now,
+        )
+    )
+    row.revision = 1
 
 
 def _participants(db: Session, conversation_id: str) -> list[ConversationParticipant]:

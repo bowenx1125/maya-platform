@@ -731,49 +731,51 @@ def invalidate_assessment_attempts_for_knowledge_update(
                 selected_set_ids,
             )
         else:
-            next_selection_revision, has_questions, original_set_ids = refreshed
+            _next_selection_revision, has_questions, original_set_ids = refreshed
             if selected_set_ids != original_set_ids:
                 raise conflict(
                     "assessment_team_selection_changed",
                     "The published assessment Team selection changed.",
                 )
 
-        expected_revision = attempt.revision
-        expected_selection_revision = attempt.question_selection_revision
-        expected_status = attempt.status
-        changed = db.execute(
-            update(AssessmentAttempt)
-            .where(
-                AssessmentAttempt.id == attempt.id,
-                AssessmentAttempt.status == expected_status,
-                AssessmentAttempt.revision == expected_revision,
-                AssessmentAttempt.question_selection_revision == expected_selection_revision,
-            )
-            .values(
-                question_selection_revision=next_selection_revision,
-                revision=expected_revision + 1,
-                updated_at=_now(),
-            )
-            .execution_options(synchronize_session=False)
-        )
-        if getattr(changed, "rowcount", 0) != 1:
-            raise conflict(
-                "assessment_attempt_changed",
-                "The assessment changed while its Knowledge was being updated.",
-            )
-        attempt.question_selection_revision = next_selection_revision
-        attempt.revision = expected_revision + 1
-        attempt.updated_at = _now()
-        _copy_activity_questions(db, activity, attempt)
-        db.flush()
         persist_assessment_knowledge_update_notice(
             db,
             attempt=attempt,
             conversation=conversation,
             has_questions=has_questions,
         )
+        _delete_unfinished_attempt(db, attempt)
         invalidated += 1
     return invalidated
+
+
+def _delete_unfinished_attempt(db: Session, attempt: AssessmentAttempt) -> None:
+    """Drop a live attempt after the Leader has said to answer again.
+
+    Completed attempts are not passed here. A report revision that already
+    cites the row cannot lose it, so that case stops instead of guessing.
+    """
+
+    from .models import AssessmentCourseReportEvidence
+
+    cited = db.scalar(
+        select(AssessmentCourseReportEvidence.attempt_id)
+        .where(AssessmentCourseReportEvidence.attempt_id == attempt.id)
+        .limit(1)
+    )
+    if cited is not None:
+        raise conflict(
+            "assessment_attempt_reported",
+            "This unfinished attempt is already in a saved report.",
+        )
+    attempt_id = attempt.id
+    _discard_abandoned_learning(db, attempt_id)
+    db.execute(
+        delete(AssessmentAttemptEvent).where(AssessmentAttemptEvent.attempt_id == attempt_id)
+    )
+    db.flush()
+    db.delete(attempt)
+    db.flush()
 
 
 def _event(

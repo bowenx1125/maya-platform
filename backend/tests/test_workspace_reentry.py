@@ -202,7 +202,9 @@ def test_public_maya_team_post_reuses_only_the_live_owned_attempt_chat(
     else:
         assert session["id"] != source_id
         assert session["chat_visibility"] == "public"
-        assert session["turns"] == []
+        assert len(session["turns"]) == 1
+        assert session["turns"][0]["user_text"] == ""
+        assert "Leader" in session["turns"][0]["member_results"][0]["assistant_text"]
 
     with database.session() as db:
         attempt = db.get(AssessmentAttempt, attempt_id)
@@ -246,7 +248,8 @@ def test_reentry_lookup_is_scoped_to_actor_and_current_course_membership(
     kaikai_session = kaikai_response.json()
     assert kaikai_session["id"] != source_id
     assert kaikai_session["chat_visibility"] == "public"
-    assert kaikai_session["turns"] == []
+    assert len(kaikai_session["turns"]) == 1
+    assert kaikai_session["turns"][0]["user_text"] == ""
     assert client.get(f"/api/v1/conversations/{source_id}").status_code == 404
 
     with database.session() as db:
@@ -286,7 +289,8 @@ def test_withdrawn_attempt_source_is_not_reused_for_a_new_public_chat(
     session = response.json()
     assert session["id"] != source_id
     assert session["chat_visibility"] == "public"
-    assert session["turns"] == []
+    assert len(session["turns"]) == 1
+    assert session["turns"][0]["user_text"] == ""
 
     with database.session() as db:
         source = db.get(Conversation, source_id)

@@ -406,7 +406,8 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
                     "old-second-answer",
                 ),
             )
-            assert result is not None
+            if result is None:
+                return "removed"
             return result.disposition
 
     def race_teacher_save() -> None:
@@ -428,15 +429,13 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
         save_future = pool.submit(race_teacher_save)
         raced_answer_disposition = answer_future.result(timeout=20)
         save_future.result(timeout=20)
-    assert raced_answer_disposition in {"recorded", "redirected"}
+    assert raced_answer_disposition in {"recorded", "redirected", "removed"}
 
     with database.session() as db:
         activity = db.get(AssessmentActivity, first_activity.id)
         assert activity is not None and activity.question_selection_revision == 2
         for user_id in student_ids:
-            attempt = db.get(AssessmentAttempt, attempt_ids[user_id])
-            assert attempt is not None and attempt.question_selection_revision == 2
-            assert attempt.status == "in_progress"
+            assert db.get(AssessmentAttempt, attempt_ids[user_id]) is None
             assert (
                 read_attempt_answers(
                     db,
@@ -445,10 +444,6 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
                 )
                 == []
             )
-            rows = _attempt_question_rows(db, attempt.id)
-            assert len(rows) == 2
-            assert all(row.status == "not_presented" for row in rows)
-            assert all(row.question_version_id is None for row in rows)
             conversation = db.get(Conversation, conversations[user_id])
             assert conversation is not None and conversation.active_request_id is None
             assert (
@@ -510,7 +505,7 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
             provider_count_before_update
         )
         current_attempt = db.get(AssessmentAttempt, attempt_ids[student_ids[0]])
-        assert current_attempt is not None
+        assert current_attempt is None
         assert (
             read_attempt_answers(
                 db,
@@ -532,6 +527,13 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
         with restarted_database.session() as db:
             begin_sqlite_writer(db)
             actor = _actor(db, restarted_settings, tokens[student_ids[0]])
+            restarted = start_or_resume_attempt(
+                db,
+                actor,
+                conversations[student_ids[0]],
+                client_event_id=uuid4(),
+            )
+            assert restarted is not None
             context = get_assessment_runtime_context(
                 db,
                 actor,
@@ -642,7 +644,8 @@ def test_completion_and_canonical_update_race_has_one_durable_winner(
                     classification="complete_request",
                 ),
             )
-            assert result is not None
+            if result is None:
+                return None
             return result.disposition
 
     def save_new_knowledge() -> None:
@@ -664,14 +667,14 @@ def test_completion_and_canonical_update_race_has_one_durable_winner(
         save_future = pool.submit(save_new_knowledge)
         completion_disposition = complete_future.result(timeout=20)
         save_future.result(timeout=20)
-    assert completion_disposition in {"transitioned", "redirected"}
+    assert completion_disposition in {"transitioned", "redirected", None}
 
     with database.session() as db:
         attempt = db.get(AssessmentAttempt, str(started.attempt.id))
         activity = db.get(AssessmentActivity, str(started.attempt.activity_id))
         conversation = db.get(Conversation, conversation_id)
-        assert attempt is not None and activity is not None and conversation is not None
-        if attempt.status == "completed":
+        assert activity is not None and conversation is not None
+        if attempt is not None and attempt.status == "completed":
             assert attempt.completed_at is not None
             assert attempt.question_selection_revision == 1
             assert attempt_has_final_evidence(db, attempt)
@@ -685,14 +688,9 @@ def test_completion_and_canonical_update_race_has_one_durable_winner(
                 )
                 == 0
             )
+        elif attempt is not None:
+            raise AssertionError(f"unfinished attempt remained {attempt.status}")
         else:
-            assert attempt.status == "in_progress"
-            assert attempt.completed_at is None
-            assert attempt.question_selection_revision == 2
-            assert not attempt_has_final_evidence(db, attempt)
-            assert all(
-                row.status == "not_presented" for row in _attempt_question_rows(db, attempt.id)
-            )
             assert (
                 db.scalar(
                     select(func.count(ConversationTurn.id)).where(

@@ -157,7 +157,7 @@ def test_coordinate_cycle_pauses_and_explicit_resume_continues_saved_run(
     messages_url = f"/api/v1/conversations/{session['id']}/messages"
     paused = client.post(messages_url, headers=_headers(csrf), json=body)
     assert paused.status_code == 200, paused.text
-    turn = paused.json()["turns"][0]
+    turn = next(item for item in paused.json()["turns"] if item["user_text"])
     assert turn["state"] == "paused"
     assert turn["safe_error_code"] == "team_no_progress"
     assert leader_calls == 2
@@ -165,7 +165,7 @@ def test_coordinate_cycle_pauses_and_explicit_resume_continues_saved_run(
     resume_url = f"/api/v1/conversations/{session['id']}/turns/{turn['id']}:resume"
     resumed = client.post(resume_url, headers=_headers(csrf))
     assert resumed.status_code == 200, resumed.text
-    final = resumed.json()["turns"][0]
+    final = next(item for item in resumed.json()["turns"] if item["id"] == turn["id"])
     assert final["state"] == "ready"
     assert final["member_results"][0]["assistant_text"] == "resumed conclusion"
     assert len(final["member_results"]) == 3

@@ -430,7 +430,9 @@ def test_0044_preserves_populated_results_and_rolls_back_all_ddl(
         headers=_headers(csrf),
         json=_body(session, "all"),
     )
-    assert response.status_code == 200 and response.json()["turns"][0]["state"] == "ready"
+    assert response.status_code == 200
+    sent = [item for item in response.json()["turns"] if item["user_text"]][-1]
+    assert sent["state"] == "ready"
     path = Path(database.engine.url.database)
     # The TestClient fixture creates current metadata directly. Stamp only
     # this isolated synthetic database before probing the real down/up DDL.

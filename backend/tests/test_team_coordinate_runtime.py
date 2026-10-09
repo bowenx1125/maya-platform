@@ -62,7 +62,7 @@ def test_coordinate_twelve_effective_delegations_keep_every_result_and_replay_no
     url = f"/api/v1/conversations/{session['id']}/messages"
     response = client.post(url, headers=_headers(csrf), json=body)
     assert response.status_code == 200, response.text
-    turn = response.json()["turns"][0]
+    turn = next(item for item in response.json()["turns"] if item["user_text"])
     assert turn["state"] == "ready", turn
     assert len(calls) == 25 and leader_calls == 13
     results = turn["member_results"]
@@ -73,8 +73,8 @@ def test_coordinate_twelve_effective_delegations_keep_every_result_and_replay_no
     assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
     assert len(calls) == 25
     with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 1
-        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == 13
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 2
+        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == 14
         assert db.scalar(select(func.count()).select_from(TeamChatEvent)) == 15
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
         assert db.get(Conversation, session["id"]).active_request_id is None
@@ -92,5 +92,6 @@ def test_default_auto_sse_has_committed_member_results_and_owner_can_continue(
     assert response.text.count("event: member_result") == 3
     assert response.text.count("event: turn_done") == 1
     saved = client.get(f"/api/v1/conversations/{session['id']}").json()
-    assert saved["turns"][0]["state"] == "ready" and saved["can_send"] is True
+    sent = next(item for item in saved["turns"] if item["user_text"])
+    assert sent["state"] == "ready" and saved["can_send"] is True
     assert client.post(url, headers=headers, json=body).text == response.text

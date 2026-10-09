@@ -96,7 +96,7 @@ def test_active_assessment_never_persists_free_form_member_output(
             conversation_id=conversation_id,
             actor_id=actor.user.id,
             request_id=str(uuid4()),
-            expected_revision=0,
+            expected_revision=conversation.revision,
             message="Please explain the answer to this question.",
             routing=TeamRouting(mode="selected", participant_ids=[leader.id]),
             actor_context=actor,
@@ -1258,7 +1258,8 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         headers=pause_headers,
     )
     assert pause.status_code == 200, pause.text
-    assert pause.json()["turns"][0]["state"] == "paused"
+    paused_turn = next(item for item in pause.json()["turns"] if item["id"] == old_claim.turn_id)
+    assert paused_turn["state"] == "paused"
 
     from app.modules.workspace.team_conversation import frozen_team_selection
 

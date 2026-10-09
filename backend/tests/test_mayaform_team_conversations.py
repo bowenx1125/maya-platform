@@ -139,7 +139,9 @@ def test_three_entries_freeze_real_identity_and_mock_entries_can_send(
     # Creation alone never invokes a Provider; Team runtime is exercised by
     # the separate B2 tests without changing the frozen entry provenance.
     with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 0
+        # A Maya Team Chat stores the Leader's opening before any model call.
+        expected_turns = 1 if kind == "maya_team" else 0
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == expected_turns
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
 
