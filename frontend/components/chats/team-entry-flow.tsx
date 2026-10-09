@@ -25,7 +25,6 @@ import {
 import { useT } from "../locale";
 import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
-import { WorkspaceIcon } from "../workspace-icon";
 import styles from "../agent-chat.module.css";
 
 type KnowledgeSetChoice = { id: string; name: string };
@@ -698,19 +697,9 @@ export function TeamEntryFlow({
               form={formId}
               disabled={saving || (!mutationUnknown && Boolean(formErrors))}
             />
-            <div className={styles.teamFormFooter}>
-              {formErrors ? (
-                <p className={styles.entryHint}>{formErrors}</p>
-              ) : null}
-              <button
-                className={styles.startButton}
-                type="submit"
-                disabled={saving || (!mutationUnknown && Boolean(formErrors))}
-              >
-                <WorkspaceIcon name="done" />
-                {variant === "maya" ? t("publish") : t("save")}
-              </button>
-            </div>
+            {formErrors ? (
+              <p className={styles.entryHint}>{formErrors}</p>
+            ) : null}
           </form>
         ) : null}
         {formOpen ? (

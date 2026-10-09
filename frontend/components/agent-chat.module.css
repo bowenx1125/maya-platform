@@ -32,33 +32,6 @@
   font-size: 1.15rem;
   font-weight: 600;
 }
-.historyNew {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-  transition:
-    background 160ms var(--ease-out),
-    border-color 160ms var(--ease-out);
-}
-.historyNew:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.historyNew:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.historyNew:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
 .historyEmpty {
   margin: 4px 4px 0;
   color: var(--muted);
@@ -254,52 +227,20 @@
   opacity: 0.5;
 }
 .emptyState {
-  display: grid;
+  display: flex;
   flex: 1 1 auto;
-  place-content: center;
-  justify-items: center;
-  gap: 24px;
-  padding: 48px 24px;
-  text-align: center;
+  align-items: flex-start;
+  padding: 28px;
 }
-.startButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 22px 0 18px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--accent-fill);
-  color: var(--on-accent);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: var(--lift);
-  transition:
-    background 160ms var(--ease-out),
-    transform 160ms var(--ease-out);
-}
-.startButton:hover:not(:disabled) {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-}
-.startButton:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-.startButton:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.emptyState p {
-  max-width: 22ch;
-  margin: 0;
-  color: var(--ink);
-  font-family: var(--display-serif);
-  font-size: clamp(1.5rem, 2.8vw, 2.1rem);
-  line-height: 1.3;
-  text-wrap: balance;
+.emptyState strong {
+  padding: 18px;
+  border: 1px dashed #d9d0e2;
+  border-radius: 16px;
+  color: var(--muted);
+  background: var(--surface-subtle, #f5f5f7);
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.5;
 }
 .conversation > .entryFlow {
   flex: 1 1 auto;
@@ -311,13 +252,6 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-.conversation[data-blank="true"] .messages {
-  flex: 0 0 auto;
-  padding: 0;
-}
-.conversation[data-blank="true"] .composer {
-  margin-block: auto;
 }
 /* The shared appearance theme styles every select at (0,4,1) specificity
    through :is(input:not()...), so the pill shape must be forced here. */
@@ -417,38 +351,74 @@
   font-size: 13px;
 }
 .recipientChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   max-width: 100%;
-  padding: 5px 9px;
+  padding: 3px 4px 3px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+.recipientRemove {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.recipientRemove:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+.recipientRemove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .recipientMenu {
   position: absolute;
   z-index: 2;
-  left: 0;
+  left: 14px;
   bottom: calc(100% + 8px);
   display: grid;
-  gap: 8px;
-  width: min(360px, calc(100vw - 40px));
+  gap: 2px;
+  width: min(280px, calc(100% - 28px));
   max-height: 50dvh;
   overflow: auto;
-  padding: 14px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
-.recipientMenu p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.recipientMenu .entryChoice {
+.recipientMenu button {
   min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.recipientMenu button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.recipientMenu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.recipientMenu button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .messages {
   flex: 1 1 auto;
@@ -508,6 +478,7 @@
 /* Floating rounded shell: text row above, picker and send on the control
    row, with clear air under the shell — not a flush bar or sharp block. */
 .composer {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -748,19 +719,6 @@
 .entryError {
   color: var(--red);
   line-height: 1.5;
-}
-.teamFormFooter {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-.teamFormFooter .entryHint {
-  flex: 1 1 240px;
-  margin: 0;
-}
-.teamFormFooter .startButton {
-  margin-left: auto;
 }
 @media (max-width: 1100px) {
   .layout {

@@ -331,6 +331,17 @@ describe("Studyform Maya Team", () => {
     view.rerender(teamManagementPage("team-new"));
     expect(await screen.findByLabelText("Team name")).toBeTruthy();
     expect(sidebarButton("Done")).toBeTruthy();
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", { name: "Done" }),
+    ).toBeNull();
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", {
+        name: "Publish",
+      }),
+    ).toBeNull();
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", { name: "Save" }),
+    ).toBeNull();
   });
 
   it("lists only the Teacher's public personal Teams, because only those are published", async () => {
@@ -540,12 +551,21 @@ describe("Studyform Maya Team", () => {
 
 describe("Chatform", () => {
   it.each(["student", "teacher"])(
-    "asks a %s to press New before any Chat exists",
+    "shows No chats yet before any Chat exists for a %s",
     async (role) => {
       state.role = role;
       renderChats();
+      expect(await screen.findByText("No chats yet.")).toBeTruthy();
       expect(
-        await screen.findByText("Click New and start chatting with me!"),
+        screen.queryByText("Click New and start chatting with me!"),
+      ).toBeNull();
+      expect(
+        within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
+      ).toBeNull();
+      expect(
+        within(screen.getByRole("navigation")).getByRole("button", {
+          name: "New",
+        }),
       ).toBeTruthy();
       expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
       expect(screen.queryByRole("combobox", { name: "Chat with" })).toBeNull();
@@ -564,6 +584,8 @@ describe("Chatform", () => {
     expect(
       within(picker).getByRole("option", { name: "Course Dialogue Team" }),
     );
+    expect(within(picker).getByRole("option", { name: "Agents & Teams" }));
+    expect(screen.queryByText("Choose who to chat with")).toBeNull();
     expect(within(picker).getByRole("option", { name: "+ New Team" }));
     expect(picker.value).toBe("agent:version-1");
     expect(
@@ -1067,7 +1089,7 @@ describe("Chatform", () => {
       </LocaleProvider>,
     );
 
-    await screen.findByText("Click New and start chatting with me!");
+    await screen.findByText("No chats yet.");
     const picker = await openNewChat();
     expect(
       await within(picker).findByRole("option", {
@@ -1096,27 +1118,37 @@ describe("Chatform", () => {
     );
 
     fireEvent.keyDown(message, { key: "@", shiftKey: true });
-    expect(screen.getByRole("group", { name: "Recipients" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("checkbox", { name: "@All members" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /@Bowen · 1/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /@Jade · 3/ }));
-    const recipientGroup = within(
-      screen.getByRole("group", { name: "Recipients" }),
+    const menu = screen.getByRole("menu", { name: "Recipients" });
+    expect(
+      screen.queryByText(
+        "Members with the same name are identified by their role and order.",
+      ),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add @ recipient" }),
+    ).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "All" })).toBeTruthy();
+    expect(
+      within(menu).getAllByRole("menuitem", { name: "Bowen" }),
+    ).toHaveLength(2);
+    expect(within(menu).getByRole("menuitem", { name: "Jade" })).toBeTruthy();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "All" }));
+    fireEvent.click(
+      within(menu).getAllByRole("menuitem", { name: "Bowen" })[0],
     );
-    expect(
-      (
-        recipientGroup.getByRole("checkbox", {
-          name: /@Bowen · 1/,
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
-    expect(
-      (
-        recipientGroup.getByRole("checkbox", {
-          name: /@Jade · 3/,
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Jade" }));
+    expect(screen.getByRole("button", { name: "Remove Bowen" })).toBeTruthy();
+    const removeJade = screen.getByRole("button", { name: "Remove Jade" });
+    fireEvent.click(removeJade);
+    expect(screen.queryByRole("button", { name: "Remove Jade" })).toBeNull();
+    fireEvent.keyDown(message, { key: "@", shiftKey: true });
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "Recipients" })).getByRole(
+        "menuitem",
+        { name: "Jade" },
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Remove Jade" })).toBeTruthy();
 
     const pastedText = "```txt\n@All members @Bowen\n``` this is quoted text";
     fireEvent.change(message, { target: { value: pastedText } });

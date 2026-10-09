@@ -202,9 +202,7 @@ describe("private Agent chat", () => {
     await waitFor(() =>
       expect(state.api.conversations).toHaveBeenCalledTimes(1),
     );
-    expect(
-      await screen.findByText("Click New and start chatting with me!"),
-    ).toBeTruthy();
+    expect(await screen.findByText("No chats yet.")).toBeTruthy();
 
     window.history.pushState({}, "", "/teacher/chat?mode=new");
     view.rerender(
@@ -228,16 +226,17 @@ describe("private Agent chat", () => {
         </AppShell>
       </LocaleProvider>,
     );
-    await screen.findByText("Click New and start chatting with me!");
+    await screen.findByText("No chats yet.");
     const nav = within(screen.getByRole("navigation"));
     expect(nav.queryByText("Back")).toBeNull();
     expect(nav.queryByText("Done")).toBeNull();
     await startNewAgentChat();
     expect(state.api.createConversation).not.toHaveBeenCalled();
     expect(
-      within(screen.getByRole("main"))
-        .getByRole("button", { name: "New" })
-        .hasAttribute("disabled"),
+      within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
+    ).toBeNull();
+    expect(
+      nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
     ).toBe(true);
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },

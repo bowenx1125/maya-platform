@@ -210,7 +210,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     expect(getSettledChatSession()).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
-    await screen.findByText("Click New and start chatting with me!");
+    await screen.findByText("No chats yet.");
     expect(screen.queryByText("Synthetic A private answer")).toBeNull();
   });
 
@@ -240,7 +240,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     expect(getChatRequest()).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
-    await screen.findByText("Click New and start chatting with me!");
+    await screen.findByText("No chats yet.");
     expect(screen.queryByDisplayValue("Synthetic A private draft")).toBeNull();
     expect(getChatRequest()).toBeNull();
   });
@@ -417,7 +417,7 @@ describe("Chat data follows the accepted account and course scope", () => {
       expect(screen.getByTestId("actor").textContent).toBe("A"),
     );
     await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
-    await screen.findByText("Click New and start chatting with me!");
+    await screen.findByText("No chats yet.");
     expect(screen.queryByText("A preflight draft")).toBeNull();
     expect(screen.queryByDisplayValue("A preflight draft")).toBeNull();
     expect(getChatRequest()).toBeNull();

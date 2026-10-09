@@ -57,7 +57,6 @@ import { useSession } from "./session-provider";
 import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
-import { WorkspaceIcon } from "./workspace-icon";
 import styles from "./agent-chat.module.css";
 
 type MemoryRoute = {
@@ -306,6 +305,7 @@ function AgentChatScope({
   const [teamRecipientMenu, setTeamRecipientMenu] = useState(false);
   const [teamAllRecipients, setTeamAllRecipients] = useState(true);
   const [teamRecipientIds, setTeamRecipientIds] = useState<string[]>([]);
+  const teamRecipientMenuRef = useRef<HTMLDivElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
   const [teamError, setTeamError] = useState<unknown>(null);
   const [teamLastEventId, setTeamLastEventId] = useState(0);
@@ -408,6 +408,27 @@ function AgentChatScope({
     },
     [memoryRouteSearch, syncNewChatUrl],
   );
+
+  useEffect(() => {
+    if (!teamRecipientMenu) return;
+    const closeUnlessInside = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        teamRecipientMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setTeamRecipientMenu(false);
+    };
+    const close = () => setTeamRecipientMenu(false);
+    document.addEventListener("pointerdown", closeUnlessInside);
+    window.addEventListener("blur", close);
+    return () => {
+      document.removeEventListener("pointerdown", closeUnlessInside);
+      window.removeEventListener("blur", close);
+    };
+  }, [teamRecipientMenu]);
 
   const remember = useCallback(
     (value: ChatSession, activateIfEmpty = false) => {
@@ -895,6 +916,7 @@ function AgentChatScope({
     setSelectedTeam(null);
     setTeamDraft("");
     setTeamError(null);
+    setTeamRecipientMenu(false);
     setDraft("");
     setTeamTarget(null);
     setCreatingTeam(false);
@@ -910,6 +932,7 @@ function AgentChatScope({
     setTeamTarget(entry);
     setTeamAllRecipients(true);
     setTeamRecipientIds([]);
+    setTeamRecipientMenu(false);
     setTeamLastEventId(0);
   }
 
@@ -1172,6 +1195,7 @@ function AgentChatScope({
       setTeamLastEventId(0);
       setTeamAllRecipients(true);
       setTeamRecipientIds([]);
+      setTeamRecipientMenu(false);
       if (newChatRoute) closeNewEntry(true);
       const lastTurn = refreshed.turns.at(-1);
       if (lastTurn?.state === "acceptance_unknown") {
@@ -2057,6 +2081,7 @@ function AgentChatScope({
   const hasTarget = Boolean(
     selected || selectedTeam || teamTarget || versionId,
   );
+  const showChatEmpty = !creatingTeam && !hasTarget && !newChatRoute;
   const historyItems = [
     ...sessions
       .filter((session) => session.turns.length > 0)
@@ -2067,6 +2092,29 @@ function AgentChatScope({
   ].sort((left, right) =>
     right.session.created_at.localeCompare(left.session.created_at),
   );
+
+  function chooseAllRecipients() {
+    setTeamAllRecipients(true);
+    setTeamRecipientIds([]);
+  }
+
+  function addTeamRecipient(memberId: string) {
+    setTeamRecipientIds((current) => {
+      const base = teamAllRecipients ? [] : current;
+      return base.includes(memberId) ? base : [...base, memberId];
+    });
+    setTeamAllRecipients(false);
+  }
+
+  function removeTeamRecipient(memberId: string) {
+    setTeamAllRecipients(false);
+    setTeamRecipientIds((current) => current.filter((id) => id !== memberId));
+  }
+
+  function clearTeamRecipients() {
+    setTeamAllRecipients(false);
+    setTeamRecipientIds([]);
+  }
 
   function chooseVisibility(next: ChatVisibility) {
     if (next === shownVisibility || busy || teamBusy) return;
@@ -2155,19 +2203,9 @@ function AgentChatScope({
         <aside className={styles.sidebar}>
           <div className={styles.historyHead}>
             <h2>{t("chatHistory")}</h2>
-            <button
-              type="button"
-              className={styles.historyNew}
-              aria-label="New"
-              title="New"
-              disabled={busy || teamBusy || newChatRoute}
-              onClick={openNewEntry}
-            >
-              <WorkspaceIcon name="new" />
-            </button>
           </div>
           <div className={styles.history} aria-label="History">
-            {historyItems.length ? null : (
+            {historyItems.length || showChatEmpty ? null : (
               <p className={styles.historyEmpty}>{t("chatHistoryEmpty")}</p>
             )}
             {historyItems.map(({ kind, session }) => (
@@ -2231,18 +2269,9 @@ function AgentChatScope({
               onSaved={finishTeamCreate}
               onCancel={() => setCreatingTeam(false)}
             />
-          ) : !hasTarget && !newChatRoute ? (
+          ) : showChatEmpty ? (
             <div className={styles.emptyState}>
-              <p>{t("chatEmptyPrompt")}</p>
-              <button
-                type="button"
-                className={styles.startButton}
-                disabled={busy || teamBusy}
-                onClick={openNewEntry}
-              >
-                <WorkspaceIcon name="new" />
-                New
-              </button>
+              <strong>{t("chatHistoryEmpty")}</strong>
             </div>
           ) : (
             <>
@@ -2440,10 +2469,18 @@ function AgentChatScope({
                   ) : null}
                   {selectedTeam.can_send && !selectedTeam.read_only ? (
                     <div className={styles.teamRecipients}>
-                      <span>{t("teamRecipients")}</span>
                       {teamAllRecipients ? (
                         <span className={styles.recipientChip}>
-                          @{t("teamAllMembers")}
+                          <span>{t("teamAllMembers")}</span>
+                          <button
+                            type="button"
+                            className={styles.recipientRemove}
+                            aria-label={`Remove ${t("teamAllMembers")}`}
+                            disabled={teamBusy}
+                            onClick={clearTeamRecipients}
+                          >
+                            <IconClose />
+                          </button>
                         </span>
                       ) : (
                         selectedTeam.team.members
@@ -2455,77 +2492,19 @@ function AgentChatScope({
                               className={styles.recipientChip}
                               key={member.id}
                             >
-                              @{member.name}
-                              {` · ${member.position + 1}`}
-                              {member.is_leader ? ` · ${t("leader")}` : ""}
+                              <span>{member.name}</span>
+                              <button
+                                type="button"
+                                className={styles.recipientRemove}
+                                aria-label={`Remove ${member.name}`}
+                                disabled={teamBusy}
+                                onClick={() => removeTeamRecipient(member.id)}
+                              >
+                                <IconClose />
+                              </button>
                             </span>
                           ))
                       )}
-                      <button
-                        type="button"
-                        className="inline-button"
-                        aria-expanded={teamRecipientMenu}
-                        onClick={() => setTeamRecipientMenu((open) => !open)}
-                      >
-                        {t("teamAddRecipient")}
-                      </button>
-                      {teamRecipientMenu ? (
-                        <div
-                          className={styles.recipientMenu}
-                          role="group"
-                          aria-label={t("teamRecipients")}
-                        >
-                          <p>{t("teamDuplicateNames")}</p>
-                          <label className={styles.entryChoice}>
-                            <input
-                              type="checkbox"
-                              checked={teamAllRecipients}
-                              disabled={teamBusy}
-                              onChange={(event) => {
-                                setTeamAllRecipients(event.target.checked);
-                                if (event.target.checked)
-                                  setTeamRecipientIds([]);
-                              }}
-                            />
-                            <span>@{t("teamAllMembers")}</span>
-                          </label>
-                          {selectedTeam.team.members.map((member) => (
-                            <label
-                              className={styles.entryChoice}
-                              key={member.id}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={
-                                  teamAllRecipients ||
-                                  teamRecipientIds.includes(member.id)
-                                }
-                                disabled={teamBusy || !member.available}
-                                onChange={(event) => {
-                                  if (teamAllRecipients) {
-                                    setTeamAllRecipients(false);
-                                    setTeamRecipientIds(
-                                      event.target.checked ? [member.id] : [],
-                                    );
-                                  } else {
-                                    setTeamRecipientIds((current) =>
-                                      event.target.checked
-                                        ? [...current, member.id]
-                                        : current.filter(
-                                            (id) => id !== member.id,
-                                          ),
-                                    );
-                                  }
-                                }}
-                              />
-                              <span>
-                                @{member.name} · {member.position + 1}
-                                {member.is_leader ? ` · ${t("leader")}` : ""}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -2534,6 +2513,34 @@ function AgentChatScope({
                 className={styles.composer}
                 onSubmit={(event) => submitMessage(event)}
               >
+                {selectedTeam && teamRecipientMenu ? (
+                  <div
+                    ref={teamRecipientMenuRef}
+                    className={styles.recipientMenu}
+                    role="menu"
+                    aria-label={t("teamRecipients")}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={teamBusy}
+                      onClick={chooseAllRecipients}
+                    >
+                      {t("teamAllMembers")}
+                    </button>
+                    {selectedTeam.team.members.map((member) => (
+                      <button
+                        key={member.id}
+                        type="button"
+                        role="menuitem"
+                        disabled={teamBusy || !member.available}
+                        onClick={() => addTeamRecipient(member.id)}
+                      >
+                        {member.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <select
                   className={styles.targetSelect}
                   aria-label={t("chatTarget")}
@@ -2634,8 +2641,14 @@ function AgentChatScope({
                     }
                   }}
                   onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setTeamRecipientMenu(false);
+                      return;
+                    }
                     if (
                       selectedTeam &&
+                      selectedTeam.can_send &&
+                      !selectedTeam.read_only &&
                       event.key === "@" &&
                       !event.nativeEvent.isComposing
                     ) {

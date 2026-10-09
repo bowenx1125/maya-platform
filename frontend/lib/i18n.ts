@@ -653,13 +653,12 @@ const enMessages = {
   academyMascotsLabel:
     "Four scholars of the academy, whose eyes follow the cursor and look away while a password is typed.",
   academyStageLabel: "The academy courtyard",
-  chatEmptyPrompt: "Click New and start chatting with me!",
   chatHistory: "History",
   chatHistoryEmpty: "No chats yet.",
   chatNewTitle: "New chat",
   chatMessagePlaceholder: "Message",
   chatTarget: "Chat with",
-  chatTargetPlaceholder: "Choose who to chat with",
+  chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Teams",
   chatTargetNewTeam: "+ New Team",
   mayaTeam: "Maya Team",
@@ -709,15 +708,12 @@ const enMessages = {
     "A Team member could not reply because the current Team data-use authorization needs confirmation. Review and confirm it, then explicitly send a new message.",
   teamChatReadOnly: "This Public Team Chat is read-only.",
   teamRecipients: "Recipients",
-  teamAllMembers: "All members",
-  teamAddRecipient: "Add @ recipient",
+  teamAllMembers: "All",
   teamPartialResult:
     "Some members could not reply. Successful replies are kept.",
   teamCheckStatus: "Check Team Chat status",
   teamTurnPending:
     "This Team turn is still running. Check its status to resume updates.",
-  teamDuplicateNames:
-    "Members with the same name are identified by their role and order.",
 } as const;
 
 const zhMessages: Record<keyof typeof enMessages, string> = {
@@ -1336,13 +1332,12 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   academyMascotsLabel:
     "学院里的四位学者，眼睛会跟随光标移动，输入密码时会转过头去。",
   academyStageLabel: "学院庭院",
-  chatEmptyPrompt: "点击 New，和我开始聊天吧！",
   chatHistory: "历史",
   chatHistoryEmpty: "还没有对话。",
   chatNewTitle: "新对话",
   chatMessagePlaceholder: "输入消息",
   chatTarget: "聊天对象",
-  chatTargetPlaceholder: "选择聊天对象",
+  chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Team",
   chatTargetNewTeam: "+ 新建 Team",
   mayaTeam: "Maya Team",
@@ -1386,13 +1381,11 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "Team 成员的回复需要确认当前 Team 数据调用授权。请核对并确认该授权，然后显式发送一条新消息。",
   teamChatReadOnly: "此公开 Team 聊天为只读。",
   teamRecipients: "接收回复的成员",
-  teamAllMembers: "全体成员",
-  teamAddRecipient: "添加 @ 接收成员",
+  teamAllMembers: "All",
   teamPartialResult: "部分成员未能回复；已成功的回复已保留。",
   teamCheckStatus: "检查 Team 聊天状态",
   teamTurnPending: "Team 回复仍在运行。请检查状态以恢复更新。",
-  teamDuplicateNames: "同名成员会用角色和顺序区分。",
-} as const;
+};
 
 export const messages = {
   en: enMessages,
@@ -1422,6 +1415,8 @@ export const ALLOWED_IDENTICAL_TERMS = [
   "TTS",
   "Mock",
   "Generating AI Knowledge",
+  "Agents & Teams",
+  "All",
 ] as const;
 
 export type MessageKey = keyof typeof enMessages;

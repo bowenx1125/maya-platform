@@ -94,7 +94,7 @@ MAYA_REPORT_PROVIDER=dashscope
 
 Provider 模式、API Key 和连通性检查由维护层管理，教师首页不提供 Components 控件。现有配置和调用账本继续保留，Mock 与真实 Embedding 快照不混用；资料外发按当前身份、用途和准确清单授权。Knowledge 的保存或明确生成/重生成表达当次意图，不要求另外打开披露页面确认；权限、供应商政策、去重与费用记录仍校验。
 
-没有选中会话时，Chatform 显示 “Click New and start chatting with me!”。左栏 **New** 打开空白会话，在输入框上方的 **Chat with** 中选择 Agent、Team 或带标签的 Maya Team，发送第一条消息才创建会话。标题栏的 **Public/Private** 决定会话隐私；会话开始后隐私不再改变，切换会开启新会话。Private 不进入教师查询，Public 正式测评可以按授权汇总；普通 Public 聊天不自动进入诊断报告。重新进入保留历史，Chatform 只输出文字。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。列表自动更新，断线可重新进入。
+没有选中会话时，Chatform 显示 “No chats yet.”。左栏 **New** 打开空白会话，在页面底部输入框上方的 **Agents & Teams** 中选择 Agent、Team 或带标签的 Maya Team，发送第一条消息才创建会话。标题栏的 **Public/Private** 决定会话隐私；会话开始后隐私不再改变，切换会开启新会话。Private 不进入教师查询，Public 正式测评可以按授权汇总；普通 Public 聊天不自动进入诊断报告。重新进入保留历史，Chatform 只输出文字。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。列表自动更新，断线可重新进入。
 
 课堂或正式实例由部署方在 `.env` 设置 `PROVIDER_STANDING_CONSENT=true`，一次性授权外部 AI 发送，师生不再看到披露页面；每个准确清单仍逐一记录、去重，未知结果不会自动重发。未设置时，教师需要在 `/teacher/provider-approvals/chats` 确认（按用户要求已无导航入口）。缺少授权时请求不会发出；确认后由学生明确发送新消息，旧失败请求不会自动重发。
 

@@ -71,15 +71,15 @@
   cursor: pointer;
 }
 
-.sidebarAction {
-  color: var(--accent);
-  background: var(--accent-soft);
-  font-weight: 650;
+.link.sidebarAction {
+  color: color-mix(in srgb, var(--accent) 62%, var(--muted));
+  background: color-mix(in srgb, var(--surface) 70%, var(--accent-soft));
+  font-weight: 560;
 }
 
-.sidebarAction:hover {
-  color: var(--accent);
-  background: var(--accent-soft);
+.link.sidebarAction:hover {
+  color: color-mix(in srgb, var(--accent) 78%, var(--ink));
+  background: color-mix(in srgb, var(--surface) 48%, var(--accent-soft));
 }
 
 .disabled {
