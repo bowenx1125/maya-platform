@@ -765,7 +765,7 @@ describe("Chatform", () => {
     expect(state.api.mayaTeams).toHaveBeenCalledWith("course");
   });
 
-  it("keeps an existing Chat's privacy and starts a new Chat when privacy is switched", async () => {
+  it("keeps an existing Chat's privacy fixed after it is created", async () => {
     const history = {
       ...teamSession,
       turns: [
@@ -791,25 +791,17 @@ describe("Chatform", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Public" }));
-    expect(within(log).queryByText("A private Team question")).toBeNull();
     expect(
-      screen.getByRole("heading", { level: 2, name: "Reasoning circle" }),
-    ).toBeTruthy();
+      (screen.getByRole("button", { name: "Public" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(within(log).getByText("A private Team question")).toBeTruthy();
+    expect(state.api.createTeamConversation).not.toHaveBeenCalled();
     expect(
       (screen.getByRole("combobox", { name: "Chat with" }) as HTMLSelectElement)
         .value,
     ).toBe("team:team-1");
-    expect(state.api.createTeamConversation).not.toHaveBeenCalled();
-
-    await sendMessage("Now in public");
-    await waitFor(() =>
-      expect(state.api.createTeamConversation).toHaveBeenCalledWith(
-        { kind: "team", team_id: "team-1" },
-        "public",
-      ),
-    );
-    expect(state.api.streamTeamConversation).toHaveBeenCalled();
+    expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
   });
 
   it("shows the Team name on keyboard focus without a delayed native title", async () => {

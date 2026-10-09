@@ -183,9 +183,15 @@ Knowledge view/edit/download/delete and PDF/DOCX. View/New/edit replaces main co
 in independent deep-link mode, not a bottom panel. Knowledge uses asset-name entry,
 shows authorized Agent consumers, edits one canonical object; Agent Knowledge entry
 also remains. Create AI Knowledge/New Agent one flow, Private/Public labels only;
-Brainform source picker accepts RAG or Knowledge. Updates affect future Agent use; active/paused Team attempts announce changed
-Knowledge and require answering again; old answers/late results cannot evaluate.
-Completed attempts stay unchanged. Frontend work remains uncommitted.
+Brainform accepts RAG or Knowledge. A Teacher Agent writes a question bank and
+knowledge graph into Knowledge with a Tool. Other Agents may carry that Knowledge
+or only AGENT.md. A Maya Team's shared RAG or Knowledge is added beside each
+member's own material. Maya Team versions match Agent versions. Students and
+Teachers create Teams the same way; only a Teacher publishes a Maya Team, which
+keeps that label. A Teacher update while a student is answering on the old version
+makes the Leader say the database changed and to answer again, and deletes that
+unfinished assessment. Completed attempts stay. Teacher report reads stored answers
+and statistics for that student, Maya Team name and time, not the raw chat.
 
 Teacher explicit save/generate/regenerate must authorize exact Knowledge generation
 without additional provider confirmation page. Current ACL/policy/manifest/accounting/
