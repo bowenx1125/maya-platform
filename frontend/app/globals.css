@@ -264,6 +264,25 @@ textarea {
   text-align: center;
 }
 
+.symbol-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
+.symbol-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.symbol-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .inline-button:hover,
 .chip-button:hover {
   border-color: #b7add5;

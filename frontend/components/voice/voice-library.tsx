@@ -7,7 +7,6 @@ import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { PageAction } from "../page-action";
-import pageActionStyles from "../page-action.module.css";
 import { WorkspaceIcon } from "../workspace-icon";
 import { useSession } from "../session-provider";
 import {
@@ -269,13 +268,13 @@ export function VoiceLibrary({
 
   const newVoice = (
     <button
-      className={`text-link ${pageActionStyles.action}`}
+      className="inline-button symbol-button"
       type="button"
+      aria-label={t("voiceCreateTitle")}
       disabled={busy || creating || !groupScopeReady}
       onClick={() => setCreating(true)}
     >
       <WorkspaceIcon name="new" />
-      <span>{t("voiceCreateTitle")}</span>
     </button>
   );
 

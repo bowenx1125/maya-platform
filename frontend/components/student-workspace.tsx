@@ -25,6 +25,7 @@ import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { VoiceLibrary } from "./voice/voice-library";
 import { StudyformModule } from "./studyform-layout";
+import { WorkspaceIcon } from "./workspace-icon";
 import {
   EmptyCard,
   ErrorNotice,
@@ -339,9 +340,6 @@ function GroupWorkspaceSession({
   return (
     <>
       <PageIntro title={t("studyform")} />
-      {teacherIdentity ? null : (
-        <PageAction name="new" href={`/student/groups/${groupId}/agents/new`} />
-      )}
       {error ? (
         <ErrorNotice
           error={error}
@@ -350,7 +348,21 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
-      <StudyformModule title={t("agents")} count={items.length}>
+      <StudyformModule
+        title={t("agents")}
+        count={items.length}
+        action={
+          teacherIdentity ? null : (
+            <Link
+              className="inline-button symbol-button"
+              href={`/student/groups/${groupId}/agents/new`}
+              aria-label={t("newAgent")}
+            >
+              <WorkspaceIcon name="new" />
+            </Link>
+          )
+        }
+      >
         {items.length === 0 ? (
           <EmptyCard title={t("noAgents")} />
         ) : (

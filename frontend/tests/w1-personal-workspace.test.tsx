@@ -264,10 +264,17 @@ describe("W1 teacher personal workspace", () => {
     ).toBeTruthy();
     expect(api.voiceProfiles).toHaveBeenCalledWith(groupId);
 
-    const agentNew = within(screen.getByRole("navigation")).getByRole("link", {
-      name: "New",
-    });
+    const agents = screen
+      .getByRole("heading", { name: /^Agents/ })
+      .closest("section") as HTMLElement;
+    const agentNew = within(agents).getByRole("link", { name: "New" });
     expect(agentNew.getAttribute("href")).toBe("/teacher/agents/new");
+    expect(agentNew.textContent?.trim()).toBe("");
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("link", {
+        name: "New",
+      }),
+    ).toBeNull();
     const voiceNew = within(voices).getByRole("button", { name: "New" });
     fireEvent.click(voiceNew);
     await screen.findByLabelText(

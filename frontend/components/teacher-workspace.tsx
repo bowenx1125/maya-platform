@@ -39,6 +39,7 @@ import { CreateAgentForm } from "./student-workspace";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { StudyformModule } from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
+import { WorkspaceIcon } from "./workspace-icon";
 import {
   EmptyCard,
   ErrorNotice,
@@ -317,11 +318,22 @@ export function TeacherStudyformWorkspace({
   return (
     <>
       <PageIntro title={t("studyform")} />
-      {teacherCourseId ? (
-        <PageAction name="new" href="/teacher/agents/new" />
-      ) : null}
       {error ? <ErrorNotice error={error} /> : null}
-      <StudyformModule title={t("agents")} count={personalAgents.length}>
+      <StudyformModule
+        title={t("agents")}
+        count={personalAgents.length}
+        action={
+          teacherCourseId ? (
+            <Link
+              className="inline-button symbol-button"
+              href="/teacher/agents/new"
+              aria-label={t("newAgent")}
+            >
+              <WorkspaceIcon name="new" />
+            </Link>
+          ) : null
+        }
+      >
         {personalAgents.length ? (
           <div className="agent-tile-grid">
             {personalAgents.map((agent) => (
