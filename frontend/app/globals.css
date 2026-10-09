@@ -227,6 +227,18 @@ textarea {
   max-width: 680px;
 }
 
+.quiet-create {
+  margin-top: 8px;
+  gap: 22px;
+}
+
+.quiet-create label span {
+  font-family: var(--display-serif);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
 .button-row,
 .chip-row,
 .workbench-meta,
@@ -271,6 +283,9 @@ textarea {
   width: 44px;
   min-width: 44px;
   padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
 }
 
 .symbol-button svg {
@@ -287,6 +302,12 @@ textarea {
 .chip-button:hover {
   border-color: #b7add5;
   background: #faf8ff;
+}
+
+.symbol-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--surface-hover, #ededf0);
+  color: var(--ink);
 }
 
 .danger-button {
@@ -565,9 +586,9 @@ details > summary {
   margin-bottom: 18px;
   padding: var(--workspace-inset);
   border: 1px solid var(--line);
-  border-radius: 22px;
-  background: #fdfaf3;
-  box-shadow: 0 14px 38px rgba(72, 61, 105, 0.05);
+  border-radius: 16px;
+  background: var(--surface-subtle, #f5f5f7);
+  box-shadow: none;
 }
 
 .section-card-header {
@@ -585,10 +606,12 @@ details > summary {
 }
 
 .section-card-header h2 {
-  margin: 0 0 7px;
-  font-size: 1.35rem;
-  font-weight: 720;
-  letter-spacing: -0.02em;
+  margin: 0;
+  font-family: var(--display-serif);
+  font-size: clamp(1.45rem, 2.2vw, 1.85rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .section-card-header p {
@@ -744,7 +767,9 @@ details > summary {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
-  font-size: 0.98rem;
+  font-family: var(--display-serif);
+  font-size: 1.05rem;
+  font-weight: 500;
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.01em;

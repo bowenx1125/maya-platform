@@ -294,7 +294,7 @@ export function VoiceLibrary({
         <SectionCard className={styles.uploadCard}>
           {groupPicker}
           <label className={styles.field}>
-            <span>{t("voiceSampleFile")}</span>
+            <span>{t("voiceSampleLabel")}</span>
             <input
               className={styles.fileInput}
               type="file"
@@ -313,22 +313,20 @@ export function VoiceLibrary({
             />
             <span>{t("voiceConsent")}</span>
           </label>
-          <div className="button-row">
-            <PageAction
-              name="back"
-              disabled={busy}
-              onClick={() => {
-                setCreating(false);
-                setFile(null);
-                setConsent(false);
-              }}
-            />
-            <PageAction
-              name="done"
-              disabled={!file || !consent || busy || !groupScopeReady}
-              onClick={() => void submitEnrollment()}
-            />
-          </div>
+          <PageAction
+            name="back"
+            disabled={busy}
+            onClick={() => {
+              setCreating(false);
+              setFile(null);
+              setConsent(false);
+            }}
+          />
+          <PageAction
+            name="done"
+            disabled={!file || !consent || busy || !groupScopeReady}
+            onClick={() => void submitEnrollment()}
+          />
         </SectionCard>
       ) : (
         <SectionCard

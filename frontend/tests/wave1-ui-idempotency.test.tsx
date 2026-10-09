@@ -120,7 +120,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         <CreateAgentForm groupId="group-id" />
       </AppShell>,
     );
-    const name = screen.getByLabelText("Agent name");
+    const name = screen.getByLabelText("Name");
     fireEvent.change(name, { target: { value: "First Agent" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 

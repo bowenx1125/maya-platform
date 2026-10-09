@@ -556,13 +556,14 @@ function CreateAgentFormSession({
       <SectionCard title={t("agentIdentity")}>
         <form
           id="create-agent-form"
-          className="stack-form wide-form"
+          className="stack-form wide-form quiet-create"
           onSubmit={submit}
           aria-busy={busy}
         >
           <label>
             <span>{t("agentName")}</span>
             <input
+              aria-label={t("agentName")}
               value={name}
               disabled={busy}
               maxLength={120}
@@ -611,14 +612,12 @@ function CreateAgentFormSession({
               onRetry={retryable ? () => void createAgent() : undefined}
             />
           ) : null}
-          <div className="button-row">
-            <PageAction
-              name="back"
-              href={groupId ? `/student/groups/${groupId}` : "/teacher"}
-              disabled={busy}
-            />
-            <PageAction name="done" form="create-agent-form" disabled={busy} />
-          </div>
+          <PageAction
+            name="back"
+            href={groupId ? `/student/groups/${groupId}` : "/teacher/studyform"}
+            disabled={busy}
+          />
+          <PageAction name="done" form="create-agent-form" disabled={busy} />
         </form>
       </SectionCard>
     </>

@@ -509,7 +509,6 @@ export function TeamEntryFlow({
       <div className={styles.entryHeading}>
         <div>
           <h2 id={headingId}>{title}</h2>
-          {variant === "maya" ? <p>{t("mayaTeamPublishHelp")}</p> : null}
         </div>
       </div>
 

@@ -511,7 +511,7 @@ describe("Brainform workspace actions", () => {
     });
     renderWorkspace("teacher");
     fireEvent.click(
-      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[1],
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
     const docx = new File(
       [new Uint8Array([80, 75, 3, 4, 0, 255])],
@@ -585,13 +585,13 @@ describe("Brainform workspace actions", () => {
     const viewButtons = await screen.findAllByRole("button", {
       name: "View lesson.md",
     });
-    expect(viewButtons).toHaveLength(2);
+    expect(viewButtons).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Edit lesson.md" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Hide lesson.md" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Reindex lesson.md" }),
     ).toBeNull();
-    fireEvent.click(viewButtons[1]);
+    fireEvent.click(viewButtons[0]);
     expect(await screen.findByText("Source")).toBeTruthy();
     expect(state.api.downloadKnowledge).toHaveBeenCalledWith("document-1");
 
@@ -1396,7 +1396,7 @@ describe("Brainform workspace actions", () => {
     const editButtons = await screen.findAllByRole("button", {
       name: "Edit lesson.md",
     });
-    fireEvent.click(editButtons[1]);
+    fireEvent.click(editButtons[0]);
     const editor = await screen.findByRole("textbox", {
       name: "Markdown content",
     });

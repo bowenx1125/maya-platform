@@ -273,3 +273,5 @@ Server facts, not a launch: `app.mayaform.net` resolved to `8.210.57.144`.
 That host is Ubuntu 24.04 with Docker 29.9 and Compose 5.6; a 4 GiB swap file
 is on. The production stack was not started, no certificate was issued, and no
 real Provider call was made. The cloud machine's local site remains Mock.
+
+October 9 local UI pass, not acceptance: Brainform, Chatform and Studyform use the Debates card (serif title, thin line, no heavy shadow). Brainform lists one module column. Studyform creation stays a module symbol; the Maya Team paragraph is gone. RAG view and edit are one control each. A Node Buffer from `File#arrayBuffer` is copied before SHA-256 so jsdom can fingerprint a staged PDF. Frontend typecheck and lint passed, and the touched UI tests passed. The full browser classroom flow and any real Provider call remain not run.

@@ -42,7 +42,6 @@ import {
   IconArrowRight,
   IconClose,
   IconDownload,
-  IconEdit,
   IconEye,
   IconRefresh,
 } from "../quiet-icons";
@@ -310,7 +309,8 @@ function rememberRagDrafts(scope: string, drafts: Record<string, RagDraft>) {
 }
 
 async function fingerprintRagFile(file: File): Promise<string> {
-  const bytes = await file.arrayBuffer();
+  // jsdom's File#arrayBuffer can return a Node Buffer, which SubtleCrypto rejects.
+  const bytes = new Uint8Array(await file.arrayBuffer());
   const subtle = globalThis.crypto?.subtle;
   if (subtle) {
     const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
@@ -2104,32 +2104,19 @@ function BrainformWorkspaceBody({
                         ) : null}
                       </div>
                       <div className={styles.actions}>
-                        <button
-                          type="button"
-                          className={styles.iconButton}
-                          aria-label={t("brainformViewRagNamed", {
-                            name: document.source_filename,
-                          })}
-                          data-ui-guide="knowledge.view"
-                          data-ui-guide-text={t("brainformViewRag")}
-                          disabled={busyKey === `view:${document.id}`}
-                          onClick={() => void viewRag(document)}
-                        >
-                          <IconEye />
-                        </button>
                         {canEdit ? (
                           <button
                             type="button"
                             className={styles.iconButton}
-                            aria-label={t("brainformEditRagNamed", {
+                            aria-label={t("brainformViewRagNamed", {
                               name: document.source_filename,
                             })}
-                            data-ui-guide="knowledge.edit"
-                            data-ui-guide-text={t("knowledgeEditLede")}
-                            disabled={busyKey === `read:${document.id}`}
-                            onClick={() => void editRag(document)}
+                            data-ui-guide="knowledge.view"
+                            data-ui-guide-text={t("brainformViewRag")}
+                            disabled={busyKey === `view:${document.id}`}
+                            onClick={() => void viewRag(document)}
                           >
-                            <IconEdit />
+                            <IconEye />
                           </button>
                         ) : null}
                         <button
@@ -2454,9 +2441,10 @@ function BrainformWorkspaceBody({
                 >
                   {busyKey === `import:${pane.draftKey}`
                     ? t("working")
-                    : t("knowledgeImportFile")}
+                    : t("knowledgeImportAction")}
                   <input
                     type="file"
+                    aria-label={t("knowledgeImportFile")}
                     accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     disabled={Boolean(busyKey)}
                     onChange={(event) => {

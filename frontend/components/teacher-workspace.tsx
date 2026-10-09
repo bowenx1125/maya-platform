@@ -358,16 +358,14 @@ export function TeacherStudyformWorkspace({
         title={t("mayaTeam")}
         action={
           <Link
-            className="inline-button"
+            className="inline-button symbol-button"
             href={`/teacher/studyform${selectedGroup ? `?group_id=${encodeURIComponent(selectedGroup.id)}&` : "?"}mode=teams`}
             aria-label={t("studyformOpenMayaTeams")}
           >
             <IconArrowRight />
           </Link>
         }
-      >
-        <p className="studyform-module-note">{t("mayaTeamPublishHelp")}</p>
-      </StudyformModule>
+      />
     </>
   );
 }

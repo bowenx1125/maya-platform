@@ -201,7 +201,7 @@ describe("W1 teacher personal workspace", () => {
     expect(
       screen.queryByText(/A Public personal Agent is shareable/),
     ).toBeNull();
-    const name = screen.getByLabelText("Agent name");
+    const name = screen.getByLabelText("Name");
     fireEvent.change(name, { target: { value: "Teacher Lens" } });
     fireEvent.submit(name.closest("form")!);
 
@@ -255,7 +255,7 @@ describe("W1 teacher personal workspace", () => {
     expect(
       (
         within(voices).getByRole("combobox", {
-          name: "Group workspace",
+          name: "Group",
         }) as HTMLSelectElement
       ).value,
     ).toBe(groupId);
@@ -324,7 +324,7 @@ describe("W1 teacher personal workspace", () => {
     });
     const voices = heading.closest("section") as HTMLElement;
     const group = within(voices).getByRole("combobox", {
-      name: "Group workspace",
+      name: "Group",
     }) as HTMLSelectElement;
     expect(group.value).toBe("");
     expect(api.voiceProfiles).not.toHaveBeenCalled();
@@ -394,10 +394,9 @@ describe("W1 teacher personal workspace", () => {
     expect((newButton as HTMLButtonElement).disabled).toBe(true);
     expect(api.enrollVoice).not.toHaveBeenCalled();
 
-    fireEvent.change(
-      within(voices).getByRole("combobox", { name: "Group workspace" }),
-      { target: { value: accessibleGroupId } },
-    );
+    fireEvent.change(within(voices).getByRole("combobox", { name: "Group" }), {
+      target: { value: accessibleGroupId },
+    });
     const accessibleHeading = await screen.findByRole("heading", {
       name: "Voices · 0",
     });
@@ -507,7 +506,7 @@ describe("W1 teacher personal workspace", () => {
     ).toBe(true);
     expect(api.enrollVoice).not.toHaveBeenCalled();
     expect(
-      within(voices).getByRole("combobox", { name: "Group workspace" }),
+      within(voices).getByRole("combobox", { name: "Group" }),
     ).toBeTruthy();
   });
 
