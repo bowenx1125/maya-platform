@@ -175,7 +175,10 @@ the first request of a run:
 - confirm the run is new and its charged-request count is zero;
 - confirm the provider, `LLM_MODEL`, region, dimension and policy hash
   are the reviewed ones;
-- confirm the teacher disclosure was confirmed for that exact manifest.
+- confirm the applicable authorization covers that exact manifest. For Knowledge
+  generation, the Teacher's explicit save/generate/regenerate or authorized Tool
+  call records this authorization; do not add a second confirmation screen.
+  Other operations retain their documented disclosure/authorization rules.
 
 A structure repair is the one exception to "no retry": it re-sends the same
 authorized manifest once with frozen feedback, inherits its first attempt's
@@ -207,10 +210,11 @@ services:
       - "127.0.0.1:18080:8080"
 ```
 
-`CLASSROOM_PUBLIC_BASE_URL` must satisfy two independent rules at once: the
-classroom QR code rejects loopback and needs a private-LAN address, while the
-CSRF origin check compares the port. Use the host's LAN address with the port
-the stack actually publishes.
+`CLASSROOM_PUBLIC_BASE_URL` must satisfy the classroom QR and exact CSRF origin
+checks, including the port. Local Demo uses the host's private-LAN address and
+published port. The separate production profile uses the reviewed public HTTPS
+origin; never expose the Demo profile publicly. See `docs/RELEASE_POLICY.md` for
+production credentials, isolated data/config mounts and release checks.
 
 `scripts/reset_demo_runtime.py` renames the runtime directory rather than
 deleting it. A container bind mount follows the original inode, so a container

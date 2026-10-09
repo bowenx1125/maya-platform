@@ -1,139 +1,139 @@
-# Knowledge generation durability and Provider stage contract (K2a/K2b)
+# Knowledge generation: authorization, durability and current versions
 
-Latest product override (2026-10-05, implementation in progress): Teacher save or explicit generate/regenerate expresses the exact Knowledge-generation intent. No separate “provider confirmation required / Open provider disclosure” step is permitted. Record the current actor-authorized exact payload under the registered reviewed policy; preserve course/source ACL, privacy, idempotency, accounting, current usable content and unknown no-resend. This replaces the historical separate-confirmation and separate Create AI Knowledge UI descriptions below. Agent creation and AI Knowledge creation use one Agent flow with Brainform RAG/Knowledge selection; canonical references use current Knowledge for future work without rewriting historical attempts.
+This is the current v1.4 contract. It replaces the historical K2 separate
+confirmation screen, separate asset-management UI and manual-head preservation
+rules. Implementation and deployment evidence belong in [PROJECT](../PROJECT.md).
+The [Brainform contract](MAYAFORM_V14_BRAINFORM_ASSESSMENT.md) and
+[UI contract](MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) define the product interface.
 
-K2a persists an explicitly supplied Teacher Knowledge intent. K2b1 adds a
-confirmed, owner-authorized one-shot Provider operation and immutable sanitized
-stage. K2b2-A materializes accepted candidates into the same K1 Set, one
-permission-fenced Asset transaction at a time. The explicit Create/Update AI
-Knowledge UI passed focused independent review; overall K2b2/backend acceptance
-is pending. Ordinary Agent Done remains independent.
+## Intent and current authorization
 
-## Done intent and authorization
+Agent creation and AI Knowledge creation share the Agent workbench. A Teacher
+selects authorized Brainform RAG or Knowledge and saves Agent.md; the explicit
+generation flow records the selected RAG generation intent with Done. Ordinary
+Agent Done need not generate. Bound RAG content changes also update Knowledge
+with an established generation relationship. Manual `↻` remains available.
 
-Generation intent is an optional publish-request field. Ordinary Teacher Done,
-including an Agent with selected courseware, creates no generation Job/run.
-Student Done also keeps the existing request shape. K2b2 will send the existing
-intent only from an explicit AI Knowledge creation/update flow. Agent.md guides
-that authorized operation; no Planner, semantic classifier, fixed Markdown
-heading, Teacher capability switch, Toolkit binding or per-Asset approval is
-required. When a caller explicitly supplies `generation.source_document_ids`,
-the ordered IDs must exactly match the immutable draft's enabled documents.
+A Teacher Agent Chat may use the maintainer-registered
+`generate_agent_knowledge` Tool for its current published Agent and enabled RAG.
+The Tool derives actor, course, Agent/version, source IDs and target from the
+authenticated invocation; the model cannot supply another identity or arbitrary
+target. It reuses the same generation service, stable Set and durable worker.
+It is not a separate Agent compiler, content reviewer or Toolkit binding flow.
 
-The server requires the current actor to be the Agent owner and a Teacher in its
-course. It rechecks active Agent/version state, course and Group access, source
-ownership/visibility, current document/file hashes, authorization epochs and
-index revisions before persisting. Agent names and Markdown never grant role or
-resource access.
+Teacher save, explicit regeneration or an authorized generation Tool action
+expresses the exact intent. No separate “provider confirmation required / Open
+provider disclosure” step is required for this generation. The worker records
+the exact authorized manifest under the current reviewed Provider policy and
+rechecks actor/course, Agent/Set ownership and read/edit, source visibility,
+hashes, epochs and index revisions. Missing policy or revoked access stops that
+task accurately; it does not grant access or permanently lock Chats.
 
-## Atomic durable run
+Agent.md, names and creator identity do not confer permissions. Student runtime
+does not expose this Teacher Tool. Team data-use consent remains separately
+bound to the actual published Team version and resources; removing the Knowledge
+generation confirmation screen does not invent Team or Private-data consent.
 
-On the existing publish final commit, the server may create one Private personal
-Knowledge Set for the stable owner/course/Agent identity, add currently authorized
-selected Sources, link the Set to that Agent, and insert its `jobs` row and
-`knowledge_generation_runs` row. These rows commit with Done and the completed
-publish idempotency response, or roll back together. A response replay preserves
-the original run/job/Set identifiers. The new input key is a canonical SHA-256
-over owner, course, Agent identity/privacy epoch, target Set identity/privacy
-epoch, Agent.md hash, policy version and ordered source binding/hash/epoch/index
-manifest; it excludes the random AgentVersion ID and mutable display names.
-The database unique key reuses the same run across concurrent or differently
-keyed identical Done requests. Every reuse rechecks current authorization.
+## Atomic enqueue and replay
 
-`GET /knowledge-generation-jobs/{job_id}` is owner-only and returns safe state,
-Set ID, timestamps, error code and accepted/materialized/failed item counts. It
-never returns Markdown, source content, Provider request/response data or other
-owners' rows. Owner Set summaries expose `generated_by_agent_id` only for a
-generation-owned Set; manual Sets and non-owner projections return null.
+The initiating transaction creates or reuses the owner/course/Agent's stable
+canonical Set, source bindings, Agent relation, job and generation run. These
+commit with the product action or its accepted Tool receipt, or roll back together.
+Only after commit does the process-local task manager wake the durable job.
+Startup recovery uses the same persisted claims and leases.
 
-Brainform summaries expose nullable `generation_job_id` only to the current
-Teacher owner who can edit the canonical Set and still access the actual
-generation Agent/version in the same course. An alias opens that same Set; it
-does not become the generator. Student/shared rows and rows whose generator,
-owner or course access is revoked return null. A still-authorized Teacher owner
-can read a blocked job after source revocation. Reloading Brainform hydrates the
-existing owner-only job status;
-reading status never creates or retries a run. Missing exact disclosure consent
-uses the existing disclosure link. Confirmation resumes that same blocked job
-only; sending or unknown acceptance never authorizes a resend. Late list/status
-responses cannot replace a newer job or another actor/course's state.
+One product action has one stable action ID, exact payload hash and replay result.
+Retries, double-clicks and differently keyed repeats of the same saved input do
+not create duplicate Sets, versions, runs or charges. A later explicit manual
+regenerate action may generate again even if source content is unchanged.
+The Teacher Tool reuses the current matching pending/running/completed generation
+when present and reports its real state; it does not turn an unknown request into
+an automatic retry. A changed payload cannot reuse an action ID.
 
-## K2a worker and K2b1 Provider boundary
+The input binds owner/course, Agent and Set identity/epochs, Agent.md hash,
+policy and ordered source identity/hash/epoch/index manifest. Mutable display
+names and random version IDs do not alone create new work. Every reuse still
+checks current authorization.
 
-Jobs are durable; the process-local task manager is only a wake mechanism.
-Claims use a persisted token and lease. Current Agent, Set, Source, group,
-course, file hash and authorization epochs are rechecked at claim, immediately
-before dispatch, and in the accepted-stage transaction. With a non-Provider
-selector, the intent blocks as `provider_not_configured`, with no Provider
-operation, request or Assets.
+Job status is owner-only: safe state, Set/job identity, timestamps, error code and
+item counts, without source text, Provider bodies, credentials or foreign rows.
+Brainform exposes the generation job only to the current Teacher owner who can
+edit the Set and access its actual generator. Reading status never enqueues,
+retries or dispatches a Provider request. Late responses cannot replace another
+identity, course, selected object or newer job.
 
-With the configured DashScope LLM, K2b1 prepares the `llm_knowledge_generate`
-manifest against the exact run and agent version. Its field classes are Teacher
-Agent instructions, authorized courseware text, platform rules and an opaque
-local identifier. The exact manifest and policy require the existing teacher
-disclosure confirmation. Missing consent creates no ProviderOperation,
-reservation or request. Ordinary source text is not screened by keyword.
+## Public SDK and actual send
 
-Agno 3.0.11 receives a fresh Agent and may invoke exactly once. The callback
-uses the final SDK system/user messages to build canonical UTF-8 JSON bytes;
-their SHA-256 is the durable request hash and those bytes are passed unchanged
-to `post_bytes`. Retry, history, memory, tools, cache and telemetry are off.
-The credential is sent only in the Authorization header. No raw HTTP envelope,
-header or request body is persisted. Knowledge generation reuses the existing
-LLM accounting bucket without an added quota or retry allowance.
+Use pinned Agno 3.0.11 through public interfaces and the thin MayaForm adapter.
+The Knowledge worker's fresh Agent invokes one authorized generation request;
+its retry, history, memory, tools, cache and telemetry do not create additional
+calls. This generation Agent is distinct from the Teacher Chat Agent that
+requested the job.
 
-A valid response stores only canonical typed candidate JSON and validated
-usage (or null when usage is absent/invalid); usage is never an Asset-content
-gate. Acceptance, stage, reservation and run/job transitions commit together.
-K2b1 alone does not materialize Assets. K2b2-A keeps the accepted claim for its
-local worker, which can resume the immutable stage without another Provider
-request. If ACL changes while the call is in flight, the response content is
-suppressed and only a safe receipt hash/error is retained.
+The final SDK messages produce canonical UTF-8 request bytes; the durable hash
+and actual `post_bytes` bytes must match. Credentials remain in the transport
+header. Raw HTTP bodies, headers and credentials are not persisted in diagnostics.
+The transition to `sending` rechecks current authorization in the writer
+transaction. Accounting is retained without product call, token or cost quotas.
 
-Startup never automatically repeats an uncertain request: reserved becomes
-not-sent with zero charged count, sending becomes `acceptance_unknown`, and an
-accepted stage remains accepted for local zero-network recovery. A failed local
-stage commit becomes acceptance-unknown. No provider diagnostics enter the
-owner status DTO.
+Usable completed response content is required. Missing/invalid usage is recorded
+as absent metadata and never rejects otherwise usable content. Acceptance,
+sanitized immutable stage, accounting and job transitions commit consistently.
+Revocation during a call suppresses unauthorized content while retaining the
+necessary safe receipt and actual billing state.
 
-## K2b2-A accepted-stage materialization
+Startup converts unsent reservations to not-sent and uncertain sending to
+`acceptance_unknown`. It never automatically resends an unknown request. An
+accepted stage can resume local materialization without another Provider call.
+Failure to persist an accepted response cannot be falsely reported as not-sent.
 
-Each selected source gets a random, run-scoped `source_receipt_id`. The provider
-sees that opaque ID beside authorized courseware text, never a client-chosen
-binding or location. A candidate's optional receipt IDs become K1 source
-relations only after the worker rechecks run, Set, binding, document, file,
-hashes, epoch, index revision and current ACL. Invalid optional receipts are
-dropped and counted as unverified; they do not reject otherwise valid content.
+## Materialization and canonical promotion
 
-The worker hashes the canonical accepted stage and derives a deterministic
-item key from run/stage/index. Each Concept, Question (including its teacher-only
-Rubric/reference answer), or Note is validated with K1 rules and saved in its
-own short transaction. A malformed item records a safe failure without undoing
-earlier successes or suppressing later valid items. Items retain stage/candidate
-hashes, receipt IDs, lineage and immutable AssetVersion IDs. Status counts mean
-accepted candidates, committed versions, and failed plus skipped items.
+The server issues opaque source receipts. Optional invalid citations create no
+verified relation; they need not reject otherwise legal content. Verified
+relations are saved only after rechecking the exact source/version/ACL.
 
-The stable owner/course/Agent Set identity is reused on explicit later Done.
-Generated items use stable kind/ordinal lineage. Each run freezes expected
-Asset IDs, head sequence and origin at enqueue; materialization appends only
-when the current head still matches. An older concurrent run skips a stale
-item as `target_head_changed` while it may save independent items. Manual heads
-stay intact (`manual_head_preserved`). Current Teacher, Agent, Set, source and
-claim fences are checked for every item; revocation preserves committed items
-and blocks remaining work. Startup reclaims an accepted stage for local
-materialization with zero Provider calls; stale claims cannot write. Per-item
-commits are immediately readable through K1 APIs. There is no review,
-confirmation or content-quality gate.
+Each candidate uses a deterministic run/stage/item key and stable lineage.
+Concepts, Questions with teacher-only Rubric/reference, and Notes retain immutable
+versions and provenance. Partial successful items remain traceable, but a failed
+or incomplete generation does not replace a complete usable canonical document.
+The canonical Markdown and its executable question projection agree on the
+selected version and actual included assets; omitted/edited questions cannot
+silently use older live heads.
 
-Migration `0037_knowledge_generation_runs` adds the run table;
-`0038_knowledge_generation_provider_stage` adds manifest and accepted-stage
-data; `0039_knowledge_generation_materialization` adds source receipts,
-target-head snapshots, item journal and generated lineage. Existing 0038 runs
-receive an empty lineage baseline because that schema could not store generated
-Assets. Migrations are atomic with Alembic head updates;
-downgrade refuses to discard generation or materialization history. Debate
-cleanup preserves K2 rows. Tests cover good/bad/good, citations, manual head,
-source/Teacher/Set revocation, late claims, zero-network recovery, provider
-accounting states and migration rollback. The explicit Teacher UI passed focused
-independent review; overall K2b2 and real Provider acceptance remain pending.
-No real Provider was called.
+A valid newest generation appends a new canonical version and makes it current,
+including when it replaces manually edited content. The manual version stays in
+history. An old generation cannot overwrite a newer source/intent generation;
+duplicate materialization cannot create another version. Generation failure
+preserves the previous usable content. Rename/no-op changes do not generate.
+
+After a successful relevant canonical change, active/paused formal Team attempts
+using that object receive the ordinary Chat message “老师已更改当前回合的
+Knowledge，请重新答题。” The same attempt gets a new question-selection
+generation; old answers remain historical and cannot enter the new evaluation.
+Paused attempts stay paused, completed attempts stay unchanged, and old accepted
+evaluator/Boundary results cannot write to the new selection. Promotion, selection,
+notice and write fences are transactional. Failed/partial/no-op/rename changes
+do not reset a round. This affects neither ordinary Chat nor learning Memory.
+
+## Presentation, migrations and acceptance
+
+During real work show only `Generating AI Knowledge`; no Ready/Reviewed/Published
+badge or Teacher content approval. Saved complete content is usable immediately.
+Brainform renders one canonical Markdown object with section headings and a
+visual-only Graph, independent view/edit routes and shared RAG operations.
+Errors retain content and a valid recovery path, without a new workflow panel.
+
+Migrations retain old Set/Asset/Question IDs, source receipts, versions, history,
+Chat, evidence and provider ledger. Downgrades that would discard history refuse
+rather than rebuilding a parent table unsafely. Generation tables began in
+0037–0039; canonical and attempt-selection migrations extend them. Current head
+and actual backup/upgrade results are recorded in PROJECT, not inferred here.
+
+Acceptance covers current ACL before send and write, action replay/concurrency,
+exact transport bytes, billing/unknown isolation, accepted-stage recovery,
+manual replacement with history, partial failure, newest-generation fencing,
+active/paused attempt reanswer and completed-history stability. Final product
+acceptance additionally requires an actual Teacher Agent Tool call, real
+generation, shared canonical references, student Team answers saved to the DB
+and a correctly scoped Teacher report; focused Fake tests do not substitute.

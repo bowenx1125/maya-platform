@@ -33,32 +33,42 @@ results in `docs/PROJECT.md` after each run.
    `http://localhost:8080/`, and the Teacher/Student routes. Compare the
    unrelated container IDs with step 2. A healthy container is a deployment
    check, not proof of AI behavior or teaching quality.
-6. For one real Provider smoke, use a new, minimal synthetic Agent.md and
-   synthetic courseware in the authorized scope. Confirm the exact current
-   Provider policy, outbound field classes, manifest hash, model/region and
-   Teacher disclosure before sending. Record the run ID, request hash,
-   charged-request count and result status without logging credentials,
-   endpoint, raw response, Source text or private paths. Do not automatically
-   repeat an `acceptance_unknown` request. In Teacher Workspace's Agents section, use
-   **Create AI Knowledge**, select the synthetic Source in the existing Agent
-   workbench and press Done once. Ordinary New Agent Done remains unchanged.
-   Brainform's sidebar New creates only Markdown RAG. Check that global and Agent
-   Brainform open the same canonical Knowledge ID, successful content is immediately
-   usable, and the owner-only generation Job matches the saved content. Edit bound
-   RAG to verify automatic updating; also use the Knowledge row's ↻. Successful
-   regeneration replaces the manually edited current Markdown while preserving its
-   immutable history. Failures retain the last usable document. Compare actual
-   saved versions and browser behavior with current account/Source ACL and BF/AT/RS.
-   Verify
-   Private and Public assessment attempts through the existing General Chat:
-   send natural-language start, pause, continue, query submitted records, abandon
-   and explicit abandon-and-redo messages. There is no assessment card, progress
-   panel, dedicated composer or lifecycle button group. Check that querying or
-   abandoning a paused attempt does not first resume grading. Verify
-   automatic completion after final Assessment/Boundary saves, Teacher Kaikai
-   report/download and Chat withdrawal. Provider authorization reuses
-   valid existing grants; missing scope has a recoverable path and is not treated
-   as authorization to send another charged request.
+6. Execute the authorized real acceptance workflow with dedicated synthetic
+   data: create four Agents through Studyform and one synthetic Brainform RAG.
+   In Teacher Maya Agent Chat actually call `generate_agent_knowledge`; record
+   the accepted Tool receipt, canonical Set/job and final successful saved version.
+   Bind the other three Agents to that same canonical object, configure the
+   legitimate Leader/evaluator/summarizer recipe, and save an own-course Public
+   Team through Studyform. Confirm its exact published-version data-use scope.
+   Several separately authenticated synthetic students must select it from
+   Chats → New → Maya Team and submit real Public/Private answers. Verify actual
+   DB attempt/answer/evaluation/Boundary relationships, then ask Teacher Maya
+   Agent Chat for statistics and a downloadable report targeted only to that
+   synthetic activity. Private contributes neither content nor count; never
+   query unrelated real students or Private histories as test data.
+
+   Record request hashes, receipts, job/attempt/report identities, actual billing
+   and result state without credentials or private response bodies. HTTP 200,
+   model prose or enqueue success alone is not completion. Unknown acceptance
+   is never resent automatically. Teacher Knowledge generation needs no separate
+   Provider confirmation screen, but current source/target ACL and reviewed
+   policy still apply. Team and Chat purposes retain their actual authorization.
+
+   Check canonical reference equality, usable generated content, bound RAG
+   auto-update and explicit ↻. Successful latest generation may replace manual
+   current while preserving history; failed/partial/old results cannot clear or
+   replace usable current. Relevant active/paused rounds receive the ordinary
+   reanswer message; stale answers/results do not enter the new selection and
+   completed history stays unchanged. RAG New supports the existing Markdown,
+   PDF and DOCX import, with common editor/view/download/delete operations.
+
+   Test natural-language start, pause, continue and query in the ordinary General
+   Chat; no assessment card, panel, dedicated composer or lifecycle button group.
+   Private participation completes normally but stays excluded from Teacher
+   statistics/report/download. The latest abandoned-record disposition is a
+   separately deferred Tool/prompt change; do not claim current retention meets
+   it or delete billing/history while testing. Missing permission affects only
+   that operation and leaves lawful subsequent messages available.
 
 Teacher Chat approvals must be checked separately for LLM and query Embedding.
 Confirm each exact purpose/policy disclosure once in its valid course scope;

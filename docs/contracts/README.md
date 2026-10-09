@@ -9,23 +9,22 @@
 These files and `docs/PROJECT.md` override historical
 pre-code snapshots.
 
-## Debate generation contracts
+## Knowledge and generation contracts
 
 [`KNOWLEDGE_SETS_CONTRACT.md`](KNOWLEDGE_SETS_CONTRACT.md) describes K1's shared
 Set/Asset store, immutable versions, source authority and student Question
 projection.
 
 [`KNOWLEDGE_GENERATION_CONTRACT.md`](KNOWLEDGE_GENERATION_CONTRACT.md) records
-K2a's durable, permission-scoped intent boundary.
+the current generation Tool/intent, exact authorization, durable jobs and canonical-version boundary.
 [`MAYAFORM_V14_GENERATION_AND_TOOLS.md`](MAYAFORM_V14_GENERATION_AND_TOOLS.md)
 records the latest user-approved K2b2/K3/K4 trigger, Tool and provenance
 decisions; its unimplemented obligations are not release claims.
 
-[`DEBATE_GENERATION_CONTRACTS.md`](DEBATE_GENERATION_CONTRACTS.md) is the frozen
-behaviour of the real Debate path — Persona, formal content, embedding identity,
-evidence trace, the mutual-learning RuleSet, the prompt budget, the provider
-control ledger and the LLM turn runtime. It was ten files in a `wave4/`
-directory; splitting one subject across a directory only made it harder to read.
+[`DEBATE_GENERATION_CONTRACTS.md`](DEBATE_GENERATION_CONTRACTS.md) retains Debate
+Persona, embedding, evidence, ledger and wire-schema details. Historical budget
+estimates and preflight gates in it do not override the current unbounded accounting
+rules, authorization or four-round contract.
 
 [`FOUR_ROUND_PROMPTS.md`](FOUR_ROUND_PROMPTS.md) records the current four-round
 prompt examples. Completed Wave plans are deliberately not retained here; current

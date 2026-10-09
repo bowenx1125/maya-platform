@@ -21,8 +21,10 @@ Only configured assessment Maya Teams activate the local no-hint protocol. One
 unfinished attempt exists per actor/activity; unrelated activities and ordinary
 Chats remain usable. New entry resumes the original attempt and original privacy.
 Pause, disconnect, refresh, output stop and failure preserve answers/current question.
-Explicit abandon-and-redo closes the original attempt without deletion and creates
-a new ID atomically. After all selected questions are resolved, the authorized
+Explicit abandon-and-redo closes the original attempt and creates exactly one
+new ID atomically. The latest user decision discards abandoned learning records;
+its Tool/prompt and data-disposition implementation is explicitly deferred. Current
+retention is not acceptance of that decision, nor authority to purge billing history. After all selected questions are resolved, the authorized
 executor saves Assessment and Boundary. The final successful Boundary write and
 server completion event share one transaction; no extra student confirmation is
 required. Missing evidence, paused/withdrawn state or failed writes cannot complete

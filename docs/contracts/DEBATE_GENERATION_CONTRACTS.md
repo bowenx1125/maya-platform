@@ -42,9 +42,11 @@ Status: `FROZEN / REAL EMBEDDING 1024 DELTA`
 7. **Which factual claims require evidence?** Every concrete quantity or explicit
    attribution to an expert, study, survey or report requires direct evidence; the
    existing server detector is the minimum enforcement set.
-8. **Maximum input per turn?** 32,000 model tokens; output request 1,500 tokens.
-9. **Maximum Provider calls per debate?** 20 Debate LLM calls for 5 Agents × 2 rounds;
-   LLM-B and TTS have separate non-transferable caps.
+8. **Maximum input/output per turn?** No product token ceiling or fixed requested
+   output cap. Preserve complete authorized history and actual usage accounting.
+9. **Maximum Provider calls per debate?** No product call-count ceiling. The
+   current four-round schedule, exact authorized operation and idempotent recovery
+   still determine which calls may run; see `FOUR_ROUND_PROMPTS.md`.
 10. **When may attempt 2 retrieve again?** Only after retrieval technical failure
     before any LLM request. Structural repair reuses the frozen receipt set.
 11. **What is sent externally?** The exact allowlist in ProviderDataCallV1: structured
@@ -58,9 +60,9 @@ Status: `FROZEN / REAL EMBEDDING 1024 DELTA`
 13. **Model versions?** Chat, debate and report use `LLM_MODEL`
     (default `qwen3.8-max-2026-09-02`). Embedding stays `text-embedding-v4` at 1024
     dimensions and `qwen3-tts-vc-2026-01-22`; no `latest` fallback.
-14. **Maximum charge?** CNY 0.15/request and CNY 3.00 per full Debate LLM run; other
-    operation caps are the table in ProviderDataCallV1. Embedding additionally limits
-    each item to 8,000 counted tokens and each ten-item request to 30,000.
+14. **Maximum charge?** No product CNY quota. Legacy estimate fields remain for
+    accounting rather than rejection. Embedding retains the supplier's supported
+    item/batch shape; these transport constraints are not a total authored-RAG cap.
 15. **How do budget/timeout/shape/uncertain failures close?** Pre-send violations make
     zero calls; a durable atomic reservation precedes network I/O; repair uses one
     frozen retry; acceptance-unknown consumes the cap and is never retried or
@@ -1000,11 +1002,9 @@ model/region/data class, sending forbidden identity data or skipping the exact G
 
 ## LLM turn runtime
 
-Status: `DESIGN FROZEN CANDIDATE / G0-S REAUDIT PENDING / REAL LLM IMPLEMENTATION NOT AUTHORIZED`
-
-This contract closes the design decisions required before a real debate-turn LLM can
-be implemented. It does not authorize a Provider call. The earlier one-call account
-preflight remains availability evidence only and must not be repeated.
+The real Debate adapter implements this wire boundary. Deployment, real-call
+results and current authorization are recorded in `docs/PROJECT.md`; historical
+preflight results are not current acceptance or permission to repeat a paid call.
 
 ### Fixed wire resource
 
@@ -1033,7 +1033,6 @@ The exact Provider-visible JSON object contains only:
   "stream": false,
   "temperature": 0.2,
   "top_p": 0.8,
-  "max_completion_tokens": 1500,
   "n": 1,
   "response_format": {
     "type": "json_schema",
@@ -1051,10 +1050,10 @@ The exact Provider-visible JSON object contains only:
 The system/user messages are the two strings already frozen by PromptRequestV1; neither
 may be split, reordered or duplicated.
 
-`max_tokens` is not used because the official Chat contract marks it for deprecation;
-the fixed snapshot supports `max_completion_tokens`. The official structured-output
-contract requires `enable_thinking=false` for stable JSON and supports strict JSON
-Schema for the Qwen3.7-Plus family.
+Neither `max_tokens` nor `max_completion_tokens` is sent. The adapter uses
+`enable_thinking=false` and the exact hash-pinned structured-output schema. Verify
+the configured model through the authorized Provider test rather than an older
+model-family claim in this document.
 
 The request hash is SHA-256 over canonical JSON containing method, exact resolved
 endpoint, the complete Provider-visible body, prompt contract version, schema hash,

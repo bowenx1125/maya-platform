@@ -52,212 +52,72 @@ Direct+5/contextual+2/no_match+0 measure evidence support, not accuracy.
 support manual review of answers/new points/evidence/disagreement, without keyword/
 similarity gates.
 
-## Verification boundary
+## Preserved classroom and account behavior
 
-Browser evidence below is dated; complete RAG/content quality needs owner review.
-Main delivery/Docker updates are authorized; usage reset is not.
+Classroom/Voice work remains separate from v1.4 Chats. Next reuses/intercepts
+retained audio; failed audio retains text. Preview polls only while visible;
+Final freezes eligible barrages transactionally. Conclude creates Report with
+version/history; model/object/usage metadata do not reject usable Report content.
+Replay reuses media without new input or generation. Immerse retains Transcript,
+right-edge controls, QR/Interact and leases; no manual barrage pause control.
 
-## Established classroom behavior
+Devocalize removes audio only. Rebirth preserves rounds1–3, resets Final/classroom/
+Report locally with new final IDs and no Preview call. Delete fences workers and
+removes only the authorized revision after commit; sent calls cannot be retracted.
+Remake/recovery preserves charged/accepted/unknown receipts and explicit retry
+identity. Audio fallback never bypasses supplier-download SSRF protection.
 
-Next interrupts/reuses audio; visible/focused lists refresh. Reports preserve Debate
-language/Markdown without HTML/prose rejection(0025); stages omit A/B/C. Replay reuses
-media without new barrages/Open Message. Immerse keeps Transcript, right-edge controls,
-focus/QR behavior. Conclude creates Reportv1 Evaluation/History; Regenerate/Review remain.
+Topic and optional Background are separate (0026). Current default Rulesets are
+`backend/app/modules/debates/default_rules/{zh,en}.md`; language and teaching guidance
+are editable/frozen Ruleset content, not hidden Chat instructions. Old protocols
+were removed; immutable legacy IDs/data remain. Report Markdown and sources stay
+complete. Classes/config/3D work owned by other authorized contributors is preserved.
 
-- **Devocalize:** remove audio, retain speech/sources.
-- **Delete:** current revision by ID; remove after commit. Materialize legacy playback;
-  fence workers without awaiting suppliers. Keep owner/file/path guards; sent calls cannot
-  be retracted or recreate data.
-- **Rebirth:** preserve rounds1–3, remove final/classroom/report data, return Preview-ready
-  with new final IDs. No Provider/Preview rerun; restore immutability triggers on commit/
-  rollback.
-- **Remake:** guarded; no bulk retry/recovery UI/read-triggered generation. Preserve
-  charges/results/unknown stop. End, auth/CSRF and control guards remain.
+Single-course Demo registration and usernames/group normalization retain collision
+checks (0029). Teacher Enter keeps the Teacher role and resource ACL; restarting
+catalog sync preserves memberships. Password changes keep the current session and
+revoke other sessions. Voice clones stay uploader-owned; live classroom access does
+not grant student generation/control. No usage reset or real speech acceptance is
+implied. Next.js/FastAPI/SQLite/files/Caddy share localhost:8080.
 
-Visible Preview polls; WebSocket speech/speaker updates ignore stale media callbacks.
-Barrages freeze transactionally. Each round queries its KB at high/low/medium/high
-priority, up to3 queries/batch. Remake rebinds and preserves caches; failures never become
-cache successes, deleted diagnostics stay gone. Audio consent/identity/state guards remain;
-Audio Ready means retained audio. Failed classroom actions retain rows.
+Agent.md and RAG have no artificial total authored-text caps. Supplier embedding
+batches retain their supported shape (10 items/30,000 estimated tokens). 0031
+Agent tombstones preserve historical Chats/snapshots. Chats is text-only, with full
+history, current-message language and no hidden locale/language suffix; Voice/Debate
+speech is separate. Unknown acceptance affects one request, not later sends.
 
-Next.js/FastAPI/SQLite/files/Caddy share8080. Inspect active SQLite inside its container;
-preserve config/knowledge/runtime data. Real core calls require authorization,
-embedding dimension1024. Not real-service acceptance.
+0033 removes product request/token/CNY/call-ordinal ceilings while preserving
+reservations, actual usage, exact manifests, deduplication and authorization.
+Output token caps remain absent. An HTTP 200 or accepted charge alone is not a
+successful generation/report. .env updates require scoped recreation; backup and
+sending/job/turn inspection precede deployment. Other services and private config
+must remain unchanged.
 
-## Remaining scope
+Historical browser/provider results remain in Git history and are not current
+v1.4 acceptance. Prior observed Voice/Report failures and billed calls cannot be
+silently retried or converted into success. Real RAG quality/classroom load/voice
+quality remain separately unverified.徐伯闻 owns teaching content, 古月 3D/voice/TTS,
+Kaikai accounts/student UI. [Architecture](ARCHITECTURE.md), [contracts](contracts/),
+[ADRs](adr/) retain the implementation agreements.
 
-徐伯闻 owns content acceptance; 古月 3D/voice/TTS, Kaikai accounts/student UI.
-RAG quality, classroom load, deployment/monitoring, backup/restore and real speech
-remain unverified. Architecture: [overview](ARCHITECTURE.md), [contracts](../contracts/), [ADRs](adr/).
+## Preserved v1.4 accepted work
 
-## Topic and Background
+W0 pins Agno3.0.11/public SDK (ADR-009); Team history uses `additional_input`, since
+direct Message arrays dropped assistant turns. W1 owner-first workspace (0035)
+keeps personal drafts, publication/ACL, frozen names and identity fencing. W2a
+keeps request replay, history, usage/CAS/refund and SSE/GET recovery; W2b removes
+Agent.md/RAG limits (0034) without changing supplier batch constraints. No Toolkit
+approval or fixed Agent.md chapters.
 
-Topic/optional Background are separate(0026); titles show Topic only. Accept visible
-scripts/symbols; NFC/control/whitespace cleanup preserves punctuation. Background is
-unverified scenario data. Draft edits invalidate Preview. Creation uses separate
-cards, Back/Done and Ruleset language. Budget ceilings were later removed.
+K1 retains immutable Set/Asset/Version, actual Sources, Question-contained Rubric,
+visual-only Graph and one shared store. K2a/K2b persist jobs, claims and exact
+Provider stages; K2b2/K3-A materialization and published assets are committed.
+Latest generation/current-version behavior is in
+[Knowledge generation](contracts/KNOWLEDGE_GENERATION_CONTRACT.md), rather than
+old separate confirmation or manual-head-preservation descriptions. Accepted W0,
+W1, W2, K1, K2 and K3-A are not being reimplemented.
 
-## Frozen Markdown Ruleset and current Report repair
-
-Defaults are `backend/app/modules/debates/default_rules/{zh,en}.md`; reads make no
-Provider call. Agents Order precedes language/Edit/Save. Display full Markdown; edit
-raw text, Save language, Back discards. Done creates, hides in Edit and never saves
-unsaved Ruleset edits. Freeze both files/eight System messages; send intact Markdown
-plus round/JSON/source/routing rules, with language in Rulesets. Drafts cannot replace
-frozen rules. Migration0027 preserves old custom rules/speeches; recovery/repair
-retains messages and appends frozen feedback. Reject HTML/unsafe links; model
-compliance stays manual.
-
-“RAG证实”/“RAG提示”/“我感觉” guide evidence, else Agent.md; never invent/widen
-claims. Reports keep full evidence; bibliography is not secret leakage. Creation:
-Chinese default, separate CN/EN drafts, linked inputs/newest-first Agents, Beta→Debates.
-Reentry reconnects without retry/advance; Replay/Conclude require completion; Live
-clears replay cursors.
-
-Only `ordered_multi_expert_mutual_learning_v1` remains; new Debates use four-round
-`segments_v2`. Old protocols were removed September10; migrations/readers retain data.
-
-## Account integration — September 12, 2026
-
-Single-course Demo: open registration/five-character passwords/separate unknown-user
-and wrong-password errors; multi-course deferred, catalog managed. Migration0029
-stops canonical username/group collisions without changing logins. Teacher course role survives sync; Enter selects group scope without bypassing
-resource-owner ACL. Mayaform returns Home. Self-service password changes retain the
-current session, revoke others and store a DB override without changing the catalog.
-Auth/CSRF/publication/course/consent guards remain.
-
-## Classroom display — September 18, 2026
-
-PR29(ed22231):2–5 licensed courtyard scholars; jaw/bubble/Transcript follows audio,
-with text on media failure. /local-roundtable accepts WAVs. Voice clones stay
-uploader-owned; Gaussian packs are optional ADR-007 experiments.
-
-## Operation panel and browser acceptance — September 22, 2026
-
-Historical three-Agent12-turn Conclude/Report/Replay used seven calls and reused
-nine Preview speeches; reopening added none. TTS/Voice were Mock; no student input.
-Old retained turns/list labels were not rewritten. This excludes current changes,
-RAG quality, real speech and load.
-
-## Working — workspace, private Chats and Live
-
-0030 adds private history, encrypted preferences and 20s Live leases. Chat freezes
-version/snapshot, actor, revision and unknown-state; Live shares history/audio without
-spectator generation/control. Providers are core modules; speech settings are
-environment-managed (TTS120s, generic30s). Account settings retain preset avatars and self-service passwords; Workspace
-3D editing stays separate. Warm-paper and compact typography remain. Key entry makes no call/mode change; env key
-wins. Check skips Ready/deferred, confirms calls and stops on failure. Failed creation
-keeps text/retry identity; libraries use pencil/download/X. Dated workspace/Live checks
-used11 calls; concurrent owner work raised the historical ledger to17.
-
-Agent.md has no total cap; template is optional, with no chapter/semantic gates or
-executed ToT/ReAct. Persona UI is removed; old codecs no longer reject by total size.
-RAG has no file/aggregate character cap; ACL/non-execution guards remain. Supplier
-batches stay at 10 items/30,000 estimated tokens. 0031 tombstones remove shared access
-but retain assets/read-only Chats; Debate references/publication block deletion under
-writer lock. Chats restores history; New starts fresh; Send clears the composer and
-errors restore text/request identity. No cross-chat memory. Historical deterministic/
-Docker0031 checks used no paid calls/live deletion/generation; quality stayed unverified.
-
-September23 removed Chat ceilings/fixed output caps and prose scanning; retain full
-history, auth/CSRF/ownership/header/unknown-acceptance/dedup/retry guards. Reservations
-are accounting only; SendChat has no maxLength/429. Focused tests passed; no paid
-post-rebuild SiyaH/RAG acceptance.
-
-## Working — quiet workspace UI (observed in code 2026-09-24)
-
-Mayaform: Welcome then Members. File X preserves snapshots; Agent version becomes X
-on hover/focus. Debate opens Preview, hiding only its title. AGENT.md/Evidence/snapshot
-downloads and Chats floating composer/separate Send remain.
-
-## Snapshot publication history — September 23, 2026
-
-Snapshot totals are unbounded; supplier batches remain10/30,000 estimated tokens.
-Historical 罗燕玲/SiyaH stages retained accepted batches across timeout/commit failure;
-stage promotion reused paid results. Drafts cannot steal another warmer; proven-not-sent
-queries get one retry. Agents use AGENT.md, not compiled Persona. Prompt/output/query/
-LLM caps and embedding byte rejection were removed. Historical success is not current
-Provider acceptance.
-
-## Chat and speech boundaries
-
-Chats is text-only: no Chat TTS dispatch, audio event or hidden language instruction.
-Streaming saves accepted text and keeps usage separate; unknown acceptance affects
-one request, never subsequent messages. Voice/Debate speech stays separately scoped.
-
-## Workspace/integration history — September 27, 2026
-
-Bilingual help covered workspace/Debate; imports were then Markdown-only.
-Merged local7236a97/checkpoint4fd1968, main a2b397d/entaiaki dfac2b4;
-excluded sibling/revert branches. Delete ledger, budgets and Compose voice mapping fixed.
-
-## Unbounded provider accounting — September 27, 2026
-
-Owner removed request/token/CNY ceilings for Chat/Debate/Report/Embedding. Reservations,
-actual usage and legacy max_* fields are accounting only; LLM/Report omit output caps.
-0033_budget_accounting_unbounded removes allocation/call-ordinal ceilings, retaining
-history. Report call_no maximum was removed with contract/types/fixture synchronization.
-Permissions/disclosure/deduplication/retry authorization/unknown recovery and supplier
-batch shapes remain; no paid acceptance authorized by this change.
-
-pnpm check/boundary and backed-up Docker/0033/readiness/integrity passed, without
-real-provider acceptance. Migration preserved59 tables; tests cover concurrency/
-usage above estimates. Preview correction passed frontend/static checks and showed
-nine cards/Immerse without title. An older record retained its state error/data.
-
-## Workspace polish and speech configuration — September 27, 2026
-
-Drafts preserved; text-only Chats, Workspace AvatarEditor. History date/Delete exclusive
-on hover/focus, touch supported; Knowledge hid Ready, Voices retained consent.
-Tooltip clears on leave/navigation/DOM/scroll/blur/Escape; dated desktop/mobile PASS.
-Voice guidance10–15s vs server10–20s/10MiB. Debate Embedding403 charge retained without
-retry; dated Mock Voice/static/Docker/browser PASS with4 warnings.
-
-## Preserved adjacent work — September 27, 2026
-
-Historical Voice enrollment/preview/113.12s succeeded; promotion reused paid stages,
-unknown charges never retried. Owner/SSRF/snapshot/name/duplicate409 guards remain.
-Mock history is not current quality proof; one Report200 failed content without retry.
-Live keeps QR/Final cutoff; Chat has no language field/TTS.
-
-## MayaForm W0 — 2026-09-27
-
-Agno3.0.11 pinned; 11 probes pass (ADR-009). Team `additional_input` preserves
-history; direct `Message[]` drops assistant turns.
-
-## MayaForm W2a Chat reliability — 2026-09-27
-
-No automatic unknown resend; same-ID replay/new-ID follow-up, history/usage/CAS/refund/
-SSE/GET recovery retained. Actor/course switch clears Chat; same-actor navigation retains.
-R4:42 focused/449 frontend+1skip, full check/boundary/Sol PASS; Mock only,0 real calls.
-
-## MayaForm W2b authored lengths — 2026-09-27
-
-W2b removes Agent.md/RAG caps; 14,343/108,350/123,080-char fixtures persist losslessly.
-0034 preserves data; oversized downgrade refuses. Supplier batches stay ≤10/30k estimated
-tokens via codepoint chunks. Sol/check/boundary passed; no Provider; IME NOT_RUN.
-
-## MayaForm W1 owner-first workspace — accepted R5
-
-0035: personal ownership/epochs/frozen Chat names; legacy Group owner NULL. Private drafts
-stay owner-only until Done; sharing checks source ACL. Student Agent.md allowed, no Toolkit
-approval. R5: full check/boundary/Sol ACL+migration/80 Mock/Teacher Chat+mobile PASS;
-no Provider/Docker, IME NOT_RUN. K1: immutable types, Teacher Rubric/reference,
-read-only Graph/one store; P09/source/0036/replay PASS. See
-`docs/contracts/KNOWLEDGE_SETS_CONTRACT.md`.
-
-## MayaForm K2a — accepted
-
-0037: owner-only Jobs/runs/reuse/leases; explicit intent only, ordinary Done creates no
-Job. Publish/Private Set/link/run atomic; no Provider→zero calls/assets. R2/Sol/HTTP/browser PASS.
-
-## MayaForm K2b1 — accepted Provider stage
-
-0038: confirmed llm_knowledge_generate, public Agno3.0.11 once; bytes/hash/post_bytes
-match. ACL/disclosure/accounting/unknown/sanitized stage, check/migration/HTTP/Sol PASS;
-K2b1 had no Assets or real Provider/Docker.
-
-## MayaForm recovery — current October5
+## MayaForm recovery — current October7
 
 Branch feat/mayaform-v14; committed K2b2 a975e38, K3-A83de097/evidence1b1bfca retained.
 K3-B1/B2,0041–0053 and learning/Tools checkpoint f59df82, later fixes e40d2a1,
@@ -279,12 +139,7 @@ Integrated PDF eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and selected colleague U
 817282e7c53313e2c2e5233dc5be64d404dab90a via b648efc/8987cf8; UI03/04/05 preserved.
 Components UI removed1d92a2f; maintenance APIs stay. No GitHub final push yet.
 
-Same frozen R5 source:1930 passed/21 existing skips/exit0,398.40s; R4 known race
-passed unchanged in retry and R5. Frontend559/1 skip/types/lint/format, Ruff/format493,
-mypy247,152 API semantics/19 negatives, privacy/boundary/generated and7 migration/
-bootstrap/reset gates passed. Sol independently reviewed KB recovery52backend/20front,
-Team75+9, learning fixture37+1 (63 assertions retained), Chat guidance41, identity
-handoff35. These are code/deterministic evidence, not complete real product acceptance.
+R4/R5 gate counts and Sol review counts are superseded by the October9 gates below.
 
 Maya backend/frontend30db274 deployed only; other containers/env preserved. Schema0053,
 readiness200/integrity/FK passed, Agno3.0.11 public SDK. Backup20261005T110321Z healthy;
@@ -294,7 +149,9 @@ replaced manualseq2, preserving history. Public synthetic first send denied unif
 for consent,4 member failures/no ORM error/input enabled/0calls/charges. Real natural
 Team/assessment/Teacher statistics/download and Private exclusion still unaccepted.
 User explicitly authorized specified synthetic Team payload and new Private test-body
-read; old auto-review permission blocks resolved. User now performs Team creation/review.
+read; old auto-review permission blocks resolved. The latest October7 instruction now authorizes a fresh dedicated synthetic four-Agent
+Team/multi-student real workflow. Older no-Team-creation instructions are superseded.
+Do not read unrelated Private Chat bodies or use real learner data.
 
 User requested cleanup: backup20261005T130151Z via SQLite backup API/integrity/FK OK.
 Precisely1 synthetic Team+publication,1Set,4Agents,2failed testChats withdrawn/archived;
@@ -305,8 +162,14 @@ fixture IDs touched; no user/colleague records or original evidence physically p
 
 [Current UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) overrides prior UI
 planning: same Studyform/Brainform structure for both roles, permissions differ.
-Studyform owns Agent/Team creation; Chats selects existing resources. Reuse sidebar
-New/Back/Done; New bright when useful/dim otherwise, Back/Done only contextual. Voice
+October9 user decisions: Studyform creates Agents/Voices and Teachers publish Maya
+Teams there; Chats is renamed Chatform, whose New opens a blank chat with a Chat with
+picker and inline + New Team for students or Teachers. The first message creates the
+chat; the Public/Private toggle starts a new chat, never relabels one. Brainform has no
+disclosure entry; operator `PROVIDER_STANDING_CONSENT` covers classroom/production,
+otherwise Teachers confirm at the unlinked approvals route. Teacher Accounts (read-only
+Public group visit, temporary membership removed on return) and Debates are restored.
+Reuse sidebar New/Back/Done; New bright when useful/dim otherwise, Back/Done only contextual. Voice
 New is module-right exception; Home Voices Guide goes directly to its new form.
 Colleague Mayaform Home preserved except Components, Guide destinations and data-use
 entry moved to Brainform. All decorative heading explanations become immediate help;
@@ -317,12 +180,75 @@ shows authorized Agent consumers, edits one canonical object; Agent Knowledge en
 also remains. Create AI Knowledge/New Agent one flow, Private/Public labels only;
 Brainform source picker accepts RAG or Knowledge. Updates affect future Agent use; active/paused Team attempts announce changed
 Knowledge and require answering again; old answers/late results cannot evaluate.
-Completed attempts stay unchanged; invalidation hook not yet implemented. Current frontend changes uncommitted/unaccepted.
+Completed attempts stay unchanged. Frontend work remains uncommitted.
 
 Teacher explicit save/generate/regenerate must authorize exact Knowledge generation
 without additional provider confirmation page. Current ACL/policy/manifest/accounting/
 idempotency/unknown protections remain; backend implementation in progress, not yet
-deployed. Existing AgentKnowledgeSet references/current asset heads support future
-updates; manual Markdown vs live asset heads/partial generation needs focused probe.
-UI and backend writers own separate files; independent current-version audit and actual
-browser desktop/mobile checks still required. No pending path is labelled complete.
+deployed. Canonical Single/Team runtime passed frozen Sol review44checks. Generation
+49focused and independent Sol34checks passed, including real fresh-action race/no
+duplicate run/charge. UI core Sol72checks passed, including pending-edit target switch;
+Full UI r5:573pass/1skip, types/lint/format/build passed; A–K found Voices/help gaps.
+Attempt27focused/longRAG1/migration3 passed; internal0054 pointer handles empty selections.
+The newer backend freeze passed78focused and independent61checks (42 original+19
+independent), including20different users/cookies/DB sessions, races, late-grant fences,
+rollback and0054preservation. Deployed DB remains0053. These are not classroom load tests.
+Final full gates, browser, real Team/report, GitHub and Docker rollout remain incomplete.
+
+## Current delivery closure — October7
+
+Acceptance is now a launchable website with the existing warm-paper UI, independent
+review, exact-version gates, real four-Agent workflow, GitHub integration and final
+scoped Docker/manual verification. Public DNS/TLS/off-host operation needs its own
+actual evidence; local Demo health is not public launch acceptance.
+
+Teacher `generate_agent_knowledge` now uses actual generation services/accepted Tool
+receipts and wakes after commit. First ordinary published Agent generation works
+without a prior Set. Independent Sol found and closed selected-source retry/revoked
+receipt replay defects. Final39-file Tool freeze passed140focused; independent
+30Tool+47generation+2additional executions passed. Source ACL, current publication,
+exact manifest, idempotency, actual billing and unknown no-resend remain. Not deployed.
+
+UI R13 removed unreachable KnowledgeLibrary/KnowledgeSetWorkspace/TeacherSources,
+retaining shared RAG fields/file/download and mutation helpers. R14 closed binary
+same-metadata/different-bytes and changed-text-after-unknown nonce defects. R15 locks
+only the current pending Knowledge save while allowing selection/copy; independent
+44tests passed. C1 full frontend exposed an enabled-sidebar Done stale closure after
+file fingerprinting. R16 reads the current committed action and fences the draft;
+independent68tests passed, including an old-source failing early-click counterexample.
+No new assessment controls or replacement Home design. Real browser acceptance pending.
+
+Separate production profile rejects Demo/quick-login/auto-confirm, validates exact
+public HTTPS origin, hides Demo identity routes, requires independent strong Teacher
+credentials and dedicated production data/config mounts, and bounds auth abuse only.
+Open-course enrollment/classroom password policy is unchanged. New auth rules never
+limit Chat, Tool, authored content or Provider use. Independent C1 review passed41
+backend+4locale checks and found two required fixes: active auth-limit bucket eviction
+and Caddy overriding stricter classroom no-referrer. Original author is fixing these;
+no public deployment or live configuration change has occurred.
+
+Complete backup113435Z contains SQLite,250files,238active file receipts, private config
+and effective Compose settings. Isolated zero-network service restoration passed
+0053→0054, readiness200, file hashes/integrity/FK. All457Provider operation records and
+accounting/payloads are retained; startup reclassified1historical incomplete accepted
+Debate call as unknown without sending. Original3unknown remain unretried. This is
+expected zero-network recovery, not a new charge or a claim that every state is unchanged.
+
+C1 actual isolated HTTPS/SQLite test passed60synthetic registrations/logins,60parallel
+Single Chat sends/replays/cross-user denials, SSE disconnect/reconnect, process restart
+and60history reads/continued sends. Peak client concurrency20;121unique persisted
+intents, no ownership mismatch, integrity/FK pass. Mock only/0Provider operations;
+not a real Team throughput or supported class-size claim. Final source rerun pending.
+
+Real acceptance remains NOT_RUN: Teacher Maya Agent calls RAG→Knowledge Tool; three
+Agents reference that exact canonical object; dedicated synthetic students start
+Public/Private Maya Team Chats and save real answers/evaluations/Boundary evidence;
+Teacher Maya Chat reads activity-scoped Public statistics/report/download with Private
+excluded. Inputs are prepared, not uploaded. Historical paid calls are not acceptance.
+
+Latest remote fetch confirms selected PDF eb7e142 and UI03/04/05/06 refs already
+included in HEAD. Older avatar/Voice siblings were outside the selected integration;
+old Chat-TTS/schema0033 and revert branches conflict with the current text-only/UI
+contract and must not overwrite it. Final push and Maya backend/frontend rollout wait
+for combined acceptance. Preserve unrelated containers, env, private config, data and
+colleague UI; clear only obsolete code/docs and specifically disposable test fixtures.
