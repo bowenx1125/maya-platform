@@ -5,6 +5,7 @@ import {
   realpathSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -32,16 +33,9 @@ const forbiddenDirectories = new Set([
 const forbiddenTrackedName =
   /(^|\/)(?:\.env$|[^/]*\.(?:sqlite3?|db(?:-[^/]*)?|wav|mp3|m4a|aac|ogg|pem|key))$/i;
 const privateCredentialName =
-  /(^|\/)(?:demo[_-]?users|[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env)$/i;
-// These files are intentionally generated local runtime state. They are
-// ignored by Git/Docker and may contain the developer's session secret or
-// Demo credentials, so inspect them through explicit existence/permission
-// checks rather than treating their values as repository content.
-const ignoredRuntimeFiles = new Set([
-  ".env",
-  "backend/config/demo-accounts/accounts.private.md",
-  "backend/config/demo_users.yaml",
-]);
+  /(^|\/)(?:demo[_-]?users|[^/]*(?:credential|secret|private)[^/]*)\.(?:json|ya?ml|toml|ini|env|md)$/i;
+const privateEnvironmentName = /(^|\/)\.env(?:\.(?!example$)[^/]*)?$/i;
+const privateProviderPolicyPath = /(^|\/)config\/provider-policies\//i;
 const binaryArchiveName = /\.(?:zip|rar|7z|tar|gz|bz2|xz)$/i;
 const forbiddenReference =
   /(?:Document Validation Agent|agent-core-private|OpenMAIC-main|parallax-main|OpenAvatarChat-main|TalkingHead-main|motion-engine-main|RomanticSimulation)/i;
@@ -56,6 +50,23 @@ const assignmentPattern =
   /^[ \t]*(?:DASHSCOPE_API_KEY|DEEPL_API_KEY|OPENAI_API_KEY|SESSION_SECRET|SECRET_KEY|API_KEY)[ \t]*[=:][ \t]*([^\r\n]*)$/gm;
 const genericSecretAssignmentPattern =
   /^[ \t]*["']?(?:api[_-]+key|access[_-]+token|secret(?:[_-]+key)?|provider[_-]+key|external[_-]+voice[_-]+id)["']?[ \t]*[=:][ \t]*["']?([^"',\r\n}{\[]*)/gim;
+
+function isPrivateRuntimeInput(relativePath) {
+  return (
+    privateEnvironmentName.test(relativePath) ||
+    privateCredentialName.test(relativePath) ||
+    relativePath === "backend/config/demo_users.yaml" ||
+    privateProviderPolicyPath.test(relativePath)
+  );
+}
+
+function isCredentialSource(relativePath) {
+  return (
+    privateEnvironmentName.test(relativePath) ||
+    privateCredentialName.test(relativePath) ||
+    relativePath === "backend/config/demo_users.yaml"
+  );
+}
 
 const gitRoot = execFileSync(
   "git",
@@ -83,7 +94,9 @@ for (const file of tracked) {
     boundaryFailures.push(`parent path tracked: ${normalized}`);
   if (
     forbiddenTrackedName.test(normalized) ||
-    privateCredentialName.test(normalized)
+    privateCredentialName.test(normalized) ||
+    privateEnvironmentName.test(normalized) ||
+    privateProviderPolicyPath.test(normalized)
   )
     boundaryFailures.push(
       `forbidden runtime/secret file tracked: ${normalized}`,
@@ -104,11 +117,23 @@ function walk(directory) {
       continue;
     }
     if (!entry.isFile()) continue;
-    if (
-      ignoredRuntimeFiles.has(relativePath) ||
-      binaryArchiveName.test(relativePath)
-    )
-      continue;
+    if (binaryArchiveName.test(relativePath)) continue;
+    if (isPrivateRuntimeInput(relativePath)) {
+      try {
+        const mode = statSync(absolute).mode & 0o777;
+        if (mode & 0o077)
+          boundaryFailures.push(
+            `private runtime input must not be group/world accessible: ${relativePath}`,
+          );
+      } catch {
+        boundaryFailures.push(
+          `could not inspect private runtime input permissions: ${relativePath}`,
+        );
+      }
+      // Never read credential sources into the content scanner. The path,
+      // ignore rules and owner-only mode are the boundary evidence.
+      if (isCredentialSource(relativePath)) continue;
+    }
     let bytes;
     try {
       bytes = readFileSync(absolute);
@@ -188,7 +213,7 @@ function walk(directory) {
       // These files are the operator's, git-ignored and mode 0600; the scan
       // still reads them for credentials, it just does not treat the endpoint
       // they exist to record as a leak.
-      relativePath.startsWith("backend/config/provider-policies/");
+      privateProviderPolicyPath.test(relativePath);
     if (!supplierUrlAllowed && supplierUrlPattern.test(text))
       boundaryFailures.push(
         `supplier endpoint outside its allow-list in ${relativePath}`,

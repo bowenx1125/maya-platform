@@ -826,6 +826,12 @@ paths:
                 $ref: '#/components/schemas/AuthSession'
         '401':
           $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '413':
+          description: The production gateway rejected an oversized authentication request.
+        '429':
+          $ref: '#/components/responses/Error'
   /auth/switch:
     post:
       tags:
@@ -952,6 +958,12 @@ paths:
         '409':
           $ref: '#/components/responses/Error'
         '422':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '413':
+          description: The production gateway rejected an oversized authentication request.
+        '429':
           $ref: '#/components/responses/Error'
   /auth/me:
     get:
@@ -6434,8 +6446,10 @@ components:
       properties:
         username:
           type: string
+          maxLength: 64
         password:
           type: string
+          maxLength: 128
           format: password
     DemoQuickLoginRequest:
       type: object

@@ -4,6 +4,8 @@
 !.env.example
 backend/config/demo_users.yaml
 backend/config/demo-accounts/accounts.private.md
+# Production and operator-selected private Markdown account catalogs.
+*.private.md
 *.pem
 *.key
 

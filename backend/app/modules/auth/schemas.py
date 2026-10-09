@@ -10,8 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str = Field(json_schema_extra={"format": "password"})
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=128, json_schema_extra={"format": "password"})
 
 
 class CourseMembership(BaseModel):

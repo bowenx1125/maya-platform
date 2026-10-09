@@ -1330,6 +1330,12 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "description": "The production gateway rejected an oversized authentication request."
+          },
           "422": {
             "description": "FastAPI request validation response (explicitly allow-listed).",
             "content": {
@@ -1339,6 +1345,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
           }
         }
       }
@@ -1543,10 +1552,19 @@
               }
             }
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
+          "413": {
+            "description": "The production gateway rejected an oversized authentication request."
+          },
           "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -10410,10 +10428,12 @@
         ],
         "properties": {
           "username": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 64
           },
           "password": {
             "type": "string",
+            "maxLength": 128,
             "format": "password"
           }
         }

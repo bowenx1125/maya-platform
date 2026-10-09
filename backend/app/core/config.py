@@ -23,6 +23,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Dated snapshot, not the floating qwen3.8-max alias. LLM_MODEL overrides it.
 DEFAULT_LLM_MODEL = "qwen3.8-max-2026-09-02"
 _LLM_MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_PUBLIC_DNS_HOST_RE = re.compile(
+    r"(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"(?=[a-z0-9-]*[a-z])[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z"
+)
 
 
 class Settings(BaseSettings):
@@ -48,6 +52,13 @@ class Settings(BaseSettings):
     # With it off, a person confirms each disclosure exactly as before.
     demo_auto_confirm_provider: bool = Field(
         default=False, validation_alias="DEMO_AUTO_CONFIRM_PROVIDER"
+    )
+    # The deployment operator's one-time consent for a classroom instance. It
+    # records the same exact-manifest confirmations and ledger rows a teacher
+    # click would, so teachers and students never see a disclosure screen; it
+    # is not Demo-only because a real classroom has no Demo switches on.
+    provider_standing_consent: bool = Field(
+        default=False, validation_alias="PROVIDER_STANDING_CONSENT"
     )
     session_secret: str | None = Field(default=None, validation_alias="SESSION_SECRET")
     classroom_public_base_url: str | None = Field(
@@ -135,6 +146,29 @@ class Settings(BaseSettings):
         validation_alias="ALLOW_LEGACY_DEMO_USERS",
     )
     maya_env: str = Field(default="", validation_alias="MAYA_ENV")
+    auth_login_account_failure_limit: int = Field(
+        default=10, ge=1, le=10_000, validation_alias="AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT"
+    )
+    auth_login_client_failure_limit: int = Field(
+        default=240, ge=1, le=100_000, validation_alias="AUTH_LOGIN_CLIENT_FAILURE_LIMIT"
+    )
+    auth_login_failure_window_seconds: int = Field(
+        default=900, ge=1, le=86_400, validation_alias="AUTH_LOGIN_FAILURE_WINDOW_SECONDS"
+    )
+    auth_register_client_limit: int = Field(
+        default=120, ge=1, le=100_000, validation_alias="AUTH_REGISTER_CLIENT_LIMIT"
+    )
+    auth_register_window_seconds: int = Field(
+        default=3_600, ge=1, le=604_800, validation_alias="AUTH_REGISTER_WINDOW_SECONDS"
+    )
+    auth_abuse_max_buckets: int = Field(
+        default=8_192, ge=128, le=65_536, validation_alias="AUTH_ABUSE_MAX_BUCKETS"
+    )
+    # This is safe only when the application is reachable through the isolated
+    # production Caddy network and that gateway overwrites X-Forwarded-For.
+    auth_trust_gateway_x_forwarded_for: bool = Field(
+        default=False, validation_alias="AUTH_TRUST_GATEWAY_X_FORWARDED_FOR"
+    )
 
     @field_validator("session_secret", mode="before")
     @classmethod
@@ -150,24 +184,36 @@ class Settings(BaseSettings):
             return None
         if not isinstance(value, str):
             raise ValueError("CLASSROOM_PUBLIC_BASE_URL must be an HTTP origin")
-        parsed = urlsplit(value.strip())
+        if value != value.strip() or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+            raise ValueError("CLASSROOM_PUBLIC_BASE_URL must not contain whitespace controls")
+        if "?" in value or "#" in value:
+            raise ValueError(
+                "CLASSROOM_PUBLIC_BASE_URL must not contain query or fragment delimiters"
+            )
+        candidate = value
+        parsed = urlsplit(candidate)
+        if parsed.path == "/" and not parsed.query and not parsed.fragment:
+            candidate = candidate[:-1]
+            parsed = urlsplit(candidate)
         try:
             _ = parsed.port
         except ValueError:
             raise ValueError("CLASSROOM_PUBLIC_BASE_URL has an invalid port") from None
         if (
-            parsed.scheme not in {"http", "https"}
+            parsed.scheme.lower() not in {"http", "https"}
             or not parsed.hostname
             or parsed.username
             or parsed.password
             or parsed.query
             or parsed.fragment
-            or parsed.path not in {"", "/"}
+            or parsed.path
+            or "@" in parsed.netloc
+            or "\\" in parsed.netloc
         ):
             raise ValueError(
                 "CLASSROOM_PUBLIC_BASE_URL must be an absolute HTTP origin without a path"
             )
-        return f"{parsed.scheme}://{parsed.netloc}"
+        return f"{parsed.scheme.lower()}://{parsed.netloc}"
 
     @field_validator("demo_mode", mode="before")
     @classmethod
@@ -260,6 +306,8 @@ class Settings(BaseSettings):
     def is_test(self) -> bool:
         """Whether ephemeral test-only defaults may be used."""
 
+        if self.is_production:
+            return False
         explicit = self.maya_env.strip().lower()
         if explicit in {"test", "testing"}:
             return True
@@ -267,11 +315,30 @@ class Settings(BaseSettings):
         # constructed TestClient safe without changing a developer's shell.
         return bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get("MAYA_TESTING") == "1"
 
+    @property
+    def is_production(self) -> bool:
+        """Treat either production environment marker as a hard production gate."""
+
+        return (
+            self.node_env.strip().lower() == "production"
+            or self.maya_env.strip().lower() == "production"
+        )
+
     def validate_runtime(self) -> None:
         """Reject insecure production configuration at application startup."""
 
+        if self.is_production:
+            if self.demo_mode or self.demo_quick_login or self.demo_auto_confirm_provider:
+                raise RuntimeError(
+                    "Production requires DEMO_MODE, DEMO_QUICK_LOGIN and "
+                    "DEMO_AUTO_CONFIRM_PROVIDER to be false"
+                )
+            if not self._has_public_https_origin():
+                raise RuntimeError(
+                    "Production requires CLASSROOM_PUBLIC_BASE_URL to be an HTTPS DNS origin"
+                )
         if self.session_secret is None or len(self.session_secret.encode("utf-8")) < 32:
-            if not self.is_test:
+            if self.is_production or not self.is_test:
                 raise RuntimeError("SESSION_SECRET must contain at least 32 bytes")
         self.validate_provider_configuration()
         # A bad baseline-voice map must stop startup rather than bind the
@@ -280,7 +347,12 @@ class Settings(BaseSettings):
         # Parse the complete private graph before the application lifespan
         # yields. A malformed catalog therefore prevents readiness rather
         # than partially applying identities.
-        if self.demo_mode or self.demo_quick_login or self.resolved_demo_accounts_file.exists():
+        production_default_catalog = self.is_production and self.uses_demo_default_accounts_file
+        if (
+            self.demo_mode
+            or self.demo_quick_login
+            or (self.resolved_demo_accounts_file.exists() and not production_default_catalog)
+        ):
             from app.modules.auth.credentials import prepare_catalog
 
             prepare_catalog(self)
@@ -466,7 +538,7 @@ class Settings(BaseSettings):
 
         if self.session_secret is not None and len(self.session_secret.encode("utf-8")) >= 32:
             return self.session_secret.encode("utf-8")
-        if self.is_test:
+        if self.is_test and not self.is_production:
             return b"maya-wave0-test-session-secret-not-for-production"
         # Keep a clear failure even if a caller uses the property before the
         # lifespan validator.
@@ -474,17 +546,26 @@ class Settings(BaseSettings):
 
     @property
     def classroom_public_origin(self) -> str | None:
-        """Return a phone-reachable private-LAN origin or ``None``.
+        """Return a valid QR origin: the public HTTPS origin or local Demo URL.
 
         Loopback is valid for the ordinary local site but cannot be placed in
-        a QR code: a phone would resolve it to itself.  Wave 3 deliberately
-        accepts only a private numeric address or a local-network hostname.
+        a QR code: a phone would resolve it to itself. Demo keeps its existing
+        private numeric and ``.local`` behavior; production uses its exact
+        configured public HTTPS DNS origin.
         """
 
         value = self.classroom_public_base_url
         if value is None:
             return None
-        hostname = (urlsplit(value).hostname or "").lower().rstrip(".")
+        from app.core.origin import origin_tuple
+
+        parsed_origin = origin_tuple(value)
+        if parsed_origin is None:
+            return None
+        scheme, hostname, _port = parsed_origin
+        hostname = hostname.rstrip(".")
+        if self.is_production:
+            return value if scheme == "https" and self._is_public_dns_hostname(hostname) else None
         if hostname == "localhost":
             return None
         try:
@@ -498,6 +579,31 @@ class Settings(BaseSettings):
             ip_network("fc00::/7"),
         )
         return value if any(address in network for network in private_networks) else None
+
+    @staticmethod
+    def _is_public_dns_hostname(hostname: str) -> bool:
+        """Check public DNS hostname syntax without making a DNS request."""
+
+        lowered = hostname.lower().rstrip(".")
+        if lowered.endswith((".local", ".localhost")) or lowered in {"localhost", "local"}:
+            return False
+        try:
+            ip_address(lowered)
+        except ValueError:
+            return bool(_PUBLIC_DNS_HOST_RE.fullmatch(lowered))
+        return False
+
+    def _has_public_https_origin(self) -> bool:
+        value = self.classroom_public_base_url
+        if value is None:
+            return False
+        from app.core.origin import origin_tuple
+
+        parsed_origin = origin_tuple(value)
+        if parsed_origin is None:
+            return False
+        scheme, hostname, _port = parsed_origin
+        return scheme == "https" and self._is_public_dns_hostname(hostname)
 
     @property
     def resolved_data_root(self) -> Path:
@@ -521,6 +627,25 @@ class Settings(BaseSettings):
         if path.is_absolute():
             return path
         return Path(__file__).resolve().parents[2] / path
+
+    @property
+    def uses_demo_default_accounts_file(self) -> bool:
+        """Whether the configured credential path is the repository Demo catalog."""
+
+        default_path = (
+            Path(__file__).resolve().parents[2] / "config/demo-accounts/accounts.private.md"
+        )
+        return self.resolved_demo_accounts_file.resolve() == default_path.resolve()
+
+    @property
+    def production_account_catalog_available(self) -> bool:
+        """Whether production has a separate, present private account catalog."""
+
+        return (
+            self.is_production
+            and not self.uses_demo_default_accounts_file
+            and self.resolved_demo_accounts_file.is_file()
+        )
 
     @property
     def resolved_config_root(self) -> Path:

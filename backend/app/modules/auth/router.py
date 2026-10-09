@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError, forbidden, not_found
 from app.core.models import CourseMember, Group, GroupMember, User
+from app.modules.auth.abuse import AuthAbuseLimiter, client_key
 from app.modules.auth.credentials import (
     CredentialFileError,
     DemoAccountSnapshot,
@@ -25,6 +26,7 @@ from app.modules.auth.dependencies import (
     require_demo_authenticated_mutation,
     require_demo_mode,
     require_demo_quick_login,
+    require_same_origin,
 )
 from app.modules.auth.profile import change_password, update_avatar
 from app.modules.auth.registration import (
@@ -60,6 +62,18 @@ from app.modules.auth.service import (
 from app.modules.org.access import WorkspaceMember
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+def _limiter(request: Request) -> AuthAbuseLimiter:
+    limiter = getattr(request.app.state, "auth_abuse_limiter", None)
+    if not isinstance(limiter, AuthAbuseLimiter):
+        raise RuntimeError("authentication abuse limiter is not initialized")
+    return limiter
+
+
+def _require_production_auth_origin(request: Request, settings: Settings) -> None:
+    if settings.is_production:
+        require_same_origin(request, settings)
 
 
 def _utc(value: datetime) -> datetime:
@@ -166,6 +180,9 @@ def _public_demo_identities(db: Session, settings: Settings) -> list[DemoIdentit
     responses={
         200: {"model": AuthSession, "description": "Session created and CSRF token returned."},
         401: {"model": Error, "description": "Authentication failed."},
+        403: {"model": Error, "description": "The configured public origin is required."},
+        413: {"description": "The production gateway rejects oversized login bodies."},
+        429: {"model": Error, "description": "Authentication attempts are temporarily limited."},
     },
 )
 def login(
@@ -175,40 +192,53 @@ def login(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthSession:
-    # The read-only Demo catalog stays authoritative for the fixed
-    # identities; self-registered accounts resolve from the database source
-    # only after that lookup misses.
-    database_owned, user_id = verify_database_password(db, payload.username, payload.password)
-    if not database_owned:
-        user_id = verify_password(settings, payload.username, payload.password)
-    if user_id is None:
-        # Which half was wrong is reported on purpose. A student who has
-        # mistyped their name should not spend the lesson guessing at their
-        # password instead. The cost is that a name can be probed for
-        # existence, which is accepted here: these are classroom accounts,
-        # created by the students themselves, and the roster is visible to
-        # everyone in the course anyway.
-        if username_exists(db, settings, payload.username):
-            raise PlatformError(
-                "password_incorrect", "That password does not match this account.", 401
-            )
-        raise PlatformError("account_not_found", "No account uses that username yet.", 401)
-    user = db.get(User, user_id)
-    if user is None or user.status != "active":
-        # A deactivated account is a teacher decision, not a typo, and saying
-        # so is what stops the student from trying the password again.
-        raise PlatformError(
-            "account_inactive", "This account has been deactivated by a teacher.", 401
-        )
-    raw_token, session_row, raw_csrf = create_rotated_session(
-        db,
-        user,
-        settings,
-        old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+    _require_production_auth_origin(request, settings)
+    limiter = _limiter(request) if settings.is_production else None
+    reservation = (
+        limiter.reserve_login(client_key(request, settings), payload.username, settings)
+        if limiter is not None
+        else None
     )
-    _set_session_cookie(response, raw_token, settings, request)
-    context = AuthContext(raw_token, session_row, user, raw_csrf)
-    return _auth_response(db, context, raw_csrf)
+    failed = False
+    try:
+        # The read-only catalog stays authoritative for provisioned identities;
+        # self-registered accounts resolve from the database source after a miss.
+        database_owned, user_id = verify_database_password(db, payload.username, payload.password)
+        if not database_owned:
+            user_id = verify_password(settings, payload.username, payload.password)
+        if user_id is None:
+            failed = True
+            # Which half was wrong is reported on purpose. A student who has
+            # mistyped their name should not spend the lesson guessing at their
+            # password instead. The cost is that a name can be probed for
+            # existence, which is accepted here: these are classroom accounts,
+            # created by the students themselves, and the roster is visible to
+            # everyone in the course anyway.
+            if username_exists(db, settings, payload.username):
+                raise PlatformError(
+                    "password_incorrect", "That password does not match this account.", 401
+                )
+            raise PlatformError("account_not_found", "No account uses that username yet.", 401)
+        user = db.get(User, user_id)
+        if user is None or user.status != "active":
+            failed = True
+            # A deactivated account is a teacher decision, not a typo, and saying
+            # so is what stops the student from trying the password again.
+            raise PlatformError(
+                "account_inactive", "This account has been deactivated by a teacher.", 401
+            )
+        raw_token, session_row, raw_csrf = create_rotated_session(
+            db,
+            user,
+            settings,
+            old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+        )
+        _set_session_cookie(response, raw_token, settings, request)
+        context = AuthContext(raw_token, session_row, user, raw_csrf)
+        return _auth_response(db, context, raw_csrf)
+    finally:
+        if limiter is not None and reservation is not None:
+            limiter.finish_login(reservation, failed=failed)
 
 
 @router.get(
@@ -440,7 +470,10 @@ def registration_options(db: Session = Depends(get_db)) -> RegistrationOptions:
     openapi_extra={"security": []},
     responses={
         201: {"model": AuthSession, "description": "Account created and session started."},
+        403: {"model": Error, "description": "The configured public origin is required."},
         409: {"model": Error, "description": "The username is already taken."},
+        413: {"description": "The production gateway rejects oversized registration bodies."},
+        429: {"model": Error, "description": "Registration attempts are temporarily limited."},
         422: {"model": Error, "description": "A submitted field is not acceptable."},
     },
 )
@@ -458,6 +491,9 @@ def register(
     any security, because the caller just proved knowledge of the password.
     """
 
+    _require_production_auth_origin(request, settings)
+    if settings.is_production:
+        _limiter(request).consume_registration(client_key(request, settings), settings)
     user, _group = register_student(
         db,
         settings,

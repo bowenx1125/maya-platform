@@ -263,7 +263,13 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     assert preview_languages == ["auto"]
     media = client.get(preview.json()["playback_url"])
     assert media.status_code == 200
-    assert media.headers["cache-control"].startswith("no-store")
+    # API responses use `private, no-store`. The directive may follow another
+    # token, so a prefix check would miss an equivalent no-store policy.
+    cache_directives = {
+        directive.split("=", 1)[0].strip()
+        for directive in media.headers["cache-control"].casefold().split(",")
+    }
+    assert "no-store" in cache_directives
 
     confirmed = client.post(
         f"/api/v1/voice-profiles/{profile['id']}/confirm",

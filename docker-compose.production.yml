@@ -1,0 +1,56 @@
+services:
+  gateway:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      MAYA_DOMAIN: ${MAYA_DOMAIN:?Set MAYA_DOMAIN to the public DNS name}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL for certificate notices}
+    volumes: !override
+      - ./infra/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - maya_caddy_data:/data
+      - maya_caddy_config:/config
+    networks: !override
+      - maya_public
+      - maya_backend
+
+  frontend:
+    networks: !override
+      - maya_public
+
+  backend:
+    environment:
+      NODE_ENV: production
+      MAYA_ENV: production
+      DEMO_MODE: "false"
+      DEMO_QUICK_LOGIN: "false"
+      DEMO_AUTO_CONFIRM_PROVIDER: "false"
+      PROVIDER_STANDING_CONSENT: ${PROVIDER_STANDING_CONSENT:-false}
+      DEMO_ACCOUNTS_FILE: ${MAYA_PRODUCTION_ACCOUNTS_FILE:-/app/config/production-accounts/accounts.private.md}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET to a managed value of at least 32 bytes}
+      CLASSROOM_PUBLIC_BASE_URL: https://${MAYA_DOMAIN:?Set MAYA_DOMAIN to the public DNS name}
+      DATABASE_URL: sqlite:////app/data/maya.sqlite3
+      DATA_ROOT: /app/data
+      AUTH_TRUST_GATEWAY_X_FORWARDED_FOR: "true"
+      AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT: ${AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT:-10}
+      AUTH_LOGIN_CLIENT_FAILURE_LIMIT: ${AUTH_LOGIN_CLIENT_FAILURE_LIMIT:-240}
+      AUTH_LOGIN_FAILURE_WINDOW_SECONDS: ${AUTH_LOGIN_FAILURE_WINDOW_SECONDS:-900}
+      AUTH_REGISTER_CLIENT_LIMIT: ${AUTH_REGISTER_CLIENT_LIMIT:-120}
+      AUTH_REGISTER_WINDOW_SECONDS: ${AUTH_REGISTER_WINDOW_SECONDS:-3600}
+      AUTH_ABUSE_MAX_BUCKETS: ${AUTH_ABUSE_MAX_BUCKETS:-8192}
+    networks: !override
+      - maya_backend
+    volumes: !override
+      - ${MAYA_PRODUCTION_DATA_DIR:?Set a dedicated production data directory}:/app/data
+      - ${MAYA_PRODUCTION_CONFIG_DIR:?Set a dedicated production config directory}:/app/config:ro
+      - ./contracts:/app/contracts:ro
+
+networks:
+  maya_public:
+    driver: bridge
+  maya_backend:
+    driver: bridge
+
+volumes:
+  maya_caddy_data:
+  maya_caddy_config:

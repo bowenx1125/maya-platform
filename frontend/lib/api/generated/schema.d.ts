@@ -6370,6 +6370,15 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description The production gateway rejected an oversized authentication request. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["Error"];
         };
     };
     switchDemoIdentity: {
@@ -6498,8 +6507,17 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSession"];
                 };
             };
+            403: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            /** @description The production gateway rejected an oversized authentication request. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     getCurrentUser: {

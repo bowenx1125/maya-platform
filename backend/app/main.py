@@ -27,9 +27,12 @@ from app.core.errors import (
     request_validation_handler,
 )
 from app.core.logging import configure_application_logging
-from app.core.models import Course, ProviderOperation
+from app.core.models import Course, CourseMember, ProviderOperation, User
 from app.modules.agents.router import router as agents_router
+from app.modules.auth.abuse import AuthAbuseLimiter
+from app.modules.auth.credentials import active_catalog_snapshot
 from app.modules.auth.dependencies import get_db
+from app.modules.auth.models import UserCredential
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
@@ -127,6 +130,41 @@ def build_report_runtime(
             repository=ProviderRepository(runtime_database, require_export_confirmation=False),
         )
     return report_runtime
+
+
+def _production_teacher_auth_available(database: Database, settings: Settings) -> bool:
+    """Require one active Teacher whose credential source survives startup."""
+
+    with database.session() as session:
+        teacher_ids = set(
+            session.scalars(
+                select(User.id)
+                .join(CourseMember, CourseMember.user_id == User.id)
+                .where(User.status == "active", CourseMember.role == "teacher")
+            ).all()
+        )
+        if not teacher_ids:
+            return False
+        credentialed_teacher = session.scalar(
+            select(User.id)
+            .join(CourseMember, CourseMember.user_id == User.id)
+            .join(UserCredential, UserCredential.user_id == User.id)
+            .where(
+                User.status == "active",
+                CourseMember.role == "teacher",
+                User.id.in_(teacher_ids),
+            )
+            .limit(1)
+        )
+        if credentialed_teacher is not None:
+            return True
+        if not settings.production_account_catalog_available:
+            return False
+        snapshot = active_catalog_snapshot(settings)
+        return any(
+            account.role == "teacher" and snapshot.user_id_for(account) in teacher_ids
+            for account in snapshot.accounts
+        )
 
 
 def create_app(
@@ -305,10 +343,29 @@ def create_app(
                     runtime_settings,
                     seed_if_empty,
                 )
+            elif runtime_settings.production_account_catalog_available:
+                # Production reuses the strict private account synchronizer
+                # while Demo discovery, quick-login and switching stay off.
+                def seed_if_empty(session: Any) -> None:
+                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
+                        seed_demo_data(session)
+
+                bootstrap_demo_accounts(
+                    runtime_database,
+                    runtime_settings,
+                    seed_if_empty,
+                )
             else:
                 with runtime_database.session() as session:
                     if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
                         seed_demo_data(session)
+            if runtime_settings.is_production and not _production_teacher_auth_available(
+                runtime_database, runtime_settings
+            ):
+                raise RuntimeError(
+                    "Production requires a separate private Teacher credential catalog or "
+                    "an active Teacher account with a database password credential"
+                )
             if not runtime_settings.is_test:
                 with runtime_database.session() as session:
                     ensure_demo_baseline(session, runtime_settings.resolved_data_root)
@@ -355,6 +412,7 @@ def create_app(
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
+    app.state.auth_abuse_limiter = AuthAbuseLimiter()
     app.state.playback_service = playback_service
     app.state.interaction_service = interaction_service
     app.state.interaction_event_publisher = publish_interaction_event
@@ -393,7 +451,18 @@ def create_app(
 
     app.dependency_overrides[get_provider_disclosure_service] = request_provider_disclosure_service
 
-    app.add_exception_handler(PlatformError, platform_error_handler)  # type: ignore[arg-type]
+    async def platform_error_response(request: Request, exc: PlatformError) -> JSONResponse:
+        response = await platform_error_handler(request, exc)
+        retry_after = exc.details.get("retry_after_seconds")
+        if (
+            exc.status_code == 429
+            and isinstance(retry_after, int)
+            and not isinstance(retry_after, bool)
+        ):
+            response.headers["Retry-After"] = str(max(1, retry_after))
+        return response
+
+    app.add_exception_handler(PlatformError, platform_error_response)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_handler)  # type: ignore[arg-type]
 
     async def framework_error_handler(
@@ -447,7 +516,13 @@ def create_app(
         request.state.request_id = str(uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         path = request.url.path
+        if path.startswith("/api/"):
+            # Auth, private projections, downloads, and errors share one cache
+            # rule; SSE keeps its route-specific streaming headers untouched.
+            response.headers["Cache-Control"] = "private, no-store"
         teacher_interaction_path = path.startswith("/api/v1/debates/") and path.endswith(
             ("/interaction", "/interaction/open", "/interaction/close")
         )

@@ -14,6 +14,11 @@ def origin_tuple(value: str | None) -> OriginTuple | None:
 
     if not value or value != value.strip():
         return None
+    if any(
+        character.isspace() or ord(character) < 0x20 or ord(character) == 0x7F or character == "\\"
+        for character in value
+    ):
+        return None
     try:
         parsed = urlsplit(value)
         if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
@@ -24,9 +29,13 @@ def origin_tuple(value: str | None) -> OriginTuple | None:
         # empty ``@`` userinfo as false-y; reject their raw delimiters too.
         if "?" in value or "#" in value or "@" in parsed.netloc:
             return None
-        if parsed.port is None and parsed.netloc.endswith(":"):
+        port = parsed.port
+        if port is None and parsed.netloc.endswith(":"):
             return None
-        return parsed.scheme.lower(), parsed.hostname.lower(), parsed.port
+        scheme = parsed.scheme.lower()
+        if port == (443 if scheme == "https" else 80):
+            port = None
+        return scheme, parsed.hostname.lower(), port
     except ValueError:
         return None
 
@@ -42,7 +51,7 @@ def _configured_origin(settings: Settings) -> OriginTuple | None:
     configured = getattr(settings, "gateway_origin", None) or settings.classroom_public_base_url
     if not isinstance(configured, str):
         return None
-    return origin_tuple(configured.rstrip("/"))
+    return origin_tuple(configured)
 
 
 def _demo_loopback_allowed(
