@@ -570,7 +570,7 @@ describe("W1 teacher personal workspace", () => {
     );
 
     const visibilityHeading = await screen.findByRole("heading", {
-      name: "Who can use this Agent",
+      name: "Visibility",
     });
     const visibilitySection = visibilityHeading.closest(
       "section",
