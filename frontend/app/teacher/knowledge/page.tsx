@@ -10,6 +10,9 @@ export default async function TeacherKnowledgePage({
     set_id?: string;
     job_id?: string;
     course_id?: string;
+    group_id?: string;
+    mode?: string;
+    document_id?: string;
   }>;
 }) {
   const query = await searchParams;
@@ -22,6 +25,9 @@ export default async function TeacherKnowledgePage({
           initialSetId={query.set_id}
           initialCourseId={query.course_id}
           initialJobId={query.job_id}
+          initialGroupId={query.group_id}
+          initialMode={query.mode}
+          initialDocumentId={query.document_id}
         />
       </AppShell>
     </RouteGuard>

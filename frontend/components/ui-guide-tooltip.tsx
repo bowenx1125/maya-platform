@@ -31,7 +31,10 @@ export function UiGuideTooltip() {
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const tooltipRef = useRef<HTMLDivElement>(null);
   const localeRef = useRef(locale);
-  const text = active ? uiGuideText(active.key, locale) : null;
+  const text = active
+    ? active.target.dataset.uiGuideText?.trim() ||
+      uiGuideText(active.key, locale)
+    : null;
 
   useLayoutEffect(() => {
     localeRef.current = locale;
@@ -42,6 +45,7 @@ export function UiGuideTooltip() {
     let descriptionTarget: HTMLElement | null = null;
     let previousDescription: string | null = null;
     let currentKey: UiGuideKey | null = null;
+    let currentText: string | null = null;
     let hovered: HTMLElement | null = null;
     let focused: HTMLElement | null = null;
     let focusedDescriptionElement: HTMLElement | null = null;
@@ -63,6 +67,7 @@ export function UiGuideTooltip() {
     const hide = () => {
       restoreDescription();
       currentKey = null;
+      currentText = null;
       touchPinned = false;
       hovered = null;
       focused = null;
@@ -78,7 +83,10 @@ export function UiGuideTooltip() {
         : target,
     ) => {
       const key = target.dataset.uiGuide;
-      if (!key || !uiGuideText(key, localeRef.current)) {
+      const message =
+        target.dataset.uiGuideText?.trim() ||
+        (key ? uiGuideText(key, localeRef.current) : null);
+      if (!key || !message) {
         hide();
         return;
       }
@@ -95,6 +103,7 @@ export function UiGuideTooltip() {
       }
       described = target;
       currentKey = key as UiGuideKey;
+      currentText = message;
       setActive({ ...point, key: key as UiGuideKey, target, pathname });
     };
 
@@ -199,17 +208,26 @@ export function UiGuideTooltip() {
       if (document.visibilityState === "hidden") hide();
     };
     const observer = new MutationObserver(() => {
-      if (
-        described &&
-        (!described.isConnected || described.dataset.uiGuide !== currentKey)
-      )
+      if (!described) return;
+      if (!described.isConnected || described.dataset.uiGuide !== currentKey) {
         hide();
+        return;
+      }
+      const nextText =
+        described.dataset.uiGuideText?.trim() ||
+        uiGuideText(currentKey, localeRef.current);
+      if (!nextText) {
+        hide();
+      } else if (nextText !== currentText) {
+        currentText = nextText;
+        setActive((current) => (current ? { ...current } : current));
+      }
     });
     observer.observe(document.body, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["data-ui-guide"],
+      attributeFilter: ["data-ui-guide", "data-ui-guide-text"],
     });
 
     document.addEventListener("pointerover", onPointerOver, true);

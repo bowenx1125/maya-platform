@@ -25,7 +25,7 @@ real-provider acceptance.
 
 - Ordinary pages use **New** at the list/empty state and **Back / Done** with the
   page/editor they act on. Preserve the existing sidebar actions for
-  Brainform and General Chat: Brainform's left **New** creates only Markdown RAG.
+  Brainform and General Chat: Brainform's left **New** creates RAG with existing Markdown/PDF/DOCX import.
   Chats retains its existing New, history, composer and Send interactions.
   Fullscreen Immerse, file pickers and Provider consent remain separately scoped.
 - In Workspace, New creates an Agent. Opening an Agent shows its current version

@@ -21,9 +21,17 @@ export const uiGuideCopy = {
     en: "Files in this list are available to the group's knowledge search.",
     zh: "此列表中的文件可用于小组知识检索。",
   },
+  "teacher.personalAgents": {
+    en: "Personal Agents and private sources are visible only to you.",
+    zh: "个人 Agent 和私有来源仅你自己可见。",
+  },
   "knowledge.edit": {
     en: "Open the Markdown editor for this source.",
     zh: "打开此知识源的 Markdown 编辑器。",
+  },
+  "knowledge.view": {
+    en: "Read the current source without changing it.",
+    zh: "查看当前来源，不会修改内容。",
   },
   "knowledge.download": {
     en: "Download this source as a Markdown file.",
@@ -34,8 +42,16 @@ export const uiGuideCopy = {
     zh: "为此知识源重新建立检索索引。",
   },
   "knowledge.hide": {
-    en: "Hide this source from the active group library.",
-    zh: "从当前小组知识库中隐藏此知识源。",
+    en: "Hide this source from the active Brainform library. Existing snapshots stay available.",
+    zh: "从当前 Brainform 资源列表隐藏此来源；已有快照仍可使用。",
+  },
+  "knowledge.filename": {
+    en: "Full source filename.",
+    zh: "来源文件完整名称。",
+  },
+  "knowledge.regenerate": {
+    en: "Generate a new Knowledge version from the current Agent sources.",
+    zh: "根据当前 Agent 资料生成新版 Knowledge。",
   },
   "agent.markdown": {
     en: "Write the Agent's identity, teaching style, and response guidance here.",
@@ -44,6 +60,18 @@ export const uiGuideCopy = {
   "agent.evidence": {
     en: "Choose knowledge files this Agent can use as evidence.",
     zh: "选择此 Agent 可用于回答的证据文件。",
+  },
+  "agent.brainform": {
+    en: "Choose RAG source files and existing Knowledge that this Agent can use.",
+    zh: "选择此 Agent 可使用的 RAG 来源和现有 Knowledge。",
+  },
+  "agent.visibility": {
+    en: "A Public personal Agent is shareable, but course students do not get access automatically. They need a separate invocation grant to use it; its prompt and sources remain visible only to its owner.",
+    zh: "个人 Agent 设为公开后可分享，但课程学生不会自动获得访问权限。学生需要单独的调用授权才能使用；提示词和来源仍只有所有者可见。",
+  },
+  "agent.knowledgeSets": {
+    en: "Selected Knowledge stays linked to its canonical set and uses its current version.",
+    zh: "所选 Knowledge 始终引用同一知识集，并使用其当前版本。",
   },
   "agent.voice": {
     en: "Choose the saved voice profile used when this Agent speaks.",
@@ -77,9 +105,17 @@ export const uiGuideCopy = {
     en: "Delete this conversation from your chat history.",
     zh: "从聊天记录中删除此对话。",
   },
+  "chat.history": {
+    en: "Conversation name.",
+    zh: "会话名称。",
+  },
   "chat.send": {
     en: "Send this message to the selected Agent.",
     zh: "将此消息发送给当前选择的 Agent。",
+  },
+  "brainform.memory": {
+    en: "Open the saved Memory context in Chatform.",
+    zh: "在 Chatform 中打开已保存的 Memory 上下文。",
   },
   "chat.readOnly": {
     en: "This Agent is unavailable for new messages.",
@@ -88,6 +124,10 @@ export const uiGuideCopy = {
   "debate.topic": {
     en: "Set the question the Agents will discuss. Keep it focused and answerable.",
     zh: "设置 Agent 要讨论的问题；尽量具体、可回答。",
+  },
+  "debate.stalled": {
+    en: "See the safe failure reason for this stalled debate.",
+    zh: "查看此辩论停滞的安全错误原因。",
   },
   "debate.background": {
     en: "Add optional context for the debate. It is context, not verified evidence.",

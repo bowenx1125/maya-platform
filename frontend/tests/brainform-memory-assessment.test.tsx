@@ -31,6 +31,8 @@ vi.mock("../components/session-provider", () => ({
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => `/${state.role}/chat`,
+  useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
 import { AgentChat } from "../components/agent-chat";

@@ -72,13 +72,23 @@ describe("group navigation scope", () => {
     expect(links()).not.toContain("/student/groups/group-a");
   });
 
-  it("keeps the teacher home and roster return available inside a group", () => {
+  it("keeps teacher identity inside a visited group and offers the way back to Accounts", () => {
     state.pathname = "/student/groups/group-b";
     state.user.courses = [{ course_id: "course", role: "teacher" }];
     render(content());
     expect(
       screen.getByRole("link", { name: "Mayaform" }).getAttribute("href"),
     ).toBe("/teacher");
-    expect(links()).toContain("/teacher/roster");
+    expect(
+      screen.getByRole("link", { name: "Studyform" }).getAttribute("href"),
+    ).toBe("/teacher/studyform");
+    expect(links()).toContain("/teacher/knowledge");
+    expect(links()).toContain("/teacher/chat");
+    expect(
+      screen.getByRole("link", { name: "Accounts" }).getAttribute("href"),
+    ).toBe("/teacher/roster");
+    expect(
+      screen.getByRole("link", { name: "Back" }).getAttribute("href"),
+    ).toBe("/teacher/roster");
   });
 });

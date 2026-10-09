@@ -327,7 +327,11 @@ export function RosterWorkspace() {
             {groups.map((group) => {
               const joined = ownGroupIds.has(group.id);
               return (
-                <div className="list-row account-row" key={group.id}>
+                <div
+                  className="list-row account-row"
+                  id={`roster-group-${group.id}`}
+                  key={group.id}
+                >
                   <span>
                     <strong>{group.name}</strong>
                   </span>

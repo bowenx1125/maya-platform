@@ -301,8 +301,7 @@
   line-height: 1.5;
 }
 
-.notice,
-.generationNote {
+.notice {
   margin: 0;
   padding: 10px 13px;
   border: 1px solid #c8b58d;
@@ -310,14 +309,6 @@
   background: #f8f2e5;
   color: #534324;
   line-height: 1.5;
-}
-
-.generationNote {
-  padding: 8px 0 0;
-  border: 0;
-  background: transparent;
-  color: #69522b;
-  font-size: 0.9rem;
 }
 
 .editorPanel {
@@ -338,6 +329,32 @@
 
 .panelHeader h2 {
   font-size: clamp(1.35rem, 2.5vw, 1.8rem);
+}
+
+.usageSection {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e8e1d8;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.usageSection h3 {
+  margin: 0;
+  color: var(--ink, #292820);
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.usageSection ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding-inline-start: 20px;
+  color: #625e59;
+  font-size: 0.88rem;
 }
 
 .editorForm,
@@ -396,8 +413,7 @@
   gap: 10px;
 }
 
-.generationNote :global(.spinner),
-.rowStatus :global(.spinner) {
+.iconButton :global(.spinner) {
   width: 14px;
   height: 14px;
 }

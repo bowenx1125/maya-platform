@@ -5,13 +5,15 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/teacher/chat",
-  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
 import { AgentChat } from "../components/agent-chat";
@@ -54,7 +56,6 @@ const privateReadySession = {
     },
   ],
 } as unknown as ChatSession;
-
 function auth(
   userId: string,
   courses = [
@@ -106,6 +107,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 beforeEach(() => {
   resetChatRequestIdentity();
+  window.history.replaceState(null, "", "/teacher/chat");
   actor = "A";
   api = {
     me: vi.fn(async () => auth(actor ?? "A")),
@@ -148,6 +150,17 @@ function mount() {
       </SessionProvider>
     </LocaleProvider>,
   );
+}
+
+function openNewChatUrl() {
+  window.history.replaceState(null, "", "/teacher/chat?mode=new");
+}
+
+async function chooseAgent() {
+  const picker = await screen.findByRole("combobox", { name: "Chat with" });
+  await within(picker).findByRole("option", { name: /Synthetic Agent/ });
+  fireEvent.change(picker, { target: { value: `agent:${agent.version_id}` } });
+  return screen.findByRole("textbox", { name: "Message" });
 }
 
 async function sendAndLeave(message: string) {
@@ -197,7 +210,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     expect(getSettledChatSession()).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
-    await screen.findByRole("textbox", { name: "Message" });
+    await screen.findByText("Click New and start chatting with me!");
     expect(screen.queryByText("Synthetic A private answer")).toBeNull();
   });
 
@@ -227,8 +240,8 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     expect(getChatRequest()).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
-    const input = await screen.findByRole("textbox", { name: "Message" });
-    expect(input).toHaveProperty("value", "");
+    await screen.findByText("Click New and start chatting with me!");
+    expect(screen.queryByDisplayValue("Synthetic A private draft")).toBeNull();
     expect(getChatRequest()).toBeNull();
   });
 
@@ -249,11 +262,14 @@ describe("Chat data follows the accepted account and course scope", () => {
     api.streamConversation.mockImplementationOnce(
       () => new Promise(() => undefined),
     );
+    openNewChatUrl();
     mount();
     await waitFor(() =>
       expect(screen.getByTestId("actor").textContent).toBe("A"),
     );
+    await chooseAgent();
     await sendAndLeave("A request remains in flight");
+    window.history.replaceState(null, "", "/teacher/chat");
     const requestId = getChatRequest()?.requestId;
     expect(requestId).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Refresh identity" }));
@@ -303,7 +319,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     api.conversation.mockResolvedValueOnce(readySession);
 
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
-    await screen.findByText("Recovered after reopen", {}, { timeout: 4000 });
+    await screen.findByText("Recovered after reopen");
     expect(getChatRequest()).toBeNull();
     expect(api.conversation).toHaveBeenCalledTimes(1);
     expect(api.streamConversation).toHaveBeenCalledTimes(1);
@@ -377,19 +393,21 @@ describe("Chat data follows the accepted account and course scope", () => {
           resolveCreated = resolve;
         }),
     );
+    openNewChatUrl();
     mount();
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    const input = await chooseAgent();
     fireEvent.change(input, { target: { value: "A preflight draft" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
       expect(api.createConversation).toHaveBeenCalledTimes(1),
     );
+    window.history.replaceState(null, "", "/teacher/chat");
 
     fireEvent.click(screen.getByRole("button", { name: "Public switch B" }));
     await waitFor(() =>
       expect(screen.getByTestId("actor").textContent).toBe("B"),
     );
-    await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(1));
     await act(async () => resolveCreated(emptyConversation));
     expect(api.streamConversation).not.toHaveBeenCalled();
     expect(getChatRequest()).toBeNull();
@@ -398,9 +416,10 @@ describe("Chat data follows the accepted account and course scope", () => {
     await waitFor(() =>
       expect(screen.getByTestId("actor").textContent).toBe("A"),
     );
-    await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(3));
-    await screen.findByRole("textbox", { name: "Message" });
+    await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
+    await screen.findByText("Click New and start chatting with me!");
     expect(screen.queryByText("A preflight draft")).toBeNull();
+    expect(screen.queryByDisplayValue("A preflight draft")).toBeNull();
     expect(getChatRequest()).toBeNull();
     expect(api.streamConversation).not.toHaveBeenCalled();
   });
@@ -419,8 +438,9 @@ describe("Chat data follows the accepted account and course scope", () => {
     api.streamConversation.mockImplementationOnce(
       () => new Promise(() => undefined),
     );
+    openNewChatUrl();
     mount();
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    const input = await chooseAgent();
     fireEvent.change(input, { target: { value: "Old preflight request" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
@@ -429,9 +449,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leave Chats" }));
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
 
-    const reopenedInput = await screen.findByRole("textbox", {
-      name: "Message",
-    });
+    const reopenedInput = await chooseAgent();
     fireEvent.change(reopenedInput, {
       target: { value: "New current request" },
     });
@@ -463,8 +481,9 @@ describe("Chat data follows the accepted account and course scope", () => {
     api.streamConversation.mockImplementationOnce(
       () => new Promise(() => undefined),
     );
+    openNewChatUrl();
     mount();
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    const input = await chooseAgent();
     fireEvent.change(input, { target: { value: "Old preflight request" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
@@ -473,9 +492,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leave Chats" }));
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
 
-    const reopenedInput = await screen.findByRole("textbox", {
-      name: "Message",
-    });
+    const reopenedInput = await chooseAgent();
     fireEvent.change(reopenedInput, {
       target: { value: "New current request" },
     });

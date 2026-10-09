@@ -105,6 +105,7 @@ export function SectionCard({
   children,
   className = "",
   guide,
+  guideText,
 }: {
   title?: string;
   description?: string;
@@ -112,6 +113,7 @@ export function SectionCard({
   children: ReactNode;
   className?: string;
   guide?: UiGuideKey;
+  guideText?: string;
 }) {
   // A section directly beneath the page title does not need to repeat it, so
   // the header collapses entirely when there is nothing of its own to say.
@@ -122,7 +124,11 @@ export function SectionCard({
         <div className="section-card-header">
           <div>
             {title ? (
-              <h2 data-ui-guide={guide} tabIndex={guide ? 0 : undefined}>
+              <h2
+                data-ui-guide={guide}
+                data-ui-guide-text={guideText}
+                tabIndex={guide ? 0 : undefined}
+              >
                 {title}
               </h2>
             ) : null}

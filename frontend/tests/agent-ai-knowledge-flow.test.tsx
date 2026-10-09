@@ -14,10 +14,13 @@ import { LocaleProvider } from "../components/locale";
 import { useSession } from "../components/session-provider";
 import { TeacherAgentDetail } from "../components/teacher-workspace";
 import type {
+  AgentKnowledgeSets,
   AgentDetail,
   AgentVersion,
   KnowledgeDocument,
   KnowledgeSetDetail,
+  KnowledgeSetSummary,
+  ReplaceAgentKnowledgeSetsRequest,
 } from "../lib/api";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -103,6 +106,22 @@ function makeApi(enabledDocuments: KnowledgeDocument[] = []) {
     agent: vi.fn(async () => agent),
     versions: vi.fn(async () => []),
     knowledgeSet: vi.fn(async () => generatedSet),
+    knowledgeSets: vi.fn(async (): Promise<KnowledgeSetSummary[]> => []),
+    agentKnowledgeSets: vi.fn(async (): Promise<AgentKnowledgeSets> => ({
+      agent_id: "agent-1",
+      agent_metadata_revision: 0,
+      sets: [],
+    })),
+    replaceAgentKnowledgeSets: vi.fn(
+      async (
+        _agentId: string,
+        body: ReplaceAgentKnowledgeSetsRequest,
+      ): Promise<AgentKnowledgeSets> => ({
+        agent_id: "agent-1",
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      }),
+    ),
     nextVersion: vi.fn(async () => draft),
     workspaceDocuments: vi.fn(async () => [source]),
     ragPreview: vi.fn(async () => ({
@@ -250,6 +269,42 @@ describe("explicit AI Knowledge Agent flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
     expect(api.publish.mock.calls[0]?.[2]).not.toHaveProperty("generation");
+  });
+
+  it("links an existing canonical Knowledge set from the Brainform source selector", async () => {
+    const api = makeApi();
+    api.knowledgeSets.mockResolvedValue([generatedSet as KnowledgeSetSummary]);
+    api.agentKnowledgeSets.mockResolvedValue({
+      agent_id: "agent-1",
+      agent_metadata_revision: 4,
+      sets: [],
+    });
+    api.replaceAgentKnowledgeSets.mockImplementation(
+      async (_agentId, body) => ({
+        agent_id: "agent-1",
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [generatedSet as KnowledgeSetSummary],
+      }),
+    );
+    renderWorkbench(api, false);
+
+    const choice = await screen.findByRole("checkbox", {
+      name: /Generated Knowledge/,
+    });
+    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    fireEvent.click(choice);
+
+    await waitFor(() =>
+      expect(api.replaceAgentKnowledgeSets).toHaveBeenCalledWith(
+        "agent-1",
+        {
+          expected_agent_metadata_revision: 4,
+          set_ids: ["set-1"],
+        },
+        { idempotency: expect.objectContaining({ key: expect.any(String) }) },
+      ),
+    );
+    expect(choice).toHaveProperty("checked", true);
   });
 
   it("starts from an existing Agent's saved Sources when Done is explicitly chosen", async () => {

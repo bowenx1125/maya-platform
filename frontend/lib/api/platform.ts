@@ -1077,8 +1077,14 @@ export class PlatformApi {
     );
   }
 
-  createConversation(versionId: string): Promise<ChatSession> {
-    return this.postJson("conversations", { version_id: versionId });
+  createConversation(
+    versionId: string,
+    chatVisibility: "private" | "public" = "private",
+  ): Promise<ChatSession> {
+    return this.postJson("conversations", {
+      entry: { kind: "agent", version_id: versionId },
+      chat_visibility: chatVisibility,
+    });
   }
 
   createTeamConversation(

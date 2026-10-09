@@ -17,6 +17,7 @@ import {
   type AgentDetail,
   type AgentSummary,
   type AgentVersion,
+  type ChatAgent,
   type Course,
   type Group,
   type GroupDetail,
@@ -25,7 +26,7 @@ import {
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { useT } from "./locale";
-import { IconClose, IconDownload } from "./quiet-icons";
+import { IconArrowRight, IconClose, IconDownload } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
@@ -35,6 +36,9 @@ import { UserAvatar } from "./user-avatar";
 import detailStyles from "./teacher-agent-detail.module.css";
 import { AgentWorkbench } from "./agent-workspace";
 import { CreateAgentForm } from "./student-workspace";
+import { TeamEntryFlow } from "./chats/team-entry-flow";
+import { StudyformModule } from "./studyform-layout";
+import { VoiceLibrary } from "./voice/voice-library";
 import {
   EmptyCard,
   ErrorNotice,
@@ -57,7 +61,6 @@ export function TeacherDashboard() {
   }, [workspaceScope]);
   const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
-  const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [debateCount, setDebateCount] = useState(0);
@@ -72,22 +75,17 @@ export function TeacherDashboard() {
       const courses = await api.courses();
       if (workspaceScopeRef.current !== requestScope) return;
       const courseId = teacherCourseId;
-      const [nextPublished, nextGroups, nextPersonalAgents, debates] =
-        await Promise.all([
-          courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
-          courseId ? api.groups(courseId) : Promise.resolve([]),
-          courseId && typeof api.workspaceAgents === "function"
-            ? api.workspaceAgents(courseId)
-            : Promise.resolve([]),
-          courseId ? api.debates(courseId) : Promise.resolve([]),
-        ]);
+      const [nextPublished, nextGroups, debates] = await Promise.all([
+        courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
+        courseId ? api.groups(courseId) : Promise.resolve([]),
+        courseId ? api.debates(courseId) : Promise.resolve([]),
+      ]);
       if (workspaceScopeRef.current !== requestScope) return;
       setCourse(
         courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
       );
       setPublished(nextPublished);
       setGroups(nextGroups);
-      setPersonalAgents(nextPersonalAgents);
       setDebateCount(debates.length);
     } catch (cause) {
       if (workspaceScopeRef.current === requestScope) setError(cause);
@@ -124,7 +122,7 @@ export function TeacherDashboard() {
   }
 
   if (loading || loadedScope !== workspaceScope) return <LoadingCard />;
-  if (error && published.length === 0 && personalAgents.length === 0)
+  if (error && published.length === 0)
     return <ErrorNotice error={error} onRetry={() => void load()} />;
   const name = user?.display_name ?? "";
   const guide = [
@@ -141,7 +139,7 @@ export function TeacherDashboard() {
     {
       label: t("teacherGuideAgents"),
       complete: published.length > 0,
-      href: "/teacher",
+      href: "/teacher/studyform",
     },
     {
       label: t("teacherGuideDebate"),
@@ -191,51 +189,6 @@ export function TeacherDashboard() {
         <HomeGuide steps={guide} />
       </section>
       {error ? <ErrorNotice error={error} /> : null}
-      <SectionCard
-        title={`${t("personalAgents")} · ${personalAgents.length}`}
-        description={t("personalWorkspaceLede")}
-        className="published-section"
-        action={
-          course ? (
-            <div className="row-actions">
-              <Link
-                className="text-link"
-                href={`/teacher/provider-approvals/chats?course_id=${encodeURIComponent(course.id)}`}
-              >
-                {t("openProviderDisclosure")}
-              </Link>
-              <Link
-                className="text-link"
-                href="/teacher/agents/new?flow=ai-knowledge"
-              >
-                {t("createAiKnowledge")}
-              </Link>
-              <Link className="primary-action" href="/teacher/agents/new">
-                {t("newAgent")}
-              </Link>
-            </div>
-          ) : null
-        }
-      >
-        {personalAgents.length === 0 ? (
-          <EmptyCard
-            title={t("noPersonalAgents")}
-            action={
-              course ? (
-                <Link className="text-link" href="/teacher/agents/new">
-                  {t("openPersonalWorkspace")}
-                </Link>
-              ) : null
-            }
-          />
-        ) : (
-          <div className="agent-tile-grid">
-            {personalAgents.map((agent) => (
-              <PersonalAgentTile agent={agent} key={agent.id} />
-            ))}
-          </div>
-        )}
-      </SectionCard>
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
@@ -264,11 +217,150 @@ export function TeacherDashboard() {
   );
 }
 
-export function TeacherPersonalAgentCreate({
-  generationFlow = false,
+export function TeacherStudyformWorkspace({
+  initialGroupId,
+  initialMode,
+  initialTeamId,
 }: {
-  generationFlow?: boolean;
+  initialGroupId?: string;
+  initialMode?: string;
+  initialTeamId?: string;
 }) {
+  const t = useT();
+  const { api, identityGeneration, user } = useSession();
+  const teacherCourseId = user?.courses.find(
+    (membership) => membership.role === "teacher",
+  )?.course_id;
+  const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${identityGeneration}`;
+  const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupSelection, setGroupSelection] = useState("");
+  const selectedGroupId = groupSelection;
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const loading = loadedScope !== scope;
+  const [error, setError] = useState<unknown>(null);
+  const selectedGroup = groups.find((group) => group.id === selectedGroupId);
+
+  useEffect(() => {
+    let active = true;
+    const requestScope = scope;
+    const timer = window.setTimeout(() => {
+      setError(null);
+      if (!teacherCourseId) {
+        setPersonalAgents([]);
+        setChatAgents([]);
+        setGroups([]);
+        setLoadedScope(requestScope);
+        return;
+      }
+      void Promise.all([
+        api.workspaceAgents(teacherCourseId),
+        api.chatAgents(teacherCourseId),
+        api.groups(teacherCourseId),
+      ])
+        .then(([nextPersonalAgents, nextChatAgents, nextGroups]) => {
+          if (!active) return;
+          setPersonalAgents(nextPersonalAgents);
+          setChatAgents(nextChatAgents);
+          setGroups(nextGroups);
+          setLoadedScope(requestScope);
+          setError(null);
+          setGroupSelection((current) => {
+            if (
+              initialGroupId &&
+              nextGroups.some((group) => group.id === initialGroupId)
+            ) {
+              return initialGroupId;
+            }
+            return nextGroups.some((group) => group.id === current)
+              ? current
+              : "";
+          });
+        })
+        .catch((cause) => {
+          if (!active) return;
+          setError(cause);
+          setLoadedScope(requestScope);
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, initialGroupId, scope, teacherCourseId]);
+
+  if (loading || loadedScope !== scope) return <LoadingCard />;
+  if (error && !personalAgents.length && !chatAgents.length)
+    return <ErrorNotice error={error} />;
+
+  if (initialMode && ["teams", "team-new", "team-edit"].includes(initialMode))
+    return (
+      <>
+        <PageIntro title={t("studyform")} />
+        {teacherCourseId ? (
+          <TeamEntryFlow
+            key={scope}
+            api={api}
+            courseId={teacherCourseId}
+            agents={chatAgents}
+            variant="maya"
+            standalone
+            backHref={`/teacher/studyform${selectedGroup ? `?group_id=${encodeURIComponent(selectedGroup.id)}` : ""}`}
+            initialRouteMode={initialMode}
+            initialTeamId={initialTeamId}
+          />
+        ) : null}
+      </>
+    );
+
+  return (
+    <>
+      <PageIntro title={t("studyform")} />
+      {teacherCourseId ? (
+        <PageAction name="new" href="/teacher/agents/new" />
+      ) : null}
+      {error ? <ErrorNotice error={error} /> : null}
+      <StudyformModule title={t("agents")} count={personalAgents.length}>
+        {personalAgents.length ? (
+          <div className="agent-tile-grid">
+            {personalAgents.map((agent) => (
+              <PersonalAgentTile agent={agent} key={agent.id} />
+            ))}
+          </div>
+        ) : (
+          <EmptyCard title={t("noPersonalAgents")} />
+        )}
+      </StudyformModule>
+      <div id="studyform-voices">
+        <VoiceLibrary
+          key={`${scope}:voices:${selectedGroup?.id ?? "none"}:${initialMode === "new" ? "new" : "list"}`}
+          groupId={selectedGroup?.id ?? null}
+          groupOptions={groups}
+          onGroupChange={setGroupSelection}
+          embedded
+          initialCreate={initialMode === "new"}
+        />
+      </div>
+      <StudyformModule
+        title={t("mayaTeam")}
+        action={
+          <Link
+            className="inline-button"
+            href={`/teacher/studyform${selectedGroup ? `?group_id=${encodeURIComponent(selectedGroup.id)}&` : "?"}mode=teams`}
+            aria-label={t("studyformOpenMayaTeams")}
+          >
+            <IconArrowRight />
+          </Link>
+        }
+      >
+        <p className="studyform-module-note">{t("mayaTeamPublishHelp")}</p>
+      </StudyformModule>
+    </>
+  );
+}
+
+export function TeacherPersonalAgentCreate() {
   const t = useT();
   const { identityGeneration, user } = useSession();
   const teacherMembership = user?.courses.find(
@@ -279,11 +371,7 @@ export function TeacherPersonalAgentCreate({
   }
   const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
   return (
-    <CreateAgentForm
-      key={scopeKey}
-      courseId={teacherMembership.course_id}
-      generationFlow={generationFlow}
-    />
+    <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
   );
 }
 
@@ -300,10 +388,14 @@ function PersonalAgentTile({ agent }: { agent: AgentSummary }) {
       <span className="agent-tile-group">
         {agent.current_draft_version_id ? t("draft") : t("published")}
       </span>
-      <span className="agent-pill-label">
+      <span
+        className="agent-pill-label"
+        data-ui-guide="agent.visibility"
+        tabIndex={0}
+      >
         {agent.visibility === "private"
-          ? t("privateVisibility")
-          : t("personalPublicVisibility")}
+          ? t("privateOption")
+          : t("publicOption")}
       </span>
     </div>
   );
@@ -352,7 +444,6 @@ function PublishedAgentTile({
         data-pending={hasUnpublishedWork ? "true" : "false"}
         disabled={deleting}
         aria-label={t("deleteAgent")}
-        title={version.version_label}
         onClick={onDelete}
       >
         <span className="agent-pill-label">{version.version_label}</span>
@@ -607,14 +698,11 @@ export function TeacherAgentDetail({
       ) : null}
       {agent.ownership_scope === "personal" &&
       agent.current_published_version_id ? (
-        <button
-          className="primary-action"
-          type="button"
-          disabled={creatingDraft}
+        <PageAction
+          name="new"
+          disabled={creatingDraft || agent.status === "archived"}
           onClick={() => void createPersonalVersion()}
-        >
-          {creatingDraft ? t("creating") : t("createNewVersion")}
-        </button>
+        />
       ) : null}
       <Link
         className={detailStyles.action}
@@ -698,7 +786,7 @@ export function TeacherAgentDetail({
                 className="icon-action"
                 type="button"
                 aria-label={`${t("download")} RAG`}
-                title={t("download")}
+                data-ui-guide="agent.download"
                 onClick={() => {
                   void (async () => {
                     for (const document of snapshot.documents) {
@@ -784,7 +872,7 @@ function TeacherAgentMarkdown({ version }: { version?: AgentVersion }) {
               type="button"
               disabled={busy}
               aria-label={`${t("download")} AGENT.md`}
-              title={t("download")}
+              data-ui-guide="agent.download"
               onClick={() => {
                 void (async () => {
                   setBusy(true);
@@ -855,7 +943,11 @@ function RagFile({
     <div className={detailStyles.file}>
       <div className={detailStyles.fileHeader}>
         <div className={detailStyles.fileIdentity}>
-          <strong title={document.source_filename}>
+          <strong
+            data-ui-guide="knowledge.filename"
+            data-ui-guide-text={document.source_filename}
+            tabIndex={0}
+          >
             {document.source_filename}
           </strong>
           <small>
@@ -878,7 +970,7 @@ function RagFile({
             type="button"
             disabled={busy}
             aria-label={t("download")}
-            title={t("download")}
+            data-ui-guide="agent.download"
             onClick={() => void read(true)}
           >
             <IconDownload />

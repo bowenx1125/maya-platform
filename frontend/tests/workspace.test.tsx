@@ -28,7 +28,8 @@ vi.mock("../components/session-provider", () => ({
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => `/${state.role}/chat`,
-  useRouter: () => ({ replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 vi.mock("../components/avatar", () => ({
   AvatarPreview: (props: { assetUrl?: string }) => (
@@ -88,6 +89,7 @@ beforeEach(() => {
   state.userId = `test-user-${Date.now()}-${Math.random()}`;
   state.role = "teacher";
   state.displayName = undefined;
+  window.history.replaceState({}, "", "/teacher/chat");
   state.api = {
     chatAgents: vi.fn().mockResolvedValue([agent]),
     conversations: vi.fn().mockResolvedValue([]),
@@ -143,17 +145,81 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function startNewAgentChat() {
-  const nav = within(screen.getByRole("navigation"));
-  fireEvent.click(nav.getByRole("button", { name: "New" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: /New Agent chat/ }),
+function renderChat({ shell = false, newChat = false } = {}) {
+  if (newChat) window.history.replaceState({}, "", "/teacher/chat?mode=new");
+  return render(
+    <LocaleProvider initialLocale="en">
+      {shell ? (
+        <AppShell role="teacher">
+          <AgentChat />
+        </AppShell>
+      ) : (
+        <AgentChat />
+      )}
+    </LocaleProvider>,
   );
-  fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
+}
+
+async function chooseSocrates() {
+  const picker = await screen.findByRole("combobox", { name: "Chat with" });
+  await within(picker).findByRole("option", { name: /Socrates/ });
+  fireEvent.change(picker, { target: { value: "agent:version" } });
   return screen.findByRole("textbox", { name: "Message" });
 }
 
+async function startNewAgentChat() {
+  const create = within(screen.getByRole("navigation")).getByRole("button", {
+    name: "New",
+  });
+  await waitFor(() => expect(create.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(create);
+  return chooseSocrates();
+}
+
 describe("private Agent chat", () => {
+  it("follows the New URL through browser history without reading old chat history in New mode", async () => {
+    window.history.replaceState({}, "", "/teacher/chat?mode=new");
+    const view = render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <AgentChat />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    expect(
+      await screen.findByRole("combobox", { name: "Chat with" }),
+    ).toBeTruthy();
+    expect(state.api.conversations).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/teacher/chat");
+    view.rerender(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <AgentChat />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    await waitFor(() =>
+      expect(state.api.conversations).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      await screen.findByText("Click New and start chatting with me!"),
+    ).toBeTruthy();
+
+    window.history.pushState({}, "", "/teacher/chat?mode=new");
+    view.rerender(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <AgentChat />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    expect(
+      await screen.findByRole("combobox", { name: "Chat with" }),
+    ).toBeTruthy();
+    expect(state.api.conversations).toHaveBeenCalledTimes(1);
+  });
+
   it("starts from the sidebar and sends consecutive messages with the latest revision", async () => {
     render(
       <LocaleProvider initialLocale="en">
@@ -162,17 +228,12 @@ describe("private Agent chat", () => {
         </AppShell>
       </LocaleProvider>,
     );
-    await screen.findByRole("combobox", { name: "Agent" });
+    await screen.findByText("Click New and start chatting with me!");
     const nav = within(screen.getByRole("navigation"));
     expect(nav.queryByText("Back")).toBeNull();
     expect(nav.queryByText("Done")).toBeNull();
     await startNewAgentChat();
     expect(state.api.createConversation).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(
-        nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
     expect(
       within(screen.getByRole("main")).queryByRole("button", {
         name: "New",
@@ -183,6 +244,11 @@ describe("private Agent chat", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("A considered reply");
+    await waitFor(() =>
+      expect(
+        nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
     const first = (await state.api.streamConversation.mock.results[0].value)
       .session;
     state.api.streamConversation.mockResolvedValue({
@@ -223,14 +289,10 @@ describe("private Agent chat", () => {
       audioUrl: "/api/v1/conversations/conversation/audio/legacy",
       ttsErrorCode: "tts_failed",
     });
-    const view = render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    await screen.findByRole("combobox", { name: "Agent" });
+    const view = renderChat({ newChat: true });
+    await chooseSocrates();
     expect(document.querySelector("audio")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Chats" }).className).toBe(
+    expect(screen.getByRole("heading", { name: "Chatform" }).className).toBe(
       "sr-only",
     );
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
@@ -240,7 +302,10 @@ describe("private Agent chat", () => {
     await screen.findByText("A considered reply");
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(state.api.createConversation).toHaveBeenCalledWith("version");
+    expect(state.api.createConversation).toHaveBeenCalledWith(
+      "version",
+      "private",
+    );
     expect(state.api.streamConversation).toHaveBeenCalledWith(
       "conversation",
       expect.objectContaining({
@@ -261,6 +326,7 @@ describe("private Agent chat", () => {
       .session;
     state.api.conversations.mockResolvedValue([saved]);
     view.unmount();
+    window.history.replaceState({}, "", "/teacher/chat");
     render(
       <LocaleProvider initialLocale="en">
         <AgentChat />
@@ -268,17 +334,13 @@ describe("private Agent chat", () => {
     );
     await screen.findByText("A considered reply");
     expect(state.api.streamConversation).toHaveBeenCalledTimes(1);
-    expect(state.api.conversations).toHaveBeenCalledTimes(2);
+    expect(state.api.conversations).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Voice" })).toBeNull();
   });
 
   it("keeps Chats focused on conversation without a 3D model panel", async () => {
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    await screen.findByRole("combobox", { name: "Agent" });
+    renderChat({ newChat: true });
+    await chooseSocrates();
     expect(screen.queryByRole("combobox", { name: "3D model" })).toBeNull();
     expect(screen.queryByTestId("avatar")).toBeNull();
     expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
@@ -295,7 +357,7 @@ describe("private Agent chat", () => {
         <AgentChat />
       </LocaleProvider>,
     );
-    await screen.findByRole("combobox", { name: "Agent" });
+    await screen.findByRole("combobox", { name: "Chat with" });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
     });
@@ -314,12 +376,8 @@ describe("private Agent chat", () => {
     state.api.streamConversation.mockRejectedValueOnce(
       new Error("The response was lost"),
     );
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     fireEvent.change(input, { target: { value: "Known failed request" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByRole("alert");
@@ -342,6 +400,7 @@ describe("private Agent chat", () => {
       ],
     } as unknown as ChatSession;
     state.api.conversations.mockResolvedValue([failedSession]);
+    window.history.replaceState({}, "", "/teacher/chat");
     render(
       <LocaleProvider initialLocale="en">
         <AgentChat />
@@ -352,6 +411,10 @@ describe("private Agent chat", () => {
     });
     await waitFor(() => expect(getChatRequest()).toBeNull());
     expect(reopenedInput).toHaveProperty("value", "");
+    expect(
+      screen.getByText("The platform request could not be completed."),
+    ).toBeTruthy();
+    expect(screen.queryByText("chat_failed")).toBeNull();
 
     fireEvent.change(reopenedInput, {
       target: { value: "A distinct follow-up" },
@@ -417,13 +480,8 @@ describe("private Agent chat", () => {
       voiceProfileId: null,
       contentType: null,
     });
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    await screen.findByRole("combobox", { name: "Agent" });
-    const input = screen.getByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     fireEvent.change(input, {
       target: { value: "A question with an unknown outcome" },
     });
@@ -483,12 +541,8 @@ describe("private Agent chat", () => {
         throw interrupted;
       },
     );
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     fireEvent.change(input, {
       target: { value: "Interrupted while processing" },
     });
@@ -564,12 +618,8 @@ describe("private Agent chat", () => {
         finishRetry = resolve;
       });
     });
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     fireEvent.change(input, { target: { value: "Retry the same request" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByRole("alert");
@@ -668,12 +718,8 @@ describe("private Agent chat", () => {
         throw new ChatRequestPendingError();
       },
     );
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     fireEvent.change(input, { target: { value: "Still generating" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByRole("alert");
@@ -681,9 +727,8 @@ describe("private Agent chat", () => {
     await waitFor(() =>
       expect(state.api.streamConversation).toHaveBeenCalledTimes(2),
     );
-    await waitFor(
-      () => expect(screen.getByText("Finished after pending")).toBeTruthy(),
-      { timeout: 4000 },
+    await waitFor(() =>
+      expect(screen.getByText("Finished after pending")).toBeTruthy(),
     );
     const requests = state.api.streamConversation.mock.calls.map(
       (call) => call[1],
@@ -730,7 +775,7 @@ describe("private Agent chat", () => {
     await screen.findByRole("status");
     await waitFor(() => expect(getChatRequest()?.status).toBe("observing"));
     expect(getChatRequest()?.requestId).toBe("persisted-request");
-    await screen.findByText("Recovered after reload", {}, { timeout: 4000 });
+    await screen.findByText("Recovered after reload");
     expect(state.api.streamConversation).not.toHaveBeenCalled();
     expect(state.api.conversation).toHaveBeenCalledTimes(2);
   });
@@ -776,7 +821,7 @@ describe("private Agent chat", () => {
     await screen.findByText("A considered reply");
     await startNewAgentChat();
     fireEvent.click(screen.getByRole("button", { name: "Hello" }));
-    await screen.findByText("Finished after reopen", {}, { timeout: 4000 });
+    await screen.findByText("Finished after reopen");
     expect(state.api.conversation).toHaveBeenCalledTimes(2);
     expect(state.api.streamConversation).not.toHaveBeenCalled();
     expect(state.api.sendConversation).not.toHaveBeenCalled();
@@ -952,14 +997,8 @@ describe("private Agent chat", () => {
           });
         },
       );
-      render(
-        <LocaleProvider initialLocale="en">
-          <AppShell role="teacher">
-            <AgentChat />
-          </AppShell>
-        </LocaleProvider>,
-      );
-      const input = await screen.findByRole("textbox", { name: "Message" });
+      renderChat({ shell: true, newChat: true });
+      const input = await chooseSocrates();
       fireEvent.change(input, { target: { value: "Old sent message" } });
       fireEvent.click(screen.getByRole("button", { name: "Send" }));
       await waitFor(() =>
@@ -1026,12 +1065,8 @@ describe("private Agent chat", () => {
           });
         })
         .mockImplementationOnce(() => new Promise(() => undefined));
-      render(
-        <LocaleProvider initialLocale="en">
-          <AgentChat />
-        </LocaleProvider>,
-      );
-      const input = await screen.findByRole("textbox", { name: "Message" });
+      renderChat({ newChat: true });
+      const input = await chooseSocrates();
       fireEvent.change(input, { target: { value: "Old message" } });
       fireEvent.click(screen.getByRole("button", { name: "Send" }));
       await waitFor(() =>
@@ -1148,12 +1183,8 @@ describe("private Agent chat", () => {
       },
     );
     vi.stubGlobal("fetch", fetchMock);
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     fireEvent.change(input, { target: { value: "Retry after proxy loss" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText("Saved despite proxy 502");
@@ -1178,12 +1209,8 @@ describe("private Agent chat", () => {
         resolve = done;
       }),
     );
-    render(
-      <LocaleProvider initialLocale="en">
-        <AgentChat />
-      </LocaleProvider>,
-    );
-    const input = await screen.findByRole("textbox", { name: "Message" });
+    renderChat({ newChat: true });
+    const input = await chooseSocrates();
     expect(screen.queryByText("Message")).toBeNull();
     fireEvent.change(input, { target: { value: "Hello" } });
     const button = screen.getByRole("button", { name: "Send" });
@@ -1249,7 +1276,7 @@ describe("private Agent chat", () => {
 });
 
 describe("teacher workspace access", () => {
-  it("keeps provider disclosure but renders no Components UI or settings calls", async () => {
+  it("keeps external data disclosure off Mayaform and renders no Components UI or settings calls", async () => {
     state.displayName = "Teacher";
     state.api.courses.mockResolvedValue([{ id: "course", name: "Course" }]);
 
@@ -1261,10 +1288,22 @@ describe("teacher workspace access", () => {
       </LocaleProvider>,
     );
 
-    const disclosure = await screen.findByRole("link", { name: "Review" });
-    expect(disclosure.getAttribute("href")).toBe(
-      "/teacher/provider-approvals/chats?course_id=course",
-    );
+    await screen.findByRole("heading", { name: /Welcome/ });
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
+    const navigation = screen.getByRole("navigation");
+    expect(
+      Array.from(navigation.children)
+        .filter((item) => item.matches("a, [aria-disabled='true']"))
+        .map((item) => item.textContent?.trim()),
+    ).toEqual([
+      "Mayaform",
+      "Studyform",
+      "Brainform",
+      "Chatform",
+      "Live",
+      "Debates",
+      "Accounts",
+    ]);
     expect(screen.queryByText("Components")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Check" })).toBeNull();

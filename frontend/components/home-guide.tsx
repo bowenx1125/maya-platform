@@ -11,13 +11,10 @@ export type GuideStep = {
   optional?: boolean;
 };
 
-const NUMERALS = ["I", "II", "III", "IV", "V", "VI"];
-
 /**
- * The home's steps, set like a syllabus rather than a checklist: numbered in
- * the sign-in's serif, ruled in its gold, and with only the step that comes
- * next asking to be clicked. A finished step keeps its place as a gold
- * diamond, the same mark that sits on the sign-in's rule.
+ * The home's steps, set like a syllabus rather than a checklist: each marked
+ * with the sign-in rule's gold diamond, and with only the step that comes next
+ * asking to be clicked.
  */
 export function HomeGuide({ steps }: { steps: GuideStep[] }) {
   const t = useT();
@@ -34,9 +31,7 @@ export function HomeGuide({ steps }: { steps: GuideStep[] }) {
               data-state={state}
               aria-current={state === "next" ? "step" : undefined}
             >
-              <span className="home-guide-marker" aria-hidden="true">
-                {step.complete ? null : NUMERALS[index]}
-              </span>
+              <span className="home-guide-marker" aria-hidden="true" />
               <strong>{step.label}</strong>
               {step.optional ? <small>{t("guideOptional")}</small> : null}
               <span

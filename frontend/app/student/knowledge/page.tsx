@@ -8,7 +8,11 @@ export default async function StudentKnowledgePage({
   searchParams: Promise<{
     agent_id?: string;
     set_id?: string;
+    job_id?: string;
     course_id?: string;
+    group_id?: string;
+    mode?: string;
+    document_id?: string;
   }>;
 }) {
   const query = await searchParams;
@@ -19,7 +23,11 @@ export default async function StudentKnowledgePage({
           role="student"
           initialAgentId={query.agent_id}
           initialSetId={query.set_id}
+          initialJobId={query.job_id}
           initialCourseId={query.course_id}
+          initialGroupId={query.group_id}
+          initialMode={query.mode}
+          initialDocumentId={query.document_id}
         />
       </AppShell>
     </RouteGuard>

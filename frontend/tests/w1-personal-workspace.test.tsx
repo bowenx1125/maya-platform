@@ -1,17 +1,21 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
 import { LocaleProvider } from "../components/locale";
+import { AppShell } from "../components/app-shell";
 import {
   TeacherDashboard,
   TeacherPersonalAgentCreate,
+  TeacherStudyformWorkspace,
 } from "../components/teacher-workspace";
 import { useSession } from "../components/session-provider";
 import type {
@@ -20,6 +24,7 @@ import type {
   AgentVersion,
   KnowledgeDocument,
 } from "../lib/api";
+import { PlatformApiError } from "../lib/api";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -119,8 +124,38 @@ afterEach(() => {
 });
 
 describe("W1 teacher personal workspace", () => {
-  it("lists a personal Agent from the teacher's real course workspace", async () => {
+  it("keeps personal Agent lists in Studyform, not on Mayaform Home", async () => {
     const agent = personalAgent() as AgentSummary;
+    const api = {
+      workspaceAgents: vi.fn().mockResolvedValue([agent]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([]),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const tile = await screen.findByRole("link", { name: "Teacher Lens" });
+    expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
+    const visibility = screen.getByText("Private", { exact: true });
+    expect(visibility.getAttribute("data-ui-guide")).toBe("agent.visibility");
+    expect(visibility.getAttribute("tabindex")).toBe("0");
+    expect(screen.queryByText("Private — only me")).toBeNull();
+    expect(
+      screen.queryByText("Shareable; students need an explicit grant"),
+    ).toBeNull();
+    expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
+    expect(
+      screen.getByRole("link", { name: "Studyform" }).getAttribute("href"),
+    ).toBe("/teacher/studyform");
+  });
+
+  it("preserves the colleague Home without loading personal Agent lists", async () => {
     const api = {
       courses: vi
         .fn()
@@ -130,7 +165,7 @@ describe("W1 teacher personal workspace", () => {
       publishedAgents: vi.fn().mockResolvedValue([]),
       debates: vi.fn().mockResolvedValue([]),
       groups: vi.fn().mockResolvedValue([]),
-      workspaceAgents: vi.fn().mockResolvedValue([agent]),
+      workspaceAgents: vi.fn().mockResolvedValue([]),
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
@@ -139,18 +174,11 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    const tile = await screen.findByRole("link", { name: "Teacher Lens" });
-    expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
-    expect(screen.getByText("Private — only me")).toBeTruthy();
-    expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
-    expect(
-      screen
-        .getByRole("link", { name: "Create AI Knowledge" })
-        .getAttribute("href"),
-    ).toBe("/teacher/agents/new?flow=ai-knowledge");
-    expect(screen.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
-      "/teacher/agents/new",
-    );
+    await screen.findByRole("heading", { name: /Welcome/ });
+    expect(api.workspaceAgents).not.toHaveBeenCalled();
+    expect(screen.queryByText("Personal Agents · 0")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Guide" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Publish an Agent/ })).toBeTruthy();
   });
 
   it("creates a course-scoped Agent with Private as the default visibility", async () => {
@@ -165,16 +193,14 @@ describe("W1 teacher personal workspace", () => {
     );
 
     expect(
-      screen.getByText(/A Public personal Agent is shareable/),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/separate invocation grant to use it/),
-    ).toBeTruthy();
-    expect(
       screen.getByRole("option", {
-        name: "Shareable; students need an explicit grant",
+        name: "Private",
       }),
     ).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Public" })).toBeTruthy();
+    expect(
+      screen.queryByText(/A Public personal Agent is shareable/),
+    ).toBeNull();
     const name = screen.getByLabelText("Agent name");
     fireEvent.change(name, { target: { value: "Teacher Lens" } });
     fireEvent.submit(name.closest("form")!);
@@ -190,6 +216,294 @@ describe("W1 teacher personal workspace", () => {
     );
   });
 
+  it("loads the shared VoiceLibrary only for a teacher's explicit group scope", async () => {
+    const groupId = "teacher-group";
+    const api = {
+      workspaceAgents: vi.fn().mockResolvedValue([]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi
+        .fn()
+        .mockResolvedValue([
+          { id: groupId, course_id: courseId, name: "Cultural exchange" },
+        ]),
+      voiceProfiles: vi.fn().mockResolvedValue([
+        {
+          id: "teacher-voice",
+          scope: "group",
+          group_id: groupId,
+          status: "ready",
+          source_filename: "teacher-voice.wav",
+          created_at: "2026-10-07T00:00:00Z",
+        },
+      ]),
+      enrollVoice: vi.fn(),
+      createVoicePreview: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace initialGroupId={groupId} />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const heading = await screen.findByRole("heading", {
+      name: "Voices · 1",
+    });
+    const voices = heading.closest("section") as HTMLElement;
+    expect(
+      (
+        within(voices).getByRole("combobox", {
+          name: "Group workspace",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe(groupId);
+    expect(
+      await within(voices).findByRole("button", { name: "teacher-voice.wav" }),
+    ).toBeTruthy();
+    expect(api.voiceProfiles).toHaveBeenCalledWith(groupId);
+
+    const agentNew = within(screen.getByRole("navigation")).getByRole("link", {
+      name: "New",
+    });
+    expect(agentNew.getAttribute("href")).toBe("/teacher/agents/new");
+    const voiceNew = within(voices).getByRole("button", { name: "New" });
+    fireEvent.click(voiceNew);
+    await screen.findByLabelText(
+      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
+    );
+    const sidebar = within(screen.getByRole("navigation"));
+    expect(sidebar.getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(
+      (sidebar.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", { name: "Back" }),
+    ).toBeNull();
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", { name: "Done" }),
+    ).toBeNull();
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+    expect(api.createVoicePreview).not.toHaveBeenCalled();
+  });
+
+  it("waits for explicit group choice before opening direct Teacher Voice New mode", async () => {
+    const groupId = "teacher-group";
+    const api = {
+      workspaceAgents: vi.fn().mockResolvedValue([]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi
+        .fn()
+        .mockResolvedValue([
+          { id: groupId, course_id: courseId, name: "Cultural exchange" },
+        ]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      enrollVoice: vi.fn(),
+      createVoicePreview: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace initialMode="new" />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const heading = await screen.findByRole("heading", {
+      name: "Voices · 0",
+    });
+    const voices = heading.closest("section") as HTMLElement;
+    const group = within(voices).getByRole("combobox", {
+      name: "Group workspace",
+    }) as HTMLSelectElement;
+    expect(group.value).toBe("");
+    expect(api.voiceProfiles).not.toHaveBeenCalled();
+    expect(
+      (within(voices).getByRole("button", { name: "New" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    fireEvent.change(group, { target: { value: groupId } });
+    await screen.findByLabelText(
+      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
+    );
+    await waitFor(() =>
+      expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
+    );
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+    expect(api.createVoicePreview).not.toHaveBeenCalled();
+  });
+
+  it("keeps Voice New dim while checking group access and after a membership 404", async () => {
+    const deniedGroupId = "not-a-member-group";
+    const accessibleGroupId = "joined-group";
+    let rejectDeniedScope: ((cause: unknown) => void) | null = null;
+    const api = {
+      workspaceAgents: vi.fn().mockResolvedValue([]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([
+        { id: deniedGroupId, course_id: courseId, name: "Other group" },
+        { id: accessibleGroupId, course_id: courseId, name: "Joined group" },
+      ]),
+      voiceProfiles: vi.fn().mockImplementation((selectedGroupId: string) => {
+        if (selectedGroupId === deniedGroupId) {
+          return new Promise((_, reject) => {
+            rejectDeniedScope = reject;
+          });
+        }
+        return Promise.resolve([]);
+      }),
+      enrollVoice: vi.fn(),
+      createVoicePreview: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace initialGroupId={deniedGroupId} />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const heading = await screen.findByRole("heading", {
+      name: "Voices · 0",
+    });
+    const voices = heading.closest("section") as HTMLElement;
+    const newButton = within(voices).getByRole("button", { name: "New" });
+    expect((newButton as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() =>
+      expect(api.voiceProfiles).toHaveBeenCalledWith(deniedGroupId),
+    );
+    await act(async () => {
+      rejectDeniedScope?.(
+        new PlatformApiError(404, "workspace_member_required"),
+      );
+      await Promise.resolve();
+    });
+    await screen.findByRole("alert");
+    expect((newButton as HTMLButtonElement).disabled).toBe(true);
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+
+    fireEvent.change(
+      within(voices).getByRole("combobox", { name: "Group workspace" }),
+      { target: { value: accessibleGroupId } },
+    );
+    const accessibleHeading = await screen.findByRole("heading", {
+      name: "Voices · 0",
+    });
+    const accessibleVoices = accessibleHeading.closest(
+      "section",
+    ) as HTMLElement;
+    await waitFor(() =>
+      expect(api.voiceProfiles).toHaveBeenCalledWith(accessibleGroupId),
+    );
+    await waitFor(() =>
+      expect(
+        (
+          within(accessibleVoices).getByRole("button", {
+            name: "New",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a Voice profile server error as a confirmed scope denial", async () => {
+    const groupId = "teacher-group";
+    const api = {
+      workspaceAgents: vi.fn().mockResolvedValue([]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi
+        .fn()
+        .mockResolvedValue([
+          { id: groupId, course_id: courseId, name: "Group" },
+        ]),
+      voiceProfiles: vi
+        .fn()
+        .mockRejectedValue(new PlatformApiError(500, "temporary_failure")),
+      enrollVoice: vi.fn(),
+      createVoicePreview: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace initialGroupId={groupId} />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const heading = await screen.findByRole("heading", {
+      name: "Voices · 0",
+    });
+    const voices = heading.closest("section") as HTMLElement;
+    const newButton = await within(voices).findByRole("button", {
+      name: "New",
+    });
+    await waitFor(() =>
+      expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
+    );
+    await waitFor(() =>
+      expect((newButton as HTMLButtonElement).disabled).toBe(false),
+    );
+    expect(within(voices).getByRole("alert")).toBeTruthy();
+  });
+
+  it("keeps direct Voice New Done disabled when its selected group returns 404", async () => {
+    const groupId = "not-a-member-group";
+    const api = {
+      workspaceAgents: vi.fn().mockResolvedValue([]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi
+        .fn()
+        .mockResolvedValue([
+          { id: groupId, course_id: courseId, name: "Group" },
+        ]),
+      voiceProfiles: vi
+        .fn()
+        .mockRejectedValue(
+          new PlatformApiError(404, "workspace_member_required"),
+        ),
+      enrollVoice: vi.fn(),
+      createVoicePreview: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace
+            initialGroupId={groupId}
+            initialMode="new"
+          />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const sampleInput = await screen.findByLabelText(
+      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
+    );
+    const voices = sampleInput.closest("section") as HTMLElement;
+    await waitFor(() =>
+      expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
+    );
+    await screen.findByRole("alert");
+    expect(
+      (
+        within(screen.getByRole("navigation")).getByRole("button", {
+          name: "Done",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+    expect(
+      within(voices).getByRole("combobox", { name: "Group workspace" }),
+    ).toBeTruthy();
+  });
+
   it("lets the owner share a private source and personal Agent from the workbench", async () => {
     let agent = personalAgent();
     let document = privateDocument();
@@ -198,6 +512,18 @@ describe("W1 teacher personal workspace", () => {
       version: vi.fn().mockImplementation(async () => currentDraft),
       agent: vi.fn().mockImplementation(async () => agent),
       workspaceDocuments: vi.fn().mockImplementation(async () => [document]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockImplementation(async () => ({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      })),
+      replaceAgentKnowledgeSets: vi.fn(async (_id, body) => ({
+        agent_id: agent.id,
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      })),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
       ragPreview: vi.fn().mockResolvedValue({
         version_id: versionId,
         total_char_count: document.char_count,
@@ -237,7 +563,23 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    await screen.findByRole("heading", { name: "Who can use this Agent" });
+    const visibilityHeading = await screen.findByRole("heading", {
+      name: "Who can use this Agent",
+    });
+    const visibilitySection = visibilityHeading.closest(
+      "section",
+    ) as HTMLElement;
+    expect(
+      within(visibilitySection).getByText("Private", { exact: true }),
+    ).toBeTruthy();
+    expect(visibilityHeading.getAttribute("data-ui-guide")).toBe(
+      "agent.visibility",
+    );
+    expect(
+      within(visibilitySection).queryByText(
+        "Shareable; students need an explicit grant",
+      ),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Make Agent public" }));
     await waitFor(() =>
       expect(api.updateAgentMetadata).toHaveBeenCalledWith(

@@ -131,6 +131,11 @@ describe("student and teacher snapshot selection", () => {
     const view = render(<TeacherAgentDetail agentId="agent-id" />);
     await screen.findByRole("heading", { name: "version-one" });
     expect(screen.getByRole("button", { name: "Download RAG" })).toBeTruthy();
+    const filename = screen.getByText("One.md");
+    expect(filename.getAttribute("title")).toBeNull();
+    expect(filename.getAttribute("data-ui-guide")).toBe("knowledge.filename");
+    expect(filename.getAttribute("data-ui-guide-text")).toBe("One.md");
+    expect((filename as HTMLElement).tabIndex).toBe(0);
     fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
     await screen.findByRole("heading", { name: `${first} one` });
     expect(screen.queryByRole("heading", { name: `${first} two` })).toBeNull();

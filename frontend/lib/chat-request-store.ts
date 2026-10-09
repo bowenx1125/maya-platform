@@ -120,13 +120,6 @@ export function settleChatRequest(
   emit();
 }
 
-export function observeChatRequest(
-  requestId: string,
-  scopeKey?: string | null,
-) {
-  observeChatRequestOnTurn(requestId, requestId, scopeKey);
-}
-
 export function observeChatRequestOnTurn(
   requestId: string,
   observedTurnId: string,

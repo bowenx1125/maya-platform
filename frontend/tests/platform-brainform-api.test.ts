@@ -143,4 +143,109 @@ describe("PlatformApi Brainform actions", () => {
       "X-CSRF-Token": "csrf-token",
     });
   });
+
+  it("retains canonical Markdown sequence CAS, asset history, Graph, and generation linkage APIs", async () => {
+    const generatedRow = {
+      agent_id: "agent-1",
+      canonical_set_id: "set-1",
+      source_agent_display_name: "Socrates",
+      knowledge_display_name: "Socrates Knowledge",
+      generation_job_id: "job-1",
+      can_read: true,
+      can_edit: true,
+      version_seq: 4,
+      content_hash: "a".repeat(64),
+      generation_state: "completed",
+      safe_error_code: null,
+    };
+    const markdown = {
+      audience: "full",
+      agent_id: "agent-1",
+      canonical_set_id: "set-1",
+      source_agent_display_name: "Socrates",
+      knowledge_display_name: "Socrates Knowledge",
+      version_seq: 4,
+      content_hash: "a".repeat(64),
+      markdown: "# Canonical Knowledge",
+      projection_available: true,
+      can_read: true,
+      can_edit: true,
+      created_at: "2026-10-07T00:00:00Z",
+    };
+    const assetVersions = {
+      asset_id: "asset-1",
+      audience: "student",
+      versions: [],
+    };
+    const graph = {
+      set_id: "set-1",
+      nodes: [],
+      edges: [],
+    };
+    const savedMarkdown = {
+      ...markdown,
+      version_seq: 5,
+      markdown: "# Updated",
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([generatedRow]), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(markdown), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(assetVersions), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(graph), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(savedMarkdown), { status: 200 }),
+      );
+    const api = new PlatformApi({
+      baseUrl: "http://maya.test/api/v1",
+      csrfToken: "csrf-token",
+    });
+    const generationRows = await api.brainformKnowledge("course-1");
+
+    expect(generationRows[0]).toMatchObject({
+      canonical_set_id: "set-1",
+      generation_job_id: "job-1",
+    });
+    expect(await api.knowledgeMarkdown("set-1")).toMatchObject({
+      canonical_set_id: "set-1",
+      version_seq: 4,
+    });
+    expect(await api.knowledgeSetAssetVersions("asset-1")).toEqual(
+      assetVersions,
+    );
+    expect(await api.knowledgeSetGraph("set-1")).toEqual(graph);
+
+    const idempotency = createIdempotencyHandle();
+    const idempotencyKey = idempotency.key;
+    expect(
+      await api.saveKnowledgeMarkdown(
+        "set-1",
+        { expected_version_seq: 4, markdown: "# Updated" },
+        { idempotency },
+      ),
+    ).toMatchObject({ canonical_set_id: "set-1", version_seq: 5 });
+
+    expect(new URL(String(fetchMock.mock.calls[4]?.[0])).pathname).toBe(
+      "/api/v1/knowledge-sets/set-1/markdown",
+    );
+    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({
+      method: "PUT",
+      headers: {
+        "Idempotency-Key": idempotencyKey,
+        "X-CSRF-Token": "csrf-token",
+      },
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body))).toEqual({
+      expected_version_seq: 4,
+      markdown: "# Updated",
+    });
+  });
 });

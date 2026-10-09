@@ -12,14 +12,15 @@ import {
 import type { ReactNode } from "react";
 
 import {
-  PlatformApiError,
   isAmbiguousMutationFailure,
   isConflict,
   type IdempotencyHandle,
+  type AgentKnowledgeSets,
   type AgentDetail,
   type AgentVersion,
   type AvatarTemplate,
   type KnowledgeDocument,
+  type KnowledgeSetSummary,
   type KnowledgeSnapshot,
   type RagPreview,
   type VoiceProfile,
@@ -228,6 +229,16 @@ export function AgentWorkbench({
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+  const [knowledgeSets, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
+  const [agentKnowledge, setAgentKnowledge] =
+    useState<AgentKnowledgeSets | null>(null);
+  const [selectedKnowledgeSetIds, setSelectedKnowledgeSetIds] = useState<
+    string[]
+  >([]);
+  const [knowledgeBindingSaving, setKnowledgeBindingSaving] = useState(false);
+  const [pendingKnowledgeSetIds, setPendingKnowledgeSetIds] = useState<
+    string[] | null
+  >(null);
   const [preview, setPreview] = useState<RagPreview | null>(null);
   const [avatarTemplates, setAvatarTemplates] = useState<AvatarTemplate[]>([]);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
@@ -248,11 +259,9 @@ export function AgentWorkbench({
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const mutationStore = useIdempotencyStore();
   const [retryAction, setRetryAction] = useState<
-    "uploadKnowledge" | "publish" | null
+    "uploadKnowledge" | "bindKnowledge" | "publish" | null
   >(null);
   const [generationSourcePrompt, setGenerationSourcePrompt] = useState(false);
-  const [providerConfirmationRequired, setProviderConfirmationRequired] =
-    useState(false);
   const [pendingKnowledgeUpload, setPendingKnowledgeUpload] = useState<{
     file: File;
     signature: string;
@@ -262,6 +271,7 @@ export function AgentWorkbench({
   >(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
   const uploadIntent = `${workbenchScope}:upload-knowledge:${versionId}`;
+  const knowledgeBindingIntent = `${workbenchScope}:knowledge-sets:${agent?.id ?? versionId}`;
   const publishIntent = `${workbenchScope}:publish-agent-version:${versionId}`;
 
   async function refreshKnowledgePreview() {
@@ -307,6 +317,8 @@ export function AgentWorkbench({
           nextPreview,
           nextAvatarTemplates,
           nextVoiceProfiles,
+          nextKnowledgeSets,
+          nextAgentKnowledge,
         ] = await Promise.all([
           nextAgent.group_id
             ? api.knowledge(nextAgent.group_id)
@@ -316,11 +328,24 @@ export function AgentWorkbench({
           nextAgent.group_id
             ? api.voiceProfiles(nextAgent.group_id)
             : Promise.resolve([]),
+          api.knowledgeSets(nextAgent.course_id),
+          api.agentKnowledgeSets(nextAgent.id),
         ]);
         if (!isCurrentScope(requestScope)) return;
         setVersion(nextVersion);
         setAgent(nextAgent);
         setDocuments(nextDocuments);
+        setKnowledgeSets(
+          Array.from(
+            new Map(
+              [...nextKnowledgeSets, ...nextAgentKnowledge.sets].map((set) => [
+                set.id,
+                set,
+              ]),
+            ).values(),
+          ),
+        );
+        setAgentKnowledge(nextAgentKnowledge);
         setPreview(nextPreview);
         setKnowledgePreviewRefreshFailed(false);
         setAvatarTemplates(nextAvatarTemplates);
@@ -334,6 +359,10 @@ export function AgentWorkbench({
               (document) => document.id,
             ),
           );
+          setSelectedKnowledgeSetIds(
+            nextAgentKnowledge.sets.map((set) => set.id),
+          );
+          setPendingKnowledgeSetIds(null);
           setConflict(false);
         }
       } catch (cause) {
@@ -430,7 +459,6 @@ export function AgentWorkbench({
     abandonPublishIntent();
     setSaving(true);
     setError(null);
-    setProviderConfirmationRequired(false);
     setNotice(null);
     setConflict(false);
     try {
@@ -529,6 +557,53 @@ export function AgentWorkbench({
       }
     } finally {
       if (isCurrentScope(requestScope)) setSaving(false);
+    }
+  }
+
+  async function saveKnowledgeSetSelection(nextSetIds: string[]) {
+    const requestScope = workbenchScope;
+    if (!agentKnowledge || knowledgeBindingSaving) return;
+    setSelectedKnowledgeSetIds(nextSetIds);
+    setPendingKnowledgeSetIds(nextSetIds);
+    setKnowledgeBindingSaving(true);
+    setError(null);
+    setNotice(null);
+    const handle = mutationStore.handleFor(knowledgeBindingIntent);
+    try {
+      const next = await api.replaceAgentKnowledgeSets(
+        agentKnowledge.agent_id,
+        {
+          expected_agent_metadata_revision:
+            agentKnowledge.agent_metadata_revision,
+          set_ids: nextSetIds,
+        },
+        { idempotency: handle },
+      );
+      if (!isCurrentScope(requestScope)) return;
+      mutationStore.finish(knowledgeBindingIntent, handle);
+      setAgentKnowledge(next);
+      setAgent((current) =>
+        current
+          ? { ...current, metadata_revision: next.agent_metadata_revision }
+          : current,
+      );
+      setSelectedKnowledgeSetIds(next.sets.map((set) => set.id));
+      setPendingKnowledgeSetIds(null);
+      setRetryAction(null);
+      setNotice("knowledgeBindingsUpdated");
+    } catch (cause) {
+      if (!isCurrentScope(requestScope)) return;
+      if (isAmbiguousMutationFailure(cause)) {
+        setRetryAction("bindKnowledge");
+      } else {
+        mutationStore.abandon(knowledgeBindingIntent, handle);
+        setRetryAction(null);
+        setPendingKnowledgeSetIds(null);
+        setSelectedKnowledgeSetIds(agentKnowledge.sets.map((set) => set.id));
+      }
+      setError(cause);
+    } finally {
+      if (isCurrentScope(requestScope)) setKnowledgeBindingSaving(false);
     }
   }
 
@@ -648,6 +723,14 @@ export function AgentWorkbench({
       });
       if (!isCurrentScope(requestScope)) return;
       setAgent(updatedAgent);
+      setAgentKnowledge((current) =>
+        current
+          ? {
+              ...current,
+              agent_metadata_revision: updatedAgent.metadata_revision,
+            }
+          : current,
+      );
       const nextVersion = await api.version(versionId);
       if (!isCurrentScope(requestScope)) return;
       setVersion(nextVersion);
@@ -683,7 +766,6 @@ export function AgentWorkbench({
     if (!retry) abandonUploadIntent();
     setSaving(true);
     setError(null);
-    setProviderConfirmationRequired(false);
     setNotice(null);
     const handle = mutationStore.handleFor(publishIntent);
     try {
@@ -716,10 +798,6 @@ export function AgentWorkbench({
       );
     } catch (cause) {
       if (!isCurrentScope(requestScope)) return;
-      setProviderConfirmationRequired(
-        cause instanceof PlatformApiError &&
-          cause.code === "provider_confirmation_required",
-      );
       if (isConflict(cause)) setConflict(true);
       if (isAmbiguousMutationFailure(cause)) {
         setRetryAction("publish");
@@ -757,26 +835,16 @@ export function AgentWorkbench({
             onRetry={
               retryAction === "uploadKnowledge" && pendingKnowledgeUpload
                 ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
-                : retryAction === "publish"
-                  ? () => {
-                      void publish(true);
-                    }
-                  : () => void load(true)
+                : retryAction === "bindKnowledge" && pendingKnowledgeSetIds
+                  ? () => void saveKnowledgeSetSelection(pendingKnowledgeSetIds)
+                  : retryAction === "publish"
+                    ? () => {
+                        void publish(true);
+                      }
+                    : () => void load(true)
             }
           />
         </>
-      ) : null}
-      {providerConfirmationRequired ? (
-        <div className="notice notice-warning" role="status">
-          <strong>{t("providerConfirmationNeeded")}</strong>
-
-          <Link
-            className="text-link"
-            href={`/teacher/provider-approvals/agent-versions/${currentVersion.id}`}
-          >
-            {t("openProviderDisclosure")}
-          </Link>
-        </div>
       ) : null}
       {generationSourcePrompt ? (
         <div className="notice notice-warning" role="alert">
@@ -903,8 +971,8 @@ export function AgentWorkbench({
             </SectionCard>
           ) : null}
           <SectionCard
-            title={t("evidenceSet")}
-            guide="agent.evidence"
+            title={t("brainform")}
+            guide="agent.brainform"
             action={
               <label
                 className="secondary-action file-button"
@@ -925,125 +993,191 @@ export function AgentWorkbench({
               </label>
             }
           >
-            <p id="knowledge-import-help" className="muted-copy">
-              {t("knowledgeImportFormats")}
-            </p>
-            {saving && pendingKnowledgeUpload ? (
-              <p className="muted-copy" role="status" aria-live="polite">
-                <span className="spinner" aria-hidden="true" />
-                {t(
-                  /\.(pdf|docx)$/i.test(pendingKnowledgeUpload.file.name)
-                    ? "knowledgeImportPending"
-                    : "knowledgeUploadPending",
-                )}
+            <div className="brainform-source-group">
+              <h3>{t("rag")}</h3>
+              <p id="knowledge-import-help" className="muted-copy">
+                {t("knowledgeImportFormats")}
               </p>
-            ) : null}
-            {knowledgePreviewRefreshing ? (
-              <p className="muted-copy" role="status" aria-live="polite">
-                <span className="spinner" aria-hidden="true" />
-                {t("knowledgePreviewRefreshing")}
-              </p>
-            ) : null}
-            {knowledgeUploadError && error === knowledgeUploadError ? (
-              <ErrorNotice
-                error={knowledgeUploadError}
-                onRetry={
-                  retryAction === "uploadKnowledge" && pendingKnowledgeUpload
-                    ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
-                    : undefined
-                }
-              />
-            ) : null}
-            {knowledgePreviewRefreshFailed ? (
-              <div className="notice notice-warning" role="alert">
-                <strong>{t("knowledgePreviewRefreshFailed")}</strong>
-                <button
-                  className="inline-button"
-                  type="button"
-                  disabled={saving || knowledgePreviewRefreshing}
-                  onClick={() => void refreshKnowledgePreview()}
-                >
-                  {t("retry")}
-                </button>
-              </div>
-            ) : null}
-            {documents.length === 0 ? (
-              <p className="muted-copy">{t("noGroupMarkdown")}</p>
-            ) : (
-              <div className="document-list">
-                {documents.map((document) => (
-                  <div
-                    className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
-                    key={document.id}
+              {saving && pendingKnowledgeUpload ? (
+                <p className="muted-copy" role="status" aria-live="polite">
+                  <span className="spinner" aria-hidden="true" />
+                  {t(
+                    /\.(pdf|docx)$/i.test(pendingKnowledgeUpload.file.name)
+                      ? "knowledgeImportPending"
+                      : "knowledgeUploadPending",
+                  )}
+                </p>
+              ) : null}
+              {knowledgePreviewRefreshing ? (
+                <p className="muted-copy" role="status" aria-live="polite">
+                  <span className="spinner" aria-hidden="true" />
+                  {t("knowledgePreviewRefreshing")}
+                </p>
+              ) : null}
+              {knowledgeUploadError && error === knowledgeUploadError ? (
+                <ErrorNotice
+                  error={knowledgeUploadError}
+                  onRetry={
+                    retryAction === "uploadKnowledge" && pendingKnowledgeUpload
+                      ? () => void uploadKnowledge(pendingKnowledgeUpload.file)
+                      : undefined
+                  }
+                />
+              ) : null}
+              {knowledgePreviewRefreshFailed ? (
+                <div className="notice notice-warning" role="alert">
+                  <strong>{t("knowledgePreviewRefreshFailed")}</strong>
+                  <button
+                    className="inline-button"
+                    type="button"
+                    disabled={saving || knowledgePreviewRefreshing}
+                    onClick={() => void refreshKnowledgePreview()}
                   >
-                    <label className="document-select">
+                    {t("retry")}
+                  </button>
+                </div>
+              ) : null}
+              {documents.length === 0 ? (
+                <p className="muted-copy">{t("noGroupMarkdown")}</p>
+              ) : (
+                <div className="document-list">
+                  {documents.map((document) => (
+                    <div
+                      className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}
+                      key={document.id}
+                    >
+                      <label className="document-select">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocumentIds.includes(document.id)}
+                          disabled={
+                            saving ||
+                            knowledgePreviewRefreshing ||
+                            document.workspace_state === "hidden"
+                          }
+                          onChange={(event) =>
+                            void toggleDocument(
+                              document.id,
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        <span className="document-main">
+                          <strong>{document.source_filename}</strong>
+                          <small>
+                            {document.char_count.toLocaleString()}{" "}
+                            {t("characters")} ·{" "}
+                            {document.workspace_state === "hidden"
+                              ? t("hiddenWorkspace")
+                              : document.visibility === "public"
+                                ? t("publicVisibility")
+                                : t("privateVisibility")}
+                          </small>
+                        </span>
+                      </label>
+                      <div className="row-actions">
+                        <StatusBadge
+                          status={document.index_status}
+                          tone={
+                            document.index_status === "ready"
+                              ? "good"
+                              : document.index_status === "failed"
+                                ? "bad"
+                                : "warn"
+                          }
+                        />
+                        {document.can_manage_visibility ? (
+                          <button
+                            className="inline-button"
+                            type="button"
+                            disabled={
+                              saving || visibilityBusyDocumentId !== null
+                            }
+                            aria-label={`${document.visibility === "private" ? t("shareSource") : t("makeSourcePrivate")}: ${document.source_filename}`}
+                            onClick={() =>
+                              void updateSourceVisibility(document)
+                            }
+                          >
+                            {visibilityBusyDocumentId === document.id
+                              ? t("working")
+                              : document.visibility === "private"
+                                ? t("shareSource")
+                                : t("makeSourcePrivate")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div
+              className="brainform-source-group"
+              data-ui-guide="agent.knowledgeSets"
+            >
+              <h3>{t("knowledge")}</h3>
+              {knowledgeBindingSaving ? (
+                <p className="muted-copy" role="status" aria-live="polite">
+                  <span className="spinner" aria-hidden="true" />
+                  {t("saving")}
+                </p>
+              ) : null}
+              {knowledgeSets.length === 0 ? (
+                <p className="muted-copy">{t("noKnowledgeSets")}</p>
+              ) : (
+                <div className="document-list">
+                  {knowledgeSets.map((set) => (
+                    <label
+                      className="document-row document-select"
+                      key={set.id}
+                    >
                       <input
                         type="checkbox"
-                        checked={selectedDocumentIds.includes(document.id)}
+                        checked={selectedKnowledgeSetIds.includes(set.id)}
                         disabled={
                           saving ||
-                          knowledgePreviewRefreshing ||
-                          document.workspace_state === "hidden"
+                          knowledgeBindingSaving ||
+                          retryAction === "bindKnowledge"
                         }
-                        onChange={(event) =>
-                          void toggleDocument(document.id, event.target.checked)
-                        }
+                        onChange={(event) => {
+                          const nextSetIds = event.target.checked
+                            ? [...selectedKnowledgeSetIds, set.id]
+                            : selectedKnowledgeSetIds.filter(
+                                (id) => id !== set.id,
+                              );
+                          void saveKnowledgeSetSelection(nextSetIds);
+                        }}
                       />
                       <span className="document-main">
-                        <strong>{document.source_filename}</strong>
+                        <strong>{set.display_name}</strong>
                         <small>
-                          {document.char_count.toLocaleString()}{" "}
-                          {t("characters")} ·{" "}
-                          {document.workspace_state === "hidden"
-                            ? t("hiddenWorkspace")
-                            : document.visibility === "public"
-                              ? t("publicVisibility")
-                              : t("privateVisibility")}
+                          {set.asset_count.toLocaleString()}{" "}
+                          {t("knowledgeAssets")}
                         </small>
                       </span>
                     </label>
-                    <div className="row-actions">
-                      <StatusBadge
-                        status={document.index_status}
-                        tone={
-                          document.index_status === "ready"
-                            ? "good"
-                            : document.index_status === "failed"
-                              ? "bad"
-                              : "warn"
-                        }
-                      />
-                      {document.can_manage_visibility ? (
-                        <button
-                          className="inline-button"
-                          type="button"
-                          disabled={saving || visibilityBusyDocumentId !== null}
-                          aria-label={`${document.visibility === "private" ? t("shareSource") : t("makeSourcePrivate")}: ${document.source_filename}`}
-                          onClick={() => void updateSourceVisibility(document)}
-                        >
-                          {visibilityBusyDocumentId === document.id
-                            ? t("working")
-                            : document.visibility === "private"
-                              ? t("shareSource")
-                              : t("makeSourcePrivate")}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+              {agentKnowledge?.sets.length ? (
+                <Link
+                  className="text-link"
+                  href={`${agent.ownership_scope === "personal" ? "/teacher/knowledge" : "/student/knowledge"}?agent_id=${encodeURIComponent(agent.id)}`}
+                >
+                  {t("openKnowledge")}
+                </Link>
+              ) : null}
+            </div>
           </SectionCard>
         </div>
         <aside className="workbench-side">
           {agent.ownership_scope === "personal" ? (
-            <SectionCard title={t("agentVisibility")}>
+            <SectionCard title={t("agentVisibility")} guide="agent.visibility">
               <div className="stack-form">
-                <p className="muted-copy">{t("personalVisibilityLede")}</p>
                 <strong>
                   {agent.visibility === "private"
-                    ? t("privateVisibility")
-                    : t("personalPublicVisibility")}
+                    ? t("privateOption")
+                    : t("publicOption")}
                 </strong>
                 <button
                   className="secondary-action"

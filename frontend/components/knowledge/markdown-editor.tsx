@@ -1,263 +1,84 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import { useT } from "../locale";
 
-import type { KnowledgeDocument } from "../../lib/api";
-import { localizeError } from "../../lib/i18n";
-import { useLocale, useT } from "../locale";
-import { PageAction } from "../page-action";
-
-/** A narrow editable view with the authoritative replacement CAS fields. */
-export type EditableKnowledgeDocument = Pick<
-  KnowledgeDocument,
-  | "id"
-  | "source_filename"
-  | "char_count"
-  | "workspace_state"
-  | "index_status"
-  | "content_hash"
-  | "index_revision"
->;
-
-export type KnowledgeReplacementRequest = {
-  documentId: string;
-  file: File;
-  expectedContentHash: string;
-  expectedIndexRevision: number;
-};
-
-export type MarkdownEditorProps = {
-  /** Present for copy-on-write edit mode; omitted for a library create. */
-  document?: EditableKnowledgeDocument | null;
-  initialFilename?: string;
-  initialContent?: string;
-  expectedContentHash?: string;
-  expectedIndexRevision?: number;
-  disabled?: boolean;
-  /** Parent-owned callback that sends the generated File to the safe API. */
-  onCreate?: (file: File) => Promise<unknown> | unknown;
-  /** Parent-owned callback that sends the immutable replacement request. */
-  onReplace?: (
-    request: KnowledgeReplacementRequest,
-  ) => Promise<unknown> | unknown;
-  onCancel?: () => void;
-  onChange?: () => void;
-};
-
-/**
- * Build the exact Markdown File used by both create and replacement flows.
- * Keeping this helper outside the component makes the upload pipeline easy to
- * reuse from a group library page and an Agent workbench without duplicating
- * file validation or silently enabling a draft relation.
- */
 export function buildMarkdownFile(filename: string, content: string): File {
   return new File([content], filename, { type: "text/markdown" });
 }
 
-/**
- * Small provider-neutral Markdown editor.
- *
- * The component intentionally knows nothing about PlatformApi, idempotency,
- * Agent versions, or document selection.  `onCreate` and `onReplace` remain
- * parent-owned seams, so a new library file can be persisted through the
- * existing secure multipart upload path without being enabled automatically.
- */
-export function MarkdownEditor({
-  document,
-  initialFilename,
-  initialContent = "",
-  expectedContentHash,
-  expectedIndexRevision,
-  disabled = false,
-  onCreate,
-  onReplace,
-  onCancel,
+export function downloadKnowledgeMarkdown(content: string, filename: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export function KnowledgeFilenameField({
+  value,
   onChange,
-}: MarkdownEditorProps) {
+  disabled = false,
+  readOnly = false,
+  className,
+  describedBy,
+  invalid = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  className?: string;
+  describedBy?: string;
+  invalid?: boolean;
+}) {
   const t = useT();
-  const { locale } = useLocale();
-  const formId = useId();
-  const replacing = Boolean(document);
-  const [filename, setFilename] = useState(
-    document?.source_filename ?? initialFilename ?? "notes.md",
-  );
-  const [content, setContent] = useState(initialContent);
-  const [submitting, setSubmitting] = useState(false);
-  const [importingFile, setImportingFile] = useState(false);
-  const [importingConversion, setImportingConversion] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const lastImportedFile = useRef<string | null>(null);
-
-  const trimmedFilename = filename.trim();
-  const validFilename =
-    trimmedFilename.length > 0 && trimmedFilename.toLowerCase().endsWith(".md");
-  const validContent = content.trim().length > 0;
-  const canSubmit =
-    !disabled &&
-    !submitting &&
-    validFilename &&
-    validContent &&
-    (replacing ? Boolean(onReplace) : Boolean(onCreate));
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (disabled || submitting) return;
-    if (!validFilename || !validContent) {
-      setError(t("knowledgeEditorInvalid"));
-      return;
-    }
-    if (replacing && !onReplace) {
-      setError(t("knowledgeEditorNoReplaceHandler"));
-      return;
-    }
-    if (!replacing && !onCreate) {
-      setError(t("knowledgeEditorNoCreateHandler"));
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      const file = buildMarkdownFile(trimmedFilename, content);
-      if (replacing && document && onReplace) {
-        await onReplace({
-          documentId: document.id,
-          file,
-          expectedContentHash: expectedContentHash ?? document.content_hash,
-          expectedIndexRevision:
-            expectedIndexRevision ?? document.index_revision,
-        });
-      } else if (!replacing && onCreate) {
-        await onCreate(file);
-      }
-    } catch (cause) {
-      setError(localizeError(cause, locale));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function importFile(file: File) {
-    if (disabled || submitting) return;
-    const signature = `${file.name}:${file.size}:${file.lastModified}`;
-    if (lastImportedFile.current !== signature) {
-      onChange?.();
-      lastImportedFile.current = signature;
-    }
-    setSubmitting(true);
-    setImportingFile(true);
-    setImportingConversion(/\.(pdf|docx)$/i.test(file.name));
-    setError(null);
-    try {
-      if (replacing && document && onReplace) {
-        await onReplace({
-          documentId: document.id,
-          file,
-          expectedContentHash: expectedContentHash ?? document.content_hash,
-          expectedIndexRevision:
-            expectedIndexRevision ?? document.index_revision,
-        });
-      } else if (!replacing && onCreate) {
-        await onCreate(file);
-      }
-    } catch (cause) {
-      setError(localizeError(cause, locale));
-    } finally {
-      setSubmitting(false);
-      setImportingFile(false);
-      setImportingConversion(false);
-    }
-  }
-
   return (
-    <form
-      id={formId}
-      className="stack-form"
-      onSubmit={submit}
-      data-mode={replacing ? "replace" : "create"}
-    >
-      {onCreate || onReplace ? (
-        <div className="stack-form">
-          <label
-            className="secondary-action file-button"
-            data-ui-guide="knowledge.importFile"
-          >
-            {t("knowledgeImportFile")}
-            <input
-              type="file"
-              accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              aria-describedby="knowledge-import-formats"
-              disabled={disabled || submitting}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                if (file) void importFile(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <p id="knowledge-import-formats" className="muted-copy">
-            {t("knowledgeImportFormats")}
-          </p>
-          {submitting && importingFile ? (
-            <p className="muted-copy" role="status" aria-live="polite">
-              <span className="spinner" aria-hidden="true" />
-              {t(
-                importingConversion
-                  ? "knowledgeImportPending"
-                  : "knowledgeUploadPending",
-              )}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      <label>
-        <span>{t("knowledgeFilename")}</span>
-        <input
-          type="text"
-          value={filename}
-          disabled={disabled || submitting}
-          onChange={(event) => {
-            onChange?.();
-            setFilename(event.target.value);
-          }}
-          placeholder={t("knowledgeFilenamePlaceholder")}
-          aria-invalid={filename.length > 0 && !validFilename}
-        />
-      </label>
-      <label>
-        <span>{t("knowledgeContent")}</span>
-        <textarea
-          className="markdown-editor"
-          value={content}
-          disabled={disabled || submitting}
-          onChange={(event) => {
-            onChange?.();
-            setContent(event.target.value);
-          }}
-          aria-label={t("knowledgeContent")}
-          rows={10}
-        />
-      </label>
-      {error ? (
-        <div className="notice notice-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      <div className="button-row">
-        {onCancel ? (
-          <PageAction
-            name="back"
-            disabled={disabled || submitting}
-            onClick={onCancel}
-          />
-        ) : null}
-        <PageAction name="done" form={formId} disabled={!canSubmit} />
-      </div>
-    </form>
+    <label className={className}>
+      <span>{t("knowledgeFilename")}</span>
+      <input
+        type="text"
+        value={value}
+        disabled={disabled}
+        readOnly={readOnly}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={t("knowledgeFilenamePlaceholder")}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+      />
+    </label>
   );
 }
 
-/** Descriptive aliases for callers that prefer a domain-specific component name. */
-export const KnowledgeDocumentEditor = MarkdownEditor;
-export const MarkdownCreateEditor = MarkdownEditor;
+export function KnowledgeMarkdownField({
+  value,
+  onChange,
+  disabled = false,
+  readOnly = false,
+  className,
+  rows = 10,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  className?: string;
+  rows?: number;
+}) {
+  const t = useT();
+  return (
+    <label className={className}>
+      <span>{t("knowledgeContent")}</span>
+      <textarea
+        className="markdown-editor"
+        value={value}
+        disabled={disabled}
+        readOnly={readOnly}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={t("knowledgeContent")}
+        rows={rows}
+      />
+    </label>
+  );
+}

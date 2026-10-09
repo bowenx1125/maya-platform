@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { ReportMarkdown } from "../../report/report-markdown";
-import { IconArrowLeft, IconCheck, IconEdit } from "../../quiet-icons";
+import { IconEdit } from "../../quiet-icons";
 import { SectionCard } from "../../ui";
+import { WorkspaceAction } from "../../workspace-actions";
 import styles from "./ruleset-editor.module.css";
 import sectionStyles from "./create-section.module.css";
 
@@ -67,26 +68,18 @@ export function RulesetEditor({
           </div>
           {editing ? (
             <>
-              <button
-                type="button"
-                className={`${styles.action} ${styles.iconAction}`}
+              <WorkspaceAction
+                name="back"
                 disabled={disabled}
-                aria-label="Back"
-                title="Back"
+                priority={10}
                 onClick={cancel}
-              >
-                <IconArrowLeft />
-              </button>
-              <button
-                type="button"
-                className={`${styles.action} ${styles.iconAction}`}
+              />
+              <WorkspaceAction
+                name="done"
                 disabled={disabled}
-                aria-label="Save"
-                data-ui-guide="debate.rulesetSave"
+                priority={10}
                 onClick={save}
-              >
-                <IconCheck />
-              </button>
+              />
             </>
           ) : (
             <button

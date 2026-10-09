@@ -1,4 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentChat } from "../components/agent-chat";
@@ -21,6 +27,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => `/${state.role}/chat`,
+  useSearchParams: () => new URLSearchParams(window.location.search),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
 
@@ -125,6 +132,7 @@ function expectedFields() {
 describe("published avatar field parity", () => {
   afterEach(() => {
     cleanup();
+    window.history.replaceState(null, "", "/");
     state.role = "student";
   });
 
@@ -132,12 +140,16 @@ describe("published avatar field parity", () => {
     "keeps the published avatar out of %s Chats",
     async (role) => {
       state.role = role;
+      window.history.replaceState(null, "", `/${role}/chat?mode=new`);
       render(
         <LocaleProvider initialLocale="en">
           <AgentChat />
         </LocaleProvider>,
       );
-      await screen.findByRole("combobox", { name: "Agent" });
+      const picker = await screen.findByRole("combobox", { name: "Chat with" });
+      await within(picker).findByRole("option", { name: /Socrates/ });
+      fireEvent.change(picker, { target: { value: "agent:version" } });
+      await screen.findByRole("heading", { level: 2, name: "Socrates" });
       expect(screen.queryByRole("img", { name: /Socrates/i })).toBeNull();
       expect(screen.queryByRole("combobox", { name: "3D model" })).toBeNull();
     },

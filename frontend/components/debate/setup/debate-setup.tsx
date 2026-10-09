@@ -506,7 +506,9 @@ export function TeacherDebateCreate({
   return (
     <div className={styles.pageStack}>
       <PageIntro title={copy(t, "newDebateTitle")} />
-      <PageAction name="back" href="/teacher/debates" disabled={busy} />
+      {!rulesEditing ? (
+        <PageAction name="back" href="/teacher/debates" disabled={busy} />
+      ) : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form
         id="create-debate-form"

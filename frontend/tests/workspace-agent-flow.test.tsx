@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -61,6 +62,9 @@ const api = {
   group: vi.fn(),
   agents: vi.fn(),
   knowledge: vi.fn(),
+  chatAgents: vi.fn().mockResolvedValue([]),
+  knowledgeSets: vi.fn().mockResolvedValue([]),
+  voiceProfiles: vi.fn(),
   updateAgentMetadata: vi.fn(),
 };
 
@@ -72,6 +76,9 @@ describe("Workspace Agent flow", () => {
     api.nextVersion.mockResolvedValue(
       version({ id: "draft-id", state: "draft", version_label: "V1.1" }),
     );
+    api.chatAgents.mockResolvedValue([]);
+    api.knowledgeSets.mockResolvedValue([]);
+    api.voiceProfiles.mockResolvedValue([]);
   });
   afterEach(() => {
     cleanup();
@@ -93,14 +100,12 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(screen.queryByText("Info")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
-    const main = within(screen.getByRole("main"));
+    const nav = within(screen.getByRole("navigation"));
     expect(
-      (await main.findByRole("link", { name: "Back" })).getAttribute("href"),
+      (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
     expect(
-      within(screen.getByRole("navigation")).queryByRole("link", {
-        name: "Back",
-      }),
+      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
@@ -124,6 +129,52 @@ describe("Workspace Agent flow", () => {
     });
   });
 
+  it("registers Teacher personal next-version creation in the left sidebar", async () => {
+    api.agent.mockResolvedValue(
+      agent({
+        ownership_scope: "personal",
+        group_id: null,
+        current_published_version_id: "published-id",
+        current_draft_version_id: null,
+      }),
+    );
+    api.versions.mockResolvedValue([version()]);
+    let finishNextVersion!: (next: AgentVersion) => void;
+    api.nextVersion.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishNextVersion = resolve;
+        }),
+    );
+    render(
+      <AppShell role="teacher">
+        <TeacherAgentDetail agentId="agent-id" />
+      </AppShell>,
+    );
+
+    const navigation = within(screen.getByRole("navigation"));
+    const newAction = await navigation.findByRole("button", { name: "New" });
+    expect(
+      within(screen.getByRole("main")).queryByRole("button", {
+        name: "Create New Version",
+      }),
+    ).toBeNull();
+    fireEvent.click(newAction);
+
+    await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
+    expect((newAction as HTMLButtonElement).disabled).toBe(true);
+    expect(api.nextVersion).toHaveBeenCalledWith(
+      "agent-id",
+      expect.objectContaining({ idempotency: expect.any(Object) }),
+    );
+    await act(async () => {
+      finishNextVersion(
+        version({ id: "next-version", state: "draft", version_label: "V1.1" }),
+      );
+      await Promise.resolve();
+    });
+  });
+
   it("continues an existing next-version draft without making a second one", async () => {
     api.agent.mockResolvedValue(
       agent({ current_draft_version_id: "draft-id" }),
@@ -137,7 +188,10 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    const next = await screen.findByRole("link", { name: "New" });
+    const next = await within(screen.getByRole("navigation")).findByRole(
+      "link",
+      { name: "New" },
+    );
     expect(next.getAttribute("href")).toBe(
       "/student/agent-versions/draft-id/edit",
     );
@@ -163,13 +217,8 @@ describe("Workspace Agent flow", () => {
     );
     const nav = within(screen.getByRole("navigation"));
     expect(
-      (
-        await within(screen.getByRole("main")).findByRole("link", {
-          name: "New",
-        })
-      ).getAttribute("href"),
+      (await nav.findByRole("link", { name: "New" })).getAttribute("href"),
     ).toBe("/student/agent-versions/draft-id/edit");
-    expect(nav.queryByRole("link", { name: "New" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.nextVersion).not.toHaveBeenCalled();
@@ -196,7 +245,9 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByRole("link", { name: "New" });
+    await within(screen.getByRole("navigation")).findByRole("link", {
+      name: "New",
+    });
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 
@@ -263,7 +314,7 @@ describe("Workspace Agent flow", () => {
     fireEvent.click(button);
     expect(api.deleteAgent).not.toHaveBeenCalled();
     fireEvent.click(button);
-    await screen.findByRole("alert");
+    await screen.findByText("Used by a Debate");
     expect(screen.getByRole("link", { name: /Agent/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>

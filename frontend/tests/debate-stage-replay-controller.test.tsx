@@ -959,13 +959,11 @@ describe("waiting generation reconciliation", () => {
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Generating")).toBeTruthy();
-    await waitFor(
-      () =>
-        expect(
-          (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
-            .disabled,
-        ).toBe(false),
-      { timeout: 3000 },
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
     );
     expect(screen.getByText("Waiting")).toBeTruthy();
     expect(refreshSnapshot).toHaveBeenCalledTimes(1);

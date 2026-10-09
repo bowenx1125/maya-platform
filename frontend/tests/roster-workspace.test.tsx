@@ -130,11 +130,11 @@ describe("teacher account management", () => {
     mount(api, "en");
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
-    const main = within(screen.getByRole("main"));
-    expect(main.getByRole("button", { name: "Back" })).toBeTruthy();
-    expect(main.getByRole("button", { name: "Done" })).toBeTruthy();
+    const sidebar = within(screen.getByRole("navigation"));
+    expect(sidebar.getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(sidebar.getByRole("button", { name: "Done" })).toBeTruthy();
     expect(
-      within(screen.getByRole("navigation")).queryByRole("button", {
+      within(screen.getByRole("main")).queryByRole("button", {
         name: "Back",
       }),
     ).toBeNull();

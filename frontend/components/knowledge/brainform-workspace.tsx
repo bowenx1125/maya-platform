@@ -1,11 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +14,7 @@ import {
 import {
   isAmbiguousMutationFailure,
   isConflict,
+  PlatformApiError,
   type BrainformKnowledge,
   type ChatAgent,
   type Group,
@@ -25,6 +26,13 @@ import {
   type TeamSummaryDto,
 } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
+import {
+  buildMarkdownFile,
+  downloadKnowledgeMarkdown,
+  KnowledgeFilenameField,
+  KnowledgeMarkdownField,
+} from "./markdown-editor";
+import { runKnowledgeMutation } from "./knowledge-mutation";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
@@ -33,6 +41,7 @@ import { ReportMarkdown } from "../report/report-markdown";
 import {
   IconArrowRight,
   IconClose,
+  IconDownload,
   IconEdit,
   IconEye,
   IconRefresh,
@@ -55,7 +64,13 @@ type RagDraft = {
   canEdit?: boolean;
 };
 
+type StagedRagFile = { file: File; fingerprint: string };
+
 type KnowledgeDraft = { markdown: string; expectedVersionSeq: number };
+type BrainformKnowledgeAssetRow = BrainformKnowledge & {
+  used_by_agents: string[];
+  agent_ids: string[];
+};
 
 type BrainformMemoryItem = {
   source: MemoryEntrySource;
@@ -75,6 +90,7 @@ type PendingGeneration = {
   documentId: string;
   actionId: string;
 };
+type PendingRagAction = { kind: "hide" | "reindex"; documentId: string };
 
 type KnowledgeGraphEdge = { from: string; to: string };
 type ParsedKnowledgeGraph = {
@@ -293,6 +309,20 @@ function rememberRagDrafts(scope: string, drafts: Record<string, RagDraft>) {
   ragDraftsByScope.set(scope, drafts);
 }
 
+async function fingerprintRagFile(file: File): Promise<string> {
+  const bytes = await file.arrayBuffer();
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
+    return `sha256:${Array.from(digest, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("")}`;
+  }
+  return `bytes:${Array.from(new Uint8Array(bytes), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")}`;
+}
+
 function getKnowledgeDrafts(scope: string): Record<string, KnowledgeDraft> {
   return knowledgeDraftsByScope.get(scope) ?? {};
 }
@@ -360,20 +390,27 @@ export function BrainformWorkspace({
   initialSetId,
   initialCourseId,
   initialJobId,
+  initialGroupId,
+  initialMode,
+  initialDocumentId,
 }: {
   role: BrainformRole;
   initialAgentId?: string;
   initialSetId?: string;
   initialCourseId?: string;
   initialJobId?: string;
+  initialGroupId?: string;
+  initialMode?: string;
+  initialDocumentId?: string;
 }) {
   const { api, identityGeneration, user } = useSession();
+  const [effectiveRole, setEffectiveRole] = useState(role);
   const roleCourseIds = useMemo(
     () =>
       (user?.courses ?? [])
-        .filter((membership) => membership.role === role)
+        .filter((membership) => membership.role === effectiveRole)
         .map((membership) => membership.course_id),
-    [role, user?.courses],
+    [effectiveRole, user?.courses],
   );
   const defaultCourseId =
     (initialCourseId && roleCourseIds.includes(initialCourseId)
@@ -382,29 +419,97 @@ export function BrainformWorkspace({
   const [selectedCourseId, setSelectedCourseId] = useState(
     defaultCourseId ?? "",
   );
+  const [groupContextResolved, setGroupContextResolved] =
+    useState(!initialGroupId);
+  const [groupContextError, setGroupContextError] = useState<unknown>(null);
   const courseId =
     selectedCourseId && roleCourseIds.includes(selectedCourseId)
       ? selectedCourseId
       : (defaultCourseId ?? "");
+
+  useEffect(() => {
+    if (!initialGroupId) {
+      const timer = window.setTimeout(() => {
+        setEffectiveRole(role);
+        setGroupContextResolved(true);
+        setGroupContextError(null);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setGroupContextResolved(false);
+      setGroupContextError(null);
+      void api
+        .group(initialGroupId)
+        .then((group) => {
+          if (!active) return;
+          const member = (user?.groups ?? []).some(
+            (membership) => membership.group_id === initialGroupId,
+          );
+          const groupMemberships = (user?.courses ?? []).filter(
+            (membership) => membership.course_id === group.course_id,
+          );
+          const groupRole = groupMemberships.some(
+            (membership) => membership.role === role,
+          )
+            ? role
+            : role === "student" &&
+                groupMemberships.some(
+                  (membership) => membership.role === "teacher",
+                )
+              ? "teacher"
+              : role;
+          const hasGroupCourseRole = groupMemberships.some(
+            (membership) => membership.role === groupRole,
+          );
+          if (!hasGroupCourseRole || (role === "student" && !member))
+            throw new Error("group scope unavailable");
+          setEffectiveRole(groupRole);
+          setSelectedCourseId(group.course_id);
+          setGroupContextResolved(true);
+        })
+        .catch((cause) => {
+          if (!active) return;
+          setGroupContextError(cause);
+          setGroupContextResolved(true);
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, initialGroupId, role, user?.courses, user?.groups]);
+
+  if (!groupContextResolved) return <LoadingCard />;
+  if (groupContextError) return <ErrorNotice error={groupContextError} />;
   const dataScope = JSON.stringify([
     user?.id ?? null,
-    role,
+    effectiveRole,
     courseId,
+    initialGroupId,
     identityGeneration,
   ]);
 
   return (
     <BrainformWorkspaceBody
       key={dataScope}
-      role={role}
+      role={effectiveRole}
       courseIds={roleCourseIds}
       courseId={courseId}
       onCourseChange={setSelectedCourseId}
       initialAgentId={initialAgentId}
       initialSetId={initialSetId}
       initialJobId={initialJobId}
+      initialGroupId={initialGroupId}
+      initialMode={initialMode}
+      initialDocumentId={initialDocumentId}
       identityScope={dataScope}
-      ragDraftScope={JSON.stringify([user?.id ?? null, role, selectedCourseId])}
+      ragDraftScope={JSON.stringify([
+        user?.id ?? null,
+        effectiveRole,
+        selectedCourseId,
+      ])}
     />
   );
 }
@@ -417,6 +522,9 @@ function BrainformWorkspaceBody({
   initialAgentId,
   initialSetId,
   initialJobId,
+  initialGroupId,
+  initialMode,
+  initialDocumentId,
   identityScope,
   ragDraftScope,
 }: {
@@ -427,11 +535,15 @@ function BrainformWorkspaceBody({
   initialAgentId?: string;
   initialSetId?: string;
   initialJobId?: string;
+  initialGroupId?: string;
+  initialMode?: string;
+  initialDocumentId?: string;
   identityScope: string;
   ragDraftScope: string;
 }) {
   const t = useT();
   const router = useRouter();
+  const pathname = usePathname();
   const { api, user } = useSession();
   const mutationStore = useIdempotencyStore();
   const [courseNames, setCourseNames] = useState<Record<string, string>>({});
@@ -444,10 +556,14 @@ function BrainformWorkspaceBody({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [notice, setNotice] = useState("");
+  const [pendingRagAction, setPendingRagAction] =
+    useState<PendingRagAction | null>(null);
   const [pane, setPane] = useState<Pane | null>(null);
+  const handledUrlMode = useRef("");
   const [ragDrafts, setRagDrafts] = useState<Record<string, RagDraft>>(() =>
     getRagDrafts(ragDraftScope),
   );
+  const [ragFiles, setRagFiles] = useState<Record<string, StagedRagFile>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<KnowledgeMarkdown | null>(null);
   const [markdownDraft, setMarkdownDraft] = useState("");
@@ -465,8 +581,32 @@ function BrainformWorkspaceBody({
   const [renameSetId, setRenameSetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const currentScope = useRef(identityScope);
+  const ragActionPane = useRef<Pane | null>(pane);
+  const ragActionDrafts = useRef(ragDrafts);
+  const ragActionFiles = useRef(ragFiles);
+  const busyKeyRef = useRef(busyKey);
+  const createRagAction = useRef<(draftKey: string) => void>(() => {});
+  const saveRagAction = useRef<(draftKey: string) => void>(() => {});
+  function commitBusy(
+    next: string | null | ((current: string | null) => string | null),
+  ) {
+    const resolved =
+      typeof next === "function" ? next(busyKeyRef.current) : next;
+    busyKeyRef.current = resolved;
+    setBusyKey(resolved);
+  }
+  useLayoutEffect(() => {
+    ragActionPane.current = pane;
+    createRagAction.current = (draftKey) => {
+      void createRag(draftKey);
+    };
+    saveRagAction.current = (draftKey) => {
+      void saveRag(draftKey);
+    };
+  });
   const loadSequence = useRef(0);
   const operationSequence = useRef(0);
+  const fileSelectionSequence = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const initialKnowledgeOpened = useRef(false);
   const initialJobRead = useRef<string | null>(null);
@@ -474,6 +614,41 @@ function BrainformWorkspaceBody({
     scope: string;
     jobs: Record<string, string | null>;
   } | null>(null);
+
+  const syncModeUrl = useCallback(
+    (mode: string | null, documentId?: string) => {
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      if (mode) {
+        params.set("mode", mode);
+        if (documentId) params.set("document_id", documentId);
+        else params.delete("document_id");
+        handledUrlMode.current = `${mode}:${documentId ?? ""}`;
+      } else {
+        params.delete("mode");
+        params.delete("document_id");
+        handledUrlMode.current =
+          handledUrlMode.current ||
+          (initialMode
+            ? `${initialMode}:${initialDocumentId ?? initialSetId ?? ""}`
+            : "closed");
+      }
+      const query = params.toString();
+      router.push(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
+    },
+    [initialDocumentId, initialMode, initialSetId, pathname, router],
+  );
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (new URLSearchParams(window.location.search).has("mode")) return;
+      handledUrlMode.current = "";
+      setPane(null);
+      setMarkdown(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
     currentScope.current = identityScope;
@@ -501,6 +676,19 @@ function BrainformWorkspaceBody({
 
   const loadRagDocuments = useCallback(
     async (activeCourseId: string) => {
+      if (initialGroupId) {
+        if (
+          role === "student" &&
+          !(user?.groups ?? []).some(
+            (membership) => membership.group_id === initialGroupId,
+          )
+        )
+          throw new Error(t("groupNotFound"));
+        const group = await api.group(initialGroupId);
+        if (group.course_id !== activeCourseId)
+          throw new Error(t("groupNotFound"));
+        return api.knowledge(initialGroupId);
+      }
       if (role === "teacher") return api.workspaceDocuments(activeCourseId);
       const joinedGroupIds = [
         ...new Set((user?.groups ?? []).map((group) => group.group_id)),
@@ -524,7 +712,7 @@ function BrainformWorkspaceBody({
       }
       return [...byId.values()];
     },
-    [api, role, user?.groups],
+    [api, initialGroupId, role, t, user?.groups],
   );
 
   const loadGroups = useCallback(
@@ -546,136 +734,161 @@ function BrainformWorkspaceBody({
     [api, role, user?.groups],
   );
 
-  const loadWorkspace = useCallback(async () => {
-    const scope = identityScope;
-    const sequence = ++loadSequence.current;
-    if (!courseId) {
-      setRagDocuments([]);
-      setKnowledgeRows([]);
-      setChatAgents([]);
-      setGroups([]);
-      latestGenerationJobs.current = { scope, jobs: {} };
-      rememberGenerationJobs(scope, {});
-      setGenerationJobs({});
-      setGenerationStatuses({});
-      setLoading(false);
-      setLoadError(null);
-      return;
-    }
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const [
-        courseRows,
-        nextRag,
-        nextKnowledge,
-        nextAgents,
-        nextGroups,
-        nextTeams,
-        nextMayaTeams,
-      ] = await Promise.all([
-        api.courses(),
-        loadRagDocuments(courseId),
-        api.brainformKnowledge(courseId),
-        api.chatAgents(courseId),
-        loadGroups(courseId),
-        typeof api.teams === "function"
-          ? api.teams(courseId).catch(() => [])
-          : Promise.resolve([]),
-        typeof api.mayaTeams === "function"
-          ? api.mayaTeams(courseId).catch(() => [])
-          : Promise.resolve([]),
-      ]);
-      if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
-      const accessibleCourseNames = Object.fromEntries(
-        courseRows
-          .filter((course) => courseIds.includes(course.id))
-          .map((course) => [course.id, course.name]),
-      );
-      setCourseNames(accessibleCourseNames);
-      setRagDocuments(nextRag);
-      setKnowledgeRows(nextKnowledge);
-      setChatAgents(nextAgents);
-      setGroups(nextGroups);
-      setTeams(nextTeams);
-      setMayaTeams(nextMayaTeams);
-      const latestJobs: Record<string, string | null> = {};
-      for (const row of nextKnowledge) {
-        const setId = row.canonical_set_id;
-        if (!Object.prototype.hasOwnProperty.call(latestJobs, setId)) {
-          latestJobs[setId] = null;
-        }
-        if (role === "teacher" && row.can_edit && row.generation_job_id) {
-          latestJobs[setId] = row.generation_job_id;
-        }
-      }
-      latestGenerationJobs.current = { scope, jobs: latestJobs };
-      const restoredJobs = Object.fromEntries(
-        Object.entries(latestJobs).filter(
-          (entry): entry is [string, string] => entry[1] !== null,
-        ),
-      );
-      const previousJobs = getGenerationJobs(scope);
-      const jobsChanged =
-        Object.keys(previousJobs).length !== Object.keys(restoredJobs).length ||
-        Object.entries(restoredJobs).some(
-          ([setId, jobId]) => previousJobs[setId] !== jobId,
-        );
-      if (jobsChanged) {
-        rememberGenerationJobs(scope, restoredJobs);
-      }
-      setGenerationJobs((current) => {
-        const currentEntries = Object.entries(current);
-        return currentEntries.length === Object.keys(restoredJobs).length &&
-          currentEntries.every(
-            ([setId, jobId]) => restoredJobs[setId] === jobId,
-          )
-          ? current
-          : restoredJobs;
-      });
-      setGenerationStatuses((current) => {
-        const retained = Object.entries(current).filter(
-          ([setId, status]) => restoredJobs[setId] === status.job_id,
-        );
-        return retained.length === Object.keys(current).length
-          ? current
-          : Object.fromEntries(retained);
-      });
-      setNotice("");
-    } catch (cause) {
-      if (scopeIsCurrent(scope) && sequence === loadSequence.current) {
-        setLoadError(cause);
-      }
-    } finally {
-      if (scopeIsCurrent(scope) && sequence === loadSequence.current) {
+  const loadWorkspace = useCallback(
+    async (background = false) => {
+      const scope = identityScope;
+      const sequence = ++loadSequence.current;
+      if (!courseId) {
+        setRagDocuments([]);
+        setKnowledgeRows([]);
+        setChatAgents([]);
+        setGroups([]);
+        latestGenerationJobs.current = { scope, jobs: {} };
+        rememberGenerationJobs(scope, {});
+        setGenerationJobs({});
+        setGenerationStatuses({});
         setLoading(false);
+        setLoadError(null);
+        return;
       }
-    }
-  }, [
-    api,
-    courseId,
-    courseIds,
-    identityScope,
-    loadGroups,
-    loadRagDocuments,
-    role,
-    scopeIsCurrent,
-  ]);
+      if (!background) {
+        setLoading(true);
+        setLoadError(null);
+      }
+      try {
+        const [
+          courseRows,
+          nextRag,
+          nextKnowledge,
+          nextAgents,
+          nextGroups,
+          nextTeams,
+          nextMayaTeams,
+        ] = await Promise.all([
+          api.courses(),
+          loadRagDocuments(courseId),
+          api.brainformKnowledge(courseId),
+          api.chatAgents(courseId),
+          loadGroups(courseId),
+          typeof api.teams === "function"
+            ? api.teams(courseId).catch(() => [])
+            : Promise.resolve([]),
+          typeof api.mayaTeams === "function"
+            ? api.mayaTeams(courseId).catch(() => [])
+            : Promise.resolve([]),
+        ]);
+        if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
+        const accessibleCourseNames = Object.fromEntries(
+          courseRows
+            .filter((course) => courseIds.includes(course.id))
+            .map((course) => [course.id, course.name]),
+        );
+        setCourseNames(accessibleCourseNames);
+        setRagDocuments(nextRag);
+        setKnowledgeRows(nextKnowledge);
+        setChatAgents(nextAgents);
+        setGroups(nextGroups);
+        setTeams(nextTeams);
+        setMayaTeams(nextMayaTeams);
+        const latestJobs: Record<string, string | null> = {};
+        for (const row of nextKnowledge) {
+          const setId = row.canonical_set_id;
+          if (!Object.prototype.hasOwnProperty.call(latestJobs, setId)) {
+            latestJobs[setId] = null;
+          }
+          if (role === "teacher" && row.can_edit && row.generation_job_id) {
+            latestJobs[setId] = row.generation_job_id;
+          }
+        }
+        latestGenerationJobs.current = { scope, jobs: latestJobs };
+        const restoredJobs = Object.fromEntries(
+          Object.entries(latestJobs).filter(
+            (entry): entry is [string, string] => entry[1] !== null,
+          ),
+        );
+        const previousJobs = getGenerationJobs(scope);
+        const jobsChanged =
+          Object.keys(previousJobs).length !==
+            Object.keys(restoredJobs).length ||
+          Object.entries(restoredJobs).some(
+            ([setId, jobId]) => previousJobs[setId] !== jobId,
+          );
+        if (jobsChanged) {
+          rememberGenerationJobs(scope, restoredJobs);
+        }
+        setGenerationJobs((current) => {
+          const currentEntries = Object.entries(current);
+          return currentEntries.length === Object.keys(restoredJobs).length &&
+            currentEntries.every(
+              ([setId, jobId]) => restoredJobs[setId] === jobId,
+            )
+            ? current
+            : restoredJobs;
+        });
+        setGenerationStatuses((current) => {
+          const retained = Object.entries(current).filter(
+            ([setId, status]) => restoredJobs[setId] === status.job_id,
+          );
+          return retained.length === Object.keys(current).length
+            ? current
+            : Object.fromEntries(retained);
+        });
+        if (!background) setNotice("");
+      } catch (cause) {
+        if (
+          !background &&
+          scopeIsCurrent(scope) &&
+          sequence === loadSequence.current
+        ) {
+          setLoadError(cause);
+        }
+      } finally {
+        if (scopeIsCurrent(scope) && sequence === loadSequence.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      api,
+      courseId,
+      courseIds,
+      identityScope,
+      loadGroups,
+      loadRagDocuments,
+      role,
+      scopeIsCurrent,
+    ],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadWorkspace(), 0);
     return () => window.clearTimeout(timer);
   }, [loadWorkspace]);
 
+  const generationActive = knowledgeRows.some((row) =>
+    isGenerationActive(row.generation_state),
+  );
+  // Knowledge can also be produced by an Agent's tool outside this page, so
+  // the list keeps refreshing quietly, and quickly while a run is in progress.
   useEffect(() => {
-    if (!knowledgeRows.some((row) => isGenerationActive(row.generation_state)))
-      return;
+    if (!courseId) return;
     const scope = identityScope;
-    const timer = window.setTimeout(() => {
-      if (scopeIsCurrent(scope)) void loadWorkspace();
-    }, 1500);
-    return () => window.clearTimeout(timer);
-  }, [identityScope, knowledgeRows, loadWorkspace, scopeIsCurrent]);
+    const timer = window.setInterval(
+      () => {
+        if (document.visibilityState === "hidden" || !scopeIsCurrent(scope))
+          return;
+        void loadWorkspace(true);
+      },
+      generationActive ? 1500 : 10000,
+    );
+    return () => window.clearInterval(timer);
+  }, [
+    courseId,
+    generationActive,
+    identityScope,
+    loadWorkspace,
+    scopeIsCurrent,
+  ]);
 
   useEffect(() => {
     if (!renameSetId) return;
@@ -684,7 +897,7 @@ function BrainformWorkspaceBody({
   }, [renameSetId]);
 
   useEffect(() => {
-    if (loading || initialKnowledgeOpened.current) return;
+    if (initialMode || loading || initialKnowledgeOpened.current) return;
     const row = initialSetId
       ? knowledgeRows.find((item) => item.canonical_set_id === initialSetId)
       : initialAgentId
@@ -695,7 +908,7 @@ function BrainformWorkspaceBody({
     void openKnowledge(row, "view");
     // Opening is intentionally one-shot for a routed canonical document.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialAgentId, initialSetId, knowledgeRows, loading]);
+  }, [initialAgentId, initialMode, initialSetId, knowledgeRows, loading]);
 
   useEffect(() => {
     if (
@@ -817,82 +1030,180 @@ function BrainformWorkspaceBody({
 
   const closePane = useCallback(() => {
     operationSequence.current += 1;
-    setBusyKey((current) => (current?.startsWith("import:") ? null : current));
+    commitBusy((current) => (current?.startsWith("import:") ? null : current));
     setPane(null);
     setMarkdown(null);
     setNotice("");
-  }, []);
+    syncModeUrl(null);
+  }, [syncModeUrl]);
 
   function saveRagDrafts(next: Record<string, RagDraft>) {
+    ragActionDrafts.current = next;
     rememberRagDrafts(ragDraftScope, next);
     setRagDrafts(next);
   }
 
-  function startNewRag() {
+  function abandonRagDraftMutation(draftKey: string, draft: RagDraft) {
+    if (draft.isNew) {
+      mutationStore.abandon(`brainform-create:${ragDraftScope}:${draftKey}`);
+      return;
+    }
+    if (!draft.documentId) return;
+    if (
+      draft.expectedContentHash &&
+      draft.expectedIndexRevision !== undefined
+    ) {
+      mutationStore.abandon(
+        `brainform-replace:${draft.documentId}:${draft.expectedContentHash}:${draft.expectedIndexRevision}`,
+      );
+    }
+    mutationStore.abandon(
+      `brainform-rename:${draft.documentId}:${draft.originalFilename ?? draft.filename}:${draft.filename.trim()}`,
+    );
+  }
+
+  function sameRagFile(
+    left: StagedRagFile | null | undefined,
+    right: StagedRagFile | null | undefined,
+  ) {
+    if (left === right) return true;
+    return Boolean(
+      left &&
+      right &&
+      left.file.name === right.file.name &&
+      left.file.size === right.file.size &&
+      left.file.type === right.file.type &&
+      left.fingerprint === right.fingerprint,
+    );
+  }
+
+  function updateRagDraft(
+    draftKey: string,
+    next: RagDraft,
+    stagedFile?: StagedRagFile | null,
+  ) {
+    const current = ragActionDrafts.current[draftKey];
+    const currentFile = ragActionFiles.current[draftKey];
+    const nextFile = stagedFile === undefined ? currentFile : stagedFile;
+    if (
+      current &&
+      (current.filename !== next.filename ||
+        current.markdown !== next.markdown ||
+        current.groupId !== next.groupId ||
+        !sameRagFile(currentFile, nextFile))
+    ) {
+      abandonRagDraftMutation(draftKey, current);
+    }
+    saveRagDrafts({ ...ragActionDrafts.current, [draftKey]: next });
+    if (stagedFile !== undefined) {
+      const updated = { ...ragActionFiles.current };
+      if (stagedFile) updated[draftKey] = stagedFile;
+      else delete updated[draftKey];
+      ragActionFiles.current = updated;
+      setRagFiles(updated);
+    }
+  }
+
+  function startNewRag(syncUrl = true) {
     operationSequence.current += 1;
-    setBusyKey((current) => (current?.startsWith("import:") ? null : current));
+    commitBusy((current) => (current?.startsWith("import:") ? null : current));
     const draftKey = `new:${createUuid()}`;
     saveRagDrafts({
-      ...ragDrafts,
+      ...ragActionDrafts.current,
       [draftKey]: {
         filename: "notes.md",
         markdown: "",
         isNew: true,
-        groupId: role === "student" ? groups[0]?.id : undefined,
+        groupId:
+          role === "student"
+            ? initialGroupId &&
+              groups.some((group) => group.id === initialGroupId)
+              ? initialGroupId
+              : groups.length === 1
+                ? groups[0].id
+                : undefined
+            : undefined,
       },
     });
     setPane({ kind: "rag-edit", draftKey });
     setNotice("");
+    if (syncUrl) syncModeUrl("rag-new");
   }
 
   async function importRag(draftKey: string, file: File) {
-    const draft = ragDrafts[draftKey];
-    if (!draft?.isNew || busyKey) return;
-    if (!file.name.toLowerCase().endsWith(".md")) {
+    const draft = ragActionDrafts.current[draftKey];
+    if (
+      !draft ||
+      busyKeyRef.current ||
+      (draft.isNew === false && !draft.canEdit)
+    )
+      return;
+    const extension = file.name.split(".").at(-1)?.toLowerCase();
+    if (!extension || !["md", "pdf", "docx"].includes(extension)) {
       setNotice(t("brainformMarkdownRequired"));
       return;
     }
     const scope = identityScope;
+    const selection = ++fileSelectionSequence.current;
     const sequence = ++operationSequence.current;
-    setBusyKey(`import:${draftKey}`);
+    const selectionIsCurrent = () =>
+      scopeIsCurrent(scope) &&
+      selection === fileSelectionSequence.current &&
+      sequence === operationSequence.current;
+    commitBusy(`import:${draftKey}`);
     setLoadError(null);
     setNotice("");
+    if (extension !== "md") {
+      try {
+        const stagedFile = {
+          file,
+          fingerprint: await fingerprintRagFile(file),
+        };
+        if (!selectionIsCurrent()) return;
+        updateRagDraft(draftKey, { ...draft, filename: file.name }, stagedFile);
+        setNotice(t("brainformRagFileStaged", { filename: file.name }));
+      } catch (cause) {
+        if (selectionIsCurrent()) setLoadError(cause);
+      } finally {
+        if (selectionIsCurrent()) commitBusy(null);
+      }
+      return;
+    }
     try {
       const content = new TextDecoder("utf-8", { fatal: true }).decode(
         await file.arrayBuffer(),
       );
-      if (!scopeIsCurrent(scope) || sequence !== operationSequence.current)
-        return;
+      if (!selectionIsCurrent()) return;
       if (!content.trim()) {
         setNotice(t("brainformMarkdownRequired"));
         return;
       }
-      saveRagDrafts({
-        ...ragDrafts,
-        [draftKey]: { ...draft, filename: file.name, markdown: content },
-      });
+      updateRagDraft(
+        draftKey,
+        { ...draft, filename: file.name, markdown: content },
+        null,
+      );
     } catch {
-      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+      if (selectionIsCurrent()) {
         setNotice(t("brainformMarkdownRequired"));
       }
     } finally {
-      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
-        setBusyKey(null);
-      }
+      if (selectionIsCurrent()) commitBusy(null);
     }
   }
 
-  async function editRag(document: KnowledgeDocument) {
+  async function editRag(document: KnowledgeDocument, syncUrl = true) {
     const draftKey = `document:${document.id}`;
     const existing = ragDrafts[draftKey];
     if (existing) {
       setPane({ kind: "rag-edit", draftKey });
       setNotice("");
+      if (syncUrl) syncModeUrl("rag-edit", document.id);
       return;
     }
     const scope = identityScope;
     const sequence = ++operationSequence.current;
-    setBusyKey(`read:${document.id}`);
+    commitBusy(`read:${document.id}`);
     setNotice("");
     try {
       const downloaded = await api.downloadKnowledge(document.id);
@@ -912,21 +1223,22 @@ function BrainformWorkspaceBody({
       };
       saveRagDrafts({ ...ragDrafts, [draftKey]: draft });
       setPane({ kind: "rag-edit", draftKey });
+      if (syncUrl) syncModeUrl("rag-edit", document.id);
     } catch (cause) {
       if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
         setLoadError(cause);
       }
     } finally {
       if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
-        setBusyKey(null);
+        commitBusy(null);
       }
     }
   }
 
-  async function viewRag(document: KnowledgeDocument) {
+  async function viewRag(document: KnowledgeDocument, syncUrl = true) {
     const scope = identityScope;
     const sequence = ++operationSequence.current;
-    setBusyKey(`view:${document.id}`);
+    commitBusy(`view:${document.id}`);
     setLoadError(null);
     setNotice("");
     try {
@@ -939,69 +1251,78 @@ function BrainformWorkspaceBody({
         markdown: downloaded.content,
         filename: downloaded.filename || document.source_filename,
       });
+      if (syncUrl) syncModeUrl("rag-view", document.id);
     } catch (cause) {
       if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
         setLoadError(cause);
       }
     } finally {
       if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
-        setBusyKey(null);
+        commitBusy(null);
       }
     }
   }
 
   async function createRag(draftKey: string) {
-    const draft = ragDrafts[draftKey];
-    if (!draft || !courseId || busyKey) return;
+    const draft = ragActionDrafts.current[draftKey];
+    if (!draft || !courseId || busyKeyRef.current) return;
     const filename = draft.filename.trim();
-    if (!filename.toLowerCase().endsWith(".md") || !draft.markdown.trim()) {
+    const extension = filename.split(".").at(-1)?.toLowerCase();
+    const stagedFile = ragActionFiles.current[draftKey]?.file;
+    if (
+      !extension ||
+      !["md", "pdf", "docx"].includes(extension) ||
+      (!stagedFile && (extension !== "md" || !draft.markdown.trim()))
+    ) {
       setNotice(t("brainformMarkdownRequired"));
       return;
     }
     const intent = `brainform-create:${ragDraftScope}:${draftKey}`;
-    const handle = mutationStore.handleFor(intent);
-    setBusyKey(draftKey);
+    commitBusy(draftKey);
     setLoadError(null);
     setNotice("");
     try {
-      const file = new File([draft.markdown], filename, {
-        type: "text/markdown",
-      });
-      const mutation =
-        role === "teacher"
-          ? await api.createWorkspaceKnowledge(courseId, file, {
-              idempotency: handle,
-            })
-          : draft.groupId
-            ? await api.createLibraryKnowledge(draft.groupId, file, {
-                idempotency: handle,
-              })
-            : (() => {
-                throw new Error(t("brainformChooseGroup"));
-              })();
-      mutationStore.finish(intent, handle);
+      const file = stagedFile
+        ? new File([stagedFile], filename, { type: stagedFile.type })
+        : buildMarkdownFile(filename, draft.markdown);
+      const mutation = await runKnowledgeMutation(
+        mutationStore,
+        intent,
+        (idempotency) =>
+          role === "teacher"
+            ? api.createWorkspaceKnowledge(courseId, file, { idempotency })
+            : draft.groupId
+              ? api.createLibraryKnowledge(draft.groupId, file, {
+                  idempotency,
+                })
+              : Promise.reject(new Error(t("brainformChooseGroup"))),
+      );
       if (!scopeIsCurrent()) return;
-      const nextDrafts = { ...ragDrafts };
+      const nextDrafts = { ...ragActionDrafts.current };
       delete nextDrafts[draftKey];
       saveRagDrafts(nextDrafts);
+      const nextFiles = { ...ragActionFiles.current };
+      delete nextFiles[draftKey];
+      ragActionFiles.current = nextFiles;
+      setRagFiles(nextFiles);
       setRagDocuments((current) => [...current, mutation.document]);
       setPane(null);
+      syncModeUrl(null);
       setNotice(t("brainformRagSaved"));
       void loadWorkspace();
     } catch (cause) {
       if (isAmbiguousMutationFailure(cause)) {
         setNotice(t("brainformRetrySameSave"));
-      } else {
-        mutationStore.abandon(intent, handle);
       }
       if (scopeIsCurrent()) setLoadError(cause);
     } finally {
-      if (scopeIsCurrent()) setBusyKey(null);
+      if (scopeIsCurrent()) commitBusy(null);
     }
   }
 
   async function saveRag(draftKey: string) {
-    const draft = ragDrafts[draftKey];
+    const draft = ragActionDrafts.current[draftKey];
+    const stagedFile = ragActionFiles.current[draftKey]?.file;
     if (
       !draft ||
       draft.isNew ||
@@ -1009,53 +1330,63 @@ function BrainformWorkspaceBody({
       !draft.canEdit ||
       !draft.expectedContentHash ||
       draft.expectedIndexRevision === undefined ||
-      busyKey
+      busyKeyRef.current
     )
       return;
     const filename = draft.filename.trim();
+    const extension = filename.split(".").at(-1)?.toLowerCase();
     const contentChanged = draft.markdown !== draft.originalMarkdown;
     const filenameChanged = filename !== draft.originalFilename;
-    if (filenameChanged && !filename.toLowerCase().endsWith(".md")) {
+    if (!extension || !["md", "pdf", "docx"].includes(extension)) {
       setNotice(t("brainformMarkdownRequired"));
       return;
     }
-    if (contentChanged && !draft.markdown.trim()) {
+    if (
+      contentChanged &&
+      !stagedFile &&
+      (extension !== "md" || !draft.markdown.trim())
+    ) {
       setNotice(t("brainformMarkdownRequired"));
       return;
     }
-    if (!filenameChanged && !contentChanged) {
+    if (!filenameChanged && !contentChanged && !stagedFile) {
       setNotice(t("brainformRagSaved"));
       return;
     }
-    const renameOnly = filenameChanged && !contentChanged;
+    const renameOnly = filenameChanged && !contentChanged && !stagedFile;
     const intent = renameOnly
       ? `brainform-rename:${draft.documentId}:${draft.originalFilename}:${filename}`
       : `brainform-replace:${draft.documentId}:${draft.expectedContentHash}:${draft.expectedIndexRevision}`;
-    const handle = mutationStore.handleFor(intent);
-    setBusyKey(draftKey);
+    commitBusy(draftKey);
     setLoadError(null);
     setNotice("");
     try {
-      const next = renameOnly
-        ? await api.renameKnowledgeDocument(
-            draft.documentId,
-            {
-              expected_filename: draft.originalFilename ?? draft.filename,
-              filename,
-            },
-            { idempotency: handle },
-          )
-        : await api.replaceKnowledgeDocument(
-            draft.documentId,
-            new File([draft.markdown], filename, { type: "text/markdown" }),
-            draft.expectedContentHash,
-            draft.expectedIndexRevision,
-            { idempotency: handle },
-          );
-      mutationStore.finish(intent, handle);
+      const next = await runKnowledgeMutation(
+        mutationStore,
+        intent,
+        (idempotency) =>
+          renameOnly
+            ? api.renameKnowledgeDocument(
+                draft.documentId as string,
+                {
+                  expected_filename: draft.originalFilename ?? draft.filename,
+                  filename,
+                },
+                { idempotency },
+              )
+            : api.replaceKnowledgeDocument(
+                draft.documentId as string,
+                stagedFile
+                  ? new File([stagedFile], filename, { type: stagedFile.type })
+                  : buildMarkdownFile(filename, draft.markdown),
+                draft.expectedContentHash as string,
+                draft.expectedIndexRevision as number,
+                { idempotency },
+              ),
+      );
       if (!scopeIsCurrent()) return;
       saveRagDrafts({
-        ...ragDrafts,
+        ...ragActionDrafts.current,
         [draftKey]: {
           ...draft,
           filename: next.source_filename,
@@ -1068,28 +1399,136 @@ function BrainformWorkspaceBody({
       setRagDocuments((current) =>
         current.map((document) => (document.id === next.id ? next : document)),
       );
+      const nextFiles = { ...ragActionFiles.current };
+      delete nextFiles[draftKey];
+      ragActionFiles.current = nextFiles;
+      setRagFiles(nextFiles);
       setNotice(renameOnly ? t("brainformRagRenamed") : t("brainformRagSaved"));
       void loadWorkspace();
     } catch (cause) {
       if (isConflict(cause)) {
-        mutationStore.abandon(intent, handle);
-        setNotice(t("brainformRagConflictDraftKept"));
-        void loadWorkspace();
+        await loadWorkspace();
+        if (scopeIsCurrent()) setNotice(t("brainformRagConflictDraftKept"));
       } else if (isAmbiguousMutationFailure(cause)) {
         setNotice(t("brainformRetrySameSave"));
-      } else {
-        mutationStore.abandon(intent, handle);
       }
       if (scopeIsCurrent()) setLoadError(cause);
     } finally {
-      if (scopeIsCurrent()) setBusyKey(null);
+      if (scopeIsCurrent()) commitBusy(null);
     }
   }
 
-  async function openKnowledge(row: BrainformKnowledge, mode: "view" | "edit") {
+  async function downloadRag(document: KnowledgeDocument) {
+    commitBusy(`download:${document.id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const downloaded = await api.downloadKnowledge(document.id);
+      if (!scopeIsCurrent()) return;
+      downloadKnowledgeMarkdown(downloaded.content, downloaded.filename);
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function hideRag(document: KnowledgeDocument, retry = false) {
+    if (!document.can_manage_visibility) return;
+    if (
+      !retry &&
+      !window.confirm(
+        t("brainformRagHideConfirm", {
+          filename: document.source_filename,
+        }),
+      )
+    )
+      return;
+    const intent = `knowledge-hide:${document.id}`;
+    commitBusy(`hide:${document.id}`);
+    setPendingRagAction(null);
+    setLoadError(null);
+    setNotice("");
+    try {
+      await runKnowledgeMutation(mutationStore, intent, (idempotency) =>
+        api.hideKnowledge(document.id, { idempotency }),
+      );
+      if (!scopeIsCurrent()) return;
+      setRagDocuments((current) =>
+        current.filter((item) => item.id !== document.id),
+      );
+      setNotice(t("knowledgeHidden"));
+      void loadWorkspace();
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setPendingRagAction({ kind: "hide", documentId: document.id });
+        setNotice(t("brainformRetrySameSave"));
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function reindexRag(document: KnowledgeDocument, retry = false) {
+    if (!document.can_manage_visibility || document.index_status !== "failed")
+      return;
+    const intent = `knowledge-reindex:${document.id}`;
+    commitBusy(`reindex:${document.id}`);
+    setPendingRagAction(null);
+    setLoadError(null);
+    setNotice("");
+    try {
+      await runKnowledgeMutation(mutationStore, intent, (idempotency) =>
+        api.reindex(document.id, { idempotency }),
+      );
+      if (!scopeIsCurrent()) return;
+      void loadWorkspace();
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setPendingRagAction({ kind: "reindex", documentId: document.id });
+        setNotice(t("brainformRetrySameSave"));
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  function retryRagAction() {
+    if (!pendingRagAction) return;
+    const document = ragDocuments.find(
+      (item) => item.id === pendingRagAction.documentId,
+    );
+    if (!document) return;
+    if (pendingRagAction.kind === "hide") void hideRag(document, true);
+    else void reindexRag(document, true);
+  }
+
+  function beginKnowledgeEdit(current: KnowledgeMarkdown, syncUrl = true) {
+    const setId = current.canonical_set_id;
+    const draft = knowledgeDrafts[setId] ?? {
+      markdown: current.markdown,
+      expectedVersionSeq: current.version_seq,
+    };
+    if (!knowledgeDrafts[setId]) {
+      const nextDrafts = { ...knowledgeDrafts, [setId]: draft };
+      rememberKnowledgeDrafts(identityScope, nextDrafts);
+      setKnowledgeDrafts(nextDrafts);
+    }
+    setMarkdownDraft(draft.markdown);
+    setPane({ kind: "knowledge-edit", documentId: setId });
+    if (syncUrl) syncModeUrl("knowledge-edit", setId);
+  }
+
+  async function openKnowledge(
+    row: BrainformKnowledge,
+    mode: "view" | "edit",
+    syncUrl = true,
+  ) {
     const scope = identityScope;
     const sequence = ++operationSequence.current;
-    setBusyKey(`knowledge:${row.canonical_set_id}`);
+    commitBusy(`knowledge:${row.canonical_set_id}`);
     setLoadError(null);
     setNotice("");
     try {
@@ -1098,34 +1537,132 @@ function BrainformWorkspaceBody({
         return;
       setMarkdown(next);
       if (mode === "edit") {
-        const draft = knowledgeDrafts[row.canonical_set_id] ?? {
-          markdown: next.markdown,
-          expectedVersionSeq: next.version_seq,
-        };
-        if (!knowledgeDrafts[row.canonical_set_id]) {
+        beginKnowledgeEdit(next, syncUrl);
+        return;
+      }
+      setPane({ kind: "knowledge-view", documentId: row.canonical_set_id });
+      if (syncUrl) syncModeUrl("knowledge-view", row.canonical_set_id);
+    } catch (cause) {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        if (
+          mode === "edit" &&
+          row.can_edit &&
+          (row.version_seq == null || row.version_seq === 0) &&
+          cause instanceof PlatformApiError &&
+          cause.status === 404
+        ) {
+          const emptyDraft = {
+            markdown: knowledgeDrafts[row.canonical_set_id]?.markdown ?? "",
+            expectedVersionSeq: 0,
+          };
+          const emptyMarkdown: KnowledgeMarkdown = {
+            audience: "full",
+            agent_id: row.agent_id,
+            canonical_set_id: row.canonical_set_id,
+            source_agent_display_name: row.source_agent_display_name,
+            knowledge_display_name: row.knowledge_display_name,
+            version_seq: 0,
+            content_hash: "",
+            markdown: "",
+            projection_available: true,
+            can_read: true,
+            can_edit: true,
+            created_at: "",
+          };
           const nextDrafts = {
             ...knowledgeDrafts,
-            [row.canonical_set_id]: draft,
+            [row.canonical_set_id]: emptyDraft,
           };
           rememberKnowledgeDrafts(identityScope, nextDrafts);
           setKnowledgeDrafts(nextDrafts);
+          setMarkdown(emptyMarkdown);
+          setMarkdownDraft(emptyDraft.markdown);
+          setPane({
+            kind: "knowledge-edit",
+            documentId: row.canonical_set_id,
+          });
+          if (syncUrl) syncModeUrl("knowledge-edit", row.canonical_set_id);
+          return;
         }
-        setMarkdownDraft(draft.markdown);
-      }
-      setPane({
-        kind: mode === "view" ? "knowledge-view" : "knowledge-edit",
-        documentId: row.canonical_set_id,
-      });
-    } catch (cause) {
-      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
         setLoadError(cause);
       }
     } finally {
       if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
-        setBusyKey(null);
+        commitBusy(null);
       }
     }
   }
+
+  useEffect(() => {
+    if (!initialMode) {
+      return;
+    }
+    const documentId = initialDocumentId ?? initialSetId;
+    const modeKey = `${initialMode}:${documentId ?? ""}`;
+    if (handledUrlMode.current === modeKey || loading || !courseId) return;
+    const timer = window.setTimeout(() => {
+      if (handledUrlMode.current === modeKey) return;
+      if (initialMode === "rag-new") {
+        handledUrlMode.current = modeKey;
+        startNewRag(false);
+        return;
+      }
+      if (initialMode === "rag-view" || initialMode === "rag-edit") {
+        if (!documentId) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformRagEmpty")));
+          return;
+        }
+        const document = ragDocuments.find((item) => item.id === documentId);
+        if (!document) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformRagEmpty")));
+          return;
+        }
+        handledUrlMode.current = modeKey;
+        if (initialMode === "rag-view") void viewRag(document, false);
+        else if (document.can_manage_visibility) void editRag(document, false);
+        else void viewRag(document, false);
+        return;
+      }
+      if (
+        initialMode === "knowledge-view" ||
+        initialMode === "knowledge-edit"
+      ) {
+        if (!documentId) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformKnowledgeEmpty")));
+          return;
+        }
+        const row = knowledgeRows.find(
+          (item) => item.canonical_set_id === documentId,
+        );
+        if (!row) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformKnowledgeEmpty")));
+          return;
+        }
+        handledUrlMode.current = modeKey;
+        void openKnowledge(
+          row,
+          initialMode === "knowledge-view" || !row.can_edit ? "view" : "edit",
+          false,
+        );
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // The routed operation is dispatched once after its context is loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    courseId,
+    initialDocumentId,
+    initialMode,
+    initialSetId,
+    knowledgeRows,
+    loading,
+    ragDocuments,
+    t,
+  ]);
 
   async function saveKnowledge() {
     if (!markdown?.can_edit || busyKey) return;
@@ -1136,7 +1673,7 @@ function BrainformWorkspaceBody({
     };
     const intent = `brainform-markdown:${setId}:${draft.expectedVersionSeq}`;
     const handle = mutationStore.handleFor(intent);
-    setBusyKey(`knowledge-save:${setId}`);
+    commitBusy(`knowledge-save:${setId}`);
     setLoadError(null);
     setNotice("");
     try {
@@ -1173,6 +1710,8 @@ function BrainformWorkspaceBody({
             : row,
         ),
       );
+      setPane({ kind: "knowledge-view", documentId: setId });
+      syncModeUrl("knowledge-view", setId);
       setNotice(t("brainformKnowledgeSaved"));
     } catch (cause) {
       if (isConflict(cause)) {
@@ -1191,7 +1730,7 @@ function BrainformWorkspaceBody({
       }
       if (scopeIsCurrent()) setLoadError(cause);
     } finally {
-      if (scopeIsCurrent()) setBusyKey(null);
+      if (scopeIsCurrent()) commitBusy(null);
     }
   }
 
@@ -1203,7 +1742,7 @@ function BrainformWorkspaceBody({
         : { documentId: row.canonical_set_id, actionId: createUuid() };
     const intent = `brainform-regenerate:${pending.documentId}:${pending.actionId}`;
     const handle = mutationStore.handleFor(intent);
-    setBusyKey(`regenerate:${pending.documentId}`);
+    commitBusy(`regenerate:${pending.documentId}`);
     setLoadError(null);
     setNotice("");
     try {
@@ -1255,7 +1794,7 @@ function BrainformWorkspaceBody({
       }
       if (scopeIsCurrent()) setLoadError(cause);
     } finally {
-      if (scopeIsCurrent()) setBusyKey(null);
+      if (scopeIsCurrent()) commitBusy(null);
     }
   }
 
@@ -1267,7 +1806,7 @@ function BrainformWorkspaceBody({
     if (!current || value === current.knowledge_display_name) return;
     const intent = `brainform-set-name:${setId}:${value}`;
     const handle = mutationStore.handleFor(intent);
-    setBusyKey(`rename:${setId}`);
+    commitBusy(`rename:${setId}`);
     setLoadError(null);
     setNotice("");
     try {
@@ -1301,15 +1840,14 @@ function BrainformWorkspaceBody({
       mutationStore.abandon(intent, handle);
       if (scopeIsCurrent()) setLoadError(cause);
     } finally {
-      if (scopeIsCurrent()) setBusyKey(null);
+      if (scopeIsCurrent()) commitBusy(null);
     }
   }
 
-  const generationActive = knowledgeRows.some((row) =>
-    isGenerationActive(row.generation_state),
-  );
   const selectedDraft =
     pane?.kind === "rag-edit" ? ragDrafts[pane.draftKey] : null;
+  const selectedRagFile =
+    pane?.kind === "rag-edit" ? (ragFiles[pane.draftKey]?.file ?? null) : null;
   const accessibleAgents = useMemo(() => {
     const agentIds = new Set(knowledgeRows.map((row) => row.agent_id));
     const rows = chatAgents.filter((agent) =>
@@ -1324,11 +1862,45 @@ function BrainformWorkspaceBody({
       : rows;
   }, [chatAgents, initialAgentId, knowledgeRows]);
   const displayedKnowledgeRows = useMemo(() => {
-    if (!initialAgentId) return knowledgeRows;
-    return [...knowledgeRows].sort(
+    const bySet = new Map<string, BrainformKnowledge[]>();
+    for (const row of knowledgeRows) {
+      const rows = bySet.get(row.canonical_set_id) ?? [];
+      rows.push(row);
+      bySet.set(row.canonical_set_id, rows);
+    }
+    const assets: BrainformKnowledgeAssetRow[] = [...bySet.values()].flatMap(
+      (rows) => {
+        const representative = rows[0];
+        if (!representative) return [];
+        return [
+          {
+            ...representative,
+            can_edit: rows.some((row) => row.can_edit),
+            generation_job_id:
+              rows.find((row) => row.generation_job_id)?.generation_job_id ??
+              representative.generation_job_id,
+            generation_state:
+              rows.find((row) => isGenerationActive(row.generation_state))
+                ?.generation_state ?? representative.generation_state,
+            safe_error_code:
+              rows.find((row) => row.safe_error_code)?.safe_error_code ??
+              representative.safe_error_code,
+            version_seq:
+              rows.find((row) => row.version_seq != null)?.version_seq ??
+              representative.version_seq,
+            used_by_agents: [
+              ...new Set(rows.map((row) => row.source_agent_display_name)),
+            ],
+            agent_ids: [...new Set(rows.map((row) => row.agent_id))],
+          },
+        ];
+      },
+    );
+    if (!initialAgentId) return assets;
+    return assets.sort(
       (left, right) =>
-        Number(right.agent_id === initialAgentId) -
-        Number(left.agent_id === initialAgentId),
+        Number(right.agent_ids.includes(initialAgentId)) -
+        Number(left.agent_ids.includes(initialAgentId)),
     );
   }, [initialAgentId, knowledgeRows]);
   const memoryItems = useMemo<BrainformMemoryItem[]>(
@@ -1378,13 +1950,63 @@ function BrainformWorkspaceBody({
 
   return (
     <main className={styles.page}>
-      <WorkspaceAction name="new" onClick={startNewRag} disabled={!courseId} />
-      <header className={styles.pageHeader}>
-        <div>
-          <p className={styles.eyebrow}>{t("brainformEyebrow")}</p>
-          <h1>{t("brainformTitle")}</h1>
-        </div>
-        {courseIds.length > 1 ? (
+      {pane || initialMode ? (
+        <WorkspaceAction
+          name="back"
+          onClick={closePane}
+          disabled={Boolean(busyKey)}
+        />
+      ) : (
+        <WorkspaceAction
+          name="new"
+          onClick={() => startNewRag()}
+          disabled={
+            !courseId || (role === "teacher" && Boolean(initialGroupId))
+          }
+        />
+      )}
+      {pane?.kind === "knowledge-view" &&
+      markdown?.can_edit &&
+      markdown.audience === "full" ? (
+        <WorkspaceAction
+          name="new"
+          onClick={() => beginKnowledgeEdit(markdown)}
+          disabled={Boolean(busyKey)}
+        />
+      ) : null}
+      {pane?.kind === "rag-edit" && selectedDraft ? (
+        <WorkspaceAction
+          name="done"
+          onClick={() => {
+            const current = ragActionPane.current;
+            if (current?.kind !== "rag-edit") return;
+            const draft = ragActionDrafts.current[current.draftKey];
+            if (!draft) return;
+            if (draft.isNew) createRagAction.current(current.draftKey);
+            else saveRagAction.current(current.draftKey);
+          }}
+          disabled={
+            Boolean(busyKey) ||
+            (!selectedDraft.isNew && !selectedDraft.canEdit) ||
+            (role === "student" &&
+              selectedDraft.isNew &&
+              !selectedDraft.groupId)
+          }
+        />
+      ) : null}
+      {pane?.kind === "knowledge-edit" && markdown ? (
+        <WorkspaceAction
+          name="done"
+          onClick={() => void saveKnowledge()}
+          disabled={
+            Boolean(busyKey) ||
+            !markdown.can_edit ||
+            markdown.audience !== "full"
+          }
+        />
+      ) : null}
+      {courseIds.length > 1 && !initialGroupId ? (
+        <header className={styles.pageHeader}>
           <label className={styles.coursePicker}>
             <span>{t("selectCourse")}</span>
             <select
@@ -1392,6 +2014,7 @@ function BrainformWorkspaceBody({
               onChange={(event) => {
                 setPane(null);
                 setMarkdown(null);
+                syncModeUrl(null);
                 onCourseChange(event.target.value);
               }}
             >
@@ -1402,11 +2025,16 @@ function BrainformWorkspaceBody({
               ))}
             </select>
           </label>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
 
       {loadError ? (
-        <ErrorNotice error={loadError} onRetry={() => void loadWorkspace()} />
+        <ErrorNotice
+          error={loadError}
+          onRetry={() =>
+            pendingRagAction ? retryRagAction() : void loadWorkspace()
+          }
+        />
       ) : null}
       {notice ? (
         <p className={styles.notice} role="status">
@@ -1418,7 +2046,7 @@ function BrainformWorkspaceBody({
       ) : null}
       {loading && courseId ? <LoadingCard /> : null}
 
-      {!loading && !loadError && courseId ? (
+      {!pane && !initialMode && !loading && !loadError && courseId ? (
         <div className={styles.sections}>
           <section
             className={styles.section}
@@ -1426,8 +2054,14 @@ function BrainformWorkspaceBody({
           >
             <div className={styles.sectionHeading}>
               <div>
-                <h2 id="brainform-rag-heading">RAG</h2>
-                <p>{t("brainformRagIntro")}</p>
+                <h2
+                  id="brainform-rag-heading"
+                  data-ui-guide="knowledge.files"
+                  data-ui-guide-text={t("brainformRagIntro")}
+                  tabIndex={0}
+                >
+                  RAG
+                </h2>
               </div>
               <span className={styles.count}>{ragDocuments.length}</span>
             </div>
@@ -1476,7 +2110,8 @@ function BrainformWorkspaceBody({
                           aria-label={t("brainformViewRagNamed", {
                             name: document.source_filename,
                           })}
-                          title={t("brainformViewRag")}
+                          data-ui-guide="knowledge.view"
+                          data-ui-guide-text={t("brainformViewRag")}
                           disabled={busyKey === `view:${document.id}`}
                           onClick={() => void viewRag(document)}
                         >
@@ -1489,11 +2124,62 @@ function BrainformWorkspaceBody({
                             aria-label={t("brainformEditRagNamed", {
                               name: document.source_filename,
                             })}
-                            title={t("edit")}
+                            data-ui-guide="knowledge.edit"
+                            data-ui-guide-text={t("knowledgeEditLede")}
                             disabled={busyKey === `read:${document.id}`}
                             onClick={() => void editRag(document)}
                           >
                             <IconEdit />
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          aria-label={t("brainformDownloadRagNamed", {
+                            name: document.source_filename,
+                          })}
+                          data-ui-guide="knowledge.download"
+                          disabled={busyKey === `download:${document.id}`}
+                          onClick={() => void downloadRag(document)}
+                        >
+                          <IconDownload />
+                        </button>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformHideRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            data-ui-guide="knowledge.hide"
+                            disabled={busyKey === `hide:${document.id}`}
+                            onClick={() => void hideRag(document)}
+                          >
+                            <IconClose />
+                          </button>
+                        ) : null}
+                        {canEdit && document.index_status === "failed" ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformReindexRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            data-ui-guide="knowledge.reindex"
+                            disabled={busyKey === `reindex:${document.id}`}
+                            onClick={() => void reindexRag(document)}
+                          >
+                            <IconRefresh />
+                          </button>
+                        ) : null}
+                        {pendingRagAction?.documentId === document.id ? (
+                          <button
+                            className={styles.textAction}
+                            type="button"
+                            disabled={Boolean(busyKey)}
+                            onClick={retryRagAction}
+                          >
+                            {t("retry")}
                           </button>
                         ) : null}
                       </div>
@@ -1512,10 +2198,14 @@ function BrainformWorkspaceBody({
           >
             <div className={styles.sectionHeading}>
               <div>
-                <h2 id="brainform-knowledge-heading">
+                <h2
+                  id="brainform-knowledge-heading"
+                  data-ui-guide="knowledge.files"
+                  data-ui-guide-text={t("brainformKnowledgeIntro")}
+                  tabIndex={0}
+                >
                   {t("brainformKnowledgeHeading")}
                 </h2>
-                <p>{t("brainformKnowledgeIntro")}</p>
               </div>
               <span className={styles.count}>
                 {displayedKnowledgeRows.length}
@@ -1524,27 +2214,17 @@ function BrainformWorkspaceBody({
             {displayedKnowledgeRows.length ? (
               <ul className={styles.list}>
                 {displayedKnowledgeRows.map((row) => {
-                  const currentDoc = row.version_seq != null;
+                  const currentDoc = (row.version_seq ?? 0) > 0;
                   const canGenerate = row.can_edit;
                   const isGenerating = isGenerationActive(row.generation_state);
-                  const generationStatus =
-                    generationStatuses[row.canonical_set_id];
-                  const providerConfirmationRequired =
-                    row.safe_error_code === "provider_confirmation_required";
-                  const disclosureHash =
-                    role === "teacher" &&
-                    generationStatus !== undefined &&
-                    generationStatus.job_id ===
-                      generationJobs[row.canonical_set_id] &&
-                    generationStatus.safe_error_code ===
-                      "provider_confirmation_required"
-                      ? generationStatus.provider_manifest_hash
-                      : null;
+                  const jobStatus = generationStatuses[row.canonical_set_id];
+                  const generationErrorCode =
+                    jobStatus &&
+                    jobStatus.job_id === generationJobs[row.canonical_set_id]
+                      ? jobStatus.safe_error_code
+                      : row.safe_error_code;
                   return (
-                    <li
-                      className={styles.row}
-                      key={`${row.agent_id}:${row.canonical_set_id}`}
-                    >
+                    <li className={styles.row} key={row.canonical_set_id}>
                       <div className={styles.rowCopy}>
                         {renameSetId === row.canonical_set_id ? (
                           <input
@@ -1587,21 +2267,19 @@ function BrainformWorkspaceBody({
                           </button>
                         )}
                         <span className={styles.rowMeta}>
-                          {row.source_agent_display_name}
+                          {t("brainformRagUsedByAgents", {
+                            names: row.used_by_agents.join(", "),
+                          })}
                         </span>
-                        {isGenerating ? (
-                          <span className={styles.rowStatus} role="status">
-                            <span className="spinner" aria-hidden="true" />
-                            Generating AI Knowledge
-                          </span>
-                        ) : null}
                         {!isGenerating &&
                         row.generation_state &&
                         row.generation_state !== "completed" ? (
                           <span className={styles.rowStatus} role="alert">
-                            {row.safe_error_code
+                            {generationErrorCode &&
+                            generationErrorCode !==
+                              "provider_confirmation_required"
                               ? t("brainformGenerationFailedReason", {
-                                  reason: row.safe_error_code.replaceAll(
+                                  reason: generationErrorCode.replaceAll(
                                     "_",
                                     " ",
                                   ),
@@ -1614,60 +2292,18 @@ function BrainformWorkspaceBody({
                             {t("brainformNoKnowledgeDocument")}
                           </span>
                         ) : null}
-                        {disclosureHash ? (
-                          <>
-                            <span className={styles.rowStatus} role="status">
-                              {t("aiKnowledgeProviderConfirmationRecovery")}
-                            </span>
-                            <Link
-                              className={styles.textAction}
-                              href={`/teacher/provider-disclosures/${encodeURIComponent(disclosureHash)}`}
-                            >
-                              {t("reviewProviderDisclosure")}
-                            </Link>
-                          </>
-                        ) : null}
                       </div>
                       <div className={styles.actions}>
-                        {currentDoc ? (
-                          <>
-                            <button
-                              type="button"
-                              className={styles.iconButton}
-                              aria-label={t("brainformViewKnowledgeNamed", {
-                                name: row.knowledge_display_name,
-                              })}
-                              title={t("brainformViewKnowledge")}
-                              onClick={() => void openKnowledge(row, "view")}
-                            >
-                              <IconEye />
-                            </button>
-                            {row.can_edit ? (
-                              <button
-                                type="button"
-                                className={styles.iconButton}
-                                aria-label={t("brainformEditKnowledgeNamed", {
-                                  name: row.knowledge_display_name,
-                                })}
-                                title={t("edit")}
-                                onClick={() => void openKnowledge(row, "edit")}
-                              >
-                                <IconEdit />
-                              </button>
-                            ) : null}
-                          </>
-                        ) : null}
-                        {canGenerate ? (
+                        {canGenerate && !isGenerating ? (
                           <button
                             type="button"
                             className={styles.iconButton}
                             aria-label={t("brainformRegenerateNamed", {
                               name: row.knowledge_display_name,
                             })}
-                            title={t("brainformRegenerate")}
+                            data-ui-guide="knowledge.regenerate"
+                            data-ui-guide-text={t("brainformRegenerate")}
                             disabled={
-                              isGenerating ||
-                              providerConfirmationRequired ||
                               busyKey === `regenerate:${row.canonical_set_id}`
                             }
                             onClick={() => void regenerateKnowledge(row)}
@@ -1688,6 +2324,40 @@ function BrainformWorkspaceBody({
                             {t("retry")}
                           </button>
                         ) : null}
+                        {isGenerating ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformGeneratingNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            aria-busy="true"
+                            disabled
+                          >
+                            <span className="spinner" aria-hidden="true" />
+                          </button>
+                        ) : currentDoc || row.can_edit ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformOpenKnowledgeNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            data-ui-guide="knowledge.view"
+                            data-ui-guide-text={t("brainformViewKnowledge")}
+                            disabled={
+                              busyKey === `knowledge:${row.canonical_set_id}`
+                            }
+                            onClick={() =>
+                              void openKnowledge(
+                                row,
+                                currentDoc ? "view" : "edit",
+                              )
+                            }
+                          >
+                            <IconArrowRight />
+                          </button>
+                        ) : null}
                       </div>
                     </li>
                   );
@@ -1696,11 +2366,6 @@ function BrainformWorkspaceBody({
             ) : (
               <p className={styles.empty}>{t("brainformKnowledgeEmpty")}</p>
             )}
-            {generationActive ? (
-              <p className={styles.generationNote} role="status">
-                Generating AI Knowledge
-              </p>
-            ) : null}
           </section>
 
           <section
@@ -1709,8 +2374,14 @@ function BrainformWorkspaceBody({
           >
             <div className={styles.sectionHeading}>
               <div>
-                <h2 id="brainform-memory-heading">Memory</h2>
-                <p>{t("brainformMemoryIntro")}</p>
+                <h2
+                  id="brainform-memory-heading"
+                  data-ui-guide="brainform.memory"
+                  data-ui-guide-text={t("brainformMemoryIntro")}
+                  tabIndex={0}
+                >
+                  Memory
+                </h2>
               </div>
               <span className={styles.count}>{memoryItems.length}</span>
             </div>
@@ -1735,7 +2406,8 @@ function BrainformWorkspaceBody({
                         aria-label={t("brainformMemoryOpenNamed", {
                           name: item.name,
                         })}
-                        title={t("brainformMemoryOpen")}
+                        data-ui-guide="brainform.memory"
+                        data-ui-guide-text={t("brainformMemoryOpen")}
                         onClick={() => router.push(memoryHref(item.source))}
                       >
                         <IconArrowRight />
@@ -1771,19 +2443,11 @@ function BrainformWorkspaceBody({
                     : (markdown?.knowledge_display_name ?? t("loading"))}
               </h2>
             </div>
-            <button
-              className={styles.iconButton}
-              type="button"
-              aria-label={t("brainformClose")}
-              onClick={closePane}
-            >
-              <IconClose />
-            </button>
           </div>
 
           {pane.kind === "rag-edit" && selectedDraft ? (
             <div className={styles.editorForm}>
-              {selectedDraft.isNew ? (
+              {selectedDraft.isNew || selectedDraft.canEdit ? (
                 <label
                   className="secondary-action file-button"
                   aria-busy={busyKey === `import:${pane.draftKey}`}
@@ -1793,7 +2457,7 @@ function BrainformWorkspaceBody({
                     : t("knowledgeImportFile")}
                   <input
                     type="file"
-                    accept=".md,text/markdown"
+                    accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     disabled={Boolean(busyKey)}
                     onChange={(event) => {
                       const file = event.currentTarget.files?.[0];
@@ -1803,52 +2467,48 @@ function BrainformWorkspaceBody({
                   />
                 </label>
               ) : null}
-              <label className={styles.field}>
-                <span>{t("knowledgeFilename")}</span>
-                <input
-                  value={selectedDraft.filename}
-                  disabled={busyKey === `import:${pane.draftKey}`}
-                  readOnly={!selectedDraft.isNew && !selectedDraft.canEdit}
-                  aria-describedby={
-                    !selectedDraft.isNew && selectedDraft.canEdit
-                      ? "brainform-rag-name-note"
-                      : undefined
-                  }
-                  onChange={(event) => {
-                    if (!selectedDraft.isNew && !selectedDraft.canEdit) return;
-                    saveRagDrafts({
-                      ...ragDrafts,
-                      [pane.draftKey]: {
-                        ...selectedDraft,
-                        filename: event.target.value,
-                      },
-                    });
-                  }}
-                />
-              </label>
+              <KnowledgeFilenameField
+                className={styles.field}
+                value={selectedDraft.filename}
+                disabled={busyKey === `import:${pane.draftKey}`}
+                readOnly={!selectedDraft.isNew && !selectedDraft.canEdit}
+                describedBy={
+                  !selectedDraft.isNew && selectedDraft.canEdit
+                    ? "brainform-rag-name-note"
+                    : undefined
+                }
+                onChange={(filename) => {
+                  if (!selectedDraft.isNew && !selectedDraft.canEdit) return;
+                  updateRagDraft(pane.draftKey, { ...selectedDraft, filename });
+                }}
+              />
               {!selectedDraft.isNew && selectedDraft.canEdit ? (
                 <small id="brainform-rag-name-note">
                   {t("brainformRagRenameNote")}
                 </small>
               ) : null}
-              <label className={styles.field}>
-                <span>{t("knowledgeContent")}</span>
-                <textarea
+              {selectedRagFile ? (
+                <p className={styles.empty} role="status">
+                  {t("brainformRagFileStaged", {
+                    filename: selectedRagFile.name,
+                  })}{" "}
+                  {t("brainformNotMarkdownEditor")}
+                </p>
+              ) : (
+                <KnowledgeMarkdownField
+                  className={styles.field}
                   value={selectedDraft.markdown}
                   disabled={busyKey === `import:${pane.draftKey}`}
                   rows={16}
                   readOnly={!selectedDraft.isNew && !selectedDraft.canEdit}
-                  onChange={(event) =>
-                    saveRagDrafts({
-                      ...ragDrafts,
-                      [pane.draftKey]: {
-                        ...selectedDraft,
-                        markdown: event.target.value,
-                      },
+                  onChange={(markdown) =>
+                    updateRagDraft(pane.draftKey, {
+                      ...selectedDraft,
+                      markdown,
                     })
                   }
                 />
-              </label>
+              )}
               <div className={styles.panelActions}>
                 {selectedDraft.isNew ? (
                   role === "student" && !selectedDraft.groupId ? (
@@ -1857,12 +2517,9 @@ function BrainformWorkspaceBody({
                       <select
                         value={selectedDraft.groupId ?? ""}
                         onChange={(event) =>
-                          saveRagDrafts({
-                            ...ragDrafts,
-                            [pane.draftKey]: {
-                              ...selectedDraft,
-                              groupId: event.target.value || undefined,
-                            },
+                          updateRagDraft(pane.draftKey, {
+                            ...selectedDraft,
+                            groupId: event.target.value || undefined,
                           })
                         }
                       >
@@ -1882,31 +2539,6 @@ function BrainformWorkspaceBody({
                     </label>
                   ) : null
                 ) : null}
-                <button
-                  className="primary-action"
-                  type="button"
-                  disabled={
-                    Boolean(busyKey) ||
-                    (!selectedDraft.isNew && !selectedDraft.canEdit) ||
-                    (role === "student" &&
-                      selectedDraft.isNew &&
-                      !selectedDraft.groupId)
-                  }
-                  onClick={() =>
-                    void (selectedDraft.isNew
-                      ? createRag(pane.draftKey)
-                      : saveRag(pane.draftKey))
-                  }
-                >
-                  {busyKey === pane.draftKey ? t("knowledgeSaving") : t("save")}
-                </button>
-                <button
-                  className="secondary-action"
-                  type="button"
-                  onClick={closePane}
-                >
-                  {t("brainformClose")}
-                </button>
               </div>
             </div>
           ) : null}
@@ -1918,6 +2550,42 @@ function BrainformWorkspaceBody({
           {(pane.kind === "knowledge-view" || pane.kind === "knowledge-edit") &&
           markdown ? (
             <>
+              {markdown.version_seq === 0 ? (
+                <p className={styles.empty} role="status">
+                  {t("brainformKnowledgeFirstVersionEmpty")}
+                </p>
+              ) : null}
+              <section
+                className={styles.usageSection}
+                aria-labelledby="brainform-knowledge-users-heading"
+              >
+                <h3 id="brainform-knowledge-users-heading">
+                  {t("brainformAgentsUsingKnowledge")}
+                </h3>
+                {knowledgeRows.some(
+                  (row) => row.canonical_set_id === markdown.canonical_set_id,
+                ) ? (
+                  <ul>
+                    {[
+                      ...new Set(
+                        knowledgeRows
+                          .filter(
+                            (row) =>
+                              row.canonical_set_id ===
+                              markdown.canonical_set_id,
+                          )
+                          .map((row) => row.source_agent_display_name),
+                      ),
+                    ].map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.empty}>
+                    {t("brainformNoKnowledgeUsers")}
+                  </p>
+                )}
+              </section>
               {pane.kind === "knowledge-edit" ? (
                 <label className={styles.field}>
                   <span>{t("knowledgeContent")}</span>
@@ -1925,17 +2593,24 @@ function BrainformWorkspaceBody({
                     value={markdownDraft}
                     rows={18}
                     readOnly={
-                      !markdown.can_edit || markdown.audience !== "full"
+                      !markdown.can_edit ||
+                      markdown.audience !== "full" ||
+                      busyKey === `knowledge-save:${markdown.canonical_set_id}`
                     }
                     onChange={(event) => {
                       const value = event.target.value;
-                      setMarkdownDraft(value);
                       const current = knowledgeDrafts[
                         markdown.canonical_set_id
                       ] ?? {
                         markdown: markdown.markdown,
                         expectedVersionSeq: markdown.version_seq,
                       };
+                      if (value !== markdownDraft) {
+                        mutationStore.abandon(
+                          `brainform-markdown:${markdown.canonical_set_id}:${current.expectedVersionSeq}`,
+                        );
+                      }
+                      setMarkdownDraft(value);
                       const nextDrafts = {
                         ...knowledgeDrafts,
                         [markdown.canonical_set_id]: {
@@ -1958,29 +2633,6 @@ function BrainformWorkspaceBody({
                   {t("brainformProjectionUnavailable")}
                 </p>
               )}
-              {pane.kind === "knowledge-edit" &&
-              markdown.can_edit &&
-              markdown.audience === "full" ? (
-                <div className={styles.panelActions}>
-                  <button
-                    className="primary-action"
-                    type="button"
-                    disabled={Boolean(busyKey)}
-                    onClick={() => void saveKnowledge()}
-                  >
-                    {busyKey === `knowledge-save:${markdown.canonical_set_id}`
-                      ? t("knowledgeSaving")
-                      : t("save")}
-                  </button>
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={closePane}
-                  >
-                    {t("brainformClose")}
-                  </button>
-                </div>
-              ) : null}
             </>
           ) : null}
         </section>

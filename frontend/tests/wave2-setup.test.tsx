@@ -501,7 +501,14 @@ describe("Wave 2 teacher debate setup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "connection reset",
+    );
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() =>
+      expect((done as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(done);
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -581,9 +588,25 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 仅本场中文修改" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const navigation = within(screen.getByRole("navigation"));
+    fireEvent.click(await navigation.findByRole("button", { name: "Back" }));
     expect(create).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "默认规则" })).toBeTruthy();
+    expect(
+      navigation.getByRole("link", { name: "Back" }).getAttribute("href"),
+    ).toBe("/teacher/debates");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
+      target: { value: "# 仅本场中文修改" },
+    });
+    fireEvent.click(await navigation.findByRole("button", { name: "Done" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "仅本场中文修改" }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "English" }));
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
@@ -677,12 +700,14 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   await screen.findByText("Needs recovery");
   expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   expect(
-    within(screen.getByRole("main"))
-      .getByRole("link", { name: "New" })
-      .getAttribute("href"),
+    (
+      await within(screen.getByRole("navigation")).findByRole("link", {
+        name: "New",
+      })
+    ).getAttribute("href"),
   ).toBe("/teacher/debates/new");
   expect(
-    within(screen.getByRole("navigation")).queryByRole("link", { name: "New" }),
+    within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
   ).toBeNull();
   fireEvent.focus(window);
   await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));

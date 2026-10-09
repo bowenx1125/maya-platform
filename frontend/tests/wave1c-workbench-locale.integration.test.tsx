@@ -191,6 +191,22 @@ function makeApi() {
     version: vi.fn(async () => version),
     agent: vi.fn(async () => agent),
     knowledge: vi.fn(async () => [document]),
+    knowledgeSets: vi.fn(async () => []),
+    agentKnowledgeSets: vi.fn(async () => ({
+      agent_id: agent.id,
+      agent_metadata_revision: agent.metadata_revision,
+      sets: [],
+    })),
+    replaceAgentKnowledgeSets: vi.fn(
+      async (
+        _agentId: string,
+        body: { expected_agent_metadata_revision: number },
+      ) => ({
+        agent_id: agent.id,
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      }),
+    ),
     ragPreview: vi.fn(async () => makePreview()),
     avatarTemplates: vi.fn(async () => makeTemplates()),
     voiceProfiles: vi.fn(async (): Promise<VoiceProfile[]> => []),
@@ -429,7 +445,9 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.updateDraft).toHaveBeenCalledTimes(1);
     expect(api.publish).not.toHaveBeenCalled();
     expect(
-      within(screen.getByRole("main")).getByText("Knowledge"),
+      within(screen.getByRole("main")).getByRole("heading", {
+        name: "Knowledge",
+      }),
     ).toBeTruthy();
     expect(screen.getByLabelText("AGENT.md editor")).toHaveProperty(
       "value",
@@ -475,8 +493,8 @@ describe("Wave 1C real workbench locale boundary", () => {
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
       target: { value: "# Unsaved" },
     });
-    expect(back.closest("nav")).toBeNull();
-    expect(back.closest("main")).not.toBeNull();
+    expect(back.closest("nav")).not.toBeNull();
+    expect(back.closest("main")).toBeNull();
     expect(back.getAttribute("href")).toBe("/student/agents/agent-id");
     expect(fireEvent.click(back)).toBe(false);
     expect(confirm).toHaveBeenCalledTimes(1);

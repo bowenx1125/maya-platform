@@ -3,6 +3,7 @@ import {
   fireEvent,
   render as renderComponent,
   screen,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
@@ -43,7 +44,7 @@ function Harness({ saved = vi.fn(), editing = vi.fn() } = {}) {
 }
 
 describe("per-debate Markdown rules editor", () => {
-  it("shows only the selected language and preserves edits across language switches", () => {
+  it("shows only the selected language and preserves edits across language switches", async () => {
     const saved = vi.fn();
     const editing = vi.fn();
     render(<Harness saved={saved} editing={editing} />);
@@ -63,6 +64,12 @@ describe("per-debate Markdown rules editor", () => {
     expect(screen.queryByText("Prompt EN")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(editing).toHaveBeenLastCalledWith(true);
+    const navigation = within(screen.getByRole("navigation"));
+    const main = within(screen.getByRole("main"));
+    const back = await navigation.findByRole("button", { name: "Back" });
+    const done = await navigation.findByRole("button", { name: "Done" });
+    expect(main.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(main.queryByRole("button", { name: "Done" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "English" }) as HTMLButtonElement)
         .disabled,
@@ -71,8 +78,8 @@ describe("per-debate Markdown rules editor", () => {
       target: { value: "# 本场新规则\n\n给一个例子。" },
     });
     expect(saved).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect((back as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(done);
     expect(editing).toHaveBeenLastCalledWith(false);
     expect(saved).toHaveBeenCalledWith({
       zh: "# 本场新规则\n\n给一个例子。",

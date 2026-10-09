@@ -95,6 +95,22 @@ function makeApi(version: AgentVersion) {
         }) as AgentDetail,
     ),
     knowledge: vi.fn(async () => []),
+    knowledgeSets: vi.fn(async () => []),
+    agentKnowledgeSets: vi.fn(async () => ({
+      agent_id: "agent-id",
+      agent_metadata_revision: 0,
+      sets: [],
+    })),
+    replaceAgentKnowledgeSets: vi.fn(
+      async (
+        _agentId: string,
+        body: { expected_agent_metadata_revision: number },
+      ) => ({
+        agent_id: "agent-id",
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      }),
+    ),
     ragPreview: vi.fn(async () => ({
       version_id: "version-id",
       total_char_count: 0,
