@@ -41,7 +41,8 @@ Before producing a runtime artifact:
 The production profile must use an exact HTTPS origin, protected individual account
 credentials and no Demo identity selection, switching or automatic Demo consent.
 Local HTTP/Demo manual acceptance remains a separate deployment configuration.
-Open self-enrollment into the configured course/group remains the explicit product
+The Demo profile stays on a private network and must not be exposed. Open
+self-enrollment into the configured course/group remains the explicit product
 policy; it must not be described as invitation-only enrollment.
 
 Public-release checks include exact-origin authentication and mutations, recoverable
@@ -72,15 +73,65 @@ public DNS/TLS, off-host backup retention and operator monitoring distinct from 
 verification. No public hostname, external backup destination or third-party monitoring
 service is provisioned implicitly by this policy.
 
+## Initial public server
+
+This stage has no product usage ceiling. Chat, Tools, authored text, debate
+rounds, student registration, Provider calls and fees are not rejected because
+of count, tokens, CNY, words or elapsed use. Legacy `max_*` fields stay
+accounting estimates. Explicit retry authorization and unknown-acceptance
+recovery stay separate from budgeting. Authentication failure windows and the
+login/register body limit stay; they are abuse controls, not usage quotas.
+ACL, CSRF, SSRF, idempotency, privacy and the provider ledger stay as they are.
+
+The production profile is the only public deployment, and it uses the reviewed
+public HTTPS origin. The base Compose file is the private Demo: gateway port
+8080 and a private-LAN `CLASSROOM_PUBLIC_BASE_URL` that includes that port. Do
+not publish the Demo, do not point public DNS at it, and do not reuse its data
+directory, account catalog or password for the public site.
+
+Four values are still unset. This document does not choose them:
+
+- **Domain.** `MAYA_DOMAIN`, a DNS name the owner controls. No name is recorded
+  here.
+- **TLS.** No certificate or private key is in git. Caddy requests one for
+  `MAYA_DOMAIN` after that name resolves to the new server and `ACME_EMAIL` is
+  set. Certificate state stays in the `maya_caddy_data` volume.
+- **Server.** The machine is not chosen, and no address is recorded here. It
+  needs Docker Compose and public TCP 80 and 443 for this project only. Do not
+  run the command below against an existing local classroom, including a
+  `maya-production` project already published on port 8090.
+- **Public base URL.** `CLASSROOM_PUBLIC_BASE_URL`. The production override sets
+  it to `https://${MAYA_DOMAIN}` and omits a port, because this profile
+  publishes 443. The origin check treats `:443` as the same origin as an
+  omitted port. A path, query, fragment or trailing slash is rejected. If the
+  published origin uses any other port, that port must be included
+  (`https://<domain>:<port>`) and the gateway, Caddy site and this value must
+  be the same origin; the current override does not publish another port.
+  Classroom QR links are that origin plus `/classroom/{token}`. CSRF accepts
+  only that exact origin.
+
+The protected operator file is not in git. It must set `MAYA_DOMAIN`,
+`ACME_EMAIL`, a `SESSION_SECRET` of at least 32 bytes, and absolute
+`MAYA_PRODUCTION_DATA_DIR` and `MAYA_PRODUCTION_CONFIG_DIR` paths. Do not put a
+sample domain, address or certificate in that file until the owner supplies
+them. Provider keys, when used, follow
+[REAL_PROVIDER_SETUP](REAL_PROVIDER_SETUP.md) and stay in the same uncommitted
+file. Putting `CLASSROOM_PUBLIC_BASE_URL` in the file does not change the
+production service: the override replaces it with `https://${MAYA_DOMAIN}`.
+
+Until the domain, TLS path, server and public base URL exist, do not start the
+public stack and do not invent a stand-in name, address or certificate.
+
 ## Production startup
 
-The base Compose file is for the existing local Demo. For a public deployment use
-`docker-compose.production.yml` as an explicit override and a separate project.
-Provide `MAYA_DOMAIN` (a DNS name you control), `ACME_EMAIL`, and absolute
-`MAYA_PRODUCTION_DATA_DIR` / `MAYA_PRODUCTION_CONFIG_DIR` paths in a protected
-operator environment file. The data directory is writable application state; the
-config directory is mounted read-only. Keep these paths separate from local Demo
-unless you deliberately migrate a verified complete backup.
+For a public deployment use `docker-compose.production.yml` as an explicit
+override and a separate project on the new server. Provide `MAYA_DOMAIN`,
+`ACME_EMAIL`, and absolute `MAYA_PRODUCTION_DATA_DIR` /
+`MAYA_PRODUCTION_CONFIG_DIR` paths in a protected operator environment file
+outside the repository. The data directory is writable application state; the
+config directory is mounted read-only. Keep these paths separate from local
+Demo unless you deliberately migrate a verified complete backup. `.env`,
+account catalogs, keys, certificates and this operator file stay uncommitted.
 
 Provision `production-accounts/accounts.private.md` inside that config directory,
 using the existing account-catalog format and owner-only permissions. Supply a
@@ -125,7 +176,7 @@ can configure the documented `AUTH_*` environment values; denials state a retry 
 and retain legitimate sessions. These protections exist only at authentication
 endpoints. Caddy's 16 KB request limit applies only to login/register; its HTTP 413
 is an edge response, while application 403/429 use the platform error envelope.
-There are no new Chat, Tool, content, generation-count or fee quotas.
+This stage has no Chat, Tool, content, generation-count or fee quota.
 
 Arrange protected regular backups and an operator-owned off-host destination before
 public use. A backup must include SQLite via its backup API, referenced runtime
