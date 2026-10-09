@@ -109,6 +109,28 @@ function unknownChatOutcomeError() {
   });
 }
 
+// Classroom origins are plain HTTP on a .local name, which is not a secure
+// context, so randomUUID is missing. Request ids still have to be UUIDs.
+function newRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex
+    .slice(6, 8)
+    .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
 function isAgentSession(
   session: ConversationSession,
 ): session is AgentChatSession {
@@ -1335,7 +1357,7 @@ function AgentChatScope({
       return;
     }
     const sequence = ++teamSendSequence.current;
-    const requestId = preset?.requestId ?? crypto.randomUUID();
+    const requestId = preset?.requestId ?? newRequestId();
     const scopeAtSend = scopeKey;
     const sentSessionId = session.id;
     const request = {
@@ -1560,8 +1582,7 @@ function AgentChatScope({
         (pending.sessionId === session.id || pending.sessionId === null)
           ? pending
           : null;
-      const requestId =
-        preset?.requestId ?? reuse?.requestId ?? crypto.randomUUID();
+      const requestId = preset?.requestId ?? reuse?.requestId ?? newRequestId();
       const revision =
         preset?.expectedRevision ?? reuse?.revision ?? session.revision;
       const promise = api
