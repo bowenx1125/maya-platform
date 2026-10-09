@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
-import styles from "./card-table.module.css";
+import styles from "./entrance.module.css";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const ease = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);

@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import type { Player } from "../../lib/poker/table";
 import { usePrefersReducedMotion } from "../academy/motion";
 import { useSession } from "../session-provider";
-import styles from "./card-table.module.css";
+import styles from "./entrance.module.css";
 // Loaded with the page: the door has to be up before the first paint of the
 // room behind it, or the room flashes through.
 import { VaultEntrance } from "./vault-entrance";
