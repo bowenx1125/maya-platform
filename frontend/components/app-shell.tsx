@@ -267,13 +267,13 @@ export function AppShell({
     disabled?: boolean;
   }[] = [
     { href: home, label: t("appName"), icon: "home" },
-    { href: studyformHref, label: t("studyform"), icon: "agents" },
+    { href: studyformHref, label: t("studyform"), icon: "knowledge" },
     {
       href: teacherSurface
         ? `/teacher/knowledge${teacherLegacyBrainform}`
         : "/student/knowledge",
       label: "Brainform",
-      icon: "knowledge",
+      icon: "brain",
     },
     {
       href: teacherSurface ? "/teacher/chat" : "/student/chat",
