@@ -1298,7 +1298,6 @@ describe("teacher workspace access", () => {
       "Studyform",
       "Brainform",
       "Chatform",
-      "Live",
       "Debates",
       "Accounts",
     ]);

@@ -100,7 +100,6 @@ describe("PW3-E teacher information architecture", () => {
       "Studyform",
       "Brainform",
       "Chatform",
-      "Live",
       "Debates",
       "Accounts",
     ]);

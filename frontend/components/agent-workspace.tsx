@@ -56,6 +56,13 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     "delete" | "nextVersion" | null
   >(null);
   const mutationStore = useIdempotencyStore();
+  const draftVersionId =
+    versions.find((version) => version.id === agent?.current_draft_version_id)
+      ?.id ?? versions.find((version) => version.state === "draft")?.id;
+  useEffect(() => {
+    if (!agent || !draftVersionId) return;
+    router.replace(`/student/agent-versions/${draftVersionId}/edit`);
+  }, [agent, draftVersionId, router]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,17 +181,12 @@ export function AgentOverview({ agentId }: { agentId: string }) {
         />
       ) : null}
       {visible ? (
-        <PageAction
-          name="new"
-          disabled={busy || agent.status === "archived"}
-          href={
-            draft ? "/student/agent-versions/" + draft.id + "/edit" : undefined
-          }
-          onClick={draft ? undefined : () => void createNextVersion()}
+        <ReadOnlyVersion
+          version={visible}
+          agent={agent}
+          actions={actions}
+          backHref={`/student/groups/${agent.group_id}`}
         />
-      ) : null}
-      {visible ? (
-        <ReadOnlyVersion version={visible} agent={agent} actions={actions} />
       ) : (
         <SectionCard action={actions}>
           <PageAction name="back" href={`/student/groups/${agent.group_id}`} />

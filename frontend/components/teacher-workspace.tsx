@@ -707,17 +707,9 @@ export function TeacherAgentDetail({
   return (
     <div className={detailStyles.page}>
       <PageIntro title={agent.name} />
-      <PageAction name="back" href="/teacher" />
+      <PageAction name="back" href="/teacher/studyform" />
       {agent.status === "archived" ? (
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
-      ) : null}
-      {agent.ownership_scope === "personal" &&
-      agent.current_published_version_id ? (
-        <PageAction
-          name="new"
-          disabled={creatingDraft || agent.status === "archived"}
-          onClick={() => void createPersonalVersion()}
-        />
       ) : null}
       <Link
         className={detailStyles.action}

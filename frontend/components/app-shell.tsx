@@ -270,12 +270,16 @@ export function AppShell({
       label: "Chatform",
       icon: "chat",
     },
-    {
-      href: "/student/live",
-      label: "Live",
-      icon: "live",
-      disabled: teacherSurface || !live,
-    },
+    ...(teacherSurface
+      ? []
+      : [
+          {
+            href: "/student/live",
+            label: "Live",
+            icon: "live" as const,
+            disabled: !live,
+          },
+        ]),
     ...(teacherSurface
       ? [
           {
