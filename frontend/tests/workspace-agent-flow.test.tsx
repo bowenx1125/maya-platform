@@ -111,12 +111,19 @@ describe("Workspace Agent flow", () => {
       version({ id: "old-id", state: "superseded", agent_md: "# Old prompt" }),
       version(),
     ]);
+    api.version.mockResolvedValue(version());
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByText("Current prompt");
+    expect(
+      (
+        (await screen.findByRole("textbox", {
+          name: "AGENT.md editor",
+        })) as HTMLTextAreaElement
+      ).value,
+    ).toBe("# Current prompt");
     expect(screen.queryByText("Old prompt")).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(screen.queryByText("Info")).toBeNull();
@@ -125,14 +132,17 @@ describe("Workspace Agent flow", () => {
     expect(
       (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
-    expect(
-      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(nav.getByRole("button", { name: "Done" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(api.nextVersion).not.toHaveBeenCalled();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
   });
 
-  it("opens a published Agent with Back and uses sidebar New for the next version", async () => {
+  it("opens a published Agent in the editor and does not save a draft before Done", async () => {
+    api.version.mockResolvedValue(version());
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
@@ -142,8 +152,8 @@ describe("Workspace Agent flow", () => {
     expect(
       (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
-    fireEvent.click(nav.getByRole("button", { name: "New" }));
-    await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
   it("opens a Teacher Agent with Back and uses sidebar New for the next version", async () => {
@@ -163,12 +173,17 @@ describe("Workspace Agent flow", () => {
     );
 
     const navigation = within(screen.getByRole("navigation"));
-    const backs = await navigation.findAllByRole("link", { name: "Back" });
-    expect(backs.map((link) => link.getAttribute("href"))).toContain(
-      "/teacher/studyform",
-    );
-    fireEvent.click(navigation.getByRole("button", { name: "New" }));
-    await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const backs = navigation.getAllByRole("link", { name: "Back" });
+      expect(backs.map((link) => link.getAttribute("href"))).toContain(
+        "/teacher/studyform",
+      );
+    });
+    expect(navigation.queryByRole("button", { name: "New" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
   });
 
   it("continues an existing next-version draft without making a second one", async () => {
@@ -184,12 +199,11 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    const nav = within(screen.getByRole("navigation"));
-    fireEvent.click(await nav.findByRole("button", { name: "New" }));
-    expect(router.push).toHaveBeenCalledWith(
-      "/student/agent-versions/draft-id/edit",
-    );
+    expect(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
     expect(api.nextVersion).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it("uses page New to edit an initial draft without inline Edit or Delete", async () => {
@@ -207,11 +221,9 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    const nav = within(screen.getByRole("navigation"));
-    fireEvent.click(await nav.findByRole("button", { name: "New" }));
-    expect(router.push).toHaveBeenCalledWith(
-      "/student/agent-versions/draft-id/edit",
-    );
+    expect(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.nextVersion).not.toHaveBeenCalled();
@@ -239,12 +251,16 @@ describe("Workspace Agent flow", () => {
       </AppShell>,
     );
     expect(
-      await within(screen.getByRole("navigation")).findByRole("button", {
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("button", {
         name: "New",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(router.replace).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
   it("opens current Agent inspection from a keyboard-focusable Workspace row", async () => {

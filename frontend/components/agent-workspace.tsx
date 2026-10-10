@@ -27,7 +27,12 @@ import {
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
-import { AvatarEditor, type AvatarConfig } from "./avatar";
+import {
+  AVATAR_TEMPLATE_DEFAULT_CONFIGS,
+  AvatarEditor,
+  avatarDefaultConfigForTemplate,
+  type AvatarConfig,
+} from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { ModulePlus } from "./studyform-layout";
@@ -57,9 +62,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     "delete" | "nextVersion" | null
   >(null);
   const mutationStore = useIdempotencyStore();
-  const draftVersionId =
-    versions.find((version) => version.id === agent?.current_draft_version_id)
-      ?.id ?? versions.find((version) => version.state === "draft")?.id;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +145,16 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     versions.every(
       (version) => version.state === "draft" && !version.knowledge_snapshot_id,
     );
+  const editorVersion = current ?? draft;
+  if (agent.group_id && editorVersion) {
+    return (
+      <AgentWorkbench
+        versionId={editorVersion.id}
+        backHref={`/student/groups/${agent.group_id}`}
+        publishOnDone
+      />
+    );
+  }
   const actions = canDelete ? (
     <div className="button-row">
       <button
@@ -169,19 +181,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           }
         />
       ) : null}
-      {agent.group_id ? (
-        <PageAction
-          name="new"
-          disabled={busy}
-          onClick={() => {
-            if (draftVersionId) {
-              router.push(`/student/agent-versions/${draftVersionId}/edit`);
-              return;
-            }
-            void createNextVersion();
-          }}
-        />
-      ) : null}
       {visible ? (
         <ReadOnlyVersion
           version={visible}
@@ -204,18 +203,36 @@ export function AgentWorkbench({
   backHref,
   actorScopeKey,
   generationFlow = false,
+  publishOnDone = false,
+  unsavedCreate,
 }: {
-  versionId: string;
+  versionId?: string;
   backHref?: string;
   actorScopeKey?: string;
   knowledgeHref?: string;
   generationFlow?: boolean;
+  // Edits stay in the browser until Done. New does not create a draft.
+  publishOnDone?: boolean;
+  // A new Agent stays in this form until Done, which creates and publishes it.
+  unsavedCreate?: {
+    groupId?: string;
+    courseId?: string;
+    create: (
+      name: string,
+      visibility: "private" | "public",
+    ) => Promise<AgentDetail>;
+    onIdentityEdit?: () => void;
+  };
 }) {
   const t = useT();
   const router = useRouter();
   const { locale } = useLocale();
   const { api, user } = useSession();
-  const workbenchScope = actorScopeKey ?? `agent-version:${versionId}`;
+  const workbenchScope =
+    actorScopeKey ??
+    (versionId
+      ? `agent-version:${versionId}`
+      : `agent-create:${unsavedCreate?.groupId ?? unsavedCreate?.courseId ?? "course"}`);
   const workbenchScopeRef = useRef(workbenchScope);
   useLayoutEffect(() => {
     workbenchScopeRef.current = workbenchScope;
@@ -248,6 +265,10 @@ export function AgentWorkbench({
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [agentMd, setAgentMd] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const [draftVisibility, setDraftVisibility] = useState<"private" | "public">(
+    "private",
+  );
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -272,9 +293,16 @@ export function AgentWorkbench({
   const [visibilityBusyDocumentId, setVisibilityBusyDocumentId] = useState<
     string | null
   >(null);
-  const uploadIntent = `${workbenchScope}:upload-knowledge:${versionId}`;
-  const knowledgeBindingIntent = `${workbenchScope}:knowledge-sets:${agent?.id ?? versionId}`;
-  const publishIntent = `${workbenchScope}:publish-agent-version:${versionId}`;
+  const versionKey = versionId ?? "new";
+  const uploadIntent = `${workbenchScope}:upload-knowledge:${versionKey}`;
+  const knowledgeBindingIntent = `${workbenchScope}:knowledge-sets:${agent?.id ?? versionKey}`;
+  const publishIntent = `${workbenchScope}:publish-agent-version:${versionKey}`;
+  const createdAgentRef = useRef<AgentDetail | null>(null);
+  const persistedVersionRef = useRef<AgentVersion | null>(null);
+  const publishLock = useRef(false);
+  const unsavedGroupId = unsavedCreate?.groupId ?? null;
+  const unsavedCourseId = unsavedCreate?.courseId ?? null;
+  const creating = unsavedCreate !== undefined;
 
   async function refreshKnowledgePreview() {
     const requestScope = workbenchScope;
@@ -310,6 +338,88 @@ export function AgentWorkbench({
       setLoading(true);
       setError(null);
       try {
+        if (creating) {
+          let courseId = unsavedCourseId;
+          if (unsavedGroupId) {
+            const group = await api.group(unsavedGroupId);
+            if (!isCurrentScope(requestScope)) return;
+            courseId = courseId ?? group.course_id;
+          }
+          if (!courseId) throw new Error("missing course");
+          const [
+            nextDocuments,
+            nextAvatarTemplates,
+            nextVoiceProfiles,
+            nextKnowledgeSets,
+          ] = await Promise.all([
+            unsavedGroupId
+              ? api.knowledge(unsavedGroupId)
+              : api.workspaceDocuments(courseId),
+            api.avatarTemplates(),
+            unsavedGroupId
+              ? api.voiceProfiles(unsavedGroupId)
+              : Promise.resolve([]),
+            api.knowledgeSets(courseId),
+          ]);
+          if (!isCurrentScope(requestScope)) return;
+          const baselineAvatar =
+            nextAvatarTemplates
+              .map((template) => avatarDefaultConfigForTemplate(template))
+              .find((config): config is AvatarConfig => config !== null) ??
+            ({
+              ...AVATAR_TEMPLATE_DEFAULT_CONFIGS["wave1-default-head"],
+            } as AvatarConfig);
+          setVersion({
+            id: "",
+            agent_id: "",
+            version_label: "V1.0",
+            state: "draft",
+            revision: 0,
+            agent_md: "",
+            avatar_config: baselineAvatar,
+            voice_profile_id: null,
+            voice_fallback_active: true,
+            persona_confirmed: false,
+            enabled_documents: [],
+            publish_blockers: [],
+          } as unknown as AgentVersion);
+          setAgent({
+            id: "",
+            name: "",
+            description: "",
+            group_id: unsavedGroupId,
+            course_id: courseId,
+            ownership_scope: unsavedGroupId ? "group" : "personal",
+            visibility: "private",
+            metadata_revision: 0,
+            status: "active",
+            current_draft_version_id: null,
+            current_published_version_id: null,
+            versions: [],
+          } as unknown as AgentDetail);
+          setDocuments(nextDocuments);
+          setKnowledgeSets(nextKnowledgeSets);
+          setAgentKnowledge({
+            agent_id: "",
+            agent_metadata_revision: 0,
+            sets: [],
+          });
+          setPreview(null);
+          setKnowledgePreviewRefreshFailed(false);
+          setAvatarTemplates(nextAvatarTemplates);
+          setVoiceProfiles(nextVoiceProfiles);
+          if (!keepLocal) {
+            setAgentMd("");
+            setAvatarConfig(baselineAvatar);
+            setVoiceProfileId(null);
+            setSelectedDocumentIds([]);
+            setSelectedKnowledgeSetIds([]);
+            setPendingKnowledgeSetIds(null);
+            setConflict(false);
+          }
+          return;
+        }
+        if (!versionId) throw new Error("missing version");
         const nextVersion = await api.version(versionId);
         if (!isCurrentScope(requestScope)) return;
         const nextAgent = await api.agent(nextVersion.agent_id);
@@ -373,7 +483,7 @@ export function AgentWorkbench({
         if (isCurrentScope(requestScope)) setLoading(false);
       }
     },
-    [api, versionId, workbenchScope],
+    [api, creating, unsavedCourseId, unsavedGroupId, versionId, workbenchScope],
   );
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -410,11 +520,23 @@ export function AgentWorkbench({
   }, [api, voiceGroupId]);
 
   const enabledCount = selectedDocumentIds.length;
+  const sameIds = (left: string[], right: string[]) =>
+    left.length === right.length &&
+    [...left].sort().every((id, index) => id === [...right].sort()[index]);
   const localDirty = Boolean(
     version &&
     (agentMd !== (version.agent_md ?? "") ||
       JSON.stringify(avatarConfig) !== JSON.stringify(version.avatar_config) ||
-      voiceProfileId !== (version.voice_profile_id ?? null)),
+      voiceProfileId !== (version.voice_profile_id ?? null) ||
+      !sameIds(
+        selectedDocumentIds,
+        (version.enabled_documents ?? []).map((document) => document.id),
+      ) ||
+      (agentKnowledge !== null &&
+        !sameIds(
+          selectedKnowledgeSetIds,
+          agentKnowledge.sets.map((set) => set.id),
+        ))),
   );
   const blockers = version?.publish_blockers ?? [];
 
@@ -438,7 +560,7 @@ export function AgentWorkbench({
     );
   const currentVersion = version;
   const currentAgent = agent;
-  if (version.state !== "draft")
+  if (version.state !== "draft" && !publishOnDone)
     return (
       <ReadOnlyVersion version={version} agent={agent} backHref={backHref} />
     );
@@ -481,6 +603,10 @@ export function AgentWorkbench({
   }
 
   async function uploadAgentMd(file: File) {
+    if (publishOnDone) {
+      setAgentMd(await file.text());
+      return;
+    }
     const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
@@ -512,6 +638,16 @@ export function AgentWorkbench({
   }
 
   async function toggleDocument(documentId: string, enabled: boolean) {
+    if (publishOnDone) {
+      setSelectedDocumentIds((current) =>
+        enabled
+          ? current.includes(documentId)
+            ? current
+            : [...current, documentId]
+          : current.filter((id) => id !== documentId),
+      );
+      return;
+    }
     const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
@@ -551,6 +687,10 @@ export function AgentWorkbench({
   }
 
   async function saveKnowledgeSetSelection(nextSetIds: string[]) {
+    if (publishOnDone) {
+      setSelectedKnowledgeSetIds(nextSetIds);
+      return;
+    }
     const requestScope = workbenchScope;
     if (!agentKnowledge || knowledgeBindingSaving) return;
     setSelectedKnowledgeSetIds(nextSetIds);
@@ -600,6 +740,12 @@ export function AgentWorkbench({
   async function uploadKnowledge(file: File) {
     const requestScope = workbenchScope;
     const signature = `${file.name}:${file.size}:${file.lastModified}`;
+    if (unsavedCreate && !createdAgentRef.current?.id) {
+      setPendingKnowledgeUpload({ file, signature });
+      setError(null);
+      setKnowledgeUploadError(null);
+      return;
+    }
     if (pendingKnowledgeUpload?.signature !== signature) {
       mutationStore.abandon(uploadIntent);
     }
@@ -698,6 +844,156 @@ export function AgentWorkbench({
     }
   }
 
+  async function writeUnsavedAgent(): Promise<{
+    agent: AgentDetail;
+    version: AgentVersion;
+  } | null> {
+    const requestScope = workbenchScope;
+    const create = unsavedCreate?.create;
+    if (!create) {
+      setError(new Error(t("draftNotFound")));
+      return null;
+    }
+    let created = createdAgentRef.current;
+    if (!created) {
+      try {
+        created = await create(draftName.trim(), draftVisibility);
+        if (!isCurrentScope(requestScope)) return null;
+        createdAgentRef.current = created;
+        setAgent(created);
+      } catch (cause) {
+        if (!isCurrentScope(requestScope)) return null;
+        if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+        setError(cause);
+        return null;
+      }
+    }
+    const draftId =
+      created.current_draft_version_id ??
+      created.versions?.find((item) => item.state === "draft")?.id;
+    if (!draftId) {
+      setError(new Error(t("draftNotFound")));
+      return null;
+    }
+    let saved = persistedVersionRef.current;
+    if (!saved || localDirty) {
+      try {
+        saved = await api.updateDraft(draftId, {
+          expected_revision: saved?.revision ?? 0,
+          agent_md: agentMd,
+          ...(avatarConfig ? { avatar_config: avatarConfig } : {}),
+          ...(voiceProfileId !== (saved?.voice_profile_id ?? null)
+            ? { voice_profile_id: voiceProfileId }
+            : {}),
+        });
+        if (!isCurrentScope(requestScope)) return null;
+        persistedVersionRef.current = saved;
+        setVersion(saved);
+      } catch (cause) {
+        if (!isCurrentScope(requestScope)) return null;
+        if (isConflict(cause)) setConflict(true);
+        if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+        setError(cause);
+        return null;
+      }
+    }
+    if (!saved) return null;
+    if (pendingKnowledgeUpload) {
+      const handle = mutationStore.handleFor(uploadIntent);
+      try {
+        const mutation = created.group_id
+          ? await api.uploadKnowledge(
+              created.group_id,
+              saved.id,
+              pendingKnowledgeUpload.file,
+              saved.revision,
+              { idempotency: handle },
+            )
+          : await api.uploadWorkspaceKnowledge(
+              created.course_id,
+              saved.id,
+              pendingKnowledgeUpload.file,
+              saved.revision,
+              { idempotency: handle },
+            );
+        mutationStore.finish(uploadIntent, handle);
+        if (!isCurrentScope(requestScope)) return null;
+        if (!mutation.agent_version) {
+          setError(new Error(t("draftNotFound")));
+          return null;
+        }
+        saved = mutation.agent_version;
+        persistedVersionRef.current = saved;
+        setVersion(saved);
+        setPendingKnowledgeUpload(null);
+        setDocuments((current) =>
+          current.some((item) => item.id === mutation.document.id)
+            ? current
+            : [...current, mutation.document],
+        );
+      } catch (cause) {
+        if (!isCurrentScope(requestScope)) return null;
+        if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+        else mutationStore.abandon(uploadIntent, handle);
+        setError(cause);
+        setKnowledgeUploadError(cause);
+        return null;
+      }
+    }
+    const enabledIds = (saved.enabled_documents ?? []).map(
+      (document) => document.id,
+    );
+    if (!sameIds(selectedDocumentIds, enabledIds)) {
+      try {
+        saved = await api.setDocuments(
+          saved.id,
+          saved.revision,
+          selectedDocumentIds,
+        );
+        if (!isCurrentScope(requestScope)) return null;
+        persistedVersionRef.current = saved;
+        setVersion(saved);
+      } catch (cause) {
+        if (!isCurrentScope(requestScope)) return null;
+        if (isConflict(cause)) setConflict(true);
+        if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+        setError(cause);
+        return null;
+      }
+    }
+    const boundIds = agentKnowledge?.sets.map((set) => set.id) ?? [];
+    if (agentKnowledge && !sameIds(selectedKnowledgeSetIds, boundIds)) {
+      const handle = mutationStore.handleFor(knowledgeBindingIntent);
+      try {
+        const next = await api.replaceAgentKnowledgeSets(
+          created.id,
+          {
+            expected_agent_metadata_revision:
+              agentKnowledge.agent_metadata_revision,
+            set_ids: selectedKnowledgeSetIds,
+          },
+          { idempotency: handle },
+        );
+        if (!isCurrentScope(requestScope)) return null;
+        mutationStore.finish(knowledgeBindingIntent, handle);
+        setAgentKnowledge(next);
+        created = {
+          ...created,
+          metadata_revision: next.agent_metadata_revision,
+        };
+        createdAgentRef.current = created;
+        setAgent(created);
+      } catch (cause) {
+        if (!isCurrentScope(requestScope)) return null;
+        if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+        else mutationStore.abandon(knowledgeBindingIntent, handle);
+        setError(cause);
+        return null;
+      }
+    }
+    return { agent: created, version: saved };
+  }
+
   async function publish(retry = false) {
     const requestScope = workbenchScope;
     if (generationFlow && selectedDocumentIds.length === 0) {
@@ -706,9 +1002,125 @@ export function AgentWorkbench({
       return;
     }
     setGenerationSourcePrompt(false);
+    if (unsavedCreate) {
+      if (publishLock.current) return;
+      if (!draftName.trim() || !agentMd.trim()) return;
+      publishLock.current = true;
+      setSaving(true);
+      setError(null);
+      setNotice(null);
+      try {
+        const materialized = await writeUnsavedAgent();
+        if (!materialized || !isCurrentScope(requestScope)) return;
+        const saved = materialized.version;
+        const activeAgent = materialized.agent;
+        if ((saved.publish_blockers ?? []).length > 0) {
+          setError(
+            new Error(blockerLabel(saved.publish_blockers?.[0] ?? "", locale)),
+          );
+          return;
+        }
+        const handle = mutationStore.handleFor(publishIntent);
+        const next = await api.publish(saved.id, saved.revision, {
+          idempotency: handle,
+        });
+        mutationStore.finish(publishIntent, handle);
+        if (!isCurrentScope(requestScope)) return;
+        createdAgentRef.current = {
+          ...activeAgent,
+          current_published_version_id: next.id,
+          current_draft_version_id: null,
+        };
+        setRetryAction(null);
+        setVersion(next);
+        setNotice("publishedNotice");
+        router.replace(
+          activeAgent.group_id
+            ? `/student/groups/${activeAgent.group_id}`
+            : "/teacher/studyform",
+        );
+      } catch (cause) {
+        if (!isCurrentScope(requestScope)) return;
+        if (isConflict(cause)) setConflict(true);
+        if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+        else {
+          mutationStore.abandon(publishIntent);
+          setRetryAction(null);
+        }
+        setError(cause);
+      } finally {
+        publishLock.current = false;
+        if (isCurrentScope(requestScope)) setSaving(false);
+      }
+      return;
+    }
     // The server only knows the last saved revision.  Never publish it while
     // the browser still holds newer AGENT/avatar/voice values.
-    const saved = localDirty ? await saveDraft() : currentVersion;
+    let saved =
+      localDirty && !(publishOnDone && currentVersion.state !== "draft")
+        ? await saveDraft()
+        : currentVersion;
+    if (publishOnDone && saved && saved.state !== "draft") {
+      const intent = `agent-next-version:${currentAgent.id}`;
+      const handle = mutationStore.handleFor(intent);
+      try {
+        saved = await api.nextVersion(currentAgent.id, { idempotency: handle });
+        mutationStore.finish(intent, handle);
+      } catch (cause) {
+        if (isAmbiguousMutationFailure(cause)) {
+          setError(cause);
+          setRetryAction("publish");
+          return;
+        }
+        mutationStore.abandon(intent, handle);
+        const versions = await api.versions(currentAgent.id);
+        const existing = versions.find((item) => item.state === "draft");
+        if (!existing) {
+          setError(cause);
+          return;
+        }
+        saved = existing;
+      }
+      if (!saved) return;
+      const written = await api.updateDraft(saved.id, {
+        expected_revision: saved.revision,
+        agent_md: agentMd,
+        ...(avatarConfig ? { avatar_config: avatarConfig } : {}),
+        ...(voiceProfileId !== (saved.voice_profile_id ?? null)
+          ? { voice_profile_id: voiceProfileId }
+          : {}),
+      });
+      saved = written;
+    }
+    if (publishOnDone && saved) {
+      const documentIds = (saved.enabled_documents ?? []).map(
+        (document) => document.id,
+      );
+      if (!sameIds(selectedDocumentIds, documentIds)) {
+        saved = await api.setDocuments(
+          saved.id,
+          saved.revision,
+          selectedDocumentIds,
+        );
+      }
+      if (
+        agentKnowledge &&
+        !sameIds(
+          selectedKnowledgeSetIds,
+          agentKnowledge.sets.map((set) => set.id),
+        )
+      ) {
+        await api.replaceAgentKnowledgeSets(
+          currentAgent.id,
+          {
+            expected_agent_metadata_revision:
+              agentKnowledge.agent_metadata_revision,
+            set_ids: selectedKnowledgeSetIds,
+          },
+          { idempotency: mutationStore.handleFor(knowledgeBindingIntent) },
+        );
+      }
+    }
     if (
       !isCurrentScope(requestScope) ||
       !saved ||
@@ -744,9 +1156,14 @@ export function AgentWorkbench({
       }
       setNotice("publishedNotice");
       router.replace(
-        currentAgent.ownership_scope === "personal"
-          ? `/teacher/agents/${currentAgent.id}`
-          : `/student/agents/${currentAgent.id}`,
+        publishOnDone
+          ? (backHref ??
+              (currentAgent.group_id
+                ? `/student/groups/${currentAgent.group_id}`
+                : "/teacher/studyform"))
+          : currentAgent.ownership_scope === "personal"
+            ? `/teacher/agents/${currentAgent.id}`
+            : `/student/agents/${currentAgent.id}`,
       );
     } catch (cause) {
       if (!isCurrentScope(requestScope)) return;
@@ -765,7 +1182,15 @@ export function AgentWorkbench({
 
   return (
     <>
-      <PageIntro title={`${agent.name} · ${version.version_label}`} />
+      <PageIntro
+        title={
+          unsavedCreate
+            ? draftName.trim()
+              ? `${draftName.trim()} · ${version.version_label}`
+              : t("newAgent")
+            : `${agent.name} · ${version.version_label}`
+        }
+      />
       {generationFlow ? (
         <p className="notice notice-info" role="status">
           {t("aiKnowledgeFlowIntro")}
@@ -804,6 +1229,60 @@ export function AgentWorkbench({
       ) : null}
       <div className="workbench-grid">
         <div className="workbench-main">
+          {unsavedCreate ? (
+            <SectionCard title={t("agentIdentity")}>
+              <form
+                id="create-agent-form"
+                className="stack-form wide-form quiet-create"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void publish();
+                }}
+              >
+                <label>
+                  <span>{t("agentName")}</span>
+                  <input
+                    aria-label={t("agentName")}
+                    value={draftName}
+                    disabled={saving}
+                    maxLength={120}
+                    onChange={(event) => {
+                      unsavedCreate.onIdentityEdit?.();
+                      setDraftName(event.target.value);
+                    }}
+                    required
+                  />
+                </label>
+                <div className="agent-identity">
+                  <div
+                    className="visibility-toggle"
+                    role="group"
+                    aria-label={t("agentVisibility")}
+                    data-ui-guide="agent.visibility"
+                  >
+                    {(["private", "public"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        aria-pressed={draftVisibility === option}
+                        disabled={saving}
+                        onClick={() => {
+                          unsavedCreate.onIdentityEdit?.();
+                          setDraftVisibility(option);
+                        }}
+                      >
+                        {t(
+                          option === "private"
+                            ? "privateOption"
+                            : "publicOption",
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </form>
+            </SectionCard>
+          ) : null}
           <SectionCard
             title={t("agentMd")}
             guide="agent.markdown"
@@ -816,7 +1295,12 @@ export function AgentWorkbench({
                   onClick={() => {
                     abandonUploadIntent();
                     abandonPublishIntent();
-                    setAgentMd(buildAgentTemplate(agent.name, locale));
+                    setAgentMd(
+                      buildAgentTemplate(
+                        draftName.trim() || agent.name,
+                        locale,
+                      ),
+                    );
                   }}
                 >
                   {t("insertOutline")}
@@ -1087,13 +1571,50 @@ export function AgentWorkbench({
           href={backHref ?? `/student/agents/${agent.id}`}
           disabled={saving}
           onClick={(event) => {
-            if (localDirty && !window.confirm(t("discardDraftConfirm")))
+            if (localDirty && !window.confirm(t("discardDraftConfirm"))) {
               event.preventDefault();
+              return;
+            }
+            const created = createdAgentRef.current;
+            if (
+              unsavedCreate &&
+              created?.id &&
+              !created.current_published_version_id
+            ) {
+              event.preventDefault();
+              const href =
+                backHref ??
+                (created.group_id
+                  ? `/student/groups/${created.group_id}`
+                  : "/teacher/studyform");
+              void (async () => {
+                try {
+                  await api.deleteAgent(created.id);
+                  router.push(href);
+                } catch (cause) {
+                  setError(cause);
+                }
+              })();
+            }
           }}
         />
         <PageAction
           name="done"
-          disabled={saving || (!localDirty && blockers.length > 0)}
+          disabled={
+            saving ||
+            (Boolean(unsavedCreate) &&
+              (!draftName.trim() || !agentMd.trim()) &&
+              retryAction !== "publish") ||
+            (publishOnDone &&
+              !unsavedCreate &&
+              !generationFlow &&
+              !localDirty &&
+              retryAction !== "publish") ||
+            (!publishOnDone &&
+              !unsavedCreate &&
+              !localDirty &&
+              blockers.length > 0)
+          }
           onClick={() => void publish()}
         />
       </div>

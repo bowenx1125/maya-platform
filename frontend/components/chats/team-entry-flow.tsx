@@ -499,18 +499,11 @@ export function TeamEntryFlow({
       onSaved?.(savedTeam);
       return;
     }
-
-    // Once the write returns a receipt, only a list refresh may still fail.
-    // Keep the receipt and never submit the mutation again for a GET failure.
-    setTeams((current) => [
-      savedTeam,
-      ...current.filter((item) => item.id !== savedTeam.id),
-    ]);
-    setTeamListRefreshError(false);
-    setFormOpen(false);
+    // Leave the form directly. A version list between Done and Studyform
+    // only flashes the version that was just saved.
     setSaved(true);
     syncManageRoute("teams");
-    await refreshTeamList();
+    onSaved?.(savedTeam);
   }
 
   const formErrors = !form.name.trim()
@@ -520,7 +513,7 @@ export function TeamEntryFlow({
       : !form.leaderVersionId
         ? t("teamChooseLeader")
         : "";
-  const title = variant === "maya" ? t("mayaTeam") : t("chatCreateTeam");
+  const title = variant === "maya" ? t("mayaTeams") : t("chatTargetTeams");
 
   return (
     <section className={styles.entryFlow} aria-labelledby={headingId}>
@@ -591,9 +584,6 @@ export function TeamEntryFlow({
             className={styles.teamForm}
             onSubmit={(event) => void saveTeam(event)}
           >
-            {standalone ? (
-              <h3>{editing ? t("chatEditTeam") : t("chatCreateTeam")}</h3>
-            ) : null}
             <label>
               {t("teamName")}
               <input

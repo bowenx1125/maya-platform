@@ -190,7 +190,7 @@ describe("W1 teacher personal workspace", () => {
 
     const tile = await screen.findByRole("link", { name: "Teacher Lens" });
     expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
-    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.queryByText("Draft")).toBeNull();
     expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
   });
 
@@ -223,18 +223,31 @@ describe("W1 teacher personal workspace", () => {
   it("creates a course-scoped Agent with Private as the default visibility", async () => {
     const api = {
       createWorkspaceAgent: vi.fn().mockResolvedValue(personalAgent()),
+      workspaceDocuments: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      updateDraft: vi.fn(async () =>
+        draft({ ...privateDocument(), id: "unused" }),
+      ),
+      publish: vi.fn(async () => ({
+        ...draft(privateDocument()),
+        state: "published",
+        publish_blockers: [],
+      })),
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
       <LocaleProvider initialLocale="en">
-        <TeacherPersonalAgentCreate />
+        <AppShell role="teacher">
+          <TeacherPersonalAgentCreate />
+        </AppShell>
       </LocaleProvider>,
     );
 
     expect(
-      screen
-        .getByRole("button", { name: "Private" })
-        .getAttribute("aria-pressed"),
+      (await screen.findByRole("button", { name: "Private" })).getAttribute(
+        "aria-pressed",
+      ),
     ).toBe("true");
     expect(
       screen
@@ -246,9 +259,15 @@ describe("W1 teacher personal workspace", () => {
     expect(
       screen.queryByText(/A Public personal Agent is shareable/),
     ).toBeNull();
+    expect(api.createWorkspaceAgent).not.toHaveBeenCalled();
     const name = screen.getByLabelText("Name");
     fireEvent.change(name, { target: { value: "Teacher Lens" } });
-    fireEvent.submit(name.closest("form")!);
+    fireEvent.change(screen.getByRole("textbox", { name: "AGENT.md editor" }), {
+      target: { value: "# Teacher Lens" },
+    });
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() => expect(done).not.toHaveProperty("disabled", true));
+    fireEvent.click(done);
 
     await waitFor(() =>
       expect(api.createWorkspaceAgent).toHaveBeenCalledWith(

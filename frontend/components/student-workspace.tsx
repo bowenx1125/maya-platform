@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
 
 import {
   isAmbiguousMutationFailure,
@@ -22,7 +20,7 @@ import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { HomeGuide } from "./home-guide";
 import { useLocale, useT } from "./locale";
-import { PageAction } from "./page-action";
+import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
@@ -84,14 +82,10 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
   const draft =
     versions.find((version) => version.id === agent.current_draft_version_id) ??
     versions.find((version) => version.state === "draft");
-  const hasUnpublishedWork =
-    Boolean(agent.current_draft_version_id) &&
-    agent.current_draft_version_id !== agent.current_published_version_id;
-  const onlyDraft = !agent.current_published_version_id && Boolean(draft);
   const label = published?.version_label ?? draft?.version_label ?? "V1.0";
   return {
     label,
-    pending: hasUnpublishedWork || onlyDraft || agent.status === "archived",
+    pending: agent.status === "archived",
   };
 }
 
@@ -295,9 +289,7 @@ function GroupWorkspaceSession({
   const { api, user } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [items, setItems] = useState<AgentListItem[]>([]);
-  const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>(
-    [],
-  );
+  const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -466,7 +458,9 @@ function GroupWorkspaceSession({
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
-          empty={items.length || courseAgents.length ? undefined : t("noAgents")}
+          empty={
+            items.length || courseAgents.length ? undefined : t("noAgents")
+          }
           action={
             teacherIdentity ? null : (
               <ModulePlus
@@ -615,32 +609,15 @@ function CreateAgentFormSession({
   courseId?: string;
   actorScopeKey: string;
 }) {
-  const t = useT();
   const { api } = useSession();
-  const router = useRouter();
   const mutationStore = useIdempotencyStore();
-  const mounted = useRef(true);
-  const [name, setName] = useState("");
-  const [visibility, setVisibility] = useState<"private" | "public">("private");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [retryable, setRetryable] = useState(false);
   const mutationIntent = `create-agent:${actorScopeKey}`;
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   function abandonCreateIntent() {
     mutationStore.abandon(mutationIntent);
-    setRetryable(false);
   }
 
-  async function createAgent() {
-    setBusy(true);
-    setError(null);
+  async function createAgent(name: string, visibility: "private" | "public") {
     const handle = mutationStore.handleFor(mutationIntent);
     try {
       const created = groupId
@@ -659,99 +636,24 @@ function CreateAgentFormSession({
             visibility,
           );
       mutationStore.finish(mutationIntent, handle);
-      if (!mounted.current) return;
-      setRetryable(false);
-      const draftId =
-        created.current_draft_version_id ??
-        created.versions?.find((version) => version.state === "draft")?.id;
-      router.push(
-        groupId
-          ? draftId
-            ? `/student/agent-versions/${draftId}/edit`
-            : `/student/agents/${created.id}`
-          : `/teacher/agents/${created.id}`,
-      );
+      return created;
     } catch (cause) {
-      if (!mounted.current) return;
-      if (isAmbiguousMutationFailure(cause)) {
-        setRetryable(true);
-      } else {
+      if (!isAmbiguousMutationFailure(cause))
         mutationStore.abandon(mutationIntent, handle);
-        setRetryable(false);
-      }
-      setError(cause);
-    } finally {
-      setBusy(false);
+      throw cause;
     }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    void createAgent();
-  }
-
   return (
-    <>
-      <PageIntro title={t("newAgent")} />
-      <SectionCard title={t("agentIdentity")}>
-        <form
-          id="create-agent-form"
-          className="stack-form wide-form quiet-create"
-          onSubmit={submit}
-          aria-busy={busy}
-        >
-          <label>
-            <span>{t("agentName")}</span>
-            <input
-              aria-label={t("agentName")}
-              value={name}
-              disabled={busy}
-              maxLength={120}
-              onChange={(event) => {
-                abandonCreateIntent();
-                setName(event.target.value);
-              }}
-              required
-            />
-          </label>
-          <div className="agent-identity">
-            <div
-              className="visibility-toggle"
-              role="group"
-              aria-label={t("agentVisibility")}
-              data-ui-guide="agent.visibility"
-            >
-              {(["private", "public"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={visibility === option}
-                  disabled={busy}
-                  onClick={() => {
-                    abandonCreateIntent();
-                    setVisibility(option);
-                  }}
-                >
-                  {t(option === "private" ? "privateOption" : "publicOption")}
-                </button>
-              ))}
-            </div>
-          </div>
-          {error ? (
-            <ErrorNotice
-              error={error}
-              onRetry={retryable ? () => void createAgent() : undefined}
-            />
-          ) : null}
-          <PageAction
-            name="back"
-            href={groupId ? `/student/groups/${groupId}` : "/teacher/studyform"}
-            disabled={busy}
-          />
-          <PageAction name="done" form="create-agent-form" disabled={busy} />
-        </form>
-      </SectionCard>
-    </>
+    <AgentWorkbench
+      publishOnDone
+      backHref={groupId ? `/student/groups/${groupId}` : "/teacher/studyform"}
+      unsavedCreate={{
+        groupId,
+        courseId,
+        create: createAgent,
+        onIdentityEdit: abandonCreateIntent,
+      }}
+    />
   );
 }

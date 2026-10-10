@@ -11,7 +11,7 @@ export default async function AgentVersionEditPage({
   return (
     <RouteGuard role="student">
       <AppShell role="student">
-        <AgentWorkbench versionId={versionId} />
+        <AgentWorkbench versionId={versionId} publishOnDone />
       </AppShell>
     </RouteGuard>
   );

@@ -113,16 +113,38 @@ describe("Wave 1A UI idempotency wiring", () => {
       if (keys.length < 3) throw new TypeError("connection reset");
       return createdAgent();
     });
-    useSessionMock.mockReturnValue({ api: { createAgent } });
+    useSessionMock.mockReturnValue({
+      api: {
+        createAgent,
+        group: vi.fn().mockResolvedValue({
+          id: "group-id",
+          course_id: "course-id",
+          name: "Group",
+        }),
+        knowledge: vi.fn().mockResolvedValue([]),
+        knowledgeSets: vi.fn().mockResolvedValue([]),
+        avatarTemplates: vi.fn().mockResolvedValue([]),
+        voiceProfiles: vi.fn().mockResolvedValue([]),
+        updateDraft: vi.fn(async () => draftVersion()),
+        publish: vi.fn(async () => draftVersion("published")),
+      },
+      user: { groups: [] },
+    });
 
     render(
       <AppShell role="student">
         <CreateAgentForm groupId="group-id" />
       </AppShell>,
     );
-    const name = screen.getByLabelText("Name");
+    const name = await screen.findByLabelText("Name");
     fireEvent.change(name, { target: { value: "First Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+      { target: { value: "# First Agent" } },
+    );
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() => expect(done).not.toHaveProperty("disabled", true));
+    fireEvent.click(done);
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("alert").textContent).toContain("Request failed");
@@ -135,8 +157,8 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(3));
     expect(keys[2]).not.toBe(keys[1]);
-    expect(router.push).toHaveBeenCalledWith(
-      "/student/agent-versions/version-id/edit",
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/student/groups/group-id"),
     );
   });
 
@@ -319,18 +341,43 @@ describe("Wave 1A UI idempotency wiring", () => {
       return draftVersion();
     });
     const api = {
+      version: vi.fn().mockResolvedValue(version),
       agent: vi.fn().mockResolvedValue(agent),
       versions: vi.fn().mockResolvedValue([version]),
+      knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        document_count: 0,
+        total_char_count: 0,
+        index_status: "ready",
+        combined_markdown: "",
+      }),
+      updateDraft: vi.fn(async () => draftVersion()),
+      publish: vi.fn(async () => draftVersion("published")),
       nextVersion,
     };
-    useSessionMock.mockReturnValue({ api });
+    useSessionMock.mockReturnValue({ api, user: { groups: [] } });
 
     render(
       <AppShell role="student">
-        <AgentOverview agentId="agent-id" />
+        <AgentWorkbench versionId="version-id" publishOnDone />
       </AppShell>,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    const editor = await screen.findByRole("textbox", {
+      name: "AGENT.md editor",
+    });
+    expect(nextVersion).not.toHaveBeenCalled();
+    fireEvent.change(editor, { target: { value: "# Updated agent" } });
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() => expect(done).not.toHaveProperty("disabled", true));
+    fireEvent.click(done);
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "connection reset",
@@ -384,9 +431,7 @@ describe("Wave 1A UI idempotency wiring", () => {
         <AgentWorkbench versionId="version-id" />
       </AppShell>,
     );
-    expect(
-      await screen.findByRole("link", { name: "New" }),
-    ).toHaveProperty(
+    expect(await screen.findByRole("link", { name: "New" })).toHaveProperty(
       "href",
       expect.stringContaining(
         "/student/knowledge?group_id=group-id&mode=rag-new",

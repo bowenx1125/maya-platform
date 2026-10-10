@@ -665,6 +665,7 @@ const enMessages = {
   chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Teams",
   mayaTeam: "Maya Team",
+  mayaTeams: "Maya Teams",
   mayaTeamPublishHelp:
     "Choose Agents, a Leader and shared Knowledge, then press Done to publish. Students find it under New in Chatform.",
   mayaTeamPublished:
@@ -675,7 +676,7 @@ const enMessages = {
   chatCreateTeam: "Create Team",
   chatEditTeam: "Edit Team",
   teamVersionLabel: "Version {seq}",
-  teamName: "Team name",
+  teamName: "Name",
   teamNameRequired: "Enter a Team name.",
   teamPrivate: "Private",
   teamPublic: "Public",
@@ -685,7 +686,7 @@ const enMessages = {
   teamSetLeader: "Set {name} as Leader",
   teamNeedsTwoMembers: "Choose at least two members.",
   teamChooseLeader: "Choose one Leader from the selected members.",
-  teamSharedKnowledge: "Shared Knowledge",
+  teamSharedKnowledge: "Knowledge",
   teamSharedKnowledgeHelp:
     "Only selected Knowledge Sets will be shared with this Team.",
   teamNoSharedKnowledge: "No Knowledge yet.",
@@ -1349,6 +1350,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Team",
   mayaTeam: "Maya Team",
+  mayaTeams: "Maya Teams",
   mayaTeamPublishHelp:
     "勾选 Agents、指定组长并选择共享 Knowledge，点击 Done 即发布。学生在 Chatform 点击 New 就能看到。",
   mayaTeamPublished: "Maya Team 已发布，学生可在 Chatform 的 New 中选择。",
@@ -1358,7 +1360,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   chatCreateTeam: "创建 Team",
   chatEditTeam: "编辑 Team",
   teamVersionLabel: "版本 {seq}",
-  teamName: "Team 名称",
+  teamName: "名称",
   teamNameRequired: "请输入 Team 名称。",
   teamPrivate: "私有",
   teamPublic: "公开",
@@ -1367,7 +1369,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamSetLeader: "设 {name} 为组长",
   teamNeedsTwoMembers: "请选择至少两名成员。",
   teamChooseLeader: "请从已选成员中指定一位组长。",
-  teamSharedKnowledge: "共享知识",
+  teamSharedKnowledge: "Knowledge",
   teamSharedKnowledgeHelp: "只有选中的知识集会在此 Team 内共享。",
   teamNoSharedKnowledge: "还没有 Knowledge。",
   teamSaveFailed: "无法保存 Team。请检查访问权限后重试。",

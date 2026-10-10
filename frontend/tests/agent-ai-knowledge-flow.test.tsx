@@ -329,7 +329,12 @@ describe("explicit AI Knowledge Agent flow", () => {
         generated_by_agent_id: "agent-1",
       })),
       nextVersion: vi.fn(async () => updateDraft),
-      version: vi.fn(async () => updateDraft),
+      version: vi.fn(async () => published),
+      updateDraft: vi.fn(async () => ({
+        ...updateDraft,
+        revision: 0,
+        enabled_documents: [],
+      })),
       setDocuments: vi.fn(
         async (_versionId: string, _revision: number, ids: string[]) => ({
           ...updateDraft,
@@ -374,17 +379,20 @@ describe("explicit AI Knowledge Agent flow", () => {
     const editor = await screen.findByRole("textbox", {
       name: "AGENT.md editor",
     });
-    expect(api.nextVersion).toHaveBeenCalledWith(
-      "agent-1",
-      expect.objectContaining({ idempotency: expect.any(Object) }),
-    );
+    expect(api.nextVersion).not.toHaveBeenCalled();
     fireEvent.click(
       await screen.findByRole("checkbox", { name: /lesson\.md/ }),
     );
-    await waitFor(() => expect(api.setDocuments).toHaveBeenCalledTimes(1));
+    expect(api.setDocuments).not.toHaveBeenCalled();
     const done = await screen.findByRole("button", { name: "Done" });
     await waitFor(() => expect(done).not.toHaveProperty("disabled", true));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(api.nextVersion).toHaveBeenCalledWith(
+        "agent-1",
+        expect.objectContaining({ idempotency: expect.any(Object) }),
+      ),
+    );
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
     expect(api.publish).toHaveBeenCalledWith(
       "update-draft",
@@ -558,7 +566,9 @@ describe("explicit AI Knowledge Agent flow", () => {
         </AppShell>
       </LocaleProvider>,
     );
-    await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(api.knowledgeSet).toHaveBeenCalledWith("set-new"),
+    );
     await act(async () => {
       oldSetLookup.resolve({
         ...generatedSet,
@@ -570,6 +580,6 @@ describe("explicit AI Knowledge Agent flow", () => {
     expect(
       await screen.findByRole("textbox", { name: "AGENT.md editor" }),
     ).toBeTruthy();
-    expect(api.nextVersion).toHaveBeenCalledTimes(1);
+    expect(api.nextVersion).not.toHaveBeenCalled();
   });
 });
