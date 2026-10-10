@@ -574,7 +574,8 @@ def visible_student_version(db: Session, context: AuthContext, version_id: str) 
         raise not_found()
     version, agent = row
     role = _agent_workspace_role(db, context, agent)
-    if role in {"owner", "student"} and can_read_version(db, version, agent, role, context=context):
+    # Draft writes belong to the publishing account. A public reader stays on visible_version.
+    if role == "owner" and can_read_version(db, version, agent, role, context=context):
         return ScopedVersion(version, agent, role)
     raise not_found()
 
@@ -584,7 +585,7 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
     if agent is None:
         raise not_found()
     role = _agent_workspace_role(db, context, agent)
-    if role == "owner" or role == "student":
+    if role == "owner":
         return ScopedAgent(agent, role)
     raise not_found()
 
@@ -1372,6 +1373,7 @@ def agent_summary(
         course_id=UUID(agent.course_id),
         ownership_scope=cast(Literal["group", "personal"], agent.ownership_scope),
         visibility=cast(Literal["private", "public"], agent.visibility),
+        can_edit=role == "owner",
         name=agent.name,
         description=agent.description,
         metadata_revision=agent.metadata_revision,

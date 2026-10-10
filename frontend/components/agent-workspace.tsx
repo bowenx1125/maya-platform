@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import {
   isAmbiguousMutationFailure,
@@ -30,13 +31,14 @@ import { useLocale, useT } from "./locale";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
   AvatarEditor,
+  AvatarPreview,
   avatarDefaultConfigForTemplate,
   type AvatarConfig,
 } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { ModulePlus } from "./studyform-layout";
-import { IconDownload, IconUpload } from "./quiet-icons";
+import { IconClose, IconDownload, IconEye, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -140,18 +142,31 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     ) ?? versions.find((version) => version.state === "published");
   const visible = current ?? draft;
   const canDelete =
+    agent.can_edit === true &&
     !visible &&
     !agent.current_published_version_id &&
     versions.every(
       (version) => version.state === "draft" && !version.knowledge_snapshot_id,
     );
   const editorVersion = current ?? draft;
-  if (agent.group_id && editorVersion) {
+  const entryBack = agent.group_id
+    ? `/student/groups/${agent.group_id}`
+    : "/student";
+  if (editorVersion && agent.can_edit === true) {
     return (
       <AgentWorkbench
         versionId={editorVersion.id}
-        backHref={`/student/groups/${agent.group_id}`}
+        backHref={entryBack}
         publishOnDone
+      />
+    );
+  }
+  if (editorVersion) {
+    return (
+      <AgentReadOnly
+        agent={agent}
+        version={editorVersion}
+        backHref={entryBack}
       />
     );
   }
@@ -1231,7 +1246,7 @@ export function AgentWorkbench({
           <span>{t(notice)}</span>
         </div>
       ) : null}
-      <div className="workbench-grid">
+      <div className="agent-entry">
         <div className="workbench-main">
           {unsavedCreate ? (
             <SectionCard title={t("agentIdentity")}>
@@ -1357,53 +1372,6 @@ export function AgentWorkbench({
               </span>
             </div>
           </SectionCard>
-          <div className="agent-editor-media">
-            {avatarConfig ? (
-              <SectionCard title={t("avatarDesign")}>
-                <AvatarEditor
-                  templates={avatarTemplates}
-                  value={avatarConfig}
-                  onChange={setAvatarConfig}
-                  fallbackLabel={agent.name}
-                  disabled={saving}
-                />
-              </SectionCard>
-            ) : null}
-            <div>
-              {voiceProfileId &&
-              !voiceProfiles.some(
-                (profile) =>
-                  profile.id === voiceProfileId && profile.status === "ready",
-              ) ? (
-                <button
-                  className="text-link"
-                  type="button"
-                  aria-pressed="true"
-                  disabled={saving}
-                  onClick={() => setVoiceProfileId(null)}
-                >
-                  {t("currentVoiceBinding")}
-                </button>
-              ) : null}
-              <VoiceLibrary
-                groupId={agent.group_id}
-                membershipGroupIds={
-                  agent.group_id
-                    ? []
-                    : (user?.groups ?? []).map((group) => group.group_id)
-                }
-                embedded
-                selectedId={voiceProfileId}
-                onSelect={(profileId) =>
-                  setVoiceProfileId((current) =>
-                    current === profileId ? null : profileId,
-                  )
-                }
-              />
-            </div>
-          </div>
-        </div>
-        <aside className="workbench-side">
           <SectionCard
             title={t("brainform")}
             guide="agent.brainform"
@@ -1567,7 +1535,52 @@ export function AgentWorkbench({
               )}
             </div>
           </SectionCard>
-        </aside>
+          <div className="agent-editor-media">
+            {avatarConfig ? (
+              <SectionCard title={t("avatarDesign")}>
+                <AvatarEditor
+                  templates={avatarTemplates}
+                  value={avatarConfig}
+                  onChange={setAvatarConfig}
+                  fallbackLabel={agent.name}
+                  disabled={saving}
+                />
+              </SectionCard>
+            ) : null}
+            <div>
+              {voiceProfileId &&
+              !voiceProfiles.some(
+                (profile) =>
+                  profile.id === voiceProfileId && profile.status === "ready",
+              ) ? (
+                <button
+                  className="text-link"
+                  type="button"
+                  aria-pressed="true"
+                  disabled={saving}
+                  onClick={() => setVoiceProfileId(null)}
+                >
+                  {t("currentVoiceBinding")}
+                </button>
+              ) : null}
+              <VoiceLibrary
+                groupId={agent.group_id}
+                membershipGroupIds={
+                  agent.group_id
+                    ? []
+                    : (user?.groups ?? []).map((group) => group.group_id)
+                }
+                embedded
+                selectedId={voiceProfileId}
+                onSelect={(profileId) =>
+                  setVoiceProfileId((current) =>
+                    current === profileId ? null : profileId,
+                  )
+                }
+              />
+            </div>
+          </div>
+        </div>
       </div>
       <div className="button-row">
         <PageAction
@@ -1637,6 +1650,274 @@ export function DraftConflictNotice() {
       <strong>{t("revisionConflict")}</strong>
       <span>{t("conflictDetail")}</span>
     </div>
+  );
+}
+
+export function AgentReadOnly({
+  agent,
+  version,
+  backHref,
+}: {
+  agent: AgentDetail;
+  version: AgentVersion;
+  backHref: string;
+}) {
+  const t = useT();
+  const { api } = useSession();
+  const [sets, setSets] = useState<KnowledgeSetSummary[]>([]);
+  const [check, setCheck] = useState<{
+    title: string;
+    markdown: string;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (typeof api.agentKnowledgeSets !== "function") return;
+    void api
+      .agentKnowledgeSets(agent.id)
+      .then((result) => {
+        if (active) setSets(result.sets ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [agent.id, api]);
+
+  useEffect(() => {
+    if (!check) return;
+    closeRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setCheck(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [check]);
+
+  async function viewMarkdown(title: string, load: () => Promise<string>) {
+    setBusy(true);
+    setError(null);
+    try {
+      setCheck({ title, markdown: await load() });
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadMarkdown(
+    filename: string,
+    load: () => Promise<string>,
+  ) {
+    setBusy(true);
+    setError(null);
+    try {
+      downloadText(await load(), filename);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const documents = version.enabled_documents ?? [];
+  const checkRoot =
+    typeof document === "undefined"
+      ? null
+      : (document.getElementById("workspace-content") ?? document.body);
+
+  return (
+    <>
+      <PageIntro title={`${agent.name} · ${version.version_label}`} />
+      <PageAction name="back" href={backHref} />
+      {error ? <ErrorNotice error={error} /> : null}
+      <div className="agent-entry">
+        <SectionCard
+          title={t("agentMd")}
+          guide="agent.markdown"
+          action={
+            <button
+              className="icon-action"
+              type="button"
+              disabled={busy}
+              aria-label={`${t("download")} AGENT.md`}
+              onClick={() =>
+                void downloadMarkdown("AGENT.md", async () => {
+                  const downloaded = await api.downloadAgentMd(version.id);
+                  return downloaded.content;
+                })
+              }
+            >
+              <IconDownload />
+            </button>
+          }
+        >
+          <ReportMarkdown className="read-only-markdown" label="AGENT.md">
+            {version.agent_md || t("noPrompt")}
+          </ReportMarkdown>
+        </SectionCard>
+        <SectionCard title={t("brainform")} guide="agent.brainform">
+          <div className="brainform-source-group">
+            <h3>{t("rag")}</h3>
+            {documents.length === 0 ? (
+              <p className="muted-copy">{t("noEvidence")}</p>
+            ) : (
+              <div className="document-list">
+                {documents.map((document) => (
+                  <div className="document-row" key={document.id}>
+                    <span className="document-main">
+                      <strong>{document.source_filename}</strong>
+                      <small>
+                        {document.char_count.toLocaleString()} {t("characters")}
+                      </small>
+                    </span>
+                    <div className="row-actions">
+                      <button
+                        className="icon-action"
+                        type="button"
+                        disabled={busy}
+                        aria-label={t("brainformViewRagNamed", {
+                          name: document.source_filename,
+                        })}
+                        onClick={() =>
+                          void viewMarkdown(
+                            document.source_filename,
+                            async () => {
+                              const downloaded = await api.downloadKnowledge(
+                                document.id,
+                                document.source_filename,
+                              );
+                              return downloaded.content;
+                            },
+                          )
+                        }
+                      >
+                        <IconEye />
+                      </button>
+                      <button
+                        className="icon-action"
+                        type="button"
+                        disabled={busy}
+                        aria-label={t("brainformDownloadRagNamed", {
+                          name: document.source_filename,
+                        })}
+                        onClick={() =>
+                          void downloadMarkdown(
+                            document.source_filename,
+                            async () => {
+                              const downloaded = await api.downloadKnowledge(
+                                document.id,
+                                document.source_filename,
+                              );
+                              return downloaded.content;
+                            },
+                          )
+                        }
+                      >
+                        <IconDownload />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="brainform-source-group">
+            <h3>{t("brainformKnowledgeHeading")}</h3>
+            {sets.length === 0 ? (
+              <p className="muted-copy">{t("brainformKnowledgeEmpty")}</p>
+            ) : (
+              <div className="document-list">
+                {sets.map((set) => (
+                  <div className="document-row" key={set.id}>
+                    <span className="document-main">
+                      <strong>{set.display_name}</strong>
+                    </span>
+                    <div className="row-actions">
+                      <button
+                        className="icon-action"
+                        type="button"
+                        disabled={busy}
+                        aria-label={t("brainformViewRagNamed", {
+                          name: set.display_name,
+                        })}
+                        onClick={() =>
+                          void viewMarkdown(set.display_name, async () => {
+                            const document = await api.knowledgeMarkdown(
+                              set.id,
+                            );
+                            return document.markdown;
+                          })
+                        }
+                      >
+                        <IconEye />
+                      </button>
+                      <button
+                        className="icon-action"
+                        type="button"
+                        disabled={busy}
+                        aria-label={t("brainformDownloadRagNamed", {
+                          name: set.display_name,
+                        })}
+                        onClick={() =>
+                          void downloadMarkdown(
+                            `${set.display_name}.md`,
+                            async () => {
+                              const document = await api.knowledgeMarkdown(
+                                set.id,
+                              );
+                              return document.markdown;
+                            },
+                          )
+                        }
+                      >
+                        <IconDownload />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </SectionCard>
+        <SectionCard title={t("avatarDesign")}>
+          <AvatarPreview
+            config={version.avatar_config}
+            fallbackLabel={agent.name}
+            framing="full-body"
+          />
+        </SectionCard>
+      </div>
+      {check && checkRoot
+        ? createPortal(
+            <div className="knowledge-check">
+              <div
+                className="knowledge-check-card"
+                role="dialog"
+                aria-label={check.title}
+              >
+                <button
+                  ref={closeRef}
+                  className="icon-action knowledge-check-close"
+                  type="button"
+                  aria-label={t("knowledgeCheckClose")}
+                  onClick={() => setCheck(null)}
+                >
+                  <IconClose />
+                </button>
+                <ReportMarkdown label={check.title}>
+                  {check.markdown}
+                </ReportMarkdown>
+              </div>
+            </div>,
+            checkRoot,
+          )
+        : null}
+    </>
   );
 }
 

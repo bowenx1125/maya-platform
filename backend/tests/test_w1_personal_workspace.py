@@ -211,8 +211,7 @@ def test_private_group_names_are_owner_scoped_and_public_editor_cannot_probe_the
             "agent_md": "# Edit H1 Secret\n\nA public editor cannot see Bowen's private name.",
         },
     )
-    assert rename.status_code == 200, rename.text
-    assert rename.json()["agent_id"] == shared_agent["id"]
+    assert rename.status_code == 404, rename.text
 
 
 def test_private_history_and_private_derived_clone_stay_owner_only_until_publish(
@@ -792,7 +791,9 @@ def test_personal_public_agent_is_visible_to_the_course(
     _student, student_csrf = login(client, "bowen")
     directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
     assert any(row["agent_id"] == agent_id for row in directory.json())
-    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 200
+    student_detail = client.get(f"/api/v1/agents/{agent_id}")
+    assert student_detail.status_code == 200
+    assert student_detail.json()["can_edit"] is False
     assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 200
     opened = client.post(
         "/api/v1/conversations", headers=_headers(student_csrf), json={"version_id": version_id}
@@ -814,6 +815,9 @@ def test_personal_public_agent_is_visible_to_the_course(
     other_csrf = other.json()["csrf_token"]
     other_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
     assert any(row["agent_id"] == agent_id for row in other_directory.json())
+    other_detail = client.get(f"/api/v1/agents/{agent_id}")
+    assert other_detail.status_code == 200
+    assert other_detail.json()["can_edit"] is False
     other_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
     assert any(row["agent"]["id"] == agent_id for row in other_published.json())
     other_chat = client.post(
@@ -924,8 +928,8 @@ def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(
     assert private_source.status_code == 201, private_source.text
     private_source_id = private_source.json()["document"]["id"]
 
-    # Legacy pre-W1 group assets intentionally have no guessed owner. A current
-    # editor may still attach an explicitly shared same-Group source.
+    # A group Agent with no publishing account is not editable, even by a
+    # teacher who has entered the group.
     with database.session() as session:
         persisted = session.get(Agent, agent_id)
         assert persisted is not None
@@ -935,21 +939,18 @@ def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(
         headers=_headers(teacher_csrf),
         json={"expected_revision": 0, "document_ids": [public_source_id]},
     )
-    assert linked.status_code == 200, linked.text
-    assert [item["id"] for item in linked.json()["enabled_documents"]] == [public_source_id]
+    assert linked.status_code == 404, linked.text
 
-    # Editor ownership of a Private source does not authorize attaching it to
-    # a legacy Group Agent with unknown owner.
     private_link = client.put(
         f"/api/v1/agent-versions/{version_id}/knowledge-documents",
         headers=_headers(teacher_csrf),
-        json={"expected_revision": 1, "document_ids": [private_source_id]},
+        json={"expected_revision": 0, "document_ids": [private_source_id]},
     )
     assert private_link.status_code == 404
     current = client.get(f"/api/v1/agent-versions/{version_id}")
     assert current.status_code == 200
-    assert current.json()["revision"] == 1
-    assert [item["id"] for item in current.json()["enabled_documents"]] == [public_source_id]
+    assert current.json()["revision"] == 0
+    assert current.json()["enabled_documents"] == []
 
     other = register(client, username="w1-legacy-cross-group", group_name="W1 Legacy Other")
     assert other.status_code == 201, other.text
@@ -966,7 +967,7 @@ def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(
         f"/api/v1/agent-versions/{version_id}/knowledge-documents",
         headers=_headers(teacher_csrf),
         json={
-            "expected_revision": 1,
+            "expected_revision": 0,
             "document_ids": [other_source.json()["document"]["id"]],
         },
     )

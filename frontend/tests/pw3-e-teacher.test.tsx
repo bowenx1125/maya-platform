@@ -83,6 +83,7 @@ function agent(): AgentDetail {
     course_id: "course-id",
     ownership_scope: "group",
     visibility: "public",
+    can_edit: false,
     name: "Published Agent",
     description: "A released classroom perspective.",
     metadata_revision: 0,
@@ -233,17 +234,19 @@ describe("PW3-E teacher shell and responsive contract", () => {
       </LocaleProvider>,
     );
 
-    await waitFor(() => expect(screen.getByText("Bowen group")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "AGENT.md" })).toBeTruthy(),
+    );
     expect(api.group).toHaveBeenCalledWith(groupId);
-    expect(screen.getByRole("heading", { name: "AGENT.md" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Avatar" })).toBeTruthy();
+    expect(screen.queryByText("Bowen group")).toBeNull();
     expect(screen.queryByText("Current release")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
+    expect(screen.queryByText("Default voice")).toBeNull();
     expect(
       screen.getByRole("img", { name: "Published Agent avatar preview" }),
     ).toBeTruthy();
-    // The state is a badge, not a paragraph explaining what the badge means.
-    expect(screen.getByText("Default voice")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /edit description/i }),
     ).toBeNull();

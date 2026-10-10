@@ -151,6 +151,7 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
 ) -> None:
     _user, csrf = login(client, "bowen")
     agent, version_id = _make_agent(client, csrf)
+    assert agent["can_edit"] is True
     avatar = agent["versions"][0]["avatar_config"]
 
     response = client.patch(
@@ -254,6 +255,15 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     # belong to is not found at all. The teacher's pre-publication 404 is
     # covered by test_wave1_teacher_prepublication_visibility_and_authorized_empty_list.
     _student, other_csrf = login(client, "kaikai")
+    visible = client.get(f"/api/v1/agents/{agent['id']}")
+    assert visible.status_code == 200
+    assert visible.json()["can_edit"] is False
+    denied = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(other_csrf),
+        json={"expected_revision": 2, "agent_md": "# not the publisher"},
+    )
+    assert denied.status_code == 404
     assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 200
     assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 200
     assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}").status_code == 200

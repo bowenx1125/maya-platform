@@ -3039,7 +3039,7 @@ def _agent_for_binding(db: Session, context: AuthContext, agent_id: str, *, edit
     if agent is None or agent.deleted_at is not None or agent.status != "active":
         raise not_found()
     role = _agent_workspace_role(db, context, agent)
-    if role is None or (edit and role not in {"owner", "student"}):
+    if role is None or (edit and role != "owner"):
         raise not_found()
     return agent
 

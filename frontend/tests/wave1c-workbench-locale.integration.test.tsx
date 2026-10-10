@@ -123,6 +123,7 @@ function makeAgent(): AgentDetail {
     course_id: "course-id",
     ownership_scope: "group",
     visibility: "public",
+    can_edit: true,
     name: "Agent",
     description: "A stable Agent description",
     metadata_revision: 0,

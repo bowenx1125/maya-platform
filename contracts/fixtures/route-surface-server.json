@@ -11184,6 +11184,10 @@
       },
       "AgentSummary": {
         "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
           "course_id": {
             "format": "uuid",
             "title": "Course Id",
@@ -11275,6 +11279,7 @@
           "course_id",
           "ownership_scope",
           "visibility",
+          "can_edit",
           "name",
           "metadata_revision",
           "status"
@@ -11284,6 +11289,10 @@
       },
       "AgentDetail": {
         "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
           "course_id": {
             "format": "uuid",
             "title": "Course Id",
@@ -11382,6 +11391,7 @@
           "course_id",
           "ownership_scope",
           "visibility",
+          "can_edit",
           "name",
           "metadata_revision",
           "status"

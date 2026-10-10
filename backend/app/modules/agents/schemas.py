@@ -32,6 +32,8 @@ class AgentSummary(BaseModel):
     course_id: UUID
     ownership_scope: Literal["group", "personal"]
     visibility: Literal["private", "public"]
+    # True only for the account that published this Agent. Public use is read-only.
+    can_edit: bool
     name: str
     description: str = ""
     metadata_revision: int = Field(ge=0)

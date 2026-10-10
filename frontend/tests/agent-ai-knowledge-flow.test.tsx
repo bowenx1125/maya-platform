@@ -70,6 +70,7 @@ const agent: AgentDetail = {
   course_id: "course-1",
   ownership_scope: "personal",
   visibility: "private",
+  can_edit: true,
   name: "Teacher-created Agent",
   description: "",
   metadata_revision: 0,

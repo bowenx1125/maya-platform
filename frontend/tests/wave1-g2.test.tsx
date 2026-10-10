@@ -134,6 +134,7 @@ describe("G2 idempotency key lifecycle", () => {
       course_id: "course-id",
       ownership_scope: "group",
       visibility: "public",
+      can_edit: true,
       name: "Agent",
       status: "active",
       description: "",

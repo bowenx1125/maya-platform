@@ -47,6 +47,7 @@ function agent(overrides: Partial<AgentDetail> = {}): AgentDetail {
     name: "Agent",
     description: "Mutable description",
     status: "active",
+    can_edit: true,
     current_published_version_id: "published-id",
     current_draft_version_id: null,
     versions: [],
@@ -291,15 +292,24 @@ describe("Workspace Agent flow", () => {
   });
 
   it("keeps teacher inspection read-only without the removed description", async () => {
+    api.agent.mockResolvedValue(agent({ can_edit: false }));
     render(
       <AppShell role="teacher">
         <TeacherAgentDetail agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByText("Current prompt");
+    await screen.findByRole("heading", { name: "Current prompt" });
+    expect(screen.getByRole("heading", { name: "Avatar" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    const nav = within(screen.getByRole("navigation"));
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(nav.getByRole("link", { name: "Back" })).toBeTruthy();
   });
 
   it("deletes a Workspace Agent only after confirmation and retains a blocked row", async () => {

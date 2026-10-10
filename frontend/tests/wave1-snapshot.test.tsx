@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +27,7 @@ function agent(): AgentDetail {
     course_id: "course-id",
     ownership_scope: "group",
     visibility: "public",
+    can_edit: false,
     name: "Published Agent",
     description: "A released view",
     metadata_revision: 0,
@@ -91,73 +93,50 @@ describe("student and teacher snapshot selection", () => {
     });
   });
 
-  it("checks files independently without downloading all RAG and resets on version change", async () => {
-    const first = "11111111-1111-4111-8111-111111111111";
-    const second = "22222222-2222-4222-8222-222222222222";
+  it("checks one attached file without downloading the rest", async () => {
+    const published = version(
+      "version-one",
+      "11111111-1111-4111-8111-111111111111",
+      "published",
+    );
+    published.enabled_documents = [
+      {
+        id: "one",
+        source_filename: "One.md",
+        char_count: 20,
+      },
+      {
+        id: "two",
+        source_filename: "Two.md",
+        char_count: 20,
+      },
+    ] as AgentVersion["enabled_documents"];
     const api = {
       agent: vi.fn().mockResolvedValue(agent()),
-      versions: vi
-        .fn()
-        .mockResolvedValue([
-          version("version-one", first, "published"),
-          version("version-two", second, "superseded"),
-        ]),
-      snapshot: vi.fn((id: string) =>
-        Promise.resolve({
-          ...snapshot(id),
-          id,
-          documents: [
-            {
-              id: "one",
-              source_filename: "One.md",
-              char_count: 20,
-              order_index: 0,
-            },
-            {
-              id: "two",
-              source_filename: "Two.md",
-              char_count: 20,
-              order_index: 1,
-            },
-          ],
-        }),
+      versions: vi.fn().mockResolvedValue([published]),
+      snapshot: vi.fn(),
+      downloadKnowledge: vi.fn((id: string) =>
+        Promise.resolve({ content: `# ${id}`, filename: `${id}.md` }),
       ),
       downloadSnapshot: vi.fn(),
-      downloadSnapshotDocument: vi.fn((id: string, doc: string) =>
-        Promise.resolve({ content: `# ${id} ${doc}`, filename: `${doc}.md` }),
-      ),
+      downloadSnapshotDocument: vi.fn(),
     };
     mockedUseSession.mockReturnValue({ api } as never);
-    const view = render(<TeacherAgentDetail agentId="agent-id" />);
+    render(<TeacherAgentDetail agentId="agent-id" />);
     await screen.findByRole("heading", { name: "version-one" });
-    expect(screen.getByRole("button", { name: "Download RAG" })).toBeTruthy();
-    const filename = screen.getByText("One.md");
-    expect(filename.getAttribute("title")).toBeNull();
-    expect(filename.getAttribute("data-ui-guide")).toBe("knowledge.filename");
-    expect(filename.getAttribute("data-ui-guide-text")).toBe("One.md");
-    expect((filename as HTMLElement).tabIndex).toBe(0);
-    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
-    await screen.findByRole("heading", { name: `${first} one` });
-    expect(screen.queryByRole("heading", { name: `${first} two` })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View One.md" }));
+    const dialog = await screen.findByRole("dialog", { name: "One.md" });
+    expect(within(dialog).getByRole("heading", { name: "one" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "two" })).toBeNull();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
-    expect(api.downloadSnapshot).not.toHaveBeenCalled();
-    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
-    expect(screen.queryByRole("heading", { name: `${first} one` })).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[0]);
-    expect(api.downloadSnapshotDocument).toHaveBeenCalledTimes(1);
-    view.rerender(
-      <TeacherAgentDetail agentId="agent-id" snapshotId={second} />,
-    );
-    await screen.findByRole("heading", { name: "version-two" });
-    expect(screen.queryByRole("heading", { name: `${first} one` })).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Check" })[1]);
-    await screen.findByRole("heading", { name: `${second} two` });
-    fireEvent.click(screen.getAllByRole("button", { name: "Download" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download Two.md" }));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
-    expect(api.downloadSnapshotDocument).toHaveBeenLastCalledWith(
-      second,
-      "two",
-    );
+    expect(api.downloadKnowledge).toHaveBeenLastCalledWith("two", "Two.md");
+    expect(api.downloadSnapshot).not.toHaveBeenCalled();
   });
 
   it("marks the displayed teacher snapshot and keeps other versions navigable", async () => {
@@ -185,34 +164,14 @@ describe("student and teacher snapshot selection", () => {
     };
     mockedUseSession.mockReturnValue({ api } as never);
 
-    const view = render(<TeacherAgentDetail agentId="agent-id" />);
-    const current = await screen.findByRole("link", { name: "V1.0 Published" });
-    expect(current.getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("heading", { name: "version-one" })).toBeTruthy();
+    render(<TeacherAgentDetail agentId="agent-id" />);
     expect(
-      screen.getByRole("link", { name: "V1.1 Previous" }).getAttribute("href"),
-    ).toBe(
-      "/teacher/agents/agent-id?snapshot=22222222-2222-4222-8222-222222222222",
-    );
+      await screen.findByRole("heading", { name: "version-one" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "V1.0 Published" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "V1.1 Previous" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
     expect(screen.queryByText("Viewing")).toBeNull();
-    view.rerender(
-      <TeacherAgentDetail
-        agentId="agent-id"
-        snapshotId="22222222-2222-4222-8222-222222222222"
-      />,
-    );
-    await screen.findByRole("heading", { name: "version-two" });
-    expect(
-      screen
-        .getByRole("link", { name: "V1.1 Previous" })
-        .getAttribute("aria-current"),
-    ).toBe("page");
-    expect(
-      screen
-        .getByRole("link", { name: "V1.0 Published" })
-        .getAttribute("aria-current"),
-    ).toBeNull();
-    expect(screen.queryByRole("heading", { name: "version-one" })).toBeNull();
   });
 
   it("lets a same-group student inspect and download a published snapshot", async () => {

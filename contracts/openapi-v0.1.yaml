@@ -6968,6 +6968,9 @@ components:
           - type: 'null'
     AgentSummary:
       properties:
+        can_edit:
+          title: Can Edit
+          type: boolean
         course_id:
           format: uuid
           title: Course Id
@@ -7029,6 +7032,7 @@ components:
       - course_id
       - ownership_scope
       - visibility
+      - can_edit
       - name
       - metadata_revision
       - status
@@ -7036,6 +7040,9 @@ components:
       type: object
     AgentDetail:
       properties:
+        can_edit:
+          title: Can Edit
+          type: boolean
         course_id:
           format: uuid
           title: Course Id
@@ -7102,6 +7109,7 @@ components:
       - course_id
       - ownership_scope
       - visibility
+      - can_edit
       - name
       - metadata_revision
       - status

@@ -127,6 +127,7 @@ def _insert_published_agent(
             Agent(
                 id=agent_id,
                 group_id=group_id,
+                owner_user_id=STUDENT_BOWEN_ID,
                 name=name,
                 description=f"{name} perspective",
                 metadata_revision=0,

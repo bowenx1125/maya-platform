@@ -314,13 +314,7 @@ def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> A
         raise not_found()
     if course_member_role(db, context.user.id, agent.course_id) is None:
         raise not_found()
-    if agent.owner_user_id == context.user.id:
-        return agent
-    if agent.ownership_scope != "group" or agent.group_id is None:
-        raise not_found()
-    if agent.visibility != "public":
-        raise not_found()
-    if scoped_group_role(db, context, agent.group_id) != "student":
+    if agent.owner_user_id != context.user.id:
         raise not_found()
     return agent
 

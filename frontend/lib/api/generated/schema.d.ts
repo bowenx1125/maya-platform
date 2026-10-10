@@ -2829,6 +2829,8 @@ export interface components {
         };
         /** AgentSummary */
         AgentSummary: {
+            /** Can Edit */
+            can_edit: boolean;
             /**
              * Course Id
              * Format: uuid
@@ -2872,6 +2874,8 @@ export interface components {
         };
         /** AgentDetail */
         AgentDetail: {
+            /** Can Edit */
+            can_edit: boolean;
             /**
              * Course Id
              * Format: uuid
