@@ -242,6 +242,7 @@ export function TeacherStudyformWorkspace({
   const [personalAgents, setPersonalAgents] = useState<PublishedAgentSummary[]>(
     [],
   );
+  const [ownedAgents, setOwnedAgents] = useState<AgentSummary[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -256,6 +257,7 @@ export function TeacherStudyformWorkspace({
       setError(null);
       if (!teacherCourseId) {
         setPersonalAgents([]);
+        setOwnedAgents([]);
         setChatAgents([]);
         setTeams([]);
         setLoadedScope(requestScope);
@@ -269,10 +271,19 @@ export function TeacherStudyformWorkspace({
         typeof api.teams === "function"
           ? api.teams(teacherCourseId)
           : Promise.resolve([]),
+        typeof api.workspaceAgents === "function"
+          ? api.workspaceAgents(teacherCourseId)
+          : Promise.resolve([]),
       ])
-        .then(([nextPersonalAgents, nextChatAgents, nextTeams]) => {
+        .then(([nextPersonalAgents, nextChatAgents, nextTeams, nextOwned]) => {
           if (!active) return;
+          const publishedIds = new Set(
+            nextPersonalAgents.map((item) => item.agent.id),
+          );
           setPersonalAgents(nextPersonalAgents);
+          setOwnedAgents(
+            nextOwned.filter((agent) => !publishedIds.has(agent.id)),
+          );
           setChatAgents(nextChatAgents);
           setTeams(
             nextTeams.filter(
@@ -306,6 +317,9 @@ export function TeacherStudyformWorkspace({
       setPersonalAgents((current) =>
         current.filter((item) => item.agent.id !== agentId),
       );
+      setOwnedAgents((current) =>
+        current.filter((agent) => agent.id !== agentId),
+      );
     } catch (cause) {
       setError(cause);
     } finally {
@@ -328,7 +342,12 @@ export function TeacherStudyformWorkspace({
   }
 
   if (loading || loadedScope !== scope) return <LoadingCard />;
-  if (error && !personalAgents.length && !chatAgents.length)
+  if (
+    error &&
+    !personalAgents.length &&
+    !ownedAgents.length &&
+    !chatAgents.length
+  )
     return <ErrorNotice error={error} />;
 
   const mayaForm = initialMode === "maya-new" || initialMode === "maya-edit";
@@ -367,14 +386,18 @@ export function TeacherStudyformWorkspace({
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
-          empty={personalAgents.length ? undefined : t("noPersonalAgents")}
+          empty={
+            personalAgents.length || ownedAgents.length
+              ? undefined
+              : t("noPersonalAgents")
+          }
           action={
             teacherCourseId ? (
               <ModulePlus href="/teacher/agents/new" label={t("newAgent")} />
             ) : null
           }
         >
-          {personalAgents.length ? (
+          {personalAgents.length || ownedAgents.length ? (
             <ModuleTiles>
               {personalAgents.map((item) => (
                 <VersionTile
@@ -392,6 +415,25 @@ export function TeacherStudyformWorkspace({
                   }
                 />
               ))}
+              {ownedAgents.map((agent) => {
+                const pending =
+                  agent.current_published_version_id == null ||
+                  (agent.current_draft_version_id != null &&
+                    agent.current_draft_version_id !==
+                      agent.current_published_version_id);
+                return (
+                  <VersionTile
+                    key={agent.id}
+                    name={agent.name}
+                    href={`/teacher/agents/${agent.id}`}
+                    label={pending ? t("draft") : t("published")}
+                    pending={pending}
+                    deleting={deletingId !== null}
+                    deleteLabel={t("deleteAgent")}
+                    onDelete={() => void deletePersonalAgent(agent.id)}
+                  />
+                );
+              })}
             </ModuleTiles>
           ) : undefined}
         </ModuleCard>

@@ -203,6 +203,36 @@ def _owner_has_course_access(db: Session, actor: AuthContext | str, course_id: s
     return course_member_role(db, _actor_user_id(actor), course_id) is not None
 
 
+def _publisher_is_teacher(db: Session, agent: Agent) -> bool:
+    if agent.owner_user_id is None:
+        return False
+    return course_member_role(db, agent.owner_user_id, agent.course_id) == "teacher"
+
+
+def can_use_agent(db: Session, actor: AuthContext | str, agent: Agent) -> bool:
+    """Public is who may use the Agent. Private stays on the owner account.
+
+    A teacher-published public Agent is usable by the course. A
+    student-published public Agent is usable by that group and by teachers.
+    """
+
+    user_id = _actor_user_id(actor)
+    if agent.deleted_at is not None or agent.status != "active":
+        return False
+    if not _owner_has_course_access(db, user_id, agent.course_id):
+        return False
+    if agent.owner_user_id == user_id:
+        return True
+    if agent.visibility != "public":
+        return False
+    viewer = course_member_role(db, user_id, agent.course_id)
+    if viewer == "teacher" or _publisher_is_teacher(db, agent):
+        return viewer in {"student", "teacher"}
+    if agent.group_id is None or viewer != "student":
+        return False
+    return scoped_group_role_for_user(db, user_id, agent.group_id) is not None
+
+
 def _agent_workspace_role(db: Session, actor: AuthContext | str, agent: Agent) -> str | None:
     user_id = _actor_user_id(actor)
     if agent.deleted_at is not None or not _owner_has_course_access(db, user_id, agent.course_id):
@@ -215,14 +245,14 @@ def _agent_workspace_role(db: Session, actor: AuthContext | str, agent: Agent) -
             return "teacher"
         if agent.owner_user_id == user_id:
             return None
-        return group_role if agent.visibility == "public" else None
+        if group_role and agent.visibility == "public":
+            return group_role
+        if can_use_agent(db, actor, agent):
+            return "teacher"
+        return None
     if agent.owner_user_id == user_id:
         return "owner"
-    # A public Agent is visible to the course. The non-owner read role is
-    # "teacher" so published versions can be listed without the student
-    # mutation role that would allow a new draft.
-    course_role = course_member_role(db, user_id, agent.course_id)
-    if agent.visibility == "public" and course_role in {"student", "teacher"}:
+    if can_use_agent(db, actor, agent):
         return "teacher"
     return None
 
@@ -307,8 +337,9 @@ def can_invoke_version(
 ) -> bool:
     """Resolve current workspace access before allowing a Chat invocation.
 
-    A public published Agent is available to course members. A private Agent
-    stays with its owner.
+    Usage follows the Agent's public/private right: a teacher's public Agent
+    for the course, a student's public Agent for its group and for teachers,
+    and a private Agent for its owner.
     """
 
     role = _agent_workspace_role(db, context, agent)
@@ -392,6 +423,27 @@ def can_bind_source(
     return agent.owner_user_id == context.user.id and source_role == "student"
 
 
+def _public_snapshot_source_follows_use(
+    db: Session,
+    context: AuthContext | str,
+    document: KnowledgeDocument,
+    agent: Agent | None,
+) -> bool:
+    """Using a public Agent includes the public sources published with it.
+
+    The group library stays closed. This does not grant the raw document.
+    """
+
+    if (
+        agent is None
+        or document.visibility != "public"
+        or document.workspace_state != "active"
+        or document.course_id != agent.course_id
+    ):
+        return False
+    return can_use_agent(db, context, agent)
+
+
 def snapshot_sources_are_readable(
     db: Session,
     context: AuthContext | str,
@@ -417,7 +469,10 @@ def snapshot_sources_are_readable(
             owner_can_read_history
             or document.authorization_epoch == source_row.source_authorization_epoch
         )
-        and can_read_source(db, context, document, require_active=False)
+        and (
+            can_read_source(db, context, document, require_active=False)
+            or _public_snapshot_source_follows_use(db, context, document, agent)
+        )
         for source_row, document in rows
     )
 

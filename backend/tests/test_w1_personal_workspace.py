@@ -52,6 +52,8 @@ def test_teacher_personal_no_rag_agent_chat_and_private_source_acl(
     released = published.json()
     assert released["state"] == "published"
     assert released["knowledge_snapshot_id"] is None
+    owner_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert all(row["agent"]["id"] != agent["id"] for row in owner_published.json())
 
     directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
     assert directory.status_code == 200, directory.text
@@ -624,6 +626,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     peer_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
     assert peer_directory.status_code == 200
     assert any(row["agent_id"] == agent_id for row in peer_directory.json())
+    peer_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert any(row["agent"]["id"] == agent_id for row in peer_published.json())
     peer_chat = client.post(
         "/api/v1/conversations", headers=_headers(peer_csrf), json={"version_id": version_id}
     )
@@ -642,6 +646,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     _teacher, teacher_csrf = login(client, "maya")
     teacher_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
     assert any(row["agent_id"] == agent_id for row in teacher_directory.json())
+    teacher_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert any(row["agent"]["id"] == agent_id for row in teacher_published.json())
     teacher_chat = client.post(
         "/api/v1/conversations", headers=_headers(teacher_csrf), json={"version_id": version_id}
     )
@@ -669,6 +675,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     other_csrf = other.json()["csrf_token"]
     other_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
     assert all(row["agent_id"] != agent_id for row in other_directory.json())
+    other_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert all(row["agent"]["id"] != agent_id for row in other_published.json())
     assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
     assert client.get(f"/api/v1/knowledge-documents/{source_id}").status_code == 404
     denied_download = client.get(f"/api/v1/knowledge-documents/{source_id}/download")
@@ -793,6 +801,85 @@ def test_personal_public_agent_is_visible_to_the_course(
     published_list = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
     assert published_list.status_code == 200
     assert any(row["agent"]["id"] == agent_id for row in published_list.json())
+    denied_next = client.post(
+        f"/api/v1/agents/{agent_id}/versions",
+        headers=_headers(student_csrf, **{"Idempotency-Key": "w1-personal-public-next-denied"}),
+    )
+    assert denied_next.status_code == 404
+
+    # A teacher-published public Agent is usable by the course, including a
+    # student who is not in the teacher's groups.
+    other = register(client, username="w1-teacher-public-outsider", group_name="W1 Outside")
+    assert other.status_code == 201, other.text
+    other_csrf = other.json()["csrf_token"]
+    other_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
+    assert any(row["agent_id"] == agent_id for row in other_directory.json())
+    other_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert any(row["agent"]["id"] == agent_id for row in other_published.json())
+    other_chat = client.post(
+        "/api/v1/conversations", headers=_headers(other_csrf), json={"version_id": version_id}
+    )
+    assert other_chat.status_code == 200, other_chat.text
+
+
+def test_teacher_public_group_source_is_usable_outside_that_group(
+    client: TestClient,
+) -> None:
+    _owner, owner_csrf = login(client, "maya")
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/workspace-agents",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-teacher-source-agent-001"}),
+        json={"name": "Teacher Shared Source", "visibility": "public"},
+    )
+    assert created.status_code == 201, created.text
+    agent_id = created.json()["id"]
+    version_id = created.json()["versions"][0]["id"]
+    saved = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(owner_csrf),
+        json={"expected_revision": 0, "agent_md": "# Teacher Shared Source\n\nCourse usable."},
+    )
+    assert saved.status_code == 200, saved.text
+    assert (
+        client.post(
+            f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(owner_csrf)
+        ).status_code
+        == 200
+    )
+    uploaded = client.post(
+        f"/api/v1/groups/{GROUP_ID}/knowledge-documents",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-teacher-source-doc-001"}),
+        data={"visibility": "public"},
+        files={"file": ("shared.md", b"# Shared\n\nTEACHER_PUBLIC_SOURCE_CANARY", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    document_id = uploaded.json()["document"]["id"]
+    linked = client.put(
+        f"/api/v1/agent-versions/{version_id}/knowledge-documents",
+        headers=_headers(owner_csrf),
+        json={"expected_revision": 1, "document_ids": [document_id]},
+    )
+    assert linked.status_code == 200, linked.text
+    published = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-teacher-source-publish-001"}),
+        json={"expected_revision": linked.json()["revision"]},
+    )
+    assert published.status_code == 200, published.text
+
+    other = register(client, username="w1-teacher-source-outsider", group_name="W1 Source Outside")
+    assert other.status_code == 201, other.text
+    other_csrf = other.json()["csrf_token"]
+    published_list = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert any(row["agent"]["id"] == agent_id for row in published_list.json())
+    opened = client.post(
+        "/api/v1/conversations", headers=_headers(other_csrf), json={"version_id": version_id}
+    )
+    assert opened.status_code == 200, opened.text
+    assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 404
+    denied_download = client.get(f"/api/v1/knowledge-documents/{document_id}/download")
+    assert denied_download.status_code == 404
+    assert b"TEACHER_PUBLIC_SOURCE_CANARY" not in denied_download.content
 
 
 def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(

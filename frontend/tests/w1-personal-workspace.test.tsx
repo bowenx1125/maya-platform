@@ -172,6 +172,28 @@ describe("W1 teacher personal workspace", () => {
     ).toBe("/teacher/studyform");
   });
 
+  it("shows the owner's private Agent on Studyform", async () => {
+    const api = {
+      publishedAgents: vi.fn().mockResolvedValue([]),
+      workspaceAgents: vi.fn().mockResolvedValue([personalAgent()]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([]),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    const tile = await screen.findByRole("link", { name: "Teacher Lens" });
+    expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
+  });
+
   it("preserves the colleague Home without loading personal Agent lists", async () => {
     const api = {
       courses: vi

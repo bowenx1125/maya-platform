@@ -94,6 +94,7 @@ from app.modules.knowledge.services import (
     agent_detail,
     agent_summary,
     assert_claim_owned,
+    can_invoke_version,
     can_read_version,
     claim_idempotency,
     course_member_role,
@@ -108,7 +109,6 @@ from app.modules.knowledge.services import (
     scoped_student_group_role,
     version_dto,
     version_is_currently_public,
-    version_sources_are_readable,
     visible_agent,
     visible_student_agent,
     visible_student_version,
@@ -1827,8 +1827,7 @@ def list_published_agents_for_teacher(
     public_rows: list[tuple[Agent, AgentVersion, str]] = [
         (agent, version, group_name or "")
         for agent, version, group_name in rows
-        if version_is_currently_public(version, agent)
-        and version_sources_are_readable(db, context, version, agent=agent)
+        if can_invoke_version(db, context, version, agent)
     ]
     return [
         PublishedAgentSummary(
