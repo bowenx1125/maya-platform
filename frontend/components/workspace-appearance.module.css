@@ -221,7 +221,7 @@
 }
 
 .appearance :global(.agent-pill[data-pending="true"]) {
-  color: #8a6a1f;
+  color: var(--accent-strong);
   background: var(--gold-soft);
   font-weight: 640;
 }

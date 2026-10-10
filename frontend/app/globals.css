@@ -587,7 +587,7 @@ details > summary {
   padding: var(--workspace-inset);
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--surface-subtle, #f5f5f7);
+  background: var(--panel, #fdfaf3);
   box-shadow: none;
 }
 
@@ -705,6 +705,13 @@ button.agent-tile-name {
   background: transparent;
   cursor: pointer;
   padding: 0;
+  color: inherit;
+  font-family: var(--display-serif);
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-align: center;
 }
 
 .knowledge-tile,
@@ -775,6 +782,11 @@ button.agent-tile-name {
 .agent-pill-action:hover .agent-pill-x,
 .agent-pill-action:focus-visible .agent-pill-x {
   display: inline-flex;
+}
+
+.agent-pill-action:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
+  outline-offset: 2px;
 }
 
 .agent-tile-name {
@@ -2089,7 +2101,7 @@ dd {
 
 .agent-pill[data-pending="true"] {
   background: var(--gold-soft);
-  color: #8a6a1f;
+  color: var(--accent-strong, #76591f);
 }
 
 /* The group's members, alphabetical, under the group's own name. */
