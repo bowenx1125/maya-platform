@@ -434,9 +434,15 @@ export function AppShell({
             })}
           </nav>
           <div className={styles.account}>
-            <span className={styles.credit}>
-              Study With <span className={styles.author}>Bowen</span>.
-            </span>
+            <p className={styles.credit}>
+              <span className={styles.creditTitle}>Meet Problems?</span>
+              <a
+                className={styles.creditMail}
+                href="mailto:bowenx1135@gmail.com"
+              >
+                Send to bowenx1135@gmail.com
+              </a>
+            </p>
             <button
               className={styles.logout}
               type="button"
