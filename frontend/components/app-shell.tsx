@@ -18,6 +18,11 @@ import {
 } from "./workspace-actions";
 
 import { useT } from "./locale";
+import {
+  endTeacherEnter,
+  teacherEnterInProgress,
+  trackTeacherLeave,
+} from "../lib/teacher-visit";
 import { useSession } from "./session-provider";
 
 type ActionRegistration = {
@@ -214,7 +219,11 @@ export function AppShell({
     }
   }, [membershipGroupIds.length, refresh, visitingGroup]);
   useEffect(() => {
+    if (visitingGroup) endTeacherEnter();
+  }, [visitingGroup]);
+  useEffect(() => {
     if (
+      teacherEnterInProgress() ||
       !visitedGroupIds.length ||
       typeof api?.leaveGroupAsTeacher !== "function"
     )
@@ -224,7 +233,7 @@ export function AppShell({
     );
     if (!pending.length) return;
     for (const visited of pending) leaving.current.add(visited);
-    void Promise.allSettled(
+    const job = Promise.allSettled(
       pending.map((visited) => api.leaveGroupAsTeacher(visited)),
     ).then(async () => {
       try {
@@ -233,6 +242,7 @@ export function AppShell({
         for (const visited of pending) leaving.current.delete(visited);
       }
     });
+    trackTeacherLeave(job);
   }, [api, refresh, visitedGroupIds]);
   useEffect(() => {
     if (!visitingGroup) return;

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   LoginForm,
+  RouteGuard,
   SessionProvider,
   useSession,
 } from "../components/session-provider";
@@ -247,6 +248,73 @@ function renderRaceProbe(api: PlatformApi) {
     </SessionProvider>,
   );
 }
+
+describe("teacher group visit", () => {
+  afterEach(() => cleanup());
+
+  function teacherSession(groups: AuthSession["user"]["groups"]): AuthSession {
+    return {
+      csrf_token: "csrf-teacher",
+      expires_at: "2026-08-28T12:00:00Z",
+      user: {
+        id: "teacher-id",
+        username: "maya",
+        display_name: "Maya",
+        courses: [{ course_id: "course-id", role: "teacher" }],
+        groups,
+      },
+    };
+  }
+
+  it("loads the joined group before refusing the student workspace", async () => {
+    const joined = teacherSession([{ group_id: "group-id", role: "member" }]);
+    const api = {
+      me: vi
+        .fn()
+        .mockResolvedValueOnce(teacherSession([]))
+        .mockResolvedValue(joined),
+      getCsrfToken: vi.fn(() => "csrf-teacher"),
+    } as unknown as PlatformApi;
+
+    render(
+      <LocaleProvider initialLocale="en">
+        <SessionProvider api={api}>
+          <RouteGuard role="student">
+            <p>Group workspace</p>
+          </RouteGuard>
+        </SessionProvider>
+      </LocaleProvider>,
+    );
+
+    expect(await screen.findByText("Group workspace")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.me).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the account boundary when the teacher still has no group", async () => {
+    const api = {
+      me: vi.fn(async () => teacherSession([])),
+      getCsrfToken: vi.fn(() => "csrf-teacher"),
+    } as unknown as PlatformApi;
+
+    render(
+      <LocaleProvider initialLocale="en">
+        <SessionProvider api={api}>
+          <RouteGuard role="student">
+            <p>Group workspace</p>
+          </RouteGuard>
+        </SessionProvider>
+      </LocaleProvider>,
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "That view is not available for this account.",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Group workspace")).toBeNull();
+  });
+});
 
 describe("PW3-A SessionProvider operation fences", () => {
   afterEach(() => cleanup());

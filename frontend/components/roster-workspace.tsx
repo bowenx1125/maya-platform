@@ -8,6 +8,11 @@ import {
   type RosterEntry,
   type UpdateCourseMemberRequest,
 } from "../lib/api";
+import {
+  beginTeacherEnter,
+  endTeacherEnter,
+  teacherLeavesSettled,
+} from "../lib/teacher-visit";
 import { useT } from "./locale";
 import { PageAction } from "./page-action";
 import { IconArrowRight } from "./quiet-icons";
@@ -126,7 +131,12 @@ export function RosterWorkspace() {
     async (group: Group, joined: boolean) => {
       setBusy(group.id);
       setError(null);
+      beginTeacherEnter();
       try {
+        // A roster that is already open may still be deleting the previous
+        // visit. Join only after that delete finishes, or it removes the row
+        // this click just created.
+        await teacherLeavesSettled();
         // Joining is what opens the group's workspace, so the two are one
         // action rather than a state to set and then act on.
         if (!joined) {
@@ -137,6 +147,7 @@ export function RosterWorkspace() {
         // and delete it before the group can load.
         router.push(`/student/groups/${group.id}`);
       } catch (cause) {
+        endTeacherEnter();
         setError(cause);
         setBusy(null);
       }

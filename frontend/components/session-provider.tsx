@@ -24,6 +24,7 @@ import {
 import { resetChatRequestIdentity } from "../lib/chat-request-store";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
+import { endTeacherEnter } from "../lib/teacher-visit";
 import { useSetAcademyMood } from "./academy/mood";
 import { useLocale, useT } from "./locale";
 
@@ -383,10 +384,52 @@ export function RouteGuard({
   role?: "teacher" | "student";
 }) {
   const t = useT();
-  const { status, user } = useSession();
+  const { status, user, refresh } = useSession();
   const pathname = usePathname();
+  const [visitCheck, setVisitCheck] = useState<"idle" | "done">("idle");
 
-  if (status === "loading") {
+  // A teacher who has joined a group may open the student workspace for it.
+  // Explicit teacher access opens the same editing workspace as student membership.
+  // Course role alone would keep every
+  // teacher out of the surface they just gave themselves access to.
+  const teachesCourse = user?.courses?.some(
+    (membership) => membership.role === "teacher",
+  );
+  const sitsInGroup = (user?.groups?.length ?? 0) > 0;
+  const enrolledStudent = user?.courses?.some(
+    (membership) => membership.role === "student",
+  );
+  const hasRole = !role
+    ? true
+    : role === "student"
+      ? enrolledStudent || (teachesCourse && sitsInGroup)
+      : teachesCourse;
+  // The group page is behind this guard, and the shell that would reload the
+  // session only mounts after the guard opens. Refresh here, or a teacher who
+  // just joined still looks group-less and stays on the 403.
+  const awaitingTeacherVisit =
+    status === "authenticated" &&
+    role === "student" &&
+    Boolean(teachesCourse) &&
+    !enrolledStudent &&
+    !sitsInGroup;
+
+  useEffect(() => {
+    if (status === "authenticated" && role === "student") endTeacherEnter();
+  }, [role, status]);
+
+  useEffect(() => {
+    if (!awaitingTeacherVisit) return;
+    let active = true;
+    void refresh().finally(() => {
+      if (active) setVisitCheck("done");
+    });
+    return () => {
+      active = false;
+    };
+  }, [awaitingTeacherVisit, refresh]);
+
+  if (status === "loading" || (awaitingTeacherVisit && visitCheck !== "done")) {
     return (
       <main className="shell">
         <div className="loading-card" role="status">
@@ -413,20 +456,6 @@ export function RouteGuard({
     );
   }
 
-  // A teacher who has joined a group may open the student workspace for it.
-  // Explicit teacher access opens the same editing workspace as student membership.
-  // Course role alone would keep every
-  // teacher out of the surface they just gave themselves access to.
-  const teachesCourse = user?.courses?.some(
-    (membership) => membership.role === "teacher",
-  );
-  const sitsInGroup = (user?.groups?.length ?? 0) > 0;
-  const hasRole = !role
-    ? true
-    : role === "student"
-      ? user?.courses?.some((membership) => membership.role === "student") ||
-        (teachesCourse && sitsInGroup)
-      : teachesCourse;
   if (!hasRole) {
     return (
       <main className="shell">
