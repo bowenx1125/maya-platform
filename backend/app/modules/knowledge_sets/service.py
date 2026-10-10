@@ -14,7 +14,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
 from pydantic import TypeAdapter
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, invalid_state, not_found, stale_revision, unprocessable
@@ -75,6 +75,7 @@ from app.modules.knowledge_sets.schemas import (
     StudentAssetContent,
     StudentQuestionContent,
 )
+from app.modules.teams.models import Team, TeamVersion, TeamVersionSet
 
 SetRole = Literal["owner", "student", "teacher"]
 
@@ -138,6 +139,7 @@ def save_knowledge_markdown_version(
     generator_agent_version_id: str | None = None,
     asset_version_ids: list[str] | None = None,
     student_projection_markdown: str = "",
+    invalidate_attempts: bool = True,
 ) -> KnowledgeSetMarkdownVersion:
     """Append one immutable Markdown version and atomically advance its Set head."""
 
@@ -224,15 +226,16 @@ def save_knowledge_markdown_version(
         )
         if available_version_ids != expected_version_ids:
             raise invalid_state("A projected Knowledge Asset version is unavailable.")
-    from app.modules.learning.attempts import (
-        invalidate_assessment_attempts_for_knowledge_update,
-    )
+    if invalidate_attempts:
+        from app.modules.learning.attempts import (
+            invalidate_assessment_attempts_for_knowledge_update,
+        )
 
-    invalidate_assessment_attempts_for_knowledge_update(
-        db,
-        knowledge_set_id=set_id,
-        actor_user_id=actor_user_id,
-    )
+        invalidate_assessment_attempts_for_knowledge_update(
+            db,
+            knowledge_set_id=set_id,
+            actor_user_id=actor_user_id,
+        )
     return row
 
 
@@ -746,10 +749,130 @@ def _visible_source_agent(db: Session, context: AuthContext, set_row: KnowledgeS
     raise not_found()
 
 
+def _current_asset_versions(
+    db: Session, set_row: KnowledgeSet
+) -> list[tuple[KnowledgeAsset, KnowledgeAssetVersion]]:
+    rows = db.execute(
+        select(KnowledgeAsset, KnowledgeAssetVersion)
+        .join(
+            KnowledgeAssetVersion,
+            (KnowledgeAssetVersion.asset_id == KnowledgeAsset.id)
+            & (KnowledgeAssetVersion.version_seq == KnowledgeAsset.current_version_seq),
+        )
+        .where(
+            KnowledgeAsset.knowledge_set_id == set_row.id,
+            KnowledgeAsset.current_version_seq >= 1,
+        )
+        .order_by(KnowledgeAsset.created_at, KnowledgeAsset.id)
+    ).all()
+    return [(asset, version) for asset, version in rows]
+
+
+def _markdown_from_current_assets(
+    set_row: KnowledgeSet,
+    versions: list[tuple[KnowledgeAsset, KnowledgeAssetVersion]],
+) -> tuple[str, list[str]] | None:
+    """Render the same Question Markdown Brainform already edits.
+
+    A hand-written question bank has to use that shape or a later save cannot
+    keep the questions as assessment content.
+    """
+
+    questions: list[QuestionContent] = []
+    version_ids: list[str] = []
+    for asset, version in versions:
+        if asset.kind != "question":
+            return None
+        try:
+            content = QuestionContent.model_validate_json(version.content_json)
+        except ValueError:
+            return None
+        if not content.rubric.criteria:
+            return None
+        questions.append(content)
+        version_ids.append(version.id)
+    if not questions:
+        return None
+    blocks: list[str] = []
+    for index, content in enumerate(questions, start=1):
+        block = f"### Question {index}\n\n{content.prompt}"
+        block += "\n\n#### Rubric\n\n" + "\n".join(
+            f"- **{criterion.label}** ({criterion.points:g}): {criterion.guidance}"
+            for criterion in content.rubric.criteria
+        )
+        if content.rubric.total_points is not None:
+            block += f"\n\nTotal: {content.rubric.total_points:g} points"
+        if content.reference_answer is not None:
+            block += f"\n\n#### Reference answer\n\n{content.reference_answer}"
+        blocks.append(block)
+    markdown = f"# {set_row.display_name}\n\n## Questions\n\n" + "\n\n".join(blocks)
+    return markdown, version_ids
+
+
+def _promote_manual_asset_markdown(
+    db: Session, set_row: KnowledgeSet, actor_user_id: str
+) -> KnowledgeSetMarkdownVersion | None:
+    """Give a question bank its Brainform document without treating it as a new edit.
+
+    The assets are already the canonical questions. Opening them for review
+    must not look like a teacher changed the bank.
+    """
+
+    if set_row.current_markdown_version_seq > 0 or _latest_generation_for_set(db, set_row.id):
+        return _current_markdown_version(db, set_row)
+    rendered = _markdown_from_current_assets(set_row, _current_asset_versions(db, set_row))
+    if rendered is None:
+        return None
+    markdown, version_ids = rendered
+    _begin_knowledge_write_transaction(db)
+    return save_knowledge_markdown_version(
+        db,
+        set_id=set_row.id,
+        expected_version_seq=0,
+        markdown=markdown,
+        actor_user_id=actor_user_id,
+        origin="manual",
+        asset_version_ids=version_ids,
+        student_projection_markdown=_student_safe_markdown(markdown, None),
+        invalidate_attempts=False,
+    )
+
+
+def _visible_team_knowledge_labels(
+    db: Session, context: AuthContext, set_row: KnowledgeSet
+) -> list[str]:
+    names = db.scalars(
+        select(Team.display_name)
+        .join(
+            TeamVersion,
+            (TeamVersion.team_id == Team.id)
+            & (TeamVersion.version_seq == Team.current_version_seq),
+        )
+        .join(
+            TeamVersionSet,
+            (TeamVersionSet.team_version_id == TeamVersion.id)
+            & (TeamVersionSet.knowledge_set_id == set_row.id),
+        )
+        .where(
+            Team.deleted_at.is_(None),
+            Team.course_id == set_row.course_id,
+            Team.current_version_seq >= 1,
+            or_(Team.owner_user_id == context.user.id, Team.visibility == "public"),
+        )
+        .order_by(Team.created_at, Team.id)
+    ).all()
+    return list(dict.fromkeys(names))
+
+
 def list_brainform_knowledge(
     db: Session, context: AuthContext, course_id: str
 ) -> list[BrainformKnowledgeSummary]:
-    """List only readable canonical documents or real first-generation runs."""
+    """List readable Knowledge, including a Team's shared question bank.
+
+    An Agent binding is one consumer. A Team share is another. A question bank
+    that was written as assets still becomes the Brainform document so it can
+    be reviewed before a Team checks it.
+    """
 
     summaries = list_knowledge_sets(db, context, course_id)
     candidates: list[tuple[int, BrainformKnowledgeSummary]] = []
@@ -757,15 +880,18 @@ def list_brainform_knowledge(
         set_row = db.get(KnowledgeSet, str(summary.id))
         if set_row is None:
             continue
-        markdown_version = _current_markdown_version(db, set_row)
+        role = _set_role(db, context, set_row)
+        if role is None:
+            continue
         run = _latest_generation_for_set(db, set_row.id)
+        if role == "owner" and run is None and set_row.current_markdown_version_seq == 0:
+            _promote_manual_asset_markdown(db, set_row, context.user.id)
+        markdown_version = _current_markdown_version(db, set_row)
         if markdown_version is None and run is None:
             continue
         source_agents = _visible_source_agents(db, context, set_row)
-        if not source_agents:
-            continue
-        role = _set_role(db, context, set_row)
-        if role is None:
+        team_labels = [] if source_agents else _visible_team_knowledge_labels(db, context, set_row)
+        if not source_agents and not team_labels:
             continue
         generation_state = run.state if run is not None else None
         safe_error_code = run.safe_error_code if run is not None and summary.can_edit else None
@@ -781,14 +907,18 @@ def list_brainform_knowledge(
                 content_hash = markdown_version.content_hash
             elif _student_projection_is_available(db, context, set_row, markdown_version):
                 content_hash = _sha256(markdown_version.student_projection_markdown)
-        for source_agent in source_agents:
+        consumers: list[tuple[str | None, str]] = [
+            (source_agent.id, source_agent.name) for source_agent in source_agents
+        ] or [(None, label) for label in team_labels]
+        for agent_id, label in consumers:
             generation_job_id = None
             run_agent = db.get(Agent, run.agent_id) if run is not None else None
             run_agent_version = (
                 db.get(AgentVersion, run.agent_version_id) if run is not None else None
             )
             if (
-                run is not None
+                agent_id is not None
+                and run is not None
                 and run_agent is not None
                 and run_agent_version is not None
                 and run_agent_version.agent_id == run.agent_id
@@ -802,9 +932,9 @@ def list_brainform_knowledge(
             ):
                 generation_job_id = _uid(run.job_id)
             row = BrainformKnowledgeSummary(
-                agent_id=_uid(source_agent.id),
+                agent_id=_uid(agent_id) if agent_id is not None else None,
                 canonical_set_id=summary.id,
-                source_agent_display_name=source_agent.name,
+                source_agent_display_name=label,
                 knowledge_display_name=summary.display_name,
                 generation_job_id=generation_job_id,
                 can_read=True,
@@ -814,17 +944,26 @@ def list_brainform_knowledge(
                 generation_state=cast(Any, generation_state),
                 safe_error_code=safe_error_code,
             )
-            # Keep every readable Agent/Set pair; the generator sorts first
-            # only within the Set it originally generated.
-            priority = 0 if run is not None and run.agent_id == source_agent.id else 1
+            # Keep every readable consumer; the generator sorts first only
+            # within the Set it originally generated.
+            priority = 0 if run is not None and run.agent_id == agent_id else 1
             candidates.append((priority, row))
     candidates.sort(
-        key=lambda entry: (entry[0], str(entry[1].agent_id), str(entry[1].canonical_set_id))
+        key=lambda entry: (
+            entry[0],
+            str(entry[1].agent_id),
+            entry[1].source_agent_display_name,
+            str(entry[1].canonical_set_id),
+        )
     )
-    seen_relations: set[tuple[str, str]] = set()
+    seen_relations: set[tuple[str, str, str]] = set()
     result: list[BrainformKnowledgeSummary] = []
     for _priority, row in candidates:
-        relation = (str(row.canonical_set_id), str(row.agent_id))
+        relation = (
+            str(row.canonical_set_id),
+            str(row.agent_id),
+            row.source_agent_display_name,
+        )
         if relation in seen_relations:
             continue
         seen_relations.add(relation)
@@ -836,10 +975,23 @@ def get_brainform_markdown(
     db: Session, context: AuthContext, set_id: str
 ) -> KnowledgeMarkdownDocument:
     access = _access(db, context, set_id)
+    if access.role == "owner" and _latest_generation_for_set(db, access.knowledge_set.id) is None:
+        _promote_manual_asset_markdown(db, access.knowledge_set, context.user.id)
     version = _current_markdown_version(db, access.knowledge_set)
     if version is None:
         raise not_found()
-    agent = _visible_source_agent(db, context, access.knowledge_set)
+    try:
+        agent = _visible_source_agent(db, context, access.knowledge_set)
+        consumer_agent_id: UUID | None = _uid(agent.id)
+        consumer_label = agent.name
+    except PlatformError as error:
+        if error.status_code != 404:
+            raise
+        labels = _visible_team_knowledge_labels(db, context, access.knowledge_set)
+        if not labels:
+            raise not_found() from error
+        consumer_agent_id = None
+        consumer_label = labels[0]
     if access.role == "teacher" and not _markdown_sources_readable_to_teacher(
         db,
         context,
@@ -860,9 +1012,9 @@ def get_brainform_markdown(
     )
     return KnowledgeMarkdownDocument(
         audience="full" if full else "student",
-        agent_id=_uid(agent.id),
+        agent_id=consumer_agent_id,
         canonical_set_id=_uid(set_id),
-        source_agent_display_name=agent.name,
+        source_agent_display_name=consumer_label,
         knowledge_display_name=access.knowledge_set.display_name,
         version_seq=version.version_seq,
         content_hash=version.content_hash if full else _sha256(markdown),

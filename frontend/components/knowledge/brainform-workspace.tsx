@@ -1849,7 +1849,9 @@ function BrainformWorkspaceBody({
   const selectedRagFile =
     pane?.kind === "rag-edit" ? (ragFiles[pane.draftKey]?.file ?? null) : null;
   const accessibleAgents = useMemo(() => {
-    const agentIds = new Set(knowledgeRows.map((row) => row.agent_id));
+    const agentIds = new Set(
+      knowledgeRows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
+    );
     const rows = chatAgents.filter((agent) =>
       agentIds.size ? agentIds.has(agent.agent_id) : true,
     );
@@ -1891,7 +1893,11 @@ function BrainformWorkspaceBody({
             used_by_agents: [
               ...new Set(rows.map((row) => row.source_agent_display_name)),
             ],
-            agent_ids: [...new Set(rows.map((row) => row.agent_id))],
+            agent_ids: [
+              ...new Set(
+                rows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
+              ),
+            ],
           },
         ];
       },

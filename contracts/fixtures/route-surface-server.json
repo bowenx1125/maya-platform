@@ -16967,9 +16967,16 @@
         "additionalProperties": false,
         "properties": {
           "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
           },
           "can_edit": {
             "title": "Can Edit",
@@ -17050,7 +17057,6 @@
           }
         },
         "required": [
-          "agent_id",
           "canonical_set_id",
           "source_agent_display_name",
           "knowledge_display_name",
@@ -17078,9 +17084,16 @@
         "additionalProperties": false,
         "properties": {
           "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
           },
           "audience": {
             "enum": [
@@ -17138,7 +17151,6 @@
         },
         "required": [
           "audience",
-          "agent_id",
           "canonical_set_id",
           "source_agent_display_name",
           "knowledge_display_name",

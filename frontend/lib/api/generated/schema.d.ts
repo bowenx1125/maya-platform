@@ -4721,11 +4721,8 @@ export interface components {
         };
         /** BrainformKnowledgeSummary */
         BrainformKnowledgeSummary: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
+            /** Agent Id */
+            agent_id?: string | null;
             /** Can Edit */
             can_edit: boolean;
             /**
@@ -4767,11 +4764,8 @@ export interface components {
         };
         /** KnowledgeMarkdownDocument */
         KnowledgeMarkdownDocument: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
+            /** Agent Id */
+            agent_id?: string | null;
             /**
              * Audience
              * @enum {string}

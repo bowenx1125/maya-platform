@@ -11055,9 +11055,11 @@ components:
       additionalProperties: false
       properties:
         agent_id:
-          format: uuid
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
           title: Agent Id
-          type: string
         can_edit:
           title: Can Edit
           type: boolean
@@ -11112,7 +11114,6 @@ components:
           - type: 'null'
           title: Version Seq
       required:
-      - agent_id
       - canonical_set_id
       - source_agent_display_name
       - knowledge_display_name
@@ -11134,9 +11135,11 @@ components:
       additionalProperties: false
       properties:
         agent_id:
-          format: uuid
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
           title: Agent Id
-          type: string
         audience:
           enum:
           - full
@@ -11180,7 +11183,6 @@ components:
           type: integer
       required:
       - audience
-      - agent_id
       - canonical_set_id
       - source_agent_display_name
       - knowledge_display_name

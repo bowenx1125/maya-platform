@@ -221,16 +221,34 @@ export function TeamEntryFlow({
         setListLoading(false);
         return;
       }
+      const knowledgeRequest =
+        typeof api.brainformKnowledge === "function"
+          ? api.brainformKnowledge(courseId).then((rows) => {
+              const seen = new Set<string>();
+              return rows.flatMap((row) => {
+                if (seen.has(row.canonical_set_id)) return [];
+                seen.add(row.canonical_set_id);
+                return [
+                  {
+                    id: row.canonical_set_id,
+                    name: row.knowledge_display_name,
+                  },
+                ];
+              });
+            })
+          : api
+              .knowledgeSets(courseId)
+              .then((sets) =>
+                sets.map((set) => ({ id: set.id, name: set.display_name })),
+              );
       void Promise.all([
         standalone ? apiForTeams.teams(courseId) : Promise.resolve([]),
-        api.knowledgeSets(courseId),
+        knowledgeRequest,
       ])
         .then(([teamList, sets]) => {
           if (!owns()) return;
           setTeams(teamList);
-          setKnowledgeSets(
-            sets.map((set) => ({ id: set.id, name: set.display_name })),
-          );
+          setKnowledgeSets(sets);
           setLoadedTeamScope(requestScope);
         })
         .catch((cause) => {

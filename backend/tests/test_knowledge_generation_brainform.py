@@ -46,6 +46,7 @@ from tests.test_knowledge_generation_materialization import (
     _run_claim,
 )
 from tests.test_knowledge_sets import _upload_source
+from tests.test_mayaform_teams import MAYA_ID, _make_agent_version
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
@@ -2321,3 +2322,71 @@ def test_crlf_source_save_builds_the_frozen_provider_input_from_its_receipted_ve
     )
     assert len(courseware) == 1
     assert courseware[0][2] == "# Lesson\n\nA source canary."
+
+
+def test_team_shared_question_bank_is_reviewable_in_brainform(
+    client: TestClient,
+    database: Any,
+) -> None:
+    _teacher, csrf = login(client, "maya")
+    created = _create_set(client, csrf, "Diagnostic questions")
+    set_id = created["id"]
+    saved = client.post(
+        f"/api/v1/knowledge-sets/{set_id}/assets",
+        headers=_headers(csrf, f"k3-brainform-team-question-{uuid4()}"),
+        json={
+            "expected_content_revision": 0,
+            "content": {
+                "kind": "question",
+                "prompt": "What stays after the lesson?",
+                "reference_answer": "The idea you can explain.",
+                "rubric": {
+                    "criteria": [
+                        {
+                            "label": "Explanation",
+                            "points": 1,
+                            "guidance": "Names the idea.",
+                        }
+                    ],
+                    "total_points": 1,
+                },
+            },
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    hidden = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert hidden.status_code == 200, hidden.text
+    assert all(item["canonical_set_id"] != set_id for item in hidden.json())
+
+    first = _make_agent_version(database, owner_id=MAYA_ID, name="Diagnostic Leader")
+    second = _make_agent_version(database, owner_id=MAYA_ID, name="Diagnostic Member")
+    team = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, f"k3-brainform-team-share-{uuid4()}"),
+        json={
+            "display_name": "Diagnostic circle",
+            "visibility": "public",
+            "members": [
+                {"agent_version_id": first[1], "is_leader": True, "position": 0},
+                {"agent_version_id": second[1], "is_leader": False, "position": 1},
+            ],
+            "shared_knowledge_set_ids": [set_id],
+        },
+    )
+    assert team.status_code == 201, team.text
+
+    listed = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert listed.status_code == 200, listed.text
+    rows = [item for item in listed.json() if item["canonical_set_id"] == set_id]
+    assert len(rows) == 1
+    assert rows[0]["agent_id"] is None
+    assert rows[0]["source_agent_display_name"] == "Diagnostic circle"
+    assert rows[0]["can_edit"] is True
+    assert rows[0]["version_seq"] == 1
+
+    document = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
+    assert document.status_code == 200, document.text
+    assert document.json()["agent_id"] is None
+    assert "What stays after the lesson?" in document.json()["markdown"]
+    assert "The idea you can explain." in document.json()["markdown"]
+    assert "#### Rubric" in document.json()["markdown"]

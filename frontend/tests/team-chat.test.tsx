@@ -285,11 +285,28 @@ beforeEach(() => {
     streamConversation: vi.fn(),
     conversation: vi.fn(),
     deleteConversation: vi.fn(),
-    knowledgeSets: vi
-      .fn()
-      .mockResolvedValue([
-        { id: "set-1", display_name: "Shared course notes", can_edit: true },
-      ]),
+    knowledgeSets: vi.fn().mockResolvedValue([
+      {
+        id: "hidden-set",
+        display_name: "Hidden outside Brainform",
+        can_edit: true,
+      },
+    ]),
+    brainformKnowledge: vi.fn().mockResolvedValue([
+      {
+        agent_id: null,
+        canonical_set_id: "set-1",
+        source_agent_display_name: "Course Dialogue Team",
+        knowledge_display_name: "Shared course notes",
+        generation_job_id: null,
+        can_read: true,
+        can_edit: true,
+        version_seq: 1,
+        content_hash: null,
+        generation_state: null,
+        safe_error_code: null,
+      },
+    ]),
     teams: vi.fn().mockResolvedValue([]),
     team: vi.fn().mockResolvedValue(team),
     mayaTeams: vi.fn().mockResolvedValue([mayaTeam]),
@@ -416,6 +433,9 @@ describe("Studyform Maya Team", () => {
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Shared course notes" }),
     );
+    expect(
+      screen.queryByRole("checkbox", { name: "Hidden outside Brainform" }),
+    ).toBeNull();
     fireEvent.click(sidebarButton("Done"));
     await screen.findByText(
       "Maya Team published. Students can choose it from New in Chatform.",

@@ -153,7 +153,8 @@ class KnowledgeSetDetail(KnowledgeSetSummary):
 
 
 class BrainformKnowledgeSummary(StrictModel):
-    agent_id: UUID
+    # A Team-shared document is reviewed in Brainform before any Agent owns it.
+    agent_id: UUID | None = None
     canonical_set_id: UUID
     source_agent_display_name: str
     knowledge_display_name: str
@@ -168,7 +169,7 @@ class BrainformKnowledgeSummary(StrictModel):
 
 class KnowledgeMarkdownDocument(StrictModel):
     audience: Literal["full", "student"]
-    agent_id: UUID
+    agent_id: UUID | None = None
     canonical_set_id: UUID
     source_agent_display_name: str
     knowledge_display_name: str
