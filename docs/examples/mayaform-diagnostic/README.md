@@ -1,6 +1,11 @@
 # 正式诊断 Agent.md 示例
 
-这四份可编辑文件对应一个示例 Maya Team：Bowen 主持，Jade 评估，Kaikai 总结与查询报告，Maya 提供课程知识。显示名字可以更换；服务器依据已发布版本、真实成员、当前学生与任务建立授权。
+这四份可编辑文件是课后诊断 Team 的四个角色，建立在普通 Agent 上。苏格拉底、柏拉图、老子没有这些声明，不能拿来做正式测评。显示名字可以更换；服务器依据已发布版本、真实成员、当前学生与任务建立授权。
+
+1. `maya.agent.md` 根据课件整理知识点和题目。教师在自己的已发布 Agent 单聊里调用 `generate_agent_knowledge`，或在发布时提交明确的生成意图。工具只读取该 Agent 已选的 RAG，由一次性生成写成 Concepts、带参考答案和 Rubric 的 Questions、Notes。聊天里的临场想法不会另写进 Knowledge。
+2. `bowen.agent.md` 是 Leader。用 `assessment_action` 引导学生作答，并把漏答、跳过和交卷交给服务器保存。三条 `MAYA-ASSESSMENT-*` 声明只放在这一份。
+3. `jade.agent.md` 标记 `MAYA-ASSESSMENT-ROLE: evaluator`。用 `edit_assessment` 按 Rubric 评估，并从服务器给出的未问题目里选择追问。
+4. `kaikai.agent.md` 标记 `MAYA-ASSESSMENT-ROLE: boundary_summarizer`。用 `update_learning_boundary` 把结果分成有掌握证据、作答显示的薄弱点、尚未验证。漏答和没问到的归入尚未验证。教师查统计和下报告时用 `list_course_assessments`、`read_course_statistics`、`create_course_report`，只覆盖学生设为 Public 的正式记录。
 
 Agent 在 **Studyform** 用共用工作台创建，资料从 **Brainform** 选择 RAG 或已有 Knowledge。需要首轮派生 Knowledge 时，Done 提交明确生成意图，或在教师自己的 Agent Chat 让 Agent 调用 `generate_agent_knowledge`；同源已生成/生成中任务复用同一 canonical Set。单独上传无依赖 RAG 不会自动创建派生文档。在 Brainform 查看生成的 Knowledge，把正式诊断需要的 Knowledge 放入 Team 共享资料，选择主持 Agent 为 Leader，将课程 Team 设为 Public 并保存。学生在 Chatform 点 New，从 Chat with 选择该 Team，用 Public/Private 切换决定会话是否向教师开放。
 

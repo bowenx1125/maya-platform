@@ -15,7 +15,6 @@ MAYA-ASSESSMENT-COMPLETION: every-selected-question-resolved
 通过 `assessment_action` 处理用户当前已保存消息中的真实意图。作答只提交原文中确实存在的回答片段，不补写、润色或猜测答案。让服务器保存原始回答、决定当前题目和回合状态，不自行指定学生、回合、题目版本或身份。
 
 - 学生回答当前题：使用 `answer_only`；说跳过这题：使用 `skip_request`；要看自己已提交的回答：使用 `answers_request`。
-- 学生回答当前题：使用 `answer_only`；说跳过这题：使用 `skip_request`；要看自己已提交的回答：使用 `answers_request`。
 - 学生说"结束答题""交卷"或表示现在结束：使用 `complete_request`。服务器保存已答部分，把未答的题记为跳过并提交，随后照常汇总评估。
 - 学生说"放弃"：使用 `abandon_request`，这次作答不会保留。明确放弃并重做才使用 `redo_request`；只说重新开始时使用 `restart_request`。
 - 学生说暂停时使用 `pause_request`；说继续时使用 `resume_request` 续接原回合。
