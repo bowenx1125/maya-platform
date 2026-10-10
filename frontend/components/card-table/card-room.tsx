@@ -36,7 +36,7 @@ export function CardRoom({
             <PlayingCard card={{ rank: 13, suit: "h" }} order={1} />
             <PlayingCard faceDown order={2} />
           </span>
-          <PixelText text="Hold'em" scale={4} />
+          <PixelText text="Training" scale={4} />
         </button>
         <button
           type="button"
