@@ -30,6 +30,7 @@ import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
+import { ModulePlus } from "./studyform-layout";
 import { IconDownload, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import { ReportMarkdown } from "./report/report-markdown";
@@ -59,10 +60,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   const draftVersionId =
     versions.find((version) => version.id === agent?.current_draft_version_id)
       ?.id ?? versions.find((version) => version.state === "draft")?.id;
-  useEffect(() => {
-    if (!agent || !draftVersionId) return;
-    router.replace(`/student/agent-versions/${draftVersionId}/edit`);
-  }, [agent, draftVersionId, router]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -172,6 +169,17 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           }
         />
       ) : null}
+      <PageAction
+        name="new"
+        disabled={busy}
+        onClick={() => {
+          if (draftVersionId) {
+            router.push(`/student/agent-versions/${draftVersionId}/edit`);
+            return;
+          }
+          void createNextVersion();
+        }}
+      />
       {visible ? (
         <ReadOnlyVersion
           version={visible}
@@ -222,10 +230,12 @@ export function AgentWorkbench({
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
-  const [, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
+  const [knowledgeSets, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
   const [agentKnowledge, setAgentKnowledge] =
     useState<AgentKnowledgeSets | null>(null);
-  const [, setSelectedKnowledgeSetIds] = useState<string[]>([]);
+  const [selectedKnowledgeSetIds, setSelectedKnowledgeSetIds] = useState<
+    string[]
+  >([]);
   const [knowledgeBindingSaving, setKnowledgeBindingSaving] = useState(false);
   const [pendingKnowledgeSetIds, setPendingKnowledgeSetIds] = useState<
     string[] | null
@@ -809,6 +819,16 @@ export function AgentWorkbench({
                 >
                   {t("insertOutline")}
                 </button>
+                <button
+                  className="icon-action"
+                  type="button"
+                  disabled={saving || !agentMd}
+                  aria-label={`${t("download")} AGENT.md`}
+                  data-ui-guide="agent.download"
+                  onClick={() => downloadText(agentMd, "AGENT.md")}
+                >
+                  <IconDownload />
+                </button>
                 <label
                   className="icon-action"
                   data-ui-guide="agent.uploadMarkdown"
@@ -882,9 +902,6 @@ export function AgentWorkbench({
                     ? []
                     : (user?.groups ?? []).map((group) => group.group_id)
                 }
-                listenOnly={Boolean(
-                  user?.courses?.some((course) => course.role === "teacher"),
-                )}
                 embedded
                 selectedId={voiceProfileId}
                 onSelect={(profileId) =>
@@ -901,24 +918,14 @@ export function AgentWorkbench({
             title={t("brainform")}
             guide="agent.brainform"
             action={
-              <label
-                className="icon-action"
-                data-ui-guide="agent.uploadEvidence"
-              >
-                <IconUpload />
-                <input
-                  className="sr-only"
-                  type="file"
-                  accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  aria-label={t("uploadMarkdown")}
-                  disabled={saving || knowledgePreviewRefreshing}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void uploadKnowledge(file);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
+              <ModulePlus
+                href={
+                  agent.group_id && agent.ownership_scope !== "personal"
+                    ? `/student/knowledge?group_id=${encodeURIComponent(agent.group_id)}&mode=rag-new`
+                    : "/teacher/knowledge?mode=rag-new"
+                }
+                label={t("newAgent")}
+              />
             }
           >
             <div className="brainform-source-group">
@@ -1031,6 +1038,39 @@ export function AgentWorkbench({
                           </button>
                         ) : null}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="brainform-source-group">
+              <h3>{t("brainformKnowledgeHeading")}</h3>
+              {knowledgeSets.length === 0 ? (
+                <p className="muted-copy">{t("brainformKnowledgeEmpty")}</p>
+              ) : (
+                <div className="document-list">
+                  {knowledgeSets.map((set) => (
+                    <div className="document-row" key={set.id}>
+                      <label className="document-select">
+                        <input
+                          type="checkbox"
+                          checked={selectedKnowledgeSetIds.includes(set.id)}
+                          disabled={
+                            saving || knowledgeBindingSaving || !set.can_edit
+                          }
+                          onChange={(event) => {
+                            const nextIds = event.target.checked
+                              ? [...selectedKnowledgeSetIds, set.id]
+                              : selectedKnowledgeSetIds.filter(
+                                  (id) => id !== set.id,
+                                );
+                            void saveKnowledgeSetSelection(nextIds);
+                          }}
+                        />
+                        <span className="document-main">
+                          <strong>{set.display_name}</strong>
+                        </span>
+                      </label>
                     </div>
                   ))}
                 </div>

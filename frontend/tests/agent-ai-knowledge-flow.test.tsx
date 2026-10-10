@@ -271,18 +271,21 @@ describe("explicit AI Knowledge Agent flow", () => {
     expect(api.publish.mock.calls[0]?.[2]).not.toHaveProperty("generation");
   });
 
-  it("does not select Knowledge sets on the Agent editor", async () => {
+  it("selects a Knowledge set from the Agent editor", async () => {
     const api = makeApi();
     api.knowledgeSets.mockResolvedValue([generatedSet as KnowledgeSetSummary]);
     renderWorkbench(api, false);
 
-    expect(
-      await screen.findByRole("heading", { name: "Brainform" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("checkbox", { name: /Generated Knowledge/ }),
-    ).toBeNull();
-    expect(api.replaceAgentKnowledgeSets).not.toHaveBeenCalled();
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: /Generated Knowledge/ }),
+    );
+    await waitFor(() =>
+      expect(api.replaceAgentKnowledgeSets).toHaveBeenCalledWith(
+        "agent-1",
+        expect.objectContaining({ set_ids: ["set-1"] }),
+        expect.anything(),
+      ),
+    );
   });
 
   it("starts from an existing Agent's saved Sources when Done is explicitly chosen", async () => {

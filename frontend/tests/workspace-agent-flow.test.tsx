@@ -66,6 +66,16 @@ const api = {
   knowledgeSets: vi.fn().mockResolvedValue([]),
   voiceProfiles: vi.fn(),
   updateAgentMetadata: vi.fn(),
+  version: vi.fn(),
+  ragPreview: vi.fn().mockResolvedValue(null),
+  avatarTemplates: vi.fn().mockResolvedValue([]),
+  agentKnowledgeSets: vi.fn().mockResolvedValue({
+    agent_id: "agent-id",
+    agent_metadata_revision: 0,
+    sets: [],
+  }),
+  workspaceDocuments: vi.fn().mockResolvedValue([]),
+  knowledge: vi.fn().mockResolvedValue([]),
 };
 
 describe("Workspace Agent flow", () => {
@@ -79,6 +89,18 @@ describe("Workspace Agent flow", () => {
     api.chatAgents.mockResolvedValue([]);
     api.knowledgeSets.mockResolvedValue([]);
     api.voiceProfiles.mockResolvedValue([]);
+    api.version.mockResolvedValue(
+      version({ id: "draft-id", state: "draft", version_label: "V1.1" }),
+    );
+    api.ragPreview.mockResolvedValue(null);
+    api.avatarTemplates.mockResolvedValue([]);
+    api.agentKnowledgeSets.mockResolvedValue({
+      agent_id: "agent-id",
+      agent_metadata_revision: 0,
+      sets: [],
+    });
+    api.workspaceDocuments.mockResolvedValue([]);
+    api.knowledge.mockResolvedValue([]);
   });
   afterEach(() => {
     cleanup();
@@ -111,7 +133,7 @@ describe("Workspace Agent flow", () => {
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
   });
 
-  it("opens a published Agent with Back and does not use sidebar New", async () => {
+  it("opens a published Agent with Back and uses sidebar New for the next version", async () => {
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
@@ -121,12 +143,11 @@ describe("Workspace Agent flow", () => {
     expect(
       (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
-    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
-    expect(nav.queryByRole("link", { name: "New" })).toBeNull();
-    expect(api.nextVersion).not.toHaveBeenCalled();
+    fireEvent.click(nav.getByRole("button", { name: "New" }));
+    await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
   });
 
-  it("opens a Teacher Agent with Back and does not use sidebar New", async () => {
+  it("opens a Teacher Agent with Back and uses sidebar New for the next version", async () => {
     api.agent.mockResolvedValue(
       agent({
         ownership_scope: "personal",
@@ -147,9 +168,8 @@ describe("Workspace Agent flow", () => {
     expect(backs.map((link) => link.getAttribute("href"))).toContain(
       "/teacher/studyform",
     );
-    expect(navigation.queryByRole("button", { name: "New" })).toBeNull();
-    expect(navigation.queryByRole("link", { name: "New" })).toBeNull();
-    expect(api.nextVersion).not.toHaveBeenCalled();
+    fireEvent.click(navigation.getByRole("button", { name: "New" }));
+    await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
   });
 
   it("continues an existing next-version draft without making a second one", async () => {
@@ -165,17 +185,11 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith(
-        "/student/agent-versions/draft-id/edit",
-      ),
+    const nav = within(screen.getByRole("navigation"));
+    fireEvent.click(await nav.findByRole("button", { name: "New" }));
+    expect(router.push).toHaveBeenCalledWith(
+      "/student/agent-versions/draft-id/edit",
     );
-    expect(
-      within(screen.getByRole("navigation")).queryByRole("link", {
-        name: "New",
-      }),
-    ).toBeNull();
-    expect(api.nextVersion).not.toHaveBeenCalled();
     expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
@@ -194,16 +208,11 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith(
-        "/student/agent-versions/draft-id/edit",
-      ),
+    const nav = within(screen.getByRole("navigation"));
+    fireEvent.click(await nav.findByRole("button", { name: "New" }));
+    expect(router.push).toHaveBeenCalledWith(
+      "/student/agent-versions/draft-id/edit",
     );
-    expect(
-      within(screen.getByRole("navigation")).queryByRole("link", {
-        name: "New",
-      }),
-    ).toBeNull();
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(api.nextVersion).not.toHaveBeenCalled();
@@ -230,16 +239,12 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith(
-        "/student/agent-versions/draft-id/edit",
-      ),
-    );
     expect(
-      within(screen.getByRole("navigation")).queryByRole("link", {
+      await within(screen.getByRole("navigation")).findByRole("button", {
         name: "New",
       }),
-    ).toBeNull();
+    ).toBeTruthy();
+    expect(router.replace).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 

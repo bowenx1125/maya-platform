@@ -630,7 +630,7 @@ export function TeacherAgentDetail({
           : nextVersions.filter((version) => version.state !== "draft");
       setVersions(visibleVersions);
       setEditingVersionId(
-        nextAgent.ownership_scope === "personal"
+        generationFlow && nextAgent.ownership_scope === "personal"
           ? (visibleVersions.find((version) => version.state === "draft")?.id ??
               null)
           : null,
@@ -780,10 +780,24 @@ export function TeacherAgentDetail({
 
   if (snapshotId && snapshot?.id !== snapshotId) return <LoadingCard />;
 
+  const draftVersion = versions.find((version) => version.state === "draft");
   return (
     <div className={detailStyles.page}>
       <PageIntro title={agent.name} />
       <PageAction name="back" href="/teacher/studyform" />
+      {agent.ownership_scope === "personal" ? (
+        <PageAction
+          name="new"
+          disabled={creatingDraft}
+          onClick={() => {
+            if (draftVersion) {
+              setEditingVersionId(draftVersion.id);
+              return;
+            }
+            void createPersonalVersion();
+          }}
+        />
+      ) : null}
       {agent.status === "archived" ? (
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}

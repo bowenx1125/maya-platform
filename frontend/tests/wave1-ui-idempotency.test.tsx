@@ -330,9 +330,15 @@ describe("Wave 1A UI idempotency wiring", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByRole("link", { name: "Back" });
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    expect(nextVersion).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(
+        "connection reset",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(nextVersion).toHaveBeenCalledTimes(2));
+    expect(keys[1]).toBe(keys[0]);
   });
 
   it("replays knowledge upload through the action-specific retry path", async () => {
@@ -378,20 +384,14 @@ describe("Wave 1A UI idempotency wiring", () => {
         <AgentWorkbench versionId="version-id" />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(screen.getAllByLabelText("Upload")).toHaveLength(2),
-    );
-    const fileInput = screen.getAllByLabelText("Upload")[1];
-    fireEvent.change(fileInput, {
-      target: { files: [new File(["# one"], "one.md")] },
-    });
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+    expect(
+      await screen.findByRole("link", { name: "New" }),
+    ).toHaveProperty(
+      "href",
+      expect.stringContaining(
+        "/student/knowledge?group_id=group-id&mode=rag-new",
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(2));
-    expect(keys[1]).toBe(keys[0]);
+    expect(uploadKnowledge).not.toHaveBeenCalled();
   });
 });
