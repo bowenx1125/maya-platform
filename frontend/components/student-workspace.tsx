@@ -9,9 +9,11 @@ import {
   isAmbiguousMutationFailure,
   type AgentSummary,
   type AgentVersion,
+  type ChatAgent,
   type Course,
   type GroupDetail,
   type PlatformApi,
+  type TeamSummaryDto,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
@@ -22,6 +24,7 @@ import { useLocale, useT } from "./locale";
 import { PageAction } from "./page-action";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
+import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
   ModuleCard,
@@ -224,19 +227,25 @@ export function GroupWorkspace({
   groupId,
   initialVoiceCreate = false,
   focusVoices = false,
+  initialMode,
+  initialTeamId,
 }: {
   groupId: string;
   initialVoiceCreate?: boolean;
   focusVoices?: boolean;
+  initialMode?: string;
+  initialTeamId?: string;
 }) {
   const { identityGeneration, user } = useSession();
-  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}`;
+  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}:${initialMode ?? ""}:${initialTeamId ?? ""}`;
   return (
     <GroupWorkspaceSession
       key={scope}
       groupId={groupId}
       initialVoiceCreate={initialVoiceCreate}
       focusVoices={focusVoices}
+      initialMode={initialMode}
+      initialTeamId={initialTeamId}
       scope={scope}
     />
   );
@@ -246,17 +255,23 @@ function GroupWorkspaceSession({
   groupId,
   initialVoiceCreate,
   focusVoices,
+  initialMode,
+  initialTeamId,
   scope,
 }: {
   groupId: string;
   initialVoiceCreate: boolean;
   focusVoices: boolean;
+  initialMode?: string;
+  initialTeamId?: string;
   scope: string;
 }) {
   const t = useT();
   const { api, user } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [items, setItems] = useState<AgentListItem[]>([]);
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
+  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -275,14 +290,30 @@ function GroupWorkspaceSession({
     setLoading(true);
     setError(null);
     try {
-      const [nextGroup, nextAgents] = await Promise.all([
-        api.group(groupId),
+      const nextGroup = await api.group(groupId);
+      const [nextAgents, nextTeams, nextChatAgents] = await Promise.all([
         api.agents(groupId, true),
+        typeof api.teams === "function"
+          ? api.teams(nextGroup.course_id)
+          : Promise.resolve([]),
+        typeof api.chatAgents === "function"
+          ? api.chatAgents(nextGroup.course_id)
+          : Promise.resolve([]),
       ]);
       const versions = await Promise.all(
         nextAgents.map((agent) => api.versions(agent.id)),
       );
       setGroup(nextGroup);
+      setTeams(
+        (Array.isArray(nextTeams) ? nextTeams : []).filter(
+          (team) =>
+            team.can_edit &&
+            team.visibility === "private" &&
+            team.ownership_scope === "personal" &&
+            team.group_id === null,
+        ),
+      );
+      setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
       setItems(
         nextAgents.map((agent, index) => ({
           agent,
@@ -333,12 +364,55 @@ function GroupWorkspaceSession({
     }
   }
 
+  async function deleteOwnedTeam(teamId: string) {
+    if (
+      deleting ||
+      teacherIdentity ||
+      typeof api.deleteTeam !== "function" ||
+      !window.confirm(t("deletePrivateTeamConfirm"))
+    )
+      return;
+    setDeleting(teamId);
+    setError(null);
+    try {
+      await api.deleteTeam(teamId);
+      setTeams((current) => current.filter((team) => team.id !== teamId));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   if (!group)
     return (
       <ErrorNotice
         error={error ?? new Error(t("groupNotFound"))}
         onRetry={() => void load()}
       />
+    );
+
+  const teamForm =
+    !teacherIdentity &&
+    (initialMode === "team-new" || initialMode === "team-edit");
+  if (teamForm)
+    return (
+      <>
+        <PageIntro title={t("studyform")} />
+        <TeamEntryFlow
+          key={scope}
+          api={api}
+          courseId={group.course_id}
+          agents={chatAgents}
+          variant="team"
+          standalone
+          backHref={`/student/groups/${groupId}`}
+          initialRouteMode={
+            initialMode === "team-new" ? "team-new" : "team-edit"
+          }
+          initialTeamId={initialTeamId}
+        />
+      </>
     );
 
   return (
@@ -381,6 +455,38 @@ function GroupWorkspaceSession({
             </ModuleTiles>
           ) : undefined}
         </ModuleCard>
+        {teacherIdentity ? null : (
+          <ModuleCard
+            title={t("chatTargetTeams")}
+            labelledBy="studyform-teams"
+            empty={teams.length ? undefined : t("teamNoneYet")}
+            action={
+              <ModulePlus
+                href={`/student/groups/${groupId}?mode=team-new`}
+                label={t("newAgent")}
+              />
+            }
+          >
+            {teams.length ? (
+              <ModuleTiles>
+                {teams.map((team) => (
+                  <VersionTile
+                    key={team.id}
+                    name={team.display_name}
+                    href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                    label={t("teamVersionLabel", {
+                      seq: team.current_version_seq,
+                    })}
+                    pending={false}
+                    deleting={deleting !== null}
+                    deleteLabel={t("deleteAgent")}
+                    onDelete={() => void deleteOwnedTeam(team.id)}
+                  />
+                ))}
+              </ModuleTiles>
+            ) : undefined}
+          </ModuleCard>
+        )}
         <VoiceLibrary
           id="studyform-voices"
           key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}

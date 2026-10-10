@@ -238,7 +238,7 @@ export function TeacherStudyformWorkspace({
   const teacherCourseId = user?.courses.find(
     (membership) => membership.role === "teacher",
   )?.course_id;
-  const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${identityGeneration}`;
+  const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${initialMode ?? ""}:${initialTeamId ?? ""}:${identityGeneration}`;
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
@@ -274,7 +274,6 @@ export function TeacherStudyformWorkspace({
             nextTeams.filter(
               (team) =>
                 team.can_edit &&
-                team.visibility === "public" &&
                 team.ownership_scope === "personal" &&
                 team.group_id === null,
             ),
@@ -310,8 +309,8 @@ export function TeacherStudyformWorkspace({
     }
   }
 
-  async function deleteMayaTeam(teamId: string) {
-    if (deletingId || !window.confirm(t("deleteTeamConfirm"))) return;
+  async function deleteOwnedTeam(teamId: string, confirmMessage: string) {
+    if (deletingId || !window.confirm(confirmMessage)) return;
     setDeletingId(teamId);
     setError(null);
     try {
@@ -328,7 +327,9 @@ export function TeacherStudyformWorkspace({
   if (error && !personalAgents.length && !chatAgents.length)
     return <ErrorNotice error={error} />;
 
-  if (initialMode && ["team-new", "team-edit"].includes(initialMode))
+  const mayaForm = initialMode === "maya-new" || initialMode === "maya-edit";
+  const privateForm = initialMode === "team-new" || initialMode === "team-edit";
+  if (mayaForm || privateForm)
     return (
       <>
         <PageIntro title={t("studyform")} />
@@ -338,15 +339,21 @@ export function TeacherStudyformWorkspace({
             api={api}
             courseId={teacherCourseId}
             agents={chatAgents}
-            variant="maya"
+            variant={mayaForm ? "maya" : "team"}
             standalone
             backHref="/teacher/studyform"
-            initialRouteMode={initialMode}
+            initialRouteMode={
+              initialMode === "maya-new" || initialMode === "team-new"
+                ? "team-new"
+                : "team-edit"
+            }
             initialTeamId={initialTeamId}
           />
         ) : null}
       </>
     );
+  const privateTeams = teams.filter((team) => team.visibility === "private");
+  const mayaTeams = teams.filter((team) => team.visibility === "public");
 
   return (
     <>
@@ -387,20 +394,10 @@ export function TeacherStudyformWorkspace({
             </ModuleTiles>
           ) : undefined}
         </ModuleCard>
-        <VoiceLibrary
-          id="studyform-voices"
-          key={`${scope}:voices`}
-          groupId={null}
-          membershipGroupIds={(user?.groups ?? []).map(
-            (group) => group.group_id,
-          )}
-          listenOnly
-          embedded
-        />
         <ModuleCard
-          title={t("mayaTeam")}
-          labelledBy="studyform-maya"
-          empty={teams.length ? undefined : t("mayaTeamNoneYet")}
+          title={t("chatTargetTeams")}
+          labelledBy="studyform-teams"
+          empty={privateTeams.length ? undefined : t("teamNoneYet")}
           action={
             teacherCourseId ? (
               <ModulePlus
@@ -410,9 +407,9 @@ export function TeacherStudyformWorkspace({
             ) : null
           }
         >
-          {teams.length ? (
+          {privateTeams.length ? (
             <ModuleTiles>
-              {teams.map((team) => (
+              {privateTeams.map((team) => (
                 <VersionTile
                   key={team.id}
                   name={team.display_name}
@@ -423,12 +420,58 @@ export function TeacherStudyformWorkspace({
                   pending={false}
                   deleting={deletingId !== null}
                   deleteLabel={t("deleteAgent")}
-                  onDelete={() => void deleteMayaTeam(team.id)}
+                  onDelete={() =>
+                    void deleteOwnedTeam(team.id, t("deletePrivateTeamConfirm"))
+                  }
                 />
               ))}
             </ModuleTiles>
           ) : undefined}
         </ModuleCard>
+        <ModuleCard
+          title={t("mayaTeam")}
+          labelledBy="studyform-maya"
+          empty={mayaTeams.length ? undefined : t("mayaTeamNoneYet")}
+          action={
+            teacherCourseId ? (
+              <ModulePlus
+                href="/teacher/studyform?mode=maya-new"
+                label={t("newAgent")}
+              />
+            ) : null
+          }
+        >
+          {mayaTeams.length ? (
+            <ModuleTiles>
+              {mayaTeams.map((team) => (
+                <VersionTile
+                  key={team.id}
+                  name={team.display_name}
+                  href={`/teacher/studyform?mode=maya-edit&team_id=${encodeURIComponent(team.id)}`}
+                  label={t("teamVersionLabel", {
+                    seq: team.current_version_seq,
+                  })}
+                  pending={false}
+                  deleting={deletingId !== null}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={() =>
+                    void deleteOwnedTeam(team.id, t("deleteTeamConfirm"))
+                  }
+                />
+              ))}
+            </ModuleTiles>
+          ) : undefined}
+        </ModuleCard>
+        <VoiceLibrary
+          id="studyform-voices"
+          key={`${scope}:voices`}
+          groupId={null}
+          membershipGroupIds={(user?.groups ?? []).map(
+            (group) => group.group_id,
+          )}
+          listenOnly
+          embedded
+        />
       </ModuleGrid>
     </>
   );

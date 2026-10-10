@@ -78,6 +78,7 @@ const enMessages = {
   deleteAgentConfirm:
     "Delete this Agent for teachers and students? Existing chats become read-only. Shared knowledge files stay.",
   deleteTeamConfirm: "Delete this Maya Team? Existing chats stay read-only.",
+  deletePrivateTeamConfirm: "Delete this Team? Existing chats stay read-only.",
   deleteChat: "Delete chat",
   deleteChatConfirm: "Delete this entire conversation? This cannot be undone.",
   delete: "Delete",
@@ -663,13 +664,13 @@ const enMessages = {
   chatTarget: "Chat with",
   chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Teams",
-  chatTargetNewTeam: "+ New Team",
   mayaTeam: "Maya Team",
   mayaTeamPublishHelp:
     "Choose Agents, a Leader and shared Knowledge, then press Done to publish. Students find it under New in Chatform.",
   mayaTeamPublished:
     "Maya Team published. Students can choose it from New in Chatform.",
   mayaTeamNoneYet: "No Maya Teams yet.",
+  teamNoneYet: "No Teams yet.",
   studyformOpenMayaTeams: "Open Maya Team",
   chatCreateTeam: "Create Team",
   chatEditTeam: "Edit Team",
@@ -793,6 +794,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   deleteAgentConfirm:
     "从老师和学生端删除这个智能体？已有聊天保留只读，小组共享知识文件不变。",
   deleteTeamConfirm: "删除这个 Maya Team？已有聊天保留只读。",
+  deletePrivateTeamConfirm: "删除这个 Team？已有聊天保留只读。",
   deleteChat: "删除对话",
   deleteChatConfirm: "删除整段对话？此操作无法撤销。",
   delete: "删除",
@@ -1346,12 +1348,12 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   chatTarget: "聊天对象",
   chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Team",
-  chatTargetNewTeam: "+ 新建 Team",
   mayaTeam: "Maya Team",
   mayaTeamPublishHelp:
     "勾选 Agents、指定组长并选择共享 Knowledge，点击 Done 即发布。学生在 Chatform 点击 New 就能看到。",
   mayaTeamPublished: "Maya Team 已发布，学生可在 Chatform 的 New 中选择。",
   mayaTeamNoneYet: "还没有 Maya Team。",
+  teamNoneYet: "还没有 Team。",
   studyformOpenMayaTeams: "进入 Maya Team",
   chatCreateTeam: "创建 Team",
   chatEditTeam: "编辑 Team",

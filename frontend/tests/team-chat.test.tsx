@@ -40,6 +40,8 @@ vi.mock("next/navigation", () => ({
 import { AgentChat } from "../components/agent-chat";
 import { AppShell } from "../components/app-shell";
 import { TeamEntryFlow } from "../components/chats/team-entry-flow";
+import { GroupWorkspace } from "../components/student-workspace";
+import { TeacherStudyformWorkspace } from "../components/teacher-workspace";
 import { LocaleProvider } from "../components/locale";
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 import { abandonChatRequest } from "../lib/chat-request-store";
@@ -445,6 +447,10 @@ describe("Studyform Maya Team", () => {
     );
 
     const name = await screen.findByLabelText("Team name");
+    expect(navigation.push).toHaveBeenCalledWith(
+      "/teacher/chat?mode=maya-edit&team_id=team-1",
+      { scroll: false },
+    );
     fireEvent.change(name, { target: { value: "Reasoning circle v2" } });
     fireEvent.click(sidebarButton("Done"));
 
@@ -560,6 +566,125 @@ describe("Studyform Maya Team", () => {
   });
 });
 
+describe("Studyform Team cards", () => {
+  it("lists Agents, Teams, Maya Teams and Voices in that order", async () => {
+    state.role = "teacher";
+    state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
+    state.api.teams.mockResolvedValue([
+      { ...team, display_name: "Private circle" },
+      {
+        ...publicTeam,
+        id: "published-team",
+        display_name: "Course Dialogue Team",
+      },
+      {
+        ...publicTeam,
+        id: "group-team",
+        display_name: "Group circle",
+        group_id: "group-1",
+      },
+    ]);
+    render(
+      <LocaleProvider initialLocale="en">
+        <TeacherStudyformWorkspace />
+      </LocaleProvider>,
+    );
+
+    const headings = await screen.findAllByRole("heading", { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "Agents",
+      "Teams",
+      "Maya Team",
+      "Voices",
+    ]);
+    expect(
+      screen.getByRole("link", { name: "Private circle" }).getAttribute("href"),
+    ).toBe("/teacher/studyform?mode=team-edit&team_id=team-1");
+    expect(
+      screen
+        .getByRole("link", { name: "Course Dialogue Team" })
+        .getAttribute("href"),
+    ).toBe("/teacher/studyform?mode=maya-edit&team_id=published-team");
+    expect(screen.queryByText("Group circle")).toBeNull();
+    expect(
+      screen
+        .getAllByRole("link", { name: "New" })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "/teacher/agents/new",
+      "/teacher/studyform?mode=team-new",
+      "/teacher/studyform?mode=maya-new",
+    ]);
+  });
+
+  it("lets a student create a private Team beside Agents and Voices", async () => {
+    state.api.group = vi.fn().mockResolvedValue({
+      id: "group-1",
+      course_id: "course",
+      name: "Demo",
+    });
+    state.api.agents = vi.fn().mockResolvedValue([]);
+    state.api.versions = vi.fn().mockResolvedValue([]);
+    state.api.voiceProfiles = vi.fn().mockResolvedValue([]);
+    state.api.teams.mockResolvedValue([
+      { ...team, display_name: "Private circle" },
+      {
+        ...publicTeam,
+        id: "published-team",
+        display_name: "Course Dialogue Team",
+      },
+    ]);
+    render(
+      <LocaleProvider initialLocale="en">
+        <GroupWorkspace groupId="group-1" />
+      </LocaleProvider>,
+    );
+
+    const headings = await screen.findAllByRole("heading", { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "Agents",
+      "Teams",
+      "Voices",
+    ]);
+    expect(screen.queryByRole("heading", { name: "Maya Team" })).toBeNull();
+    expect(screen.queryByText("Course Dialogue Team")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Private circle" }).getAttribute("href"),
+    ).toBe("/student/groups/group-1?mode=team-edit&team_id=team-1");
+    expect(
+      screen
+        .getAllByRole("link", { name: "New" })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "/student/groups/group-1/agents/new",
+      "/student/groups/group-1?mode=team-new",
+    ]);
+  });
+
+  it("does not offer Team creation on a teacher's group visit", async () => {
+    state.role = "teacher";
+    state.api.group = vi.fn().mockResolvedValue({
+      id: "group-1",
+      course_id: "course",
+      name: "Demo",
+    });
+    state.api.agents = vi.fn().mockResolvedValue([]);
+    state.api.versions = vi.fn().mockResolvedValue([]);
+    state.api.voiceProfiles = vi.fn().mockResolvedValue([]);
+    render(
+      <LocaleProvider initialLocale="en">
+        <GroupWorkspace groupId="group-1" initialMode="team-new" />
+      </LocaleProvider>,
+    );
+
+    await screen.findByRole("heading", { name: "Agents" });
+    expect(screen.queryByRole("heading", { name: "Teams" })).toBeNull();
+    expect(screen.queryByLabelText("Team name")).toBeNull();
+    expect(screen.queryByRole("link", { name: "New" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Voices" })).toBeTruthy();
+  });
+});
+
 describe("Chatform", () => {
   it.each(["student", "teacher"])(
     "shows No chats yet before any Chat exists for a %s",
@@ -583,7 +708,7 @@ describe("Chatform", () => {
     },
   );
 
-  it("offers Agents, Teams, Maya Teams and a new Team in one picker without creating a Chat", async () => {
+  it("offers Agents, Teams and Maya Teams in one picker and does not create a Team there", async () => {
     state.api.teams.mockResolvedValue([
       { ...team, can_edit: false, visibility: "public" },
     ]);
@@ -597,7 +722,10 @@ describe("Chatform", () => {
     );
     expect(within(picker).getByRole("option", { name: "Agents & Teams" }));
     expect(screen.queryByText("Choose who to chat with")).toBeNull();
-    expect(within(picker).getByRole("option", { name: "+ New Team" }));
+    expect(
+      within(picker).queryByRole("option", { name: "+ New Team" }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Team name")).toBeNull();
     expect(picker.value).toBe("agent:version-1");
     expect(
       screen.getByRole("heading", { level: 2, name: "Socrates" }),
@@ -680,18 +808,24 @@ describe("Chatform", () => {
     expect(state.api.updateTeam).not.toHaveBeenCalled();
   });
 
-  it("creates a private Team inline from the picker and starts its Chat with the first message", async () => {
-    renderChats();
-    await chooseTarget("new-team", "+ New Team");
+  it("creates a private Team from Studyform and does not start a Chat", async () => {
+    state.role = "teacher";
+    state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace initialMode="team-new" />
+        </AppShell>
+      </LocaleProvider>,
+    );
     await screen.findByRole("heading", { level: 2, name: "Create Team" });
     expect(screen.queryByRole("radio", { name: "Public" })).toBeNull();
     await fillTeamForm("Reasoning circle");
-    state.api.teams.mockResolvedValue([team]);
     const done = sidebarButton("Done");
     await waitFor(() => expect(done.disabled).toBe(false));
     fireEvent.click(done);
 
-    await screen.findByRole("heading", { level: 2, name: "Reasoning circle" });
+    await screen.findByText("Team saved. You can now start a Team Chat.");
     expect(state.api.createTeam).toHaveBeenCalledWith(
       "course",
       {
@@ -707,25 +841,22 @@ describe("Chatform", () => {
       { idempotency: expect.anything() },
     );
     expect(state.api.createTeamConversation).not.toHaveBeenCalled();
-
-    await sendMessage("First Team question");
-    await waitFor(() =>
-      expect(state.api.createTeamConversation).toHaveBeenCalledWith(
-        { kind: "team", team_id: "team-1", team_version_id: "team-version-3" },
-        "private",
-      ),
-    );
+    expect(state.api.createConversation).not.toHaveBeenCalled();
   });
 
-  it("returns to the blank Chat when the inline Team form is cancelled", async () => {
-    renderChats();
-    await chooseTarget("new-team", "+ New Team");
+  it("leaves the private Team form without creating one", async () => {
+    state.role = "teacher";
+    state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace initialMode="team-new" />
+        </AppShell>
+      </LocaleProvider>,
+    );
     await screen.findByLabelText("Team name");
     fireEvent.click(sidebarButton("Back"));
 
-    expect(
-      await screen.findByRole("combobox", { name: "Chat with" }),
-    ).toBeTruthy();
     expect(screen.queryByLabelText("Team name")).toBeNull();
     expect(state.api.createTeam).not.toHaveBeenCalled();
   });

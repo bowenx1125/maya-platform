@@ -25,7 +25,6 @@ import {
   type TeamChatSession,
   type TeamChatEntry,
   type TeamChatTurn,
-  type TeamDetailDto,
   type TeamRouting,
   type TeamMemberResult,
   type TeamSummaryDto,
@@ -56,7 +55,6 @@ import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
-import { TeamEntryFlow } from "./chats/team-entry-flow";
 import styles from "./agent-chat.module.css";
 
 type MemoryRoute = {
@@ -317,7 +315,6 @@ function AgentChatScope({
     useState<ChatVisibility>("private");
   const [teamChoices, setTeamChoices] = useState<TeamSummaryDto[]>([]);
   const [mayaChoices, setMayaChoices] = useState<MayaTeamDirectoryDto[]>([]);
-  const [creatingTeam, setCreatingTeam] = useState(false);
   const selectedTeamIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState(() => {
     const pending = getChatRequest(scopeKey);
@@ -439,7 +436,6 @@ function AgentChatScope({
 
   const openNewEntry = useCallback(() => {
     setChatVisibility("private");
-    setCreatingTeam(false);
     setNewChatRouteState({ search: memoryRouteSearch, open: true });
     syncNewChatUrl(true);
   }, [memoryRouteSearch, syncNewChatUrl]);
@@ -963,7 +959,6 @@ function AgentChatScope({
     setTeamRecipientMenu(false);
     setDraft("");
     setTeamTarget(null);
-    setCreatingTeam(false);
     abandonChatRequest(undefined, scopeKey);
     if (nextVersionId) setVersionId(nextVersionId);
   }
@@ -979,10 +974,6 @@ function AgentChatScope({
   }
 
   function chooseTarget(value: string) {
-    if (value === "new-team") {
-      if (!busy && !teamBusy) setCreatingTeam(true);
-      return;
-    }
     const separator = value.indexOf(":");
     const kind = value.slice(0, separator);
     const id = value.slice(separator + 1);
@@ -997,19 +988,6 @@ function AgentChatScope({
       });
     else if (kind === "maya_team")
       startTeamTarget({ kind: "maya_team", team_id: id });
-  }
-
-  function finishTeamCreate(team: TeamDetailDto) {
-    setTeamChoices((current) => [
-      team,
-      ...current.filter((item) => item.id !== team.id),
-    ]);
-    startTeamTarget({
-      kind: "team",
-      team_id: team.id,
-      team_version_id: team.current_version_id,
-    });
-    void loadTeamChoices();
   }
 
   async function startTeamChat(event?: FormEvent) {
@@ -1081,7 +1059,6 @@ function AgentChatScope({
       setSelected(refreshed);
       setSelectedTeam(null);
       setTeamTarget(null);
-      setCreatingTeam(false);
       setVersionId(refreshed.agent.version_id);
       setDraft("");
       setError(null);
@@ -1231,7 +1208,6 @@ function AgentChatScope({
       setSelected(null);
       setSelectedTeam(refreshed);
       setTeamTarget(null);
-      setCreatingTeam(false);
       rememberTeam(refreshed, true);
       setTeamDraft("");
       setTeamLastEventId(0);
@@ -2162,7 +2138,7 @@ function AgentChatScope({
   const hasTarget = Boolean(
     selected || selectedTeam || teamTarget || versionId,
   );
-  const showChatEmpty = !creatingTeam && !hasTarget && !newChatRoute;
+  const showChatEmpty = !hasTarget && !newChatRoute;
   const historyItems = [
     ...sessions
       .filter((session) => session.turns.length > 0)
@@ -2357,15 +2333,7 @@ function AgentChatScope({
           className={styles.conversation}
           data-blank={!activeSession && !pendingMessage ? "true" : undefined}
         >
-          {creatingTeam ? (
-            <TeamEntryFlow
-              api={api}
-              courseId={courseId}
-              agents={agents}
-              onSaved={finishTeamCreate}
-              onCancel={() => setCreatingTeam(false)}
-            />
-          ) : showChatEmpty ? null : (
+          {showChatEmpty ? null : (
             <>
               <header className={styles.chatHeader}>
                 <div className={styles.chatTitle}>
@@ -2675,7 +2643,6 @@ function AgentChatScope({
                         ))}
                       </optgroup>
                     ) : null}
-                    <option value="new-team">{t("chatTargetNewTeam")}</option>
                   </select>
                 ) : null}
                 {!teamMode && character?.available === false ? (

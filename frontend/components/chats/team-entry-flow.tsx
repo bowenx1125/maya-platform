@@ -276,8 +276,20 @@ export function TeamEntryFlow({
 
   function syncManageRoute(modeValue: string, teamId?: string) {
     if (!standalone || typeof window === "undefined") return;
+    // Studyform keeps Maya Team and private Team on different query modes.
+    // Writing the shared internal name back would reopen the other form.
+    const nextMode =
+      variant === "maya" && modeValue === "team-edit"
+        ? "maya-edit"
+        : variant === "maya" && modeValue === "team-new"
+          ? "maya-new"
+          : modeValue;
     const params = new URLSearchParams(window.location.search);
-    params.set("mode", modeValue);
+    const sameTeam = teamId
+      ? params.get("team_id") === teamId
+      : !params.get("team_id");
+    if (params.get("mode") === nextMode && sameTeam) return;
+    params.set("mode", nextMode);
     if (teamId) params.set("team_id", teamId);
     else params.delete("team_id");
     const query = params.toString();
