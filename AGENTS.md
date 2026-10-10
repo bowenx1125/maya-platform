@@ -248,7 +248,46 @@ Do not create status files, handoff notes or worklogs beside it. If something
 is worth keeping, it belongs in `docs/PROJECT.md`, an ADR under `docs/adr/`, or a
 contract under `docs/contracts/`.
 
-## 8. Commits
+## 8. Publishing the public site
+
+Push GitHub `main` first. Only after that push succeeds, update the public
+site. Do not rebuild or restart production from a commit that is not already
+on GitHub `main`.
+
+The public site is `https://app.mayaform.net/`. The server is `8.210.57.144`,
+SSH user `root`, SSH host name `maya-prod`. Login uses the private key
+`~/.ssh/maya_deploy` with `IdentitiesOnly`. There is no SSH password. Do not
+invent one, do not commit the key, and do not copy it into a chat, log, or
+document.
+
+The server bare repo is `/opt/maya-platform.git`. The working tree is
+`/opt/maya-platform`. After GitHub `main` is updated:
+
+```bash
+git push origin HEAD:main
+git push maya-prod:/opt/maya-platform.git HEAD:main
+ssh maya-prod 'cd /opt/maya-platform && git pull --ff-only'
+```
+
+Before a rebuild, back up `/app/data/maya.sqlite3` with SQLite's backup API
+inside `maya-production-backend-1`. Write the backup under
+`/srv/maya-production/backups/` and require `PRAGMA integrity_check` to be
+`ok`. Then, from `/opt/maya-platform`:
+
+```bash
+docker compose --project-name maya-production \
+  --env-file /protected/maya-production.env \
+  -f docker-compose.yml -f docker-compose.production.yml \
+  up -d --build --wait
+```
+
+Do not use `docker compose down -v`. Confirm container health,
+`/health/ready`, the Alembic head, and `https://app.mayaform.net/` returning
+200. A docs-only commit still updates GitHub and the server git tree; it does
+not by itself require a rebuild. Record the built commit, backup name, schema
+head, and HTTP result in `docs/PROJECT.md`.
+
+## 9. Commits
 
 One commit per coherent change, with its tests and its documentation update.
 Write the subject as what the change does, not what you did.
