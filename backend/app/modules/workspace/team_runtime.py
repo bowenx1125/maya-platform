@@ -1190,13 +1190,19 @@ def _member_system(
             "such as how to format an answer or an unrelated fact; it must not contain an "
             "answer, hint, judgment or score for any question. The server appends progress and "
             "the current question, and discards your prose for every other result. "
-            "If the action tool cannot return a safe result, do not provide student-facing prose.\n"
+            "If the action tool cannot return a safe result, do not provide student-facing prose. "
+            "Before this attempt is submitted, 再来一轮 or 再来一遍 is redo_request: abandon this "
+            "round's answers for scoring and start a new scored round. After it is submitted, "
+            "that phrase is start_request and every completed record stays. Never edit a saved "
+            "answer from another attempt. A request to remember is not an answer: call "
+            "write_agent_memory with an exact span of that request. Do not put assessment "
+            "answers, scores, or Rubric into account memory.\n"
             "</active_assessment_action_protocol>"
         )
     else:
-        from .chat_provider import AGENT_LIMIT_REPLY_RULE
+        from .chat_provider import ACCOUNT_MEMORY_RULE, AGENT_LIMIT_REPLY_RULE
 
-        message += f"\n{AGENT_LIMIT_REPLY_RULE}"
+        message += f"\n{ACCOUNT_MEMORY_RULE}\n{AGENT_LIMIT_REPLY_RULE}"
     return message
 
 

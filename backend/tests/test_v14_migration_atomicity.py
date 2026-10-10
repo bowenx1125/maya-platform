@@ -28,6 +28,7 @@ _REVISIONS = (
     ("0053_user_profile", "0054_assessment_attempt_question_selection"),
     ("0054_assessment_attempt_question_selection", "0055_assessment_attempt_submission"),
     ("0055_assessment_attempt_submission", "0056_preset_voice_profiles"),
+    ("0056_preset_voice_profiles", "0057_agent_account_memory"),
 )
 
 

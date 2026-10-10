@@ -544,6 +544,14 @@ function AgentChatScope({
           clearSettledChatSession(scopeKey);
         }
         setSessions(nextHistory);
+        if (parsedMemoryRoute.kind === "valid" && !invalidMemoryRoute) {
+          // Memory opens a new chat. Do not show an older window while it is created.
+          setSelected(null);
+          setSelectedTeam(null);
+          setVersionId("");
+          setTeamTarget(null);
+          return;
+        }
         let pending = getChatRequest(scopeKey);
         const storedRequest = pending;
         let reconciledCurrentTerminal = false;
@@ -686,7 +694,14 @@ function AgentChatScope({
     return () => {
       active = false;
     };
-  }, [api, courseId, newChatRoute, scopeKey]);
+  }, [
+    api,
+    courseId,
+    invalidMemoryRoute,
+    newChatRoute,
+    parsedMemoryRoute,
+    scopeKey,
+  ]);
 
   const loadTeamChoices = useCallback(async () => {
     const [teams, mayaTeams] = await Promise.all([

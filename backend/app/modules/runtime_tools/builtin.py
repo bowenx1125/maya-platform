@@ -142,10 +142,13 @@ def read_memory(
 
 
 def runtime_registry() -> dict[str, ToolSpec]:
+    from .agent_memory import agent_memory_tools
+
     return {
         **teacher_tools(),
         **knowledge_tools(),
         **learning_tools(),
+        **agent_memory_tools(),
         "assessment_action": ToolSpec(
             "assessment_action",
             "Student",
@@ -155,7 +158,12 @@ def runtime_registry() -> dict[str, ToolSpec]:
                 "complete_request means the user ends the test now: unanswered Questions are "
                 "saved as skipped and the attempt is submitted. abandon_request discards the "
                 "attempt's answers. redo_request means explicit abandonment AND redo, never a "
-                "plain restart request. Use progress_request for time left or progress, "
+                "plain restart request. Before this attempt is submitted, 再来一轮 or 再来一遍 "
+                "is redo_request: abandon this round's answers for scoring and start a new "
+                "scored round. After it is submitted, that phrase is start_request: open another "
+                "scored round and keep every completed record and score. Never edit a saved "
+                "answer from another attempt or from a question that is not current. "
+                "Use progress_request for time left or progress, "
                 "restricted_request for answers, hints or judgments, and off_topic for anything "
                 "else, including how to format an answer. "
                 "Only a configured assessment recipe is affected. Return the server's safe result."

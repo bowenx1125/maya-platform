@@ -988,7 +988,7 @@ def test_memory_entry_never_uses_a_teachers_read_only_view_of_a_students_public_
     assert response.status_code == 404
 
 
-def test_memory_entry_by_agent_reuses_the_latest_owned_chat_for_that_agent(
+def test_memory_entry_by_agent_opens_a_new_chat_instead_of_the_latest(
     workspace: Any,
 ) -> None:
     _app, database, client = workspace
@@ -1013,27 +1013,20 @@ def test_memory_entry_by_agent_reuses_the_latest_owned_chat_for_that_agent(
         },
     )
     assert action.status_code == 200, action.text
-    assert action.json()["conversation_id"] == created.json()["id"]
+    assert action.json()["conversation_id"] != created.json()["id"]
+    assert action.json()["message"] == "你目前记得我们之前聊过什么？"
     assert action.json()["session"]["turns"] == []
 
 
-def test_memory_entry_uses_server_assessment_state_for_its_visible_query(
-    workspace: Any, monkeypatch: Any
+def test_memory_entry_stays_a_new_chat_when_an_assessment_is_active(
+    workspace: Any,
 ) -> None:
-    from types import SimpleNamespace
-
     _app, _database, client = workspace
     with _database.session() as db:
         version = db.get(AgentVersion, BASELINE_VERSION_ID)
         assert version is not None
         agent_id = version.agent_id
     _, csrf = login(client, "bowen")
-    monkeypatch.setattr(
-        "app.modules.learning.attempts.get_assessment_runtime_context",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            attempt=SimpleNamespace(status="paused"), redirect_to_original_conversation=False
-        ),
-    )
     response = client.post(
         "/api/v1/conversations/memory-entry",
         headers={"X-CSRF-Token": csrf},
@@ -1044,9 +1037,7 @@ def test_memory_entry_uses_server_assessment_state_for_its_visible_query(
         },
     )
     assert response.status_code == 200, response.text
-    assert response.json()["message"] == (
-        "请列出本测评回合中我已经提交的作答记录和当前进度，不要提供答案、评分依据或提示。"
-    )
+    assert response.json()["message"] == "你目前记得我们之前聊过什么？"
     assert response.json()["session"]["turns"] == []
 
 

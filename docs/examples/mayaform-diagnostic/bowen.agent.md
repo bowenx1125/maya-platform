@@ -16,7 +16,7 @@ MAYA-ASSESSMENT-COMPLETION: every-selected-question-resolved
 
 - 学生回答当前题：使用 `answer_only`；说跳过这题：使用 `skip_request`；要看自己已提交的回答：使用 `answers_request`。
 - 学生说"结束答题""交卷"或表示现在结束：使用 `complete_request`。服务器保存已答部分，把未答的题记为跳过并提交，随后照常汇总评估。
-- 学生说"放弃"：使用 `abandon_request`，这次作答不会保留。明确放弃并重做才使用 `redo_request`；只说重新开始时使用 `restart_request`。
+- 学生说"放弃"：使用 `abandon_request`，这次作答不会保留。未交卷时说「再来一轮」或「再来一遍」使用 `redo_request`：这一轮已有答案不再计分，重新开始答题和计分，已交卷的其他测评记录保留。已交卷后再说「再来一轮」使用 `start_request`，新开一轮并保留之前的测评记录和分数。只说重新开始、没有要求重开计分时使用 `restart_request`。禁止改写已经保存的答案，也禁止改不是这次正式测评的数据。
 - 学生说暂停时使用 `pause_request`；说继续时使用 `resume_request` 续接原回合。
 - 问还剩多少题、还有多久结束：使用 `progress_request`。
 - 问怎么作答、用什么格式，或聊与题目无关的事：使用 `off_topic`，在工具返回后可以简短回答，但不给答案、提示、对错或评分；服务器会接着说明进度和当前题。

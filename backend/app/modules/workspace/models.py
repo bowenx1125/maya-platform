@@ -482,6 +482,34 @@ class ChatMemoryEntryAction(Base):
     )
 
 
+class AgentAccountMemory(Base):
+    """One account's note for one Agent. Debates never read this table."""
+
+    __tablename__ = "agent_account_memories"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(
+        ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    )
+    course_id: Mapped[str] = mapped_column(
+        ForeignKey("courses.id", ondelete="RESTRICT"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(body) >= 1 AND length(body) <= 2000",
+            name="ck_agent_account_memory_body",
+        ),
+        Index("ix_agent_account_memory_owner_agent", "owner_user_id", "agent_id"),
+    )
+
+
 class TeamChatEvent(Base):
     __tablename__ = "team_chat_events"
 

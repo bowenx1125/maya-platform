@@ -1222,9 +1222,6 @@ def create_conversation(
 
 
 _MEMORY_CHAT_MESSAGE = "你目前记得我们之前聊过什么？"
-_ASSESSMENT_MEMORY_MESSAGE = (
-    "请列出本测评回合中我已经提交的作答记录和当前进度，不要提供答案、评分依据或提示。"
-)
 
 
 def _memory_source_identity(payload: MemoryEntryRequest) -> tuple[str, str]:
@@ -1270,33 +1267,7 @@ def _memory_conversation(
             or not _version_chat_available(db, context, version, agent)
         ):
             raise not_found()
-        candidates = db.scalars(
-            select(Conversation)
-            .where(
-                Conversation.user_id == context.user.id,
-                Conversation.course_id == course_id,
-                Conversation.agent_version_id == version.id,
-                Conversation.entry_kind == "agent",
-                Conversation.withdrawn_at.is_(None),
-            )
-            .order_by(
-                func.coalesce(
-                    select(func.max(ConversationTurn.created_at))
-                    .where(ConversationTurn.conversation_id == Conversation.id)
-                    .scalar_subquery(),
-                    Conversation.created_at,
-                ).desc(),
-                Conversation.created_at.desc(),
-                Conversation.id,
-            )
-        )
-        for candidate in candidates:
-            try:
-                owned_conversation(db, context, candidate.id)
-                session_view(db, candidate, context, settings)
-            except PlatformError:
-                continue
-            return candidate
+        # Brainform Memory always opens a new chat. Account memory is not this transcript.
         row = Conversation(
             id=str(uuid4()),
             user_id=context.user.id,
@@ -1320,40 +1291,12 @@ def _memory_conversation(
         entry: SavedTeamChatEntry | MayaTeamChatEntry = SavedTeamChatEntry(
             kind="team", team_id=source.team_id
         )
-        entry_kind = "team"
     elif isinstance(source, MemoryMayaTeamSource):
         entry = MayaTeamChatEntry(kind="maya_team", team_id=source.team_id)
-        entry_kind = "maya_team"
     else:
         raise not_found()
 
-    candidates = db.scalars(
-        select(Conversation)
-        .where(
-            Conversation.user_id == context.user.id,
-            Conversation.course_id == course_id,
-            Conversation.team_id == str(source.team_id),
-            Conversation.entry_kind == entry_kind,
-            Conversation.withdrawn_at.is_(None),
-        )
-        .order_by(
-            func.coalesce(
-                select(func.max(ConversationTurn.created_at))
-                .where(ConversationTurn.conversation_id == Conversation.id)
-                .scalar_subquery(),
-                Conversation.created_at,
-            ).desc(),
-            Conversation.created_at.desc(),
-            Conversation.id,
-        )
-    )
-    for candidate in candidates:
-        try:
-            owned_conversation(db, context, candidate.id)
-            session_view(db, candidate, context, settings)
-        except PlatformError:
-            continue
-        return candidate
+    # A Team Memory click opens a new chat even when an older Team chat or assessment exists.
     row = create_team_conversation(db, context, entry, "private")
     if row.course_id != course_id:
         raise not_found()
@@ -1378,8 +1321,6 @@ def create_memory_entry_action(
     settings: Settings = Depends(get_settings),
 ) -> MemoryEntryResponse:
     """Resolve one durable Brainform navigation intent; sending remains explicit Chat work."""
-    from app.modules.learning.attempts import get_assessment_runtime_context
-
     course_id = str(payload.course_id)
     source_kind, source_id = _memory_source_identity(payload)
     if db.get_bind().dialect.name == "sqlite":
@@ -1409,17 +1350,9 @@ def create_memory_entry_action(
         )
 
     row = _memory_conversation(db, context, course_id, payload, settings)
-    assessment = get_assessment_runtime_context(db, context, row.id)
-    if assessment is not None and assessment.redirect_to_original_conversation:
-        row = owned_conversation(db, context, str(assessment.canonical_conversation_id))
-        if row.course_id != course_id:
-            raise not_found()
-        assessment = get_assessment_runtime_context(db, context, row.id)
-    formal_attempt_active = assessment is not None and assessment.attempt.status in {
-        "in_progress",
-        "paused",
-    }
-    message = _ASSESSMENT_MEMORY_MESSAGE if formal_attempt_active else _MEMORY_CHAT_MESSAGE
+    # A new Memory chat does not resume an assessment window. The speaking Agent
+    # chooses read_memory or read_agent_memory after the one-shot question.
+    message = _MEMORY_CHAT_MESSAGE
     request_id = str(uuid4())
     db.add(
         ChatMemoryEntryAction(

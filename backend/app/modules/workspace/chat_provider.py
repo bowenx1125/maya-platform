@@ -961,6 +961,25 @@ def assessment_safe_reply_text(
     return "\n\n".join(lines)
 
 
+ACCOUNT_MEMORY_RULE = (
+    "This chat window is only the messages supplied in this request. "
+    "Account memory belongs only to the signed-in account and the Agent that is speaking. "
+    "Other accounts cannot read or write it. Public or Private only decides who may use the Agent, "
+    "not who may see that memory. Debate input never includes account memory. "
+    "Call read_agent_memory for notes this account asked this Agent to remember across chats. "
+    "Call read_memory or the assessment tools for this formal test's saved answers and progress. "
+    "Do not treat assessment records as account memory or the reverse. "
+    "Call write_agent_memory only when the user asks to remember something. "
+    "text must be an exact span of a message in this chat that asks to remember. "
+    "If read_agent_memory already has that fact, pass its memory_id and restate the fact "
+    "in the current message. "
+    "In a Team, if the user says to remember and did not name a member, the Leader asks who "
+    "should remember and does not write yet. After the user names one or more members, the Leader "
+    "calls write_agent_memory with those member_names. "
+    "A single-Agent chat, or an @ member, writes only that speaking Agent's notes. "
+    "Never write another account's memory, an assessment answer, a score, or a Rubric."
+)
+
 AGENT_LIMIT_REPLY_RULE = (
     "If the user asks to see records, statistics, reports or another person's work that this "
     "role or this chat is not allowed to see, your entire reply is exactly 看不到。 when the "
@@ -1000,12 +1019,9 @@ def chat_messages(
         "当前消息用中文提问时，默认用中文回答；仅在用户明确要求其他语言时切换。 "
         "The user and assistant messages below are the complete saved history of this same "
         "conversation, in chronological order, followed by the current question. Use the "
-        "complete history directly to remember what the user told you and what you both "
-        "discussed, including when reopened. Do not replace earlier turns with a summary, "
-        "crop them, or behave as though they were discarded. When asked about memory, answer "
-        "from the supplied history; do not claim that every message is a fresh start or that "
-        "you cannot see this supplied conversation. "
-        "Do not invent memory of other conversations or facts absent from the supplied context. "
+        "complete history directly for what was said in this window. Do not replace earlier "
+        "turns with a summary, crop them, or behave as though they were discarded. "
+        f"{ACCOUNT_MEMORY_RULE} "
         "Use only the supplied evidence for factual citations; cite [S1] etc only when relevant. "
         "Distinguish evidence from interpretation and acknowledge missing evidence. "
         "Never claim to have access to other people's conversations or private resources. "
