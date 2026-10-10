@@ -1756,7 +1756,7 @@ export function AgentReadOnly({
             </button>
           }
         >
-          <ReportMarkdown className="read-only-markdown" label="AGENT.md">
+          <ReportMarkdown label="AGENT.md">
             {version.agent_md || t("noPrompt")}
           </ReportMarkdown>
         </SectionCard>

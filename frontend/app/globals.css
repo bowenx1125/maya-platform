@@ -1660,6 +1660,12 @@ button.agent-tile-name {
   background: #fdfaf3;
 }
 
+.agent-entry .icon-action:focus-visible,
+.knowledge-check-close:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .knowledge-check {
     backdrop-filter: none;
