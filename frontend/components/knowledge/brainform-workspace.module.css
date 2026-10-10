@@ -176,6 +176,11 @@
   color: #3f3424;
 }
 
+.addButton:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
 .addButton:disabled {
   color: #8b887f;
   cursor: not-allowed;
