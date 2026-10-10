@@ -169,17 +169,19 @@ export function AgentOverview({ agentId }: { agentId: string }) {
           }
         />
       ) : null}
-      <PageAction
-        name="new"
-        disabled={busy}
-        onClick={() => {
-          if (draftVersionId) {
-            router.push(`/student/agent-versions/${draftVersionId}/edit`);
-            return;
-          }
-          void createNextVersion();
-        }}
-      />
+      {agent.group_id ? (
+        <PageAction
+          name="new"
+          disabled={busy}
+          onClick={() => {
+            if (draftVersionId) {
+              router.push(`/student/agent-versions/${draftVersionId}/edit`);
+              return;
+            }
+            void createNextVersion();
+          }}
+        />
+      ) : null}
       {visible ? (
         <ReadOnlyVersion
           version={visible}

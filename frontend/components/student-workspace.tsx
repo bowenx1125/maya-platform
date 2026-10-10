@@ -8,6 +8,7 @@ import type { FormEvent } from "react";
 import {
   isAmbiguousMutationFailure,
   type AgentSummary,
+  type PublishedAgentSummary,
   type AgentVersion,
   type ChatAgent,
   type Course,
@@ -99,6 +100,7 @@ export function StudentDashboard() {
   const { locale } = useLocale();
   const { api, user } = useSession();
   const [groups, setGroups] = useState<GroupOverview[]>([]);
+  const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -113,11 +115,15 @@ export function StudentDashboard() {
     setError(null);
     try {
       const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
-      const [overviews, courses] = await Promise.all([
+      const [overviews, courses, nextPublished] = await Promise.all([
         loadGroups(api, groupIds),
         courseId ? api.courses() : Promise.resolve([]),
+        courseId && typeof api.publishedAgents === "function"
+          ? api.publishedAgents(courseId)
+          : Promise.resolve([]),
       ]);
       setGroups(overviews);
+      setPublished(nextPublished);
       setCourse(
         courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
       );
@@ -181,6 +187,25 @@ export function StudentDashboard() {
           <AcademyMascots label={t("academyMascotsLabel")} />
         </div>
       </section>
+      {published.length ? (
+        <section className="home-panel" aria-labelledby="student-agents-title">
+          <h2 id="student-agents-title">
+            {t("agents")} · {published.length}
+          </h2>
+          <div className="agent-tile-grid">
+            {published.map((item) => (
+              <VersionTile
+                key={item.agent.id}
+                name={item.agent.name}
+                href={`/student/agents/${item.agent.id}`}
+                label={item.current_version.version_label}
+                pending={false}
+                deleteLabel={t("deleteAgent")}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
@@ -270,6 +295,9 @@ function GroupWorkspaceSession({
   const { api, user } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [items, setItems] = useState<AgentListItem[]>([]);
+  const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>(
+    [],
+  );
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -303,7 +331,15 @@ function GroupWorkspaceSession({
       const versions = await Promise.all(
         nextAgents.map((agent) => api.versions(agent.id)),
       );
+      const listedIds = new Set(nextAgents.map((agent) => agent.id));
+      const nextCourseAgents =
+        typeof api.publishedAgents === "function"
+          ? await api.publishedAgents(nextGroup.course_id)
+          : [];
       setGroup(nextGroup);
+      setCourseAgents(
+        nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
+      );
       setTeams(
         (Array.isArray(nextTeams) ? nextTeams : []).filter(
           (team) =>
@@ -430,7 +466,7 @@ function GroupWorkspaceSession({
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
-          empty={items.length ? undefined : t("noAgents")}
+          empty={items.length || courseAgents.length ? undefined : t("noAgents")}
           action={
             teacherIdentity ? null : (
               <ModulePlus
@@ -450,6 +486,29 @@ function GroupWorkspaceSession({
                   deleting={deleting !== null}
                   onDelete={() => void deleteAgent(agent.id)}
                   canDelete={!teacherIdentity}
+                />
+              ))}
+              {courseAgents.map((item) => (
+                <VersionTile
+                  key={item.agent.id}
+                  name={item.agent.name}
+                  href={`/student/agents/${item.agent.id}`}
+                  label={item.current_version.version_label}
+                  pending={false}
+                  deleteLabel={t("deleteAgent")}
+                />
+              ))}
+            </ModuleTiles>
+          ) : courseAgents.length ? (
+            <ModuleTiles>
+              {courseAgents.map((item) => (
+                <VersionTile
+                  key={item.agent.id}
+                  name={item.agent.name}
+                  href={`/student/agents/${item.agent.id}`}
+                  label={item.current_version.version_label}
+                  pending={false}
+                  deleteLabel={t("deleteAgent")}
                 />
               ))}
             </ModuleTiles>

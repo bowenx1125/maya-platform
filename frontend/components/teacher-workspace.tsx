@@ -239,7 +239,9 @@ export function TeacherStudyformWorkspace({
     (membership) => membership.role === "teacher",
   )?.course_id;
   const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${initialMode ?? ""}:${initialTeamId ?? ""}:${identityGeneration}`;
-  const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
+  const [personalAgents, setPersonalAgents] = useState<PublishedAgentSummary[]>(
+    [],
+  );
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -260,7 +262,9 @@ export function TeacherStudyformWorkspace({
         return;
       }
       void Promise.all([
-        api.workspaceAgents(teacherCourseId),
+        typeof api.publishedAgents === "function"
+          ? api.publishedAgents(teacherCourseId)
+          : Promise.resolve([]),
         api.chatAgents(teacherCourseId),
         typeof api.teams === "function"
           ? api.teams(teacherCourseId)
@@ -300,7 +304,7 @@ export function TeacherStudyformWorkspace({
     try {
       await api.deleteAgent(agentId);
       setPersonalAgents((current) =>
-        current.filter((agent) => agent.id !== agentId),
+        current.filter((item) => item.agent.id !== agentId),
       );
     } catch (cause) {
       setError(cause);
@@ -372,25 +376,22 @@ export function TeacherStudyformWorkspace({
         >
           {personalAgents.length ? (
             <ModuleTiles>
-              {personalAgents.map((agent) => {
-                const pending = Boolean(
-                  agent.current_draft_version_id &&
-                  agent.current_draft_version_id !==
-                    agent.current_published_version_id,
-                );
-                return (
-                  <VersionTile
-                    key={agent.id}
-                    name={agent.name}
-                    href={`/teacher/agents/${agent.id}`}
-                    label={pending ? t("draft") : t("published")}
-                    pending={pending}
-                    deleting={deletingId !== null}
-                    deleteLabel={t("deleteAgent")}
-                    onDelete={() => void deletePersonalAgent(agent.id)}
-                  />
-                );
-              })}
+              {personalAgents.map((item) => (
+                <VersionTile
+                  key={item.agent.id}
+                  name={item.agent.name}
+                  href={`/teacher/agents/${item.agent.id}`}
+                  label={item.current_version.version_label}
+                  pending={false}
+                  deleting={deletingId !== null}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={
+                    item.author?.user_id === user?.id
+                      ? () => void deletePersonalAgent(item.agent.id)
+                      : undefined
+                  }
+                />
+              ))}
             </ModuleTiles>
           ) : undefined}
         </ModuleCard>

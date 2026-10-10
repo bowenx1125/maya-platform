@@ -218,6 +218,12 @@ def _agent_workspace_role(db: Session, actor: AuthContext | str, agent: Agent) -
         return group_role if agent.visibility == "public" else None
     if agent.owner_user_id == user_id:
         return "owner"
+    # A public Agent is visible to the course. The non-owner read role is
+    # "teacher" so published versions can be listed without the student
+    # mutation role that would allow a new draft.
+    course_role = course_member_role(db, user_id, agent.course_id)
+    if agent.visibility == "public" and course_role in {"student", "teacher"}:
+        return "teacher"
     return None
 
 
@@ -301,9 +307,8 @@ def can_invoke_version(
 ) -> bool:
     """Resolve current workspace access before allowing a Chat invocation.
 
-    Course membership alone is not an invocation grant. Group Agents inherit
-    their own group workspace rules; personal Agents remain owner-only until
-    a separate, explicit invoke grant exists.
+    A public published Agent is available to course members. A private Agent
+    stays with its owner.
     """
 
     role = _agent_workspace_role(db, context, agent)

@@ -1806,16 +1806,17 @@ def list_published_agents_for_teacher(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[PublishedAgentSummary]:
+    member_role = course_member_role(db, context.user.id, str(course_id))
+    if member_role not in {"teacher", "student"}:
+        raise not_found()
     rows = db.execute(
         select(Agent, AgentVersion, Group.name)
-        .join(Group, Group.id == Agent.group_id)
-        .join(CourseMember, CourseMember.course_id == Group.course_id)
         .join(AgentVersion, AgentVersion.id == Agent.current_published_version_id)
+        .outerjoin(Group, Group.id == Agent.group_id)
         .where(
-            Group.course_id == str(course_id),
-            CourseMember.user_id == context.user.id,
-            CourseMember.role == "teacher",
+            Agent.course_id == str(course_id),
             Agent.status == "active",
+            Agent.deleted_at.is_(None),
             Agent.visibility == "public",
             AgentVersion.state == "published",
             AgentVersion.published_visibility == "public",
@@ -1823,18 +1824,8 @@ def list_published_agents_for_teacher(
         )
         .order_by(Agent.created_at.desc(), Agent.id.desc())
     ).all()
-    if not rows:
-        course_exists = db.scalar(
-            select(CourseMember.course_id).where(
-                CourseMember.course_id == str(course_id),
-                CourseMember.user_id == context.user.id,
-                CourseMember.role == "teacher",
-            )
-        )
-        if course_exists is None:
-            raise not_found()
     public_rows: list[tuple[Agent, AgentVersion, str]] = [
-        (agent, version, group_name)
+        (agent, version, group_name or "")
         for agent, version, group_name in rows
         if version_is_currently_public(version, agent)
         and version_sources_are_readable(db, context, version, agent=agent)

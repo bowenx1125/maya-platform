@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID, uuid4
 
-from app.core.models import Agent, AgentVersion, CourseMember, GroupMember, KnowledgeDocument
+from app.core.models import Agent, AgentVersion, GroupMember, KnowledgeDocument
 from app.modules.workspace.models import Conversation
 from fastapi.testclient import TestClient
 
@@ -756,8 +756,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     assert owner_visibility.status_code == 404
 
 
-def test_personal_public_agent_has_no_implicit_course_invoke_grant(
-    client: TestClient, database: Any
+def test_personal_public_agent_is_visible_to_the_course(
+    client: TestClient,
 ) -> None:
     _owner, owner_csrf = login(client, "maya")
     created = client.post(
@@ -781,29 +781,18 @@ def test_personal_public_agent_has_no_implicit_course_invoke_grant(
     )
     assert published.status_code == 200, published.text
 
-    student, student_csrf = login(client, "bowen")
+    _student, student_csrf = login(client, "bowen")
     directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
-    assert all(row["agent_id"] != agent_id for row in directory.json())
-    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
-    assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
-    denied = client.post(
+    assert any(row["agent_id"] == agent_id for row in directory.json())
+    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 200
+    assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 200
+    opened = client.post(
         "/api/v1/conversations", headers=_headers(student_csrf), json={"version_id": version_id}
     )
-    assert denied.status_code == 404
-
-    # Course-teacher status is also not a personal-resource grant. Keep the
-    # authenticated user ID unchanged; only the CourseMember role is changed.
-    with database.session() as session:
-        membership = session.get(CourseMember, (COURSE_ID, student["user"]["id"]))
-        assert membership is not None
-        membership.role = "teacher"
-    _, teacher_csrf = login(client, "bowen")
-    teacher_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
-    assert all(row["agent_id"] != agent_id for row in teacher_directory.json())
-    teacher_denied = client.post(
-        "/api/v1/conversations", headers=_headers(teacher_csrf), json={"version_id": version_id}
-    )
-    assert teacher_denied.status_code == 404
+    assert opened.status_code == 200, opened.text
+    published_list = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
+    assert published_list.status_code == 200
+    assert any(row["agent"]["id"] == agent_id for row in published_list.json())
 
 
 def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(

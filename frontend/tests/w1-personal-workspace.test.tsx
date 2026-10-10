@@ -127,10 +127,29 @@ afterEach(() => {
 });
 
 describe("W1 teacher personal workspace", () => {
-  it("keeps personal Agent lists in Studyform, not on Mayaform Home", async () => {
+  it("shows the same public Agents on Studyform as on Mayaform Home", async () => {
     const agent = personalAgent() as AgentSummary;
+    const published = {
+      group_name: "",
+      author: {
+        user_id: "teacher-user",
+        display_name: "Maya",
+        avatar: null,
+      },
+      agent: {
+        ...agent,
+        visibility: "public",
+        current_published_version_id: "version-1",
+        current_draft_version_id: null,
+      },
+      current_version: {
+        id: "version-1",
+        version_label: "V1.0",
+        state: "published",
+      },
+    };
     const api = {
-      workspaceAgents: vi.fn().mockResolvedValue([agent]),
+      publishedAgents: vi.fn().mockResolvedValue([published]),
       chatAgents: vi.fn().mockResolvedValue([]),
       groups: vi.fn().mockResolvedValue([]),
     };
@@ -145,14 +164,9 @@ describe("W1 teacher personal workspace", () => {
 
     const tile = await screen.findByRole("link", { name: "Teacher Lens" });
     expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
-    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByText("V1.0")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
-    expect(screen.queryByText("Private", { exact: true })).toBeNull();
-    expect(screen.queryByText("Private — only me")).toBeNull();
-    expect(
-      screen.queryByText("Shareable; students need an explicit grant"),
-    ).toBeNull();
-    expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
+    expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
     expect(
       screen.getByRole("link", { name: "Studyform" }).getAttribute("href"),
     ).toBe("/teacher/studyform");
