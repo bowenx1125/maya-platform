@@ -29,7 +29,7 @@ type IssuedPassword = { user_id: string; username: string; password: string };
 
 export function RosterWorkspace() {
   const t = useT();
-  const { api, user, refresh } = useSession();
+  const { api, user } = useSession();
   const router = useRouter();
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -131,18 +131,17 @@ export function RosterWorkspace() {
         // action rather than a state to set and then act on.
         if (!joined) {
           await api.joinGroupAsTeacher(group.id);
-          // The route guard reads membership from the session; without this
-          // the new membership is not visible yet and the workspace answers
-          // 403 to the caller who just joined it.
-          await refresh();
         }
+        // Refresh after the student route is current. Refreshing while this
+        // Accounts page is still open makes the shell treat the visit as over
+        // and delete it before the group can load.
         router.push(`/student/groups/${group.id}`);
       } catch (cause) {
         setError(cause);
         setBusy(null);
       }
     },
-    [api, refresh, router],
+    [api, router],
   );
 
   if (loading) return <LoadingCard />;

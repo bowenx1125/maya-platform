@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { PlatformApiError, type Group, type VoiceProfile } from "../../lib/api";
+import { PlatformApiError, type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
@@ -23,41 +23,38 @@ type PreviewState = {
 
 type ScopeStatus = "loading" | "ready" | "denied" | "error";
 
-type ListedVoice = VoiceProfile & { groupLabel: string };
-
-type VoiceScope = { id: string; name: string };
+type ListedVoice = VoiceProfile;
 
 export function VoiceLibrary({
   groupId,
-  groupOptions,
+  membershipGroupIds = [],
+  listenOnly = false,
   embedded = false,
   initialCreate = false,
   id,
 }: {
   groupId: string | null;
-  groupOptions?: Pick<Group, "id" | "name">[];
+  /** Groups this person belongs to. Never a course-wide picker. */
+  membershipGroupIds?: string[];
+  /** Accounts opens a group so a teacher can play its voices. */
+  listenOnly?: boolean;
   embedded?: boolean;
   initialCreate?: boolean;
   id?: string;
 }) {
   const t = useT();
   const { api } = useSession();
-  const scopes = useMemo<VoiceScope[]>(
-    () =>
-      groupId
-        ? [{ id: groupId, name: "" }]
-        : (groupOptions ?? []).map((group) => ({
-            id: group.id,
-            name: group.name,
-          })),
-    [groupId, groupOptions],
+  const membershipKey = membershipGroupIds.join("|");
+  const scopes = useMemo<string[]>(
+    () => (groupId ? [groupId] : membershipKey ? membershipKey.split("|") : []),
+    [groupId, membershipKey],
   );
   const [profiles, setProfiles] = useState<ListedVoice[]>([]);
   const [scopeStatus, setScopeStatus] = useState<Record<string, ScopeStatus>>(
     {},
   );
   const [file, setFile] = useState<File | null>(null);
-  const [creating, setCreating] = useState(initialCreate);
+  const [creating, setCreating] = useState(initialCreate && !listenOnly);
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
@@ -89,12 +86,12 @@ export function VoiceLibrary({
     setLoading(true);
     setError(null);
     const results = await Promise.all(
-      scopes.map(async (scope) => {
+      scopes.map(async (scopeId) => {
         try {
           return {
-            scope,
+            scopeId,
             status: "ready" as const,
-            profiles: await api.voiceProfiles(scope.id),
+            profiles: await api.voiceProfiles(scopeId),
             cause: null,
           };
         } catch (cause) {
@@ -102,7 +99,7 @@ export function VoiceLibrary({
             cause instanceof PlatformApiError &&
             (cause.status === 403 || cause.status === 404);
           return {
-            scope,
+            scopeId,
             status: denied ? ("denied" as const) : ("error" as const),
             profiles: [] as VoiceProfile[],
             cause,
@@ -113,23 +110,19 @@ export function VoiceLibrary({
     if (sequence !== loadSequence.current) return;
     setProfiles(
       results.flatMap((result) =>
-        result.status === "denied"
-          ? []
-          : result.profiles.map((profile) => ({
-              ...profile,
-              groupLabel: result.scope.name,
-            })),
+        result.status === "denied" ? [] : result.profiles,
       ),
     );
     setScopeStatus(
       Object.fromEntries(
-        results.map((result) => [result.scope.id, result.status]),
+        results.map((result) => [result.scopeId, result.status]),
       ),
     );
     const failure = results.find((result) => result.status === "error");
-    // A 403/404 group is outside this person's voice scope. Skip it instead of
-    // turning the whole card into a failure when nothing else is readable.
-    setError(failure?.cause ?? null);
+    const denial = results.find((result) => result.status === "denied");
+    const ready = results.some((result) => result.status === "ready");
+    // A refused group is not an empty library. Say so when nothing else loaded.
+    setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
     setLoading(false);
   }, [api, scopes]);
 
@@ -141,11 +134,17 @@ export function VoiceLibrary({
     };
   }, [load]);
 
-  const enrollmentGroupId =
-    scopes.find((scope) => scopeStatus[scope.id] === "ready")?.id ??
-    scopes.find((scope) => scopeStatus[scope.id] === "error")?.id ??
-    null;
-  const canEnroll = Boolean(enrollmentGroupId) && !loading;
+  const enrollmentGroupId = listenOnly
+    ? null
+    : groupId &&
+        (scopeStatus[groupId] === "ready" || scopeStatus[groupId] === "error")
+      ? groupId
+      : scopes.length === 1 &&
+          (scopeStatus[scopes[0]] === "ready" ||
+            scopeStatus[scopes[0]] === "error")
+        ? scopes[0]
+        : null;
+  const canEnroll = Boolean(enrollmentGroupId) && !loading && !listenOnly;
 
   async function submitEnrollment() {
     if (!canEnroll || !enrollmentGroupId || !file || !consent) return;
@@ -341,6 +340,8 @@ export function VoiceLibrary({
                       }
                     }}
                   />
+                ) : listenOnly ? (
+                  <span className={cards.staticTitle}>{name}</span>
                 ) : (
                   <button
                     className={cards.titleButton}
@@ -364,9 +365,6 @@ export function VoiceLibrary({
                     {name}
                   </button>
                 )}
-                {profile.groupLabel ? (
-                  <span className={cards.rowMeta}>{profile.groupLabel}</span>
-                ) : null}
                 {profile.status !== "ready" ? (
                   <StatusBadge status={profile.status} />
                 ) : null}
@@ -385,7 +383,7 @@ export function VoiceLibrary({
                     <IconPlay />
                   </button>
                 ) : null}
-                {profile.status === "preview_ready" ? (
+                {!listenOnly && profile.status === "preview_ready" ? (
                   <button
                     className={cards.iconButton}
                     aria-label={t("voiceConfirm")}
@@ -397,7 +395,7 @@ export function VoiceLibrary({
                     <IconCheck />
                   </button>
                 ) : null}
-                {profile.status !== "deleted" ? (
+                {!listenOnly && profile.status !== "deleted" ? (
                   <button
                     className={cards.iconButton}
                     aria-label={t("voiceDelete")}
@@ -449,7 +447,7 @@ export function VoiceLibrary({
         labelledBy={id ? `${id}-title` : "voices-title"}
         empty={body ? undefined : t("voiceNone")}
         action={
-          creating ? null : (
+          creating || listenOnly ? null : (
             <ModulePlus
               label={t("voiceCreateTitle")}
               disabled={busy || !canEnroll}

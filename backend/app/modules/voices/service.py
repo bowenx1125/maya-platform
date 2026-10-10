@@ -157,6 +157,8 @@ def rename_voice_profile(
 def list_group_voices(
     db: Session, context: AuthContext, group_id: str
 ) -> list[VoiceProfileResponse]:
+    # Accounts access counts as being in the group, but the list is still only
+    # the voices this person created. Another student's clone stays hidden.
     authorized = db.scalar(
         select(WorkspaceMember.user_id)
         .join(Group, Group.id == WorkspaceMember.group_id)
@@ -174,8 +176,7 @@ def list_group_voices(
         .where(
             VoiceProfile.scope == "group",
             VoiceProfile.group_id == group_id,
-            # The list only ever shows the caller's own cloned voices; a
-            # missing owner fails closed and is shown to nobody.
+            # A missing owner fails closed and is shown to nobody.
             VoiceProfile.consent_actor_user_id == context.user.id,
         )
         .order_by(VoiceProfile.created_at, VoiceProfile.id)

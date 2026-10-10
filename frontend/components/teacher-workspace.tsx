@@ -241,7 +241,6 @@ export function TeacherStudyformWorkspace({
   const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${identityGeneration}`;
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const loading = loadedScope !== scope;
@@ -255,7 +254,6 @@ export function TeacherStudyformWorkspace({
       if (!teacherCourseId) {
         setPersonalAgents([]);
         setChatAgents([]);
-        setGroups([]);
         setTeams([]);
         setLoadedScope(requestScope);
         return;
@@ -263,16 +261,14 @@ export function TeacherStudyformWorkspace({
       void Promise.all([
         api.workspaceAgents(teacherCourseId),
         api.chatAgents(teacherCourseId),
-        api.groups(teacherCourseId),
         typeof api.teams === "function"
           ? api.teams(teacherCourseId)
           : Promise.resolve([]),
       ])
-        .then(([nextPersonalAgents, nextChatAgents, nextGroups, nextTeams]) => {
+        .then(([nextPersonalAgents, nextChatAgents, nextTeams]) => {
           if (!active) return;
           setPersonalAgents(nextPersonalAgents);
           setChatAgents(nextChatAgents);
-          setGroups(nextGroups);
           setTeams(
             nextTeams.filter(
               (team) =>
@@ -364,11 +360,13 @@ export function TeacherStudyformWorkspace({
         </ModuleCard>
         <VoiceLibrary
           id="studyform-voices"
-          key={`${scope}:voices:${initialMode === "new" ? "new" : "list"}`}
+          key={`${scope}:voices`}
           groupId={null}
-          groupOptions={groups}
+          membershipGroupIds={(user?.groups ?? []).map(
+            (group) => group.group_id,
+          )}
+          listenOnly
           embedded
-          initialCreate={initialMode === "new"}
         />
         <ModuleCard
           title={t("mayaTeam")}

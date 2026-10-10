@@ -382,15 +382,14 @@ function GroupWorkspaceSession({
             </ModuleList>
           ) : undefined}
         </ModuleCard>
-        {teacherIdentity ? null : (
-          <VoiceLibrary
-            id="studyform-voices"
-            key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}`}
-            groupId={groupId}
-            embedded
-            initialCreate={initialVoiceCreate}
-          />
-        )}
+        <VoiceLibrary
+          id="studyform-voices"
+          key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}
+          groupId={groupId}
+          listenOnly={teacherIdentity}
+          embedded
+          initialCreate={teacherIdentity ? false : initialVoiceCreate}
+        />
       </ModuleGrid>
     </>
   );

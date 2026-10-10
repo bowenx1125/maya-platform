@@ -153,8 +153,10 @@ describe("legacy group Brainform actor context", () => {
     expect(screen.getByText("No Agents yet.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "New" })).toBeNull();
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: /^Voices/ })).toBeNull();
-    expect(state.api.voiceProfiles).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Voices" })).toBeTruthy();
+    await waitFor(() =>
+      expect(state.api.voiceProfiles).toHaveBeenCalledWith("joined-group"),
+    );
     expect(
       screen.getByRole("link", { name: "Back" }).getAttribute("href"),
     ).toBe("/teacher/roster");

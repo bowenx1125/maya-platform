@@ -19,6 +19,7 @@ from app.core.errors import PlatformError
 from app.core.models import (
     IdempotencyRecord,
     StoredFile,
+    TeacherGroupAccess,
     VoicePreview,
     VoiceProfile,
     VoiceProviderOperation,
@@ -963,7 +964,7 @@ def test_effective_voice_resolver_prefers_ready_custom_and_fails_closed_to_syste
 def test_voice_permissions_are_same_group_students_only(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
-    client, _database, _settings = voice_client
+    client, database, _settings = voice_client
     _user, csrf = login(client, "bowen")
     create = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
@@ -984,13 +985,35 @@ def test_voice_permissions_are_same_group_students_only(
 
     # The teacher is not a group member and receives the same not-found
     # response; the profile is not disclosed through list/detail/delete/media.
-    teacher = login(client, "maya")[1]
+    teacher_user, teacher = login(client, "maya")
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
     assert (
         client.delete(
             f"/api/v1/voice-profiles/{profile_id}",
             headers=_headers(teacher, "voice-teacher-delete"),
+        ).status_code
+        == 404
+    )
+    # Opening the group from Accounts lets the teacher see the library, not
+    # another student's clone.
+    with database.session() as session:
+        session.add(
+            TeacherGroupAccess(
+                group_id=GROUP_A,
+                user_id=teacher_user["user"]["id"],
+                created_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+    heard = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
+    assert heard.status_code == 200
+    assert heard.json() == []
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
+    assert (
+        client.delete(
+            f"/api/v1/voice-profiles/{profile_id}",
+            headers=_headers(teacher, "voice-teacher-delete-after-listen"),
         ).status_code
         == 404
     )

@@ -207,6 +207,13 @@ export function AppShell({
   );
   const leaving = useRef(new Set<string>());
   useEffect(() => {
+    // The group route mounts before the session knows about the join. Load
+    // that membership here, not on the Accounts page, or the visit is revoked.
+    if (visitingGroup && membershipGroupIds.length === 0) {
+      void refresh?.();
+    }
+  }, [membershipGroupIds.length, refresh, visitingGroup]);
+  useEffect(() => {
     if (
       !visitedGroupIds.length ||
       typeof api?.leaveGroupAsTeacher !== "function"

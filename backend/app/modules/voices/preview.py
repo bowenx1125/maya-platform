@@ -141,8 +141,7 @@ def create_voice_preview(
 ) -> PlaybackResource:
     """Generate bounded server-side preview bytes and return an opaque URL."""
 
-    scoped = visible_student_voice(db, context, profile_id)
-    profile = scoped.profile
+    profile = visible_student_voice(db, context, profile_id).profile
     if profile.status not in {"preview_ready", "ready"}:
         raise not_found()
     tts = provider or tts_provider(settings)
