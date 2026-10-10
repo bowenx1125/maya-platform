@@ -271,40 +271,18 @@ describe("explicit AI Knowledge Agent flow", () => {
     expect(api.publish.mock.calls[0]?.[2]).not.toHaveProperty("generation");
   });
 
-  it("links an existing canonical Knowledge set from the Brainform source selector", async () => {
+  it("does not select Knowledge sets on the Agent editor", async () => {
     const api = makeApi();
     api.knowledgeSets.mockResolvedValue([generatedSet as KnowledgeSetSummary]);
-    api.agentKnowledgeSets.mockResolvedValue({
-      agent_id: "agent-1",
-      agent_metadata_revision: 4,
-      sets: [],
-    });
-    api.replaceAgentKnowledgeSets.mockImplementation(
-      async (_agentId, body) => ({
-        agent_id: "agent-1",
-        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
-        sets: [generatedSet as KnowledgeSetSummary],
-      }),
-    );
     renderWorkbench(api, false);
 
-    const choice = await screen.findByRole("checkbox", {
-      name: /Generated Knowledge/,
-    });
-    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
-    fireEvent.click(choice);
-
-    await waitFor(() =>
-      expect(api.replaceAgentKnowledgeSets).toHaveBeenCalledWith(
-        "agent-1",
-        {
-          expected_agent_metadata_revision: 4,
-          set_ids: ["set-1"],
-        },
-        { idempotency: expect.objectContaining({ key: expect.any(String) }) },
-      ),
-    );
-    expect(choice).toHaveProperty("checked", true);
+    expect(
+      await screen.findByRole("heading", { name: "Brainform" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("checkbox", { name: /Generated Knowledge/ }),
+    ).toBeNull();
+    expect(api.replaceAgentKnowledgeSets).not.toHaveBeenCalled();
   });
 
   it("starts from an existing Agent's saved Sources when Done is explicitly chosen", async () => {

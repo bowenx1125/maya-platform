@@ -31,6 +31,8 @@ export function VoiceLibrary({
   listenOnly = false,
   embedded = false,
   initialCreate = false,
+  selectedId = null,
+  onSelect,
   id,
 }: {
   groupId: string | null;
@@ -40,6 +42,8 @@ export function VoiceLibrary({
   listenOnly?: boolean;
   embedded?: boolean;
   initialCreate?: boolean;
+  selectedId?: string | null;
+  onSelect?: (profileId: string) => void;
   id?: string;
 }) {
   const t = useT();
@@ -74,63 +78,83 @@ export function VoiceLibrary({
     input?.focus();
   }, []);
 
-  const load = useCallback(async () => {
-    const sequence = ++loadSequence.current;
-    if (scopes.length === 0) {
-      setProfiles([]);
-      setScopeStatus({});
-      setError(null);
+  const load = useCallback(
+    async (options?: { quiet?: boolean }) => {
+      const sequence = ++loadSequence.current;
+      if (scopes.length === 0) {
+        setProfiles([]);
+        setScopeStatus({});
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      // A focus refresh must not blank the list. The Agent editor keeps unsaved
+      // AGENT.md in the parent, and this list is the only place a new voice appears.
+      if (!options?.quiet) {
+        setLoading(true);
+        setError(null);
+      }
+      const results = await Promise.all(
+        scopes.map(async (scopeId) => {
+          try {
+            return {
+              scopeId,
+              status: "ready" as const,
+              profiles: await api.voiceProfiles(scopeId),
+              cause: null,
+            };
+          } catch (cause) {
+            const denied =
+              cause instanceof PlatformApiError &&
+              (cause.status === 403 || cause.status === 404);
+            return {
+              scopeId,
+              status: denied ? ("denied" as const) : ("error" as const),
+              profiles: [] as VoiceProfile[],
+              cause,
+            };
+          }
+        }),
+      );
+      if (sequence !== loadSequence.current) return;
+      setProfiles(
+        results.flatMap((result) =>
+          result.status === "denied" ? [] : result.profiles,
+        ),
+      );
+      setScopeStatus(
+        Object.fromEntries(
+          results.map((result) => [result.scopeId, result.status]),
+        ),
+      );
+      const failure = results.find((result) => result.status === "error");
+      const denial = results.find((result) => result.status === "denied");
+      const ready = results.some((result) => result.status === "ready");
+      // A refused group is not an empty library. Say so when nothing else loaded.
+      setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
       setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    const results = await Promise.all(
-      scopes.map(async (scopeId) => {
-        try {
-          return {
-            scopeId,
-            status: "ready" as const,
-            profiles: await api.voiceProfiles(scopeId),
-            cause: null,
-          };
-        } catch (cause) {
-          const denied =
-            cause instanceof PlatformApiError &&
-            (cause.status === 403 || cause.status === 404);
-          return {
-            scopeId,
-            status: denied ? ("denied" as const) : ("error" as const),
-            profiles: [] as VoiceProfile[],
-            cause,
-          };
-        }
-      }),
-    );
-    if (sequence !== loadSequence.current) return;
-    setProfiles(
-      results.flatMap((result) =>
-        result.status === "denied" ? [] : result.profiles,
-      ),
-    );
-    setScopeStatus(
-      Object.fromEntries(
-        results.map((result) => [result.scopeId, result.status]),
-      ),
-    );
-    const failure = results.find((result) => result.status === "error");
-    const denial = results.find((result) => result.status === "denied");
-    const ready = results.some((result) => result.status === "ready");
-    // A refused group is not an empty library. Say so when nothing else loaded.
-    setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
-    setLoading(false);
-  }, [api, scopes]);
+    },
+    [api, scopes],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => {
       window.clearTimeout(timer);
       loadSequence.current += 1;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    function refreshVisibleVoices() {
+      if (document.visibilityState === "hidden") return;
+      void load({ quiet: true });
+    }
+    window.addEventListener("focus", refreshVisibleVoices);
+    document.addEventListener("visibilitychange", refreshVisibleVoices);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleVoices);
+      document.removeEventListener("visibilitychange", refreshVisibleVoices);
     };
   }, [load]);
 
@@ -340,6 +364,16 @@ export function VoiceLibrary({
                       }
                     }}
                   />
+                ) : onSelect ? (
+                  <button
+                    className={cards.titleButton}
+                    type="button"
+                    aria-pressed={selectedId === profile.id}
+                    disabled={busy || profile.status !== "ready"}
+                    onClick={() => onSelect(profile.id)}
+                  >
+                    {name}
+                  </button>
                 ) : listenOnly ? (
                   <span className={cards.staticTitle}>{name}</span>
                 ) : (

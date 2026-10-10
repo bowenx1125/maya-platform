@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -31,7 +30,8 @@ import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
-import { IconDownload } from "./quiet-icons";
+import { IconClose, IconDownload, IconUpload } from "./quiet-icons";
+import { VoiceLibrary } from "./voice/voice-library";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import {
@@ -146,26 +146,18 @@ export function AgentOverview({ agentId }: { agentId: string }) {
     versions.every(
       (version) => version.state === "draft" && !version.knowledge_snapshot_id,
     );
-  const actions = (
+  const actions = canDelete ? (
     <div className="button-row">
-      <Link
-        className="text-link"
-        href={`/student/knowledge?agent_id=${encodeURIComponent(agent.id)}`}
+      <button
+        className="text-link danger-button"
+        type="button"
+        disabled={busy}
+        onClick={() => void deleteAgent()}
       >
-        {t("knowledgeSets")}
-      </Link>
-      {canDelete ? (
-        <button
-          className="text-link danger-button"
-          type="button"
-          disabled={busy}
-          onClick={() => void deleteAgent()}
-        >
-          {t("deleteAgent")}
-        </button>
-      ) : null}
+        {t("deleteAgent")}
+      </button>
     </div>
-  );
+  ) : null;
   return (
     <>
       {error ? (
@@ -197,11 +189,90 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   );
 }
 
+function AgentPublisherMark({
+  visibility,
+  pending,
+  versionLabel,
+  label,
+  canChange,
+  canDelete,
+  busy,
+  onVisibility,
+  onDelete,
+}: {
+  visibility: "private" | "public";
+  pending: boolean;
+  versionLabel?: string;
+  label: string;
+  canChange: boolean;
+  canDelete: boolean;
+  busy: boolean;
+  onVisibility: (next: "private" | "public") => void;
+  onDelete?: () => void;
+}) {
+  const t = useT();
+  const figure = pending ? (versionLabel ?? label) : label;
+  const showDraft = pending && Boolean(versionLabel) && versionLabel !== label;
+  const mark = (
+    <span className="agent-pill-label">
+      <span className="agent-version-figure">{figure}</span>
+      {showDraft ? (
+        <span className="agent-pill" data-pending="true">
+          {label}
+        </span>
+      ) : null}
+    </span>
+  );
+  return (
+    <div className="agent-identity agent-identity-plate">
+      <div
+        className="visibility-toggle"
+        role="group"
+        aria-label={t("agentVisibility")}
+        data-ui-guide="agent.visibility"
+      >
+        {(["private", "public"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={visibility === option}
+            disabled={!canChange || busy}
+            onClick={() => onVisibility(option)}
+          >
+            {t(option === "private" ? "privateOption" : "publicOption")}
+          </button>
+        ))}
+      </div>
+      {canDelete && onDelete ? (
+        <button
+          type="button"
+          className="agent-version-mark agent-pill-action"
+          data-pending={pending ? "true" : "false"}
+          disabled={busy}
+          aria-label={t("deleteAgent")}
+          onClick={onDelete}
+        >
+          {mark}
+          <span className="agent-pill-x" aria-hidden="true">
+            <IconClose size={14} />
+          </span>
+        </button>
+      ) : (
+        <span
+          className="agent-version-mark"
+          data-pending={pending ? "true" : "false"}
+        >
+          {mark}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function AgentWorkbench({
   versionId,
   backHref,
   actorScopeKey,
-  knowledgeHref,
   generationFlow = false,
 }: {
   versionId: string;
@@ -213,7 +284,7 @@ export function AgentWorkbench({
   const t = useT();
   const router = useRouter();
   const { locale } = useLocale();
-  const { api } = useSession();
+  const { api, user } = useSession();
   const workbenchScope = actorScopeKey ?? `agent-version:${versionId}`;
   const workbenchScopeRef = useRef(workbenchScope);
   useLayoutEffect(() => {
@@ -231,17 +302,15 @@ export function AgentWorkbench({
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
-  const [knowledgeSets, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
+  const [, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
   const [agentKnowledge, setAgentKnowledge] =
     useState<AgentKnowledgeSets | null>(null);
-  const [selectedKnowledgeSetIds, setSelectedKnowledgeSetIds] = useState<
-    string[]
-  >([]);
+  const [, setSelectedKnowledgeSetIds] = useState<string[]>([]);
   const [knowledgeBindingSaving, setKnowledgeBindingSaving] = useState(false);
   const [pendingKnowledgeSetIds, setPendingKnowledgeSetIds] = useState<
     string[] | null
   >(null);
-  const [preview, setPreview] = useState<RagPreview | null>(null);
+  const [, setPreview] = useState<RagPreview | null>(null);
   const [avatarTemplates, setAvatarTemplates] = useState<AvatarTemplate[]>([]);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
@@ -417,13 +486,6 @@ export function AgentWorkbench({
       voiceProfileId !== (version.voice_profile_id ?? null)),
   );
   const blockers = version?.publish_blockers ?? [];
-  const blockerTitles: Record<string, string> = {
-    agent_md_missing: "AGENT.md",
-    rag_missing: t("knowledge"),
-    rag_index_pending: t("knowledge"),
-    rag_index_failed: t("knowledge"),
-    avatar_missing: t("avatarDesign"),
-  };
 
   if (loading) return <LoadingCard />;
   // Keep the loaded workbench mounted for mutation errors so local AGENT.md,
@@ -445,11 +507,6 @@ export function AgentWorkbench({
     );
   const currentVersion = version;
   const currentAgent = agent;
-  const resolvedKnowledgeHref =
-    knowledgeHref ??
-    (backHref?.startsWith("/teacher")
-      ? undefined
-      : `/student/knowledge?agent_id=${encodeURIComponent(agent.id)}`);
   if (version.state !== "draft")
     return (
       <ReadOnlyVersion version={version} agent={agent} backHref={backHref} />
@@ -710,11 +767,9 @@ export function AgentWorkbench({
     }
   }
 
-  async function updateAgentVisibility() {
-    if (!agent || visibilityBusy) return;
+  async function updateAgentVisibility(nextVisibility: "private" | "public") {
+    if (!agent || visibilityBusy || agent.visibility === nextVisibility) return;
     const requestScope = workbenchScope;
-    const nextVisibility =
-      agent.visibility === "private" ? "public" : "private";
     setVisibilityBusy(true);
     setError(null);
     try {
@@ -745,6 +800,29 @@ export function AgentWorkbench({
       if (isCurrentScope(requestScope)) setError(cause);
     } finally {
       if (isCurrentScope(requestScope)) setVisibilityBusy(false);
+    }
+  }
+
+  async function deleteThisAgent() {
+    if (!agent || !window.confirm(t("deleteAgentConfirm"))) return;
+    const requestScope = workbenchScope;
+    const handle = mutationStore.handleFor(`agent-delete:${agent.id}`);
+    setSaving(true);
+    setError(null);
+    try {
+      await api.deleteAgent(agent.id, { idempotency: handle });
+      mutationStore.finish(`agent-delete:${agent.id}`, handle);
+      if (!isCurrentScope(requestScope)) return;
+      router.replace(
+        agent.ownership_scope === "personal"
+          ? "/teacher/studyform"
+          : `/student/groups/${agent.group_id}`,
+      );
+    } catch (cause) {
+      if (!isCurrentScope(requestScope)) return;
+      mutationStore.abandon(`agent-delete:${agent.id}`, handle);
+      setError(cause);
+      setSaving(false);
     }
   }
 
@@ -821,14 +899,17 @@ export function AgentWorkbench({
           {t("aiKnowledgeFlowIntro")}
         </p>
       ) : null}
-      {resolvedKnowledgeHref ? (
-        <Link className="text-link" href={resolvedKnowledgeHref}>
-          {t("agentKnowledgeSets")}
-        </Link>
-      ) : null}
-      <div className="workbench-meta">
-        <StatusBadge status="draft" />
-      </div>
+      <AgentPublisherMark
+        visibility={agent.visibility}
+        pending
+        versionLabel={version.version_label}
+        label={t("draft")}
+        canChange
+        canDelete
+        busy={saving || visibilityBusy}
+        onVisibility={(next) => void updateAgentVisibility(next)}
+        onDelete={() => void deleteThisAgent()}
+      />
       {conflict ? <DraftConflictNotice /> : null}
       {error && !conflict && error !== knowledgeUploadError ? (
         <>
@@ -868,7 +949,7 @@ export function AgentWorkbench({
             action={
               <div className="button-row">
                 <button
-                  className="secondary-action"
+                  className="text-link"
                   type="button"
                   disabled={saving}
                   onClick={() => {
@@ -880,13 +961,15 @@ export function AgentWorkbench({
                   {t("insertOutline")}
                 </button>
                 <label
-                  className="secondary-action file-button"
+                  className="icon-action"
                   data-ui-guide="agent.uploadMarkdown"
                 >
-                  {t("uploadMd")}
+                  <IconUpload />
                   <input
+                    className="sr-only"
                     type="file"
                     accept=".md,text/markdown"
+                    aria-label={t("uploadMd")}
                     disabled={saving}
                     onChange={(event) => {
                       const file = event.target.files?.[0];
@@ -915,76 +998,70 @@ export function AgentWorkbench({
               </span>
             </div>
           </SectionCard>
-          {avatarConfig ? (
-            <SectionCard title={t("avatarDesign")}>
-              <AvatarEditor
-                templates={avatarTemplates}
-                value={avatarConfig}
-                onChange={setAvatarConfig}
-                fallbackLabel={agent.name}
-                disabled={saving}
-              />
-            </SectionCard>
-          ) : null}
-          {agent.group_id ? (
-            <SectionCard
-              title={t("voiceBinding")}
-              guide="agent.voice"
-              action={
-                <Link
+          <div className="agent-editor-media">
+            {avatarConfig ? (
+              <SectionCard title={t("avatarDesign")}>
+                <AvatarEditor
+                  templates={avatarTemplates}
+                  value={avatarConfig}
+                  onChange={setAvatarConfig}
+                  fallbackLabel={agent.name}
+                  disabled={saving}
+                />
+              </SectionCard>
+            ) : null}
+            <div>
+              {voiceProfileId &&
+              !voiceProfiles.some(
+                (profile) =>
+                  profile.id === voiceProfileId && profile.status === "ready",
+              ) ? (
+                <button
                   className="text-link"
-                  href={`/student/groups/${agent.group_id}/voices`}
+                  type="button"
+                  aria-pressed="true"
+                  disabled={saving}
+                  onClick={() => setVoiceProfileId(null)}
                 >
-                  {t("manageVoices")}
-                </Link>
-              }
-            >
-              <div className="stack-form">
-                <label>
-                  <span>{t("voiceBinding")}</span>
-                  <select
-                    value={voiceProfileId ?? ""}
-                    disabled={saving}
-                    onChange={(event) =>
-                      setVoiceProfileId(event.target.value || null)
-                    }
-                  >
-                    <option value="">{t("useFallbackVoice")}</option>
-                    {voiceProfileId &&
-                    !voiceProfiles.some(
-                      (profile) =>
-                        profile.id === voiceProfileId &&
-                        profile.status === "ready",
-                    ) ? (
-                      <option value={voiceProfileId} disabled>
-                        {t("currentVoiceBinding")}
-                      </option>
-                    ) : null}
-                    {voiceProfiles
-                      .filter((profile) => profile.status === "ready")
-                      .map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.source_filename || t("customVoiceReady")}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              </div>
-            </SectionCard>
-          ) : null}
+                  {t("currentVoiceBinding")}
+                </button>
+              ) : null}
+              <VoiceLibrary
+                groupId={agent.group_id}
+                membershipGroupIds={
+                  agent.group_id
+                    ? []
+                    : (user?.groups ?? []).map((group) => group.group_id)
+                }
+                listenOnly={Boolean(
+                  user?.courses?.some((course) => course.role === "teacher"),
+                )}
+                embedded
+                selectedId={voiceProfileId}
+                onSelect={(profileId) =>
+                  setVoiceProfileId((current) =>
+                    current === profileId ? null : profileId,
+                  )
+                }
+              />
+            </div>
+          </div>
+        </div>
+        <aside className="workbench-side">
           <SectionCard
             title={t("brainform")}
             guide="agent.brainform"
             action={
               <label
-                className="secondary-action file-button"
+                className="icon-action"
                 data-ui-guide="agent.uploadEvidence"
               >
-                {t("uploadMarkdown")}
+                <IconUpload />
                 <input
+                  className="sr-only"
                   type="file"
                   accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  aria-describedby="knowledge-import-help"
+                  aria-label={t("uploadMarkdown")}
                   disabled={saving || knowledgePreviewRefreshing}
                   onChange={(event) => {
                     const file = event.target.files?.[0];
@@ -997,9 +1074,6 @@ export function AgentWorkbench({
           >
             <div className="brainform-source-group">
               <h3>{t("rag")}</h3>
-              <p id="knowledge-import-help" className="muted-copy">
-                {t("knowledgeImportFormats")}
-              </p>
               {saving && pendingKnowledgeUpload ? (
                 <p className="muted-copy" role="status" aria-live="polite">
                   <span className="spinner" aria-hidden="true" />
@@ -1113,134 +1187,6 @@ export function AgentWorkbench({
                 </div>
               )}
             </div>
-            <div
-              className="brainform-source-group"
-              data-ui-guide="agent.knowledgeSets"
-            >
-              <h3>{t("knowledge")}</h3>
-              {knowledgeBindingSaving ? (
-                <p className="muted-copy" role="status" aria-live="polite">
-                  <span className="spinner" aria-hidden="true" />
-                  {t("saving")}
-                </p>
-              ) : null}
-              {knowledgeSets.length === 0 ? (
-                <p className="muted-copy">{t("noKnowledgeSets")}</p>
-              ) : (
-                <div className="document-list">
-                  {knowledgeSets.map((set) => (
-                    <label
-                      className="document-row document-select"
-                      key={set.id}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedKnowledgeSetIds.includes(set.id)}
-                        disabled={
-                          saving ||
-                          knowledgeBindingSaving ||
-                          retryAction === "bindKnowledge"
-                        }
-                        onChange={(event) => {
-                          const nextSetIds = event.target.checked
-                            ? [...selectedKnowledgeSetIds, set.id]
-                            : selectedKnowledgeSetIds.filter(
-                                (id) => id !== set.id,
-                              );
-                          void saveKnowledgeSetSelection(nextSetIds);
-                        }}
-                      />
-                      <span className="document-main">
-                        <strong>{set.display_name}</strong>
-                        <small>
-                          {set.asset_count.toLocaleString()}{" "}
-                          {t("knowledgeAssets")}
-                        </small>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {agentKnowledge?.sets.length ? (
-                <Link
-                  className="text-link"
-                  href={`${agent.ownership_scope === "personal" ? "/teacher/knowledge" : "/student/knowledge"}?agent_id=${encodeURIComponent(agent.id)}`}
-                >
-                  {t("openKnowledge")}
-                </Link>
-              ) : null}
-            </div>
-          </SectionCard>
-        </div>
-        <aside className="workbench-side">
-          {agent.ownership_scope === "personal" ? (
-            <SectionCard title={t("agentVisibility")} guide="agent.visibility">
-              <div className="stack-form">
-                <strong>
-                  {agent.visibility === "private"
-                    ? t("privateOption")
-                    : t("publicOption")}
-                </strong>
-                <button
-                  className="secondary-action"
-                  type="button"
-                  disabled={visibilityBusy || saving}
-                  onClick={() => void updateAgentVisibility()}
-                >
-                  {visibilityBusy
-                    ? t("working")
-                    : agent.visibility === "private"
-                      ? t("makeAgentPublic")
-                      : t("makeAgentPrivate")}
-                </button>
-              </div>
-            </SectionCard>
-          ) : null}
-          <SectionCard title={t("publishChecklist")} guide="agent.publish">
-            <div className="checklist">
-              {blockers.length === 0 ? (
-                <div className="check-item check-good">
-                  <span aria-hidden="true">✓</span>
-                  <div>
-                    <strong>{t("readyPublish")}</strong>
-                  </div>
-                </div>
-              ) : (
-                blockers.map((blocker) => (
-                  <div className="check-item check-bad" key={blocker}>
-                    <span aria-hidden="true">!</span>
-                    <div>
-                      <strong>
-                        {blockerTitles[blocker] ??
-                          blockerLabel(blocker, locale)}
-                      </strong>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </SectionCard>
-          <SectionCard title={t("ragPreview")} guide="agent.ragPreview">
-            {preview ? (
-              <>
-                <div className="rag-metrics">
-                  <div>
-                    <strong>{preview.document_count}</strong>
-                    <span>{t("files")}</span>
-                  </div>
-                  <div>
-                    <strong>{preview.total_char_count.toLocaleString()}</strong>
-                    <span>{t("characters")}</span>
-                  </div>
-                  <StatusBadge status={preview.index_status} />
-                </div>
-                <pre className="rag-preview">
-                  {preview.combined_markdown || t("previewAfterIndex")}
-                </pre>
-              </>
-            ) : (
-              <LoadingCard label={t("preparingPreview")} />
-            )}
           </SectionCard>
         </aside>
       </div>
@@ -1344,6 +1290,16 @@ function ReadOnlyVersion({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
+      <AgentPublisherMark
+        visibility={agent.visibility}
+        pending={version.state === "draft"}
+        versionLabel={version.version_label}
+        label={version.state === "draft" ? t("draft") : version.version_label}
+        canChange={false}
+        canDelete={false}
+        busy={false}
+        onVisibility={() => undefined}
+      />
       <PageAction
         name="back"
         href={backHref ?? `/student/groups/${agent.group_id}`}

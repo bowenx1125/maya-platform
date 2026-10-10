@@ -1532,8 +1532,118 @@ details > summary {
 /* The pills are two facts, not one sentence: no separator between them. */
 
 .workbench-grid {
-  grid-template-columns: minmax(0, 1.52fr) minmax(300px, 0.88fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   align-items: start;
+}
+
+.agent-identity {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.agent-identity-plate {
+  width: min(240px, 100%);
+  margin: 0 auto 18px;
+  padding: 32px 28px 26px;
+  border: 1px solid #e4dfd4;
+  border-radius: 20px;
+  background: var(--panel, #fdfaf3);
+}
+
+.agent-version-mark {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-width: 88px;
+  min-height: 88px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.agent-version-mark .agent-pill-label {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.agent-version-figure {
+  font-family: var(--display-serif);
+  font-size: 2.4rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #8a6a1f;
+}
+
+.agent-version-mark:not([data-pending="true"]) .agent-version-figure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(45, 138, 104, 0.14);
+  color: var(--green);
+  font-size: 1.35rem;
+}
+
+.agent-version-mark .agent-pill {
+  padding: 4px 12px;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.agent-identity .visibility-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line, #e4e1d9);
+  border-radius: 999px;
+  background: var(--surface-subtle, #f7f6f3);
+}
+
+.agent-identity .visibility-toggle button {
+  min-height: 34px;
+  padding: 4px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, #625e59);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.agent-identity .visibility-toggle button[aria-pressed="true"] {
+  background: var(--panel, #fdfaf3);
+  color: var(--ink, #292820);
+  box-shadow: 0 1px 2px rgb(48 42 30 / 8%);
+}
+
+.agent-identity .visibility-toggle button:disabled {
+  cursor: default;
+}
+
+.agent-identity .visibility-toggle button:disabled:not([aria-pressed="true"]) {
+  opacity: 0.55;
+}
+
+.agent-identity .visibility-toggle button:focus-visible {
+  outline: 2px solid var(--accent, #8a6a1f);
+  outline-offset: 2px;
+}
+
+.agent-editor-media {
+  display: grid;
+  gap: 16px;
 }
 
 .workbench-main,

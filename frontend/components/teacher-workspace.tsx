@@ -711,12 +711,6 @@ export function TeacherAgentDetail({
       {agent.status === "archived" ? (
         <span className="status-badge status-warn">{t("archivedAgent")}</span>
       ) : null}
-      <Link
-        className={detailStyles.action}
-        href={`/teacher/knowledge?agent_id=${encodeURIComponent(agent.id)}`}
-      >
-        {t("agentKnowledgeSets")}
-      </Link>
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <div className={detailStyles.overview}>
         <TeacherAgentMarkdown

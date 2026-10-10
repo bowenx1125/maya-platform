@@ -468,16 +468,11 @@ function CreateAgentFormSession({
   const mutationStore = useIdempotencyStore();
   const mounted = useRef(true);
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"private" | "public">("private");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [retryable, setRetryable] = useState(false);
   const mutationIntent = `create-agent:${actorScopeKey}`;
-  const visibilityHelp = courseId
-    ? t("personalVisibilityLede")
-    : t("privateVisibilityLede");
-
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -499,14 +494,14 @@ function CreateAgentFormSession({
         ? await api.createAgent(
             groupId,
             name.trim(),
-            description.trim(),
+            "",
             { idempotency: handle },
             visibility,
           )
         : await api.createWorkspaceAgent(
             courseId ?? "",
             name.trim(),
-            description.trim(),
+            "",
             { idempotency: handle },
             visibility,
           );
@@ -567,38 +562,29 @@ function CreateAgentFormSession({
               required
             />
           </label>
-          <label>
-            <span>
-              {t("shortDescription")} <small>{t("optional")}</small>
-            </span>
-            <textarea
-              value={description}
-              disabled={busy}
-              maxLength={500}
-              onChange={(event) => {
-                abandonCreateIntent();
-                setDescription(event.target.value);
-              }}
-              rows={4}
-            />
-          </label>
-          <label
-            data-ui-guide="agent.visibility"
-            data-ui-guide-text={visibilityHelp}
-          >
-            <span>{t("agentVisibility")}</span>
-            <select
-              value={visibility}
-              disabled={busy}
-              onChange={(event) => {
-                abandonCreateIntent();
-                setVisibility(event.target.value as "private" | "public");
-              }}
+          <div className="agent-identity">
+            <div
+              className="visibility-toggle"
+              role="group"
+              aria-label={t("agentVisibility")}
+              data-ui-guide="agent.visibility"
             >
-              <option value="private">{t("privateOption")}</option>
-              <option value="public">{t("publicOption")}</option>
-            </select>
-          </label>
+              {(["private", "public"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={visibility === option}
+                  disabled={busy}
+                  onClick={() => {
+                    abandonCreateIntent();
+                    setVisibility(option);
+                  }}
+                >
+                  {t(option === "private" ? "privateOption" : "publicOption")}
+                </button>
+              ))}
+            </div>
+          </div>
           {error ? (
             <ErrorNotice
               error={error}

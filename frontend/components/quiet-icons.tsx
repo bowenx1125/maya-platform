@@ -110,6 +110,26 @@ export function IconCheck({ size = 16 }: { size?: number }) {
   );
 }
 
+export function IconUpload({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 16V5" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M5 19h14" />
+    </svg>
+  );
+}
+
 export function IconArrowRight({ size = 16 }: { size?: number }) {
   return (
     <svg

@@ -196,11 +196,17 @@ describe("W1 teacher personal workspace", () => {
     );
 
     expect(
-      screen.getByRole("option", {
-        name: "Private",
-      }),
-    ).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Public" })).toBeTruthy();
+      screen
+        .getByRole("button", { name: "Private" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Public" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(screen.queryByRole("option", { name: "Private" })).toBeNull();
+    expect(screen.queryByLabelText("Note")).toBeNull();
     expect(
       screen.queryByText(/A Public personal Agent is shareable/),
     ).toBeNull();
@@ -449,24 +455,17 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    const visibilityHeading = await screen.findByRole("heading", {
-      name: "Visibility",
-    });
-    const visibilitySection = visibilityHeading.closest(
-      "section",
-    ) as HTMLElement;
+    const visibility = await screen.findByRole("group", { name: "Visibility" });
+    expect(visibility.getAttribute("data-ui-guide")).toBe("agent.visibility");
     expect(
-      within(visibilitySection).getByText("Private", { exact: true }),
-    ).toBeTruthy();
-    expect(visibilityHeading.getAttribute("data-ui-guide")).toBe(
-      "agent.visibility",
-    );
+      within(visibility)
+        .getByRole("button", { name: "Private" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(
-      within(visibilitySection).queryByText(
-        "Shareable; students need an explicit grant",
-      ),
+      screen.queryByText("Shareable; students need an explicit grant"),
     ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Make Agent public" }));
+    fireEvent.click(within(visibility).getByRole("button", { name: "Public" }));
     await waitFor(() =>
       expect(api.updateAgentMetadata).toHaveBeenCalledWith(
         agentId,

@@ -330,23 +330,9 @@ describe("Wave 1A UI idempotency wiring", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(nextVersion).toHaveBeenCalledTimes(2));
-    expect(keys[1]).toBe(keys[0]);
-    expect(router.push).toHaveBeenCalledWith(
-      "/student/agent-versions/version-id/edit",
-    );
+    await screen.findByRole("link", { name: "Back" });
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    expect(nextVersion).not.toHaveBeenCalled();
   });
 
   it("replays knowledge upload through the action-specific retry path", async () => {

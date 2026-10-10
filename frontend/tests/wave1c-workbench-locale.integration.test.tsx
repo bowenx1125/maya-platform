@@ -336,17 +336,21 @@ describe("Wave 1C real workbench locale boundary", () => {
       api.updateDraft.mockResolvedValue(saved);
       api.publish.mockResolvedValue({ ...saved, state: "published" });
       renderWorkbench(api as unknown as PlatformApi, () => undefined);
-      const selector = await screen.findByRole("combobox", {
-        name: "Voice binding",
-      });
-      expect(selector).toHaveProperty("value", "inherited-private");
       expect(
-        screen.getByRole("option", { name: "Current voice" }),
+        await screen.findByRole("button", { name: "Current voice" }),
       ).toBeTruthy();
       expect(
-        screen.queryByRole("option", { name: "Not confirmed" }),
-      ).toBeNull();
-      fireEvent.change(selector, { target: { value: choice } });
+        (
+          screen.getByRole("button", {
+            name: "Not confirmed",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      if (choice) {
+        fireEvent.click(screen.getByRole("button", { name: "My voice" }));
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "Current voice" }));
+      }
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
       await waitFor(() =>
         expect(api.publish).toHaveBeenCalledWith(
@@ -397,7 +401,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     ]);
     fireEvent.focus(window);
     expect(
-      await screen.findByRole("option", { name: "New voice" }),
+      await screen.findByRole("button", { name: "New voice" }),
     ).toBeTruthy();
     expect(editor).toHaveProperty("value", "# Unsaved");
   });
@@ -446,7 +450,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.publish).not.toHaveBeenCalled();
     expect(
       within(screen.getByRole("main")).getByRole("heading", {
-        name: "Knowledge",
+        name: "Brainform",
       }),
     ).toBeTruthy();
     expect(screen.getByLabelText("AGENT.md editor")).toHaveProperty(
@@ -582,7 +586,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       true,
     );
     expect(screen.getByText("evidence.md")).toBeTruthy();
-    expect(screen.getByText(/# Evidence/)).toBeTruthy();
+    expect(screen.queryByText(/# Evidence/)).toBeNull();
     expect(screen.getByText("Agent · V1.0")).toBeTruthy();
     expect(api.me.mock.calls.length).toBe(countsBefore.me);
     expect(api.version.mock.calls.length).toBe(countsBefore.version);
