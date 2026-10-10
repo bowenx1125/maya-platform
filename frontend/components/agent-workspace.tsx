@@ -435,7 +435,11 @@ export function AgentWorkbench({
           nextAgent.group_id
             ? api.knowledge(nextAgent.group_id)
             : api.workspaceDocuments(nextAgent.course_id),
-          api.ragPreview(versionId),
+          // Preview is draft-only. A published version is the editor baseline
+          // until Done, and its preview request is a not-found.
+          nextVersion.state === "draft"
+            ? api.ragPreview(versionId)
+            : Promise.resolve(null),
           api.avatarTemplates(),
           nextAgent.group_id
             ? api.voiceProfiles(nextAgent.group_id)
