@@ -1077,6 +1077,24 @@ export class PlatformApi {
     );
   }
 
+  deleteTeam(
+    teamId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<void> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE("/teams/{team_id}", {
+        params: {
+          path: { team_id: teamId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+      });
+      return unwrap<void>(result);
+    });
+  }
+
   createConversation(
     versionId: string,
     chatVisibility: "private" | "public" = "private",

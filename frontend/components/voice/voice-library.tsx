@@ -9,8 +9,8 @@ import { useT } from "../locale";
 import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
 import { ErrorNotice, LoadingCard, PageIntro, StatusBadge } from "../ui";
-import { IconCheck, IconClose, IconPlay } from "../quiet-icons";
-import { ModuleCard, ModuleList, ModulePlus } from "../studyform-layout";
+import { IconCheck, IconPlay } from "../quiet-icons";
+import { ModuleCard, ModulePlus, ModuleTiles } from "../studyform-layout";
 import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
 
@@ -263,30 +263,6 @@ export function VoiceLibrary({
     }
   }
 
-  async function remove(profileId: string) {
-    if (!window.confirm(t("voiceDeleteConfirm"))) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.deleteVoiceProfile(profileId, {
-        idempotency: idempotency.handleFor(`voice-delete-${profileId}`),
-      });
-      idempotency.finish(`voice-delete-${profileId}`);
-      setPreview((current) => {
-        const next = { ...current };
-        delete next[profileId];
-        return next;
-      });
-      await load();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const form = (
     <div className={styles.uploadCard}>
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
@@ -329,133 +305,113 @@ export function VoiceLibrary({
 
   const list =
     profiles.length > 0 ? (
-      <ModuleList>
+      <ModuleTiles>
         {profiles.map((profile) => {
           const name = profile.source_filename ?? t("voiceCustom");
           const editing = editingName?.id === profile.id;
+          const canPlay =
+            profile.status === "preview_ready" || profile.status === "ready";
           return (
-            <li className={cards.row} key={profile.id}>
-              <div className={cards.rowCopy}>
-                {editing ? (
-                  <input
-                    className={styles.nameInput}
-                    aria-label={t("voiceName")}
-                    value={editingName.value}
-                    readOnly={busy}
-                    ref={focusNameInput}
-                    onChange={(event) =>
-                      setEditingName({
-                        id: profile.id,
-                        value: event.target.value,
-                      })
+            <li className="agent-tile" key={profile.id}>
+              {editing ? (
+                <input
+                  className={styles.nameInput}
+                  aria-label={t("voiceName")}
+                  value={editingName.value}
+                  readOnly={busy}
+                  ref={focusNameInput}
+                  onChange={(event) =>
+                    setEditingName({
+                      id: profile.id,
+                      value: event.target.value,
+                    })
+                  }
+                  onBlur={() => void saveName(profile)}
+                  onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing) return;
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void saveName(profile, true);
+                    } else if (event.key === "Escape" && !savingName.current) {
+                      event.preventDefault();
+                      closeNameEditor(profile.id, true);
                     }
-                    onBlur={() => void saveName(profile)}
-                    onKeyDown={(event) => {
-                      if (event.nativeEvent.isComposing) return;
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void saveName(profile, true);
-                      } else if (
-                        event.key === "Escape" &&
-                        !savingName.current
-                      ) {
-                        event.preventDefault();
-                        closeNameEditor(profile.id, true);
-                      }
-                    }}
-                  />
-                ) : onSelect ? (
-                  <button
-                    className={cards.titleButton}
-                    type="button"
-                    aria-pressed={selectedId === profile.id}
-                    disabled={busy || profile.status !== "ready"}
-                    onClick={() => onSelect(profile.id)}
-                  >
-                    {name}
-                  </button>
-                ) : listenOnly ? (
-                  <span className={cards.staticTitle}>{name}</span>
-                ) : (
-                  <button
-                    className={cards.titleButton}
-                    type="button"
-                    disabled={busy || profile.status === "deleted"}
-                    ref={(button) => {
-                      if (button && focusName.current === profile.id) {
-                        button.focus();
-                        focusName.current = null;
-                      }
-                    }}
-                    onClick={() => {
-                      activeName.current = profile.id;
-                      setError(null);
-                      setEditingName({
-                        id: profile.id,
-                        value: profile.source_filename ?? "",
-                      });
-                    }}
-                  >
-                    {name}
-                  </button>
-                )}
-                {profile.status !== "ready" ? (
-                  <StatusBadge status={profile.status} />
-                ) : null}
-              </div>
-              <div className={cards.actions}>
-                {profile.status === "preview_ready" ||
-                profile.status === "ready" ? (
-                  <button
-                    className={cards.iconButton}
-                    aria-label={t("voicePreview")}
-                    data-ui-guide="voice.preview"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void makePreview(profile.id)}
-                  >
-                    <IconPlay />
-                  </button>
-                ) : null}
-                {!listenOnly && profile.status === "preview_ready" ? (
-                  <button
-                    className={cards.iconButton}
-                    aria-label={t("voiceConfirm")}
-                    data-ui-guide="voice.confirm"
-                    type="button"
-                    disabled={busy || !preview[profile.id]}
-                    onClick={() => void confirm(profile.id)}
-                  >
-                    <IconCheck />
-                  </button>
-                ) : null}
-                {!listenOnly && profile.status !== "deleted" ? (
-                  <button
-                    className={cards.iconButton}
-                    aria-label={t("voiceDelete")}
-                    data-ui-guide="voice.delete"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void remove(profile.id)}
-                  >
-                    <IconClose />
-                  </button>
-                ) : null}
-              </div>
+                  }}
+                />
+              ) : onSelect ? (
+                <button
+                  className="agent-tile-name"
+                  type="button"
+                  aria-pressed={selectedId === profile.id}
+                  disabled={busy || profile.status !== "ready"}
+                  onClick={() => onSelect(profile.id)}
+                >
+                  {name}
+                </button>
+              ) : listenOnly ? (
+                <span className="agent-tile-name">{name}</span>
+              ) : (
+                <button
+                  className="agent-tile-name"
+                  type="button"
+                  disabled={busy || profile.status === "deleted"}
+                  ref={(button) => {
+                    if (button && focusName.current === profile.id) {
+                      button.focus();
+                      focusName.current = null;
+                    }
+                  }}
+                  onClick={() => {
+                    activeName.current = profile.id;
+                    setError(null);
+                    setEditingName({
+                      id: profile.id,
+                      value: profile.source_filename ?? "",
+                    });
+                  }}
+                >
+                  {name}
+                </button>
+              )}
+              {profile.status !== "ready" ? (
+                <StatusBadge status={profile.status} />
+              ) : null}
+              {canPlay ? (
+                <button
+                  className={cards.iconButton}
+                  aria-label={t("voicePreview")}
+                  data-ui-guide="voice.preview"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void makePreview(profile.id)}
+                >
+                  <IconPlay />
+                </button>
+              ) : null}
+              {!listenOnly && profile.status === "preview_ready" ? (
+                <button
+                  className={cards.iconButton}
+                  aria-label={t("voiceConfirm")}
+                  data-ui-guide="voice.confirm"
+                  type="button"
+                  disabled={busy || !preview[profile.id]}
+                  onClick={() => void confirm(profile.id)}
+                >
+                  <IconCheck />
+                </button>
+              ) : null}
               {preview[profile.id] ? (
-                <div className={cards.rowExtra}>
-                  <audio
-                    className={styles.audio}
-                    controls
-                    preload="none"
-                    src={preview[profile.id].url}
-                  />
-                </div>
+                <audio
+                  className={styles.audio}
+                  controls
+                  preload="none"
+                  src={preview[profile.id].url}
+                />
               ) : null}
             </li>
           );
         })}
-      </ModuleList>
+      </ModuleTiles>
     ) : null;
 
   const body = creating ? (

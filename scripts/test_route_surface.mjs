@@ -73,7 +73,7 @@ try {
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
   // Teams add immutable definitions, versions, and the scoped Maya directory.
-  if (platformOperationCount !== 152 || placeholderCount !== 0) {
+  if (platformOperationCount !== 153 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

@@ -20,16 +20,15 @@ import { AccountSettings } from "./account-settings";
 import { HomeGuide } from "./home-guide";
 import { useLocale, useT } from "./locale";
 import { PageAction } from "./page-action";
-import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
   ModuleCard,
   ModuleGrid,
-  ModuleList,
   ModulePlus,
-  ModuleRow,
+  ModuleTiles,
+  VersionTile,
 } from "./studyform-layout";
 import {
   EmptyCard,
@@ -368,7 +367,7 @@ function GroupWorkspaceSession({
           }
         >
           {items.length ? (
-            <ModuleList>
+            <ModuleTiles>
               {items.map(({ agent, versions }) => (
                 <GroupAgentRow
                   agent={agent}
@@ -379,7 +378,7 @@ function GroupWorkspaceSession({
                   canDelete={!teacherIdentity}
                 />
               ))}
-            </ModuleList>
+            </ModuleTiles>
           ) : undefined}
         </ModuleCard>
         <VoiceLibrary
@@ -411,25 +410,14 @@ function GroupAgentRow({
   const t = useT();
   const bubble = versionBubble(agent, versions);
   return (
-    <ModuleRow
-      title={agent.name}
+    <VersionTile
+      name={agent.name}
       href={`/student/agents/${agent.id}`}
-      meta={bubble.label}
-      action={
-        canDelete ? (
-          <button
-            type="button"
-            className="agent-pill agent-pill-action"
-            data-pending={bubble.pending ? "true" : "false"}
-            disabled={deleting}
-            aria-label={t("deleteAgent")}
-            data-ui-guide="roster.deleteAgent"
-            onClick={onDelete}
-          >
-            <IconClose size={12} />
-          </button>
-        ) : null
-      }
+      label={bubble.label}
+      pending={bubble.pending}
+      deleting={deleting}
+      deleteLabel={t("deleteAgent")}
+      onDelete={canDelete ? onDelete : undefined}
     />
   );
 }

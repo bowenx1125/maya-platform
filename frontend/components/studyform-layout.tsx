@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import styles from "./knowledge/brainform-workspace.module.css";
+import { IconClose } from "./quiet-icons";
 import { WorkspaceIcon } from "./workspace-icon";
 
 export function ModuleGrid({ children }: { children: ReactNode }) {
@@ -39,6 +40,59 @@ export function ModuleCard({
 
 export function ModuleList({ children }: { children: ReactNode }) {
   return <ul className={styles.list}>{children}</ul>;
+}
+
+export function ModuleTiles({ children }: { children: ReactNode }) {
+  return <ul className="agent-tile-grid module-tile-grid">{children}</ul>;
+}
+
+export function VersionTile({
+  name,
+  href,
+  label,
+  pending,
+  deleting = false,
+  onDelete,
+  deleteLabel,
+}: {
+  name: string;
+  href: string;
+  label: string;
+  pending: boolean;
+  deleting?: boolean;
+  onDelete?: () => void;
+  deleteLabel: string;
+}) {
+  return (
+    <li className="agent-tile">
+      <Link className="agent-tile-name text-link" href={href}>
+        {name}
+      </Link>
+      {onDelete ? (
+        <button
+          type="button"
+          className="agent-pill agent-pill-action"
+          data-pending={pending ? "true" : "false"}
+          disabled={deleting}
+          aria-label={deleteLabel}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onDelete();
+          }}
+        >
+          <span className="agent-pill-label">{label}</span>
+          <span className="agent-pill-x" aria-hidden="true">
+            <IconClose size={12} />
+          </span>
+        </button>
+      ) : (
+        <span className="agent-pill" data-pending={pending ? "true" : "false"}>
+          {label}
+        </span>
+      )}
+    </li>
+  );
 }
 
 export function ModulePlus({

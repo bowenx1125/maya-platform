@@ -77,6 +77,7 @@ const enMessages = {
   deleteAgent: "Delete",
   deleteAgentConfirm:
     "Delete this Agent for teachers and students? Existing chats become read-only. Shared knowledge files stay.",
+  deleteTeamConfirm: "Delete this Maya Team? Existing chats stay read-only.",
   deleteChat: "Delete chat",
   deleteChatConfirm: "Delete this entire conversation? This cannot be undone.",
   delete: "Delete",
@@ -791,6 +792,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   deleteAgent: "删除",
   deleteAgentConfirm:
     "从老师和学生端删除这个智能体？已有聊天保留只读，小组共享知识文件不变。",
+  deleteTeamConfirm: "删除这个 Maya Team？已有聊天保留只读。",
   deleteChat: "删除对话",
   deleteChatConfirm: "删除整段对话？此操作无法撤销。",
   delete: "删除",

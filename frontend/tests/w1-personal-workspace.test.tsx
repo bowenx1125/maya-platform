@@ -145,9 +145,9 @@ describe("W1 teacher personal workspace", () => {
 
     const tile = await screen.findByRole("link", { name: "Teacher Lens" });
     expect(tile.getAttribute("href")).toBe(`/teacher/agents/${agentId}`);
-    const visibility = screen.getByText("Private", { exact: true });
-    expect(visibility.getAttribute("data-ui-guide")).toBe("agent.visibility");
-    expect(visibility.getAttribute("tabindex")).toBe("0");
+    expect(screen.getByText("Draft")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+    expect(screen.queryByText("Private", { exact: true })).toBeNull();
     expect(screen.queryByText("Private — only me")).toBeNull();
     expect(
       screen.queryByText("Shareable; students need an explicit grant"),
@@ -455,26 +455,14 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    const visibility = await screen.findByRole("group", { name: "Visibility" });
-    expect(visibility.getAttribute("data-ui-guide")).toBe("agent.visibility");
-    expect(
-      within(visibility)
-        .getByRole("button", { name: "Private" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    await screen.findByRole("button", {
+      name: "Share source: private-notes.md",
+    });
+    expect(screen.queryByRole("group", { name: "Visibility" })).toBeNull();
     expect(
       screen.queryByText("Shareable; students need an explicit grant"),
     ).toBeNull();
-    fireEvent.click(within(visibility).getByRole("button", { name: "Public" }));
-    await waitFor(() =>
-      expect(api.updateAgentMetadata).toHaveBeenCalledWith(
-        agentId,
-        expect.objectContaining({
-          expected_metadata_revision: 0,
-          visibility: "public",
-        }),
-      ),
-    );
+    expect(api.updateAgentMetadata).not.toHaveBeenCalled();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Share source: private-notes.md" }),

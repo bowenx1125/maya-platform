@@ -689,6 +689,24 @@ details > summary {
   align-items: stretch;
 }
 
+.agent-tile-grid.module-tile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.module-tile-grid > .agent-tile {
+  min-height: 112px;
+}
+
+button.agent-tile-name {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
 .knowledge-tile,
 .agent-tile {
   display: grid;
@@ -1542,62 +1560,6 @@ details > summary {
   align-content: center;
   gap: 14px;
   text-align: center;
-}
-
-.agent-identity-plate {
-  width: min(240px, 100%);
-  margin: 0 auto 18px;
-  padding: 32px 28px 26px;
-  border: 1px solid #e4dfd4;
-  border-radius: 20px;
-  background: var(--panel, #fdfaf3);
-}
-
-.agent-version-mark {
-  display: grid;
-  place-items: center;
-  gap: 8px;
-  min-width: 88px;
-  min-height: 88px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
-.agent-version-mark .agent-pill-label {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-}
-
-.agent-version-figure {
-  font-family: var(--display-serif);
-  font-size: 2.4rem;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: -0.03em;
-  color: #8a6a1f;
-}
-
-.agent-version-mark:not([data-pending="true"]) .agent-version-figure {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 72px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: rgba(45, 138, 104, 0.14);
-  color: var(--green);
-  font-size: 1.35rem;
-}
-
-.agent-version-mark .agent-pill {
-  padding: 4px 12px;
-  font-size: 0.95rem;
-  font-weight: 500;
 }
 
 .agent-identity .visibility-toggle {

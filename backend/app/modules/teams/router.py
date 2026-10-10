@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, cast
 from uuid import UUID
 
-from app.core.errors import Error
+from app.core.errors import Error, PlatformError
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
@@ -26,7 +26,7 @@ from app.modules.teams.schemas import (
     TeamSummary,
     TeamVersionDTO,
 )
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -112,6 +112,47 @@ def create_team(
         operation=lambda: service.create_team(db, context, str(course_id), payload),
         replay=lambda body: _replay_team_detail(db, context, body),
     )
+
+
+@router.delete(
+    "/teams/{team_id}",
+    status_code=204,
+    operation_id="deleteTeam",
+    responses={
+        204: {"description": "Team removed from lists; existing chats stay read-only."},
+        404: {"model": Error, "description": "Team not found."},
+    },
+)
+def delete_team(
+    team_id: UUID,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    body_hash = parse_json_payload_hash("deleteTeam", context, [str(team_id)], {})
+    record, replay = claim_idempotency(db, context, "deleteTeam", idempotency_key, body_hash)
+    if replay is not None:
+        return Response(status_code=204)
+    assert_claim_owned(db, record)
+    try:
+        if db.get_bind().dialect.name == "sqlite":
+            db.rollback()
+            db.execute(text("BEGIN IMMEDIATE"))
+        service.delete_team(db, context, str(team_id))
+        finish_idempotency(db, record, 204, {})
+        db.commit()
+        return Response(status_code=204)
+    except PlatformError:
+        if db.in_transaction():
+            db.rollback()
+        abandon_claim(db, record)
+        raise
+    except Exception:
+        if db.in_transaction():
+            db.rollback()
+        abandon_claim(db, record)
+        raise
 
 
 @router.get(

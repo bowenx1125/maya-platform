@@ -1847,7 +1847,8 @@ export interface paths {
         /** Save Team Version */
         put: operations["saveTeamVersion"];
         post?: never;
-        delete?: never;
+        /** Delete Team */
+        delete: operations["deleteTeam"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10172,6 +10173,38 @@ export interface operations {
             };
             /** @description Invalid Team membership or scope. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteTeam: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Team removed from lists; existing chats stay read-only. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Team not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -30,7 +30,7 @@ import { useLocale, useT } from "./locale";
 import { AvatarEditor, type AvatarConfig } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
-import { IconClose, IconDownload, IconUpload } from "./quiet-icons";
+import { IconDownload, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
@@ -189,86 +189,6 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   );
 }
 
-function AgentPublisherMark({
-  visibility,
-  pending,
-  versionLabel,
-  label,
-  canChange,
-  canDelete,
-  busy,
-  onVisibility,
-  onDelete,
-}: {
-  visibility: "private" | "public";
-  pending: boolean;
-  versionLabel?: string;
-  label: string;
-  canChange: boolean;
-  canDelete: boolean;
-  busy: boolean;
-  onVisibility: (next: "private" | "public") => void;
-  onDelete?: () => void;
-}) {
-  const t = useT();
-  const figure = pending ? (versionLabel ?? label) : label;
-  const showDraft = pending && Boolean(versionLabel) && versionLabel !== label;
-  const mark = (
-    <span className="agent-pill-label">
-      <span className="agent-version-figure">{figure}</span>
-      {showDraft ? (
-        <span className="agent-pill" data-pending="true">
-          {label}
-        </span>
-      ) : null}
-    </span>
-  );
-  return (
-    <div className="agent-identity agent-identity-plate">
-      <div
-        className="visibility-toggle"
-        role="group"
-        aria-label={t("agentVisibility")}
-        data-ui-guide="agent.visibility"
-      >
-        {(["private", "public"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={visibility === option}
-            disabled={!canChange || busy}
-            onClick={() => onVisibility(option)}
-          >
-            {t(option === "private" ? "privateOption" : "publicOption")}
-          </button>
-        ))}
-      </div>
-      {canDelete && onDelete ? (
-        <button
-          type="button"
-          className="agent-version-mark agent-pill-action"
-          data-pending={pending ? "true" : "false"}
-          disabled={busy}
-          aria-label={t("deleteAgent")}
-          onClick={onDelete}
-        >
-          {mark}
-          <span className="agent-pill-x" aria-hidden="true">
-            <IconClose size={14} />
-          </span>
-        </button>
-      ) : (
-        <span
-          className="agent-version-mark"
-          data-pending={pending ? "true" : "false"}
-        >
-          {mark}
-        </span>
-      )}
-    </div>
-  );
-}
-
 export function AgentWorkbench({
   versionId,
   backHref,
@@ -340,7 +260,6 @@ export function AgentWorkbench({
   const [visibilityBusyDocumentId, setVisibilityBusyDocumentId] = useState<
     string | null
   >(null);
-  const [visibilityBusy, setVisibilityBusy] = useState(false);
   const uploadIntent = `${workbenchScope}:upload-knowledge:${versionId}`;
   const knowledgeBindingIntent = `${workbenchScope}:knowledge-sets:${agent?.id ?? versionId}`;
   const publishIntent = `${workbenchScope}:publish-agent-version:${versionId}`;
@@ -767,65 +686,6 @@ export function AgentWorkbench({
     }
   }
 
-  async function updateAgentVisibility(nextVisibility: "private" | "public") {
-    if (!agent || visibilityBusy || agent.visibility === nextVisibility) return;
-    const requestScope = workbenchScope;
-    setVisibilityBusy(true);
-    setError(null);
-    try {
-      const updatedAgent = await api.updateAgentMetadata(agent.id, {
-        expected_metadata_revision: agent.metadata_revision,
-        description: agent.description,
-        visibility: nextVisibility,
-      });
-      if (!isCurrentScope(requestScope)) return;
-      setAgent(updatedAgent);
-      setAgentKnowledge((current) =>
-        current
-          ? {
-              ...current,
-              agent_metadata_revision: updatedAgent.metadata_revision,
-            }
-          : current,
-      );
-      const nextVersion = await api.version(versionId);
-      if (!isCurrentScope(requestScope)) return;
-      setVersion(nextVersion);
-      setSelectedDocumentIds(
-        (nextVersion.enabled_documents ?? []).map((document) => document.id),
-      );
-      const nextPreview = await api.ragPreview(versionId);
-      if (isCurrentScope(requestScope)) setPreview(nextPreview);
-    } catch (cause) {
-      if (isCurrentScope(requestScope)) setError(cause);
-    } finally {
-      if (isCurrentScope(requestScope)) setVisibilityBusy(false);
-    }
-  }
-
-  async function deleteThisAgent() {
-    if (!agent || !window.confirm(t("deleteAgentConfirm"))) return;
-    const requestScope = workbenchScope;
-    const handle = mutationStore.handleFor(`agent-delete:${agent.id}`);
-    setSaving(true);
-    setError(null);
-    try {
-      await api.deleteAgent(agent.id, { idempotency: handle });
-      mutationStore.finish(`agent-delete:${agent.id}`, handle);
-      if (!isCurrentScope(requestScope)) return;
-      router.replace(
-        agent.ownership_scope === "personal"
-          ? "/teacher/studyform"
-          : `/student/groups/${agent.group_id}`,
-      );
-    } catch (cause) {
-      if (!isCurrentScope(requestScope)) return;
-      mutationStore.abandon(`agent-delete:${agent.id}`, handle);
-      setError(cause);
-      setSaving(false);
-    }
-  }
-
   async function publish(retry = false) {
     const requestScope = workbenchScope;
     if (generationFlow && selectedDocumentIds.length === 0) {
@@ -899,17 +759,6 @@ export function AgentWorkbench({
           {t("aiKnowledgeFlowIntro")}
         </p>
       ) : null}
-      <AgentPublisherMark
-        visibility={agent.visibility}
-        pending
-        versionLabel={version.version_label}
-        label={t("draft")}
-        canChange
-        canDelete
-        busy={saving || visibilityBusy}
-        onVisibility={(next) => void updateAgentVisibility(next)}
-        onDelete={() => void deleteThisAgent()}
-      />
       {conflict ? <DraftConflictNotice /> : null}
       {error && !conflict && error !== knowledgeUploadError ? (
         <>
@@ -1290,16 +1139,6 @@ function ReadOnlyVersion({
   return (
     <>
       <PageIntro title={`${agent.name} · ${version.version_label}`} />
-      <AgentPublisherMark
-        visibility={agent.visibility}
-        pending={version.state === "draft"}
-        versionLabel={version.version_label}
-        label={version.state === "draft" ? t("draft") : version.version_label}
-        canChange={false}
-        canDelete={false}
-        busy={false}
-        onVisibility={() => undefined}
-      />
       <PageAction
         name="back"
         href={backHref ?? `/student/groups/${agent.group_id}`}

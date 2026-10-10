@@ -116,6 +116,7 @@ const implemented = new Set([
   "createConversation",
   "getConversation",
   "deleteConversation",
+  "deleteTeam",
   "sendConversationMessage",
   "streamConversationMessage",
   "getProviderSettings",

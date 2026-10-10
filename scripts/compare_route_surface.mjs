@@ -105,6 +105,7 @@ const implementedOperationIds = new Set([
   "sendConversationMessage",
   "streamConversationMessage",
   "deleteConversation",
+  "deleteTeam",
   "getProviderSettings",
   "updateProviderSettings",
   "checkProvider",

@@ -1065,6 +1065,17 @@ def save_team_version(
     return get_team_detail(db, actor, team.id)
 
 
+def delete_team(db: Session, actor: AuthContext, team_id: str) -> None:
+    """Hide a Team from Studyform and the Maya directory. Chats keep their snapshot."""
+
+    team = _get_team_for_owner(db, actor, team_id)
+    timestamp = now_utc()
+    _revoke_publications(db, team.id, timestamp)
+    team.deleted_at = timestamp
+    team.updated_at = timestamp
+    db.flush()
+
+
 def list_course_teams(db: Session, actor: AuthContext, course_id: str) -> list[TeamSummary]:
     user_id = actor.user.id
     _course_scope(db, user_id, course_id)

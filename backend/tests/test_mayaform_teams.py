@@ -1439,3 +1439,44 @@ def test_team_llm_send_rechecks_persisted_source_fences_after_reservation(
         assert operation.state == "not_sent"
         assert operation.charged_request_count == 0
         assert member is not None and member.raw_source_fences_json == "[]"
+
+
+def test_owner_soft_deletes_a_maya_team_and_replays_the_same_key(
+    client: TestClient, database: Any
+) -> None:
+    _, csrf = login(client, "maya")
+    first = _make_agent_version(database, owner_id=MAYA_ID, name="Delete Seed A")
+    second = _make_agent_version(database, owner_id=MAYA_ID, name="Delete Seed B")
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, "k3-delete-team-create-01"),
+        json=_team_payload([first[1], second[1]], visibility="public"),
+    )
+    assert created.status_code == 201, created.text
+    team_id = created.json()["id"]
+
+    _, student_csrf = login(client, "bowen")
+    denied = client.delete(
+        f"/api/v1/teams/{team_id}",
+        headers=_headers(student_csrf, "k3-delete-team-bowen-01"),
+    )
+    assert denied.status_code == 404
+
+    _, csrf = login(client, "maya")
+    deleted = client.delete(
+        f"/api/v1/teams/{team_id}",
+        headers=_headers(csrf, "k3-delete-team-01"),
+    )
+    assert deleted.status_code == 204, deleted.text
+    replay = client.delete(
+        f"/api/v1/teams/{team_id}",
+        headers=_headers(csrf, "k3-delete-team-01"),
+    )
+    assert replay.status_code == 204
+    listed = client.get(f"/api/v1/courses/{COURSE_ID}/teams", headers=_headers(csrf))
+    assert listed.status_code == 200
+    assert all(item["id"] != team_id for item in listed.json())
+    directory = client.get(f"/api/v1/courses/{COURSE_ID}/maya-teams", headers=_headers(csrf))
+    assert directory.status_code == 200
+    assert all(item["id"] != team_id for item in directory.json())
+    assert client.get(f"/api/v1/teams/{team_id}", headers=_headers(csrf)).status_code == 404

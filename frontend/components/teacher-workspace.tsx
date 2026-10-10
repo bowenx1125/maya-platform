@@ -41,9 +41,9 @@ import { TeamEntryFlow } from "./chats/team-entry-flow";
 import {
   ModuleCard,
   ModuleGrid,
-  ModuleList,
   ModulePlus,
-  ModuleRow,
+  ModuleTiles,
+  VersionTile,
 } from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
@@ -242,6 +242,7 @@ export function TeacherStudyformWorkspace({
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const loading = loadedScope !== scope;
   const [error, setError] = useState<unknown>(null);
@@ -293,6 +294,36 @@ export function TeacherStudyformWorkspace({
     };
   }, [api, initialGroupId, scope, teacherCourseId]);
 
+  async function deletePersonalAgent(agentId: string) {
+    if (deletingId || !window.confirm(t("deleteAgentConfirm"))) return;
+    setDeletingId(agentId);
+    setError(null);
+    try {
+      await api.deleteAgent(agentId);
+      setPersonalAgents((current) =>
+        current.filter((agent) => agent.id !== agentId),
+      );
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function deleteMayaTeam(teamId: string) {
+    if (deletingId || !window.confirm(t("deleteTeamConfirm"))) return;
+    setDeletingId(teamId);
+    setError(null);
+    try {
+      await api.deleteTeam(teamId);
+      setTeams((current) => current.filter((team) => team.id !== teamId));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (loading || loadedScope !== scope) return <LoadingCard />;
   if (error && !personalAgents.length && !chatAgents.length)
     return <ErrorNotice error={error} />;
@@ -333,29 +364,27 @@ export function TeacherStudyformWorkspace({
           }
         >
           {personalAgents.length ? (
-            <ModuleList>
-              {personalAgents.map((agent) => (
-                <ModuleRow
-                  key={agent.id}
-                  title={agent.name}
-                  meta={
-                    agent.current_draft_version_id ? t("draft") : t("published")
-                  }
-                  href={`/teacher/agents/${agent.id}`}
-                  badge={
-                    <span
-                      className="agent-pill-label"
-                      data-ui-guide="agent.visibility"
-                      tabIndex={0}
-                    >
-                      {agent.visibility === "private"
-                        ? t("privateOption")
-                        : t("publicOption")}
-                    </span>
-                  }
-                />
-              ))}
-            </ModuleList>
+            <ModuleTiles>
+              {personalAgents.map((agent) => {
+                const pending = Boolean(
+                  agent.current_draft_version_id &&
+                  agent.current_draft_version_id !==
+                    agent.current_published_version_id,
+                );
+                return (
+                  <VersionTile
+                    key={agent.id}
+                    name={agent.name}
+                    href={`/teacher/agents/${agent.id}`}
+                    label={pending ? t("draft") : t("published")}
+                    pending={pending}
+                    deleting={deletingId !== null}
+                    deleteLabel={t("deleteAgent")}
+                    onDelete={() => void deletePersonalAgent(agent.id)}
+                  />
+                );
+              })}
+            </ModuleTiles>
           ) : undefined}
         </ModuleCard>
         <VoiceLibrary
@@ -382,18 +411,22 @@ export function TeacherStudyformWorkspace({
           }
         >
           {teams.length ? (
-            <ModuleList>
+            <ModuleTiles>
               {teams.map((team) => (
-                <ModuleRow
+                <VersionTile
                   key={team.id}
-                  title={team.display_name}
-                  meta={t("teamVersionLabel", {
+                  name={team.display_name}
+                  href={`/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                  label={t("teamVersionLabel", {
                     seq: team.current_version_seq,
                   })}
-                  href={`/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                  pending={false}
+                  deleting={deletingId !== null}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={() => void deleteMayaTeam(team.id)}
                 />
               ))}
-            </ModuleList>
+            </ModuleTiles>
           ) : undefined}
         </ModuleCard>
       </ModuleGrid>
