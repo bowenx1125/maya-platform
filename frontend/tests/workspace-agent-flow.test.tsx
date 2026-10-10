@@ -75,7 +75,6 @@ const api = {
     sets: [],
   }),
   workspaceDocuments: vi.fn().mockResolvedValue([]),
-  knowledge: vi.fn().mockResolvedValue([]),
 };
 
 describe("Workspace Agent flow", () => {
