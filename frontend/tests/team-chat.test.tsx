@@ -222,12 +222,6 @@ function sidebarButton(name: string) {
 }
 
 async function startNewTeam() {
-  const nav = within(screen.getByRole("navigation"));
-  const create = await nav.findByRole("button", { name: "New" });
-  await waitFor(() =>
-    expect((create as HTMLButtonElement).disabled).toBe(false),
-  );
-  fireEvent.click(create);
   await screen.findByLabelText("Team name");
 }
 
@@ -367,6 +361,15 @@ describe("Studyform Maya Team", () => {
     expect(screen.queryByText("Group circle")).toBeNull();
     expect(screen.queryByText("Readable circle")).toBeNull();
     expect(screen.queryByRole("radio", { name: "Public" })).toBeNull();
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "New",
+      }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Reasoning circle" }),
+    ).toBeTruthy();
   });
 
   it("does not navigate the current page when a Team save receipt arrives after unmount", async () => {
@@ -377,7 +380,7 @@ describe("Studyform Maya Team", () => {
           finishSave = resolve;
         }),
     );
-    const view = renderTeamManagement();
+    const view = renderTeamManagement("team-new");
     await screen.findByRole("heading", { level: 2, name: "Maya Team" });
     await startNewTeam();
     await fillTeamForm("Pending circle");
@@ -397,9 +400,15 @@ describe("Studyform Maya Team", () => {
   });
 
   it("publishes a Maya Team as a public personal Team from the Studyform sidebar", async () => {
-    renderTeamManagement();
+    const view = renderTeamManagement();
     await screen.findByRole("heading", { level: 2, name: "Maya Team" });
     expect(screen.getByText("No Maya Teams yet.")).toBeTruthy();
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "New",
+      }),
+    ).toBeNull();
+    view.rerender(teamManagementPage("team-new"));
     await startNewTeam();
     await fillTeamForm("Reasoning circle", "Mencius");
     fireEvent.click(
@@ -431,7 +440,9 @@ describe("Studyform Maya Team", () => {
     state.api.team.mockResolvedValue(publicTeam);
     renderTeamManagement();
     await screen.findByRole("heading", { level: 2, name: "Maya Team" });
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reasoning circle" }),
+    );
 
     const name = await screen.findByLabelText("Team name");
     fireEvent.change(name, { target: { value: "Reasoning circle v2" } });
@@ -487,7 +498,7 @@ describe("Studyform Maya Team", () => {
     state.api.createTeam
       .mockRejectedValueOnce(new Error("connection reset"))
       .mockResolvedValueOnce(publicTeam);
-    renderTeamManagement();
+    renderTeamManagement("team-new");
     await screen.findByRole("heading", { level: 2, name: "Maya Team" });
     await startNewTeam();
     await fillTeamForm("Retryable circle");
@@ -520,7 +531,7 @@ describe("Studyform Maya Team", () => {
       .mockResolvedValueOnce([])
       .mockRejectedValueOnce(new Error("list temporarily unavailable"))
       .mockResolvedValueOnce([publicTeam]);
-    renderTeamManagement();
+    renderTeamManagement("team-new");
     await screen.findByRole("heading", { level: 2, name: "Maya Team" });
     await startNewTeam();
     await fillTeamForm("Reasoning circle");
@@ -663,7 +674,7 @@ describe("Chatform", () => {
     );
     expect(state.api.streamTeamConversation.mock.calls[0][1]).toMatchObject({
       message: "Open the discussion",
-      routing: { mode: "all", participant_ids: [] },
+      routing: { mode: "selected", participant_ids: ["participant-1"] },
     });
     expect(state.api.createTeam).not.toHaveBeenCalled();
     expect(state.api.updateTeam).not.toHaveBeenCalled();
@@ -785,22 +796,11 @@ describe("Chatform", () => {
     );
     const log = await screen.findByRole("log");
     await within(log).findByText("A private Team question");
-    expect(
-      screen
-        .getByRole("button", { name: "Private" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-
-    expect(
-      (screen.getByRole("button", { name: "Public" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Private" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Chat with" })).toBeNull();
     expect(within(log).getByText("A private Team question")).toBeTruthy();
     expect(state.api.createTeamConversation).not.toHaveBeenCalled();
-    expect(
-      (screen.getByRole("combobox", { name: "Chat with" }) as HTMLSelectElement)
-        .value,
-    ).toBe("team:team-1");
     expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
   });
 
@@ -860,10 +860,8 @@ describe("Chatform", () => {
     expect(send.getAttribute("data-ui-guide-text")).toBe(
       "This Public Team Chat is read-only.",
     );
-    expect(
-      (screen.getByRole("button", { name: "Public" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Private" })).toBeNull();
     expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
   });
 
@@ -1126,22 +1124,21 @@ describe("Chatform", () => {
     ).toHaveLength(2);
     expect(within(menu).getByRole("menuitem", { name: "Jade" })).toBeTruthy();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "All" }));
-    fireEvent.click(
-      within(menu).getAllByRole("menuitem", { name: "Bowen" })[0],
-    );
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Jade" }));
-    expect(screen.getByRole("button", { name: "Remove Bowen" })).toBeTruthy();
-    const removeJade = screen.getByRole("button", { name: "Remove Jade" });
-    fireEvent.click(removeJade);
-    expect(screen.queryByRole("button", { name: "Remove Jade" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
+    expect((message as HTMLTextAreaElement).value).toBe("@All");
+    expect(screen.queryByRole("button", { name: "Remove All" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove Bowen" })).toBeNull();
+
+    fireEvent.change(message, { target: { value: "@" } });
     fireEvent.keyDown(message, { key: "@", shiftKey: true });
     fireEvent.click(
-      within(screen.getByRole("menu", { name: "Recipients" })).getByRole(
+      within(screen.getByRole("menu", { name: "Recipients" })).getAllByRole(
         "menuitem",
-        { name: "Jade" },
-      ),
+        { name: "Bowen" },
+      )[0],
     );
-    expect(screen.getByRole("button", { name: "Remove Jade" })).toBeTruthy();
+    expect((message as HTMLTextAreaElement).value).toBe("@Bowen");
+    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
 
     const pastedText = "```txt\n@All members @Bowen\n``` this is quoted text";
     fireEvent.change(message, { target: { value: pastedText } });
@@ -1158,7 +1155,7 @@ describe("Chatform", () => {
       message: pastedText,
       routing: {
         mode: "selected",
-        participant_ids: ["participant-1", "participant-3"],
+        participant_ids: ["participant-1"],
       },
     });
   });

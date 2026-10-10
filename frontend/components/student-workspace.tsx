@@ -24,8 +24,13 @@ import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { VoiceLibrary } from "./voice/voice-library";
-import { StudyformModule } from "./studyform-layout";
-import { WorkspaceIcon } from "./workspace-icon";
+import {
+  ModuleCard,
+  ModuleGrid,
+  ModuleList,
+  ModulePlus,
+  ModuleRow,
+} from "./studyform-layout";
 import {
   EmptyCard,
   ErrorNotice,
@@ -348,63 +353,57 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
-      <StudyformModule
-        title={t("agents")}
-        count={items.length}
-        action={
-          teacherIdentity ? null : (
-            <Link
-              className="inline-button symbol-button"
-              href={`/student/groups/${groupId}/agents/new`}
-              aria-label={t("newAgent")}
-            >
-              <WorkspaceIcon name="new" />
-            </Link>
-          )
-        }
-      >
-        {items.length === 0 ? (
-          <EmptyCard title={t("noAgents")} />
-        ) : (
-          <div className="agent-tile-grid">
-            {items.map(({ agent, versions }) => (
-              <GroupAgentTile
-                agent={agent}
-                groupName={group.name}
-                key={agent.id}
-                versions={versions}
-                deleting={deleting !== null}
-                onDelete={() => void deleteAgent(agent.id)}
-                canDelete={!teacherIdentity}
+      <ModuleGrid>
+        <ModuleCard
+          title={t("agents")}
+          labelledBy="studyform-agents"
+          empty={items.length ? undefined : t("noAgents")}
+          action={
+            teacherIdentity ? null : (
+              <ModulePlus
+                href={`/student/groups/${groupId}/agents/new`}
+                label={t("newAgent")}
               />
-            ))}
-          </div>
-        )}
-      </StudyformModule>
-      {teacherIdentity ? null : (
-        <div id="studyform-voices">
+            )
+          }
+        >
+          {items.length ? (
+            <ModuleList>
+              {items.map(({ agent, versions }) => (
+                <GroupAgentRow
+                  agent={agent}
+                  key={agent.id}
+                  versions={versions}
+                  deleting={deleting !== null}
+                  onDelete={() => void deleteAgent(agent.id)}
+                  canDelete={!teacherIdentity}
+                />
+              ))}
+            </ModuleList>
+          ) : undefined}
+        </ModuleCard>
+        {teacherIdentity ? null : (
           <VoiceLibrary
+            id="studyform-voices"
             key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}`}
             groupId={groupId}
             embedded
             initialCreate={initialVoiceCreate}
           />
-        </div>
-      )}
+        )}
+      </ModuleGrid>
     </>
   );
 }
 
-function GroupAgentTile({
+function GroupAgentRow({
   agent,
-  groupName,
   versions,
   deleting,
   canDelete = true,
   onDelete,
 }: {
   agent: AgentSummary;
-  groupName: string;
   versions: AgentVersion[];
   deleting: boolean;
   canDelete?: boolean;
@@ -413,31 +412,26 @@ function GroupAgentTile({
   const t = useT();
   const bubble = versionBubble(agent, versions);
   return (
-    <div className="agent-tile" data-agent-row={agent.id}>
-      <Link
-        className="agent-tile-name text-link"
-        href={`/student/agents/${agent.id}`}
-      >
-        {agent.name}
-      </Link>
-      <span className="agent-tile-group">{groupName}</span>
-      {canDelete ? (
-        <button
-          type="button"
-          className="agent-pill agent-pill-action"
-          data-pending={bubble.pending ? "true" : "false"}
-          disabled={deleting}
-          aria-label={t("deleteAgent")}
-          data-ui-guide="roster.deleteAgent"
-          onClick={onDelete}
-        >
-          <span className="agent-pill-label">{bubble.label}</span>
-          <span className="agent-pill-x" aria-hidden="true">
+    <ModuleRow
+      title={agent.name}
+      href={`/student/agents/${agent.id}`}
+      meta={bubble.label}
+      action={
+        canDelete ? (
+          <button
+            type="button"
+            className="agent-pill agent-pill-action"
+            data-pending={bubble.pending ? "true" : "false"}
+            disabled={deleting}
+            aria-label={t("deleteAgent")}
+            data-ui-guide="roster.deleteAgent"
+            onClick={onDelete}
+          >
             <IconClose size={12} />
-          </span>
-        </button>
-      ) : null}
-    </div>
+          </button>
+        ) : null
+      }
+    />
   );
 }
 

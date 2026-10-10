@@ -1,24 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PlatformApiError, type Group, type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { PageAction } from "../page-action";
-import { WorkspaceIcon } from "../workspace-icon";
 import { useSession } from "../session-provider";
-import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-  SectionCard,
-  StatusBadge,
-} from "../ui";
+import { ErrorNotice, LoadingCard, PageIntro, StatusBadge } from "../ui";
 import { IconCheck, IconClose, IconPlay } from "../quiet-icons";
-import cards from "../library-cards.module.css";
+import { ModuleCard, ModuleList, ModulePlus } from "../studyform-layout";
+import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
 
 const CONSENT_COPY_VERSION = "voice-consent-v1";
@@ -28,30 +21,45 @@ type PreviewState = {
   expiresAt: string;
 };
 
+type ScopeStatus = "loading" | "ready" | "denied" | "error";
+
+type ListedVoice = VoiceProfile & { groupLabel: string };
+
+type VoiceScope = { id: string; name: string };
+
 export function VoiceLibrary({
   groupId,
   groupOptions,
-  onGroupChange,
   embedded = false,
   initialCreate = false,
+  id,
 }: {
   groupId: string | null;
   groupOptions?: Pick<Group, "id" | "name">[];
-  onGroupChange?: (groupId: string) => void;
   embedded?: boolean;
   initialCreate?: boolean;
+  id?: string;
 }) {
   const t = useT();
   const { api } = useSession();
-  const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [creating, setCreating] = useState(initialCreate && Boolean(groupId));
-  const [consent, setConsent] = useState(false);
-  const [loading, setLoading] = useState(Boolean(groupId));
-  const [checkedGroupId, setCheckedGroupId] = useState<string | null>(null);
-  const [unavailableGroupId, setUnavailableGroupId] = useState<string | null>(
-    null,
+  const scopes = useMemo<VoiceScope[]>(
+    () =>
+      groupId
+        ? [{ id: groupId, name: "" }]
+        : (groupOptions ?? []).map((group) => ({
+            id: group.id,
+            name: group.name,
+          })),
+    [groupId, groupOptions],
   );
+  const [profiles, setProfiles] = useState<ListedVoice[]>([]);
+  const [scopeStatus, setScopeStatus] = useState<Record<string, ScopeStatus>>(
+    {},
+  );
+  const [file, setFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(initialCreate);
+  const [consent, setConsent] = useState(false);
+  const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
@@ -70,59 +78,82 @@ export function VoiceLibrary({
   }, []);
 
   const load = useCallback(async () => {
-    if (!groupId) {
+    const sequence = ++loadSequence.current;
+    if (scopes.length === 0) {
       setProfiles([]);
-      setLoading(false);
+      setScopeStatus({});
       setError(null);
-      setCheckedGroupId(null);
-      setUnavailableGroupId(null);
+      setLoading(false);
       return;
     }
-    const sequence = ++loadSequence.current;
     setLoading(true);
     setError(null);
-    try {
-      const nextProfiles = await api.voiceProfiles(groupId);
-      if (sequence === loadSequence.current) {
-        setProfiles(nextProfiles);
-        setCheckedGroupId(groupId);
-        setUnavailableGroupId(null);
-      }
-    } catch (cause) {
-      if (sequence === loadSequence.current) {
-        setError(cause);
-        setCheckedGroupId(groupId);
-        setUnavailableGroupId(
-          cause instanceof PlatformApiError &&
-            (cause.status === 403 || cause.status === 404)
-            ? groupId
-            : null,
-        );
-      }
-    } finally {
-      if (sequence === loadSequence.current) setLoading(false);
-    }
-  }, [api, groupId]);
+    const results = await Promise.all(
+      scopes.map(async (scope) => {
+        try {
+          return {
+            scope,
+            status: "ready" as const,
+            profiles: await api.voiceProfiles(scope.id),
+            cause: null,
+          };
+        } catch (cause) {
+          const denied =
+            cause instanceof PlatformApiError &&
+            (cause.status === 403 || cause.status === 404);
+          return {
+            scope,
+            status: denied ? ("denied" as const) : ("error" as const),
+            profiles: [] as VoiceProfile[],
+            cause,
+          };
+        }
+      }),
+    );
+    if (sequence !== loadSequence.current) return;
+    setProfiles(
+      results.flatMap((result) =>
+        result.status === "denied"
+          ? []
+          : result.profiles.map((profile) => ({
+              ...profile,
+              groupLabel: result.scope.name,
+            })),
+      ),
+    );
+    setScopeStatus(
+      Object.fromEntries(
+        results.map((result) => [result.scope.id, result.status]),
+      ),
+    );
+    const failure = results.find((result) => result.status === "error");
+    // A 403/404 group is outside this person's voice scope. Skip it instead of
+    // turning the whole card into a failure when nothing else is readable.
+    setError(failure?.cause ?? null);
+    setLoading(false);
+  }, [api, scopes]);
 
   useEffect(() => {
-    if (!groupId) {
-      loadSequence.current += 1;
-      return;
-    }
     const timer = window.setTimeout(() => void load(), 0);
     return () => {
       window.clearTimeout(timer);
       loadSequence.current += 1;
     };
-  }, [groupId, load]);
+  }, [load]);
+
+  const enrollmentGroupId =
+    scopes.find((scope) => scopeStatus[scope.id] === "ready")?.id ??
+    scopes.find((scope) => scopeStatus[scope.id] === "error")?.id ??
+    null;
+  const canEnroll = Boolean(enrollmentGroupId) && !loading;
 
   async function submitEnrollment() {
-    if (!groupScopeReady || !groupId || !file || !consent) return;
+    if (!canEnroll || !enrollmentGroupId || !file || !consent) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await api.enrollVoice(groupId, file, CONSENT_COPY_VERSION, {
+      await api.enrollVoice(enrollmentGroupId, file, CONSENT_COPY_VERSION, {
         idempotency: idempotency.handleFor("voice-enroll"),
       });
       idempotency.finish("voice-enroll");
@@ -144,7 +175,7 @@ export function VoiceLibrary({
     setEditingName(null);
   }
 
-  async function saveName(profile: VoiceProfile, restoreFocus = false) {
+  async function saveName(profile: ListedVoice, restoreFocus = false) {
     if (activeName.current !== profile.id || !editingName || savingName.current)
       return;
     const value = editingName.value.trim();
@@ -158,7 +189,9 @@ export function VoiceLibrary({
     try {
       const renamed = await api.renameVoiceProfile(profile.id, value);
       setProfiles((current) =>
-        current.map((item) => (item.id === profile.id ? renamed : item)),
+        current.map((item) =>
+          item.id === profile.id ? { ...item, ...renamed } : item,
+        ),
       );
       closeNameEditor(profile.id, restoreFocus);
     } catch (cause) {
@@ -231,234 +264,202 @@ export function VoiceLibrary({
     }
   }
 
-  if (loading && groupOptions === undefined) {
-    return <LoadingCard />;
-  }
-  if (error && profiles.length === 0 && groupOptions === undefined) {
-    return <ErrorNotice error={error} onRetry={() => void load()} />;
-  }
-
-  const groupPicker =
-    groupOptions === undefined ? null : groupOptions.length ? (
+  const form = (
+    <div className={styles.uploadCard}>
+      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <label className={styles.field}>
-        <span>{t("group")}</span>
-        <select
-          value={groupId ?? ""}
-          disabled={busy || creating || editingName !== null}
-          onChange={(event) => onGroupChange?.(event.target.value)}
-        >
-          <option value="">{t("selectGroup")}</option>
-          {groupOptions.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name}
-            </option>
-          ))}
-        </select>
+        <span>{t("voiceSampleLabel")}</span>
+        <input
+          className={styles.fileInput}
+          type="file"
+          accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+          data-ui-guide="voice.uploadSample"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          aria-label={t("voiceSampleFile")}
+        />
       </label>
-    ) : (
-      <EmptyCard title={t("rosterNoGroups")} />
-    );
-
-  const groupScopeReady = Boolean(
-    groupId &&
-    !loading &&
-    checkedGroupId === groupId &&
-    unavailableGroupId !== groupId,
+      <label className={styles.consent}>
+        <input
+          type="checkbox"
+          aria-label={t("voiceConsent")}
+          checked={consent}
+          onChange={(event) => setConsent(event.target.checked)}
+        />
+        <span>{t("voiceConsent")}</span>
+      </label>
+      <PageAction
+        name="back"
+        disabled={busy}
+        onClick={() => {
+          setCreating(false);
+          setFile(null);
+          setConsent(false);
+        }}
+      />
+      <PageAction
+        name="done"
+        disabled={!file || !consent || busy || !canEnroll}
+        onClick={() => void submitEnrollment()}
+      />
+    </div>
   );
 
-  const newVoice = (
-    <button
-      className="inline-button symbol-button"
-      type="button"
-      aria-label={t("voiceCreateTitle")}
-      disabled={busy || creating || !groupScopeReady}
-      onClick={() => setCreating(true)}
-    >
-      <WorkspaceIcon name="new" />
-    </button>
-  );
+  const list =
+    profiles.length > 0 ? (
+      <ModuleList>
+        {profiles.map((profile) => {
+          const name = profile.source_filename ?? t("voiceCustom");
+          const editing = editingName?.id === profile.id;
+          return (
+            <li className={cards.row} key={profile.id}>
+              <div className={cards.rowCopy}>
+                {editing ? (
+                  <input
+                    className={styles.nameInput}
+                    aria-label={t("voiceName")}
+                    value={editingName.value}
+                    readOnly={busy}
+                    ref={focusNameInput}
+                    onChange={(event) =>
+                      setEditingName({
+                        id: profile.id,
+                        value: event.target.value,
+                      })
+                    }
+                    onBlur={() => void saveName(profile)}
+                    onKeyDown={(event) => {
+                      if (event.nativeEvent.isComposing) return;
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void saveName(profile, true);
+                      } else if (
+                        event.key === "Escape" &&
+                        !savingName.current
+                      ) {
+                        event.preventDefault();
+                        closeNameEditor(profile.id, true);
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    className={cards.titleButton}
+                    type="button"
+                    disabled={busy || profile.status === "deleted"}
+                    ref={(button) => {
+                      if (button && focusName.current === profile.id) {
+                        button.focus();
+                        focusName.current = null;
+                      }
+                    }}
+                    onClick={() => {
+                      activeName.current = profile.id;
+                      setError(null);
+                      setEditingName({
+                        id: profile.id,
+                        value: profile.source_filename ?? "",
+                      });
+                    }}
+                  >
+                    {name}
+                  </button>
+                )}
+                {profile.groupLabel ? (
+                  <span className={cards.rowMeta}>{profile.groupLabel}</span>
+                ) : null}
+                {profile.status !== "ready" ? (
+                  <StatusBadge status={profile.status} />
+                ) : null}
+              </div>
+              <div className={cards.actions}>
+                {profile.status === "preview_ready" ||
+                profile.status === "ready" ? (
+                  <button
+                    className={cards.iconButton}
+                    aria-label={t("voicePreview")}
+                    data-ui-guide="voice.preview"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void makePreview(profile.id)}
+                  >
+                    <IconPlay />
+                  </button>
+                ) : null}
+                {profile.status === "preview_ready" ? (
+                  <button
+                    className={cards.iconButton}
+                    aria-label={t("voiceConfirm")}
+                    data-ui-guide="voice.confirm"
+                    type="button"
+                    disabled={busy || !preview[profile.id]}
+                    onClick={() => void confirm(profile.id)}
+                  >
+                    <IconCheck />
+                  </button>
+                ) : null}
+                {profile.status !== "deleted" ? (
+                  <button
+                    className={cards.iconButton}
+                    aria-label={t("voiceDelete")}
+                    data-ui-guide="voice.delete"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void remove(profile.id)}
+                  >
+                    <IconClose />
+                  </button>
+                ) : null}
+              </div>
+              {preview[profile.id] ? (
+                <div className={cards.rowExtra}>
+                  <audio
+                    className={styles.audio}
+                    controls
+                    preload="none"
+                    src={preview[profile.id].url}
+                  />
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ModuleList>
+    ) : null;
+
+  const body = creating ? (
+    form
+  ) : error || loading || list ? (
+    <>
+      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {loading ? <LoadingCard /> : null}
+      {list}
+    </>
+  ) : undefined;
 
   return (
-    <div className={styles.voicePanel}>
+    <div className={styles.voicePanel} id={id}>
       {embedded ? null : <PageIntro title={t("voices")} />}
-      {error &&
-      (creating || groupOptions === undefined || profiles.length > 0) ? (
-        <ErrorNotice error={error} onRetry={() => setError(null)} />
-      ) : null}
       {notice ? (
         <div className="notice notice-success" role="status">
           {t(notice)}
         </div>
       ) : null}
-      {creating ? (
-        <SectionCard className={styles.uploadCard}>
-          {groupPicker}
-          <label className={styles.field}>
-            <span>{t("voiceSampleLabel")}</span>
-            <input
-              className={styles.fileInput}
-              type="file"
-              accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-              data-ui-guide="voice.uploadSample"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              aria-label={t("voiceSampleFile")}
+      <ModuleCard
+        title={t("voices")}
+        labelledBy={id ? `${id}-title` : "voices-title"}
+        empty={body ? undefined : t("voiceNone")}
+        action={
+          creating ? null : (
+            <ModulePlus
+              label={t("voiceCreateTitle")}
+              disabled={busy || !canEnroll}
+              onClick={() => setCreating(true)}
             />
-          </label>
-          <label className={styles.consent}>
-            <input
-              type="checkbox"
-              aria-label={t("voiceConsent")}
-              checked={consent}
-              onChange={(event) => setConsent(event.target.checked)}
-            />
-            <span>{t("voiceConsent")}</span>
-          </label>
-          <PageAction
-            name="back"
-            disabled={busy}
-            onClick={() => {
-              setCreating(false);
-              setFile(null);
-              setConsent(false);
-            }}
-          />
-          <PageAction
-            name="done"
-            disabled={!file || !consent || busy || !groupScopeReady}
-            onClick={() => void submitEnrollment()}
-          />
-        </SectionCard>
-      ) : (
-        <SectionCard
-          title={`${t("voices")} · ${profiles.length}`}
-          action={newVoice}
-        >
-          {groupPicker}
-          {loading ? <LoadingCard /> : null}
-          {error && profiles.length === 0 && groupOptions !== undefined ? (
-            <ErrorNotice error={error} onRetry={() => void load()} />
-          ) : null}
-          {groupScopeReady && !error && profiles.length === 0 ? (
-            <EmptyCard title={t("voiceNone")} />
-          ) : null}
-          {!loading && groupId ? (
-            <div className={`knowledge-tile-grid ${cards.grid}`}>
-              {profiles.map((profile) => (
-                <article
-                  className={`knowledge-tile ${cards.tile}`}
-                  key={profile.id}
-                >
-                  <span className="document-main">
-                    {editingName?.id === profile.id ? (
-                      <input
-                        className={styles.nameInput}
-                        aria-label={t("voiceName")}
-                        value={editingName.value}
-                        readOnly={busy}
-                        ref={focusNameInput}
-                        onChange={(event) =>
-                          setEditingName({
-                            id: profile.id,
-                            value: event.target.value,
-                          })
-                        }
-                        onBlur={() => void saveName(profile)}
-                        onKeyDown={(event) => {
-                          if (event.nativeEvent.isComposing) return;
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            void saveName(profile, true);
-                          } else if (
-                            event.key === "Escape" &&
-                            !savingName.current
-                          ) {
-                            event.preventDefault();
-                            closeNameEditor(profile.id, true);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <button
-                        className={styles.nameButton}
-                        type="button"
-                        disabled={busy || profile.status === "deleted"}
-                        ref={(button) => {
-                          if (button && focusName.current === profile.id) {
-                            button.focus();
-                            focusName.current = null;
-                          }
-                        }}
-                        onClick={() => {
-                          activeName.current = profile.id;
-                          setError(null);
-                          setEditingName({
-                            id: profile.id,
-                            value: profile.source_filename ?? "",
-                          });
-                        }}
-                      >
-                        {profile.source_filename ?? t("voiceCustom")}
-                      </button>
-                    )}
-                  </span>
-                  <div className={`icon-action-row ${cards.actions}`}>
-                    {profile.status === "preview_ready" ||
-                    profile.status === "ready" ? (
-                      <button
-                        className="icon-action"
-                        aria-label={t("voicePreview")}
-                        data-ui-guide="voice.preview"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void makePreview(profile.id)}
-                      >
-                        <IconPlay />
-                      </button>
-                    ) : null}
-                    {profile.status === "preview_ready" ? (
-                      <button
-                        className="icon-action"
-                        aria-label={t("voiceConfirm")}
-                        data-ui-guide="voice.confirm"
-                        type="button"
-                        disabled={busy || !preview[profile.id]}
-                        onClick={() => void confirm(profile.id)}
-                      >
-                        <IconCheck />
-                      </button>
-                    ) : null}
-                    {profile.status !== "deleted" ? (
-                      <button
-                        className="icon-action icon-action-danger"
-                        aria-label={t("voiceDelete")}
-                        data-ui-guide="voice.delete"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void remove(profile.id)}
-                      >
-                        <IconClose />
-                      </button>
-                    ) : null}
-                  </div>
-                  {profile.status !== "ready" ? (
-                    <div className={cards.status}>
-                      <StatusBadge status={profile.status} />
-                    </div>
-                  ) : null}
-                  {preview[profile.id] ? (
-                    <audio
-                      className={styles.audio}
-                      controls
-                      preload="none"
-                      src={preview[profile.id].url}
-                    />
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </SectionCard>
-      )}
+          )
+        }
+      >
+        {body}
+      </ModuleCard>
     </div>
   );
 }

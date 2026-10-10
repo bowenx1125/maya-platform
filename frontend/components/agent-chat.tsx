@@ -131,19 +131,27 @@ function newRequestId(): string {
     .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
-function resolveNamedRecipients(
+function mentionLabel(text: string): string | null {
+  const visible = text.replace(/```[\s\S]*?```/g, " ");
+  const labels = [...visible.matchAll(/@([^\s@]+)/g)].map((match) => match[1]);
+  return labels.at(-1) ?? null;
+}
+
+function routingForMention(
   session: TeamChatSession,
-  names: string[],
-): string[] {
-  const pool = [...session.team.members];
-  const ids: string[] = [];
-  for (const name of names) {
-    const index = pool.findIndex((member) => member.name === name);
-    if (index < 0) continue;
-    const [match] = pool.splice(index, 1);
-    ids.push(match.id);
-  }
-  return ids;
+  message: string,
+): TeamRouting {
+  const leaderId = session.team.members.find((member) => member.is_leader)?.id;
+  const leader: TeamRouting = leaderId
+    ? { mode: "selected", participant_ids: [leaderId] }
+    : { mode: "auto", participant_ids: [] };
+  const label = mentionLabel(message);
+  if (!label) return leader;
+  if (label === "All") return { mode: "all", participant_ids: [] };
+  const member = session.team.members.find(
+    (item) => item.name === label && item.available !== false,
+  );
+  return member ? { mode: "selected", participant_ids: [member.id] } : leader;
 }
 
 function isAgentSession(
@@ -340,11 +348,8 @@ function AgentChatScope({
     useState<ChatSession | null>(null);
   const [teamDraft, setTeamDraft] = useState("");
   const [teamRecipientMenu, setTeamRecipientMenu] = useState(false);
-  const [teamAllRecipients, setTeamAllRecipients] = useState(true);
-  const [teamRecipientExplicit, setTeamRecipientExplicit] = useState(false);
-  const [teamRecipientIds, setTeamRecipientIds] = useState<string[]>([]);
-  const [teamRecipientNames, setTeamRecipientNames] = useState<string[]>([]);
   const teamRecipientMenuRef = useRef<HTMLDivElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
   const [teamError, setTeamError] = useState<unknown>(null);
   const [teamLastEventId, setTeamLastEventId] = useState(0);
@@ -969,10 +974,6 @@ function AgentChatScope({
     teamSendSequence.current += 1;
     setVersionId("");
     setTeamTarget(entry);
-    setTeamAllRecipients(true);
-    setTeamRecipientExplicit(false);
-    setTeamRecipientIds([]);
-    setTeamRecipientNames([]);
     setTeamRecipientMenu(false);
     setTeamLastEventId(0);
   }
@@ -1234,10 +1235,6 @@ function AgentChatScope({
       rememberTeam(refreshed, true);
       setTeamDraft("");
       setTeamLastEventId(0);
-      setTeamAllRecipients(true);
-      setTeamRecipientExplicit(false);
-      setTeamRecipientIds([]);
-      setTeamRecipientNames([]);
       setTeamRecipientMenu(false);
       if (newChatRoute) closeNewEntry(true);
       const lastTurn = refreshed.turns.at(-1);
@@ -1408,28 +1405,7 @@ function AgentChatScope({
     ) {
       return;
     }
-    const leaderId = session.team.members.find(
-      (member) => member.is_leader,
-    )?.id;
-    const routing: TeamRouting = preset
-      ? leaderId
-        ? { mode: "selected", participant_ids: [leaderId] }
-        : { mode: "auto", participant_ids: [] }
-      : teamRecipientExplicit && teamAllRecipients
-        ? { mode: "all", participant_ids: [] }
-        : teamRecipientExplicit
-          ? {
-              mode: "selected",
-              participant_ids: teamRecipientIds.length
-                ? teamRecipientIds.slice(0, 1)
-                : resolveNamedRecipients(session, teamRecipientNames).slice(
-                    0,
-                    1,
-                  ),
-            }
-          : leaderId
-            ? { mode: "selected", participant_ids: [leaderId] }
-            : { mode: "auto", participant_ids: [] };
+    const routing: TeamRouting = routingForMention(session, message);
     if (routing.mode === "selected" && !routing.participant_ids.length) {
       setTeamError(
         new PlatformApiError(400, "team_no_recipient", {
@@ -2225,37 +2201,15 @@ function AgentChatScope({
     (!selectedTeam && teamTarget),
   );
 
-  function addTeamRecipient(memberId: string) {
-    setTeamRecipientExplicit(true);
-    setTeamRecipientIds([memberId]);
-    setTeamAllRecipients(false);
-    setTeamRecipientNames([]);
-  }
-
-  function addNamedRecipient(name: string) {
-    setTeamRecipientExplicit(true);
-    setTeamAllRecipients(false);
-    setTeamRecipientIds([]);
-    setTeamRecipientNames([name]);
-  }
-
-  function removeTeamRecipient(memberId: string) {
-    setTeamRecipientExplicit(true);
-    setTeamAllRecipients(false);
-    setTeamRecipientIds((current) => current.filter((id) => id !== memberId));
-  }
-
-  function removeNamedRecipient(name: string) {
-    setTeamRecipientExplicit(true);
-    setTeamAllRecipients(false);
-    setTeamRecipientNames((current) => current.filter((item) => item !== name));
-  }
-
-  function clearTeamRecipients() {
-    setTeamRecipientExplicit(true);
-    setTeamAllRecipients(false);
-    setTeamRecipientIds([]);
-    setTeamRecipientNames([]);
+  function insertMention(label: string) {
+    const draft = teamDraft;
+    const at = draft.lastIndexOf("@");
+    const next =
+      at >= 0
+        ? `${draft.slice(0, at)}@${label}${draft.slice(at + 1).replace(/^[^\s@]*/, "")}`
+        : `${draft}@${label}`;
+    setTeamDraft(next);
+    setTeamRecipientMenu(false);
   }
 
   function chooseVisibility(next: ChatVisibility) {
@@ -2347,9 +2301,9 @@ function AgentChatScope({
             <h2>{t("chatHistory")}</h2>
           </div>
           <div className={styles.history} aria-label="History">
-            {historyItems.length || showChatEmpty ? null : (
+            {historyItems.length === 0 ? (
               <p className={styles.historyEmpty}>{t("chatHistoryEmpty")}</p>
-            )}
+            ) : null}
             {historyItems.map(({ kind, session }) => (
               <div className={styles.historyRow} key={session.id}>
                 <button
@@ -2411,11 +2365,7 @@ function AgentChatScope({
               onSaved={finishTeamCreate}
               onCancel={() => setCreatingTeam(false)}
             />
-          ) : showChatEmpty ? (
-            <div className={styles.emptyState}>
-              <strong>{t("chatHistoryEmpty")}</strong>
-            </div>
-          ) : (
+          ) : showChatEmpty ? null : (
             <>
               <header className={styles.chatHeader}>
                 <div className={styles.chatTitle}>
@@ -2625,63 +2575,6 @@ function AgentChatScope({
                       {t("teamCheckStatus")}
                     </button>
                   ) : null}
-                  {teamRecipientExplicit &&
-                  selectedTeam.can_send &&
-                  !selectedTeam.read_only ? (
-                    <div className={styles.teamRecipients}>
-                      {teamAllRecipients ? (
-                        <span className={styles.recipientChip}>
-                          <span>{t("teamAllMembers")}</span>
-                          <button
-                            type="button"
-                            className={styles.recipientRemove}
-                            aria-label={`Remove ${t("teamAllMembers")}`}
-                            disabled={teamBusy}
-                            onClick={clearTeamRecipients}
-                          >
-                            <IconClose />
-                          </button>
-                        </span>
-                      ) : teamRecipientIds.length ? (
-                        selectedTeam.team.members
-                          .filter((member) =>
-                            teamRecipientIds.includes(member.id),
-                          )
-                          .map((member) => (
-                            <span
-                              className={styles.recipientChip}
-                              key={member.id}
-                            >
-                              <span>{member.name}</span>
-                              <button
-                                type="button"
-                                className={styles.recipientRemove}
-                                aria-label={`Remove ${member.name}`}
-                                disabled={teamBusy}
-                                onClick={() => removeTeamRecipient(member.id)}
-                              >
-                                <IconClose />
-                              </button>
-                            </span>
-                          ))
-                      ) : (
-                        teamRecipientNames.map((name) => (
-                          <span className={styles.recipientChip} key={name}>
-                            <span>{name}</span>
-                            <button
-                              type="button"
-                              className={styles.recipientRemove}
-                              aria-label={`Remove ${name}`}
-                              disabled={teamBusy}
-                              onClick={() => removeNamedRecipient(name)}
-                            >
-                              <IconClose />
-                            </button>
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
               <form
@@ -2695,17 +2588,21 @@ function AgentChatScope({
                     role="menu"
                     aria-label={t("teamRecipients")}
                   >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={teamBusy}
+                      onClick={() => insertMention(t("teamAllMembers"))}
+                    >
+                      {t("teamAllMembers")}
+                    </button>
                     {mentionMembers.map((member) => (
                       <button
                         key={member.key}
                         type="button"
                         role="menuitem"
                         disabled={teamBusy || !member.available}
-                        onClick={() =>
-                          member.id
-                            ? addTeamRecipient(member.id)
-                            : addNamedRecipient(member.name)
-                        }
+                        onClick={() => insertMention(member.name)}
                       >
                         {member.name}
                       </button>
@@ -2787,6 +2684,7 @@ function AgentChatScope({
                   </p>
                 ) : null}
                 <textarea
+                  ref={messageRef}
                   id="chat-message"
                   aria-label="Message"
                   placeholder={t("chatMessagePlaceholder")}
@@ -2878,10 +2776,7 @@ function AgentChatScope({
                       (selectedTeam
                         ? !selectedTeam.can_send ||
                           selectedTeam.read_only ||
-                          selectedTeam.turns.at(-1)?.state === "pending" ||
-                          (!teamAllRecipients &&
-                            !teamRecipientIds.length &&
-                            !teamRecipientNames.length)
+                          selectedTeam.turns.at(-1)?.state === "pending"
                         : !teamTarget &&
                           (!agentCanSend ||
                             !versionId ||

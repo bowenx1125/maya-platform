@@ -58,9 +58,15 @@
 
 .sections {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
-  gap: var(--workspace-gap, 20px);
+  gap: 16px;
+}
+
+@media (max-width: 960px) {
+  .sections {
+    grid-template-columns: 1fr;
+  }
 }
 
 .section,
@@ -68,10 +74,10 @@
   display: grid;
   gap: 14px;
   min-width: 0;
-  padding: clamp(18px, 2vw, 28px);
-  border: 1px solid var(--line, #e8e1d8);
+  padding: clamp(16px, 2vw, 22px);
+  border: 1px solid var(--line, #e4e1d9);
   border-radius: 16px;
-  background: var(--surface-subtle, #f5f5f7);
+  background: var(--panel, #fdfaf3);
 }
 
 .graphFigure {
@@ -151,6 +157,30 @@
   font-variant-numeric: tabular-nums;
 }
 
+.addButton {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #e0d7c6;
+  border-radius: 999px;
+  background: #fffdf8;
+  color: #504b42;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.addButton:hover:not(:disabled) {
+  border-color: #c9b896;
+  background: #f6ecd3;
+  color: #3f3424;
+}
+
+.addButton:disabled {
+  color: #8b887f;
+  cursor: not-allowed;
+}
+
 .list {
   display: grid;
   gap: 6px;
@@ -161,6 +191,7 @@
 
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -196,6 +227,7 @@
 
 .titleButton {
   cursor: pointer;
+  text-decoration: none;
 }
 
 .titleButton:hover:not(:disabled) {
@@ -229,6 +261,11 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 3px;
+}
+
+.rowExtra {
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 .iconButton {

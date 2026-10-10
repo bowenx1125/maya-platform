@@ -249,19 +249,19 @@ describe("W1 teacher personal workspace", () => {
     );
 
     const heading = await screen.findByRole("heading", {
-      name: "Voices · 1",
+      name: "Voices",
     });
     const voices = heading.closest("section") as HTMLElement;
     expect(
-      (
-        within(voices).getByRole("combobox", {
-          name: "Group",
-        }) as HTMLSelectElement
-      ).value,
-    ).toBe(groupId);
+      within(voices).queryByRole("combobox", { name: "Group" }),
+    ).toBeNull();
     expect(
       await within(voices).findByRole("button", { name: "teacher-voice.wav" }),
     ).toBeTruthy();
+    expect(
+      within(voices).getByRole("button", { name: "Preview" }),
+    ).toBeTruthy();
+    expect(within(voices).getByText("Cultural exchange")).toBeTruthy();
     expect(api.voiceProfiles).toHaveBeenCalledWith(groupId);
 
     const agents = screen
@@ -296,7 +296,7 @@ describe("W1 teacher personal workspace", () => {
     expect(api.createVoicePreview).not.toHaveBeenCalled();
   });
 
-  it("waits for explicit group choice before opening direct Teacher Voice New mode", async () => {
+  it("opens Teacher Voice New for the course groups without a group picker", async () => {
     const groupId = "teacher-group";
     const api = {
       workspaceAgents: vi.fn().mockResolvedValue([]),
@@ -319,32 +319,29 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    const heading = await screen.findByRole("heading", {
-      name: "Voices · 0",
-    });
-    const voices = heading.closest("section") as HTMLElement;
-    const group = within(voices).getByRole("combobox", {
-      name: "Group",
-    }) as HTMLSelectElement;
-    expect(group.value).toBe("");
-    expect(api.voiceProfiles).not.toHaveBeenCalled();
-    expect(
-      (within(voices).getByRole("button", { name: "New" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-
-    fireEvent.change(group, { target: { value: groupId } });
-    await screen.findByLabelText(
+    const sample = await screen.findByLabelText(
       "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
     );
+    const voices = sample.closest("section") as HTMLElement;
+    expect(
+      within(voices).queryByRole("combobox", { name: "Group" }),
+    ).toBeNull();
+    expect(within(voices).queryByRole("button", { name: "New" })).toBeNull();
     await waitFor(() =>
       expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
     );
+    expect(
+      (
+        within(screen.getByRole("navigation")).getByRole("button", {
+          name: "Done",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
     expect(api.enrollVoice).not.toHaveBeenCalled();
     expect(api.createVoicePreview).not.toHaveBeenCalled();
   });
 
-  it("keeps Voice New dim while checking group access and after a membership 404", async () => {
+  it("keeps Voice New disabled while group access is unknown, then enables an accessible group", async () => {
     const deniedGroupId = "not-a-member-group";
     const accessibleGroupId = "joined-group";
     let rejectDeniedScope: ((cause: unknown) => void) | null = null;
@@ -376,13 +373,19 @@ describe("W1 teacher personal workspace", () => {
     );
 
     const heading = await screen.findByRole("heading", {
-      name: "Voices · 0",
+      name: "Voices",
     });
     const voices = heading.closest("section") as HTMLElement;
+    expect(
+      within(voices).queryByRole("combobox", { name: "Group" }),
+    ).toBeNull();
     const newButton = within(voices).getByRole("button", { name: "New" });
     expect((newButton as HTMLButtonElement).disabled).toBe(true);
     await waitFor(() =>
       expect(api.voiceProfiles).toHaveBeenCalledWith(deniedGroupId),
+    );
+    await waitFor(() =>
+      expect(api.voiceProfiles).toHaveBeenCalledWith(accessibleGroupId),
     );
     await act(async () => {
       rejectDeniedScope?.(
@@ -390,31 +393,11 @@ describe("W1 teacher personal workspace", () => {
       );
       await Promise.resolve();
     });
-    await screen.findByRole("alert");
-    expect((newButton as HTMLButtonElement).disabled).toBe(true);
-    expect(api.enrollVoice).not.toHaveBeenCalled();
-
-    fireEvent.change(within(voices).getByRole("combobox", { name: "Group" }), {
-      target: { value: accessibleGroupId },
-    });
-    const accessibleHeading = await screen.findByRole("heading", {
-      name: "Voices · 0",
-    });
-    const accessibleVoices = accessibleHeading.closest(
-      "section",
-    ) as HTMLElement;
     await waitFor(() =>
-      expect(api.voiceProfiles).toHaveBeenCalledWith(accessibleGroupId),
+      expect((newButton as HTMLButtonElement).disabled).toBe(false),
     );
-    await waitFor(() =>
-      expect(
-        (
-          within(accessibleVoices).getByRole("button", {
-            name: "New",
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(false),
-    );
+    expect(within(voices).queryByRole("alert")).toBeNull();
+    expect(screen.getByText("No voices yet.")).toBeTruthy();
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 
@@ -444,7 +427,7 @@ describe("W1 teacher personal workspace", () => {
     );
 
     const heading = await screen.findByRole("heading", {
-      name: "Voices · 0",
+      name: "Voices",
     });
     const voices = heading.closest("section") as HTMLElement;
     const newButton = await within(voices).findByRole("button", {
@@ -496,7 +479,7 @@ describe("W1 teacher personal workspace", () => {
     await waitFor(() =>
       expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
     );
-    await screen.findByRole("alert");
+    expect(within(voices).queryByRole("alert")).toBeNull();
     expect(
       (
         within(screen.getByRole("navigation")).getByRole("button", {
@@ -506,8 +489,8 @@ describe("W1 teacher personal workspace", () => {
     ).toBe(true);
     expect(api.enrollVoice).not.toHaveBeenCalled();
     expect(
-      within(voices).getByRole("combobox", { name: "Group" }),
-    ).toBeTruthy();
+      within(voices).queryByRole("combobox", { name: "Group" }),
+    ).toBeNull();
   });
 
   it("lets the owner share a private source and personal Agent from the workbench", async () => {

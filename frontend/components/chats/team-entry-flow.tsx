@@ -313,18 +313,6 @@ export function TeamEntryFlow({
     }
   }
 
-  function newTeam() {
-    if (mutationUnknown) return;
-    pendingMutation.current = null;
-    setEditing(null);
-    setFormOpen(true);
-    setForm(EMPTY_FORM);
-    setSaved(false);
-    setLoadError(null);
-    setError(null);
-    syncManageRoute("team-new");
-  }
-
   function closeForm() {
     setEditing(null);
     setFormOpen(false);
@@ -512,14 +500,6 @@ export function TeamEntryFlow({
         </div>
       </div>
 
-      {standalone && !formOpen && initialRouteMode === "teams" ? (
-        <PageAction
-          name="new"
-          onClick={newTeam}
-          disabled={loading || !apiForTeams || mutationUnknown}
-        />
-      ) : null}
-
       <div className={styles.entrySection}>
         {loading ? <p role="status">{t("loading")}</p> : null}
         {loadError ? (
@@ -531,20 +511,17 @@ export function TeamEntryFlow({
           <ul className={styles.entryTeamList} aria-label={title}>
             {visibleTeams.map((team) => (
               <li key={team.id}>
-                <span>
-                  <strong>{team.display_name}</strong>
-                  <small>
-                    {t("teamVersionLabel", { seq: team.current_version_seq })}
-                  </small>
-                </span>
                 <button
-                  className="inline-button"
+                  className="text-link"
                   type="button"
                   disabled={loading || mutationUnknown}
                   onClick={() => void editTeam(team.id)}
                 >
-                  {t("edit")}
+                  {team.display_name}
                 </button>
+                <small>
+                  {t("teamVersionLabel", { seq: team.current_version_seq })}
+                </small>
               </li>
             ))}
           </ul>

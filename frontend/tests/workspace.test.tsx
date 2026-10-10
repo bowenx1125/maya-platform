@@ -356,8 +356,7 @@ describe("private Agent chat", () => {
         <AgentChat />
       </LocaleProvider>,
     );
-    await screen.findByRole("combobox", { name: "Chat with" });
-    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
+    fireEvent.change(await screen.findByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));

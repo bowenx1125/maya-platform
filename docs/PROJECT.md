@@ -251,24 +251,9 @@ and60history reads/continued sends. Peak client concurrency20;121unique persiste
 intents, no ownership mismatch, integrity/FK pass. Mock only/0Provider operations;
 not a real Team throughput or supported class-size claim. Final source rerun pending.
 
-Real acceptance remains NOT_RUN: Teacher Maya Agent calls RAG→Knowledge Tool; three
-Agents reference that exact canonical object; dedicated synthetic students start
-Public/Private Maya Team Chats and save real answers/evaluations/Boundary evidence;
-Teacher Maya Chat reads activity-scoped Public statistics/report/download with Private
-excluded. Inputs are prepared, not uploaded. Historical paid calls are not acceptance.
+Teacher statistics/report download in a fresh browser run is still open.
+Historical paid calls are not acceptance. Colleague line `15f5450`: pose
+`e9b000a` keeps one canvas; preset voice `b8f65e7` is `0056` and Chat stays
+text-only; TTS bar `054f420` and the revert were not taken.
 
-October 9 colleague integration, pushed as `15f5450` on the v14 line:
-
-- `entaiaki-avatar-pose` (`e9b000a`): relaxed standing pose is applied inside the
-  current `setAsset` load. The branch's per-model canvas remount was not taken;
-  one canvas stays bound for a framing and receives the next model.
-- `entaiaki-plato-voice` (`b8f65e7`): migration is `0056_preset_voice_profiles`
-  after `0055`. Debate, preview, fallback and the TTS gate send the profile's
-  allowlisted model. Preview speech stays the fixed line. Chat stays text-only,
-  so that branch's chat-TTS edits were not taken.
-- `entaiaki-tts-fix` (`054f420`, ours): chat voice bar and autoplay were not
-  taken. Owner decision: chat is not read aloud.
-- `revert-task-001-merges` (`15f5450`, ours): current avatars and text-only Chat
-  stay. The revert was not applied.
-
-October 9: Brainform, Chatform and Studyform use the Debates card. Local browser imported the week 6–10 PDF as RAG and published Maya Team Keynotes from Studyform. Chatform New then selects that Team name. A real Public Keynotes turn answered from the keynotes (two charged `llm_agent_chat` successes). An earlier single-Agent turn was also charged once. A Private Keynotes turn called `read_memory` and paused with `team_no_progress`. That is not a screen hint: if the student asks for something this role cannot see, the Agent replies 看不到。; if it has no such function, the Agent replies 做不到。 Creating a Chat shows Private/Public in the header and Agents & Teams in the composer; both hide once the Chat exists. Maya Team opens with the Leader. No @ asks only the Leader. A Knowledge update deletes an unfinished attempt; completed attempts stay. Team dispatch was failing closed on SQLite `database is locked` because a session still held the writer while another connection took `BEGIN IMMEDIATE`; the session now commits and rolls back first. Tool classes stay permission-based: students get Public+Student, teachers get Public+Teacher. October 10: `8641e86` is on GitHub main. Production images were rebuilt from it after a SQLite backup. Gateway, frontend and backend are healthy, and `https://app.mayaform.net/` returned HTTP 200. Local Chrome at maya.local:18080 showed Private/Public in the header and Agents & Teams in the composer, then the Leader opening with both controls hidden.
+October 9: Brainform, Chatform and Studyform use the Debates card. Local browser imported the week 6–10 PDF as RAG and published Maya Team Keynotes from Studyform. Chatform New then selects that Team name. A real Public Keynotes turn answered from the keynotes (two charged `llm_agent_chat` successes). An earlier single-Agent turn was also charged once. A Private Keynotes turn called `read_memory` and paused with `team_no_progress`. That is not a screen hint: if the student asks for something this role cannot see, the Agent replies 看不到。; if it has no such function, the Agent replies 做不到。 Creating a Chat shows Private/Public in the header and Agents & Teams in the composer; both hide once the Chat exists. Maya Team opens with the Leader. No @ asks only the Leader. A Knowledge update deletes an unfinished attempt; completed attempts stay. Team dispatch was failing closed on SQLite `database is locked` because a session still held the writer while another connection took `BEGIN IMMEDIATE`; the session now commits and rolls back first. Tool classes stay permission-based: students get Public+Student, teachers get Public+Teacher. October 10: `8641e86` rebuilt production after a SQLite backup; `https://app.mayaform.net/` returned HTTP 200. Local Chrome then showed Brainform and Studyform as three cream cards (`#fdfaf3`): Agents, Voices and Maya Team use +, with no group picker. A group the teacher cannot open leaves “No voices yet.” and disables +. Maya Team names open edit with sidebar Back and Done. Accounts Members and Groups use count badges. Frontend tests: 619 passed, 1 skipped. This card pass is local; the public image is still `8641e86`.

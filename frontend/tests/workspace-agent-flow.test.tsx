@@ -268,7 +268,7 @@ describe("Workspace Agent flow", () => {
     link.focus();
     expect(document.activeElement).toBe(link);
     expect(link.getAttribute("href")).toBe("/student/agents/agent-id");
-    expect(screen.getByText("Agents · 1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeTruthy();
     expect(screen.getByText("V1.0")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Members" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();

@@ -21,12 +21,13 @@ import {
   type Course,
   type Group,
   type GroupDetail,
+  type TeamSummaryDto,
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { useT } from "./locale";
-import { IconArrowRight, IconClose, IconDownload } from "./quiet-icons";
+import { IconClose, IconDownload } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
@@ -37,9 +38,14 @@ import detailStyles from "./teacher-agent-detail.module.css";
 import { AgentWorkbench } from "./agent-workspace";
 import { CreateAgentForm } from "./student-workspace";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
-import { StudyformModule } from "./studyform-layout";
+import {
+  ModuleCard,
+  ModuleGrid,
+  ModuleList,
+  ModulePlus,
+  ModuleRow,
+} from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
-import { WorkspaceIcon } from "./workspace-icon";
 import {
   EmptyCard,
   ErrorNotice,
@@ -236,12 +242,10 @@ export function TeacherStudyformWorkspace({
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [groupSelection, setGroupSelection] = useState("");
-  const selectedGroupId = groupSelection;
+  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const loading = loadedScope !== scope;
   const [error, setError] = useState<unknown>(null);
-  const selectedGroup = groups.find((group) => group.id === selectedGroupId);
 
   useEffect(() => {
     let active = true;
@@ -252,6 +256,7 @@ export function TeacherStudyformWorkspace({
         setPersonalAgents([]);
         setChatAgents([]);
         setGroups([]);
+        setTeams([]);
         setLoadedScope(requestScope);
         return;
       }
@@ -259,25 +264,26 @@ export function TeacherStudyformWorkspace({
         api.workspaceAgents(teacherCourseId),
         api.chatAgents(teacherCourseId),
         api.groups(teacherCourseId),
+        typeof api.teams === "function"
+          ? api.teams(teacherCourseId)
+          : Promise.resolve([]),
       ])
-        .then(([nextPersonalAgents, nextChatAgents, nextGroups]) => {
+        .then(([nextPersonalAgents, nextChatAgents, nextGroups, nextTeams]) => {
           if (!active) return;
           setPersonalAgents(nextPersonalAgents);
           setChatAgents(nextChatAgents);
           setGroups(nextGroups);
+          setTeams(
+            nextTeams.filter(
+              (team) =>
+                team.can_edit &&
+                team.visibility === "public" &&
+                team.ownership_scope === "personal" &&
+                team.group_id === null,
+            ),
+          );
           setLoadedScope(requestScope);
           setError(null);
-          setGroupSelection((current) => {
-            if (
-              initialGroupId &&
-              nextGroups.some((group) => group.id === initialGroupId)
-            ) {
-              return initialGroupId;
-            }
-            return nextGroups.some((group) => group.id === current)
-              ? current
-              : "";
-          });
         })
         .catch((cause) => {
           if (!active) return;
@@ -295,7 +301,7 @@ export function TeacherStudyformWorkspace({
   if (error && !personalAgents.length && !chatAgents.length)
     return <ErrorNotice error={error} />;
 
-  if (initialMode && ["teams", "team-new", "team-edit"].includes(initialMode))
+  if (initialMode && ["team-new", "team-edit"].includes(initialMode))
     return (
       <>
         <PageIntro title={t("studyform")} />
@@ -307,7 +313,7 @@ export function TeacherStudyformWorkspace({
             agents={chatAgents}
             variant="maya"
             standalone
-            backHref={`/teacher/studyform${selectedGroup ? `?group_id=${encodeURIComponent(selectedGroup.id)}` : ""}`}
+            backHref="/teacher/studyform"
             initialRouteMode={initialMode}
             initialTeamId={initialTeamId}
           />
@@ -319,53 +325,80 @@ export function TeacherStudyformWorkspace({
     <>
       <PageIntro title={t("studyform")} />
       {error ? <ErrorNotice error={error} /> : null}
-      <StudyformModule
-        title={t("agents")}
-        count={personalAgents.length}
-        action={
-          teacherCourseId ? (
-            <Link
-              className="inline-button symbol-button"
-              href="/teacher/agents/new"
-              aria-label={t("newAgent")}
-            >
-              <WorkspaceIcon name="new" />
-            </Link>
-          ) : null
-        }
-      >
-        {personalAgents.length ? (
-          <div className="agent-tile-grid">
-            {personalAgents.map((agent) => (
-              <PersonalAgentTile agent={agent} key={agent.id} />
-            ))}
-          </div>
-        ) : (
-          <EmptyCard title={t("noPersonalAgents")} />
-        )}
-      </StudyformModule>
-      <div id="studyform-voices">
+      <ModuleGrid>
+        <ModuleCard
+          title={t("agents")}
+          labelledBy="studyform-agents"
+          empty={personalAgents.length ? undefined : t("noPersonalAgents")}
+          action={
+            teacherCourseId ? (
+              <ModulePlus href="/teacher/agents/new" label={t("newAgent")} />
+            ) : null
+          }
+        >
+          {personalAgents.length ? (
+            <ModuleList>
+              {personalAgents.map((agent) => (
+                <ModuleRow
+                  key={agent.id}
+                  title={agent.name}
+                  meta={
+                    agent.current_draft_version_id ? t("draft") : t("published")
+                  }
+                  href={`/teacher/agents/${agent.id}`}
+                  badge={
+                    <span
+                      className="agent-pill-label"
+                      data-ui-guide="agent.visibility"
+                      tabIndex={0}
+                    >
+                      {agent.visibility === "private"
+                        ? t("privateOption")
+                        : t("publicOption")}
+                    </span>
+                  }
+                />
+              ))}
+            </ModuleList>
+          ) : undefined}
+        </ModuleCard>
         <VoiceLibrary
-          key={`${scope}:voices:${selectedGroup?.id ?? "none"}:${initialMode === "new" ? "new" : "list"}`}
-          groupId={selectedGroup?.id ?? null}
+          id="studyform-voices"
+          key={`${scope}:voices:${initialMode === "new" ? "new" : "list"}`}
+          groupId={null}
           groupOptions={groups}
-          onGroupChange={setGroupSelection}
           embedded
           initialCreate={initialMode === "new"}
         />
-      </div>
-      <StudyformModule
-        title={t("mayaTeam")}
-        action={
-          <Link
-            className="inline-button symbol-button"
-            href={`/teacher/studyform${selectedGroup ? `?group_id=${encodeURIComponent(selectedGroup.id)}&` : "?"}mode=teams`}
-            aria-label={t("studyformOpenMayaTeams")}
-          >
-            <IconArrowRight />
-          </Link>
-        }
-      />
+        <ModuleCard
+          title={t("mayaTeam")}
+          labelledBy="studyform-maya"
+          empty={teams.length ? undefined : t("mayaTeamNoneYet")}
+          action={
+            teacherCourseId ? (
+              <ModulePlus
+                href="/teacher/studyform?mode=team-new"
+                label={t("newAgent")}
+              />
+            ) : null
+          }
+        >
+          {teams.length ? (
+            <ModuleList>
+              {teams.map((team) => (
+                <ModuleRow
+                  key={team.id}
+                  title={team.display_name}
+                  meta={t("teamVersionLabel", {
+                    seq: team.current_version_seq,
+                  })}
+                  href={`/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                />
+              ))}
+            </ModuleList>
+          ) : undefined}
+        </ModuleCard>
+      </ModuleGrid>
     </>
   );
 }
@@ -382,32 +415,6 @@ export function TeacherPersonalAgentCreate() {
   const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
   return (
     <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
-  );
-}
-
-function PersonalAgentTile({ agent }: { agent: AgentSummary }) {
-  const t = useT();
-  return (
-    <div className="agent-tile" data-agent-row={agent.id}>
-      <Link
-        className="agent-tile-name text-link"
-        href={`/teacher/agents/${agent.id}`}
-      >
-        {agent.name}
-      </Link>
-      <span className="agent-tile-group">
-        {agent.current_draft_version_id ? t("draft") : t("published")}
-      </span>
-      <span
-        className="agent-pill-label"
-        data-ui-guide="agent.visibility"
-        tabIndex={0}
-      >
-        {agent.visibility === "private"
-          ? t("privateOption")
-          : t("publicOption")}
-      </span>
-    </div>
   );
 }
 

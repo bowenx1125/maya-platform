@@ -12,15 +12,15 @@ import { useT } from "./locale";
 import { PageAction } from "./page-action";
 import { IconArrowRight } from "./quiet-icons";
 import { useSession } from "./session-provider";
-import { UserAvatar } from "./user-avatar";
+import cards from "./knowledge/brainform-workspace.module.css";
 import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-  SectionCard,
-  StatusBadge,
-} from "./ui";
+  ModuleCard,
+  ModuleGrid,
+  ModuleList,
+  ModuleRow,
+} from "./studyform-layout";
+import { UserAvatar } from "./user-avatar";
+import { ErrorNotice, LoadingCard, PageIntro, StatusBadge } from "./ui";
 
 type Draft = { display_name: string; group_name: string };
 
@@ -163,200 +163,208 @@ export function RosterWorkspace() {
       <PageIntro title={t("accounts")} />
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
 
-      <SectionCard title={`${t("members")} · ${entries.length}`}>
-        {entries.length === 0 ? (
-          <EmptyCard title={t("rosterEmpty")} />
-        ) : (
-          <div className="compact-list">
-            {entries.map((entry) => {
-              const pending = busy === entry.user_id;
-              if (editing === entry.user_id) {
-                return (
-                  <div className="list-row account-row" key={entry.user_id}>
-                    <form
-                      id={`roster-edit-${entry.user_id}`}
-                      className="stack-form account-edit"
-                      aria-busy={pending}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void mutate(entry, {
-                          display_name: draft.display_name,
-                          ...(draft.group_name
-                            ? { group_name: draft.group_name }
-                            : {}),
-                        });
-                      }}
-                    >
-                      <label>
-                        <span>{t("displayNameLabel")}</span>
-                        <input
-                          value={draft.display_name}
-                          disabled={pending}
-                          maxLength={200}
-                          onChange={(event) =>
-                            setDraft((previous) => ({
-                              ...previous,
-                              display_name: event.target.value,
-                            }))
-                          }
-                          required
-                        />
-                      </label>
-                      <label>
-                        <span>{t("groupNameLabel")}</span>
-                        <input
-                          list="roster-group-names"
-                          value={draft.group_name}
-                          disabled={pending}
-                          maxLength={200}
-                          onChange={(event) =>
-                            setDraft((previous) => ({
-                              ...previous,
-                              group_name: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      <div className="button-row">
-                        <PageAction
-                          name="back"
-                          onClick={() => setEditing(null)}
-                          disabled={pending}
-                        />
-                        <PageAction
-                          name="done"
-                          form={`roster-edit-${entry.user_id}`}
-                          disabled={pending}
-                        />
-                      </div>
-                    </form>
-                  </div>
-                );
-              }
-              return (
-                <div className="list-row account-row" key={entry.user_id}>
-                  <span className="roster-identity">
-                    <UserAvatar
-                      avatar={entry.avatar}
-                      name={entry.display_name}
-                      userId={entry.user_id}
-                    />
-                    <span>
-                      <span className="roster-headline">
-                        <strong>{entry.username}</strong>
-                        <StatusBadge
-                          status={entry.status}
-                          tone={entry.status === "active" ? "good" : "neutral"}
-                        />
-                      </span>
-                      <span className="group-label">{groupSummary(entry)}</span>
-                      {issued && issued.user_id === entry.user_id ? (
-                        <small role="status">
-                          {t("resetPasswordIssued", {
-                            username: issued.username,
-                          })}
-                          : <code>{issued.password}</code>{" "}
-                        </small>
-                      ) : null}
-                    </span>
-                  </span>
-                  {entry.editable ? (
-                    <div className="button-row">
-                      <button
-                        className="inline-button"
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                          setEditing(entry.user_id);
-                          setDraft({
-                            display_name: entry.display_name,
-                            group_name: entry.groups?.[0]?.name ?? "",
+      <ModuleGrid>
+        <ModuleCard
+          title={t("members")}
+          count={entries.length}
+          labelledBy="accounts-members"
+          empty={entries.length ? undefined : t("rosterEmpty")}
+        >
+          {entries.length ? (
+            <div className="compact-list">
+              {entries.map((entry) => {
+                const pending = busy === entry.user_id;
+                if (editing === entry.user_id) {
+                  return (
+                    <div className="list-row account-row" key={entry.user_id}>
+                      <form
+                        id={`roster-edit-${entry.user_id}`}
+                        className="stack-form account-edit"
+                        aria-busy={pending}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void mutate(entry, {
+                            display_name: draft.display_name,
+                            ...(draft.group_name
+                              ? { group_name: draft.group_name }
+                              : {}),
                           });
                         }}
                       >
-                        {t("editMember")}
-                      </button>
-                      {entry.user_id === user?.id ? null : (
+                        <label>
+                          <span>{t("displayNameLabel")}</span>
+                          <input
+                            value={draft.display_name}
+                            disabled={pending}
+                            maxLength={200}
+                            onChange={(event) =>
+                              setDraft((previous) => ({
+                                ...previous,
+                                display_name: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          <span>{t("groupNameLabel")}</span>
+                          <input
+                            list="roster-group-names"
+                            value={draft.group_name}
+                            disabled={pending}
+                            maxLength={200}
+                            onChange={(event) =>
+                              setDraft((previous) => ({
+                                ...previous,
+                                group_name: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <div className="button-row">
+                          <PageAction
+                            name="back"
+                            onClick={() => setEditing(null)}
+                            disabled={pending}
+                          />
+                          <PageAction
+                            name="done"
+                            form={`roster-edit-${entry.user_id}`}
+                            disabled={pending}
+                          />
+                        </div>
+                      </form>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="list-row account-row" key={entry.user_id}>
+                    <span className="roster-identity">
+                      <UserAvatar
+                        avatar={entry.avatar}
+                        name={entry.display_name}
+                        userId={entry.user_id}
+                      />
+                      <span>
+                        <span className="roster-headline">
+                          <strong>{entry.username}</strong>
+                          <StatusBadge
+                            status={entry.status}
+                            tone={
+                              entry.status === "active" ? "good" : "neutral"
+                            }
+                          />
+                        </span>
+                        <span className="group-label">
+                          {groupSummary(entry)}
+                        </span>
+                        {issued && issued.user_id === entry.user_id ? (
+                          <small role="status">
+                            {t("resetPasswordIssued", {
+                              username: issued.username,
+                            })}
+                            : <code>{issued.password}</code>{" "}
+                          </small>
+                        ) : null}
+                      </span>
+                    </span>
+                    {entry.editable ? (
+                      <div className="button-row">
                         <button
                           className="inline-button"
                           type="button"
                           disabled={pending}
                           onClick={() => {
-                            if (
-                              entry.status === "active" &&
-                              !window.confirm(t("deactivateConfirm"))
-                            ) {
-                              return;
-                            }
-                            void mutate(entry, {
-                              status:
-                                entry.status === "active"
-                                  ? "inactive"
-                                  : "active",
+                            setEditing(entry.user_id);
+                            setDraft({
+                              display_name: entry.display_name,
+                              group_name: entry.groups?.[0]?.name ?? "",
                             });
                           }}
                         >
-                          {entry.status === "active"
-                            ? t("deactivateAccount")
-                            : t("reactivateAccount")}
+                          {t("editMember")}
                         </button>
-                      )}
-                      <button
-                        className="inline-button"
-                        type="button"
-                        disabled={pending}
-                        onClick={() => void resetPassword(entry)}
-                      >
-                        {t("resetPassword")}
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-            <datalist id="roster-group-names">
-              {groupNames.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard title={`${t("groups")} · ${groups.length}`}>
-        {groups.length === 0 ? (
-          <EmptyCard title={t("rosterNoGroups")} />
-        ) : (
-          <div className="compact-list">
-            {groups.map((group) => {
-              const joined = ownGroupIds.has(group.id);
-              return (
-                <div
-                  className="list-row account-row"
-                  id={`roster-group-${group.id}`}
-                  key={group.id}
-                >
-                  <span>
-                    <strong>{group.name}</strong>
-                  </span>
-                  <div className="button-row">
-                    <button
-                      className="icon-action"
-                      type="button"
-                      disabled={busy === group.id}
-                      aria-label={t("enter")}
-                      data-ui-guide="roster.openGroup"
-                      onClick={() => void enterGroup(group, joined)}
-                    >
-                      <IconArrowRight />
-                    </button>
+                        {entry.user_id === user?.id ? null : (
+                          <button
+                            className="inline-button"
+                            type="button"
+                            disabled={pending}
+                            onClick={() => {
+                              if (
+                                entry.status === "active" &&
+                                !window.confirm(t("deactivateConfirm"))
+                              ) {
+                                return;
+                              }
+                              void mutate(entry, {
+                                status:
+                                  entry.status === "active"
+                                    ? "inactive"
+                                    : "active",
+                              });
+                            }}
+                          >
+                            {entry.status === "active"
+                              ? t("deactivateAccount")
+                              : t("reactivateAccount")}
+                          </button>
+                        )}
+                        <button
+                          className="inline-button"
+                          type="button"
+                          disabled={pending}
+                          onClick={() => void resetPassword(entry)}
+                        >
+                          {t("resetPassword")}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
+                );
+              })}
+              <datalist id="roster-group-names">
+                {groupNames.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </div>
+          ) : undefined}
+        </ModuleCard>
+
+        <ModuleCard
+          title={t("groups")}
+          count={groups.length}
+          labelledBy="accounts-groups"
+          empty={groups.length ? undefined : t("rosterNoGroups")}
+        >
+          {groups.length ? (
+            <ModuleList>
+              {groups.map((group) => {
+                const joined = ownGroupIds.has(group.id);
+                return (
+                  <ModuleRow
+                    id={`roster-group-${group.id}`}
+                    key={group.id}
+                    title={group.name}
+                    action={
+                      <button
+                        className={cards.iconButton}
+                        type="button"
+                        disabled={busy === group.id}
+                        aria-label={t("enter")}
+                        data-ui-guide="roster.openGroup"
+                        onClick={() => void enterGroup(group, joined)}
+                      >
+                        <IconArrowRight />
+                      </button>
+                    }
+                  />
+                );
+              })}
+            </ModuleList>
+          ) : undefined}
+        </ModuleCard>
+      </ModuleGrid>
     </div>
   );
 }

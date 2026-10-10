@@ -149,7 +149,8 @@ describe("legacy group Brainform actor context", () => {
       </LocaleProvider>,
     );
 
-    await screen.findByRole("heading", { name: "Agents · 0" });
+    await screen.findByRole("heading", { name: "Agents" });
+    expect(screen.getByText("No Agents yet.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "New" })).toBeNull();
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
     expect(screen.queryByRole("heading", { name: /^Voices/ })).toBeNull();
