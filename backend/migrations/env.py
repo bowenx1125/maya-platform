@@ -8,6 +8,7 @@ from logging.config import fileConfig
 from alembic import context
 from app.core.db import _sqlite_pragmas
 from app.core.models import Base
+from app.modules.cardroom import models as _cardroom_models
 from app.modules.debates import models as _debate_models
 from app.modules.interactions import models as _interaction_models
 from app.modules.knowledge_sets import models as _knowledge_set_models
@@ -19,6 +20,7 @@ from app.modules.workspace import models as _workspace_models
 from sqlalchemy import engine_from_config, event, pool
 
 del (
+    _cardroom_models,
     _debate_models,
     _interaction_models,
     _knowledge_set_models,

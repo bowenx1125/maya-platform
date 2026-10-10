@@ -21,6 +21,7 @@ tags:
 - name: Provider
 - name: Chat
 - name: Live
+- name: Card rooms
 - name: Provider settings
 - name: knowledge-sets
 - name: teams
@@ -805,6 +806,322 @@ paths:
       summary: Live Audio
       tags:
       - Live
+  /card-rooms:
+    post:
+      operationId: createCardRoom
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRoomView'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+      security:
+      - sessionCookie: []
+      summary: Create Card Room
+      tags:
+      - Card rooms
+  /card-rooms/{code}:
+    get:
+      operationId: getCardRoom
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRoomView'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+      security:
+      - sessionCookie: []
+      summary: Get Card Room
+      tags:
+      - Card rooms
+  /card-rooms/{code}/actions:
+    post:
+      operationId: actInCardRoom
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardAction'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRoomView'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+      security:
+      - sessionCookie: []
+      summary: Act In Card Room
+      tags:
+      - Card rooms
+  /card-rooms/{code}/rebuy:
+    post:
+      operationId: rebuyInCardRoom
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRoomView'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+      security:
+      - sessionCookie: []
+      summary: Rebuy In Card Room
+      tags:
+      - Card rooms
+  /card-rooms/{code}/seat:
+    delete:
+      operationId: leaveCardRoom
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+      security:
+      - sessionCookie: []
+      summary: Leave Card Room
+      tags:
+      - Card rooms
+    post:
+      operationId: joinCardRoom
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRoomView'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+      security:
+      - sessionCookie: []
+      summary: Join Card Room
+      tags:
+      - Card rooms
+  /card-rooms/{code}/start:
+    post:
+      operationId: startCardRoom
+      parameters:
+      - in: path
+        name: code
+        required: true
+        schema:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRoomView'
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Conflict
+      security:
+      - sessionCookie: []
+      summary: Start Card Room
+      tags:
+      - Card rooms
   /auth/login:
     post:
       tags:
@@ -12258,4 +12575,271 @@ components:
       - answer_text
       - created_at
       title: AssessmentOwnerAnswerDTO
+      type: object
+    CardAction:
+      additionalProperties: false
+      properties:
+        expected_revision:
+          minimum: 0.0
+          title: Expected Revision
+          type: integer
+        to:
+          anyOf:
+          - minimum: 1.0
+            type: integer
+          - type: 'null'
+          title: To
+        type:
+          enum:
+          - fold
+          - check
+          - call
+          - raise
+          title: Type
+          type: string
+      required:
+      - type
+      - expected_revision
+      title: CardAction
+      type: object
+    CardLegalView:
+      additionalProperties: false
+      properties:
+        can_check:
+          title: Can Check
+          type: boolean
+        can_raise:
+          title: Can Raise
+          type: boolean
+        max_raise_to:
+          title: Max Raise To
+          type: integer
+        min_raise_to:
+          title: Min Raise To
+          type: integer
+        to_call:
+          title: To Call
+          type: integer
+      required:
+      - can_check
+      - to_call
+      - can_raise
+      - min_raise_to
+      - max_raise_to
+      title: CardLegalView
+      type: object
+    CardPayoutView:
+      additionalProperties: false
+      properties:
+        amount:
+          title: Amount
+          type: integer
+        hand:
+          title: Hand
+          type:
+          - string
+          - 'null'
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - amount
+      title: CardPayoutView
+      type: object
+    CardRoomView:
+      additionalProperties: false
+      properties:
+        big_blind:
+          title: Big Blind
+          type: integer
+        board:
+          items:
+            $ref: '#/components/schemas/CardView'
+          title: Board
+          type: array
+        button:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Button
+        code:
+          pattern: ^[0-9]{4}$
+          title: Code
+          type: string
+        current_bet:
+          title: Current Bet
+          type: integer
+        deadline:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Deadline
+        hand_number:
+          title: Hand Number
+          type: integer
+        legal:
+          anyOf:
+          - $ref: '#/components/schemas/CardLegalView'
+          - type: 'null'
+        next_hand_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Next Hand At
+        now:
+          format: date-time
+          title: Now
+          type: string
+        payouts:
+          items:
+            $ref: '#/components/schemas/CardPayoutView'
+          title: Payouts
+          type: array
+        pot:
+          title: Pot
+          type: integer
+        revision:
+          title: Revision
+          type: integer
+        seats:
+          items:
+            $ref: '#/components/schemas/CardSeatView'
+          title: Seats
+          type: array
+        showdown:
+          title: Showdown
+          type: boolean
+        small_blind:
+          title: Small Blind
+          type: integer
+        status:
+          enum:
+          - waiting
+          - playing
+          title: Status
+          type: string
+        street:
+          enum:
+          - waiting
+          - preflop
+          - flop
+          - turn
+          - river
+          - complete
+          title: Street
+          type: string
+        to_act:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: To Act
+        you:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: You
+      required:
+      - code
+      - status
+      - revision
+      - seats
+      - board
+      - pot
+      - street
+      - current_bet
+      - small_blind
+      - big_blind
+      - hand_number
+      - now
+      - payouts
+      - showdown
+      title: CardRoomView
+      type: object
+    CardSeatView:
+      additionalProperties: false
+      properties:
+        all_in:
+          title: All In
+          type: boolean
+        avatar:
+          title: Avatar
+          type:
+          - string
+          - 'null'
+        bet:
+          title: Bet
+          type: integer
+        folded:
+          title: Folded
+          type: boolean
+        hole:
+          items:
+            $ref: '#/components/schemas/CardView'
+          title: Hole
+          type: array
+        hole_count:
+          title: Hole Count
+          type: integer
+        host:
+          title: Host
+          type: boolean
+        last_action:
+          title: Last Action
+          type:
+          - string
+          - 'null'
+        leaving:
+          title: Leaving
+          type: boolean
+        name:
+          title: Name
+          type: string
+        sitting_out:
+          title: Sitting Out
+          type: boolean
+        stack:
+          title: Stack
+          type: integer
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - name
+      - stack
+      - bet
+      - folded
+      - all_in
+      - sitting_out
+      - hole
+      - hole_count
+      - host
+      - leaving
+      title: CardSeatView
+      type: object
+    CardView:
+      additionalProperties: false
+      properties:
+        rank:
+          maximum: 14.0
+          minimum: 2.0
+          title: Rank
+          type: integer
+        suit:
+          enum:
+          - s
+          - h
+          - d
+          - c
+          title: Suit
+          type: string
+      required:
+      - rank
+      - suit
+      title: CardView
       type: object

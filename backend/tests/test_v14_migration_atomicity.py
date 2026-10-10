@@ -29,6 +29,7 @@ _REVISIONS = (
     ("0054_assessment_attempt_question_selection", "0055_assessment_attempt_submission"),
     ("0055_assessment_attempt_submission", "0056_preset_voice_profiles"),
     ("0056_preset_voice_profiles", "0057_agent_account_memory"),
+    ("0057_agent_account_memory", "0058_card_rooms"),
 )
 
 

@@ -117,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0057_agent_account_memory"
+    assert ALEMBIC_HEAD == "0058_card_rooms"
     _assert_foreign_keys(database)
 
 
