@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { decide } from "../../lib/poker/bot";
 import {
@@ -13,14 +19,23 @@ import {
   startHand,
   type Action,
   type Player,
+  type TableState,
 } from "../../lib/poker/table";
+import {
+  closeHand,
+  decision,
+  type Decision,
+  type HandRecord,
+} from "../../lib/poker/training";
 import { UserAvatar } from "../user-avatar";
 import { PixelText } from "./pixel-text";
 import { PlayingCard } from "./playing-card";
+import { TrainingSummary } from "./training-summary";
 import styles from "./card-table.module.css";
 
-const STACK = 1000;
-const TOP_UP = 500;
+// The same blinds and starting stack as an online room, so practice carries over.
+const STACK = 4000;
+const TOP_UP = 1000;
 
 /** Where each other seat sits on the rail, as an arc over the top, left to right. */
 const SPREAD: Record<number, number> = { 1: 0, 2: 110, 3: 150, 4: 190, 5: 210 };
@@ -62,6 +77,11 @@ export function CardTable({
     createTable(players, { stack: STACK, smallBlind: 10, bigBlind: 20 }),
   );
   const [raise, setRaise] = useState<number | null>(null);
+  const [records, setRecords] = useState<HandRecord[]>([]);
+  const [ended, setEnded] = useState(false);
+  const decisions = useRef<Decision[]>([]);
+  const stackBefore = useRef(STACK);
+  const closed = useRef(0);
   const human = table.seats.findIndex((seat) => seat.human);
   const humanSeat = table.seats[human];
   const humanTurn = table.toAct === human;
@@ -71,37 +91,71 @@ export function CardTable({
     : 0;
   const between = table.street === "waiting" || table.street === "complete";
 
+  const humanId = table.seats[human]?.id;
+  // Every change goes through here, so a hand is written into the session's
+  // record exactly once, at the moment it finishes.
+  const apply = useCallback(
+    (next: TableState) => {
+      setTable(next);
+      if (
+        humanId &&
+        next.street === "complete" &&
+        next.handNumber !== closed.current
+      ) {
+        closed.current = next.handNumber;
+        const record = closeHand(
+          next,
+          humanId,
+          stackBefore.current,
+          decisions.current,
+        );
+        setRecords((now) => [...now, record]);
+      }
+    },
+    [humanId],
+  );
+
   // Computer players think for a moment, so a hand reads as people playing.
   useEffect(() => {
     if (table.toAct === null || table.seats[table.toAct].human) return;
     const timer = window.setTimeout(
-      () =>
-        setTable((current) =>
-          current.toAct === null || current.seats[current.toAct].human
-            ? current
-            : act(current, decide(current)),
-        ),
+      () => apply(act(table, decide(table))),
       650 + Math.random() * 500,
     );
     return () => window.clearTimeout(timer);
-  }, [table]);
+  }, [apply, table]);
 
   function play(action: Action) {
-    setTable((current) => act(current, action));
+    decisions.current.push(decision(table, action));
+    apply(act(table, action));
     setRaise(null);
   }
 
   function deal() {
-    setTable((current) => {
-      let next = current;
-      // Busted computer players buy back in so the table never empties.
-      for (const seat of next.seats)
-        if (!seat.human && seat.stack === 0)
-          next = addChips(next, seat.id, STACK);
-      return startHand(next);
-    });
+    let next = table;
+    // Busted computer players buy back in so the table never empties.
+    for (const seat of next.seats)
+      if (!seat.human && seat.stack === 0)
+        next = addChips(next, seat.id, STACK);
+    stackBefore.current = humanSeat?.stack ?? 0;
+    decisions.current = [];
+    apply(startHand(next));
     setRaise(null);
   }
+
+  function again() {
+    setTable(
+      createTable(players, { stack: STACK, smallBlind: 10, bigBlind: 20 }),
+    );
+    setRecords([]);
+    setEnded(false);
+    closed.current = 0;
+  }
+
+  if (ended)
+    return (
+      <TrainingSummary records={records} onAgain={again} onLeave={onLeave} />
+    );
 
   const winners = table.payouts
     .map((payout) => ({
@@ -131,21 +185,31 @@ export function CardTable({
           text={
             table.handNumber
               ? `Hand ${table.handNumber} · Blinds ${table.smallBlind}/${table.bigBlind}`
-              : "Mayaform Hold'em"
+              : "Training"
           }
           scale={2}
         />
-        <button
-          type="button"
-          className={`${styles.button} ${styles.green}`}
-          disabled={!between}
-          data-urgent={humanSeat && humanSeat.stack === 0 ? "" : undefined}
-          onClick={() =>
-            setTable((current) => addChips(current, humanSeat.id, TOP_UP))
-          }
-        >
-          <PixelText text={`+${TOP_UP} chips`} scale={2} />
-        </button>
+        <span className={styles.topActions}>
+          <button
+            type="button"
+            className={`${styles.button} ${styles.green}`}
+            disabled={!between}
+            data-urgent={humanSeat && humanSeat.stack === 0 ? "" : undefined}
+            onClick={() =>
+              setTable((current) => addChips(current, humanSeat.id, TOP_UP))
+            }
+          >
+            <PixelText text={`+${TOP_UP} chips`} scale={2} />
+          </button>
+          <button
+            type="button"
+            className={`${styles.button} ${styles.purple}`}
+            disabled={!between || records.length === 0}
+            onClick={() => setEnded(true)}
+          >
+            <PixelText text="End" scale={2} />
+          </button>
+        </span>
       </header>
 
       <div className={styles.felt}>

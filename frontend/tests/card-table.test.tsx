@@ -64,7 +64,7 @@ describe("the card room", () => {
     fireEvent.click(
       await within(room).findByRole(
         "button",
-        { name: /Hold'em/ },
+        { name: /Training/ },
         { timeout: 5000 },
       ),
     );
@@ -126,5 +126,35 @@ describe("the card room", () => {
     expect(screen.getByRole("button", { name: "Play" })).toBeTruthy();
     // One hand spent; whatever it scored is now on the board.
     expect(document.body.textContent).toMatch(/Hands\s*3/);
+  });
+
+  it("ends a training session on a summary of the hands played", () => {
+    vi.useFakeTimers();
+    render(
+      <CardTable
+        players={[
+          { id: "me", name: "Kaikai", human: true },
+          { id: "a", name: "Bowen", human: false },
+          { id: "b", name: "Jade", human: false },
+        ]}
+        onLeave={vi.fn()}
+      />,
+    );
+    const end = screen.getByRole("button", {
+      name: "End",
+    }) as HTMLButtonElement;
+    expect(end.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Deal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fold" }));
+    for (let tick = 0; tick < 60; tick += 1) {
+      if (screen.queryByRole("button", { name: "Next hand" })) break;
+      act(() => vi.advanceTimersByTime(1500));
+    }
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+    expect(screen.getByText("Session")).toBeTruthy();
+    expect(screen.getByText("Hands").previousElementSibling?.textContent).toBe(
+      "1",
+    );
+    expect(screen.getByRole("button", { name: "Again" })).toBeTruthy();
   });
 });
