@@ -71,14 +71,11 @@ def _login(client: TestClient, username: str) -> tuple[str, str]:
     return token, csrf
 
 
-def _start_chat(client: TestClient, csrf: str, *, visibility: str = "private") -> str:
+def _start_chat(client: TestClient, csrf: str) -> str:
     response = client.post(
         "/api/v1/conversations",
         headers={"X-CSRF-Token": csrf},
-        json={
-            "entry": {"kind": "agent", "version_id": BASELINE_VERSION_ID},
-            "chat_visibility": visibility,
-        },
+        json={"entry": {"kind": "agent", "version_id": BASELINE_VERSION_ID}},
     )
     assert response.status_code == 200, response.text
     return response.json()["id"]
@@ -220,7 +217,12 @@ def test_answers_hints_skips_and_evidence_append_once_and_survive_chat_delete(
 ) -> None:
     _app, database, settings, client = learning_env
     raw_token, csrf = _login(client, "bowen")
-    conversation_id = _start_chat(client, csrf, visibility="public")
+    conversation_id = _start_chat(client, csrf)
+    # A Chat stored before every Chat became private keeps its legacy label.
+    with database.session() as db:
+        legacy = db.get(Conversation, conversation_id)
+        assert legacy is not None
+        legacy.chat_visibility = "public"
     answer_event_id = uuid4()
     first_answer = AnswerRecordRequest(
         kind="answer",
@@ -293,7 +295,7 @@ def test_answers_hints_skips_and_evidence_append_once_and_survive_chat_delete(
         assert rows[0].provenance.chat_visibility == "public"
         assert rows[0].provenance.activity_id is None
 
-    # A normal Public Chat stays a single_agent fact; it is not rewritten into
+    # A legacy Public Chat stays a single_agent fact; it is not rewritten into
     # published-course evidence merely because its chat_visibility is public.
     withdrawn = client.delete(
         f"/api/v1/conversations/{conversation_id}",

@@ -78,7 +78,7 @@ def test_active_assessment_never_persists_free_form_member_output(
         _recipe_conversation_id, team_id, *_rest = _create_formal_conversation(
             db, visibility="private"
         )
-    session = _create(client, csrf, {"kind": "maya_team", "team_id": team_id}, visibility="private")
+    session = _create(client, csrf, {"kind": "maya_team", "team_id": team_id})
     conversation_id = session["id"]
     with database.session() as db:
         actor = get_auth_context(db, settings, token)
@@ -157,7 +157,7 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
         _recipe_conversation_id, team_id, *_rest = _create_formal_conversation(
             db, visibility="private"
         )
-    session = _create(client, csrf, {"kind": "maya_team", "team_id": team_id}, visibility="private")
+    session = _create(client, csrf, {"kind": "maya_team", "team_id": team_id})
     conversation_id = session["id"]
     with database.session() as db:
         actor = get_auth_context(db, settings, token)
@@ -404,7 +404,6 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
         client,
         student_csrf,
         {"kind": "maya_team", "team_id": team_response.json()["id"]},
-        visibility="private",
     )
     conversation_id = session["id"]
 
@@ -763,11 +762,15 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
         assert owner_projection.response_key == "assessment.completed"
         assert owner_projection.context.attempt.status == "completed"
         assert owner_projection.context.current_question is None
+        # One student turn completes the attempt; the stored Leader opening has no user text.
         assert (
             db.scalar(
                 select(func.count())
                 .select_from(ConversationTurn)
-                .where(ConversationTurn.conversation_id == conversation_id)
+                .where(
+                    ConversationTurn.conversation_id == conversation_id,
+                    ConversationTurn.user_text != "",
+                )
             )
             == 1
         )
@@ -812,7 +815,6 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
         client,
         student_csrf,
         {"kind": "maya_team", "team_id": team_id},
-        visibility="private",
     )
     conversation_id = session["id"]
     with database.session() as db:

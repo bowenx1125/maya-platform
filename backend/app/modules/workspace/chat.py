@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Header, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.config import Settings, get_settings
@@ -1131,16 +1131,8 @@ def list_conversations(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> list[ConversationSession]:
-    actor_member = aliased(CourseMember)
     rows = db.scalars(
         select(Conversation)
-        .join(
-            actor_member,
-            and_(
-                actor_member.course_id == Conversation.course_id,
-                actor_member.user_id == context.user.id,
-            ),
-        )
         .join(
             CourseMember,
             (
@@ -1150,10 +1142,7 @@ def list_conversations(
         )
         .where(
             Conversation.withdrawn_at.is_(None),
-            or_(
-                Conversation.user_id == context.user.id,
-                and_(Conversation.chat_visibility == "public", actor_member.role == "teacher"),
-            ),
+            Conversation.user_id == context.user.id,
         )
         .order_by(
             select(func.max(ConversationTurn.created_at))
@@ -1181,7 +1170,7 @@ def create_conversation(
         db.rollback()
         db.execute(text("BEGIN IMMEDIATE"))
     if payload.entry is not None and not isinstance(payload.entry, AgentChatEntry):
-        row = create_team_conversation(db, context, payload.entry, payload.chat_visibility)
+        row = create_team_conversation(db, context, payload.entry)
         return session_view(db, row, context, settings)
     version_id = (
         payload.entry.version_id
@@ -1206,7 +1195,7 @@ def create_conversation(
         user_id=context.user.id,
         course_id=agent.course_id,
         entry_kind="agent",
-        chat_visibility=payload.chat_visibility,
+        chat_visibility="private",
         origin="single_agent",
         agent_version_id=version.id,
         snapshot_id=version.knowledge_snapshot_id,
@@ -1297,7 +1286,7 @@ def _memory_conversation(
         raise not_found()
 
     # A Team Memory click opens a new chat even when an older Team chat or assessment exists.
-    row = create_team_conversation(db, context, entry, "private")
+    row = create_team_conversation(db, context, entry)
     if row.course_id != course_id:
         raise not_found()
     return row

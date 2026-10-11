@@ -250,10 +250,8 @@ def test_explicit_targets_are_frozen_once_and_do_not_add_a_leader_summary(
     expected = ids if mode == "all" else ids[1:]
     assert [request.participant_id for request in seen] == expected
     assert all(request.actor_id == actor_id for request in seen)
-    assert all(request.message == body["message"] for request in seen)
-    assert all(
-        any("我是 Leader" in item["content"] for item in request.history) for request in seen
-    )
+    # Without a complete published recipe the Team has no Leader opening.
+    assert all(request.history == () and request.message == body["message"] for request in seen)
     assert turn["user_text"] == body["message"] and turn["assistant_text"] is None
     assert turn["state"] == "ready"
     assert [result["participant_id"] for result in turn["member_results"]] == expected
@@ -265,10 +263,10 @@ def test_explicit_targets_are_frozen_once_and_do_not_add_a_leader_summary(
         changed = {**body, "routing": {"mode": "selected", "participant_ids": [ids[0]]}}
         assert client.post(url, headers=_headers(csrf), json=changed).status_code == 409
     with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 2
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 1
         parent = db.get(ConversationTurn, body["request_id"])
         assert parent is not None and parent.assistant_text is None and parent.sources_json == "[]"
-        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == len(expected) + 1
+        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == len(expected)
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
 
@@ -336,15 +334,11 @@ def test_partial_unknown_replay_followup_full_history_and_late_result_are_isolat
     followup = {**_body(response.json(), "selected", ids=[ids[1]]), "message": "Follow-up"}
     continued = client.post(url, headers=_headers(csrf), json=followup)
     assert continued.status_code == 200, continued.text
-    assert [turn["state"] for turn in continued.json()["turns"]] == [
-        "ready",
-        "partial",
-        "ready",
-    ]
+    assert [turn["state"] for turn in continued.json()["turns"]] == ["partial", "ready"]
     history = seen[-1].history
-    assert history[1] == {"role": "user", "content": body["message"]}
-    assert history[2]["content"] == "Accepted member answer"
-    assert "acceptance_unknown" in history[3]["content"]
+    assert history[0] == {"role": "user", "content": body["message"]}
+    assert history[1]["content"] == "Accepted member answer"
+    assert "acceptance_unknown" in history[2]["content"]
     assert all(item["content"] != "Follow-up" for item in history)
     with database.session() as db:
         old_turn = db.get(ConversationTurn, body["request_id"])

@@ -82,22 +82,15 @@ def _team(client: TestClient, database: Database) -> tuple[dict[str, Any], list[
     return response.json(), versions, csrf
 
 
-def _create(
-    client: TestClient, csrf: str, entry: dict[str, Any], visibility: str = "private"
-) -> dict[str, Any]:
-    response = client.post(
-        "/api/v1/conversations",
-        headers=_headers(csrf),
-        json={"entry": entry, "chat_visibility": visibility},
-    )
+def _create(client: TestClient, csrf: str, entry: dict[str, Any]) -> dict[str, Any]:
+    response = client.post("/api/v1/conversations", headers=_headers(csrf), json={"entry": entry})
     assert response.status_code == 200, response.text
     return response.json()
 
 
 @pytest.mark.parametrize("kind", ["agent", "team", "maya_team"])
-@pytest.mark.parametrize("visibility", ["private", "public"])
 def test_three_entries_freeze_real_identity_and_mock_entries_can_send(
-    client: TestClient, database: Database, kind: str, visibility: str
+    client: TestClient, database: Database, kind: str
 ) -> None:
     team, versions, csrf = _team(client, database)
     entry = (
@@ -105,9 +98,16 @@ def test_three_entries_freeze_real_identity_and_mock_entries_can_send(
         if kind == "agent"
         else {"kind": kind, "team_id": team["id"]}
     )
-    session = _create(client, csrf, entry, visibility)
+    # Every Chat is private; asking for a public one is a malformed request.
+    public = client.post(
+        "/api/v1/conversations",
+        headers=_headers(csrf),
+        json={"entry": entry, "chat_visibility": "public"},
+    )
+    assert public.status_code == 400
+    session = _create(client, csrf, entry)
     assert session["entry_kind"] == kind
-    assert session["chat_visibility"] == visibility
+    assert session["chat_visibility"] == "private"
     assert session["read_only"] is False
     assert session["can_send"] is True
     assert (
@@ -139,46 +139,35 @@ def test_three_entries_freeze_real_identity_and_mock_entries_can_send(
     # Creation alone never invokes a Provider; Team runtime is exercised by
     # the separate B2 tests without changing the frozen entry provenance.
     with database.session() as db:
-        # A Maya Team Chat stores the Leader's opening before any model call.
-        expected_turns = 1 if kind == "maya_team" else 0
-        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == expected_turns
+        # Without a complete published recipe even a Maya Team has no opening.
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 0
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
 
-def test_two_students_keep_separate_privacy_and_teacher_has_public_read_only(
+def test_every_chat_stays_with_its_owner_even_a_stored_legacy_public_one(
     client: TestClient, database: Database
 ) -> None:
     team, _versions, _csrf = _team(client, database)
-    sessions: dict[str, dict[str, dict[str, Any]]] = {}
+    sessions: dict[str, dict[str, Any]] = {}
     for username in ("bowen", "kaikai"):
         _, csrf = login(client, username)
-        sessions[username] = {
-            visibility: _create(
-                client, csrf, {"kind": "maya_team", "team_id": team["id"]}, visibility
-            )
-            for visibility in ("private", "public")
-        }
-    assert len({row["id"] for user in sessions.values() for row in user.values()}) == 4
-    for visibility in ("private", "public"):
-        assert (
-            client.get(f"/api/v1/conversations/{sessions['bowen'][visibility]['id']}").status_code
-            == 404
-        )
-    assert {row["id"] for row in client.get("/api/v1/conversations").json()} == {
-        row["id"] for row in sessions["kaikai"].values()
-    }
+        sessions[username] = _create(client, csrf, {"kind": "maya_team", "team_id": team["id"]})
+    # A Chat created before every Chat became private still reads as its owner's.
+    with database.session() as db:
+        legacy = db.get(Conversation, sessions["bowen"]["id"])
+        assert legacy is not None
+        legacy.chat_visibility = "public"
+    assert client.get(f"/api/v1/conversations/{sessions['bowen']['id']}").status_code == 404
+    assert [row["id"] for row in client.get("/api/v1/conversations").json()] == [
+        sessions["kaikai"]["id"]
+    ]
     _, csrf = login(client, "maya")
-    visible = client.get("/api/v1/conversations").json()
-    assert {row["id"] for row in visible} == {sessions[user]["public"]["id"] for user in sessions}
-    for user in sessions:
-        private_id = sessions[user]["private"]["id"]
-        public_id = sessions[user]["public"]["id"]
-        assert client.get(f"/api/v1/conversations/{private_id}").status_code == 404
-        read = client.get(f"/api/v1/conversations/{public_id}").json()
-        assert read["read_only"] is True and read["can_send"] is False
+    assert client.get("/api/v1/conversations").json() == []
+    for session in sessions.values():
+        assert client.get(f"/api/v1/conversations/{session['id']}").status_code == 404
         for suffix in ("messages", "messages:stream"):
             denied = client.post(
-                f"/api/v1/conversations/{public_id}/{suffix}",
+                f"/api/v1/conversations/{session['id']}/{suffix}",
                 headers={**_headers(csrf), "Accept": "text/event-stream"},
                 json={
                     "request_id": str(uuid4()),
@@ -188,17 +177,14 @@ def test_two_students_keep_separate_privacy_and_teacher_has_public_read_only(
             )
             assert denied.status_code == 404
         assert (
-            client.delete(f"/api/v1/conversations/{public_id}", headers=_headers(csrf)).status_code
+            client.delete(
+                f"/api/v1/conversations/{session['id']}", headers=_headers(csrf)
+            ).status_code
             == 404
         )
-    with database.session() as db:
-        member = db.get(CourseMember, (COURSE_ID, MAYA_ID))
-        assert member is not None
-        member.role = "student"
-    assert client.get("/api/v1/conversations").json() == []
-    assert (
-        client.get(f"/api/v1/conversations/{sessions['bowen']['public']['id']}").status_code == 404
-    )
+    _, csrf = login(client, "bowen")
+    owned = client.get(f"/api/v1/conversations/{sessions['bowen']['id']}").json()
+    assert owned["read_only"] is False and owned["can_send"] is True
 
 
 def test_team_freezes_own_shared_sets_and_names_without_private_body_projection(
@@ -324,7 +310,7 @@ def test_maya_entry_rejects_client_configuration_overrides(
         assert db.scalar(select(func.count()).select_from(Conversation)) == 0
 
 
-def test_legacy_single_stays_private_and_teacher_public_read_has_no_raw_sources(
+def test_legacy_single_stays_private_and_its_sources_stay_with_the_owner(
     client: TestClient, database: Database
 ) -> None:
     _, csrf = login(client, "bowen")
@@ -340,15 +326,18 @@ def test_legacy_single_stays_private_and_teacher_public_read_has_no_raw_sources(
         json={"version_id": version_id, "chat_visibility": "public"},
     )
     assert invalid.status_code == 400
-    public = _create(client, csrf, {"kind": "agent", "version_id": version_id}, "public")
+    single = _create(client, csrf, {"kind": "agent", "version_id": version_id})
     with database.session() as db:
+        row = db.get(Conversation, single["id"])
+        assert row is not None
+        row.chat_visibility = "public"
         db.add(
             ConversationTurn(
                 id=str(uuid4()),
-                conversation_id=public["id"],
+                conversation_id=single["id"],
                 position=1,
-                user_text="Public user text",
-                assistant_text="Public answer",
+                user_text="Owner user text",
+                assistant_text="Owner answer",
                 sources_json=json.dumps(
                     [
                         {
@@ -363,13 +352,13 @@ def test_legacy_single_stays_private_and_teacher_public_read_has_no_raw_sources(
                 created_at=datetime.now(UTC),
             )
         )
+    owner = client.get(f"/api/v1/conversations/{single['id']}").json()
+    assert owner["turns"][0]["sources"][0]["filename"] == "PRIVATE_FILENAME"
     _, _csrf = login(client, "maya")
-    assert client.get(f"/api/v1/conversations/{legacy.json()['id']}").status_code == 404
-    read = client.get(f"/api/v1/conversations/{public['id']}")
-    assert read.status_code == 200
-    assert read.json()["turns"][0]["assistant_text"] == "Public answer"
-    assert read.json()["turns"][0]["sources"] == []
-    assert "PRIVATE_" not in read.text
+    for conversation_id in (legacy.json()["id"], single["id"]):
+        denied = client.get(f"/api/v1/conversations/{conversation_id}")
+        assert denied.status_code == 404
+        assert "PRIVATE_" not in denied.text and "Owner answer" not in denied.text
 
 
 def test_publication_grant_is_not_a_single_or_custom_entry_grant(
@@ -402,7 +391,7 @@ def test_publication_grant_is_not_a_single_or_custom_entry_grant(
     assert ambiguous.status_code == 400
     with database.session() as db:
         assert db.scalar(select(func.count()).select_from(Conversation)) == 1
-    session = _create(client, csrf, {"kind": "maya_team", "team_id": team["id"]}, "public")
+    session = _create(client, csrf, {"kind": "maya_team", "team_id": team["id"]})
     other, _csrf = login(client, "kaikai")
     other_id = other["user"]["id"]
     with database.session() as db:

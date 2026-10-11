@@ -73,8 +73,9 @@ def test_coordinate_twelve_effective_delegations_keep_every_result_and_replay_no
     assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
     assert len(calls) == 25
     with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 2
-        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == 14
+        # Without a complete published recipe the Team has no Leader opening.
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 1
+        assert db.scalar(select(func.count()).select_from(TeamTurnResult)) == 13
         assert db.scalar(select(func.count()).select_from(TeamChatEvent)) == 15
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
         assert db.get(Conversation, session["id"]).active_request_id is None

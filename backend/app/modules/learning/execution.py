@@ -1596,7 +1596,7 @@ def read_own_formal_attempt(
     }
 
 
-def _teacher_public_attempt(
+def _teacher_formal_attempt(
     db: Session,
     actor: AuthContext,
     current_conversation: Conversation,
@@ -1626,14 +1626,13 @@ def _teacher_public_attempt(
         or student.status != "active"
         or student_membership is None
         or student_membership.role != "student"
-        or attempt.chat_visibility != "public"
         or attempt.team_id != activity.team_id
         or attempt.recipe_id != activity.recipe_id
         or current_conversation.course_id != activity.course_id
         or source_conversation.user_id != attempt.actor_user_id
         or source_conversation.course_id != activity.course_id
         or source_conversation.withdrawn_at is not None
-        or source_conversation.chat_visibility != "public"
+        or source_conversation.chat_visibility != attempt.chat_visibility
         or source_conversation.origin != "published_course_team"
         or source_conversation.entry_kind != "maya_team"
         or source_conversation.team_id != activity.team_id
@@ -1679,7 +1678,7 @@ def read_authorized_assessment(
             current_conversation_id,
             assessment_id=assessment.id,
         )
-    attempt, activity = _teacher_public_attempt(
+    attempt, activity = _teacher_formal_attempt(
         db, actor, current_conversation, assessment.attempt_id
     )
     if (
@@ -1698,7 +1697,7 @@ def read_authorized_assessment(
         or revision.team_id != activity.team_id
         or revision.team_version_id != activity.team_version_id
         or revision.origin != "published_course_team"
-        or revision.chat_visibility != "public"
+        or revision.chat_visibility != attempt.chat_visibility
         or revision.evaluator_team_member_id != activity.evaluator_team_member_id
         or revision.evaluator_agent_version_id != activity.evaluator_agent_version_id
         or revision.source_model_call_id is None
@@ -1732,7 +1731,7 @@ def read_authorized_boundary(
             current_conversation_id,
             boundary_id=boundary.id,
         )
-    attempt, activity = _teacher_public_attempt(
+    attempt, activity = _teacher_formal_attempt(
         db, actor, current_conversation, boundary.attempt_id
     )
     if (

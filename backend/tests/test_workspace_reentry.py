@@ -153,13 +153,11 @@ def _post_maya_team(
     return client.post(
         "/api/v1/conversations",
         headers=headers,
-        json={
-            "entry": {"kind": "maya_team", "team_id": team_id},
-            "chat_visibility": "public",
-        },
+        json={"entry": {"kind": "maya_team", "team_id": team_id}},
     )
 
 
+# A source Chat stored before every Chat became private may still read "public".
 @pytest.mark.parametrize("visibility", ["private", "public"])
 @pytest.mark.parametrize(
     ("attempt_status", "reuse_source"),
@@ -201,7 +199,7 @@ def test_public_maya_team_post_reuses_only_the_live_owned_attempt_chat(
         assert session["turns"][0]["member_results"][0]["assistant_text"] == HISTORY_TEXT
     else:
         assert session["id"] != source_id
-        assert session["chat_visibility"] == "public"
+        assert session["chat_visibility"] == "private"
         assert len(session["turns"]) == 1
         assert session["turns"][0]["user_text"] == ""
         assert "Leader" in session["turns"][0]["member_results"][0]["assistant_text"]
@@ -247,7 +245,7 @@ def test_reentry_lookup_is_scoped_to_actor_and_current_course_membership(
     assert kaikai_response.status_code == 200, kaikai_response.text
     kaikai_session = kaikai_response.json()
     assert kaikai_session["id"] != source_id
-    assert kaikai_session["chat_visibility"] == "public"
+    assert kaikai_session["chat_visibility"] == "private"
     assert len(kaikai_session["turns"]) == 1
     assert kaikai_session["turns"][0]["user_text"] == ""
     assert client.get(f"/api/v1/conversations/{source_id}").status_code == 404
@@ -265,7 +263,7 @@ def test_reentry_lookup_is_scoped_to_actor_and_current_course_membership(
     assert teacher_response.json()["id"] not in {source_id, kaikai_session["id"]}
 
 
-def test_withdrawn_attempt_source_is_not_reused_for_a_new_public_chat(
+def test_withdrawn_attempt_source_is_not_reused_for_a_new_chat(
     reentry_env: tuple[Database, Any, TestClient],
 ) -> None:
     database, settings, client = reentry_env
@@ -288,7 +286,7 @@ def test_withdrawn_attempt_source_is_not_reused_for_a_new_public_chat(
     assert response.status_code == 200, response.text
     session = response.json()
     assert session["id"] != source_id
-    assert session["chat_visibility"] == "public"
+    assert session["chat_visibility"] == "private"
     assert len(session["turns"]) == 1
     assert session["turns"][0]["user_text"] == ""
 

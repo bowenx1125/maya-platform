@@ -1,4 +1,4 @@
-"""Persisted teacher reports over current Public formal assessment attempts."""
+"""Persisted teacher reports over current formal assessment attempts."""
 
 from __future__ import annotations
 
@@ -184,12 +184,11 @@ def _eligible_attempts(db: Session, activity: AssessmentActivity) -> list[Assess
                 AssessmentAttempt.activity_id == activity.id,
                 AssessmentAttempt.team_id == activity.team_id,
                 AssessmentAttempt.recipe_id == activity.recipe_id,
-                AssessmentAttempt.chat_visibility == "public",
+                AssessmentAttempt.chat_visibility == Conversation.chat_visibility,
                 Conversation.user_id == AssessmentAttempt.actor_user_id,
                 Conversation.course_id == activity.course_id,
                 Conversation.origin == "published_course_team",
                 Conversation.entry_kind == "maya_team",
-                Conversation.chat_visibility == "public",
                 Conversation.publication_id == activity.publication_id,
                 Conversation.team_id == activity.team_id,
                 Conversation.team_version_id == activity.team_version_id,
@@ -249,7 +248,7 @@ def _build_snapshot(
             and record.team_id == activity.team_id
             and record.team_version_id == activity.team_version_id
             and record.origin == "published_course_team"
-            and record.chat_visibility == "public"
+            and record.chat_visibility == attempt.chat_visibility
             and record.activity_id == activity.id
             and event.attempt_id == attempt.id
             and event.activity_id == activity.id
@@ -641,7 +640,7 @@ def download_assessment_course_report(
     if source_hash != revision.source_hash:
         raise conflict(
             "assessment_report_stale",
-            "The eligible Public assessment evidence changed. Generate a new report revision "
+            "The eligible assessment evidence changed. Generate a new report revision "
             "before downloading.",
         )
     content = AssessmentCourseReportDTO(

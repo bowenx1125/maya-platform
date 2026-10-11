@@ -6116,10 +6116,8 @@ components:
       additionalProperties: false
       properties:
         chat_visibility:
+          const: private
           default: private
-          enum:
-          - private
-          - public
           title: Chat Visibility
           type: string
         entry:

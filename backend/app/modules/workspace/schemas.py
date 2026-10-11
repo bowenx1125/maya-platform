@@ -185,14 +185,13 @@ ChatEntry = Annotated[
 class CreateChat(ClosedModel):
     version_id: UUID | None = None
     entry: ChatEntry | None = None
-    chat_visibility: Literal["private", "public"] = "private"
+    # Every Chat is private; the field stays only so an explicit value is checked.
+    chat_visibility: Literal["private"] = "private"
 
     @model_validator(mode="after")
     def validate_entry(self) -> "CreateChat":
         if (self.version_id is None) == (self.entry is None):
             raise ValueError("Select exactly one Chat entry.")
-        if self.version_id is not None and self.chat_visibility != "private":
-            raise ValueError("The legacy Single entry creates a Private Chat.")
         return self
 
 

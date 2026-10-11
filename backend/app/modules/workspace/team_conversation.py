@@ -44,22 +44,11 @@ MAYA_TEAM_OPENING = (
 
 
 def can_read_conversation(db: Session, actor_id: str, row: Conversation) -> bool:
-    if row.withdrawn_at is not None:
+    # Every Chat is its owner's alone. A stored legacy "public" value no longer
+    # opens it to a Teacher; formal assessment reaches reports as records instead.
+    if row.withdrawn_at is not None or row.user_id != actor_id:
         return False
-    role = db.scalar(
-        select(CourseMember.role).where(
-            CourseMember.course_id == row.course_id, CourseMember.user_id == actor_id
-        )
-    )
-    if role is None:
-        return False
-    if row.user_id == actor_id:
-        return True
-    return (
-        row.chat_visibility == "public"
-        and role == "teacher"
-        and db.get(CourseMember, (row.course_id, row.user_id)) is not None
-    )
+    return db.get(CourseMember, (row.course_id, actor_id)) is not None
 
 
 def require_single_runtime(row: Conversation) -> None:
@@ -120,10 +109,10 @@ def _published_recipe_is_complete(db: Session, selection: FrozenTeamSelection) -
     try:
         if declared_recipe(leader_version.agent_md) is None:
             return False
+        # Same role rule as ensure_assessment_activity: the Leader may itself
+        # be one of the two executors.
         roles: list[str] = []
         for member in selection.members:
-            if member.is_leader:
-                continue
             version = db.get(AgentVersion, member.agent_version_id)
             if version is None:
                 return False
@@ -153,7 +142,6 @@ def create_team_conversation(
     db: Session,
     context: AuthContext,
     entry: SavedTeamChatEntry | MayaTeamChatEntry,
-    chat_visibility: str,
 ) -> Conversation:
     selection = resolve_chat_entry(
         db,
@@ -193,7 +181,7 @@ def create_team_conversation(
         user_id=context.user.id,
         course_id=selection.course_id,
         entry_kind=entry_kind,
-        chat_visibility=chat_visibility,
+        chat_visibility="private",
         origin="published_course_team" if stored_publication else "custom_team",
         agent_version_id=None,
         snapshot_id=None,
@@ -249,7 +237,9 @@ def create_team_conversation(
                 conversation_id=row.id, knowledge_set_id=set_id, position=position
             )
         )
-    if entry_kind == "maya_team" and (entry.kind == "maya_team" or recipe_ready):
+    # The opening is a fixed rule of a complete published recipe, whoever opens
+    # the chat; without that recipe the Team waits for the first message.
+    if recipe_ready:
         if leader_participant is None:
             raise not_found()
         _persist_maya_team_opening(db, row, leader_participant)

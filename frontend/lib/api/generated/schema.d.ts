@@ -2413,9 +2413,9 @@ export interface components {
             /**
              * Chat Visibility
              * @default private
-             * @enum {string}
+             * @constant
              */
-            chat_visibility: "private" | "public";
+            chat_visibility: "private";
             /** Entry */
             entry?: (components["schemas"]["AgentChatEntry"] | components["schemas"]["SavedTeamChatEntry"] | components["schemas"]["MayaTeamChatEntry"]) | null;
             /** Version Id */
