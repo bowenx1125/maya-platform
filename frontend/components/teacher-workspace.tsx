@@ -280,14 +280,7 @@ export function TeacherStudyformWorkspace({
             nextOwned.filter((agent) => !publishedIds.has(agent.id)),
           );
           setChatAgents(nextChatAgents);
-          setTeams(
-            nextTeams.filter(
-              (team) =>
-                team.can_edit &&
-                team.ownership_scope === "personal" &&
-                team.group_id === null,
-            ),
-          );
+          setTeams(nextTeams);
           setLoadedScope(requestScope);
           setError(null);
         })
@@ -345,9 +338,12 @@ export function TeacherStudyformWorkspace({
   )
     return <ErrorNotice error={error} />;
 
-  const mayaForm = initialMode === "maya-new" || initialMode === "maya-edit";
-  const privateForm = initialMode === "team-new" || initialMode === "team-edit";
-  if (mayaForm || privateForm)
+  const teamForm =
+    initialMode === "team-new" ||
+    initialMode === "team-edit" ||
+    initialMode === "maya-new" ||
+    initialMode === "maya-edit";
+  if (teamForm)
     return (
       <>
         <PageIntro title={t("studyform")} />
@@ -357,11 +353,11 @@ export function TeacherStudyformWorkspace({
             api={api}
             courseId={teacherCourseId}
             agents={chatAgents}
-            variant={mayaForm ? "maya" : "team"}
+            variant="team"
             standalone
             backHref="/teacher/studyform"
             initialRouteMode={
-              initialMode === "maya-new" || initialMode === "team-new"
+              initialMode === "team-new" || initialMode === "maya-new"
                 ? "team-new"
                 : "team-edit"
             }
@@ -370,8 +366,6 @@ export function TeacherStudyformWorkspace({
         ) : null}
       </>
     );
-  const privateTeams = teams.filter((team) => team.visibility === "private");
-  const mayaTeams = teams.filter((team) => team.visibility === "public");
 
   return (
     <>
@@ -430,7 +424,7 @@ export function TeacherStudyformWorkspace({
         <ModuleCard
           title={t("chatTargetTeams")}
           labelledBy="studyform-teams"
-          empty={privateTeams.length ? undefined : t("teamNoneYet")}
+          empty={teams.length ? undefined : t("teamNoneYet")}
           action={
             teacherCourseId ? (
               <ModulePlus
@@ -440,9 +434,9 @@ export function TeacherStudyformWorkspace({
             ) : null
           }
         >
-          {privateTeams.length ? (
+          {teams.length ? (
             <ModuleTiles>
-              {privateTeams.map((team) => (
+              {teams.map((team) => (
                 <VersionTile
                   key={team.id}
                   name={team.display_name}
@@ -453,42 +447,14 @@ export function TeacherStudyformWorkspace({
                   pending={false}
                   deleting={deletingId !== null}
                   deleteLabel={t("deleteAgent")}
-                  onDelete={() =>
-                    void deleteOwnedTeam(team.id, t("deletePrivateTeamConfirm"))
-                  }
-                />
-              ))}
-            </ModuleTiles>
-          ) : undefined}
-        </ModuleCard>
-        <ModuleCard
-          title={t("mayaTeam")}
-          labelledBy="studyform-maya"
-          empty={mayaTeams.length ? undefined : t("mayaTeamNoneYet")}
-          action={
-            teacherCourseId ? (
-              <ModulePlus
-                href="/teacher/studyform?mode=maya-new"
-                label={t("newAgent")}
-              />
-            ) : null
-          }
-        >
-          {mayaTeams.length ? (
-            <ModuleTiles>
-              {mayaTeams.map((team) => (
-                <VersionTile
-                  key={team.id}
-                  name={team.display_name}
-                  href={`/teacher/studyform?mode=maya-edit&team_id=${encodeURIComponent(team.id)}`}
-                  label={t("teamVersionLabel", {
-                    seq: team.current_version_seq,
-                  })}
-                  pending={false}
-                  deleting={deletingId !== null}
-                  deleteLabel={t("deleteAgent")}
-                  onDelete={() =>
-                    void deleteOwnedTeam(team.id, t("deleteTeamConfirm"))
+                  onDelete={
+                    team.can_edit
+                      ? () =>
+                          void deleteOwnedTeam(
+                            team.id,
+                            t("deletePrivateTeamConfirm"),
+                          )
+                      : undefined
                   }
                 />
               ))}

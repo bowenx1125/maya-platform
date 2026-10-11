@@ -1611,7 +1611,7 @@ button.agent-tile-name {
 }
 
 .agent-identity .visibility-toggle button:focus-visible {
-  outline: 2px solid var(--accent, #8a6a1f);
+  outline: 3px solid #967c50;
   outline-offset: 2px;
 }
 

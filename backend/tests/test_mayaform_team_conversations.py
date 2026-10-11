@@ -377,12 +377,20 @@ def test_publication_grant_is_not_a_single_or_custom_entry_grant(
 ) -> None:
     team, versions, _csrf = _team(client, database)
     _, csrf = login(client, "bowen")
-    for body in (
-        {"entry": {"kind": "agent", "version_id": versions[0]}},
-        {"entry": {"kind": "team", "team_id": team["id"]}},
-    ):
-        response = client.post("/api/v1/conversations", headers=_headers(csrf), json=body)
-        assert response.status_code == 404
+    agent_denied = client.post(
+        "/api/v1/conversations",
+        headers=_headers(csrf),
+        json={"entry": {"kind": "agent", "version_id": versions[0]}},
+    )
+    assert agent_denied.status_code == 404
+    team_chat = client.post(
+        "/api/v1/conversations",
+        headers=_headers(csrf),
+        json={"entry": {"kind": "team", "team_id": team["id"]}, "chat_visibility": "private"},
+    )
+    assert team_chat.status_code == 200, team_chat.text
+    assert team_chat.json()["entry_kind"] == "team"
+    assert team_chat.json()["origin"] == "custom_team"
     ambiguous = client.post(
         "/api/v1/conversations",
         headers=_headers(csrf),
@@ -393,7 +401,7 @@ def test_publication_grant_is_not_a_single_or_custom_entry_grant(
     )
     assert ambiguous.status_code == 400
     with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(Conversation)) == 0
+        assert db.scalar(select(func.count()).select_from(Conversation)) == 1
     session = _create(client, csrf, {"kind": "maya_team", "team_id": team["id"]}, "public")
     other, _csrf = login(client, "kaikai")
     other_id = other["user"]["id"]
@@ -620,3 +628,73 @@ def test_memory_entry_creates_and_replays_an_owner_saved_team_conversation(
     assert replay.json()["conversation_id"] == payload["conversation_id"]
     assert replay.json()["request_id"] == payload["request_id"]
     assert replay.json()["session"]["turns"] == []
+
+
+def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
+    client: TestClient, database: Database, monkeypatch: Any
+) -> None:
+    from app.modules.learning.recipes import (
+        COMPLETION_DECLARATION,
+        QUESTION_SCOPE_DECLARATION,
+        SUPPORTED_RECIPE_ID,
+    )
+
+    _, csrf = login(client, "maya")
+    versions = [
+        _make_agent_version(database, owner_id=MAYA_ID, name=name)[1]
+        for name in ("Leader", "Evaluator", "Boundary")
+    ]
+    created_set = client.post(
+        f"/api/v1/courses/{COURSE_ID}/knowledge-sets",
+        headers=_headers(csrf, f"recipe-set-{uuid4()}"),
+        json={"display_name": "Recipe questions"},
+    )
+    assert created_set.status_code == 201, created_set.text
+    set_id = created_set.json()["id"]
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, f"recipe-team-{uuid4()}"),
+        json={
+            "display_name": "Recipe circle",
+            "visibility": "public",
+            "members": [
+                {"agent_version_id": version_id, "is_leader": index == 0, "position": index}
+                for index, version_id in enumerate(versions)
+            ],
+            "shared_knowledge_set_ids": [set_id],
+        },
+    )
+    assert created.status_code == 201, created.text
+    team_id = created.json()["id"]
+    plain = _create(client, csrf, {"kind": "team", "team_id": team_id})
+    assert plain["entry_kind"] == "team"
+    assert plain["origin"] == "custom_team"
+    assert plain["turns"] == []
+
+    with database.session() as db:
+        leader = db.get(AgentVersion, versions[0])
+        evaluator = db.get(AgentVersion, versions[1])
+        boundary = db.get(AgentVersion, versions[2])
+        assert leader is not None and evaluator is not None and boundary is not None
+        leader.agent_md = (
+            f"{leader.agent_md}\nMAYA-ASSESSMENT-RECIPE: {SUPPORTED_RECIPE_ID}\n"
+            f"{QUESTION_SCOPE_DECLARATION}\n{COMPLETION_DECLARATION}\n"
+        )
+        evaluator.agent_md += "\nMAYA-ASSESSMENT-ROLE: evaluator\n"
+        boundary.agent_md += "\nMAYA-ASSESSMENT-ROLE: boundary_summarizer\n"
+        db.commit()
+
+    incomplete = _create(client, csrf, {"kind": "team", "team_id": team_id})
+    assert incomplete["entry_kind"] == "team"
+    assert incomplete["turns"] == []
+
+    monkeypatch.setattr(
+        "app.modules.learning.recipes._selected_questions",
+        lambda _db, _set_ids: [("set", "asset", 1, "question")],
+    )
+    ready = _create(client, csrf, {"kind": "team", "team_id": team_id})
+    assert ready["entry_kind"] == "maya_team"
+    assert ready["origin"] == "published_course_team"
+    assert ready["turns"][0]["member_results"][0]["assistant_text"].startswith("我是 Leader")
+    with database.session() as db:
+        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0

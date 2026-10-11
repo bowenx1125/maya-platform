@@ -199,7 +199,6 @@ function teamManagementPage(
           api={state.api as never}
           courseId="course"
           agents={agents as never}
-          variant="maya"
           standalone
           backHref="/teacher/studyform"
           initialRouteMode={initialRouteMode}
@@ -265,7 +264,7 @@ async function sendMessage(message: string) {
 }
 
 async function startMayaTeamChat(message: string) {
-  await chooseTarget("maya_team:maya-team-1", "Course Dialogue Team");
+  await chooseTarget("team:maya-team-1", "Course Dialogue Team");
   await sendMessage(message);
 }
 
@@ -331,7 +330,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("Studyform Maya Team", () => {
+describe("Studyform Teams", () => {
   beforeEach(() => {
     state.role = "teacher";
     state.api.createTeam.mockResolvedValue(publicTeam);
@@ -340,7 +339,7 @@ describe("Studyform Maya Team", () => {
 
   it("opens the Maya Team form when a mounted Studyform route changes to team-new", async () => {
     const view = renderTeamManagement("teams");
-    await screen.findByRole("heading", { level: 2, name: "Maya Teams" });
+    await screen.findByRole("heading", { level: 2, name: "Teams" });
     view.rerender(teamManagementPage("team-new"));
     expect(await screen.findByLabelText("Name")).toBeTruthy();
     expect(sidebarButton("Done")).toBeTruthy();
@@ -357,7 +356,7 @@ describe("Studyform Maya Team", () => {
     ).toBeNull();
   });
 
-  it("lists only the Teacher's public personal Teams, because only those are published", async () => {
+  it("lists every readable Team on one Teams surface", async () => {
     state.api.teams.mockResolvedValue([
       publicTeam,
       { ...team, id: "private-team", display_name: "Private circle" },
@@ -376,19 +375,52 @@ describe("Studyform Maya Team", () => {
     ]);
     renderTeamManagement();
     expect(await screen.findByText("Reasoning circle")).toBeTruthy();
-    expect(screen.queryByText("Private circle")).toBeNull();
-    expect(screen.queryByText("Group circle")).toBeNull();
-    expect(screen.queryByText("Readable circle")).toBeNull();
-    expect(screen.queryByRole("radio", { name: "Public" })).toBeNull();
+    expect(screen.getByText("Private circle")).toBeTruthy();
+    expect(screen.getByText("Group circle")).toBeTruthy();
+    expect(screen.getByText("Readable circle")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
     expect(
       within(screen.getByRole("navigation")).queryByRole("button", {
         name: "New",
       }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
+  it("shows members, the Leader and selected Brainform names without letting a reader change them", async () => {
+    state.api.team.mockResolvedValue({
+      ...publicTeam,
+      can_edit: false,
+      display_name: "Readable circle",
+    });
+    renderTeamManagement("team-edit", "team-1");
+    const name = (await screen.findByLabelText("Name")) as HTMLInputElement;
+    expect(name.disabled).toBe(true);
+    expect(name.value).toBe("Readable circle");
+    const member = screen.getByRole("checkbox", {
+      name: /Socrates/,
+    }) as HTMLInputElement;
+    expect(member.checked).toBe(true);
+    expect(member.disabled).toBe(true);
+    const leader = screen.getByRole("radio", {
+      name: "Set Socrates as Leader",
+    }) as HTMLInputElement;
+    expect(leader.checked).toBe(true);
+    expect(leader.disabled).toBe(true);
+    const knowledge = screen.getByRole("checkbox", {
+      name: "Shared course notes",
+    }) as HTMLInputElement;
+    expect(knowledge.checked).toBe(true);
+    expect(knowledge.disabled).toBe(true);
     expect(
-      screen.getByRole("button", { name: "Reasoning circle" }),
-    ).toBeTruthy();
+      screen.queryByRole("checkbox", { name: "Hidden outside Brainform" }),
+    ).toBeNull();
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "Done",
+      }),
+    ).toBeNull();
+    expect(sidebarButton("Back")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
   });
 
   it("does not navigate the current page when a Team save receipt arrives after unmount", async () => {
@@ -400,7 +432,7 @@ describe("Studyform Maya Team", () => {
         }),
     );
     const view = renderTeamManagement("team-new");
-    await screen.findByRole("heading", { level: 2, name: "Maya Teams" });
+    await screen.findByRole("heading", { level: 2, name: "Teams" });
     await startNewTeam();
     await fillTeamForm("Pending circle");
     navigation.push.mockClear();
@@ -420,8 +452,8 @@ describe("Studyform Maya Team", () => {
 
   it("publishes a Maya Team as a public personal Team from the Studyform sidebar", async () => {
     const view = renderTeamManagement();
-    await screen.findByRole("heading", { level: 2, name: "Maya Teams" });
-    expect(screen.getByText("No Maya Teams yet.")).toBeTruthy();
+    await screen.findByRole("heading", { level: 2, name: "Teams" });
+    expect(screen.getByText("No Teams yet.")).toBeTruthy();
     expect(
       within(screen.getByRole("navigation")).queryByRole("button", {
         name: "New",
@@ -429,6 +461,7 @@ describe("Studyform Maya Team", () => {
     ).toBeNull();
     view.rerender(teamManagementPage("team-new"));
     await startNewTeam();
+    fireEvent.click(screen.getByRole("button", { name: "Public" }));
     await fillTeamForm("Reasoning circle", "Mencius");
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Shared course notes" }),
@@ -437,9 +470,7 @@ describe("Studyform Maya Team", () => {
       screen.queryByRole("checkbox", { name: "Hidden outside Brainform" }),
     ).toBeNull();
     fireEvent.click(sidebarButton("Done"));
-    await screen.findByText(
-      "Maya Team published. Students can choose it from New in Chatform.",
-    );
+    await screen.findByText("Team saved. You can now start a Team Chat.");
     expect(state.api.createTeam).toHaveBeenCalledWith(
       "course",
       {
@@ -461,22 +492,20 @@ describe("Studyform Maya Team", () => {
     state.api.teams.mockResolvedValue([publicTeam]);
     state.api.team.mockResolvedValue(publicTeam);
     renderTeamManagement();
-    await screen.findByRole("heading", { level: 2, name: "Maya Teams" });
+    await screen.findByRole("heading", { level: 2, name: "Teams" });
     fireEvent.click(
       await screen.findByRole("button", { name: "Reasoning circle" }),
     );
 
     const name = await screen.findByLabelText("Name");
     expect(navigation.push).toHaveBeenCalledWith(
-      "/teacher/chat?mode=maya-edit&team_id=team-1",
+      "/teacher/chat?mode=team-edit&team_id=team-1",
       { scroll: false },
     );
     fireEvent.change(name, { target: { value: "Reasoning circle v2" } });
     fireEvent.click(sidebarButton("Done"));
 
-    await screen.findByText(
-      "Maya Team published. Students can choose it from New in Chatform.",
-    );
+    await screen.findByText("Team saved. You can now start a Team Chat.");
     expect(state.api.updateTeam).toHaveBeenCalledWith(
       "team-1",
       {
@@ -525,7 +554,7 @@ describe("Studyform Maya Team", () => {
       .mockRejectedValueOnce(new Error("connection reset"))
       .mockResolvedValueOnce(publicTeam);
     renderTeamManagement("team-new");
-    await screen.findByRole("heading", { level: 2, name: "Maya Teams" });
+    await screen.findByRole("heading", { level: 2, name: "Teams" });
     await startNewTeam();
     await fillTeamForm("Retryable circle");
     fireEvent.click(sidebarButton("Done"));
@@ -539,9 +568,7 @@ describe("Studyform Maya Team", () => {
     fireEvent.click(retrySave);
 
     await waitFor(() => expect(state.api.createTeam).toHaveBeenCalledTimes(2));
-    await screen.findByText(
-      "Maya Team published. Students can choose it from New in Chatform.",
-    );
+    await screen.findByText("Team saved. You can now start a Team Chat.");
     expect(state.api.createTeam.mock.calls[1][0]).toBe("course");
     expect(state.api.createTeam.mock.calls[1][1]).toEqual(firstAttempt[1]);
     expect(state.api.createTeam.mock.calls[1][2].idempotency.key).toBe(
@@ -553,14 +580,12 @@ describe("Studyform Maya Team", () => {
   it("leaves a saved Team without showing its version list or repeating the POST", async () => {
     state.api.teams.mockResolvedValueOnce([]);
     renderTeamManagement("team-new");
-    await screen.findByRole("heading", { level: 2, name: "Maya Teams" });
+    await screen.findByRole("heading", { level: 2, name: "Teams" });
     await startNewTeam();
     await fillTeamForm("Reasoning circle");
     fireEvent.click(sidebarButton("Done"));
 
-    await screen.findByText(
-      "Maya Team published. Students can choose it from New in Chatform.",
-    );
+    await screen.findByText("Team saved. You can now start a Team Chat.");
     expect(
       screen.queryByText(
         "Team was saved, but the list could not be refreshed.",
@@ -577,7 +602,7 @@ describe("Studyform Maya Team", () => {
 });
 
 describe("Studyform Team cards", () => {
-  it("lists Agents, Teams, Maya Teams and Voices in that order", async () => {
+  it("lists Agents, Teams and Voices in that order", async () => {
     state.role = "teacher";
     state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
     state.api.teams.mockResolvedValue([
@@ -604,7 +629,6 @@ describe("Studyform Team cards", () => {
     expect(headings.map((heading) => heading.textContent)).toEqual([
       "Agents",
       "Teams",
-      "Maya Team",
       "Voices",
     ]);
     expect(
@@ -614,17 +638,15 @@ describe("Studyform Team cards", () => {
       screen
         .getByRole("link", { name: "Course Dialogue Team" })
         .getAttribute("href"),
-    ).toBe("/teacher/studyform?mode=maya-edit&team_id=published-team");
-    expect(screen.queryByText("Group circle")).toBeNull();
+    ).toBe("/teacher/studyform?mode=team-edit&team_id=published-team");
+    expect(
+      screen.getByRole("link", { name: "Group circle" }).getAttribute("href"),
+    ).toBe("/teacher/studyform?mode=team-edit&team_id=group-team");
     expect(
       screen
         .getAllByRole("link", { name: "New" })
         .map((link) => link.getAttribute("href")),
-    ).toEqual([
-      "/teacher/agents/new",
-      "/teacher/studyform?mode=team-new",
-      "/teacher/studyform?mode=maya-new",
-    ]);
+    ).toEqual(["/teacher/agents/new", "/teacher/studyform?mode=team-new"]);
   });
 
   it("lets a student create a private Team beside Agents and Voices", async () => {
@@ -656,8 +678,11 @@ describe("Studyform Team cards", () => {
       "Teams",
       "Voices",
     ]);
-    expect(screen.queryByRole("heading", { name: "Maya Teams" })).toBeNull();
-    expect(screen.queryByText("Course Dialogue Team")).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Course Dialogue Team" })
+        .getAttribute("href"),
+    ).toBe("/student/groups/group-1?mode=team-edit&team_id=published-team");
     expect(
       screen.getByRole("link", { name: "Private circle" }).getAttribute("href"),
     ).toBe("/student/groups/group-1?mode=team-edit&team_id=team-1");
@@ -718,7 +743,7 @@ describe("Chatform", () => {
     },
   );
 
-  it("offers Agents, Teams and Maya Teams in one picker and does not create a Team there", async () => {
+  it("offers Agents and Teams in one picker and does not create a Team there", async () => {
     state.api.teams.mockResolvedValue([
       { ...team, can_edit: false, visibility: "public" },
     ]);
@@ -829,7 +854,11 @@ describe("Chatform", () => {
       </LocaleProvider>,
     );
     await screen.findByRole("heading", { level: 2, name: "Teams" });
-    expect(screen.queryByRole("radio", { name: "Public" })).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Private" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     await fillTeamForm("Reasoning circle");
     const done = sidebarButton("Done");
     await waitFor(() => expect(done.disabled).toBe(false));
@@ -873,7 +902,7 @@ describe("Chatform", () => {
 
   it("lets a Student choose only a catalog Team and Chat privacy, never member or Knowledge configuration", async () => {
     renderChats();
-    await chooseTarget("maya_team:maya-team-1", "Course Dialogue Team");
+    await chooseTarget("team:maya-team-1", "Course Dialogue Team");
     expect(
       screen.getByRole("heading", { level: 2, name: "Course Dialogue Team" }),
     ).toBeTruthy();
@@ -884,7 +913,11 @@ describe("Chatform", () => {
     await sendMessage("Hello Team");
     await waitFor(() =>
       expect(state.api.createTeamConversation).toHaveBeenCalledWith(
-        { kind: "maya_team", team_id: "maya-team-1" },
+        {
+          kind: "team",
+          team_id: "maya-team-1",
+          team_version_id: "maya-version-4",
+        },
         "public",
       ),
     );
@@ -893,7 +926,7 @@ describe("Chatform", () => {
     expect(state.api.streamConversation).not.toHaveBeenCalled();
   });
 
-  it("lists a Teacher's own published Team only once, under Maya Team", async () => {
+  it("lists a Teacher's own published Team only once, under Teams", async () => {
     state.role = "teacher";
     state.api.teams.mockResolvedValue([
       {
@@ -905,13 +938,13 @@ describe("Chatform", () => {
     ]);
     renderChats();
     const picker = await chooseTarget(
-      "maya_team:maya-team-1",
+      "team:maya-team-1",
       "Course Dialogue Team",
     );
     expect(
       within(picker).getAllByRole("option", { name: "Course Dialogue Team" }),
     ).toHaveLength(1);
-    expect(picker.value).toBe("maya_team:maya-team-1");
+    expect(picker.value).toBe("team:maya-team-1");
     expect(within(picker).getByRole("option", { name: "Reasoning circle" }));
     expect(state.api.teams).toHaveBeenCalledWith("course");
     expect(state.api.mayaTeams).toHaveBeenCalledWith("course");
@@ -1415,7 +1448,7 @@ describe("Chatform", () => {
 
   it("does not send Enter during Chinese IME composition", async () => {
     renderChats();
-    await chooseTarget("maya_team:maya-team-1", "Course Dialogue Team");
+    await chooseTarget("team:maya-team-1", "Course Dialogue Team");
     const message = await screen.findByRole("textbox", { name: "Message" });
     fireEvent.change(message, { target: { value: "你好" } });
 
