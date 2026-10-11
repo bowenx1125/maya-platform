@@ -26,6 +26,9 @@ function explain(caught: unknown): string {
     if (caught.code === "card_room_full") return "That table is full.";
     if (caught.code === "card_room_needs_players")
       return "A hand needs two players with chips.";
+    // Another tab signed in as someone else, so this page's session is stale.
+    if (caught.code === "csrf_failed")
+      return "You signed in again in another tab. Reload this page.";
     return caught.message;
   }
   return "The table could not be reached. Try again.";

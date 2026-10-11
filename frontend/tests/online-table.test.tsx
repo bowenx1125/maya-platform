@@ -158,6 +158,22 @@ describe("online card rooms", () => {
     );
   });
 
+  it("asks for a reload when another tab signed in as someone else", async () => {
+    api.joinCardRoom.mockRejectedValue(
+      new PlatformApiError(403, "The CSRF check failed.", {
+        code: "csrf_failed",
+      }),
+    );
+    render(<OnlineLobby onLeave={() => undefined} />);
+    fireEvent.change(screen.getByLabelText("Room code"), {
+      target: { value: "5673" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sit down" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "You signed in again in another tab. Reload this page.",
+    );
+  });
+
   it("lets only the host deal the first hand", async () => {
     api.startCardRoom.mockResolvedValue(yourTurn());
     const { unmount } = render(
