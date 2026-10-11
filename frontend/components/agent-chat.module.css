@@ -87,7 +87,7 @@
   position: relative;
   display: grid;
   place-items: center;
-  min-width: 44px;
+  min-width: 76px;
   height: 44px;
 }
 .historyDate {
@@ -97,10 +97,13 @@
   white-space: nowrap;
   visibility: visible;
 }
+/* Pin then delete take the date's place on hover, as delete alone did. */
+.historyPin,
 .historyDelete {
   position: absolute;
-  inset: 0 0 0 auto;
-  width: 44px;
+  top: 0;
+  bottom: 0;
+  width: 38px;
   display: grid;
   place-items: center;
   margin: 0;
@@ -108,37 +111,76 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--red);
   visibility: hidden;
   pointer-events: none;
   cursor: pointer;
+}
+.historyPin {
+  right: 38px;
+  color: var(--muted);
+}
+.historyPin[aria-pressed="true"] {
+  color: var(--accent);
+}
+.historyDelete {
+  right: 0;
+  color: var(--red);
+}
+.historyPin:hover,
+.historyDelete:hover {
+  background: rgba(39, 35, 61, 0.06);
 }
 .historyRow:hover .historyDate,
 .historyRow:has(:focus-visible) .historyDate {
   visibility: hidden;
 }
-.historyRow:hover .historyDelete,
-.historyRow:has(:focus-visible) .historyDelete {
+.historyRow:hover :is(.historyPin, .historyDelete),
+.historyRow:has(:focus-visible) :is(.historyPin, .historyDelete) {
   visibility: visible;
   pointer-events: auto;
 }
+.historyPin:focus-visible,
 .historyDelete:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   visibility: visible;
   pointer-events: auto;
 }
+.historyPin:disabled,
 .historyDelete:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.historySelect[aria-disabled="true"] {
+  cursor: default;
+}
+.historyRename {
+  min-width: 0;
+  height: 36px;
+  margin: 4px 0 4px 4px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
 }
 @media (hover: none) {
   .historyDate {
     display: none;
   }
+  .historyMeta {
+    min-width: 88px;
+  }
+  .historyPin,
   .historyDelete {
+    width: 44px;
     visibility: visible;
     pointer-events: auto;
+  }
+  .historyPin {
+    right: 44px;
   }
 }
 .conversation {

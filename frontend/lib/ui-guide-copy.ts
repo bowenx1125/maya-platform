@@ -105,6 +105,10 @@ export const uiGuideCopy = {
     en: "Delete this conversation from your chat history.",
     zh: "从聊天记录中删除此对话。",
   },
+  "chat.pin": {
+    en: "Pin or unpin this conversation at the top of your history.",
+    zh: "将此对话置顶或取消置顶。",
+  },
   "chat.history": {
     en: "Conversation name.",
     zh: "会话名称。",

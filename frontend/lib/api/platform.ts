@@ -360,6 +360,8 @@ export type TeamChatSession = {
   revision: number;
   turns: TeamChatTurn[];
   created_at: string;
+  title?: string | null;
+  pinned_at?: string | null;
 };
 export type TeamVisibility =
   components["schemas"]["CreateTeamRequest"]["visibility"];
@@ -1259,6 +1261,24 @@ export class PlatformApi {
 
   deleteConversation(id: string): Promise<void> {
     return this.deleteJson(`conversations/${id}`);
+  }
+
+  /** Rename or pin a Chat; a field left out keeps its value. */
+  async updateConversation(
+    id: string,
+    changes: components["schemas"]["UpdateChat"],
+  ): Promise<ConversationSession> {
+    const session = await unwrap(
+      await this.client.PATCH("/conversations/{conversation_id}", {
+        params: {
+          path: { conversation_id: id },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: changes,
+      }),
+    );
+    // The same narrowed session shape every other Chat read returns.
+    return session as unknown as ConversationSession;
   }
 
   sendConversation(

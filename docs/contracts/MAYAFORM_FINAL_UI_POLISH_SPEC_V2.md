@@ -66,6 +66,8 @@ Team 在 Studyform 的 Teams 中创建；Chatform 不内联建 Team。
 
 每个会话都只属于创建者：没有 Public/Private 标签或切换，老师和同学都不能列出或读取别人的会话。学生在老师发布、配方完整的 Team 中的正式测评仍写入记录并进入老师统计/报告；普通会话不进入。
 
+历史中双击（键盘 F2）会话即可重命名，不加说明文字；清空名称恢复自动名称。删除左侧是置顶按钮，与删除相同：悬停时日期隐藏、置顶和删除出现；实心图钉为已置顶，空心为未置顶，点击切换，置顶会话排在最前。
+
 不能按 can_edit 过滤全部可聊天 Team；编辑操作检查 can_edit，Chatform 列表以当前可读/可启动资源为准。保留 busy/unknown/idempotency、完整历史、日期/Delete互斥与迟到结果隔离。Chatform 只有文字，不派发 TTS。
 
 不添加 Assessment dashboard、状态卡、进度面板、Pause/Continue/Abandon/Restart按钮组、专用输入框或特殊 Maya Team 布局。后台状态不改变通用聊天产品。

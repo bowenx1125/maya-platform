@@ -53,7 +53,7 @@ import {
 import { useLocale, useT } from "./locale";
 import { localizeError } from "../lib/i18n";
 import { uiGuideText } from "../lib/ui-guide-copy";
-import { IconClose } from "./quiet-icons";
+import { IconClose, IconPin } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
@@ -360,6 +360,12 @@ function AgentChatScope({
       : "";
   });
   const [loading, setLoading] = useState(true);
+  const [renaming, setRenaming] = useState<{
+    session: ChatSession | TeamChatSession;
+    initial: string;
+    value: string;
+  } | null>(null);
+  const [arranging, setArranging] = useState<string | null>(null);
   const [busy, setBusy] = useState(() => {
     const pending = getChatRequest(scopeKey);
     return pending?.promise != null || pending?.status === "observing";
@@ -1536,6 +1542,46 @@ function AgentChatScope({
     }
   }
 
+  // A name and a pin only arrange the owner's history: they never change a
+  // Chat's turns or revision, so they stay open while a reply is pending.
+  async function arrangeChat(
+    session: ChatSession | TeamChatSession,
+    changes: { title?: string | null; pinned?: boolean },
+  ) {
+    const arrangeScope = scopeKey;
+    if (!arrangeScope || arranging) return;
+    setArranging(session.id);
+    try {
+      const updated = await api.updateConversation(session.id, changes);
+      if (!isChatRequestScopeActive(arrangeScope)) return;
+      const arrangement = {
+        title: updated.title ?? null,
+        pinned_at: updated.pinned_at ?? null,
+      };
+      const apply = <T extends { id: string }>(item: T): T =>
+        item.id === session.id ? { ...item, ...arrangement } : item;
+      setSessions((current) => current.map(apply));
+      setTeamSessions((current) => current.map(apply));
+      setSelected((current) => (current ? apply(current) : current));
+      setSelectedTeam((current) => (current ? apply(current) : current));
+    } catch (cause) {
+      if (isChatRequestScopeActive(arrangeScope)) setError(cause);
+    } finally {
+      if (mounted.current && isChatRequestScopeActive(arrangeScope))
+        setArranging(null);
+    }
+  }
+
+  function commitRename() {
+    const current = renaming;
+    if (!current) return;
+    setRenaming(null);
+    const value = current.value.trim();
+    // An untouched field keeps the automatic name rather than freezing it.
+    if (value === current.initial) return;
+    void arrangeChat(current.session, { title: value || null });
+  }
+
   async function removeChat(session: ChatSession | TeamChatSession) {
     if (busy || teamBusy) return;
     if (!window.confirm(t("deleteChatConfirm"))) return;
@@ -2170,9 +2216,24 @@ function AgentChatScope({
       session,
       name: session.team.name,
     })),
-  ].sort((left, right) =>
-    right.session.created_at.localeCompare(left.session.created_at),
-  );
+  ]
+    .map((item) => ({
+      ...item,
+      label:
+        item.session.title ||
+        item.session.turns.find((turn) => turn.user_text)?.user_text ||
+        item.name,
+    }))
+    // Pinned Chats lead, the latest pin first; the rest go newest first.
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.session.pinned_at)) -
+          Number(Boolean(left.session.pinned_at)) ||
+        (right.session.pinned_at ?? "").localeCompare(
+          left.session.pinned_at ?? "",
+        ) ||
+        right.session.created_at.localeCompare(left.session.created_at),
+    );
 
   const mentionMembers: {
     key: string;
@@ -2303,34 +2364,88 @@ function AgentChatScope({
               {historyItems.length === 0 ? (
                 <p className={styles.historyEmpty}>{t("chatHistoryEmpty")}</p>
               ) : null}
-              {historyItems.map(({ kind, session, name }) => (
+              {historyItems.map(({ kind, session, name, label }) => (
                 <div className={styles.historyRow} key={session.id}>
-                  <button
-                    type="button"
-                    className={styles.historySelect}
-                    disabled={busy || teamBusy}
-                    aria-current={
-                      (kind === "agent" ? selected?.id : selectedTeam?.id) ===
-                      session.id
-                        ? "page"
-                        : undefined
-                    }
-                    data-ui-guide="chat.history"
-                    data-ui-guide-text={name}
-                    onClick={() => {
-                      if (kind === "agent") void openHistory(session);
-                      else void openTeamHistory(session);
-                    }}
-                  >
-                    <span>
-                      {session.turns.find((turn) => turn.user_text)
-                        ?.user_text || name}
-                    </span>
-                  </button>
+                  {renaming?.session.id === session.id ? (
+                    <input
+                      className={styles.historyRename}
+                      aria-label={t("renameChat")}
+                      value={renaming.value}
+                      maxLength={80}
+                      autoFocus
+                      onFocus={(event) => event.currentTarget.select()}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setRenaming((current) =>
+                          current ? { ...current, value } : current,
+                        );
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.nativeEvent.isComposing) return;
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitRename();
+                        } else if (event.key === "Escape") {
+                          event.preventDefault();
+                          setRenaming(null);
+                        }
+                      }}
+                      onBlur={commitRename}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.historySelect}
+                      // Not `disabled`: the second click of a double-click
+                      // lands while the first one is opening the Chat.
+                      aria-disabled={busy || teamBusy || undefined}
+                      aria-current={
+                        (kind === "agent" ? selected?.id : selectedTeam?.id) ===
+                        session.id
+                          ? "page"
+                          : undefined
+                      }
+                      data-ui-guide="chat.history"
+                      data-ui-guide-text={name}
+                      onClick={() => {
+                        if (busy || teamBusy) return;
+                        if (kind === "agent") void openHistory(session);
+                        else void openTeamHistory(session);
+                      }}
+                      onDoubleClick={() =>
+                        setRenaming({ session, initial: label, value: label })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key !== "F2") return;
+                        event.preventDefault();
+                        setRenaming({ session, initial: label, value: label });
+                      }}
+                    >
+                      <span>{label}</span>
+                    </button>
+                  )}
                   <span className={styles.historyMeta}>
                     <small className={styles.historyDate}>
                       {new Date(session.created_at).toLocaleDateString()}
                     </small>
+                    <button
+                      type="button"
+                      className={styles.historyPin}
+                      disabled={arranging === session.id}
+                      aria-pressed={Boolean(session.pinned_at)}
+                      aria-label={
+                        session.pinned_at ? t("unpinChat") : t("pinChat")
+                      }
+                      data-ui-guide="chat.pin"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void arrangeChat(session, {
+                          pinned: !session.pinned_at,
+                        });
+                      }}
+                    >
+                      <IconPin filled={Boolean(session.pinned_at)} />
+                    </button>
                     <button
                       type="button"
                       className={styles.historyDelete}

@@ -357,6 +357,118 @@
         "tags": [
           "Chat"
         ]
+      },
+      "patch": {
+        "operationId": "updateConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateChat"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "agent": "#/components/schemas/ChatSession",
+                      "maya_team": "#/components/schemas/TeamChatSession",
+                      "team": "#/components/schemas/TeamChatSession"
+                    },
+                    "propertyName": "entry_kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatSession"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TeamChatSession"
+                    }
+                  ],
+                  "title": "Response Updateconversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Update Conversation",
+        "tags": [
+          "Chat"
+        ]
       }
     },
     "/api/v1/conversations/{conversation_id}/messages": {
@@ -9851,6 +9963,18 @@
             "title": "Origin",
             "type": "string"
           },
+          "pinned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned At"
+          },
           "read_only": {
             "default": false,
             "title": "Read Only",
@@ -9859,6 +9983,13 @@
           "revision": {
             "title": "Revision",
             "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "turns": {
             "items": {
@@ -9876,6 +10007,33 @@
           "created_at"
         ],
         "title": "ChatSession",
+        "type": "object"
+      },
+      "UpdateChat": {
+        "additionalProperties": false,
+        "description": "Rename or pin a Chat; a field left out keeps its value.",
+        "properties": {
+          "pinned": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned"
+          },
+          "title": {
+            "maxLength": 80,
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "UpdateChat",
         "type": "object"
       },
       "ChatSource": {
@@ -18058,6 +18216,18 @@
             "title": "Origin",
             "type": "string"
           },
+          "pinned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinned At"
+          },
           "read_only": {
             "title": "Read Only",
             "type": "boolean"
@@ -18068,6 +18238,13 @@
           },
           "team": {
             "$ref": "#/components/schemas/ChatTeam"
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "turns": {
             "items": {

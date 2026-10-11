@@ -1310,6 +1310,113 @@ describe("chat that cannot continue", () => {
   });
 });
 
+describe("chat history names and pins", () => {
+  const older = {
+    ...completedConversation,
+    id: "older-chat",
+    created_at: "2026-10-01T00:00:00Z",
+    turns: [{ ...completedConversation.turns[0], user_text: "Older talk" }],
+  };
+  const newer = {
+    ...completedConversation,
+    id: "newer-chat",
+    created_at: "2026-10-09T00:00:00Z",
+    turns: [{ ...completedConversation.turns[0], user_text: "Newer talk" }],
+  };
+
+  function renderHistory() {
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    return screen.findByLabelText("History");
+  }
+
+  function rowLabels(history: HTMLElement) {
+    return within(history)
+      .getAllByRole("button", { name: /talk|Justice/ })
+      .map((button) => button.textContent);
+  }
+
+  it("renames a Chat on double-click, keeps the name on Escape and clears to the automatic one", async () => {
+    state.api.conversations.mockResolvedValue([newer, older]);
+    state.api.updateConversation = vi.fn(
+      async (_id: string, changes: { title?: string | null }) => ({
+        ...older,
+        title: changes.title ?? null,
+        pinned_at: null,
+      }),
+    );
+    const history = await renderHistory();
+    await within(history).findByRole("button", { name: "Older talk" });
+
+    fireEvent.doubleClick(
+      within(history).getByRole("button", { name: "Older talk" }),
+    );
+    const field = within(history).getByRole("textbox", { name: "Chat name" });
+    fireEvent.change(field, { target: { value: "Ignored" } });
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(state.api.updateConversation).not.toHaveBeenCalled();
+
+    fireEvent.doubleClick(
+      within(history).getByRole("button", { name: "Older talk" }),
+    );
+    const again = within(history).getByRole("textbox", { name: "Chat name" });
+    // An untouched name leaves the automatic one in place.
+    fireEvent.keyDown(again, { key: "Enter" });
+    expect(state.api.updateConversation).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(
+      within(history).getByRole("button", { name: "Older talk" }),
+      { key: "F2" },
+    );
+    const renamed = within(history).getByRole("textbox", { name: "Chat name" });
+    fireEvent.change(renamed, { target: { value: "  Justice notes " } });
+    fireEvent.keyDown(renamed, { key: "Enter" });
+    await within(history).findByRole("button", { name: "Justice notes" });
+    expect(state.api.updateConversation).toHaveBeenCalledWith("older-chat", {
+      title: "Justice notes",
+    });
+  });
+
+  it("pins a Chat above newer ones with a filled pin, and unpins it", async () => {
+    state.api.conversations.mockResolvedValue([newer, older]);
+    state.api.updateConversation = vi.fn(
+      async (_id: string, changes: { pinned?: boolean }) => ({
+        ...older,
+        title: null,
+        pinned_at: changes.pinned ? "2026-10-11T00:00:00Z" : null,
+      }),
+    );
+    const history = await renderHistory();
+    await within(history).findByRole("button", { name: "Older talk" });
+    expect(rowLabels(history)).toEqual(["Newer talk", "Older talk"]);
+
+    const pins = within(history).getAllByRole("button", { name: "Pin chat" });
+    expect(pins).toHaveLength(2);
+    expect(pins[1].getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(pins[1]);
+    const unpin = await within(history).findByRole("button", {
+      name: "Unpin chat",
+    });
+    expect(unpin.getAttribute("aria-pressed")).toBe("true");
+    expect(unpin.querySelector("path[fill='currentColor']")).not.toBeNull();
+    expect(rowLabels(history)).toEqual(["Older talk", "Newer talk"]);
+    expect(state.api.updateConversation).toHaveBeenCalledWith("older-chat", {
+      pinned: true,
+    });
+
+    fireEvent.click(unpin);
+    await waitFor(() =>
+      expect(
+        within(history).queryByRole("button", { name: "Unpin chat" }),
+      ).toBeNull(),
+    );
+    expect(rowLabels(history)).toEqual(["Newer talk", "Older talk"]);
+  });
+});
+
 describe("teacher workspace access", () => {
   it("keeps external data disclosure off Mayaform and renders no Components UI or settings calls", async () => {
     state.displayName = "Teacher";

@@ -60,6 +60,9 @@ class Conversation(Base):
     revision: Mapped[int] = mapped_column(Integer, default=0)
     active_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The owner's own name for the Chat; empty keeps the automatic one.
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         CheckConstraint("revision >= 0"),

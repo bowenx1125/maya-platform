@@ -58,6 +58,8 @@ class ChatSession(ClosedModel):
     revision: int
     turns: list[ChatTurn]
     created_at: datetime
+    title: str | None = None
+    pinned_at: datetime | None = None
 
 
 class TeamChatParticipant(ClosedModel):
@@ -121,6 +123,8 @@ class TeamChatSession(ClosedModel):
     created_at: datetime
     read_only: bool
     can_send: bool = False
+    title: str | None = None
+    pinned_at: datetime | None = None
 
 
 ConversationSession = Annotated[ChatSession | TeamChatSession, Field(discriminator="entry_kind")]
@@ -197,6 +201,24 @@ class CreateChat(ClosedModel):
     def validate_entry(self) -> "CreateChat":
         if (self.version_id is None) == (self.entry is None):
             raise ValueError("Select exactly one Chat entry.")
+        return self
+
+
+CHAT_TITLE_MAX_LENGTH = 80
+
+
+class UpdateChat(ClosedModel):
+    """Rename or pin a Chat; a field left out keeps its value."""
+
+    title: str | None = Field(default=None, max_length=CHAT_TITLE_MAX_LENGTH)
+    pinned: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_change(self) -> "UpdateChat":
+        if not self.model_fields_set:
+            raise ValueError("Change the title, the pin or both.")
+        if "pinned" in self.model_fields_set and self.pinned is None:
+            raise ValueError("Pinned is true or false.")
         return self
 
 

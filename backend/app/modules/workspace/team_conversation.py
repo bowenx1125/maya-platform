@@ -432,6 +432,8 @@ def team_session_view(
             )
         ],
         created_at=row.created_at,
+        title=row.title,
+        pinned_at=row.pinned_at,
         read_only=row.user_id != context.user.id,
         can_send=(
             runtime_available

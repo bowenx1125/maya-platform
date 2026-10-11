@@ -79,6 +79,7 @@ from .schemas import (
     SavedTeamChatEntry,
     SendChat,
     StreamChat,
+    UpdateChat,
 )
 from .team_conversation import (
     can_read_conversation,
@@ -1083,6 +1084,8 @@ def session_view(
         ),
         revision=conversation.revision,
         created_at=conversation.created_at,
+        title=conversation.title,
+        pinned_at=conversation.pinned_at,
         turns=visible_turns,
     )
 
@@ -1149,6 +1152,9 @@ def list_conversations(
             Conversation.user_id == context.user.id,
         )
         .order_by(
+            # Pinned Chats come first, the latest pin on top.
+            Conversation.pinned_at.is_(None),
+            Conversation.pinned_at.desc(),
             select(func.max(ConversationTurn.created_at))
             .where(ConversationTurn.conversation_id == Conversation.id)
             .scalar_subquery()
@@ -1425,6 +1431,36 @@ def delete_conversation(
         withdraw_conversation_attempts(db, row.id)
         db.commit()
     return Response(status_code=204)
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationSession,
+    operation_id="updateConversation",
+)
+def update_conversation(
+    conversation_id: UUID,
+    payload: UpdateChat,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ConversationSession:
+    row = db.get(Conversation, str(conversation_id))
+    if row is None or row.user_id != context.user.id or row.withdrawn_at is not None:
+        raise not_found()
+    course_member(db, context, row.course_id)
+    # A name and a pin only arrange the owner's own history, so they stay
+    # open on a Chat whose Agent was deleted and never touch its revision.
+    values: dict[str, Any] = {}
+    if "title" in payload.model_fields_set:
+        values["title"] = (payload.title or "").strip() or None
+    if payload.pinned is not None:
+        values["pinned_at"] = (row.pinned_at or datetime.now(UTC)) if payload.pinned else None
+    db.execute(update(Conversation).where(Conversation.id == row.id).values(**values))
+    db.commit()
+    db.refresh(row)
+    return session_view(db, row, context, settings)
 
 
 @router.post(

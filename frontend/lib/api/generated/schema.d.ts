@@ -37,7 +37,8 @@ export interface paths {
         delete: operations["deleteConversation"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Conversation */
+        patch: operations["updateConversation"];
         trace?: never;
     };
     "/conversations/{conversation_id}/messages": {
@@ -2330,6 +2331,8 @@ export interface components {
              * @constant
              */
             origin: "single_agent";
+            /** Pinned At */
+            pinned_at?: string | null;
             /**
              * Read Only
              * @default false
@@ -2337,8 +2340,20 @@ export interface components {
             read_only: boolean;
             /** Revision */
             revision: number;
+            /** Title */
+            title?: string | null;
             /** Turns */
             turns: components["schemas"]["ChatTurn"][];
+        };
+        /**
+         * UpdateChat
+         * @description Rename or pin a Chat; a field left out keeps its value.
+         */
+        UpdateChat: {
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Title */
+            title?: string | null;
         };
         /** ChatSource */
         ChatSource: {
@@ -5088,11 +5103,15 @@ export interface components {
              * @enum {string}
              */
             origin: "custom_team" | "published_course_team";
+            /** Pinned At */
+            pinned_at?: string | null;
             /** Read Only */
             read_only: boolean;
             /** Revision */
             revision: number;
             team: components["schemas"]["ChatTeam"];
+            /** Title */
+            title?: string | null;
             /** Turns */
             turns: components["schemas"]["TeamChatTurn"][];
         };
@@ -5961,6 +5980,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateConversation: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChat"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
             };
             /** @description Unauthorized */
             401: {
