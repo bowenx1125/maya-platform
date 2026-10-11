@@ -355,6 +355,7 @@ export function AppShell({
                   className={`${styles.link} ${styles.disabled}`}
                   aria-disabled="true"
                   key={link.href}
+                  data-tour={link.icon}
                 >
                   <WorkspaceIcon name={link.icon} />
                   <span>{link.label}</span>
@@ -365,6 +366,7 @@ export function AppShell({
                   className={`${styles.link} ${activeHref === link.href ? styles.active : ""} ${link.icon === "live" ? styles.live : ""}`}
                   href={link.href}
                   key={link.href}
+                  data-tour={link.icon}
                 >
                   {activeHref === link.href ? (
                     <ViewTransition

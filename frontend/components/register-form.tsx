@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { type RegistrationOptions } from "../lib/api";
 import { localizeError, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
+import { markTourPending } from "../lib/onboarding";
 import { useSetAcademyMood } from "./academy/mood";
 import { useLocale, useT } from "./locale";
 import { useSession } from "./session-provider";
@@ -169,12 +170,14 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
     try {
       // No display name is collected: the server falls back to the username,
       // which is what a classroom roster shows anyway.
-      await register({
+      const session = await register({
         username: username.trim(),
         password,
         group_name: groupName,
         ...(options ? { course_id: options.course_id } : {}),
       });
+      // A new account is shown round its home once, on arrival.
+      markTourPending(session.user.id);
       router.replace(nextPath || "/student");
     } catch (cause) {
       // A lost username race only returns to the account step; the session stays intact.

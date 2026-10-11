@@ -18,6 +18,7 @@ import { roleLabel } from "../lib/i18n";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { HomeGuide } from "./home-guide";
+import { OnboardingTour } from "./onboarding-tour";
 import { useLocale, useT } from "./locale";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
@@ -193,15 +194,20 @@ export function StudentDashboard() {
         <EmptyCard title={t("noGroup")} />
       ) : (
         <div className="home-columns" id="student-groups">
-          <section className="home-panel" aria-labelledby="student-guide-title">
+          <section
+            className="home-panel"
+            aria-labelledby="student-guide-title"
+            data-tour="guide"
+          >
             <h2 id="student-guide-title">{t("guide")}</h2>
             <HomeGuide steps={guide} />
           </section>
-          {groups.map((overview) => (
+          {groups.map((overview, index) => (
             <section
               className="home-panel"
               key={overview.group.id}
               aria-labelledby={`group-${overview.group.id}`}
+              data-tour={index === 0 ? "group" : undefined}
             >
               <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
               <ul className="home-people-list">
@@ -227,6 +233,7 @@ export function StudentDashboard() {
         </div>
       )}
       <AccountSettings onSaved={() => void load()} />
+      {user ? <OnboardingTour userId={user.id} /> : null}
     </div>
   );
 }
@@ -321,9 +328,7 @@ function GroupWorkspaceSession({
       setCourseAgents(
         nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
       );
-      setTeams(
-        Array.isArray(nextTeams) ? nextTeams : [],
-      );
+      setTeams(Array.isArray(nextTeams) ? nextTeams : []);
       setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
       setItems(
         nextAgents.map((agent, index) => ({
