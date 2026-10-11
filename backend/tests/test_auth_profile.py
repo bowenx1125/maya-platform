@@ -63,6 +63,56 @@ def test_invalid_avatar_fails_closed(client: TestClient) -> None:
     assert response.json()["code"] == "avatar_invalid"
 
 
+def test_a_student_renames_themselves_and_classmates_see_it(app_factory: Any) -> None:
+    app, _database, _settings = app_factory()
+    with TestClient(app) as student:
+        registration = register(student)
+        assert registration.status_code == 201, registration.text
+        csrf = registration.json()["csrf_token"]
+        user_id = registration.json()["user"]["id"]
+        renamed = student.patch(
+            "/api/v1/auth/me",
+            json={"display_name": "  Ada   Lovelace "},
+            headers=_headers(csrf),
+        )
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()["user"]["display_name"] == "Ada Lovelace"
+        # A rename alone leaves the avatar as it was.
+        assert renamed.json()["user"]["avatar"] is None
+
+        empty = student.patch(
+            "/api/v1/auth/me",
+            json={"display_name": "   "},
+            headers=_headers(renamed.json()["csrf_token"]),
+        )
+        assert empty.status_code == 422
+        assert empty.json()["code"] == "display_name_invalid"
+
+    with TestClient(app) as teacher:
+        login(teacher)
+        entry = next(
+            row
+            for row in teacher.get(f"/api/v1/courses/{COURSE_ID}/roster").json()["entries"]
+            if row["user_id"] == user_id
+        )
+        assert entry["display_name"] == "Ada Lovelace"
+
+
+def test_a_catalog_account_keeps_the_name_the_account_list_gives_it(
+    client: TestClient,
+) -> None:
+    payload, csrf = login(client, "bowen")
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "Someone Else"},
+        headers=_headers(csrf),
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "display_name_managed"
+    me = client.get("/api/v1/auth/me").json()
+    assert me["user"]["display_name"] == payload["user"]["display_name"]
+
+
 def test_password_change_keeps_current_session_and_revokes_others(app_factory: Any) -> None:
     app, _database, _settings = app_factory()
     with TestClient(app) as current:

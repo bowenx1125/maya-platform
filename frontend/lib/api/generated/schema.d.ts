@@ -4757,10 +4757,15 @@ export interface components {
              */
             user_id: string;
         };
-        /** UpdateCurrentUserRequest */
+        /**
+         * UpdateCurrentUserRequest
+         * @description Change what is given; an omitted field stays as it is. A null avatar clears it.
+         */
         UpdateCurrentUserRequest: {
             /** Avatar */
-            avatar: string | null;
+            avatar?: string | null;
+            /** Display Name */
+            display_name?: string | null;
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -7225,6 +7230,15 @@ export interface operations {
             };
             /** @description CSRF failure. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This account's name comes from the course's account list. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

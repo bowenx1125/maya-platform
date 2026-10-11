@@ -42,7 +42,7 @@ function mount(locale: "en" | "zh" = "en") {
     registrationOptions: vi.fn().mockResolvedValue(options()),
   };
   const register = vi.fn().mockResolvedValue({
-    user: { courses: [] },
+    user: { id: "new-student-id", courses: [] },
     csrf_token: "csrf",
   });
   mockedUseSession.mockReturnValue({ api, register } as never);
@@ -207,6 +207,11 @@ describe("student self-registration form", () => {
       }),
     );
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/student"));
+    // The new account is owed its first-visit tour.
+    expect(window.localStorage.getItem("maya.tour.pending")).toBe(
+      "new-student-id",
+    );
+    window.localStorage.removeItem("maya.tour.pending");
   });
 
   it("returns to the first step when the account is rejected", async () => {

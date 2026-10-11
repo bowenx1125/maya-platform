@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import UTC, datetime
 
 from pwdlib import PasswordHash
@@ -9,11 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import PlatformError, unprocessable
+from app.core.errors import PlatformError, conflict, unprocessable
 from app.core.models import User
 from app.modules.auth.credentials import verify_password
-from app.modules.auth.models import UserCredential
-from app.modules.auth.registration import validate_password
+from app.modules.auth.models import DemoAccountBinding, UserCredential
+from app.modules.auth.registration import DISPLAY_NAME_MAX, validate_password
 from app.modules.auth.service import revoke_user_sessions
 
 AVATAR_CHOICES = (
@@ -33,6 +34,30 @@ def update_avatar(user: User, avatar: str | None) -> None:
     if avatar is not None and avatar not in _AVATAR_CHOICE_SET:
         raise unprocessable("avatar_invalid", "Choose one of the available scholar avatars.")
     user.avatar = avatar
+
+
+def update_display_name(db: Session, user: User, raw: str) -> None:
+    """Rename yourself, with the same rules a teacher's roster edit applies."""
+
+    # A catalog account's name is re-applied from the account file on every
+    # start, so a change here would quietly revert; refuse it and say why.
+    managed = db.scalar(
+        select(DemoAccountBinding.user_id).where(
+            DemoAccountBinding.user_id == user.id, DemoAccountBinding.active.is_(True)
+        )
+    )
+    if managed is not None:
+        raise conflict(
+            "display_name_managed",
+            "This account's name comes from the course's account list; ask your teacher.",
+        )
+    value = " ".join(unicodedata.normalize("NFKC", raw).split())
+    if not value or len(value) > DISPLAY_NAME_MAX:
+        raise unprocessable(
+            "display_name_invalid",
+            f"A name needs 1 to {DISPLAY_NAME_MAX} characters.",
+        )
+    user.display_name = value
 
 
 def _password_matches(hash_value: str, password: str) -> bool:

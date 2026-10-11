@@ -9,7 +9,6 @@ import {
   type PublishedAgentSummary,
   type AgentVersion,
   type ChatAgent,
-  type Course,
   type GroupDetail,
   type PlatformApi,
   type TeamSummaryDto,
@@ -19,6 +18,7 @@ import { roleLabel } from "../lib/i18n";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { HomeGuide } from "./home-guide";
+import { OnboardingTour } from "./onboarding-tour";
 import { useLocale, useT } from "./locale";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
@@ -95,7 +95,6 @@ export function StudentDashboard() {
   const { api, user } = useSession();
   const [groups, setGroups] = useState<GroupOverview[]>([]);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
-  const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const hasUser = Boolean(user);
@@ -109,18 +108,14 @@ export function StudentDashboard() {
     setError(null);
     try {
       const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
-      const [overviews, courses, nextPublished] = await Promise.all([
+      const [overviews, nextPublished] = await Promise.all([
         loadGroups(api, groupIds),
-        courseId ? api.courses() : Promise.resolve([]),
         courseId && typeof api.publishedAgents === "function"
           ? api.publishedAgents(courseId)
           : Promise.resolve([]),
       ]);
       setGroups(overviews);
       setPublished(nextPublished);
-      setCourse(
-        courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
-      );
     } catch (cause) {
       setError(cause);
     } finally {
@@ -139,7 +134,6 @@ export function StudentDashboard() {
   if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
 
   const name = user?.display_name ?? "";
-  const courseName = course?.name ?? t("course");
   const primary = groups[0];
   const guide = primary
     ? [
@@ -171,10 +165,6 @@ export function StudentDashboard() {
     <div className="mayaform-home">
       <section className="home-hero">
         <div className="home-hero-copy">
-          {/* The course is the eyebrow rather than a sentence underneath: it
-              is one of the four things this page has to answer, and naming it
-              costs less than explaining it. */}
-          <p className="home-hero-eyebrow">{courseName}</p>
           <h1>{t("homeWelcomeTitle", { name })}</h1>
         </div>
         <div className="home-hero-art">
@@ -204,15 +194,20 @@ export function StudentDashboard() {
         <EmptyCard title={t("noGroup")} />
       ) : (
         <div className="home-columns" id="student-groups">
-          <section className="home-panel" aria-labelledby="student-guide-title">
+          <section
+            className="home-panel"
+            aria-labelledby="student-guide-title"
+            data-tour="guide"
+          >
             <h2 id="student-guide-title">{t("guide")}</h2>
             <HomeGuide steps={guide} />
           </section>
-          {groups.map((overview) => (
+          {groups.map((overview, index) => (
             <section
               className="home-panel"
               key={overview.group.id}
               aria-labelledby={`group-${overview.group.id}`}
+              data-tour={index === 0 ? "group" : undefined}
             >
               <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
               <ul className="home-people-list">
@@ -238,6 +233,7 @@ export function StudentDashboard() {
         </div>
       )}
       <AccountSettings onSaved={() => void load()} />
+      {user ? <OnboardingTour userId={user.id} /> : null}
     </div>
   );
 }
@@ -332,9 +328,7 @@ function GroupWorkspaceSession({
       setCourseAgents(
         nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
       );
-      setTeams(
-        Array.isArray(nextTeams) ? nextTeams : [],
-      );
+      setTeams(Array.isArray(nextTeams) ? nextTeams : []);
       setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
       setItems(
         nextAgents.map((agent, index) => ({

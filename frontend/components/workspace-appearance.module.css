@@ -214,18 +214,6 @@
   font-weight: 500;
 }
 
-.appearance :global(.agent-pill) {
-  color: var(--green);
-  background: rgba(45, 138, 104, 0.14);
-  font-weight: 640;
-}
-
-.appearance :global(.agent-pill[data-pending="true"]) {
-  color: var(--accent-strong);
-  background: var(--gold-soft);
-  font-weight: 640;
-}
-
 .appearance :global(.status-good) {
   color: var(--green);
   background: #eaf5ee;
