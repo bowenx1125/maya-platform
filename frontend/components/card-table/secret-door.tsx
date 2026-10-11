@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -12,11 +11,12 @@ import styles from "./entrance.module.css";
 // room behind it, or the room flashes through.
 import { VaultEntrance } from "./vault-entrance";
 
-// The room itself only loads for the few who find the way in.
+// The room itself only loads for the few who find the way in. It is loaded by
+// hand rather than through next/dynamic: a lazy component's reveal counts as a
+// transition, so React would start a document view transition while the vault
+// door is mid-animation, and the browser cannot capture that page.
 const loadRoom = () => import("./card-room");
-const CardRoom = dynamic(() => loadRoom().then((module) => module.CardRoom), {
-  ssr: false,
-});
+type Room = Awaited<ReturnType<typeof loadRoom>>["CardRoom"];
 
 /** The home's four scholars, left to right, clicked in turn. */
 export const SEQUENCE = ["scroll", "wreath", "tablet", "wave"];
@@ -49,6 +49,7 @@ export function SecretDoor() {
   const reduced = usePrefersReducedMotion();
   const [phase, setPhase] = useState<Phase>("closed");
   const [players, setPlayers] = useState<Player[] | null>(null);
+  const [Room, setRoom] = useState<Room | null>(null);
   const room = useRef<HTMLDivElement>(null);
   const isOpen = phase !== "closed";
 
@@ -76,6 +77,17 @@ export function SecretDoor() {
     document.addEventListener("click", listen);
     return () => document.removeEventListener("click", listen);
   }, [reduced]);
+
+  useEffect(() => {
+    if (!isOpen || Room) return;
+    let active = true;
+    void loadRoom().then((module) => {
+      if (active) setRoom(() => module.CardRoom);
+    });
+    return () => {
+      active = false;
+    };
+  }, [isOpen, Room]);
 
   // Your group takes the other seats; scholars fill in when it is small.
   useEffect(() => {
@@ -157,8 +169,8 @@ export function SecretDoor() {
         tabIndex={-1}
         data-leaving={phase === "leaving" ? "" : undefined}
       >
-        {players ? (
-          <CardRoom players={players} onLeave={() => setPhase("leaving")} />
+        {players && Room ? (
+          <Room players={players} onLeave={() => setPhase("leaving")} />
         ) : null}
       </div>
       {phase === "entering" ? (
