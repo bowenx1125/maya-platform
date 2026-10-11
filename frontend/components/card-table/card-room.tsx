@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Player } from "../../lib/poker/table";
 import { CardTable } from "./card-table";
 import { JestersTable } from "./jesters-table";
+import { OnlineLobby } from "./online-table";
 import { PixelText } from "./pixel-text";
 import { PlayingCard } from "./playing-card";
 import styles from "./card-table.module.css";
@@ -17,9 +18,13 @@ export function CardRoom({
   players: Player[];
   onLeave: () => void;
 }) {
-  const [table, setTable] = useState<"menu" | "holdem" | "jesters">("menu");
+  const [table, setTable] = useState<"menu" | "holdem" | "online" | "jesters">(
+    "menu",
+  );
   if (table === "holdem")
     return <CardTable players={players} onLeave={() => setTable("menu")} />;
+  if (table === "online")
+    return <OnlineLobby onLeave={() => setTable("menu")} />;
   if (table === "jesters")
     return <JestersTable onLeave={() => setTable("menu")} />;
   return (
@@ -36,7 +41,19 @@ export function CardRoom({
             <PlayingCard card={{ rank: 13, suit: "h" }} order={1} />
             <PlayingCard faceDown order={2} />
           </span>
-          <PixelText text="Hold'em" scale={4} />
+          <PixelText text="Training" scale={4} />
+        </button>
+        <button
+          type="button"
+          className={`${styles.button} ${styles.green} ${styles.menuChoice}`}
+          onClick={() => setTable("online")}
+        >
+          <span className={styles.menuFan} aria-hidden="true">
+            <PlayingCard card={{ rank: 11, suit: "c" }} order={6} />
+            <PlayingCard card={{ rank: 11, suit: "d" }} order={7} />
+            <PlayingCard faceDown order={8} />
+          </span>
+          <PixelText text="Online" scale={4} />
         </button>
         <button
           type="button"

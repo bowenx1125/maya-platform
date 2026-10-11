@@ -411,6 +411,8 @@ export class ChatRequestPendingError extends Error {
 export type ProviderSettings = components["schemas"]["ProviderSettings"];
 export type LiveSummary = components["schemas"]["LiveSummary"];
 export type LiveSnapshot = components["schemas"]["LiveSnapshot"];
+export type CardRoom = components["schemas"]["CardRoomView"];
+export type CardRoomAction = components["schemas"]["CardAction"];
 export type DemoBaseline = {
   agent_id: string;
   version_id: string;
@@ -1498,6 +1500,46 @@ export class PlatformApi {
     keepalive = false,
   ): Promise<LiveSummary | null> {
     return this.postJson(`debates/${debateId}/live`, body, keepalive);
+  }
+
+  createCardRoom(): Promise<CardRoom> {
+    return this.postJson("card-rooms", undefined);
+  }
+
+  cardRoom(code: string): Promise<CardRoom> {
+    return this.getJson(`card-rooms/${encodeURIComponent(code)}`);
+  }
+
+  joinCardRoom(code: string): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/seat`,
+      undefined,
+    );
+  }
+
+  leaveCardRoom(code: string): Promise<void> {
+    return this.deleteJson(`card-rooms/${encodeURIComponent(code)}/seat`);
+  }
+
+  startCardRoom(code: string): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/start`,
+      undefined,
+    );
+  }
+
+  actInCardRoom(code: string, body: CardRoomAction): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/actions`,
+      body,
+    );
+  }
+
+  rebuyInCardRoom(code: string): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/rebuy`,
+      undefined,
+    );
   }
 
   async course(courseId: string): Promise<CourseDetail> {
