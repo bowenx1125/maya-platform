@@ -1464,6 +1464,8 @@ export const ALLOWED_IDENTICAL_TERMS = [
   "Mayaform",
   "Brainform",
   "Studyform",
+  "Chatform",
+  "Live",
   "Team",
   "Maya Team",
   "Agent",
