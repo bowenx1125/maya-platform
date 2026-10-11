@@ -122,15 +122,14 @@ W1, W2, K1, K2 and K3-A are not being reimplemented.
 Branch feat/mayaform-v14; committed K2b2 a975e38, K3-A83de097/evidence1b1bfca retained.
 K3-B1/B2,0041–0053 and learning/Tools checkpoint f59df82, later fixes e40d2a1,
 0eafea9/30db274; implementation baseline36f10cb for ongoing UI/backend work. Foreign
-Debate/Voice/UI edits protected. Main GPT-6.1 Sol, Luna/max writes, independent Sol
-reviews. One writer per file; no new Astra subtask.
+Debate/Voice/UI edits protected.
 
 Resume v2 preserves Brainform RAG/Knowledge/Memory, canonical Markdown and versions;
 bound RAG/manual regenerate may replace manual head only on valid newer success,
 history retained. Current actor/source read/edit checks, task-specific evaluator and
 Boundary grants remain; Student Public+Student tools, Teacher Public+Teacher.
-Private excluded from Teacher queries/reports; ordinary Public excluded from formal
-reports. General Chat stays text-only with natural-language attempt actions, no state
+Formal attempts reach Teacher reports whatever a legacy Chat label says; ordinary
+chats never do. General Chat stays text-only with natural-language attempt actions, no state
 cards/dashboard/lifecycle buttons. Owner records/progress are phase-safe; histories
 and completed evidence stay immutable. October9 diagnosis decisions (implemented,
 0055 `submitted_at`, not yet real-accepted): survey round (all ≤3, else half), then
@@ -143,8 +142,6 @@ Integrated PDF eb7e1429ac891cf8b8e3ce2007f23d5fbadfba0a and selected colleague U
 817282e7c53313e2c2e5233dc5be64d404dab90a via b648efc/8987cf8; UI03/04/05 preserved.
 Components UI removed1d92a2f; maintenance APIs stay. October 9 pushed the v14
 line, including the colleague merges below; `main` is that same line.
-
-R4/R5 gate counts and Sol review counts are superseded by the October9 gates below.
 
 Maya backend/frontend30db274 deployed only; other containers/env preserved. Schema0053,
 readiness200/integrity/FK passed, Agno3.0.11 public SDK. Backup20261005T110321Z healthy;
@@ -168,9 +165,9 @@ fixture IDs touched; no user/colleague records or original evidence physically p
 [Current UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) overrides prior UI
 planning: same Studyform/Brainform structure for both roles, permissions differ.
 October9 user decisions: Studyform creates Agents/Voices and Teachers publish Maya
-Teams there; Chats is renamed Chatform, whose New opens a blank chat with a Chat with
-picker and inline + New Team for students or Teachers. The first message creates the
-chat; the Public/Private toggle starts a new chat, never relabels one. Brainform has no
+Teams there; Chats is renamed Chatform. Since October 11 New opens a Teams and Agents
+page whose sidebar Done creates the Chat; every Chat is private to its owner and no
+Teacher reads a student's Chat. Brainform has no
 disclosure entry; operator `PROVIDER_STANDING_CONSENT` covers classroom/production,
 otherwise Teachers confirm at the unlinked approvals route. Teacher Accounts (read-only
 Public group visit, temporary membership removed on return) and Debates are restored.
@@ -220,7 +217,7 @@ receipt replay defects. Final39-file Tool freeze passed140focused; independent
 30Tool+47generation+2additional executions passed. Source ACL, current publication,
 exact manifest, idempotency, actual billing and unknown no-resend remain. Not deployed.
 
-Knowledge editor R13–R16 kept the shared RAG editor, the pending-save lock and the draft fence. No replacement Home design.
+The Knowledge editor keeps the shared RAG editor, pending-save lock and draft fence.
 
 Separate production profile rejects Demo/quick-login/auto-confirm, validates exact
 public HTTPS origin, hides Demo identity routes, requires independent strong Teacher
@@ -245,8 +242,10 @@ intents, no ownership mismatch, integrity/FK pass. Mock only/0Provider operation
 not a real Team throughput or supported class-size claim. Final source rerun pending.
 
 Teacher statistics/report download in a fresh browser run is still open.
-Historical paid calls are not acceptance. Colleague line `15f5450`: pose
+Colleague line `15f5450`: pose
 `e9b000a` keeps one canvas; preset voice `b8f65e7` is `0056` and Chat stays
 text-only; TTS bar `054f420` and the revert were not taken.
 
-October 9: Brainform, Chatform and Studyform use the Debates card. Local browser imported the week 6–10 PDF as RAG and published Maya Team Keynotes from Studyform. Chatform New then selects that Team name. A real Public Keynotes turn answered from the keynotes (two charged `llm_agent_chat` successes). An earlier single-Agent turn was also charged once. A Private Keynotes turn called `read_memory` and paused with `team_no_progress`. That is not a screen hint: if the student asks for something this role cannot see, the Agent replies 看不到。; if it has no such function, the Agent replies 做不到。 Creating a Chat shows Private/Public in the header and Agents & Teams in the composer; both hide once the Chat exists. Maya Team opens with the Leader. No @ asks only the Leader. A Knowledge update deletes an unfinished attempt; completed attempts stay. Team dispatch no longer fails on SQLite `database is locked`: the session commits and rolls back before `BEGIN IMMEDIATE`. Tool classes stay permission-based: students get Public+Student, teachers get Public+Teacher. Cream Studyform and Brainform cards stay. A student-published public Agent is for that group and teachers; a teacher-published public Agent is for the course; private is the owner. maya and phonea both list the same 7 public Agents. Laozi, Plato and Socrates stay with Demo Group and teachers. Voices have no group picker; teachers do not create voices and have no Live. Brainform shows 课后诊断题, six editable questions, used by Maya Team 课后诊断. The publishing account opens Agent.md, Brainform, Avatar and Voice, with Back and Done. Anyone else gets that page read-only: view or download Agent.md and attached Brainform, an eye opens rendered Markdown on a cream card over the blurred main column while the sidebar stays clear, Avatar is view-only, and Voice, Done and New are absent. Done still creates or publishes only for the publisher. Back does not save a draft. A teacher-published public Agent stays usable read-only by the whole course. Teams are one Studyform list. Private or Public is chosen only when the Team is created. Private stays with the owner. A student Public Team is read-only for that group and teachers. A teacher Public Team is read-only for the course; a complete published recipe still opens with the Leader and can score a student, and a missing recipe does not. A reader sees the saved name, members, Leader and Knowledge with those controls disabled, and no Done. Chatform lists Teams once. Brainform Memory opens a new chat. Notes belong to that account and the speaking Agent, stay out of Debates, and are separate from assessment records. Deleting a Team or its Agents leaves that chat in Chatform. The history list no longer fails as not_found, and that assessment cannot continue. Card room `0058`: Online tables by 4-digit code. Students rename themselves; Accounts folds Removed; new accounts get one tour. `https://app.mayaform.net/` serves `1f34fea` (HTTP 200, backend ready 200, healthy, schema `0057`, backup20261011T045859Z integrity ok).
+October 9: Brainform, Chatform and Studyform use the Debates card. Local browser imported the week 6–10 PDF as RAG and published Maya Team Keynotes from Studyform. Chatform New then selects that Team name. A real Public Keynotes turn answered from the keynotes (two charged `llm_agent_chat` successes). An earlier single-Agent turn was also charged once. A Private Keynotes turn called `read_memory` and paused with `team_no_progress`. That is not a screen hint: if the student asks for something this role cannot see, the Agent replies 看不到。; if it has no such function, the Agent replies 做不到。 A complete published recipe opens with the Leader whoever opens the Chat; without it the Team waits for the first message. No @ asks only the Leader. A Knowledge update deletes an unfinished attempt; completed attempts stay. Team dispatch no longer fails on SQLite `database is locked`: the session commits and rolls back before `BEGIN IMMEDIATE`. Tool classes stay permission-based: students get Public+Student, teachers get Public+Teacher. Cream Studyform and Brainform cards stay. A student-published public Agent is for that group and teachers; a teacher-published public Agent is for the course; private is the owner. maya and phonea both list the same 7 public Agents. Laozi, Plato and Socrates stay with Demo Group and teachers. Voices have no group picker; teachers do not create voices and have no Live. Brainform shows 课后诊断题, six editable questions, used by Maya Team 课后诊断. The publishing account opens Agent.md, Brainform, Avatar and Voice, with Back and Done. Anyone else gets that page read-only: view or download Agent.md and attached Brainform, an eye opens rendered Markdown on a cream card over the blurred main column while the sidebar stays clear, Avatar is view-only, and Voice, Done and New are absent. Done still creates or publishes only for the publisher. Back does not save a draft. A teacher-published public Agent stays usable read-only by the whole course. Teams are one Studyform list. Private or Public is chosen only when the Team is created. Private stays with the owner. A student Public Team is read-only for that group and teachers. A teacher Public Team is read-only for the course; a complete published recipe still opens with the Leader and can score a student, and a missing recipe does not. A reader sees the saved name, members, Leader and Knowledge with those controls disabled, and no Done. Chatform lists Teams once. Brainform Memory opens a new chat. Notes belong to that account and the speaking Agent, stay out of Debates, and are separate from assessment records. Deleting a Team or its Agents leaves that chat in Chatform. The history list no longer fails as not_found, and that assessment cannot continue. Card room `0058`: Online tables by 4-digit code. Students rename themselves; Accounts folds Removed; new accounts get one tour. `https://app.mayaform.net/` serves `1f34fea` (HTTP 200, backend ready 200, healthy, schema `0057`, backup20261011T045859Z integrity ok).
+
+October 11: PR #50 (`f6b1338`) merged onto `762a810` as `556fdc5`. Chats are private: create takes only `private`, list/read are owner-only, reports drop the Public filter (old Private formal attempts count). Stale tests follow publisher-only editing and the Knowledge-update attempt reset. Not deployed; the operator deploys.

@@ -56,11 +56,11 @@ RAG 完整复用原 Knowledge 的查看/编辑/下载/删除动作，删除沿�
 
 ## F. Chatform
 
-保持现有 General Chat 的 history、messages、composer、错误呈现和多目标 @。无选中会话时显示“Click New and start chatting with me!”（中文“点击 New，和我开始聊天吧！”）。左侧 New 打开空白会话，composer 上方是“Chat with”选择器，分组列出 Agents、Teams（含“+ New Team”）和带 Maya Team 标签的 Maya Teams；第一条消息才创建会话，未选对象不创建。教师自己已发布的 Team 只列一次。
+保持现有 General Chat 的 history、messages、composer、错误呈现和多目标 @。无选中会话时显示“No chats yet.”。左侧 New 打开独立选择页，用 Studyform 的模块卡与磁贴分 Teams 和 Agents 两栏列出（空栏显示 No Teams yet. / No Agents yet.），点磁贴选中（aria-pressed，再点取消），左栏 Done 立即创建会话，Back 返回；未选对象 Done 不可用。教师自己已发布的 Team 只列一次。配方完整的老师 Team 创建时即保存 Leader 开场白。
 
-“+ New Team”在 Chatform 内用现有 Team 表单勾选成员和 Leader，师生都可创建，保存为个人 Private Team 后成为当前目标；左栏 Back 取消、Done 保存。两种 Team 都保留标签。
+Team 在 Studyform 的 Teams 中创建；Chatform 不内联建 Team。
 
-会话标题栏有 Public/Private 切换（按钮+aria-pressed）。会话开始后隐私不变，切换会开始新的会话目标；Public 可被课程教师查看，Private 只属于本人且不进入教师统计/报告。
+每个会话都只属于创建者：没有 Public/Private 标签或切换，老师和同学都不能列出或读取别人的会话。学生在老师发布、配方完整的 Team 中的正式测评仍写入记录并进入老师统计/报告；普通会话不进入。
 
 不能按 can_edit 过滤全部可聊天 Team；编辑操作检查 can_edit，Chatform 列表以当前可读/可启动资源为准。保留 busy/unknown/idempotency、完整历史、日期/Delete互斥与迟到结果隔离。Chatform 只有文字，不派发 TTS。
 
@@ -68,9 +68,9 @@ RAG 完整复用原 Knowledge 的查看/编辑/下载/删除动作，删除沿�
 
 ## G. Team / Maya Team
 
-复用现有 Team 表单、成员/Leader/Shared Knowledge、visibility、版本和保存幂等实现，不复制第二套表单或新增配置向导。普通 Team 在 Chatform 内联创建；教师在 Studyform 的 Maya Team 模块用左栏 New 新建、Done 以 Public 发布，列表只显示自己可编辑的个人 Public Team。
+复用现有 Team 表单、成员/Leader/Shared Knowledge、visibility、版本和保存幂等实现，不复制第二套表单或新增配置向导。普通 Team 在 Studyform 的 Teams 中创建；教师在 Studyform 的 Maya Team 模块用左栏 New 新建、Done 以 Public 发布，列表只显示自己可编辑的个人 Public Team。
 
-教师自己的 Public Team 自动进入 Maya Team，学生在 Chatform New 中看到带 Maya Team 标签的条目，选择后以 Private/Public 开始聊天；学生不重新配置成员、Leader或Knowledge。团队成员 own + shared 检索、当前 actor 权限和正式任务 grant 不因布局移动而变化。
+教师自己的 Public Team 自动进入 Maya Team，学生在 Chatform New 的 Teams 中选中它，Done 后开始自己的私有会话；学生不重新配置成员、Leader或Knowledge。团队成员 own + shared 检索、当前 actor 权限和正式任务 grant 不因布局移动而变化。
 
 ## H. Teacher 与维护边界
 
@@ -103,7 +103,7 @@ Components 所有用户 UI 删除成果保持，注册工具/Provider配置在�
 - [ ] New/Back/Done在左侧栏，所有页面无重复内容区按钮，busy/read-only正确。
 - [ ] Brainform无大标题/eyebrow，RAG/Knowledge/Memory三列，Knowledge pencil保留。
 - [ ] RAG edit/view/download/delete、独立查看编辑、资产名进入Knowledge并显示授权使用者、rename-only、CAS冲突保稿、md/pdf/docx、hide/reindex均可用。
-- [ ] Chatform New选择器列出Agent/Team/Maya Team和+ New Team，首条消息建会话，Public/Private切换开新会话，不增加测评控件。
+- [ ] Chatform New独立页列出Teams/Agents磁贴，Done即建私有会话，无Public/Private控件，不增加测评控件。
 - [ ] tooltip即时，mouse/focus/touch/离开/scroll/nav/Escape/locale切换正确。
 - [ ] 标题说明迁移，真正错误/empty/隐私/外发依据继续可见。
 - [ ] 全前端测试、types/lint/format、generated boundary通过；权限/调用次数负断言不删除。

@@ -6,9 +6,9 @@ Mayaform 是面向文化互学的 RAG 教学平台。学生编写 Agent 人设�
 
 - **账号**：学生自由注册，填写用户名、至少五字符的密码和小组名；同一课程内的同名小组自动归并。用户名不区分大小写，并发重名注册只提示冲突，不改变已有登录。
 - **教师 Accounts**：查看成员、修改显示名、调组、停用/恢复、重置密码。私有 Demo 目录账号由目录管理，自注册账号可在页面编辑。
-- **教师访问小组**：在 Accounts 的 Groups 中点击 **Enter**，以临时成员身份只读查看该组的 Public Agent 和 Public Chat，不能创建、删除或读取 Private Chat；左栏 **Back** 回到 Accounts，任何教师页面都会结束访问并删除这个临时成员关系。
+- **教师访问小组**：在 Accounts 的 Groups 中点击 **Enter**，以临时成员身份只读查看该组的 Public Agent，不能创建或删除；聊天只属于本人，老师看不到学生的聊天；左栏 **Back** 回到 Accounts，任何教师页面都会结束访问并删除这个临时成员关系。
 - **工作区**：老师、学生和扫码互动页面统一采用系统字体、灰白表面与登录页的暖黄色，保留原版 Logo；Chat 和 Immerse 共用按钮与配色，支持窄屏与键盘操作。登录页不变，移除解释性介绍，保留权限、费用和错误提示。
-- **Chatform**：Agent 和 Team 使用同一通用聊天界面，文字回复流式显示；保留圆角悬浮输入框与聊天历史，不展示 3D 模型或播放语音。历史、引用与版本由服务器保存，Private 仅本人可读，Public 按实际权限读取；形象在 Workspace 中编辑。
+- **Chatform**：Agent 和 Team 使用同一通用聊天界面，文字回复流式显示；保留圆角悬浮输入框与聊天历史，不展示 3D 模型或播放语音。历史、引用与版本由服务器保存，每个聊天只有本人能看；形象在 Workspace 中编辑。
 - **Live**：老师进入 Immerse 后，学生的 Live 入口亮起，同步公开发言、人物和已有音频。学生不获得控制权，观看不额外调用模型；退出或租约过期关闭。Live 画面下方的 Interact 直接打开扫码同款填写页面，弹幕不限发送次数，Final 前自动停止收集。
 - **声音**：Voices 点击文件名可直接改名，Enter／移开焦点保存，Escape 取消；不显示内部 ID。上传页不选择语言，试听默认英语，辩论朗读跟随 Ruleset。克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
 - **3D 课堂**：2–5 位国风人物围绕圆桌站立，气泡和 Transcript 随音频显示；音频失败时仍保留完整文字。实验性高斯院落需要额外的本地生成资源，不是默认课堂依赖。
@@ -94,16 +94,16 @@ MAYA_REPORT_PROVIDER=dashscope
 
 Provider 模式、API Key 和连通性检查由维护层管理，教师首页不提供 Components 控件。现有配置和调用账本继续保留，Mock 与真实 Embedding 快照不混用；资料外发按当前身份、用途和准确清单授权。Knowledge 的保存或明确生成/重生成表达当次意图，不要求另外打开披露页面确认；权限、供应商政策、去重与费用记录仍校验。
 
-没有选中会话时，Chatform 显示 “No chats yet.”。左栏 **New** 打开空白会话，在页面底部输入框上方的 **Agents & Teams** 中选择 Agent、Team 或带标签的 Maya Team，发送第一条消息才创建会话。标题栏的 **Public/Private** 决定会话隐私；会话开始后隐私不再改变，切换会开启新会话。Private 不进入教师查询，Public 正式测评可以按授权汇总；普通 Public 聊天不自动进入诊断报告。重新进入保留历史，Chatform 只输出文字。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。列表自动更新，断线可重新进入。
+没有选中会话时，Chatform 显示 “No chats yet.”。左栏 **New** 打开 Teams 和 Agents 选择页（没有时显示 No Teams yet. 或 No Agents yet.），选中一个后用左栏 **Done** 立即创建会话；配方完整的老师 Team 由 Leader 先发开场白。每个聊天都只属于本人，老师和同学都看不到；学生在老师发布的 Team 里做的正式测评照常写入记录、进入老师报告，普通聊天不进入报告。重新进入保留历史，Chatform 只输出文字。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。列表自动更新，断线可重新进入。
 
 课堂或正式实例由部署方在 `.env` 设置 `PROVIDER_STANDING_CONSENT=true`，一次性授权外部 AI 发送，师生不再看到披露页面；每个准确清单仍逐一记录、去重，未知结果不会自动重发。未设置时，教师需要在 `/teacher/provider-approvals/chats` 确认（按用户要求已无导航入口）。缺少授权时请求不会发出；确认后由学生明确发送新消息，旧失败请求不会自动重发。
 
-v1.4 的 Agent 和 Voice 在 **Studyform** 创建；普通 Team 由师生在 Chatform 的 **Chat with → + New Team** 勾选成员和 Leader 创建；教师在 Studyform 发布 Maya Team。当前部署与验收状态见 [PROJECT](docs/PROJECT.md)。教师手动检查 Maya Team 的路径是：
+v1.4 的 Agent 和 Voice 在 **Studyform** 创建；普通 Team 由师生在 Studyform 的 Teams 中勾选成员和 Leader 创建；教师在 Studyform 发布 Maya Team。当前部署与验收状态见 [PROJECT](docs/PROJECT.md)。教师手动检查 Maya Team 的路径是：
 
 1. 在 Brainform 添加 RAG；在 Studyform 用 Agents 模块右侧的 + 创建 Agent，填写 Agent.md，从 **Brainform** 选择 RAG 或已有 Knowledge，用左栏 **Done** 保存。
 2. 在 Studyform 打开 Maya Team，用左栏 **New** 选择已有成员、Leader 和共享 Knowledge。每个成员使用自己的资料加共享 Knowledge，其他成员私人资料不会自动共享。
 3. 用左栏 **Done** 发布；Team 以 Public 保存并进入 Maya Team 列表。
-4. 学生打开 **Chatform → New**，在 **Chat with** 中选择带 Maya Team 标签的 Team，再选 **Private/Public**，开始自己的会话。这里不重新选择成员、Leader 或 Knowledge。
+4. 学生打开 **Chatform → New**，在 Teams 中选中这个 Team，点左栏 **Done** 开始自己的会话。这里不重新选择成员、Leader 或 Knowledge。
 5. 测评中用自然语言作答、暂停、继续或放弃。老师成功更新相关 Knowledge 后，进行中或已暂停的回合会在普通 Chat 提示重新答题；旧作答不再参与重答评估，已完成回合不追溯修改。
 
 TTS 与 Voice 默认仍是 mock。需要语音克隆或课堂语音播放时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。柏拉图的预置音色 Eldric Sage 用 `scripts/seed_preset_voice.py` 写入，再把打印的档案 id 配成 `plato=<id>`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。TTS / Voice 由本地环境配置管理，不能在网页上切换；Real 表示已选择真实适配器，不等于音色已准备好或供应商请求已验收。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
