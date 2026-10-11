@@ -248,10 +248,14 @@ def _model_response(response_json: str) -> ModelResponse:
                 or not isinstance(function.get("arguments"), str)
             ):
                 raise ValueError
-        if not calls and (not isinstance(content, str) or not content.strip()):
-            raise ValueError
         if choice.get("finish_reason") not in {"stop", "tool_calls"}:
             raise ValueError
+        # A final message may carry no text, for instance right after a Tool
+        # call. The prompt never asks for text there, so it is not rejected
+        # here: settlement uses the server's assessment reply when one exists
+        # and still rejects an empty ordinary reply.
+        if not calls and content is None:
+            content = ""
         return ModelResponse(role="assistant", content=content, tool_calls=calls)
     except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError):
         raise TeamDispatchError("team_response_invalid") from None

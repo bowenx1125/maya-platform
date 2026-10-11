@@ -211,7 +211,9 @@ def _accepted_call(
                 saved = json.loads(saved)
             except ValueError:
                 break
-        if saved == {"arguments": arguments}:
+        # The model may send the payload flat instead of under "arguments";
+        # either shape matches only this exact payload.
+        if saved in ({"arguments": arguments}, arguments):
             return stage.operation_id
     raise conflict(
         "tool_call_unverified", "This Tool call does not match its accepted model result."

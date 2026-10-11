@@ -147,6 +147,12 @@ def _bind_one(
     )
 
     def capture(fc: FunctionCall) -> None:
+        # The schema nests the payload under "arguments". A model that sends the
+        # payload's own fields flat, or none at all, means the same call; the
+        # payload model below still validates every field and forbids extras.
+        arguments = fc.arguments
+        if arguments is None or (isinstance(arguments, dict) and "arguments" not in arguments):
+            fc.arguments = {"arguments": dict(arguments or {})}
         current_call.set(fc)
 
     def invoke(arguments: dict[str, Any]) -> dict[str, Any]:
