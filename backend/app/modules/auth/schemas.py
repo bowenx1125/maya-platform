@@ -65,7 +65,13 @@ class PublicMember(BaseModel):
 
 
 class UpdateCurrentUserRequest(BaseModel):
-    avatar: str | None = Field(max_length=64)
+    """Change what is given; an omitted field stays as it is.
+
+    ``avatar: null`` clears the avatar, so for it "omitted" and "null" differ.
+    """
+
+    avatar: str | None = Field(default=None, max_length=64)
+    display_name: str | None = Field(default=None, max_length=200)
 
 
 class PasswordChangeRequest(BaseModel):

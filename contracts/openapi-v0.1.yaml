@@ -1331,6 +1331,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: CSRF failure.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: This account's name comes from the course's account list.
       security:
       - sessionCookie: []
       summary: Update Current User
@@ -11257,14 +11263,20 @@ components:
       title: PublishedAgentAuthor
       type: object
     UpdateCurrentUserRequest:
+      description: Change what is given; an omitted field stays as it is. A null avatar clears it.
       properties:
         avatar:
+          maxLength: 64
           title: Avatar
           type:
           - string
           - 'null'
-      required:
-      - avatar
+        display_name:
+          maxLength: 200
+          title: Display Name
+          type:
+          - string
+          - 'null'
       title: UpdateCurrentUserRequest
       type: object
     PasswordChangeRequest:

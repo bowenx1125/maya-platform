@@ -29,12 +29,19 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     };
   }, []);
   const [avatar, setAvatar] = useState<string | null>(user?.avatar ?? null);
+  const [name, setName] = useState(user?.display_name ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [busy, setBusy] = useState<"avatar" | "password" | null>(null);
+  const [busy, setBusy] = useState<"avatar" | "name" | "password" | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [saved, setSaved] = useState<"avatar" | "password" | null>(null);
+  const [saved, setSaved] = useState<"avatar" | "name" | "password" | null>(
+    null,
+  );
+  // The server collapses runs of spaces the same way, so a name that only
+  // differs by spacing is not offered as a change.
+  const typedName = name.split(/\s+/).filter(Boolean).join(" ");
+  const nameChanged = typedName !== "" && typedName !== user?.display_name;
 
   // Picking a scholar is the choice, so it saves there and then. With a
   // separate Save the large preview already showed the new face, and leaving
@@ -47,7 +54,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     setSaved(null);
     setError(null);
     try {
-      await api.updateCurrentUser(choice);
+      await api.updateCurrentUser({ avatar: choice });
       if (!mounted.current) return;
       await refresh();
       if (!mounted.current) return;
@@ -62,6 +69,29 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
       // The preview never keeps a face the server did not take.
       setAvatar(previous);
       setError(cause);
+    } finally {
+      if (mounted.current) setBusy(null);
+    }
+  }
+
+  async function saveName(event: FormEvent) {
+    event.preventDefault();
+    if (busy !== null || !nameChanged) return;
+    setBusy("name");
+    setSaved(null);
+    setError(null);
+    try {
+      await api.updateCurrentUser({ display_name: typedName });
+      if (!mounted.current) return;
+      await refresh();
+      if (!mounted.current) return;
+      // The group's member list was fetched on its own and still shows the
+      // old name until the page reloads it.
+      onSaved?.();
+      setName(typedName);
+      setSaved("name");
+    } catch (cause) {
+      if (mounted.current) setError(cause);
     } finally {
       if (mounted.current) setBusy(null);
     }
@@ -114,6 +144,40 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               </span>
             ) : null}
           </div>
+          <form
+            className="profile-name"
+            onSubmit={(event) => void saveName(event)}
+          >
+            <label>
+              <span>{t("displayNameLabel")}</span>
+              <input
+                value={name}
+                maxLength={200}
+                required
+                autoComplete="nickname"
+                disabled={busy !== null}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  if (saved === "name") setSaved(null);
+                }}
+              />
+            </label>
+            {/* Save appears once there is a new name to save, so the panel
+                stays as quiet as the avatar picker until then. */}
+            {nameChanged ? (
+              <button
+                className="primary-action"
+                type="submit"
+                disabled={busy !== null}
+              >
+                {t("save")}
+              </button>
+            ) : saved === "name" ? (
+              <span className="profile-saved" role="status">
+                {t("saved")}
+              </span>
+            ) : null}
+          </form>
           <fieldset className="avatar-picker" disabled={busy !== null}>
             <legend className="sr-only">{t("userAvatar")}</legend>
             {USER_AVATAR_CHOICES.map((choice, index) => (

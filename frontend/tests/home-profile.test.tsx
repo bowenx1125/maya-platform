@@ -67,6 +67,33 @@ describe("home guide", () => {
   });
 });
 
+describe("profile name", () => {
+  it("offers Save only for a new name, and sends it collapsed", async () => {
+    session.api.updateCurrentUser.mockResolvedValue(undefined);
+    const onSaved = vi.fn();
+    inEnglish(<AccountSettings onSaved={onSaved} />);
+    const input = screen.getByLabelText("Display name") as HTMLInputElement;
+    expect(input.value).toBe("Kaikai");
+    // Only the password's Save until the name changes.
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
+
+    fireEvent.change(input, { target: { value: "Kaikai  " } });
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
+
+    fireEvent.change(input, { target: { value: "  Kai   Kai " } });
+    const saves = screen.getAllByRole("button", { name: "Save" });
+    expect(saves).toHaveLength(2);
+    fireEvent.click(saves[0]);
+    await waitFor(() =>
+      expect(session.api.updateCurrentUser).toHaveBeenCalledWith({
+        display_name: "Kai Kai",
+      }),
+    );
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(session.refresh).toHaveBeenCalled();
+  });
+});
+
 describe("profile avatar", () => {
   it("saves a scholar the moment it is picked", async () => {
     session.api.updateCurrentUser.mockResolvedValue(undefined);
@@ -76,9 +103,9 @@ describe("profile avatar", () => {
     const choices = screen.getAllByRole("radio");
     fireEvent.click(choices[2]);
     await waitFor(() =>
-      expect(session.api.updateCurrentUser).toHaveBeenCalledWith(
-        USER_AVATAR_CHOICES[2],
-      ),
+      expect(session.api.updateCurrentUser).toHaveBeenCalledWith({
+        avatar: USER_AVATAR_CHOICES[2],
+      }),
     );
     expect(await screen.findByRole("status")).toBeTruthy();
     expect(onSaved).toHaveBeenCalledTimes(1);

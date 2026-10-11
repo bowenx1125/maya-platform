@@ -28,7 +28,7 @@ from app.modules.auth.dependencies import (
     require_demo_quick_login,
     require_same_origin,
 )
-from app.modules.auth.profile import change_password, update_avatar
+from app.modules.auth.profile import change_password, update_avatar, update_display_name
 from app.modules.auth.registration import (
     register_student,
     reset_student_password,
@@ -268,7 +268,8 @@ def me(
         200: {"model": AuthSession, "description": "Updated profile and current session."},
         401: {"model": Error, "description": "Authentication required."},
         403: {"model": Error, "description": "CSRF failure."},
-        422: {"model": Error, "description": "Avatar choice is invalid."},
+        409: {"model": Error, "description": "This account's name is managed elsewhere."},
+        422: {"model": Error, "description": "Avatar choice or name is invalid."},
     },
 )
 def update_current_user(
@@ -277,7 +278,10 @@ def update_current_user(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AuthSession:
-    update_avatar(context.user, payload.avatar)
+    if "avatar" in payload.model_fields_set:
+        update_avatar(context.user, payload.avatar)
+    if payload.display_name is not None:
+        update_display_name(db, context.user, payload.display_name)
     db.flush()
     return _auth_response(db, context)
 

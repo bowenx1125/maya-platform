@@ -948,11 +948,13 @@ export class PlatformApi {
     return session;
   }
 
-  async updateCurrentUser(avatar: string | null): Promise<AuthSession> {
+  async updateCurrentUser(
+    changes: components["schemas"]["UpdateCurrentUserRequest"],
+  ): Promise<AuthSession> {
     const session = await unwrap<AuthSession>(
       await this.client.PATCH("/auth/me", {
         params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
-        body: { avatar },
+        body: changes,
       }),
     );
     this.setCsrfToken(session.csrf_token);
