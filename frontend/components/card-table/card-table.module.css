@@ -1,4 +1,6 @@
 .layout {
+  --seat-overhang-top: 40px;
+  --seat-overhang-bottom: 64px;
   position: relative;
   display: grid;
   /* Pixel type cannot wrap, so the column must never grow past the screen. */
@@ -28,7 +30,13 @@
   justify-self: center;
   width: min(1040px, 92vw);
   aspect-ratio: 2.05 / 1;
-  max-height: 100%;
+  /* Seats sit on the rail and hang over it: yours by its cards and plate
+     below, the far ones by their cards above. Keep that room clear, so on a
+     short window the felt shrinks instead of a seat covering the buttons. */
+  margin-block: var(--seat-overhang-top) var(--seat-overhang-bottom);
+  max-height: calc(
+    100% - var(--seat-overhang-top) - var(--seat-overhang-bottom)
+  );
   border-radius: 999px;
   background: repeating-conic-gradient(
       var(--felt) 0 25%,
@@ -439,6 +447,10 @@
 /* On a phone the table keeps its proportions and shrinks as a whole, so the
    pixel lettering never spills out of a card. */
 @media (max-width: 760px) {
+  .layout {
+    --seat-overhang-top: 26px;
+    --seat-overhang-bottom: 40px;
+  }
   .felt {
     width: 96vw;
     aspect-ratio: 0.95 / 1;
@@ -458,6 +470,22 @@
   .topbar,
   .controls {
     zoom: 0.72;
+  }
+}
+
+/* A short window (a laptop with the browser zoomed, or a small window)
+   shrinks the cards and seats a little, so your own hand stays clear of the
+   pot in the middle. */
+@media (min-width: 761px) and (max-height: 720px) {
+  .layout {
+    --seat-overhang-top: 30px;
+    --seat-overhang-bottom: 48px;
+  }
+  .board,
+  .seat,
+  .pot,
+  .banner {
+    zoom: 0.75;
   }
 }
 
