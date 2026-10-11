@@ -31,6 +31,7 @@ import {
   ModulePlus,
   ModuleTiles,
   VersionTile,
+  teamVersionLabel,
 } from "./studyform-layout";
 import {
   EmptyCard,
@@ -131,7 +132,8 @@ export function StudentDashboard() {
   }, [load]);
 
   if (loading) return <LoadingCard />;
-  if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
+  if (error)
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
 
   const name = user?.display_name ?? "";
   const primary = groups[0];
@@ -184,6 +186,7 @@ export function StudentDashboard() {
                 href={`/student/agents/${item.agent.id}`}
                 label={item.current_version.version_label}
                 pending={false}
+                visibility={item.agent.visibility}
                 deleteLabel={t("deleteAgent")}
               />
             ))}
@@ -403,6 +406,8 @@ function GroupWorkspaceSession({
   if (!group)
     return (
       <ErrorNotice
+        inline
+        notFound="groupNotFound"
         error={error ?? new Error(t("groupNotFound"))}
         onRetry={() => void load()}
       />
@@ -478,6 +483,7 @@ function GroupWorkspaceSession({
                   href={`/student/agents/${item.agent.id}`}
                   label={item.current_version.version_label}
                   pending={false}
+                  visibility={item.agent.visibility}
                   deleteLabel={t("deleteAgent")}
                 />
               ))}
@@ -491,6 +497,7 @@ function GroupWorkspaceSession({
                   href={`/student/agents/${item.agent.id}`}
                   label={item.current_version.version_label}
                   pending={false}
+                  visibility={item.agent.visibility}
                   deleteLabel={t("deleteAgent")}
                 />
               ))}
@@ -516,10 +523,9 @@ function GroupWorkspaceSession({
                     key={team.id}
                     name={team.display_name}
                     href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
-                    label={t("teamVersionLabel", {
-                      seq: team.current_version_seq,
-                    })}
+                    label={teamVersionLabel(team.current_version_seq)}
                     pending={false}
+                    visibility={team.visibility}
                     deleting={deleting !== null}
                     deleteLabel={t("deleteAgent")}
                     onDelete={
@@ -567,6 +573,7 @@ function GroupAgentRow({
       href={`/student/agents/${agent.id}`}
       label={bubble.label}
       pending={bubble.pending}
+      visibility={agent.visibility}
       deleting={deleting}
       deleteLabel={t("deleteAgent")}
       onDelete={canDelete ? onDelete : undefined}

@@ -502,7 +502,7 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "connection reset",
+      "Maya could not be reached. Check your connection and try again.",
     );
     const done = screen.getByRole("button", { name: "Done" });
     await waitFor(() =>

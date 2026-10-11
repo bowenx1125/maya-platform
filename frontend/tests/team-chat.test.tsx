@@ -339,7 +339,8 @@ describe("Studyform Teams", () => {
 
   it("opens the Maya Team form when a mounted Studyform route changes to team-new", async () => {
     const view = renderTeamManagement("teams");
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
+    await screen.findByText("No Teams yet.");
+    expect(screen.queryByLabelText("Name")).toBeNull();
     view.rerender(teamManagementPage("team-new"));
     expect(await screen.findByLabelText("Name")).toBeTruthy();
     expect(sidebarButton("Done")).toBeTruthy();
@@ -432,7 +433,7 @@ describe("Studyform Teams", () => {
         }),
     );
     const view = renderTeamManagement("team-new");
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
+    await screen.findByLabelText("Name");
     await startNewTeam();
     await fillTeamForm("Pending circle");
     navigation.push.mockClear();
@@ -452,8 +453,7 @@ describe("Studyform Teams", () => {
 
   it("publishes a Maya Team as a public personal Team from the Studyform sidebar", async () => {
     const view = renderTeamManagement();
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
-    expect(screen.getByText("No Teams yet.")).toBeTruthy();
+    expect(await screen.findByText("No Teams yet.")).toBeTruthy();
     expect(
       within(screen.getByRole("navigation")).queryByRole("button", {
         name: "New",
@@ -492,7 +492,6 @@ describe("Studyform Teams", () => {
     state.api.teams.mockResolvedValue([publicTeam]);
     state.api.team.mockResolvedValue(publicTeam);
     renderTeamManagement();
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
     fireEvent.click(
       await screen.findByRole("button", { name: "Reasoning circle" }),
     );
@@ -554,7 +553,7 @@ describe("Studyform Teams", () => {
       .mockRejectedValueOnce(new Error("connection reset"))
       .mockResolvedValueOnce(publicTeam);
     renderTeamManagement("team-new");
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
+    await screen.findByLabelText("Name");
     await startNewTeam();
     await fillTeamForm("Retryable circle");
     fireEvent.click(sidebarButton("Done"));
@@ -580,7 +579,7 @@ describe("Studyform Teams", () => {
   it("leaves a saved Team without showing its version list or repeating the POST", async () => {
     state.api.teams.mockResolvedValueOnce([]);
     renderTeamManagement("team-new");
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
+    await screen.findByLabelText("Name");
     await startNewTeam();
     await fillTeamForm("Reasoning circle");
     fireEvent.click(sidebarButton("Done"));
@@ -592,7 +591,7 @@ describe("Studyform Teams", () => {
       ),
     ).toBeNull();
     expect(state.api.createTeam).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("Version 1")).toBeNull();
+    expect(screen.queryByText("V1.0")).toBeNull();
     expect(navigation.push).toHaveBeenCalledWith(
       expect.stringContaining("mode=teams"),
       { scroll: false },
@@ -805,6 +804,45 @@ describe("Chatform", () => {
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
   });
 
+  it("keeps the Chat Done created when the router later drops mode=new", async () => {
+    state.api.teams.mockResolvedValue([
+      { ...team, can_edit: false, visibility: "public" },
+    ]);
+    const view = renderChats();
+    // A real router shows each push only after the page has rendered it.
+    const showUrl = (url: string) =>
+      act(() => {
+        window.history.pushState(null, "", url);
+        view.rerender(
+          <LocaleProvider initialLocale="en">
+            <UiGuideTooltip />
+            <AppShell role="student">
+              <AgentChat />
+            </AppShell>
+          </LocaleProvider>,
+        );
+      });
+    await openNewChat();
+    showUrl("/student/chat?mode=new");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Reasoning circle/ }),
+    );
+    const done = sidebarButton("Done");
+    await waitFor(() => expect(done.disabled).toBe(false));
+    fireEvent.click(done);
+    await screen.findByRole("textbox", { name: "Message" });
+    const historyReads = state.api.conversationSessions.mock.calls.length;
+
+    showUrl("/student/chat");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
+    expect(screen.getByText("Team")).toBeTruthy();
+    expect(state.api.conversationSessions).toHaveBeenCalledTimes(historyReads);
+  });
+
   it("keeps the New page when Done cannot create the Chat", async () => {
     state.api.createConversation.mockRejectedValue(new Error("stop here"));
     renderChats();
@@ -866,7 +904,7 @@ describe("Chatform", () => {
         </AppShell>
       </LocaleProvider>,
     );
-    await screen.findByRole("heading", { level: 2, name: "Teams" });
+    await screen.findByLabelText("Name");
     expect(
       screen
         .getByRole("button", { name: "Private" })
@@ -955,6 +993,81 @@ describe("Chatform", () => {
     expect(page.getByRole("button", { name: /Reasoning circle/ })).toBeTruthy();
     expect(state.api.teams).toHaveBeenCalledWith("course");
     expect(state.api.mayaTeams).toHaveBeenCalledWith("course");
+  });
+
+  it("explains under the latest message that a member Agent was deleted", async () => {
+    const history = {
+      ...teamSession,
+      can_send: false,
+      team: {
+        ...teamSession.team,
+        available: false,
+        members: teamSession.team.members.map((member, index) =>
+          index === 1 ? { ...member, available: false, deleted: true } : member,
+        ),
+      },
+      turns: [
+        {
+          id: "kept-turn",
+          user_text: "A kept Team question",
+          state: "ready",
+          member_results: [],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([history]);
+    state.api.conversationSession.mockResolvedValue(history);
+    renderChats();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "A kept Team question" }),
+    );
+    const log = await screen.findByRole("log");
+    const deletedName = teamSession.team.members[1].name;
+    expect(
+      await within(log).findByText(
+        `${deletedName} was deleted by its publisher. This Team chat can't continue; its history is kept.`,
+      ),
+    ).toBeTruthy();
+    expect(within(log).getByText("A kept Team question")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Team Chat sending is unavailable in the current runtime.",
+      ),
+    ).toBeNull();
+  });
+
+  it("tells the student an unrecorded answer must be sent again", async () => {
+    state.api.streamTeamConversation.mockResolvedValue({
+      ...teamSession,
+      revision: 1,
+      turns: [
+        {
+          id: "answer-turn",
+          user_text: "My answer",
+          state: "failed",
+          member_results: [
+            {
+              id: "leader-result",
+              participant_id: "participant-1",
+              speaker_name: "Bowen",
+              ordinal: 0,
+              state: "failed",
+              assistant_text: null,
+              sources: [],
+              safe_error_code: "assessment_action_required",
+            },
+          ],
+        },
+      ],
+    });
+    renderChats();
+    await startMayaTeamChat("My answer");
+    expect(
+      await screen.findByText(
+        "Your answer was not recorded. Send it again to continue the assessment.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("This Team member could not reply.")).toBeNull();
   });
 
   it("shows no privacy or target controls on an existing Chat", async () => {

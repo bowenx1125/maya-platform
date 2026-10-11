@@ -57,7 +57,7 @@ import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { PageAction } from "./page-action";
-import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
+import { ErrorNotice, LoadingCard, Notice, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
 
@@ -70,6 +70,24 @@ type MemoryRoute = {
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const memoryRouteKeys = [
+  "memory_action_id",
+  "memory_actor_id",
+  "memory_course_id",
+  "memory_source_kind",
+  "memory_source_id",
+] as const;
+
+function memoryParamsOf(search: string): string {
+  const params = new URLSearchParams(search);
+  const kept = new URLSearchParams();
+  for (const key of memoryRouteKeys) {
+    const value = params.get(key);
+    if (value !== null) kept.set(key, value);
+  }
+  return kept.toString();
+}
 
 function parseMemoryRoute(
   search: string,
@@ -253,9 +271,16 @@ function AgentChatScope({
     });
   }
   const newChatRoute = newChatRouteState.open;
-  const parsedMemoryRoute = useMemo(
-    () => parseMemoryRoute(memoryRouteSearch),
+  // Opening or closing New changes only `mode`. Parsing just the memory
+  // parameters keeps that URL change from reading history again, which
+  // would drop the Chat that Done has just created and selected.
+  const memoryRouteParams = useMemo(
+    () => memoryParamsOf(memoryRouteSearch),
     [memoryRouteSearch],
+  );
+  const parsedMemoryRoute = useMemo(
+    () => parseMemoryRoute(memoryRouteParams),
+    [memoryRouteParams],
   );
   const invalidMemoryRoute =
     parsedMemoryRoute.kind === "invalid" ||
@@ -267,6 +292,8 @@ function AgentChatScope({
     code: string | null | undefined,
     fallback: "teamMemberFailure" | "teamRequestFailure",
   ) => {
+    if (code === "assessment_action_required")
+      return t("teamAnswerNotRecorded");
     if (code === "provider_confirmation_required") {
       return t(
         role === "teacher"
@@ -310,6 +337,9 @@ function AgentChatScope({
   const [versionId, setVersionId] = useState("");
   const [pick, setPick] = useState("");
   const [creating, setCreating] = useState(false);
+  const [closedNoticeDismissed, setClosedNoticeDismissed] = useState<
+    string | null
+  >(null);
   const mounted = useRef(true);
   const [teamChoices, setTeamChoices] = useState<TeamSummaryDto[]>([]);
   const [mayaChoices, setMayaChoices] = useState<MayaTeamDirectoryDto[]>([]);
@@ -2097,11 +2127,36 @@ function AgentChatScope({
     ...teamChoices,
     ...mayaChoices
       .filter((team) => !teamIds.has(team.id))
-      .map((team) => ({ id: team.id, display_name: team.display_name })),
+      .map((team) => ({
+        id: team.id,
+        display_name: team.display_name,
+        visibility: "public" as const,
+      })),
   ];
   const chatTitle = selectedTeam?.team.name ?? character?.name ?? "";
   const chatKind = teamMode ? "Team" : "Agent";
   const hasTarget = Boolean(selected || selectedTeam || versionId);
+  // Inside an open Chat, errors sit under the latest message, not above the page.
+  const showConversation = hasTarget && !newChatRoute;
+  const deletedMember = selectedTeam?.team.members.find(
+    (member) => member.deleted,
+  );
+  // Why this Chat cannot continue, shown once under its latest message.
+  const closedNotice = selectedTeam
+    ? selectedTeam.team.deleted
+      ? t("chatTeamDeleted")
+      : deletedMember
+        ? t("chatTeamMemberDeleted", { name: deletedMember.name })
+        : selectedTeam.read_only
+          ? t("teamChatReadOnly")
+          : !selectedTeam.can_send
+            ? t("teamChatUnavailable")
+            : null
+    : selected?.agent.deleted
+      ? t("chatAgentDeleted")
+      : character?.available === false
+        ? readOnlyHelp
+        : null;
   // Done creates a Chat before its first message, so every saved Chat is
   // listed; it is named by its first message, else by whom it is with.
   const historyItems = [
@@ -2211,7 +2266,7 @@ function AgentChatScope({
           {t("brainformMemoryRetry")}
         </button>
       ) : null}
-      {error ? (
+      {error && !showConversation ? (
         <ErrorNotice
           error={error}
           onRetry={
@@ -2454,18 +2509,36 @@ function AgentChatScope({
                       </div>
                     </div>
                   ) : null}
-                  <div ref={endRef} />
-                </div>
-                {selectedTeam ? (
-                  <div className={styles.teamComposerTools}>
-                    {selectedTeam.read_only ? (
-                      <p role="status">{t("teamChatReadOnly")}</p>
-                    ) : !selectedTeam.can_send ? (
-                      <p role="status">{t("teamChatUnavailable")}</p>
-                    ) : null}
-                    {teamError ? (
-                      <div className={styles.teamStatus} role="alert">
-                        <p>{teamErrorText(teamError)}</p>
+                  {error ? (
+                    <ErrorNotice
+                      inline
+                      error={error}
+                      onRetry={
+                        historyRefreshTarget
+                          ? () => void openHistory(historyRefreshTarget)
+                          : undefined
+                      }
+                    />
+                  ) : null}
+                  {closedNotice &&
+                  closedNoticeDismissed !== activeSession?.id ? (
+                    <Notice
+                      inline
+                      id="chat-readonly-help"
+                      tone="warning"
+                      onClose={() =>
+                        setClosedNoticeDismissed(activeSession?.id ?? null)
+                      }
+                    >
+                      {closedNotice}
+                    </Notice>
+                  ) : null}
+                  {selectedTeam && teamError ? (
+                    <Notice
+                      inline
+                      tone="error"
+                      onClose={() => setTeamError(null)}
+                      action={
                         <button
                           type="button"
                           className="inline-button"
@@ -2474,8 +2547,17 @@ function AgentChatScope({
                         >
                           {t("teamCheckStatus")}
                         </button>
-                      </div>
-                    ) : selectedTeam.turns.at(-1)?.state === "paused" ? (
+                      }
+                    >
+                      {teamErrorText(teamError)}
+                    </Notice>
+                  ) : null}
+                  <div ref={endRef} />
+                </div>
+                {selectedTeam ? (
+                  <div className={styles.teamComposerTools}>
+                    {teamError ? null : selectedTeam.turns.at(-1)?.state ===
+                      "paused" ? (
                       <button
                         type="button"
                         className="inline-button"
@@ -2527,11 +2609,6 @@ function AgentChatScope({
                         </button>
                       ))}
                     </div>
-                  ) : null}
-                  {!teamMode && character?.available === false ? (
-                    <p id="chat-readonly-help" className={styles.readOnlyHelp}>
-                      {readOnlyHelp}
-                    </p>
                   ) : null}
                   <textarea
                     ref={messageRef}

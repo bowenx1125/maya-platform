@@ -1,11 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { isConflict } from "../lib/api";
-import { localizeError, statusLabel } from "../lib/i18n";
+import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useLocale, useT } from "./locale";
+import { IconClose } from "./quiet-icons";
 
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
@@ -23,31 +25,128 @@ export function LoadingCard({ label }: { label?: string }) {
   );
 }
 
+const noSubscription = () => () => {};
+
+/** One tray at the bottom of the page, so notices never push a page down. */
+function noticeTray(): HTMLElement {
+  let element = document.querySelector<HTMLElement>(".notice-tray");
+  if (!element) {
+    element = document.createElement("div");
+    element.className = "notice-tray";
+    document.body.append(element);
+  }
+  return element;
+}
+
+/** The tray exists only in the browser; the server renders no notice. */
+function useNoticeTray(enabled: boolean) {
+  const browser = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
+  return enabled && browser ? noticeTray() : null;
+}
+
+/**
+ * Every error and notice can be closed with its X. Inline notices stay where
+ * they are written, such as under the latest Chat message; the rest float in
+ * the bottom tray.
+ */
+export function Notice({
+  id,
+  tone,
+  title,
+  children,
+  action,
+  inline = false,
+  onClose,
+}: {
+  id?: string;
+  tone: "error" | "warning" | "success" | "info";
+  title?: ReactNode;
+  children?: ReactNode;
+  action?: ReactNode;
+  inline?: boolean;
+  onClose?: () => void;
+}) {
+  const t = useT();
+  const [closed, setClosed] = useState(false);
+  const tray = useNoticeTray(!inline);
+  if (closed || (!inline && !tray)) return null;
+  const notice = (
+    <div
+      id={id}
+      className={`notice notice-${tone}`}
+      role={tone === "error" || tone === "warning" ? "alert" : "status"}
+    >
+      {title ? <strong>{title}</strong> : null}
+      {children ? <span>{children}</span> : null}
+      {action}
+      <button
+        type="button"
+        className="notice-close"
+        aria-label={t("noticeDismiss")}
+        onClick={() => (onClose ? onClose() : setClosed(true))}
+      >
+        <IconClose />
+      </button>
+    </div>
+  );
+  return inline || !tray ? notice : createPortal(notice, tray);
+}
+
+/** A missing record, as opposed to one the server named a reason for. */
+function isNotFound(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const { code, status } = error as { code?: unknown; status?: unknown };
+  return code === "not_found" || (typeof code !== "string" && status === 404);
+}
+
+/**
+ * The message alone names the problem; a generic "Request failed" heading
+ * told the reader nothing. `notFound` says which record went missing, so a
+ * deleted Agent reads as a deleted Agent rather than an unknown resource.
+ */
 export function ErrorNotice({
   error,
   onRetry,
+  inline = false,
+  notFound,
 }: {
   error: unknown;
   onRetry?: () => void;
+  inline?: boolean;
+  notFound?: MessageKey;
 }) {
   const t = useT();
   const { locale } = useLocale();
+  // A new error shows again even where an earlier one was closed.
+  const [dismissed, setDismissed] = useState<unknown>(null);
+  if (dismissed === error) return null;
   const conflict = isConflict(error);
+  const missing = isNotFound(error);
   return (
-    <div
-      className={conflict ? "notice notice-warning" : "notice notice-error"}
-      role="alert"
+    <Notice
+      tone={conflict ? "warning" : "error"}
+      title={conflict ? t("revisionConflict") : undefined}
+      inline={inline}
+      onClose={() => setDismissed(error)}
+      action={
+        // Asking again for a deleted record cannot succeed.
+        onRetry && !missing ? (
+          <button className="inline-button" type="button" onClick={onRetry}>
+            {t("retry")}
+          </button>
+        ) : null
+      }
     >
-      <strong>{conflict ? t("revisionConflict") : t("requestFailed")}</strong>
-      <span>
-        {conflict ? t("retryConflict") : localizeError(error, locale)}
-      </span>
-      {onRetry ? (
-        <button className="inline-button" type="button" onClick={onRetry}>
-          {t("retry")}
-        </button>
-      ) : null}
-    </div>
+      {conflict
+        ? t("retryConflict")
+        : notFound && missing
+          ? t(notFound)
+          : localizeError(error, locale)}
+    </Notice>
   );
 }
 

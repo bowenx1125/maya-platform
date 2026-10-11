@@ -418,7 +418,7 @@ textarea {
 }
 
 .notice {
-  align-items: flex-start;
+  align-items: center;
   margin: 16px 0;
   line-height: 1.45;
 }
@@ -442,9 +442,69 @@ textarea {
   background: #f5fcf8;
 }
 
+.notice-close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px -6px auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.notice-close:hover {
+  background: rgba(39, 35, 61, 0.06);
+  color: var(--ink);
+}
+
+.notice-close:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
+  outline-offset: 2px;
+}
+
+/* Notices away from a conversation float above the page's bottom edge. */
+.notice-tray {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  display: grid;
+  gap: 10px;
+  width: min(440px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.notice-tray:empty {
+  display: none;
+}
+
+.notice-tray .notice {
+  margin: 0;
+  padding: 14px 16px;
+  box-shadow: var(--lift);
+  pointer-events: auto;
+}
+
+@media (max-width: 680px) {
+  .notice-tray {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    width: auto;
+  }
+}
+
 .notice .inline-button {
   margin-left: auto;
   flex: 0 0 auto;
+}
+
+.notice .inline-button + .notice-close {
+  margin-left: 0;
 }
 
 .form-error {
@@ -2219,6 +2279,36 @@ dd {
 
 .agent-pill[data-pending="true"]::before {
   background: #8a6a1f;
+}
+
+/* Where an Agent or Team carries its visibility, the version is a pill whose
+   colour says who can use it: green is Public, grey is Private. */
+.agent-pill[data-visibility] {
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 640;
+  text-transform: none;
+}
+
+.agent-pill[data-visibility]::before {
+  display: none;
+}
+
+.agent-pill[data-visibility="public"] {
+  background: rgba(45, 138, 104, 0.14);
+  color: var(--green);
+}
+
+.agent-pill[data-visibility="private"] {
+  background: #f0edf2;
+  color: var(--muted);
+}
+
+.agent-pill-action[data-visibility]:hover,
+.agent-pill-action[data-visibility]:focus-visible {
+  color: var(--red);
 }
 
 /* The group's members, alphabetical, under the group's own name. */

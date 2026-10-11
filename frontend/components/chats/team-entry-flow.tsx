@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   createIdempotencyHandle,
   isAmbiguousMutationFailure,
+  PlatformApiError,
   type ChatAgent,
   type IdempotencyHandle,
   type PlatformApi,
@@ -22,9 +23,12 @@ import {
   type TeamUpdateRequest,
   type TeamWriteRequest,
 } from "../../lib/api";
-import { useT } from "../locale";
+import { localizeError } from "../../lib/i18n";
+import { useLocale, useT } from "../locale";
 import { PageAction } from "../page-action";
+import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
+import { Notice } from "../ui";
 import styles from "../agent-chat.module.css";
 
 type KnowledgeSetChoice = { id: string; name: string };
@@ -111,12 +115,12 @@ export function TeamEntryFlow({
   onCancel?: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const { identityGeneration, user } = useSession();
   const apiForTeams = useMemo(() => teamApi(api), [api]);
   const formId = useId();
-  const headingId = useId();
   const dataScope = `${user?.id ?? "anonymous"}:${identityGeneration}:${courseId}:${variant}`;
   const actionScope = `${dataScope}:${standalone ? pathname : "inline"}:${initialRouteMode ?? ""}:${initialTeamId ?? ""}`;
   const routeOpensForm = !standalone || initialRouteMode === "team-new";
@@ -143,6 +147,8 @@ export function TeamEntryFlow({
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [error, setError] = useState<unknown>(null);
+  // Closing a notice hides that one failure; the next one shows again.
+  const [dismissedError, setDismissedError] = useState<unknown>(null);
   const requestSeq = useRef(0);
   const pendingMutation = useRef<PendingTeamMutation | null>(null);
   const routedEdit = useRef("");
@@ -548,19 +554,17 @@ export function TeamEntryFlow({
   const title = variant === "maya" ? t("mayaTeams") : t("chatTargetTeams");
 
   return (
-    <section className={styles.entryFlow} aria-labelledby={headingId}>
-      <div className={styles.entryHeading}>
-        <div>
-          <h2 id={headingId}>{title}</h2>
-        </div>
-      </div>
-
+    <section className={styles.entryFlow} aria-label={title}>
       <div className={styles.entrySection}>
         {loading ? <p role="status">{t("loading")}</p> : null}
-        {loadError ? (
-          <p role="alert" className={styles.entryError}>
+        {loadError && loadError !== dismissedError ? (
+          <Notice
+            inline
+            tone="error"
+            onClose={() => setDismissedError(loadError)}
+          >
             {apiForTeams ? t("teamLoadFailed") : t("teamApiNotConnected")}
-          </p>
+          </Notice>
         ) : null}
         {standalone && !formOpen && visibleTeams.length ? (
           <ul className={styles.entryTeamList} aria-label={title}>
@@ -574,9 +578,7 @@ export function TeamEntryFlow({
                 >
                   {team.display_name}
                 </button>
-                <small>
-                  {t("teamVersionLabel", { seq: team.current_version_seq })}
-                </small>
+                <small>{teamVersionLabel(team.current_version_seq)}</small>
               </li>
             ))}
           </ul>
@@ -590,24 +592,30 @@ export function TeamEntryFlow({
         ) : null}
 
         {saved ? (
-          <p role="status" className={styles.entryNotice}>
+          <Notice inline tone="success" onClose={() => setSaved(false)}>
             {variant === "maya"
               ? t("mayaTeamPublished")
               : t("teamSavedWaitingForChat")}
-          </p>
+          </Notice>
         ) : null}
         {teamListRefreshError ? (
-          <div className={styles.entryError}>
-            <p role="status">{t("teamListRefreshFailed")}</p>
-            <button
-              className="inline-button"
-              type="button"
-              disabled={teamListRefreshing}
-              onClick={() => void refreshTeamList()}
-            >
-              {teamListRefreshing ? t("loading") : t("retryTeamList")}
-            </button>
-          </div>
+          <Notice
+            inline
+            tone="warning"
+            onClose={() => setTeamListRefreshError(false)}
+            action={
+              <button
+                className="inline-button"
+                type="button"
+                disabled={teamListRefreshing}
+                onClick={() => void refreshTeamList()}
+              >
+                {teamListRefreshing ? t("loading") : t("retryTeamList")}
+              </button>
+            }
+          >
+            {t("teamListRefreshFailed")}
+          </Notice>
         ) : null}
 
         {!loading && apiForTeams && (editing || formOpen) ? (
@@ -751,10 +759,21 @@ export function TeamEntryFlow({
                 <p>{t("teamNoSharedKnowledge")}</p>
               )}
             </fieldset>
-            {error ? (
-              <p role="alert" className={styles.entryError}>
-                {mutationUnknown ? t("teamSaveUnknown") : t("teamSaveFailed")}
-              </p>
+            {error && error !== dismissedError ? (
+              <Notice
+                inline
+                tone="error"
+                onClose={() => setDismissedError(error)}
+              >
+                {mutationUnknown
+                  ? t("teamSaveUnknown")
+                  : // The server names why a save failed, such as a member
+                    // Agent its publisher deleted; a dropped connection
+                    // has no reason to show beyond the generic one.
+                    error instanceof PlatformApiError
+                    ? localizeError(error, locale, "teamSaveFailed")
+                    : t("teamSaveFailed")}
+              </Notice>
             ) : null}
             {readOnly ? null : (
               <PageAction

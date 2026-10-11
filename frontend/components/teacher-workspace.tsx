@@ -39,6 +39,7 @@ import {
   ModulePlus,
   ModuleTiles,
   VersionTile,
+  teamVersionLabel,
 } from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
@@ -125,7 +126,7 @@ export function TeacherDashboard() {
 
   if (loading || loadedScope !== workspaceScope) return <LoadingCard />;
   if (error && published.length === 0)
-    return <ErrorNotice error={error} onRetry={() => void load()} />;
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   const name = user?.display_name ?? "";
   const guide = [
     {
@@ -335,7 +336,7 @@ export function TeacherStudyformWorkspace({
     !ownedAgents.length &&
     !chatAgents.length
   )
-    return <ErrorNotice error={error} />;
+    return <ErrorNotice inline error={error} />;
 
   const teamForm =
     initialMode === "team-new" ||
@@ -394,6 +395,7 @@ export function TeacherStudyformWorkspace({
                   href={`/teacher/agents/${item.agent.id}`}
                   label={item.current_version.version_label}
                   pending={false}
+                  visibility={item.agent.visibility}
                   deleting={deletingId !== null}
                   deleteLabel={t("deleteAgent")}
                   onDelete={
@@ -411,6 +413,7 @@ export function TeacherStudyformWorkspace({
                     href={`/teacher/agents/${agent.id}`}
                     label=""
                     pending={false}
+                    visibility={agent.visibility}
                     deleting={deletingId !== null}
                     deleteLabel={t("deleteAgent")}
                     onDelete={() => void deletePersonalAgent(agent.id)}
@@ -440,10 +443,9 @@ export function TeacherStudyformWorkspace({
                   key={team.id}
                   name={team.display_name}
                   href={`/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
-                  label={t("teamVersionLabel", {
-                    seq: team.current_version_seq,
-                  })}
+                  label={teamVersionLabel(team.current_version_seq)}
                   pending={false}
+                  visibility={team.visibility}
                   deleting={deletingId !== null}
                   deleteLabel={t("deleteAgent")}
                   onDelete={
@@ -482,7 +484,7 @@ export function TeacherPersonalAgentCreate() {
     (item) => item.role === "teacher",
   );
   if (!user || !teacherMembership) {
-    return <ErrorNotice error={new Error(t("courseNotFound"))} />;
+    return <ErrorNotice inline error={new Error(t("courseNotFound"))} />;
   }
   const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
   return (
@@ -665,12 +667,16 @@ export function TeacherAgentDetail({
   if (error || !agent)
     return (
       <ErrorNotice
+        inline
+        notFound="publishedAgentNotFound"
         error={error ?? new Error(t("publishedAgentNotFound"))}
         onRetry={() => void load()}
       />
     );
   if (generationSetId && verifiedGenerationSetId !== generationSetId) {
-    return <ErrorNotice error={new Error(t("generatedSetAgentMismatch"))} />;
+    return (
+      <ErrorNotice inline error={new Error(t("generatedSetAgentMismatch"))} />
+    );
   }
   const currentAgent = agent;
   const editorVersion =
@@ -704,7 +710,9 @@ export function TeacherAgentDetail({
 
   if (snapshotId && snapshot?.id !== snapshotId) return <LoadingCard />;
   if (!selectedVersion) {
-    return <ErrorNotice error={new Error(t("publishedAgentNotFound"))} />;
+    return (
+      <ErrorNotice inline error={new Error(t("publishedAgentNotFound"))} />
+    );
   }
   return (
     <AgentReadOnly

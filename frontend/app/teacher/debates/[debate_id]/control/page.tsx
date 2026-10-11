@@ -403,7 +403,12 @@ export default function TeacherDebateControlPage() {
         <PageAction name="back" href="/teacher/debates" />
         {loading && !detail ? <LoadingCard /> : null}
         {!loading && error && !detail ? (
-          <ErrorNotice error={error} onRetry={() => void load()} />
+          <ErrorNotice
+            inline
+            notFound="debateNotFound"
+            error={error}
+            onRetry={() => void load()}
+          />
         ) : null}
         {detail && debateId ? (
           detail.turn_protocol === "segments_v2" ? (

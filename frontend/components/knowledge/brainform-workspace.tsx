@@ -481,7 +481,10 @@ export function BrainformWorkspace({
   }, [api, initialGroupId, role, user?.courses, user?.groups]);
 
   if (!groupContextResolved) return <LoadingCard />;
-  if (groupContextError) return <ErrorNotice error={groupContextError} />;
+  if (groupContextError)
+    return (
+      <ErrorNotice inline notFound="groupNotFound" error={groupContextError} />
+    );
   const dataScope = JSON.stringify([
     user?.id ?? null,
     effectiveRole,

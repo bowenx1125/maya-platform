@@ -3,13 +3,14 @@
 import type { ChatAgent } from "../../lib/api";
 import { useT } from "../locale";
 import { IconCheck } from "../quiet-icons";
-import { ModuleCard, ModuleGrid } from "../studyform-layout";
+import { ModuleCard, ModuleGrid, teamVersionLabel } from "../studyform-layout";
 import styles from "../agent-chat.module.css";
 
 export type ChatTargetTeam = {
   id: string;
   display_name: string;
   current_version_seq?: number;
+  visibility?: "private" | "public";
 };
 
 /** The New page: one Studyform-style list of Teams and Agents to chat with. */
@@ -31,6 +32,7 @@ export function ChatTargetPicker({
     key: string,
     name: string,
     label: string | null,
+    visibility?: "private" | "public",
     unavailable = false,
   ) => {
     const picked = value === key;
@@ -44,7 +46,11 @@ export function ChatTargetPicker({
           onClick={() => onPick(picked ? "" : key)}
         >
           <span className="agent-tile-name">{name}</span>
-          {label ? <span className="agent-pill">{label}</span> : null}
+          {label ? (
+            <span className="agent-pill" data-visibility={visibility}>
+              {label}
+            </span>
+          ) : null}
           {picked ? (
             <span className={styles.pickMark} aria-hidden="true">
               <IconCheck size={14} />
@@ -68,8 +74,9 @@ export function ChatTargetPicker({
                 `team:${team.id}`,
                 team.display_name,
                 team.current_version_seq
-                  ? t("teamVersionLabel", { seq: team.current_version_seq })
+                  ? teamVersionLabel(team.current_version_seq)
                   : null,
+                team.visibility,
               ),
             )}
           </ul>
@@ -87,6 +94,7 @@ export function ChatTargetPicker({
                 `agent:${agent.version_id}`,
                 agent.name,
                 agent.version_label,
+                agent.visibility,
                 agent.available === false,
               ),
             )}

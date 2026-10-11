@@ -191,6 +191,16 @@
   font: inherit;
   cursor: pointer;
 }
+/* Named exactly like a Studyform tile, whose name is a text link. */
+.pickTile :global(.agent-tile-name) {
+  padding: 9px 16px;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: normal;
+}
 .pickTile[aria-pressed="true"] {
   border-color: var(--accent, #76591f);
   background: var(--accent-soft);
@@ -239,8 +249,7 @@
   border-radius: 0;
   box-shadow: none;
 }
-.teamComposerTools > p,
-.teamComposerTools .teamStatus p {
+.teamComposerTools > p {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
@@ -288,20 +297,6 @@
 }
 .teamComposerTools > p {
   flex: 1 1 100%;
-  margin: 0;
-}
-.teamStatus {
-  display: flex;
-  flex: 1 1 100%;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--surface-subtle);
-}
-.teamStatus p {
   margin: 0;
 }
 .teamRecipients {
@@ -391,6 +386,10 @@
   padding: 28px 28px 12px;
   overscroll-behavior: contain;
 }
+.messages > :global(.notice) {
+  max-width: 760px;
+  margin: 12px auto 0;
+}
 .exchange {
   display: grid;
   gap: 20px;
@@ -446,7 +445,6 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    "help help"
     "text text"
     ". send";
   gap: 6px 8px;
@@ -459,12 +457,6 @@
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.8) inset,
     0 10px 28px rgba(52, 45, 30, 0.06);
-}
-.readOnlyHelp {
-  grid-area: help;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
 }
 .composer:focus-within {
   outline: none;
@@ -556,32 +548,14 @@
   background: var(--panel, #fdfaf3);
   box-shadow: none;
 }
-.entryHeading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line, #e4e1d9);
-}
-.entryHeading h2,
 .teamForm h3 {
   margin: 0;
 }
-.entryHeading h2 {
-  font-family: var(--display-serif);
-  font-size: 1.35rem;
-  font-weight: 500;
-}
-.entryHeading p,
 .teamForm fieldset > p,
 .entryTeamList small {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.5;
-}
-.entryHeading p {
-  margin: 6px 0 0;
 }
 .entrySection {
   display: grid;
@@ -614,8 +588,6 @@
   display: grid;
   gap: 16px;
   max-width: 720px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
 }
 .teamForm :global(input:focus-visible),
 .teamForm :global(button:focus-visible) {
@@ -683,16 +655,11 @@
   flex: 0 0 auto;
   accent-color: var(--accent);
 }
-.entryNotice,
 .entryHint {
   padding: 12px 14px;
   border-radius: 10px;
   background: var(--surface-subtle);
   color: var(--ink);
-  line-height: 1.5;
-}
-.entryError {
-  color: var(--red);
   line-height: 1.5;
 }
 @media (max-width: 1100px) {
@@ -708,9 +675,6 @@
     gap: 16px;
     padding: 16px;
     border-radius: 18px;
-  }
-  .entryHeading {
-    align-items: stretch;
   }
   .entryMember {
     grid-template-columns: minmax(0, 1fr);

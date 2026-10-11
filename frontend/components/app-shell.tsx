@@ -319,10 +319,14 @@ export function AppShell({
             : pathname.startsWith("/student/groups/") &&
                 pathname.endsWith("/voices")
               ? pathname.slice(0, -"/voices".length)
-              : pathname.startsWith("/student/groups/") &&
-                  pathname.endsWith("/knowledge")
-                ? "/student/knowledge"
-                : pathname;
+              : // A new Agent is made from Studyform, so Studyform stays lit.
+                pathname.startsWith("/student/groups/") &&
+                  pathname.endsWith("/agents/new")
+                ? pathname.slice(0, -"/agents/new".length)
+                : pathname.startsWith("/student/groups/") &&
+                    pathname.endsWith("/knowledge")
+                  ? "/student/knowledge"
+                  : pathname;
   const studentGroupPicker =
     !teacherSurface &&
     pathname === "/student" &&

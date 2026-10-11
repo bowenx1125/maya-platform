@@ -500,7 +500,7 @@ export function TeacherDebateCreate({
 
   if (loading) return <LoadingCard />;
   if (error && candidates.length === 0) {
-    return <ErrorNotice error={error} onRetry={() => void load()} />;
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   }
 
   return (

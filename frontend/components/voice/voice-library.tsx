@@ -8,7 +8,13 @@ import type { MessageKey } from "../../lib/i18n";
 import { useT } from "../locale";
 import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
-import { ErrorNotice, LoadingCard, PageIntro, StatusBadge } from "../ui";
+import {
+  ErrorNotice,
+  LoadingCard,
+  Notice,
+  PageIntro,
+  StatusBadge,
+} from "../ui";
 import { IconCheck, IconPlay } from "../quiet-icons";
 import { ModuleCard, ModulePlus, ModuleTiles } from "../studyform-layout";
 import cards from "../knowledge/brainform-workspace.module.css";
@@ -265,7 +271,9 @@ export function VoiceLibrary({
 
   const form = (
     <div className={styles.uploadCard}>
-      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {error ? (
+        <ErrorNotice inline error={error} onRetry={() => void load()} />
+      ) : null}
       <label className={styles.field}>
         <span>{t("voiceSampleLabel")}</span>
         <input
@@ -418,7 +426,9 @@ export function VoiceLibrary({
     form
   ) : error || loading || list ? (
     <>
-      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {error ? (
+        <ErrorNotice inline error={error} onRetry={() => void load()} />
+      ) : null}
       {loading ? <LoadingCard /> : null}
       {list}
     </>
@@ -428,9 +438,9 @@ export function VoiceLibrary({
     <div className={styles.voicePanel} id={id}>
       {embedded ? null : <PageIntro title={t("voices")} />}
       {notice ? (
-        <div className="notice notice-success" role="status">
+        <Notice tone="success" onClose={() => setNotice(null)}>
           {t(notice)}
-        </div>
+        </Notice>
       ) : null}
       <ModuleCard
         title={t("voices")}

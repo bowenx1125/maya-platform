@@ -148,7 +148,9 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(done);
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole("alert").textContent).toContain("Request failed");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Maya could not be reached. Check your connection and try again.",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(2));
@@ -212,7 +214,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     await waitFor(() => {
       expect(api.publish).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+        "Maya could not be reached. Check your connection and try again.",
       );
     });
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -301,7 +303,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+        "Maya could not be reached. Check your connection and try again.",
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -381,7 +383,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(done);
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+        "Maya could not be reached. Check your connection and try again.",
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

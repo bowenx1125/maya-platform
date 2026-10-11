@@ -61,15 +61,10 @@ const enMessages = {
   name: "Name",
   description: "Description",
   agentVisibility: "Visibility",
-  privateVisibility: "Private — only me",
-  publicVisibility: "Public to this group",
   privateOption: "Private",
   publicOption: "Public",
   makeAgentPublic: "Make Agent public",
   makeAgentPrivate: "Make Agent private",
-  shareSource: "Share source",
-  makeSourcePrivate: "Make source private",
-  sourceSharingUpdatedNotice: "Source visibility updated.",
   privateVisibilityLede:
     "Private Agents and sources stay with their owner. Public group Agents are available to group students and course teachers after publication; only Public sources are shared.",
   personalVisibilityLede:
@@ -193,6 +188,7 @@ const enMessages = {
   debateAudioLabel: "Classroom audio",
   debateMissingId: "The debate identifier is missing.",
   requestFailed: "Request failed",
+  noticeDismiss: "Dismiss",
   requestFallback: "The platform request could not be completed.",
   httpError: "Platform API returned HTTP {status}.",
   revisionConflict: "Revision conflict",
@@ -239,12 +235,15 @@ const enMessages = {
   shortDescription: "Note",
   cancel: "Cancel",
   creating: "Creating…",
-  groupNotFound: "Group not found.",
-  courseNotFound: "Course not found.",
-  agentNotFound: "Agent not found.",
-  draftNotFound: "Draft not found.",
-  publishedVersionNotFound: "Published version not found.",
-  publishedAgentNotFound: "Published Agent not found.",
+  groupNotFound: "This group no longer exists, or you are no longer in it.",
+  courseNotFound: "This course no longer exists, or you are no longer in it.",
+  agentNotFound: "This Agent was deleted or is no longer shared with you.",
+  draftNotFound: "This draft was deleted or has already been published.",
+  publishedVersionNotFound:
+    "This published version was deleted or is no longer shared with you.",
+  publishedAgentNotFound:
+    "This published Agent was deleted or is no longer shared with you.",
+  debateNotFound: "This Debate was deleted or is no longer available to you.",
   current: "current",
   revision: "revision",
   order: "order",
@@ -281,7 +280,6 @@ const enMessages = {
   knowledgeImportProcessingFailed:
     "Maya could not safely process this document. Try a smaller or less complex file.",
   noGroupMarkdown: "No RAG yet.",
-  hiddenWorkspace: "hidden from workspace",
   testChat: "Test chat",
   noSources:
     "No source files returned. General reasoning is not presented as evidence.",
@@ -486,7 +484,9 @@ const enMessages = {
   unavailable: "Unavailable",
   errorUnauthenticated: "Please sign in before continuing.",
   errorForbidden: "This account is not allowed to perform that action.",
-  errorNotFound: "The requested Maya resource was not found.",
+  errorNotFound: "This item was deleted or is no longer available to you.",
+  errorNetwork:
+    "Maya could not be reached. Check your connection and try again.",
   errorCsrfFailed: "This form has expired. Please try again.",
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
@@ -702,7 +702,6 @@ const enMessages = {
   studyformOpenMayaTeams: "Open Maya Team",
   chatCreateTeam: "Create Team",
   chatEditTeam: "Edit Team",
-  teamVersionLabel: "Version {seq}",
   teamName: "Name",
   teamNameRequired: "Enter a Team name.",
   teamMembers: "Members",
@@ -734,6 +733,16 @@ const enMessages = {
   teamProviderConfirmationTeacher:
     "A Team member could not reply because the current Team data-use authorization needs confirmation. Review and confirm it, then explicitly send a new message.",
   teamChatReadOnly: "This Public Team Chat is read-only.",
+  chatAgentDeleted:
+    "The publisher deleted this Agent. This chat can't continue; its history is kept.",
+  chatAgentUnavailable:
+    "This Agent is no longer available to you. This chat can't continue; its history is kept.",
+  chatTeamDeleted:
+    "The publisher deleted this Team. This chat can't continue; its history is kept.",
+  chatTeamMemberDeleted:
+    "{name} was deleted by its publisher. This Team chat can't continue; its history is kept.",
+  teamAnswerNotRecorded:
+    "Your answer was not recorded. Send it again to continue the assessment.",
   teamRecipients: "Recipients",
   teamAllMembers: "All",
   teamPartialResult:
@@ -800,15 +809,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   name: "名称",
   description: "简介",
   agentVisibility: "可见性",
-  privateVisibility: "私有 — 仅自己可见",
-  publicVisibility: "向本组公开",
   privateOption: "Private",
   publicOption: "Public",
   makeAgentPublic: "公开 Agent",
   makeAgentPrivate: "设为私有 Agent",
-  shareSource: "公开来源",
-  makeSourcePrivate: "设为私有来源",
-  sourceSharingUpdatedNotice: "来源可见范围已更新。",
   privateVisibilityLede:
     "私有 Agent 和来源仅所有者可见。公开的小组 Agent 发布后可供本组学生和课程教师使用；只有公开来源会共享。",
   personalVisibilityLede:
@@ -928,6 +932,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateAudioLabel: "课堂语音",
   debateMissingId: "缺少辩论标识。",
   requestFailed: "请求失败",
+  noticeDismiss: "关闭",
   requestFallback: "平台请求无法完成。",
   httpError: "平台 API 返回 HTTP {status}。",
   revisionConflict: "版本冲突",
@@ -974,12 +979,13 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   shortDescription: "备注",
   cancel: "取消",
   creating: "正在创建…",
-  groupNotFound: "找不到小组。",
-  courseNotFound: "找不到课程。",
-  agentNotFound: "找不到智能体。",
-  draftNotFound: "找不到草稿。",
-  publishedVersionNotFound: "找不到已发布版本。",
-  publishedAgentNotFound: "找不到已发布智能体。",
+  groupNotFound: "该小组已不存在，或你已不在其中。",
+  courseNotFound: "该课程已不存在，或你已不在其中。",
+  agentNotFound: "该 Agent 已被删除，或不再与你共享。",
+  draftNotFound: "该草稿已被删除或已发布。",
+  publishedVersionNotFound: "该发布版本已被删除，或不再与你共享。",
+  publishedAgentNotFound: "该已发布 Agent 已被删除，或不再与你共享。",
+  debateNotFound: "该辩论已被删除，或你已无法访问。",
   current: "当前",
   revision: "版本号",
   order: "顺序",
@@ -1016,7 +1022,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   knowledgeImportProcessingFailed:
     "Maya 未能在安全限制内处理此文件。请尝试较小或内容较简单的文档。",
   noGroupMarkdown: "还没有 RAG。",
-  hiddenWorkspace: "已从工作区隐藏",
   testChat: "测试聊天",
   noSources: "没有返回来源文件。一般推理不会被呈现为证据。",
   publishChecklist: "发布检查清单",
@@ -1202,7 +1207,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   unavailable: "不可用",
   errorUnauthenticated: "请先登录后继续。",
   errorForbidden: "此账号不允许执行该操作。",
-  errorNotFound: "找不到请求的 Maya 资源。",
+  errorNotFound: "该内容已被删除，或你已无法访问。",
+  errorNetwork: "无法连接 Maya。请检查网络后重试。",
   errorCsrfFailed: "此表单已过期，请重试。",
   errorInvalidState: "当前状态不支持该操作。",
   errorVersionImmutable: "已发布版本不可变更。",
@@ -1403,7 +1409,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   studyformOpenMayaTeams: "进入 Maya Team",
   chatCreateTeam: "创建 Team",
   chatEditTeam: "编辑 Team",
-  teamVersionLabel: "版本 {seq}",
   teamName: "名称",
   teamNameRequired: "请输入 Team 名称。",
   teamMembers: "成员",
@@ -1430,6 +1435,14 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamProviderConfirmationTeacher:
     "Team 成员的回复需要确认当前 Team 数据调用授权。请核对并确认该授权，然后显式发送一条新消息。",
   teamChatReadOnly: "此公开 Team 聊天为只读。",
+  chatAgentDeleted:
+    "发布者已删除这个 Agent，这个聊天无法继续，聊天记录已保留。",
+  chatAgentUnavailable:
+    "你已不能使用这个 Agent，这个聊天无法继续，聊天记录已保留。",
+  chatTeamDeleted: "发布者已删除这个 Team，这个聊天无法继续，聊天记录已保留。",
+  chatTeamMemberDeleted:
+    "{name} 已被发布者删除，这个 Team 聊天无法继续，聊天记录已保留。",
+  teamAnswerNotRecorded: "这次回答没有记录下来，请再发送一次以继续测评。",
   teamRecipients: "接收回复的成员",
   teamAllMembers: "All",
   teamPartialResult: "部分成员未能回复；已成功的回复已保留。",
@@ -1577,6 +1590,8 @@ const errorCodeKeys: Record<string, MessageKey> = {
   account_inactive: "errorAccountInactive",
   forbidden: "errorForbidden",
   not_found: "errorNotFound",
+  agent_deleted: "chatAgentDeleted",
+  agent_unavailable: "chatAgentUnavailable",
   csrf_failed: "errorCsrfFailed",
   invalid_state: "errorInvalidState",
   provider_preflight_blocked: "debateProviderSetupIncomplete",
@@ -1662,6 +1677,9 @@ export function localizeError(
       if (candidate.status >= 500) return t("errorProviderUnavailable", locale);
     }
   }
+  // fetch rejects with a TypeError when the connection itself fails; its
+  // browser wording ("Failed to fetch") names no next step.
+  if (error instanceof TypeError) return t("errorNetwork", locale);
   if (error instanceof Error && error.message) return error.message;
   return t(fallback, locale);
 }

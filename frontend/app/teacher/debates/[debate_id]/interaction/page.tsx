@@ -55,7 +55,12 @@ export default function TeacherDebateInteractionPage() {
       <AppShell role="teacher">
         {loading && !detail ? <LoadingCard /> : null}
         {!loading && error && !detail ? (
-          <ErrorNotice error={error} onRetry={() => void load()} />
+          <ErrorNotice
+            inline
+            notFound="debateNotFound"
+            error={error}
+            onRetry={() => void load()}
+          />
         ) : null}
         {detail && debateId ? (
           <>

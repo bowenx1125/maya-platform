@@ -46,6 +46,7 @@ import {
   EmptyCard,
   ErrorNotice,
   LoadingCard,
+  Notice,
   PageIntro,
   SectionCard,
   StatusBadge,
@@ -129,6 +130,8 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   if (!agent)
     return (
       <ErrorNotice
+        inline
+        notFound="agentNotFound"
         error={error ?? new Error(t("agentNotFound"))}
         onRetry={() => void load()}
       />
@@ -305,9 +308,6 @@ export function AgentWorkbench({
     file: File;
     signature: string;
   } | null>(null);
-  const [visibilityBusyDocumentId, setVisibilityBusyDocumentId] = useState<
-    string | null
-  >(null);
   const versionKey = versionId ?? "new";
   const uploadIntent = `${workbenchScope}:upload-knowledge:${versionKey}`;
   const knowledgeBindingIntent = `${workbenchScope}:knowledge-sets:${agent?.id ?? versionKey}`;
@@ -567,6 +567,8 @@ export function AgentWorkbench({
   if (!version || !agent)
     return (
       <ErrorNotice
+        inline
+        notFound="agentNotFound"
         error={error ?? new Error(t("draftNotFound"))}
         onRetry={
           retryAction === "uploadKnowledge" && pendingKnowledgeUpload
@@ -836,30 +838,6 @@ export function AgentWorkbench({
       setKnowledgeUploadError(cause);
     } finally {
       if (isCurrentScope(requestScope)) setSaving(false);
-    }
-  }
-
-  async function updateSourceVisibility(document: KnowledgeDocument) {
-    if (visibilityBusyDocumentId) return;
-    const requestScope = workbenchScope;
-    setVisibilityBusyDocumentId(document.id);
-    setError(null);
-    try {
-      const updated = await api.updateKnowledgeVisibility(document.id, {
-        expected_authorization_epoch: document.authorization_epoch,
-        visibility: document.visibility === "private" ? "public" : "private",
-      });
-      if (!isCurrentScope(requestScope)) return;
-      setDocuments((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      setNotice("sourceSharingUpdatedNotice");
-      const nextPreview = await api.ragPreview(currentVersion.id);
-      if (isCurrentScope(requestScope)) setPreview(nextPreview);
-    } catch (cause) {
-      if (isCurrentScope(requestScope)) setError(cause);
-    } finally {
-      if (isCurrentScope(requestScope)) setVisibilityBusyDocumentId(null);
     }
   }
 
@@ -1211,9 +1189,7 @@ export function AgentWorkbench({
         }
       />
       {generationFlow ? (
-        <p className="notice notice-info" role="status">
-          {t("aiKnowledgeFlowIntro")}
-        </p>
+        <Notice tone="info">{t("aiKnowledgeFlowIntro")}</Notice>
       ) : null}
       {conflict ? <DraftConflictNotice /> : null}
       {error && !conflict && error !== knowledgeUploadError ? (
@@ -1235,16 +1211,22 @@ export function AgentWorkbench({
         </>
       ) : null}
       {generationSourcePrompt ? (
-        <div className="notice notice-warning" role="alert">
-          <strong>{t("aiKnowledgeSourcesRequired")}</strong>
-          <span>{t("aiKnowledgeSourcesRequiredHelp")}</span>
-        </div>
+        <Notice
+          tone="warning"
+          title={t("aiKnowledgeSourcesRequired")}
+          onClose={() => setGenerationSourcePrompt(false)}
+        >
+          {t("aiKnowledgeSourcesRequiredHelp")}
+        </Notice>
       ) : null}
       {notice ? (
-        <div className="notice notice-success" role="status">
-          <strong>{t("done")}</strong>
-          <span>{t(notice)}</span>
-        </div>
+        <Notice
+          tone="success"
+          title={t("done")}
+          onClose={() => setNotice(null)}
+        >
+          {t(notice)}
+        </Notice>
       ) : null}
       <div className="agent-entry">
         <div className="workbench-main">
@@ -1415,17 +1397,21 @@ export function AgentWorkbench({
                 />
               ) : null}
               {knowledgePreviewRefreshFailed ? (
-                <div className="notice notice-warning" role="alert">
-                  <strong>{t("knowledgePreviewRefreshFailed")}</strong>
-                  <button
-                    className="inline-button"
-                    type="button"
-                    disabled={saving || knowledgePreviewRefreshing}
-                    onClick={() => void refreshKnowledgePreview()}
-                  >
-                    {t("retry")}
-                  </button>
-                </div>
+                <Notice
+                  tone="warning"
+                  title={t("knowledgePreviewRefreshFailed")}
+                  onClose={() => setKnowledgePreviewRefreshFailed(false)}
+                  action={
+                    <button
+                      className="inline-button"
+                      type="button"
+                      disabled={saving || knowledgePreviewRefreshing}
+                      onClick={() => void refreshKnowledgePreview()}
+                    >
+                      {t("retry")}
+                    </button>
+                  }
+                />
               ) : null}
               {documents.length === 0 ? (
                 <p className="muted-copy">{t("noGroupMarkdown")}</p>
@@ -1454,48 +1440,20 @@ export function AgentWorkbench({
                         />
                         <span className="document-main">
                           <strong>{document.source_filename}</strong>
-                          <small>
-                            {document.char_count.toLocaleString()}{" "}
-                            {t("characters")} ·{" "}
-                            {document.workspace_state === "hidden"
-                              ? t("hiddenWorkspace")
-                              : document.visibility === "public"
-                                ? t("publicVisibility")
-                                : t("privateVisibility")}
-                          </small>
                         </span>
                       </label>
-                      <div className="row-actions">
-                        <StatusBadge
-                          status={document.index_status}
-                          tone={
-                            document.index_status === "ready"
-                              ? "good"
-                              : document.index_status === "failed"
+                      {document.index_status === "ready" ? null : (
+                        <div className="row-actions">
+                          <StatusBadge
+                            status={document.index_status}
+                            tone={
+                              document.index_status === "failed"
                                 ? "bad"
                                 : "warn"
-                          }
-                        />
-                        {document.can_manage_visibility ? (
-                          <button
-                            className="inline-button"
-                            type="button"
-                            disabled={
-                              saving || visibilityBusyDocumentId !== null
                             }
-                            aria-label={`${document.visibility === "private" ? t("shareSource") : t("makeSourcePrivate")}: ${document.source_filename}`}
-                            onClick={() =>
-                              void updateSourceVisibility(document)
-                            }
-                          >
-                            {visibilityBusyDocumentId === document.id
-                              ? t("working")
-                              : document.visibility === "private"
-                                ? t("shareSource")
-                                : t("makeSourcePrivate")}
-                          </button>
-                        ) : null}
-                      </div>
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1646,10 +1604,9 @@ export function preserveDraftOnRetry(error: unknown): boolean {
 export function DraftConflictNotice() {
   const t = useT();
   return (
-    <div className="notice notice-warning" role="alert">
-      <strong>{t("revisionConflict")}</strong>
-      <span>{t("conflictDetail")}</span>
-    </div>
+    <Notice tone="warning" title={t("revisionConflict")}>
+      {t("conflictDetail")}
+    </Notice>
   );
 }
 
@@ -2099,6 +2056,8 @@ export function StudentPublishedVersion({ versionId }: { versionId: string }) {
   if (error || !version || !agent)
     return (
       <ErrorNotice
+        inline
+        notFound="publishedVersionNotFound"
         error={error ?? new Error(t("publishedVersionNotFound"))}
         onRetry={() => void load()}
       />
@@ -2171,7 +2130,7 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
   if (error)
     return (
       <SectionCard title={t("knowledgeSnapshot")} guide="agent.snapshot">
-        <ErrorNotice error={error} />
+        <ErrorNotice inline error={error} />
       </SectionCard>
     );
   return (

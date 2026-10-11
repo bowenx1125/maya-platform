@@ -451,7 +451,8 @@ describe("W1 teacher personal workspace", () => {
     expect(within(voices).queryByRole("combobox")).toBeNull();
   });
 
-  it("lets the owner share a private source and personal Agent from the workbench", async () => {
+  // RAG rows carry only the checkbox and file name, like the Knowledge list.
+  it("keeps the workbench RAG list to the checkbox and file name", async () => {
     let agent = personalAgent();
     let document = privateDocument();
     const currentDraft = draft(document);
@@ -510,23 +511,19 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    await screen.findByRole("button", {
-      name: "Share source: private-notes.md",
-    });
+    expect(
+      await screen.findByRole("checkbox", { name: "private-notes.md" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Share source/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Make source private/ }),
+    ).toBeNull();
+    expect(screen.queryByText("Ready")).toBeNull();
     expect(screen.queryByRole("group", { name: "Visibility" })).toBeNull();
     expect(
       screen.queryByText("Shareable; students need an explicit grant"),
     ).toBeNull();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Share source: private-notes.md" }),
-    );
-    await waitFor(() =>
-      expect(api.updateKnowledgeVisibility).toHaveBeenCalledWith(
-        "private-source",
-        { expected_authorization_epoch: 0, visibility: "public" },
-      ),
-    );
+    expect(api.updateKnowledgeVisibility).not.toHaveBeenCalled();
   });
 });

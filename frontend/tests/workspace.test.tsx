@@ -1276,6 +1276,40 @@ describe("private Agent chat", () => {
   });
 });
 
+describe("chat that cannot continue", () => {
+  it("says under the latest message that the publisher deleted the Agent, and closes", async () => {
+    state.api.conversations.mockResolvedValue([
+      {
+        ...completedConversation,
+        agent: { ...agent, available: false, deleted: true },
+      },
+    ]);
+    state.api.chatAgents.mockResolvedValue([]);
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    const log = await screen.findByRole("log");
+    const notice = await within(log).findByText(
+      "The publisher deleted this Agent. This chat can't continue; its history is kept.",
+    );
+    expect(within(log).getByText("A considered reply")).toBeTruthy();
+    expect(notice.closest(".notice")?.id).toBe("chat-readonly-help");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    fireEvent.click(within(log).getByRole("button", { name: "Dismiss" }));
+    expect(
+      within(log).queryByText(
+        "The publisher deleted this Agent. This chat can't continue; its history is kept.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByText("Request failed")).toBeNull();
+  });
+});
+
 describe("teacher workspace access", () => {
   it("keeps external data disclosure off Mayaform and renders no Components UI or settings calls", async () => {
     state.displayName = "Teacher";

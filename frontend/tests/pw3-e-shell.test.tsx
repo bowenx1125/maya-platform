@@ -292,6 +292,22 @@ describe("student shell navigation", () => {
     expect(home.getAttribute("aria-current")).toBe("page");
   });
 
+  it("keeps Studyform lit while a student makes a new Agent", () => {
+    session.user = {
+      display_name: "Kaikai",
+      courses: [{ course_id: "course", role: "student" }],
+      groups: [{ group_id: "group-a", role: "member" }],
+    };
+    renderStudentShell("/student/groups/group-a/agents/new");
+    const nav = within(screen.getByRole("navigation"));
+    expect(
+      nav.getByRole("link", { name: "Studyform" }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      nav.getByRole("link", { name: "Mayaform" }).getAttribute("aria-current"),
+    ).toBeNull();
+  });
+
   it("treats a teacher inside a student group as a visit opened from Accounts", () => {
     session.user = courseTeacherInTwoGroups;
     const leaveGroupAsTeacher = vi.fn(async () => undefined);

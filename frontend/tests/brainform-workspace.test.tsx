@@ -676,7 +676,11 @@ describe("Brainform workspace actions", () => {
       await screen.findByRole("button", { name: "Reindex lesson.md" }),
     );
     await waitFor(() => expect(state.api.reindex).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("refresh unavailable")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Maya could not be reached. Check your connection and try again.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(readsAfterMutation).toBeGreaterThan(1));
     expect(state.api.reindex).toHaveBeenCalledTimes(1);
@@ -704,7 +708,11 @@ describe("Brainform workspace actions", () => {
       await screen.findByRole("button", { name: "Reindex lesson.md" }),
     );
     await waitFor(() => expect(state.api.reindex).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("refresh unavailable")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Maya could not be reached. Check your connection and try again.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() =>
       expect(state.api.workspaceDocuments.mock.calls.length).toBeGreaterThan(1),

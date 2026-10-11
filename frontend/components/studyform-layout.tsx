@@ -46,11 +46,17 @@ export function ModuleTiles({ children }: { children: ReactNode }) {
   return <ul className="agent-tile-grid module-tile-grid">{children}</ul>;
 }
 
+/** Teams count from 1 and Agents from 0, so both read V1.0 when first saved. */
+export function teamVersionLabel(seq: number) {
+  return `V1.${Math.max(0, seq - 1)}`;
+}
+
 export function VersionTile({
   name,
   href,
   label,
   pending,
+  visibility,
   deleting = false,
   onDelete,
   deleteLabel,
@@ -59,6 +65,7 @@ export function VersionTile({
   href: string;
   label: string;
   pending: boolean;
+  visibility?: "private" | "public";
   deleting?: boolean;
   onDelete?: () => void;
   deleteLabel: string;
@@ -73,6 +80,7 @@ export function VersionTile({
           type="button"
           className="agent-pill agent-pill-action"
           data-pending={pending ? "true" : "false"}
+          data-visibility={visibility}
           disabled={deleting}
           aria-label={deleteLabel}
           onClick={(event) => {
@@ -87,7 +95,11 @@ export function VersionTile({
           </span>
         </button>
       ) : (
-        <span className="agent-pill" data-pending={pending ? "true" : "false"}>
+        <span
+          className="agent-pill"
+          data-pending={pending ? "true" : "false"}
+          data-visibility={visibility}
+        >
           {label}
         </span>
       )}

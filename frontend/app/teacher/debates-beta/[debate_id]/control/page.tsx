@@ -467,18 +467,22 @@ export default function TeacherDebateControlPage() {
           </Link>
           {loading ? <LoadingCard /> : null}
           {!loading && error ? (
-            <ErrorNotice error={error} onRetry={() => void load()} />
+            <ErrorNotice
+              inline
+              notFound="debateNotFound"
+              error={error}
+              onRetry={() => void load()}
+            />
           ) : null}
         </div>
       ) : (
         <>
           {error ? (
-            <div className={styles.floatingNotice}>
-              <ErrorNotice
-                error={error}
-                onRetry={() => void refreshSnapshot()}
-              />
-            </div>
+            <ErrorNotice
+              notFound="debateNotFound"
+              error={error}
+              onRetry={() => void refreshSnapshot()}
+            />
           ) : null}
           <BetaDebateStage
             headerActions={(replayButton) => (
