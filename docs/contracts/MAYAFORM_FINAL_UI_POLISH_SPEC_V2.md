@@ -30,6 +30,8 @@ UiGuideTooltip 仍是唯一提示体系，支持原静态 guide key 和 owner �
 
 标题下装饰性说明迁移到该标题的提示，删除常驻重复段落与空 margin。错误、empty/loading、隐私、确认所依据的外发事实、字段约束和用户内容继续可见，不因位于标题下面而隐藏。
 
+每条错误和提示都有 X 可关闭，不出现在页面最上方：整页对象不存在时提示留在页面内容里，其余浮在右下角；聊天里的提示（如发布者删除了 Agent 或 Team 成员、会话不能继续、历史保留）显示在最新消息下方。找不到记录时写明是哪类对象被删除或不再共享，不显示通用 “Request failed”，也不提供必然失败的 Retry。版本胶囊统一写作 V1.0，绿色为 Public，灰色为 Private。
+
 ## D. 页面职责与路由
 
 Mayaform 首页保留同事实现；Guide 指向 Studyform、Brainform、已有 Live/课堂目的地。不要借统一导航改写首页或移除合法 Accounts/Debates 的已有进入链。
@@ -49,6 +51,8 @@ Create AI Knowledge 与 New Agent 复用同一创建/编辑流程，不保留第
 RAG 完整复用原 Knowledge 的查看/编辑/下载/删除动作，删除沿现有权限及后台 hide/delete 语义，不能只做本地隐藏或物理清除原始证据。Knowledge 主列表使用资产名进入同一 canonical 对象，详情显示当前 actor 可读的引用 Agent，并允许修改；保存后这些 Agent 后续使用更新后的同一资产，不复制。Agent 页进入自身 Knowledge 的入口保留。本条替代仅按 Agent 名进入的旧决定。资产名单击改名保留。Knowledge 保留 eye/pencil/合法 regenerate 和单击改名；Memory 保留进入 Chats 的原符号。canonical 对象、Graph可视化、版本、原生成关系和一次授权 Memory 查询不改。
 
 复用旧 MarkdownEditor/下载原语，但不盲搬其立即上传、清冲突草稿或旧 scope 状态机。Brainform 保留显式保存、CAS、stable ID、dirty draft、rename-only不生成、不计费、失败/迟到任务不清空上一版、身份/课程切换隔离。
+
+Agent 工作台的 RAG 行只显示勾选框和文件名，与 Knowledge 列表一样干净；不显示 ready 状态或公开/私有切换，未就绪或失败时才显示状态。
 
 保留已有 md/pdf/docx 导入能力，二进制走既有安全转换 API，不当 UTF-8 读取、不新装 OCR；打开/查看/hover 不生成。保留合法 hide/reindex/download 恢复入口，不新增资产质量闸门、Ready/Reviewed/Published badge。
 
