@@ -15,6 +15,7 @@ from app.core.errors import PlatformError, conflict, not_found
 from app.core.models import Agent, AgentVersion, CourseMember
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.service import AuthContext
+from app.modules.teams.models import Team
 from app.modules.teams.service import (
     FrozenTeamMember,
     FrozenTeamSelection,
@@ -387,6 +388,13 @@ def team_session_view(
         except PlatformError:
             availability[participant.id] = False
     available = bool(availability) and all(availability.values())
+    deleted_agents = {
+        participant.id
+        for participant in participants
+        if (agent := db.get(Agent, participant.agent_id)) is not None
+        and agent.deleted_at is not None
+    }
+    team = db.get(Team, selection.team_id)
     return TeamChatSession(
         id=UUID(row.id),
         entry_kind=cast("Literal['team', 'maya_team']", row.entry_kind),
@@ -405,10 +413,12 @@ def team_session_view(
                     position=participant.position,
                     is_leader=participant.is_leader,
                     available=availability[participant.id],
+                    deleted=participant.id in deleted_agents,
                 )
                 for participant in participants
             ],
             available=available,
+            deleted=team is None or team.deleted_at is not None,
         ),
         revision=row.revision,
         turns=[

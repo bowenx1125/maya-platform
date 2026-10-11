@@ -2275,6 +2275,11 @@ export interface components {
              * Format: uuid
              */
             course_id: string;
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
             /** Name */
             name: string;
             /**
@@ -2284,6 +2289,11 @@ export interface components {
             version_id: string;
             /** Version Label */
             version_label: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
         /** ChatSession */
         ChatSession: {
@@ -5249,6 +5259,11 @@ export interface components {
             /** Available */
             available: boolean;
             /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /**
              * Course Id
              * Format: uuid
              */
@@ -5467,6 +5482,11 @@ export interface components {
              */
             available: boolean;
             avatar_config: components["schemas"]["AvatarConfig"];
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
             /**
              * Id
              * Format: uuid

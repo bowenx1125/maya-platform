@@ -9770,6 +9770,11 @@
             "title": "Course Id",
             "type": "string"
           },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -9782,6 +9787,14 @@
           "version_label": {
             "title": "Version Label",
             "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "private",
+              "public"
+            ],
+            "title": "Visibility",
+            "type": "string"
           }
         },
         "required": [
@@ -9790,7 +9803,8 @@
           "course_id",
           "name",
           "version_label",
-          "avatar_config"
+          "avatar_config",
+          "visibility"
         ],
         "title": "ChatAgent",
         "type": "object"
@@ -18443,6 +18457,11 @@
             "title": "Available",
             "type": "boolean"
           },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
           "course_id": {
             "format": "uuid",
             "title": "Course Id",
@@ -18920,6 +18939,11 @@
           },
           "avatar_config": {
             "$ref": "#/components/schemas/AvatarConfig"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",

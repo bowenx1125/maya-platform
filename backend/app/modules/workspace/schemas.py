@@ -24,7 +24,10 @@ class ChatAgent(ClosedModel):
     name: str
     version_label: str
     avatar_config: AvatarConfig
+    visibility: Literal["private", "public"]
     available: bool = True
+    # Its publisher deleted the Agent; the Chat stays readable but cannot continue.
+    deleted: bool = False
 
 
 class ChatSource(ClosedModel):
@@ -64,6 +67,7 @@ class TeamChatParticipant(ClosedModel):
     position: int
     is_leader: bool
     available: bool = True
+    deleted: bool = False
 
 
 class ChatTeam(ClosedModel):
@@ -73,6 +77,7 @@ class ChatTeam(ClosedModel):
     name: str
     members: list[TeamChatParticipant]
     available: bool
+    deleted: bool = False
 
 
 class TeamRouting(ClosedModel):

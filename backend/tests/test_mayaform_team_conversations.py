@@ -707,6 +707,53 @@ def test_deleted_published_team_chat_remains_readable(
     saved = next(item for item in listed.json() if item["id"] == session["id"])
     assert saved["entry_kind"] == "maya_team"
     assert saved["team"]["available"] is False
+    assert saved["team"]["deleted"] is True
     opened = client.get(f"/api/v1/conversations/{session['id']}")
     assert opened.status_code == 200, opened.text
     assert opened.json()["team"]["name"] == session["team"]["name"]
+
+
+def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
+    client: TestClient, database: Database
+) -> None:
+    team, versions, _csrf = _team(client, database)
+    agent_id, version_id = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Shared tutor", visibility="public"
+    )
+    _, student_csrf = login(client, "bowen")
+    single = _create(client, student_csrf, {"kind": "agent", "version_id": version_id})
+    assert single["agent"]["deleted"] is False
+    assert single["agent"]["visibility"] == "public"
+    team_chat = _create(client, student_csrf, {"kind": "maya_team", "team_id": team["id"]})
+    assert not any(member["deleted"] for member in team_chat["team"]["members"])
+
+    _, teacher_csrf = login(client, "maya")
+    with database.session() as db:
+        member_agent_id = db.get(AgentVersion, versions[0]).agent_id  # type: ignore[union-attr]
+    for deleted_agent in (agent_id, member_agent_id):
+        response = client.delete(
+            f"/api/v1/agents/{deleted_agent}",
+            headers=_headers(teacher_csrf, f"delete-agent-{uuid4()}"),
+        )
+        assert response.status_code == 204, response.text
+
+    # The student who chatted is not the publisher, yet still learns the
+    # Agent was deleted rather than that it is merely unavailable.
+    _, student_csrf = login(client, "bowen")
+    saved = client.get(f"/api/v1/conversations/{single['id']}").json()
+    assert saved["agent"]["deleted"] is True
+    assert saved["agent"]["available"] is False
+    assert [turn["user_text"] for turn in saved["turns"]] == []
+    denied = client.post(
+        f"/api/v1/conversations/{single['id']}/messages",
+        headers=_headers(student_csrf),
+        json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Hello"},
+    )
+    assert denied.status_code == 409 and denied.json()["code"] == "agent_deleted"
+
+    team_saved = client.get(f"/api/v1/conversations/{team_chat['id']}").json()
+    assert team_saved["team"]["deleted"] is False
+    deleted_members = [
+        member["name"] for member in team_saved["team"]["members"] if member["deleted"]
+    ]
+    assert deleted_members == ["Teacher member 0"]

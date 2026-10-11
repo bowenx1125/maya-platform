@@ -5898,6 +5898,10 @@ components:
           format: uuid
           title: Course Id
           type: string
+        deleted:
+          default: false
+          title: Deleted
+          type: boolean
         name:
           title: Name
           type: string
@@ -5908,6 +5912,12 @@ components:
         version_label:
           title: Version Label
           type: string
+        visibility:
+          enum:
+          - private
+          - public
+          title: Visibility
+          type: string
       required:
       - agent_id
       - version_id
@@ -5915,6 +5925,7 @@ components:
       - name
       - version_label
       - avatar_config
+      - visibility
       title: ChatAgent
       type: object
     ChatSession:
@@ -12084,6 +12095,10 @@ components:
         available:
           title: Available
           type: boolean
+        deleted:
+          default: false
+          title: Deleted
+          type: boolean
         course_id:
           format: uuid
           title: Course Id
@@ -12449,6 +12464,10 @@ components:
           type: boolean
         avatar_config:
           $ref: '#/components/schemas/AvatarConfig'
+        deleted:
+          default: false
+          title: Deleted
+          type: boolean
         id:
           format: uuid
           title: Id

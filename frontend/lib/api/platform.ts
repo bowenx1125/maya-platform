@@ -316,6 +316,7 @@ export type TeamChatParticipant = {
   position: number;
   is_leader: boolean;
   available: boolean;
+  deleted?: boolean;
 };
 export type TeamMemberResult = {
   id: string;
@@ -354,6 +355,7 @@ export type TeamChatSession = {
     name: string;
     members: TeamChatParticipant[];
     available: boolean;
+    deleted?: boolean;
   };
   revision: number;
   turns: TeamChatTurn[];

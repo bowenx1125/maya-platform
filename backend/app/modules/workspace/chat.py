@@ -121,7 +121,9 @@ def agent_view(
         name=name or agent.name,
         version_label=f"V1.{version.version_seq}",
         avatar_config=AvatarConfig.model_validate_json(version.avatar_config_json),
+        visibility=cast(Literal["private", "public"], agent.visibility),
         available=available,
+        deleted=agent.deleted_at is not None,
     )
 
 
@@ -971,8 +973,10 @@ def _conversation_is_callable(
     return can_invoke_version(db, actor_user_id, version, agent)
 
 
-def _conversation_unavailable_error(agent: Agent | None, actor_user_id: str) -> PlatformError:
-    if agent is not None and agent.deleted_at is not None and agent.owner_user_id == actor_user_id:
+def _conversation_unavailable_error(agent: Agent | None) -> PlatformError:
+    # Whoever chats with a deleted Agent learns that it was deleted; the Chat
+    # itself already proves they could use it.
+    if agent is not None and agent.deleted_at is not None:
         return conflict("agent_deleted", "This Agent has been deleted.")
     return conflict("agent_unavailable", "This Agent is no longer available to this chat.")
 
@@ -1466,7 +1470,7 @@ def send_message(
         or agent is None
         or not _conversation_is_callable(db, row, version, agent, context.user.id)
     ):
-        raise _conversation_unavailable_error(agent, context.user.id)
+        raise _conversation_unavailable_error(agent)
     request_id = str(payload.request_id)
     message = payload.message.strip()
     if not message:
@@ -1567,7 +1571,7 @@ def stream_message(
         or agent is None
         or not _conversation_is_callable(db, row, version, agent, context.user.id)
     ):
-        raise _conversation_unavailable_error(agent, context.user.id)
+        raise _conversation_unavailable_error(agent)
     if not accepts_event_stream(accept):
         raise PlatformError("malformed_request", "Accept text/event-stream is required.", 400)
     request_id = str(payload.request_id)
