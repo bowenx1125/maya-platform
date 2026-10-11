@@ -72,8 +72,9 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Teams add immutable definitions, versions, and the scoped Maya directory.
-  if (platformOperationCount !== 153 || placeholderCount !== 0) {
+  // Teams add immutable definitions, versions, and the scoped Maya directory;
+  // online card rooms add seven.
+  if (platformOperationCount !== 160 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

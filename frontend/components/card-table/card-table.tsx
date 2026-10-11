@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { decide } from "../../lib/poker/bot";
 import {
@@ -27,44 +21,14 @@ import {
   type Decision,
   type HandRecord,
 } from "../../lib/poker/training";
-import { UserAvatar } from "../user-avatar";
 import { PixelText } from "./pixel-text";
-import { PlayingCard } from "./playing-card";
+import { ActionBar, Felt } from "./table-parts";
 import { TrainingSummary } from "./training-summary";
 import styles from "./card-table.module.css";
 
 // The same blinds and starting stack as an online room, so practice carries over.
 const STACK = 4000;
 const TOP_UP = 1000;
-
-/** Where each other seat sits on the rail, as an arc over the top, left to right. */
-const SPREAD: Record<number, number> = { 1: 0, 2: 110, 3: 150, 4: 190, 5: 210 };
-function seatPosition(index: number, others: number): CSSProperties {
-  // The human is seat 0 at the bottom; the rest follow clockwise, which on
-  // screen runs up the left rail, over the top and down the right.
-  const angle =
-    index === 0
-      ? 90
-      : 270 -
-        (SPREAD[others] ?? 210) / 2 +
-        (others === 1
-          ? 0
-          : ((index - 1) * (SPREAD[others] ?? 210)) / (others - 1));
-  const radians = (angle * Math.PI) / 180;
-  return {
-    left: `${50 + 47 * Math.cos(radians)}%`,
-    top: `${50 + 46 * Math.sin(radians)}%`,
-  };
-}
-
-function Chip({ amount }: { amount: number }) {
-  return (
-    <span className={styles.bet}>
-      <span className={styles.chip} aria-hidden="true" />
-      <PixelText text={String(amount)} scale={2} />
-    </span>
-  );
-}
 
 export function CardTable({
   players,
@@ -76,7 +40,6 @@ export function CardTable({
   const [table, setTable] = useState(() =>
     createTable(players, { stack: STACK, smallBlind: 10, bigBlind: 20 }),
   );
-  const [raise, setRaise] = useState<number | null>(null);
   const [records, setRecords] = useState<HandRecord[]>([]);
   const [ended, setEnded] = useState(false);
   const decisions = useRef<Decision[]>([]);
@@ -86,9 +49,6 @@ export function CardTable({
   const humanSeat = table.seats[human];
   const humanTurn = table.toAct === human;
   const legal = humanTurn ? legalActions(table) : null;
-  const raiseTo = legal
-    ? Math.min(legal.maxRaiseTo, Math.max(legal.minRaiseTo, raise ?? 0))
-    : 0;
   const between = table.street === "waiting" || table.street === "complete";
 
   const humanId = table.seats[human]?.id;
@@ -128,7 +88,6 @@ export function CardTable({
   function play(action: Action) {
     decisions.current.push(decision(table, action));
     apply(act(table, action));
-    setRaise(null);
   }
 
   function deal() {
@@ -140,7 +99,6 @@ export function CardTable({
     stackBefore.current = humanSeat?.stack ?? 0;
     decisions.current = [];
     apply(startHand(next));
-    setRaise(null);
   }
 
   function again() {
@@ -157,13 +115,19 @@ export function CardTable({
       <TrainingSummary records={records} onAgain={again} onLeave={onLeave} />
     );
 
-  const winners = table.payouts
-    .map((payout) => ({
-      ...payout,
-      seat: table.seats.find((seat) => seat.id === payout.seatId),
-    }))
-    .filter((payout) => payout.seat && !payout.seat.folded);
-  const others = table.seats.length - 1;
+  const winners = table.payouts.flatMap((payout) => {
+    const seat = table.seats.find((seat) => seat.id === payout.seatId);
+    return seat && !seat.folded
+      ? [
+          {
+            id: seat.id,
+            name: seat.name,
+            amount: payout.amount,
+            hand: payout.hand,
+          },
+        ]
+      : [];
+  });
   const humanHand = humanSeat ? describeHand(humanSeat, table.board) : null;
   const canDeal =
     between &&
@@ -212,184 +176,42 @@ export function CardTable({
         </span>
       </header>
 
-      <div className={styles.felt}>
-        <div className={styles.center}>
-          <div className={styles.board} aria-label="Board">
-            {Array.from({ length: 5 }, (_, index) =>
-              table.board[index] ? (
-                <PlayingCard
-                  key={`${table.handNumber}-${index}`}
-                  card={table.board[index]}
-                  order={index}
-                />
-              ) : (
-                <span key={index} className={styles.slot} aria-hidden="true" />
-              ),
-            )}
-          </div>
-          {/* Under the board, not over it: at a showdown the board is the
-            reason someone won. */}
-          {table.street === "complete" && winners.length ? (
-            <div className={styles.banner} role="status">
-              {winners.map((winner) => (
-                <div key={winner.seatId} className={styles.bannerLine}>
-                  <PixelText
-                    text={`${winner.seat?.name} wins ${winner.amount}`}
-                    scale={4}
-                  />
-                  {winner.hand ? (
-                    <PixelText
-                      className={styles.handName}
-                      text={winner.hand}
-                      scale={3}
-                    />
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : pot(table) > 0 ? (
-            <PixelText
-              className={styles.pot}
-              text={`Pot ${pot(table)}`}
-              scale={3}
-            />
-          ) : null}
-        </div>
-
-        {table.seats.map((seat, index) => {
-          const reveal = seat.human || (table.showdown && !seat.folded);
-          return (
-            <div
-              key={seat.id}
-              className={styles.seat}
-              style={seatPosition(index, others)}
-              data-turn={table.toAct === index ? "" : undefined}
-              data-folded={seat.folded || seat.sittingOut ? "" : undefined}
-              data-winner={
-                winners.some((w) => w.seatId === seat.id) ? "" : undefined
-              }
-            >
-              <div className={styles.hole}>
-                {seat.hole.map((card, order) => (
-                  <PlayingCard
-                    key={`${table.handNumber}-${order}-${reveal}`}
-                    card={card}
-                    faceDown={!reveal}
-                    order={order + index * 2}
-                    small={!seat.human}
-                  />
-                ))}
-              </div>
-              <div className={styles.plate}>
-                <span className={styles.avatar}>
-                  <UserAvatar
-                    avatar={seat.avatar}
-                    name={seat.name}
-                    userId={seat.id}
-                    size="sm"
-                  />
-                  {index === table.button && table.handNumber ? (
-                    <span className={styles.dealer} aria-label="Dealer">
-                      <PixelText text="D" scale={2} />
-                    </span>
-                  ) : null}
-                </span>
-                <span className={styles.who}>
-                  <PixelText
-                    className={styles.name}
-                    text={seat.name}
-                    scale={2}
-                  />
-                  <PixelText
-                    className={styles.stack}
-                    text={String(seat.stack)}
-                    scale={2}
-                  />
-                </span>
-              </div>
-              {seat.lastAction && !between ? (
-                <PixelText
-                  key={`${table.handNumber}-${seat.lastAction}-${seat.bet}`}
-                  className={styles.said}
-                  text={seat.lastAction}
-                  scale={2}
-                />
-              ) : null}
-              {seat.bet > 0 ? <Chip amount={seat.bet} /> : null}
-            </div>
-          );
-        })}
-      </div>
+      <Felt
+        handNumber={table.handNumber}
+        board={table.board}
+        pot={pot(table)}
+        winners={winners}
+        between={between}
+        seats={table.seats.map((seat, index) => ({
+          id: seat.id,
+          name: seat.name,
+          avatar: seat.avatar,
+          stack: seat.stack,
+          bet: seat.bet,
+          out: seat.folded || seat.sittingOut,
+          lastAction: seat.lastAction,
+          // Computer players' cards stay face down until a showdown shows them.
+          cards: seat.hole.map((card) =>
+            seat.human || (table.showdown && !seat.folded) ? card : null,
+          ),
+          mine: seat.human,
+          dealer: index === table.button && table.handNumber > 0,
+          turn: table.toAct === index,
+          winner: winners.some((winner) => winner.id === seat.id),
+        }))}
+      />
 
       <footer className={styles.controls}>
         {humanHand && !between ? (
           <PixelText className={styles.handName} text={humanHand} scale={3} />
         ) : null}
         {legal ? (
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={`${styles.button} ${styles.red}`}
-              onClick={() => play({ type: "fold" })}
-            >
-              <PixelText text="Fold" scale={3} />
-            </button>
-            <button
-              type="button"
-              className={`${styles.button} ${styles.blue}`}
-              onClick={() =>
-                play(legal.canCheck ? { type: "check" } : { type: "call" })
-              }
-            >
-              <PixelText
-                text={legal.canCheck ? "Check" : `Call ${legal.toCall}`}
-                scale={3}
-              />
-            </button>
-            {legal.canRaise ? (
-              <span className={styles.raise}>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.small}`}
-                  aria-label="Less"
-                  disabled={raiseTo <= legal.minRaiseTo}
-                  onClick={() => setRaise(raiseTo - table.bigBlind)}
-                >
-                  <PixelText text="-" scale={3} />
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.orange}`}
-                  onClick={() => play({ type: "raise", to: raiseTo })}
-                >
-                  <PixelText
-                    text={
-                      raiseTo === legal.maxRaiseTo
-                        ? "All in"
-                        : `${table.currentBet ? "Raise" : "Bet"} ${raiseTo}`
-                    }
-                    scale={3}
-                  />
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.small}`}
-                  aria-label="More"
-                  disabled={raiseTo >= legal.maxRaiseTo}
-                  onClick={() => setRaise(raiseTo + table.bigBlind)}
-                >
-                  <PixelText text="+" scale={3} />
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.button} ${styles.purple}`}
-                  onClick={() => setRaise(legal.maxRaiseTo)}
-                >
-                  <PixelText text="Max" scale={2} />
-                </button>
-              </span>
-            ) : null}
-          </div>
+          <ActionBar
+            legal={legal}
+            currentBet={table.currentBet}
+            bigBlind={table.bigBlind}
+            onAct={play}
+          />
         ) : between ? (
           <button
             type="button"

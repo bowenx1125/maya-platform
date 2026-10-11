@@ -36,6 +36,7 @@ from app.modules.auth.models import UserCredential
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
+from app.modules.cardroom.router import router as cardroom_router
 from app.modules.debates.cleanup import resume_cleanup_journals
 from app.modules.debates.cleanup_router import router as debate_cleanup_router
 from app.modules.debates.playback.audio import AudioStore
@@ -563,6 +564,7 @@ def create_app(
     app.include_router(provider_disclosure_router, prefix="/api/v1")
     app.include_router(chat_router, prefix="/api/v1")
     app.include_router(live_router, prefix="/api/v1")
+    app.include_router(cardroom_router, prefix="/api/v1")
     app.include_router(provider_settings_router, prefix="/api/v1")
     app.include_router(demo_baseline_router, prefix="/api/v1")
     app.include_router(demo_acceptance_router, prefix="/api/v1")
