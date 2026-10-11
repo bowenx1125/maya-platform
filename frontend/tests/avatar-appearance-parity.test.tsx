@@ -11,6 +11,7 @@ import { AgentChat } from "../components/agent-chat";
 import type { AvatarConfig } from "../components/avatar";
 import { LocaleProvider } from "../components/locale";
 import { TeacherAgentDetail } from "../components/teacher-workspace";
+import { SidebarActions } from "./sidebar-actions";
 
 const publishedAvatar: AvatarConfig = {
   template_id: "maya-warm-scholar",
@@ -46,6 +47,26 @@ vi.mock("../components/session-provider", () => ({
         },
       ]),
       conversations: vi.fn(async () => []),
+      createConversation: vi.fn(async () => ({
+        id: "chat",
+        entry_kind: "agent",
+        chat_visibility: "private",
+        origin: "single_agent",
+        read_only: false,
+        can_send: true,
+        agent: {
+          agent_id: "agent",
+          version_id: "version",
+          course_id: "course",
+          name: "Socrates",
+          version_label: "V1.2",
+          avatar_config: publishedAvatar,
+          available: true,
+        },
+        revision: 0,
+        turns: [],
+        created_at: "2026-10-11T00:00:00Z",
+      })),
       agent: vi.fn(async () => ({
         id: "agent",
         group_id: "group",
@@ -143,12 +164,18 @@ describe("published avatar field parity", () => {
       window.history.replaceState(null, "", `/${role}/chat?mode=new`);
       render(
         <LocaleProvider initialLocale="en">
-          <AgentChat />
+          <SidebarActions>
+            <AgentChat />
+          </SidebarActions>
         </LocaleProvider>,
       );
-      const picker = await screen.findByRole("combobox", { name: "Chat with" });
-      await within(picker).findByRole("option", { name: /Socrates/ });
-      fireEvent.change(picker, { target: { value: "agent:version" } });
+      fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
+      expect(screen.queryByRole("img", { name: /Socrates/i })).toBeNull();
+      fireEvent.click(
+        within(screen.getByRole("navigation")).getByRole("button", {
+          name: "Done",
+        }),
+      );
       await screen.findByRole("heading", { level: 2, name: "Socrates" });
       expect(screen.queryByRole("img", { name: /Socrates/i })).toBeNull();
       expect(screen.queryByRole("combobox", { name: "3D model" })).toBeNull();

@@ -690,8 +690,6 @@ const enMessages = {
   chatHistoryEmpty: "No chats yet.",
   chatNewTitle: "New chat",
   chatMessagePlaceholder: "Message",
-  chatTarget: "Chat with",
-  chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Teams",
   mayaTeam: "Maya Team",
   mayaTeams: "Maya Teams",
@@ -707,8 +705,6 @@ const enMessages = {
   teamVersionLabel: "Version {seq}",
   teamName: "Name",
   teamNameRequired: "Enter a Team name.",
-  teamPrivate: "Private",
-  teamPublic: "Public",
   teamMembers: "Members",
   teamMembersHelp:
     "Choose at least two available Agents and set exactly one Leader.",
@@ -729,9 +725,6 @@ const enMessages = {
     "Team services are not connected yet. No Chat was created.",
   teamNotEditable: "You no longer have permission to edit this Team.",
   teamSavedWaitingForChat: "Team saved. You can now start a Team Chat.",
-  chatPrivacy: "Chat privacy",
-  chatPrivacyHelp:
-    "Public Chats can be read by course teachers; Private Chats stay with you. A Chat keeps its privacy once it starts, so switching opens a new Chat.",
   teamChatUnavailable:
     "Team Chat sending is unavailable in the current runtime.",
   teamRequestFailure: "The Team Chat request could not be completed.",
@@ -1399,8 +1392,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   chatHistoryEmpty: "还没有对话。",
   chatNewTitle: "新对话",
   chatMessagePlaceholder: "输入消息",
-  chatTarget: "聊天对象",
-  chatTargetPlaceholder: "Agents & Teams",
   chatTargetTeams: "Team",
   mayaTeam: "Maya Team",
   mayaTeams: "Maya Teams",
@@ -1415,8 +1406,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamVersionLabel: "版本 {seq}",
   teamName: "名称",
   teamNameRequired: "请输入 Team 名称。",
-  teamPrivate: "私有",
-  teamPublic: "公开",
   teamMembers: "成员",
   teamMembersHelp: "至少选择两个可用 Agent，并指定唯一组长。",
   teamSetLeader: "设 {name} 为组长",
@@ -1433,9 +1422,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamApiNotConnected: "Team 服务尚未接通，未创建聊天。",
   teamNotEditable: "你已没有权限编辑此 Team。",
   teamSavedWaitingForChat: "Team 已保存，现在可以开始 Team 聊天。",
-  chatPrivacy: "聊天隐私",
-  chatPrivacyHelp:
-    "公开聊天课程教师可以查看；私有聊天只属于你。聊天开始后隐私不再改变，切换会开启一个新聊天。",
   teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
   teamRequestFailure: "Team 聊天请求无法完成。",
   teamMemberFailure: "这位 Team 成员未能回复。",
@@ -1468,7 +1454,9 @@ export const ALLOWED_IDENTICAL_TERMS = [
   "Live",
   "Team",
   "Maya Team",
+  "Maya Teams",
   "Agent",
+  "Avatar",
   "AGENT.md",
   "evidence.md",
   "RAG",
@@ -1482,7 +1470,6 @@ export const ALLOWED_IDENTICAL_TERMS = [
   "TTS",
   "Mock",
   "Generating AI Knowledge",
-  "Agents & Teams",
   "All",
 ] as const;
 

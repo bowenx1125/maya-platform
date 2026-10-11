@@ -183,44 +183,34 @@
   font-weight: 650;
   letter-spacing: 0.02em;
 }
-.visibilityToggle {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-subtle);
-}
-.visibilityToggle button {
-  min-height: 34px;
-  padding: 4px 14px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
+.pickTile {
+  position: relative;
+  width: 100%;
+  min-height: 112px;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
-  transition:
-    background 160ms var(--ease-out),
-    color 160ms var(--ease-out),
-    box-shadow 160ms var(--ease-out);
 }
-.visibilityToggle button[aria-pressed="true"] {
-  background: var(--surface);
-  color: var(--ink);
+.pickTile[aria-pressed="true"] {
+  border-color: var(--accent, #76591f);
+  background: var(--accent-soft);
   box-shadow: var(--lift);
 }
-.visibilityToggle button:focus-visible {
-  outline: 2px solid var(--accent);
+.pickTile:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
   outline-offset: 2px;
 }
-.visibilityToggle button:disabled {
+.pickTile:disabled {
   cursor: default;
-}
-.visibilityToggle button:disabled:not([aria-pressed="true"]) {
   opacity: 0.5;
+}
+.pickMark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--accent, #76591f);
 }
 .emptyState {
   display: flex;
@@ -248,28 +238,6 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-/* The shared appearance theme styles every select at (0,4,1) specificity
-   through :is(input:not()...), so the pill shape must be forced here. */
-.composer .targetSelect {
-  grid-area: picker;
-  align-self: center;
-  justify-self: start;
-  width: auto !important;
-  max-width: 100%;
-  min-height: 36px !important;
-  padding: 6px 34px 6px 14px !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 999px !important;
-  background-color: var(--surface-subtle) !important;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.composer .targetSelect:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 .teamComposerTools > p,
 .teamComposerTools .teamStatus p {
@@ -471,8 +439,8 @@
   color: var(--muted);
   font-size: 14px;
 }
-/* Floating rounded shell: text row above, picker and send on the control
-   row, with clear air under the shell — not a flush bar or sharp block. */
+/* Floating rounded shell: text row above, send on the control row, with
+   clear air under the shell — not a flush bar or sharp block. */
 .composer {
   position: relative;
   display: grid;
@@ -480,7 +448,7 @@
   grid-template-areas:
     "help help"
     "text text"
-    "picker send";
+    ". send";
   gap: 6px 8px;
   width: min(100% - 40px, 720px);
   margin: 8px auto 22px;

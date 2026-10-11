@@ -145,7 +145,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderChat({ shell = false, newChat = false } = {}) {
+// The New page creates a Chat with the sidebar Done, so New mode needs the shell.
+function renderChat({
+  newChat = false,
+  shell = newChat,
+}: { newChat?: boolean; shell?: boolean } = {}) {
   if (newChat) window.history.replaceState({}, "", "/teacher/chat?mode=new");
   return render(
     <LocaleProvider initialLocale="en">
@@ -161,9 +165,12 @@ function renderChat({ shell = false, newChat = false } = {}) {
 }
 
 async function chooseSocrates() {
-  const picker = await screen.findByRole("combobox", { name: "Chat with" });
-  await within(picker).findByRole("option", { name: /Socrates/ });
-  fireEvent.change(picker, { target: { value: "agent:version" } });
+  fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
+  const done = within(screen.getByRole("navigation")).getByRole("button", {
+    name: "Done",
+  });
+  await waitFor(() => expect(done.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(done);
   return screen.findByRole("textbox", { name: "Message" });
 }
 
@@ -187,7 +194,7 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     expect(
-      await screen.findByRole("combobox", { name: "Chat with" }),
+      await screen.findByRole("button", { name: /Socrates/ }),
     ).toBeTruthy();
     expect(state.api.conversations).not.toHaveBeenCalled();
 
@@ -213,7 +220,7 @@ describe("private Agent chat", () => {
       </LocaleProvider>,
     );
     expect(
-      await screen.findByRole("combobox", { name: "Chat with" }),
+      await screen.findByRole("button", { name: /Socrates/ }),
     ).toBeTruthy();
     expect(state.api.conversations).toHaveBeenCalledTimes(1);
   });
@@ -231,13 +238,12 @@ describe("private Agent chat", () => {
     expect(nav.queryByText("Back")).toBeNull();
     expect(nav.queryByText("Done")).toBeNull();
     await startNewAgentChat();
-    expect(state.api.createConversation).not.toHaveBeenCalled();
+    // Done created the Chat before any message, and closed the New page.
+    expect(state.api.createConversation).toHaveBeenCalledWith("version");
     expect(
       within(screen.getByRole("main")).queryByRole("button", { name: "New" }),
     ).toBeNull();
-    expect(
-      nav.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(nav.queryByText("Done")).toBeNull();
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
     });
@@ -301,10 +307,7 @@ describe("private Agent chat", () => {
     await screen.findByText("A considered reply");
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(state.api.createConversation).toHaveBeenCalledWith(
-      "version",
-      "private",
-    );
+    expect(state.api.createConversation).toHaveBeenCalledWith("version");
     expect(state.api.streamConversation).toHaveBeenCalledWith(
       "conversation",
       expect.objectContaining({

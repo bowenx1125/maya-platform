@@ -244,16 +244,15 @@ async function openNewChat() {
     expect((create as HTMLButtonElement).disabled).toBe(false),
   );
   fireEvent.click(create);
-  return (await screen.findByRole("combobox", {
-    name: "Chat with",
-  })) as HTMLSelectElement;
 }
 
-async function chooseTarget(value: string, optionName: string | RegExp) {
-  const picker = await openNewChat();
-  await within(picker).findByRole("option", { name: optionName });
-  fireEvent.change(picker, { target: { value } });
-  return picker;
+// New lists Teams and Agents as tiles; the sidebar Done creates the Chat.
+async function chooseTarget(tileName: string | RegExp) {
+  await openNewChat();
+  fireEvent.click(await screen.findByRole("button", { name: tileName }));
+  const done = sidebarButton("Done");
+  await waitFor(() => expect(done.disabled).toBe(false));
+  fireEvent.click(done);
 }
 
 async function sendMessage(message: string) {
@@ -264,7 +263,8 @@ async function sendMessage(message: string) {
 }
 
 async function startMayaTeamChat(message: string) {
-  await chooseTarget("team:maya-team-1", "Course Dialogue Team");
+  await chooseTarget(/Course Dialogue Team/);
+  await screen.findByRole("textbox", { name: "Message" });
   await sendMessage(message);
 }
 
@@ -743,72 +743,82 @@ describe("Chatform", () => {
     },
   );
 
-  it("offers Agents and Teams in one picker and does not create a Team there", async () => {
+  it("lists Teams and Agents on the New page and creates nothing until Done", async () => {
     state.api.teams.mockResolvedValue([
       { ...team, can_edit: false, visibility: "public" },
     ]);
     renderChats();
-    const picker = await chooseTarget("agent:version-1", "Socrates · V1.0");
-
-    expect(within(picker).getByRole("option", { name: "Mencius · V2.0" }));
-    expect(within(picker).getByRole("option", { name: "Reasoning circle" }));
+    await openNewChat();
+    const page = within(screen.getByRole("main"));
+    const socrates = await page.findByRole("button", { name: /Socrates/ });
+    expect(page.getByRole("heading", { name: "Teams" })).toBeTruthy();
+    expect(page.getByRole("heading", { name: "Agents" })).toBeTruthy();
+    expect(page.getByRole("button", { name: /Mencius/ })).toBeTruthy();
+    expect(page.getByRole("button", { name: /Reasoning circle/ })).toBeTruthy();
     expect(
-      within(picker).getByRole("option", { name: "Course Dialogue Team" }),
-    );
-    expect(within(picker).getByRole("option", { name: "Agents & Teams" }));
-    expect(screen.queryByText("Choose who to chat with")).toBeNull();
-    expect(
-      within(picker).queryByRole("option", { name: "+ New Team" }),
-    ).toBeNull();
-    expect(screen.queryByLabelText("Name")).toBeNull();
-    expect(picker.value).toBe("agent:version-1");
-    expect(
-      screen.getByRole("heading", { level: 2, name: "Socrates" }),
+      page.getByRole("button", { name: /Course Dialogue Team/ }),
     ).toBeTruthy();
-    expect(screen.getByText("Agent")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: "Private" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(screen.queryByRole("button", { name: "Private" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Public" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(sidebarButton("Done").disabled).toBe(true);
+
+    fireEvent.click(socrates);
+    expect(socrates.getAttribute("aria-pressed")).toBe("true");
+    expect(sidebarButton("Done").disabled).toBe(false);
+    fireEvent.click(socrates);
+    expect(socrates.getAttribute("aria-pressed")).toBe("false");
+    expect(sidebarButton("Done").disabled).toBe(true);
+    fireEvent.click(sidebarButton("Done"));
     expect(state.api.createConversation).not.toHaveBeenCalled();
     expect(state.api.createTeamConversation).not.toHaveBeenCalled();
   });
 
-  it("creates the Agent Chat on the first message with the chosen privacy", async () => {
-    state.api.createConversation.mockRejectedValue(new Error("stop here"));
+  it("creates a private Agent Chat on Done, before any message", async () => {
+    state.api.createConversation.mockResolvedValue({
+      id: "conversation-agent-1",
+      entry_kind: "agent",
+      chat_visibility: "private",
+      origin: "single_agent",
+      read_only: false,
+      can_send: true,
+      agent: agents[0],
+      revision: 0,
+      turns: [],
+      created_at: "2026-10-11T00:00:00Z",
+    });
     renderChats();
-    await chooseTarget("agent:version-1", "Socrates · V1.0");
-    fireEvent.click(screen.getByRole("button", { name: "Public" }));
-    expect(
-      screen
-        .getByRole("button", { name: "Public" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    await sendMessage("Hello");
+    await chooseTarget(/Socrates/);
 
     await waitFor(() =>
-      expect(state.api.createConversation).toHaveBeenCalledWith(
-        "version-1",
-        "public",
-      ),
+      expect(state.api.createConversation).toHaveBeenCalledWith("version-1"),
     );
     expect(state.api.createConversation).toHaveBeenCalledTimes(1);
     expect(state.api.createTeamConversation).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Socrates" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Agent")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
+    expect(state.api.streamConversation).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
   });
 
-  it("does not create a Chat when the first message has no chosen target", async () => {
+  it("keeps the New page when Done cannot create the Chat", async () => {
+    state.api.createConversation.mockRejectedValue(new Error("stop here"));
     renderChats();
-    await openNewChat();
-    const message = await screen.findByRole("textbox", { name: "Message" });
-    fireEvent.change(message, { target: { value: "Who is there?" } });
+    await chooseTarget(/Socrates/);
+    await waitFor(() =>
+      expect(state.api.createConversation).toHaveBeenCalledTimes(1),
+    );
     expect(
-      (screen.getByRole("button", { name: "Send" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    fireEvent.keyDown(message, { key: "Enter" });
-    expect(state.api.createConversation).not.toHaveBeenCalled();
-    expect(state.api.createTeamConversation).not.toHaveBeenCalled();
+      await within(screen.getByRole("main")).findByRole("button", {
+        name: /Socrates/,
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+    await waitFor(() => expect(sidebarButton("Done").disabled).toBe(false));
   });
 
   it("starts a Chat with a readable Team without exposing Team management", async () => {
@@ -816,22 +826,25 @@ describe("Chatform", () => {
       { ...team, can_edit: false, visibility: "public" },
     ]);
     renderChats();
-    await chooseTarget("team:team-1", "Reasoning circle");
+    await chooseTarget(/Reasoning circle/);
+    await waitFor(() =>
+      expect(state.api.createTeamConversation).toHaveBeenCalledWith({
+        kind: "team",
+        team_id: "team-1",
+        team_version_id: "team-version-3",
+      }),
+    );
+    await screen.findByRole("textbox", { name: "Message" });
     expect(screen.getByText("Team")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByLabelText("Name")).toBeNull();
-    expect(state.api.createTeamConversation).not.toHaveBeenCalled();
+    expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
 
     await sendMessage("Open the discussion");
     await waitFor(() =>
-      expect(state.api.createTeamConversation).toHaveBeenCalledWith(
-        { kind: "team", team_id: "team-1", team_version_id: "team-version-3" },
-        "private",
-      ),
-    );
-    await waitFor(() =>
       expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1),
     );
+    expect(state.api.createTeamConversation).toHaveBeenCalledTimes(1);
     expect(state.api.streamTeamConversation.mock.calls[0][0]).toBe(
       "conversation-team-1",
     );
@@ -900,28 +913,24 @@ describe("Chatform", () => {
     expect(state.api.createTeam).not.toHaveBeenCalled();
   });
 
-  it("lets a Student choose only a catalog Team and Chat privacy, never member or Knowledge configuration", async () => {
+  it("lets a Student choose only a catalog Team, never member or Knowledge configuration", async () => {
     renderChats();
-    await chooseTarget("team:maya-team-1", "Course Dialogue Team");
-    expect(
-      screen.getByRole("heading", { level: 2, name: "Course Dialogue Team" }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Public" }));
-
+    await openNewChat();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Course Dialogue Team/ }),
+    );
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByText("Shared Knowledge")).toBeNull();
-    await sendMessage("Hello Team");
+    fireEvent.click(sidebarButton("Done"));
     await waitFor(() =>
-      expect(state.api.createTeamConversation).toHaveBeenCalledWith(
-        {
-          kind: "team",
-          team_id: "maya-team-1",
-          team_version_id: "maya-version-4",
-        },
-        "public",
-      ),
+      expect(state.api.createTeamConversation).toHaveBeenCalledWith({
+        kind: "team",
+        team_id: "maya-team-1",
+        team_version_id: "maya-version-4",
+      }),
     );
     await screen.findByRole("heading", { level: 2, name: "Reasoning circle" });
+    expect(screen.queryByRole("checkbox")).toBeNull();
     expect(state.api.createConversation).not.toHaveBeenCalled();
     expect(state.api.streamConversation).not.toHaveBeenCalled();
   });
@@ -937,20 +946,18 @@ describe("Chatform", () => {
       { ...team, can_edit: false, visibility: "public" },
     ]);
     renderChats();
-    const picker = await chooseTarget(
-      "team:maya-team-1",
-      "Course Dialogue Team",
-    );
+    await openNewChat();
+    const page = within(screen.getByRole("main"));
+    await page.findByRole("button", { name: /Course Dialogue Team/ });
     expect(
-      within(picker).getAllByRole("option", { name: "Course Dialogue Team" }),
+      page.getAllByRole("button", { name: /Course Dialogue Team/ }),
     ).toHaveLength(1);
-    expect(picker.value).toBe("team:maya-team-1");
-    expect(within(picker).getByRole("option", { name: "Reasoning circle" }));
+    expect(page.getByRole("button", { name: /Reasoning circle/ })).toBeTruthy();
     expect(state.api.teams).toHaveBeenCalledWith("course");
     expect(state.api.mayaTeams).toHaveBeenCalledWith("course");
   });
 
-  it("keeps an existing Chat's privacy fixed after it is created", async () => {
+  it("shows no privacy or target controls on an existing Chat", async () => {
     const history = {
       ...teamSession,
       turns: [
@@ -1042,7 +1049,7 @@ describe("Chatform", () => {
   it("opens a direct New URL without fetching or selecting historical Chat sessions", async () => {
     window.history.replaceState(null, "", "/student/chat?mode=new");
     renderChats();
-    await screen.findByRole("combobox", { name: "Chat with" });
+    await screen.findByRole("button", { name: /Socrates/ });
     await waitFor(() => expect(state.api.chatAgents).toHaveBeenCalledTimes(1));
     expect(state.api.conversationSessions).not.toHaveBeenCalled();
     expect(state.api.conversations).not.toHaveBeenCalled();
@@ -1052,10 +1059,8 @@ describe("Chatform", () => {
     expect(state.api.createTeamConversation).not.toHaveBeenCalled();
     expect(state.api.streamConversation).not.toHaveBeenCalled();
     expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
-    expect(
-      (screen.getByRole("button", { name: "Send" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+    expect(sidebarButton("Done").disabled).toBe(true);
   });
 
   it("refreshes the selected Team history and renders an assistant-only Knowledge notice", async () => {
@@ -1254,18 +1259,16 @@ describe("Chatform", () => {
     );
 
     await screen.findByText("No chats yet.");
-    const picker = await openNewChat();
+    await openNewChat();
     expect(
-      await within(picker).findByRole("option", {
-        name: "Other actor directory item",
+      await screen.findByRole("button", {
+        name: /Other actor directory item/,
       }),
     ).toBeTruthy();
     await act(async () => resolveOldDirectory([mayaTeam]));
 
     expect(
-      within(picker).getByRole("option", {
-        name: "Other actor directory item",
-      }),
+      screen.getByRole("button", { name: /Other actor directory item/ }),
     ).toBeTruthy();
     expect(screen.queryByText("Course Dialogue Team")).toBeNull();
   });
@@ -1448,12 +1451,11 @@ describe("Chatform", () => {
 
   it("does not send Enter during Chinese IME composition", async () => {
     renderChats();
-    await chooseTarget("team:maya-team-1", "Course Dialogue Team");
+    await chooseTarget(/Course Dialogue Team/);
     const message = await screen.findByRole("textbox", { name: "Message" });
     fireEvent.change(message, { target: { value: "你好" } });
 
     fireEvent.keyDown(message, { key: "Enter", isComposing: true });
-    expect(state.api.createTeamConversation).not.toHaveBeenCalled();
     expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
     fireEvent.keyDown(message, { key: "Enter", isComposing: false });
     await waitFor(() =>

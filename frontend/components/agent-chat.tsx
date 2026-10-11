@@ -23,7 +23,6 @@ import {
   type ConversationSession,
   type MayaTeamDirectoryDto,
   type TeamChatSession,
-  type TeamChatEntry,
   type TeamChatTurn,
   type TeamRouting,
   type TeamMemberResult,
@@ -47,12 +46,17 @@ import {
   settleChatRequest,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
+import {
+  ChatTargetPicker,
+  type ChatTargetTeam,
+} from "./chats/chat-target-picker";
 import { useLocale, useT } from "./locale";
 import { localizeError } from "../lib/i18n";
 import { uiGuideText } from "../lib/ui-guide-copy";
 import { IconClose } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
+import { PageAction } from "./page-action";
 import { ErrorNotice, LoadingCard, PageIntro } from "./ui";
 import { WorkspaceAction } from "./workspace-actions";
 import styles from "./agent-chat.module.css";
@@ -162,12 +166,6 @@ function isTeamSession(
   session: ConversationSession,
 ): session is TeamChatSession {
   return session.entry_kind === "team" || session.entry_kind === "maya_team";
-}
-
-type ChatVisibility = "private" | "public";
-
-function targetValue(entry: TeamChatEntry) {
-  return `${entry.kind}:${entry.team_id}`;
 }
 
 function upsertTeamResult(
@@ -310,9 +308,9 @@ function AgentChatScope({
     null,
   );
   const [versionId, setVersionId] = useState("");
-  const [teamTarget, setTeamTarget] = useState<TeamChatEntry | null>(null);
-  const [chatVisibility, setChatVisibility] =
-    useState<ChatVisibility>("private");
+  const [pick, setPick] = useState("");
+  const [creating, setCreating] = useState(false);
+  const mounted = useRef(true);
   const [teamChoices, setTeamChoices] = useState<TeamSummaryDto[]>([]);
   const [mayaChoices, setMayaChoices] = useState<MayaTeamDirectoryDto[]>([]);
   const selectedTeamIdRef = useRef<string | null>(null);
@@ -435,7 +433,7 @@ function AgentChatScope({
   );
 
   const openNewEntry = useCallback(() => {
-    setChatVisibility("private");
+    setPick("");
     setNewChatRouteState({ search: memoryRouteSearch, open: true });
     syncNewChatUrl(true);
   }, [memoryRouteSearch, syncNewChatUrl]);
@@ -529,7 +527,6 @@ function AgentChatScope({
           setSelected(null);
           setSelectedTeam(null);
           setVersionId("");
-          setTeamTarget(null);
           return;
         }
         const history = allHistory.filter(isAgentSession);
@@ -549,7 +546,6 @@ function AgentChatScope({
           setSelected(null);
           setSelectedTeam(null);
           setVersionId("");
-          setTeamTarget(null);
           return;
         }
         let pending = getChatRequest(scopeKey);
@@ -679,7 +675,6 @@ function AgentChatScope({
         const recent = nextHistory.find((session) => session.turns.length > 0);
         setSelected(recent ?? null);
         setSelectedTeam(null);
-        setTeamTarget(null);
         setVersionId(recent?.agent.version_id ?? "");
       })
       .catch((cause) => {
@@ -957,6 +952,13 @@ function AgentChatScope({
   ]);
 
   useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [selected?.id, selected?.turns.length, busy, pendingMessage]);
 
@@ -973,81 +975,60 @@ function AgentChatScope({
     setTeamError(null);
     setTeamRecipientMenu(false);
     setDraft("");
-    setTeamTarget(null);
     abandonChatRequest(undefined, scopeKey);
     if (nextVersionId) setVersionId(nextVersionId);
   }
 
-  function startTeamTarget(entry: TeamChatEntry) {
-    if (busy || teamBusy) return;
+  // Done on the New page creates the Chat at once. A Team whose published
+  // recipe is complete arrives with the Leader's opening already saved.
+  async function createPicked() {
+    const separator = pick.indexOf(":");
+    const kind = pick.slice(0, separator);
+    const id = pick.slice(separator + 1);
+    if (!id || creating || busy || teamBusy) return;
     start("");
-    teamSendSequence.current += 1;
     setVersionId("");
-    setTeamTarget(entry);
-    setTeamRecipientMenu(false);
+    teamSendSequence.current += 1;
     setTeamLastEventId(0);
-  }
-
-  function chooseTarget(value: string) {
-    const separator = value.indexOf(":");
-    const kind = value.slice(0, separator);
-    const id = value.slice(separator + 1);
-    if (!id) return;
-    if (kind === "agent") start(id);
-    else if (kind === "team") {
-      const team_version_id =
-        teamChoices.find((team) => team.id === id)?.current_version_id ??
-        mayaChoices.find((team) => team.id === id)?.team_version_id;
-      startTeamTarget(
-        team_version_id
-          ? { kind: "team", team_id: id, team_version_id }
-          : { kind: "team", team_id: id },
-      );
-    } else if (kind === "maya_team")
-      startTeamTarget({ kind: "maya_team", team_id: id });
-  }
-
-  async function startTeamChat(event?: FormEvent) {
-    event?.preventDefault();
-    const entry = teamTarget;
-    const message = teamDraft.trim();
-    if (
-      !entry ||
-      !message ||
-      busy ||
-      teamBusy ||
-      !isChatRequestScopeActive(scopeKey)
-    )
-      return;
-    const sequence = ++teamSendSequence.current;
-    setTeamBusy(true);
-    setError(null);
-    setTeamError(null);
-    let session: TeamChatSession;
+    // A later New, history click or account switch takes a newer attempt, so
+    // a late create response can never replace what is on screen by then.
+    const scopeAtCreate = scopeKey;
+    const attemptId = createChatRequestAttempt(scopeAtCreate);
+    if (attemptId === null) return;
+    // Leaving Chatform must not let a late create navigate back to it.
+    const stillCurrent = () =>
+      mounted.current &&
+      isChatRequestScopeActive(scopeAtCreate) &&
+      isChatRequestAttemptCurrent(attemptId, scopeAtCreate);
+    setCreating(true);
     try {
-      session = await api.createTeamConversation(entry, chatVisibility);
-    } catch (cause) {
-      if (
-        sequence === teamSendSequence.current &&
-        isChatRequestScopeActive(scopeKey)
-      ) {
-        setError(cause);
-        setTeamBusy(false);
+      if (kind === "agent") {
+        const session = await api.createConversation(id);
+        if (!stillCurrent()) return;
+        remember(session, true);
+        setSelected(session);
+        setVersionId(session.agent.version_id);
+      } else {
+        const team_version_id =
+          teamChoices.find((team) => team.id === id)?.current_version_id ??
+          mayaChoices.find((team) => team.id === id)?.team_version_id;
+        const session = await api.createTeamConversation(
+          team_version_id
+            ? { kind: "team", team_id: id, team_version_id }
+            : { kind: "team", team_id: id },
+        );
+        if (!stillCurrent()) return;
+        rememberTeam(session, true);
+        setSelectedTeam(session);
+        selectedTeamIdRef.current = session.id;
       }
-      return;
+      closeNewEntry(true);
+    } catch (cause) {
+      if (stillCurrent()) setError(cause);
+    } finally {
+      if (mounted.current && isChatRequestScopeActive(scopeAtCreate))
+        setCreating(false);
     }
-    if (
-      sequence !== teamSendSequence.current ||
-      !isChatRequestScopeActive(scopeKey)
-    )
-      return;
-    setTeamTarget(null);
-    setSelectedTeam(session);
-    selectedTeamIdRef.current = session.id;
-    rememberTeam(session, true);
-    setTeamBusy(false);
-    if (newChatRoute) closeNewEntry(true);
-    await sendTeam(undefined, undefined, session);
   }
 
   async function openHistory(session: ChatSession) {
@@ -1075,7 +1056,6 @@ function AgentChatScope({
       remember(refreshed);
       setSelected(refreshed);
       setSelectedTeam(null);
-      setTeamTarget(null);
       setVersionId(refreshed.agent.version_id);
       setDraft("");
       setError(null);
@@ -1224,7 +1204,6 @@ function AgentChatScope({
       }
       setSelected(null);
       setSelectedTeam(refreshed);
-      setTeamTarget(null);
       rememberTeam(refreshed, true);
       setTeamDraft("");
       setTeamLastEventId(0);
@@ -1383,10 +1362,9 @@ function AgentChatScope({
       expectedRevision: number;
       message: string;
     },
-    created?: TeamChatSession,
   ) {
     event?.preventDefault();
-    const session = preset?.session ?? created ?? selectedTeam;
+    const session = preset?.session ?? selectedTeam;
     const message = preset?.message ?? teamDraft.trim();
     if (
       !session ||
@@ -1613,7 +1591,7 @@ function AgentChatScope({
       const session =
         preset?.session ??
         selected ??
-        (await api.createConversation(versionId, chatVisibility));
+        (await api.createConversation(versionId));
       if (!ownsSend()) return;
       if (!selected || preset) remember(session, true);
       if (!selected && !preset && newChatRoute) closeNewEntry(true);
@@ -2112,62 +2090,31 @@ function AgentChatScope({
     selected?.read_only !== true &&
     selected?.can_send !== false &&
     character?.available !== false;
-  const teamMode = Boolean(selectedTeam || teamTarget);
+  const teamMode = Boolean(selectedTeam);
   const activeSession = selectedTeam ?? selected;
-  // Privacy and the target are chosen only while creating a Chat. Afterwards
-  // both controls hide: an existing Chat keeps the privacy it was created with.
-  const showCreationControls = !activeSession;
-  const shownVisibility: ChatVisibility = activeSession
-    ? (activeSession.chat_visibility ?? "private")
-    : chatVisibility;
   const teamIds = new Set(teamChoices.map((team) => team.id));
-  const teamOptions = [
+  const teamOptions: ChatTargetTeam[] = [
     ...teamChoices,
     ...mayaChoices
       .filter((team) => !teamIds.has(team.id))
-      .map((team) => ({
-        id: team.id,
-        display_name: team.display_name,
-        course_id: team.course_id,
-        current_version_id: team.team_version_id,
-      })),
+      .map((team) => ({ id: team.id, display_name: team.display_name })),
   ];
-  const pickerValue = selectedTeam
-    ? `${selectedTeam.entry_kind}:${selectedTeam.team.id}`
-    : teamTarget
-      ? targetValue(teamTarget)
-      : versionId
-        ? `agent:${versionId}`
-        : "";
-  const targetTeamName = teamTarget
-    ? ((teamTarget.kind === "maya_team" ? mayaChoices : teamOptions).find(
-        (team) => team.id === teamTarget.team_id,
-      )?.display_name ??
-      teamSessions.find((session) => session.team.id === teamTarget.team_id)
-        ?.team.name)
-    : undefined;
-  const currentTeam = selectedTeam
-    ? {
-        kind: selectedTeam.entry_kind,
-        id: selectedTeam.team.id,
-        name: selectedTeam.team.name,
-      }
-    : teamTarget && targetTeamName
-      ? { kind: teamTarget.kind, id: teamTarget.team_id, name: targetTeamName }
-      : null;
-  const chatTitle = currentTeam?.name ?? character?.name ?? "";
+  const chatTitle = selectedTeam?.team.name ?? character?.name ?? "";
   const chatKind = teamMode ? "Team" : "Agent";
-  const hasTarget = Boolean(
-    selected || selectedTeam || teamTarget || versionId,
-  );
-  const showChatEmpty = !hasTarget && !newChatRoute;
+  const hasTarget = Boolean(selected || selectedTeam || versionId);
+  // Done creates a Chat before its first message, so every saved Chat is
+  // listed; it is named by its first message, else by whom it is with.
   const historyItems = [
-    ...sessions
-      .filter((session) => session.turns.length > 0)
-      .map((session) => ({ kind: "agent" as const, session })),
-    ...teamSessions
-      .filter((session) => session.turns.length > 0)
-      .map((session) => ({ kind: "team" as const, session })),
+    ...sessions.map((session) => ({
+      kind: "agent" as const,
+      session,
+      name: session.agent.name,
+    })),
+    ...teamSessions.map((session) => ({
+      kind: "team" as const,
+      session,
+      name: session.team.name,
+    })),
   ].sort((left, right) =>
     right.session.created_at.localeCompare(left.session.created_at),
   );
@@ -2184,19 +2131,9 @@ function AgentChatScope({
         name: member.name,
         available: member.available,
       }))
-    : teamTarget?.kind === "maya_team"
-      ? (mayaChoices
-          .find((team) => team.id === teamTarget.team_id)
-          ?.members.map((member, index) => ({
-            key: `${member.position}:${index}:${member.display_name}`,
-            id: null,
-            name: member.display_name,
-            available: true,
-          })) ?? [])
-      : [];
+    : [];
   const canMention = Boolean(
-    (selectedTeam && selectedTeam.can_send && !selectedTeam.read_only) ||
-    (!selectedTeam && teamTarget),
+    selectedTeam && selectedTeam.can_send && !selectedTeam.read_only,
   );
 
   function insertMention(label: string) {
@@ -2210,22 +2147,8 @@ function AgentChatScope({
     setTeamRecipientMenu(false);
   }
 
-  function chooseVisibility(next: ChatVisibility) {
-    if (next === shownVisibility || busy || teamBusy) return;
-    setChatVisibility(next);
-    if (!activeSession) return;
-    if (selectedTeam)
-      startTeamTarget(
-        selectedTeam.entry_kind === "maya_team"
-          ? { kind: "maya_team", team_id: selectedTeam.team.id }
-          : { kind: "team", team_id: selectedTeam.team.id },
-      );
-    else start(versionId);
-  }
-
   function submitMessage(event?: FormEvent) {
     if (selectedTeam) void sendTeam(event);
-    else if (teamTarget) void startTeamChat(event);
     else void send(event);
   }
 
@@ -2246,6 +2169,20 @@ function AgentChatScope({
         disabled={busy || teamBusy || newChatRoute}
         onClick={openNewEntry}
       />
+      {newChatRoute ? (
+        <>
+          <PageAction
+            name="back"
+            disabled={creating}
+            onClick={() => closeNewEntry()}
+          />
+          <PageAction
+            name="done"
+            disabled={!pick || creating || busy || teamBusy}
+            onClick={() => void createPicked()}
+          />
+        </>
+      ) : null}
       {memoryLoading ? (
         <p className={styles.memoryStatus} role="status">
           {t("brainformMemoryLoading")}
@@ -2293,245 +2230,261 @@ function AgentChatScope({
           {t("chatCheckStatus")}
         </button>
       ) : null}
-      <div className={styles.layout}>
-        <aside className={styles.sidebar}>
-          <div className={styles.historyHead}>
-            <h2>{t("chatHistory")}</h2>
-          </div>
-          <div className={styles.history} aria-label="History">
-            {historyItems.length === 0 ? (
-              <p className={styles.historyEmpty}>{t("chatHistoryEmpty")}</p>
-            ) : null}
-            {historyItems.map(({ kind, session }) => (
-              <div className={styles.historyRow} key={session.id}>
-                <button
-                  type="button"
-                  className={styles.historySelect}
-                  disabled={busy || teamBusy}
-                  aria-current={
-                    (kind === "agent" ? selected?.id : selectedTeam?.id) ===
-                    session.id
-                      ? "page"
-                      : undefined
-                  }
-                  data-ui-guide="chat.history"
-                  data-ui-guide-text={
-                    kind === "agent" ? session.agent.name : session.team.name
-                  }
-                  onClick={() => {
-                    if (kind === "agent") void openHistory(session);
-                    else void openTeamHistory(session);
-                  }}
-                >
-                  <span>{session.turns[0]?.user_text || "New"}</span>
-                </button>
-                <span className={styles.historyMeta}>
-                  <small className={styles.historyDate}>
-                    {new Date(session.created_at).toLocaleDateString()}
-                  </small>
+      {newChatRoute ? (
+        <ChatTargetPicker
+          teams={teamOptions}
+          agents={agents}
+          value={pick}
+          disabled={creating}
+          onPick={setPick}
+        />
+      ) : (
+        <div className={styles.layout}>
+          <aside className={styles.sidebar}>
+            <div className={styles.historyHead}>
+              <h2>{t("chatHistory")}</h2>
+            </div>
+            <div className={styles.history} aria-label="History">
+              {historyItems.length === 0 ? (
+                <p className={styles.historyEmpty}>{t("chatHistoryEmpty")}</p>
+              ) : null}
+              {historyItems.map(({ kind, session, name }) => (
+                <div className={styles.historyRow} key={session.id}>
                   <button
                     type="button"
-                    className={styles.historyDelete}
-                    disabled={
-                      busy ||
-                      teamBusy ||
-                      ("read_only" in session && session.read_only === true)
+                    className={styles.historySelect}
+                    disabled={busy || teamBusy}
+                    aria-current={
+                      (kind === "agent" ? selected?.id : selectedTeam?.id) ===
+                      session.id
+                        ? "page"
+                        : undefined
                     }
-                    aria-label={t("deleteChat")}
-                    data-ui-guide="chat.delete"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void removeChat(session);
+                    data-ui-guide="chat.history"
+                    data-ui-guide-text={name}
+                    onClick={() => {
+                      if (kind === "agent") void openHistory(session);
+                      else void openTeamHistory(session);
                     }}
                   >
-                    <IconClose />
+                    <span>
+                      {session.turns.find((turn) => turn.user_text)
+                        ?.user_text || name}
+                    </span>
                   </button>
-                </span>
-              </div>
-            ))}
-          </div>
-        </aside>
-        <section
-          className={styles.conversation}
-          data-blank={!activeSession && !pendingMessage ? "true" : undefined}
-        >
-          {showChatEmpty ? null : (
-            <>
-              <header className={styles.chatHeader}>
-                <div className={styles.chatTitle}>
-                  <h2>{chatTitle || t("chatNewTitle")}</h2>
-                  {hasTarget ? (
-                    <span className={styles.kindChip}>{chatKind}</span>
-                  ) : null}
+                  <span className={styles.historyMeta}>
+                    <small className={styles.historyDate}>
+                      {new Date(session.created_at).toLocaleDateString()}
+                    </small>
+                    <button
+                      type="button"
+                      className={styles.historyDelete}
+                      disabled={
+                        busy ||
+                        teamBusy ||
+                        ("read_only" in session && session.read_only === true)
+                      }
+                      aria-label={t("deleteChat")}
+                      data-ui-guide="chat.delete"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void removeChat(session);
+                      }}
+                    >
+                      <IconClose />
+                    </button>
+                  </span>
                 </div>
-                {showCreationControls ? (
-                  <div
-                    className={styles.visibilityToggle}
-                    role="group"
-                    aria-label={t("chatPrivacy")}
-                    data-ui-guide="chat.privacy"
-                    data-ui-guide-text={t("chatPrivacyHelp")}
-                  >
-                    {(["private", "public"] as const).map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        aria-pressed={shownVisibility === option}
-                        disabled={busy || teamBusy}
-                        onClick={() => chooseVisibility(option)}
-                      >
-                        {t(option === "private" ? "teamPrivate" : "teamPublic")}
-                      </button>
-                    ))}
+              ))}
+            </div>
+          </aside>
+          <section
+            className={styles.conversation}
+            data-blank={!activeSession && !pendingMessage ? "true" : undefined}
+          >
+            {!hasTarget ? null : (
+              <>
+                <header className={styles.chatHeader}>
+                  <div className={styles.chatTitle}>
+                    <h2>{chatTitle || t("chatNewTitle")}</h2>
+                    <span className={styles.kindChip}>{chatKind}</span>
                   </div>
-                ) : null}
-              </header>
-              <div
-                className={styles.messages}
-                role="log"
-                aria-live="polite"
-                aria-relevant="additions text"
-              >
-                {selected?.turns.map((turn) => (
-                  <div key={turn.id} className={styles.exchange}>
-                    {turn.user_text ? (
-                      <div className={styles.userMessage}>{turn.user_text}</div>
-                    ) : null}
-                    <div className={styles.reply}>
-                      {turn.assistant_text ? (
-                        <ReportMarkdown>{turn.assistant_text}</ReportMarkdown>
-                      ) : (
-                        <span className={styles.pending} role="status">
-                          {turn.state === "pending" ? (
-                            <>
-                              <span className="spinner" aria-hidden="true" />
-                              {t("loading")}
-                            </>
-                          ) : turn.state === "acceptance_unknown" ? (
-                            t("errorChatAcceptanceUnknown")
-                          ) : (
-                            localizeError(
-                              { code: turn.safe_error_code },
-                              locale,
-                            )
-                          )}
-                        </span>
-                      )}
-                      {turn.sources.length ? (
-                        <details>
-                          <summary>Check RAG · {turn.sources.length}</summary>
-                          {turn.sources.map((source) => (
-                            <div
-                              className={styles.source}
-                              key={source.chunk_id}
-                            >
-                              <strong>{source.filename}</strong>
-                              <p>{source.excerpt}</p>
-                            </div>
-                          ))}
-                        </details>
+                </header>
+                <div
+                  className={styles.messages}
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions text"
+                >
+                  {selected?.turns.map((turn) => (
+                    <div key={turn.id} className={styles.exchange}>
+                      {turn.user_text ? (
+                        <div className={styles.userMessage}>
+                          {turn.user_text}
+                        </div>
                       ) : null}
+                      <div className={styles.reply}>
+                        {turn.assistant_text ? (
+                          <ReportMarkdown>{turn.assistant_text}</ReportMarkdown>
+                        ) : (
+                          <span className={styles.pending} role="status">
+                            {turn.state === "pending" ? (
+                              <>
+                                <span className="spinner" aria-hidden="true" />
+                                {t("loading")}
+                              </>
+                            ) : turn.state === "acceptance_unknown" ? (
+                              t("errorChatAcceptanceUnknown")
+                            ) : (
+                              localizeError(
+                                { code: turn.safe_error_code },
+                                locale,
+                              )
+                            )}
+                          </span>
+                        )}
+                        {turn.sources.length ? (
+                          <details>
+                            <summary>Check RAG · {turn.sources.length}</summary>
+                            {turn.sources.map((source) => (
+                              <div
+                                className={styles.source}
+                                key={source.chunk_id}
+                              >
+                                <strong>{source.filename}</strong>
+                                <p>{source.excerpt}</p>
+                              </div>
+                            ))}
+                          </details>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {selectedTeam?.turns.map((turn) => (
-                  <div key={turn.id} className={styles.exchange}>
-                    {turn.user_text ? (
-                      <div className={styles.userMessage}>{turn.user_text}</div>
-                    ) : null}
-                    {turn.state === "pending" ? (
-                      <p className={styles.pending} role="status">
+                  ))}
+                  {selectedTeam?.turns.map((turn) => (
+                    <div key={turn.id} className={styles.exchange}>
+                      {turn.user_text ? (
+                        <div className={styles.userMessage}>
+                          {turn.user_text}
+                        </div>
+                      ) : null}
+                      {turn.state === "pending" ? (
+                        <p className={styles.pending} role="status">
+                          <span className="spinner" aria-hidden="true" />
+                          {t("loading")}
+                        </p>
+                      ) : null}
+                      {turn.state === "acceptance_unknown" ? (
+                        <p className={styles.teamWarning} role="status">
+                          {t("errorChatAcceptanceUnknown")}
+                        </p>
+                      ) : null}
+                      {turn.state === "partial" ||
+                      turn.member_results.some(
+                        (item) =>
+                          item.state === "failed" ||
+                          item.state === "acceptance_unknown",
+                      ) ? (
+                        <p className={styles.teamWarning} role="status">
+                          {t("teamPartialResult")}
+                        </p>
+                      ) : null}
+                      <div className={styles.teamResults}>
+                        {[...turn.member_results]
+                          .sort((left, right) => left.ordinal - right.ordinal)
+                          .map((result) => {
+                            const participant = selectedTeam.team.members.find(
+                              (member) => member.id === result.participant_id,
+                            );
+                            return (
+                              <article
+                                className={styles.teamResult}
+                                key={result.id}
+                              >
+                                <h3>
+                                  {result.speaker_name}
+                                  {participant?.is_leader
+                                    ? ` · ${t("leader")}`
+                                    : ""}
+                                </h3>
+                                {result.assistant_text ? (
+                                  <ReportMarkdown>
+                                    {result.assistant_text}
+                                  </ReportMarkdown>
+                                ) : result.state === "pending" ||
+                                  result.state === "running" ? (
+                                  turn.state === "pending" ? (
+                                    <p className={styles.pending} role="status">
+                                      <span
+                                        className="spinner"
+                                        aria-hidden="true"
+                                      />
+                                      {t("loading")}
+                                    </p>
+                                  ) : null
+                                ) : result.state === "acceptance_unknown" ? (
+                                  <p
+                                    className={styles.teamWarning}
+                                    role="status"
+                                  >
+                                    {t("errorChatAcceptanceUnknown")}
+                                  </p>
+                                ) : (
+                                  <p
+                                    className={styles.teamWarning}
+                                    role="status"
+                                  >
+                                    {teamFailureText(
+                                      result.safe_error_code,
+                                      "teamMemberFailure",
+                                    )}
+                                  </p>
+                                )}
+                              </article>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
+                  {pendingMessage ? (
+                    <div className={styles.exchange}>
+                      <div className={styles.userMessage}>{pendingMessage}</div>
+                      <div className={styles.pending} role="status">
                         <span className="spinner" aria-hidden="true" />
                         {t("loading")}
-                      </p>
-                    ) : null}
-                    {turn.state === "acceptance_unknown" ? (
-                      <p className={styles.teamWarning} role="status">
-                        {t("errorChatAcceptanceUnknown")}
-                      </p>
-                    ) : null}
-                    {turn.state === "partial" ||
-                    turn.member_results.some(
-                      (item) =>
-                        item.state === "failed" ||
-                        item.state === "acceptance_unknown",
-                    ) ? (
-                      <p className={styles.teamWarning} role="status">
-                        {t("teamPartialResult")}
-                      </p>
-                    ) : null}
-                    <div className={styles.teamResults}>
-                      {[...turn.member_results]
-                        .sort((left, right) => left.ordinal - right.ordinal)
-                        .map((result) => {
-                          const participant = selectedTeam.team.members.find(
-                            (member) => member.id === result.participant_id,
-                          );
-                          return (
-                            <article
-                              className={styles.teamResult}
-                              key={result.id}
-                            >
-                              <h3>
-                                {result.speaker_name}
-                                {participant?.is_leader
-                                  ? ` · ${t("leader")}`
-                                  : ""}
-                              </h3>
-                              {result.assistant_text ? (
-                                <ReportMarkdown>
-                                  {result.assistant_text}
-                                </ReportMarkdown>
-                              ) : result.state === "pending" ||
-                                result.state === "running" ? (
-                                turn.state === "pending" ? (
-                                  <p className={styles.pending} role="status">
-                                    <span
-                                      className="spinner"
-                                      aria-hidden="true"
-                                    />
-                                    {t("loading")}
-                                  </p>
-                                ) : null
-                              ) : result.state === "acceptance_unknown" ? (
-                                <p className={styles.teamWarning} role="status">
-                                  {t("errorChatAcceptanceUnknown")}
-                                </p>
-                              ) : (
-                                <p className={styles.teamWarning} role="status">
-                                  {teamFailureText(
-                                    result.safe_error_code,
-                                    "teamMemberFailure",
-                                  )}
-                                </p>
-                              )}
-                            </article>
-                          );
-                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {pendingMessage ? (
-                  <div className={styles.exchange}>
-                    <div className={styles.userMessage}>{pendingMessage}</div>
-                    <div className={styles.pending} role="status">
-                      <span className="spinner" aria-hidden="true" />
-                      {t("loading")}
-                    </div>
-                  </div>
-                ) : null}
-                <div ref={endRef} />
-              </div>
-              {selectedTeam ? (
-                <div className={styles.teamComposerTools}>
-                  {selectedTeam.read_only ? (
-                    <p role="status">{t("teamChatReadOnly")}</p>
-                  ) : !selectedTeam.can_send ? (
-                    <p role="status">{t("teamChatUnavailable")}</p>
                   ) : null}
-                  {teamError ? (
-                    <div className={styles.teamStatus} role="alert">
-                      <p>{teamErrorText(teamError)}</p>
+                  <div ref={endRef} />
+                </div>
+                {selectedTeam ? (
+                  <div className={styles.teamComposerTools}>
+                    {selectedTeam.read_only ? (
+                      <p role="status">{t("teamChatReadOnly")}</p>
+                    ) : !selectedTeam.can_send ? (
+                      <p role="status">{t("teamChatUnavailable")}</p>
+                    ) : null}
+                    {teamError ? (
+                      <div className={styles.teamStatus} role="alert">
+                        <p>{teamErrorText(teamError)}</p>
+                        <button
+                          type="button"
+                          className="inline-button"
+                          disabled={teamBusy}
+                          onClick={() => void checkTeamStatus()}
+                        >
+                          {t("teamCheckStatus")}
+                        </button>
+                      </div>
+                    ) : selectedTeam.turns.at(-1)?.state === "paused" ? (
+                      <button
+                        type="button"
+                        className="inline-button"
+                        disabled={teamBusy}
+                        onClick={() => void resumePausedTeam()}
+                      >
+                        {t("teamResume")}
+                      </button>
+                    ) : selectedTeam.turns.at(-1)?.state === "pending" ? (
                       <button
                         type="button"
                         className="inline-button"
@@ -2540,242 +2493,168 @@ function AgentChatScope({
                       >
                         {t("teamCheckStatus")}
                       </button>
-                    </div>
-                  ) : selectedTeam.turns.at(-1)?.state === "paused" ? (
-                    <button
-                      type="button"
-                      className="inline-button"
-                      disabled={teamBusy}
-                      onClick={() => void resumePausedTeam()}
-                    >
-                      {t("teamResume")}
-                    </button>
-                  ) : selectedTeam.turns.at(-1)?.state === "pending" ? (
-                    <button
-                      type="button"
-                      className="inline-button"
-                      disabled={teamBusy}
-                      onClick={() => void checkTeamStatus()}
-                    >
-                      {t("teamCheckStatus")}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              <form
-                className={styles.composer}
-                onSubmit={(event) => submitMessage(event)}
-              >
-                {canMention && teamRecipientMenu ? (
-                  <div
-                    ref={teamRecipientMenuRef}
-                    className={styles.recipientMenu}
-                    role="menu"
-                    aria-label={t("teamRecipients")}
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      disabled={teamBusy}
-                      onClick={() => insertMention(t("teamAllMembers"))}
-                    >
-                      {t("teamAllMembers")}
-                    </button>
-                    {mentionMembers.map((member) => (
-                      <button
-                        key={member.key}
-                        type="button"
-                        role="menuitem"
-                        disabled={teamBusy || !member.available}
-                        onClick={() => insertMention(member.name)}
-                      >
-                        {member.name}
-                      </button>
-                    ))}
+                    ) : null}
                   </div>
                 ) : null}
-                {showCreationControls ? (
-                  <select
-                    className={styles.targetSelect}
-                    aria-label={t("chatTarget")}
-                    value={pickerValue}
-                    disabled={busy || teamBusy}
-                    onChange={(event) => chooseTarget(event.target.value)}
-                  >
-                    <option value="" disabled>
-                      {t("chatTargetPlaceholder")}
-                    </option>
-                    {agents.length || selected ? (
-                      <optgroup label={t("agents")}>
-                        {selected &&
-                        !agents.some(
-                          (agent) =>
-                            agent.version_id === selected.agent.version_id,
-                        ) ? (
-                          <option value={`agent:${selected.agent.version_id}`}>
-                            {selected.agent.name} ·{" "}
-                            {selected.agent.version_label}
-                          </option>
-                        ) : null}
-                        {agents.map((agent) => (
-                          <option
-                            key={agent.version_id}
-                            value={`agent:${agent.version_id}`}
-                            disabled={agent.available === false}
-                          >
-                            {agent.name} · {agent.version_label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                    {teamOptions.length || currentTeam ? (
-                      <optgroup label={t("chatTargetTeams")}>
-                        {currentTeam &&
-                        !teamOptions.some(
-                          (team) => team.id === currentTeam.id,
-                        ) ? (
-                          <option value={`team:${currentTeam.id}`}>
-                            {currentTeam.name}
-                          </option>
-                        ) : null}
-                        {teamOptions.map((team) => (
-                          <option key={team.id} value={`team:${team.id}`}>
-                            {team.display_name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                  </select>
-                ) : null}
-                {!teamMode && character?.available === false ? (
-                  <p id="chat-readonly-help" className={styles.readOnlyHelp}>
-                    {readOnlyHelp}
-                  </p>
-                ) : null}
-                <textarea
-                  ref={messageRef}
-                  id="chat-message"
-                  aria-label="Message"
-                  placeholder={t("chatMessagePlaceholder")}
-                  aria-describedby={
-                    !teamMode && character?.available === false
-                      ? "chat-readonly-help"
-                      : undefined
-                  }
-                  value={teamMode ? teamDraft : draft}
-                  rows={1}
-                  disabled={
-                    selectedTeam
-                      ? teamBusy ||
-                        !selectedTeam.can_send ||
-                        selectedTeam.read_only ||
-                        selectedTeam.turns.at(-1)?.state === "pending"
-                      : teamTarget
-                        ? teamBusy || busy
-                        : busy || !agentCanSend
-                  }
-                  onChange={(event) => {
-                    if (teamMode) setTeamDraft(event.target.value);
-                    else {
-                      uiRevision.current += 1;
-                      setDraft(event.target.value);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      setTeamRecipientMenu(false);
-                      return;
-                    }
-                    if (
-                      canMention &&
-                      event.key === "@" &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      setTeamRecipientMenu(true);
-                    }
-                    if (
-                      event.key === "Enter" &&
-                      !event.shiftKey &&
-                      !event.nativeEvent.isComposing
-                    ) {
-                      event.preventDefault();
-                      submitMessage();
-                    }
-                  }}
-                />
-                <div className={styles.composerBar}>
-                  <button
-                    type="submit"
-                    className={styles.sendButton}
+                <form
+                  className={styles.composer}
+                  onSubmit={(event) => submitMessage(event)}
+                >
+                  {canMention && teamRecipientMenu ? (
+                    <div
+                      ref={teamRecipientMenuRef}
+                      className={styles.recipientMenu}
+                      role="menu"
+                      aria-label={t("teamRecipients")}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={teamBusy}
+                        onClick={() => insertMention(t("teamAllMembers"))}
+                      >
+                        {t("teamAllMembers")}
+                      </button>
+                      {mentionMembers.map((member) => (
+                        <button
+                          key={member.key}
+                          type="button"
+                          role="menuitem"
+                          disabled={teamBusy || !member.available}
+                          onClick={() => insertMention(member.name)}
+                        >
+                          {member.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!teamMode && character?.available === false ? (
+                    <p id="chat-readonly-help" className={styles.readOnlyHelp}>
+                      {readOnlyHelp}
+                    </p>
+                  ) : null}
+                  <textarea
+                    ref={messageRef}
+                    id="chat-message"
+                    aria-label="Message"
+                    placeholder={t("chatMessagePlaceholder")}
                     aria-describedby={
                       !teamMode && character?.available === false
                         ? "chat-readonly-help"
                         : undefined
                     }
-                    aria-label={
-                      selectedTeam?.read_only
-                        ? t("teamChatReadOnly")
-                        : selectedTeam && !selectedTeam.can_send
-                          ? t("teamChatUnavailable")
-                          : !teamMode && character?.available === false
-                            ? "Read-only"
-                            : "Send"
-                    }
-                    data-ui-guide={
-                      selectedTeam?.read_only ||
-                      (selectedTeam !== null && !selectedTeam.can_send) ||
-                      (!teamMode && !agentCanSend)
-                        ? "chat.readOnly"
-                        : "chat.send"
-                    }
-                    data-ui-guide-text={
-                      selectedTeam?.read_only
-                        ? t("teamChatReadOnly")
-                        : selectedTeam && !selectedTeam.can_send
-                          ? t("teamChatUnavailable")
-                          : !teamMode && !agentCanSend
-                            ? readOnlyHelp
-                            : undefined
-                    }
+                    value={teamMode ? teamDraft : draft}
+                    rows={1}
                     disabled={
-                      busy ||
-                      teamBusy ||
-                      historyRefreshTarget !== null ||
-                      !(teamMode ? teamDraft.trim() : draft.trim()) ||
-                      (selectedTeam
-                        ? !selectedTeam.can_send ||
+                      selectedTeam
+                        ? teamBusy ||
+                          !selectedTeam.can_send ||
                           selectedTeam.read_only ||
                           selectedTeam.turns.at(-1)?.state === "pending"
-                        : !teamTarget &&
-                          (!agentCanSend ||
+                        : busy || !agentCanSend
+                    }
+                    onChange={(event) => {
+                      if (teamMode) setTeamDraft(event.target.value);
+                      else {
+                        uiRevision.current += 1;
+                        setDraft(event.target.value);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setTeamRecipientMenu(false);
+                        return;
+                      }
+                      if (
+                        canMention &&
+                        event.key === "@" &&
+                        !event.nativeEvent.isComposing
+                      ) {
+                        setTeamRecipientMenu(true);
+                      }
+                      if (
+                        event.key === "Enter" &&
+                        !event.shiftKey &&
+                        !event.nativeEvent.isComposing
+                      ) {
+                        event.preventDefault();
+                        submitMessage();
+                      }
+                    }}
+                  />
+                  <div className={styles.composerBar}>
+                    <button
+                      type="submit"
+                      className={styles.sendButton}
+                      aria-describedby={
+                        !teamMode && character?.available === false
+                          ? "chat-readonly-help"
+                          : undefined
+                      }
+                      aria-label={
+                        selectedTeam?.read_only
+                          ? t("teamChatReadOnly")
+                          : selectedTeam && !selectedTeam.can_send
+                            ? t("teamChatUnavailable")
+                            : !teamMode && character?.available === false
+                              ? "Read-only"
+                              : "Send"
+                      }
+                      data-ui-guide={
+                        selectedTeam?.read_only ||
+                        (selectedTeam !== null && !selectedTeam.can_send) ||
+                        (!teamMode && !agentCanSend)
+                          ? "chat.readOnly"
+                          : "chat.send"
+                      }
+                      data-ui-guide-text={
+                        selectedTeam?.read_only
+                          ? t("teamChatReadOnly")
+                          : selectedTeam && !selectedTeam.can_send
+                            ? t("teamChatUnavailable")
+                            : !teamMode && !agentCanSend
+                              ? readOnlyHelp
+                              : undefined
+                      }
+                      disabled={
+                        busy ||
+                        teamBusy ||
+                        historyRefreshTarget !== null ||
+                        !(teamMode ? teamDraft.trim() : draft.trim()) ||
+                        (selectedTeam
+                          ? !selectedTeam.can_send ||
+                            selectedTeam.read_only ||
+                            selectedTeam.turns.at(-1)?.state === "pending"
+                          : !agentCanSend ||
                             !versionId ||
                             Boolean(
                               selected?.turns.some(
                                 (turn) => turn.state === "pending",
                               ),
-                            )))
-                    }
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="18"
-                      height="18"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
+                            ))
+                      }
                     >
-                      <path d="M12 19V5m-7 7 7-7 7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </form>
-            </>
-          )}
-        </section>
-      </div>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 19V5m-7 7 7-7 7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </>
   );
 }

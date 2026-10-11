@@ -1099,24 +1099,14 @@ export class PlatformApi {
     });
   }
 
-  createConversation(
-    versionId: string,
-    chatVisibility: "private" | "public" = "private",
-  ): Promise<ChatSession> {
+  createConversation(versionId: string): Promise<ChatSession> {
     return this.postJson("conversations", {
       entry: { kind: "agent", version_id: versionId },
-      chat_visibility: chatVisibility,
     });
   }
 
-  createTeamConversation(
-    entry: TeamChatEntry,
-    chatVisibility: "private" | "public",
-  ): Promise<TeamChatSession> {
-    return this.postJson("conversations", {
-      entry,
-      chat_visibility: chatVisibility,
-    });
+  createTeamConversation(entry: TeamChatEntry): Promise<TeamChatSession> {
+    return this.postJson("conversations", { entry });
   }
 
   conversation(id: string): Promise<ChatSession> {

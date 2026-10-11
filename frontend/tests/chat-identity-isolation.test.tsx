@@ -10,10 +10,11 @@ import {
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const routerPush = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({
   usePathname: () => "/teacher/chat",
   useSearchParams: () => new URLSearchParams(window.location.search),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: routerPush, replace: vi.fn() }),
 }));
 
 import { AgentChat } from "../components/agent-chat";
@@ -25,6 +26,7 @@ import {
   getSettledChatSession,
   resetChatRequestIdentity,
 } from "../lib/chat-request-store";
+import { SidebarActions } from "./sidebar-actions";
 
 const agent = {
   agent_id: "synthetic-agent",
@@ -97,7 +99,11 @@ function Harness() {
       >
         Public switch A
       </button>
-      {showChats && session.status === "authenticated" ? <AgentChat /> : null}
+      {showChats && session.status === "authenticated" ? (
+        <SidebarActions>
+          <AgentChat />
+        </SidebarActions>
+      ) : null}
     </>
   );
 }
@@ -156,10 +162,19 @@ function openNewChatUrl() {
   window.history.replaceState(null, "", "/teacher/chat?mode=new");
 }
 
+async function pickAgentAndDone() {
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Synthetic Agent/ }),
+  );
+  const done = within(screen.getByRole("navigation")).getByRole("button", {
+    name: "Done",
+  });
+  await waitFor(() => expect(done.hasAttribute("disabled")).toBe(false));
+  fireEvent.click(done);
+}
+
 async function chooseAgent() {
-  const picker = await screen.findByRole("combobox", { name: "Chat with" });
-  await within(picker).findByRole("option", { name: /Synthetic Agent/ });
-  fireEvent.change(picker, { target: { value: `agent:${agent.version_id}` } });
+  await pickAgentAndDone();
   return screen.findByRole("textbox", { name: "Message" });
 }
 
@@ -395,9 +410,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     openNewChatUrl();
     mount();
-    const input = await chooseAgent();
-    fireEvent.change(input, { target: { value: "A preflight draft" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await pickAgentAndDone();
     await waitFor(() =>
       expect(api.createConversation).toHaveBeenCalledTimes(1),
     );
@@ -409,7 +422,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(1));
     await act(async () => resolveCreated(emptyConversation));
-    expect(api.streamConversation).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
     expect(getChatRequest()).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Public switch A" }));
@@ -418,14 +431,14 @@ describe("Chat data follows the accepted account and course scope", () => {
     );
     await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
     await screen.findByText("No chats yet.");
-    expect(screen.queryByText("A preflight draft")).toBeNull();
-    expect(screen.queryByDisplayValue("A preflight draft")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
     expect(getChatRequest()).toBeNull();
     expect(api.streamConversation).not.toHaveBeenCalled();
   });
 
-  it("does not let an old same-actor create overwrite a newer request after navigation", async () => {
+  it("does not let an old same-actor create replace a newer Chat after navigation", async () => {
     let resolveOldCreate!: (session: ChatSession) => void;
+    const newerConversation = { ...emptyConversation, id: "newer-chat" };
     api.conversations.mockResolvedValue([]);
     api.createConversation
       .mockImplementationOnce(
@@ -434,15 +447,13 @@ describe("Chat data follows the accepted account and course scope", () => {
             resolveOldCreate = resolve;
           }),
       )
-      .mockResolvedValueOnce(emptyConversation);
+      .mockResolvedValueOnce(newerConversation);
     api.streamConversation.mockImplementationOnce(
       () => new Promise(() => undefined),
     );
     openNewChatUrl();
     mount();
-    const input = await chooseAgent();
-    fireEvent.change(input, { target: { value: "Old preflight request" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await pickAgentAndDone();
     await waitFor(() =>
       expect(api.createConversation).toHaveBeenCalledTimes(1),
     );
@@ -457,6 +468,7 @@ describe("Chat data follows the accepted account and course scope", () => {
     await waitFor(() =>
       expect(api.streamConversation).toHaveBeenCalledTimes(1),
     );
+    expect(api.streamConversation.mock.calls[0][0]).toBe("newer-chat");
     const currentRequestId = getChatRequest()?.requestId;
     expect(currentRequestId).toBeTruthy();
     await act(async () => resolveOldCreate(emptyConversation));
@@ -467,46 +479,33 @@ describe("Chat data follows the accepted account and course scope", () => {
     expect(getChatRequest()?.status).toBe("in_flight");
   });
 
-  it("invalidates an unissued same-actor create when the re-opened Chat sends a newer turn", async () => {
+  it("keeps a create that settles after leaving the New page off screen", async () => {
     let resolveOldCreate!: (session: ChatSession) => void;
     api.conversations.mockResolvedValue([]);
-    api.createConversation
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveOldCreate = resolve;
-          }),
-      )
-      .mockResolvedValueOnce(emptyConversation);
-    api.streamConversation.mockImplementationOnce(
-      () => new Promise(() => undefined),
+    api.createConversation.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOldCreate = resolve;
+        }),
     );
     openNewChatUrl();
     mount();
-    const input = await chooseAgent();
-    fireEvent.change(input, { target: { value: "Old preflight request" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await pickAgentAndDone();
     await waitFor(() =>
       expect(api.createConversation).toHaveBeenCalledTimes(1),
     );
+    window.history.replaceState(null, "", "/teacher/chat");
     fireEvent.click(screen.getByRole("button", { name: "Leave Chats" }));
     fireEvent.click(screen.getByRole("button", { name: "Enter Chats" }));
-
-    const reopenedInput = await chooseAgent();
-    fireEvent.change(reopenedInput, {
-      target: { value: "New current request" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() =>
-      expect(api.streamConversation).toHaveBeenCalledTimes(1),
-    );
-    const currentRequestId = getChatRequest()?.requestId;
-    expect(currentRequestId).toBeTruthy();
+    await screen.findByText("No chats yet.");
+    const navigations = routerPush.mock.calls.length;
 
     await act(async () => resolveOldCreate(emptyConversation));
-    expect(api.createConversation).toHaveBeenCalledTimes(2);
-    expect(api.streamConversation).toHaveBeenCalledTimes(1);
-    expect(getChatRequest()?.requestId).toBe(currentRequestId);
-    expect(getChatRequest()?.status).toBe("in_flight");
+    expect(routerPush.mock.calls.length).toBe(navigations);
+    expect(screen.getByText("No chats yet.")).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull();
+    expect(api.createConversation).toHaveBeenCalledTimes(1);
+    expect(api.streamConversation).not.toHaveBeenCalled();
+    expect(getChatRequest()).toBeNull();
   });
 });
