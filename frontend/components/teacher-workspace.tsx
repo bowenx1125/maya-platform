@@ -153,7 +153,6 @@ export function TeacherDashboard() {
     <div className="mayaform-home">
       <section className="home-hero">
         <div className="home-hero-copy">
-          <p className="home-hero-eyebrow">{course?.name ?? t("course")}</p>
           <h1>{t("homeWelcomeTitle", { name })}</h1>
         </div>
         <div className="home-hero-art">

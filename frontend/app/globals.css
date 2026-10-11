@@ -750,8 +750,9 @@ button.agent-tile-name {
 
 .agent-tile .agent-pill {
   justify-self: center;
-  padding: 2px 8px;
-  font-size: 0.7rem;
+  min-height: 22px;
+  padding: 0 6px;
+  font-size: 0.86rem;
 }
 
 .agent-pill-action {
@@ -782,6 +783,17 @@ button.agent-tile-name {
 .agent-pill-action:hover .agent-pill-x,
 .agent-pill-action:focus-visible .agent-pill-x {
   display: inline-flex;
+}
+
+/* Hovered, the mark turns into Delete: the diamond gives way to the cross. */
+.agent-pill-action:hover,
+.agent-pill-action:focus-visible {
+  color: var(--red);
+}
+
+.agent-pill-action:hover::before,
+.agent-pill-action:focus-visible::before {
+  display: none;
 }
 
 .agent-pill-action:focus-visible {
@@ -2147,20 +2159,39 @@ dd {
 
 /* The version and the group that made it, as two pills a teacher can read at
    a glance. Amber says a newer draft exists that the class has not released. */
+/* A version reads like an edition in a library catalogue: a small gold
+   diamond and an italic number, set like the home's "member" and "leader".
+   A green status chip under every name looked like a dashboard. A draft
+   that is not published yet is marked in a darker gold. */
 .agent-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  gap: 6px;
+  padding: 0;
   border-radius: 999px;
-  background: rgba(45, 138, 104, 0.14);
-  color: var(--green);
-  font-size: 0.82rem;
-  font-weight: 640;
+  background: none;
+  color: var(--muted);
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+  font-weight: 400;
+  text-transform: lowercase;
+}
+
+.agent-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: rgba(201, 162, 39, 0.8);
+  rotate: 45deg;
 }
 
 .agent-pill[data-pending="true"] {
-  background: var(--gold-soft);
-  color: var(--accent-strong, #76591f);
+  color: #8a6a1f;
+}
+
+.agent-pill[data-pending="true"]::before {
+  background: #8a6a1f;
 }
 
 /* The group's members, alphabetical, under the group's own name. */
