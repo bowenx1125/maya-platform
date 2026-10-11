@@ -994,14 +994,16 @@ function AgentChatScope({
     const id = value.slice(separator + 1);
     if (!id) return;
     if (kind === "agent") start(id);
-    else if (kind === "team")
-      startTeamTarget({
-        kind: "team",
-        team_id: id,
-        team_version_id: teamChoices.find((team) => team.id === id)
-          ?.current_version_id,
-      });
-    else if (kind === "maya_team")
+    else if (kind === "team") {
+      const team_version_id =
+        teamChoices.find((team) => team.id === id)?.current_version_id ??
+        mayaChoices.find((team) => team.id === id)?.team_version_id;
+      startTeamTarget(
+        team_version_id
+          ? { kind: "team", team_id: id, team_version_id }
+          : { kind: "team", team_id: id },
+      );
+    } else if (kind === "maya_team")
       startTeamTarget({ kind: "maya_team", team_id: id });
   }
 
@@ -2118,8 +2120,18 @@ function AgentChatScope({
   const shownVisibility: ChatVisibility = activeSession
     ? (activeSession.chat_visibility ?? "private")
     : chatVisibility;
-  const mayaIds = new Set(mayaChoices.map((team) => team.id));
-  const teamOptions = teamChoices.filter((team) => !mayaIds.has(team.id));
+  const teamIds = new Set(teamChoices.map((team) => team.id));
+  const teamOptions = [
+    ...teamChoices,
+    ...mayaChoices
+      .filter((team) => !teamIds.has(team.id))
+      .map((team) => ({
+        id: team.id,
+        display_name: team.display_name,
+        course_id: team.course_id,
+        current_version_id: team.team_version_id,
+      })),
+  ];
   const pickerValue = selectedTeam
     ? `${selectedTeam.entry_kind}:${selectedTeam.team.id}`
     : teamTarget
@@ -2144,12 +2156,7 @@ function AgentChatScope({
       ? { kind: teamTarget.kind, id: teamTarget.team_id, name: targetTeamName }
       : null;
   const chatTitle = currentTeam?.name ?? character?.name ?? "";
-  const chatKind =
-    (selectedTeam?.entry_kind ?? teamTarget?.kind) === "maya_team"
-      ? "Maya Team"
-      : teamMode
-        ? "Team"
-        : "Agent";
+  const chatKind = teamMode ? "Team" : "Agent";
   const hasTarget = Boolean(
     selected || selectedTeam || teamTarget || versionId,
   );
@@ -2354,12 +2361,7 @@ function AgentChatScope({
                 <div className={styles.chatTitle}>
                   <h2>{chatTitle || t("chatNewTitle")}</h2>
                   {hasTarget ? (
-                    <span
-                      className={styles.kindChip}
-                      data-kind={chatKind === "Maya Team" ? "maya" : undefined}
-                    >
-                      {chatKind}
-                    </span>
+                    <span className={styles.kindChip}>{chatKind}</span>
                   ) : null}
                 </div>
                 {showCreationControls ? (
@@ -2626,9 +2628,9 @@ function AgentChatScope({
                         ))}
                       </optgroup>
                     ) : null}
-                    {teamOptions.length || currentTeam?.kind === "team" ? (
+                    {teamOptions.length || currentTeam ? (
                       <optgroup label={t("chatTargetTeams")}>
-                        {currentTeam?.kind === "team" &&
+                        {currentTeam &&
                         !teamOptions.some(
                           (team) => team.id === currentTeam.id,
                         ) ? (
@@ -2638,21 +2640,6 @@ function AgentChatScope({
                         ) : null}
                         {teamOptions.map((team) => (
                           <option key={team.id} value={`team:${team.id}`}>
-                            {team.display_name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                    {mayaChoices.length || currentTeam?.kind === "maya_team" ? (
-                      <optgroup label="Maya Team">
-                        {currentTeam?.kind === "maya_team" &&
-                        !mayaIds.has(currentTeam.id) ? (
-                          <option value={`maya_team:${currentTeam.id}`}>
-                            {currentTeam.name}
-                          </option>
-                        ) : null}
-                        {mayaChoices.map((team) => (
-                          <option key={team.id} value={`maya_team:${team.id}`}>
                             {team.display_name}
                           </option>
                         ))}

@@ -333,13 +333,7 @@ function GroupWorkspaceSession({
         nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
       );
       setTeams(
-        (Array.isArray(nextTeams) ? nextTeams : []).filter(
-          (team) =>
-            team.can_edit &&
-            team.visibility === "private" &&
-            team.ownership_scope === "personal" &&
-            team.group_id === null,
-        ),
+        Array.isArray(nextTeams) ? nextTeams : [],
       );
       setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
       setItems(
@@ -433,6 +427,7 @@ function GroupWorkspaceSession({
           courseId={group.course_id}
           agents={chatAgents}
           variant="team"
+          groupId={groupId}
           standalone
           backHref={`/student/groups/${groupId}`}
           initialRouteMode={
@@ -533,7 +528,11 @@ function GroupWorkspaceSession({
                     pending={false}
                     deleting={deleting !== null}
                     deleteLabel={t("deleteAgent")}
-                    onDelete={() => void deleteOwnedTeam(team.id)}
+                    onDelete={
+                      team.can_edit
+                        ? () => void deleteOwnedTeam(team.id)
+                        : undefined
+                    }
                   />
                 ))}
               </ModuleTiles>

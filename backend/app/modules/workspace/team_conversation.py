@@ -100,6 +100,55 @@ def _active_formal_assessment_conversation(
     )
 
 
+def _published_recipe_is_complete(db: Session, selection: FrozenTeamSelection) -> bool:
+    """Score only a teacher-published Team whose recipe, roles and questions are complete."""
+
+    if selection.publication_id is None:
+        return False
+    from app.modules.learning.recipes import (
+        _selected_questions,
+        declared_assessment_role,
+        declared_recipe,
+    )
+
+    leader = next((member for member in selection.members if member.is_leader), None)
+    if leader is None:
+        return False
+    leader_version = db.get(AgentVersion, leader.agent_version_id)
+    if leader_version is None:
+        return False
+    try:
+        if declared_recipe(leader_version.agent_md) is None:
+            return False
+        roles: list[str] = []
+        for member in selection.members:
+            if member.is_leader:
+                continue
+            version = db.get(AgentVersion, member.agent_version_id)
+            if version is None:
+                return False
+            role = declared_assessment_role(version.agent_md)
+            if role is not None:
+                roles.append(role)
+        if roles.count("evaluator") != 1 or roles.count("boundary_summarizer") != 1:
+            return False
+        set_ids = tuple(
+            dict.fromkeys(
+                tuple(
+                    set_id
+                    for member in selection.members
+                    for set_id in member.own_knowledge_set_ids
+                )
+                + selection.shared_knowledge_set_ids
+            )
+        )
+        if not set_ids:
+            return False
+        return bool(_selected_questions(db, set_ids))
+    except PlatformError:
+        return False
+
+
 def create_team_conversation(
     db: Session,
     context: AuthContext,
@@ -124,16 +173,28 @@ def create_team_conversation(
         != next(member.binding_id for member in selection.members if member.is_leader)
     ):
         raise not_found()
-    active_conversation = _active_formal_assessment_conversation(db, context, selection, entry)
+    # Published course chats use maya_team. A Teams-list chat without a
+    # complete recipe stays an ordinary Team and does not store that publication.
+    recipe_ready = _published_recipe_is_complete(db, selection)
+    entry_kind: Literal["team", "maya_team"] = (
+        "maya_team" if entry.kind == "maya_team" or recipe_ready else "team"
+    )
+    stored_publication = selection.publication_id if entry_kind == "maya_team" else None
+    assessable = (
+        MayaTeamChatEntry(kind="maya_team", team_id=entry.team_id)
+        if entry_kind == "maya_team"
+        else SavedTeamChatEntry(kind="team", team_id=entry.team_id)
+    )
+    active_conversation = _active_formal_assessment_conversation(db, context, selection, assessable)
     if active_conversation is not None:
         return active_conversation
     row = Conversation(
         id=str(uuid4()),
         user_id=context.user.id,
         course_id=selection.course_id,
-        entry_kind=entry.kind,
+        entry_kind=entry_kind,
         chat_visibility=chat_visibility,
-        origin="published_course_team" if selection.publication_id else "custom_team",
+        origin="published_course_team" if stored_publication else "custom_team",
         agent_version_id=None,
         snapshot_id=None,
         agent_name_snapshot="",
@@ -143,8 +204,8 @@ def create_team_conversation(
         team_owner_user_id=selection.owner_user_id,
         team_name_snapshot=selection.display_name,
         team_authorization_epoch=selection.team_authorization_epoch,
-        publication_id=selection.publication_id,
-        publication_epoch=selection.publication_epoch,
+        publication_id=stored_publication,
+        publication_epoch=selection.publication_epoch if stored_publication else None,
         revision=0,
         active_request_id=None,
         created_at=datetime.now(UTC),
@@ -170,7 +231,7 @@ def create_team_conversation(
             is_leader=member.is_leader,
             display_name=member.display_name,
             avatar_config_json=json.dumps(member.avatar_config, ensure_ascii=False),
-            invoke_grant_id=member.invoke_grant_id,
+            invoke_grant_id=member.invoke_grant_id if entry_kind == "maya_team" else None,
         )
         db.add(participant)
         db.flush()
@@ -188,7 +249,7 @@ def create_team_conversation(
                 conversation_id=row.id, knowledge_set_id=set_id, position=position
             )
         )
-    if entry.kind == "maya_team":
+    if entry_kind == "maya_team" and (entry.kind == "maya_team" or recipe_ready):
         if leader_participant is None:
             raise not_found()
         _persist_maya_team_opening(db, row, leader_participant)

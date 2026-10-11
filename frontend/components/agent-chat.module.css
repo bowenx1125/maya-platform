@@ -183,10 +183,6 @@
   font-weight: 650;
   letter-spacing: 0.02em;
 }
-.kindChip[data-kind="maya"] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
 .visibilityToggle {
   display: inline-flex;
   flex: 0 0 auto;
@@ -652,6 +648,15 @@
   max-width: 720px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+.teamForm :global(input:focus-visible),
+.teamForm :global(button:focus-visible) {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+.teamFormReadOnly .entryChoice,
+.teamFormReadOnly input:disabled {
+  cursor: default;
 }
 .teamForm > label {
   display: grid;

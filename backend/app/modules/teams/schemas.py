@@ -82,11 +82,17 @@ class TeamSummary(StrictModel):
     can_edit: bool
 
 
+class SharedKnowledgeSetDTO(StrictModel):
+    id: UUID
+    display_name: str
+
+
 class TeamDetail(TeamSummary):
     created_at: datetime
     updated_at: datetime
     members: list[TeamMemberDTO]
     shared_knowledge_set_ids: list[UUID]
+    shared_knowledge_sets: list[SharedKnowledgeSetDTO] = Field(default_factory=list)
     publication_state: TeamPublicationState
 
 

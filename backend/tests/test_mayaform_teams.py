@@ -18,6 +18,8 @@ from app.core.models import (
     Course,
     CourseMember,
     FileReference,
+    Group,
+    GroupMember,
     KnowledgeDocument,
     KnowledgeSnapshot,
     SnapshotDocument,
@@ -278,9 +280,8 @@ def test_personal_teacher_public_team_creates_directory_and_invoke_grants_atomic
             )
             is False
         )
-        with pytest.raises(PlatformError) as denied_custom_team:
-            resolve_chat_entry(db, BOWEN_ID, created["id"], require_publication=False)
-        assert denied_custom_team.value.status_code == 404
+        readable = resolve_chat_entry(db, BOWEN_ID, created["id"], require_publication=False)
+        assert readable.publication_id == publication.id
 
     _, student_csrf = login(client, "bowen")
     directory_response = client.get(
@@ -346,17 +347,15 @@ def test_personal_teacher_public_team_creates_directory_and_invoke_grants_atomic
         headers=_headers(teacher_csrf_again, "k3-team-public-to-private-0001"),
         json=private_payload,
     )
-    assert made_private.status_code == 200, made_private.text
-    assert made_private.json()["authorization_epoch"] == 1
-    with database.session() as db:
-        from app.modules.teams.service import assert_current_chat_targets
-
-        with pytest.raises(PlatformError) as revoked_team:
-            assert_current_chat_targets(db, BOWEN_ID, selection)
-        assert revoked_team.value.status_code == 404
+    assert made_private.status_code == 409, made_private.text
+    assert made_private.json()["code"] == "team_visibility_locked"
     assert (
-        client.get(f"/api/v1/courses/{COURSE_ID}/maya-teams", headers=_headers(student_csrf)).json()
-        == []
+        len(
+            client.get(
+                f"/api/v1/courses/{COURSE_ID}/maya-teams", headers=_headers(student_csrf)
+            ).json()
+        )
+        == 1
     )
 
     stale_update = client.put(
@@ -1480,3 +1479,114 @@ def test_owner_soft_deletes_a_maya_team_and_replays_the_same_key(
     assert directory.status_code == 200
     assert all(item["id"] != team_id for item in directory.json())
     assert client.get(f"/api/v1/teams/{team_id}", headers=_headers(csrf)).status_code == 404
+
+
+def test_student_public_team_is_read_only_for_the_same_group_and_teachers(
+    client: TestClient, database: Any
+) -> None:
+    group_id = str(uuid4())
+    with database.session() as db:
+        db.add(
+            Group(
+                id=group_id,
+                course_id=COURSE_ID,
+                name=f"Circle {group_id[:8]}",
+                created_at=datetime.now(UTC),
+            )
+        )
+        db.add(
+            GroupMember(
+                group_id=group_id,
+                user_id=BOWEN_ID,
+                role="member",
+                created_at=datetime.now(UTC),
+            )
+        )
+        db.commit()
+    _, bowen_csrf = login(client, "bowen")
+    first = _make_agent_version(
+        database,
+        owner_id=BOWEN_ID,
+        name="Group voice A",
+        visibility="public",
+        group_id=group_id,
+    )
+    second = _make_agent_version(
+        database,
+        owner_id=BOWEN_ID,
+        name="Group voice B",
+        visibility="public",
+        group_id=group_id,
+    )
+    created_set = client.post(
+        f"/api/v1/courses/{COURSE_ID}/knowledge-sets",
+        headers=_headers(bowen_csrf, f"student-team-set-{uuid4()}"),
+        json={"display_name": "Shared circle notes"},
+    )
+    assert created_set.status_code == 201, created_set.text
+    set_id = created_set.json()["id"]
+    payload = _team_payload([first[1], second[1]], visibility="public")
+    payload["group_id"] = group_id
+    payload["shared_knowledge_set_ids"] = [set_id]
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(bowen_csrf, f"student-public-team-{uuid4()}"),
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    body = created.json()
+    team_id = body["id"]
+    assert body["can_edit"] is True
+    assert body["publication_state"] == "unpublished"
+    assert body["shared_knowledge_sets"] == [{"id": set_id, "display_name": "Shared circle notes"}]
+    assert [member["display_name"] for member in body["members"]] == [
+        "Group voice A",
+        "Group voice B",
+    ]
+
+    _, outsider_csrf = login(client, "kaikai")
+    assert (
+        client.get(f"/api/v1/teams/{team_id}", headers=_headers(outsider_csrf)).status_code == 404
+    )
+    outsider_list = client.get(
+        f"/api/v1/courses/{COURSE_ID}/teams", headers=_headers(outsider_csrf)
+    )
+    assert outsider_list.status_code == 200
+    assert all(item["id"] != team_id for item in outsider_list.json())
+
+    _, teacher_csrf = login(client, "maya")
+    teacher = client.get(f"/api/v1/teams/{team_id}", headers=_headers(teacher_csrf))
+    assert teacher.status_code == 200, teacher.text
+    assert teacher.json()["can_edit"] is False
+    assert teacher.json()["shared_knowledge_sets"][0]["display_name"] == "Shared circle notes"
+
+    with database.session() as db:
+        db.add(
+            GroupMember(
+                group_id=group_id,
+                user_id="bc170f51-45fb-5296-a36d-a2edc8f8d315",
+                role="member",
+                created_at=datetime.now(UTC),
+            )
+        )
+        db.commit()
+    _, classmate_csrf = login(client, "kaikai")
+    classmate = client.get(f"/api/v1/teams/{team_id}", headers=_headers(classmate_csrf))
+    assert classmate.status_code == 200, classmate.text
+    assert classmate.json()["can_edit"] is False
+    assert classmate.json()["members"][0]["is_leader"] is True
+
+    _, bowen_csrf = login(client, "bowen")
+    locked = client.put(
+        f"/api/v1/teams/{team_id}",
+        headers=_headers(bowen_csrf, f"student-team-lock-{uuid4()}"),
+        json={
+            "display_name": body["display_name"],
+            "visibility": "private",
+            "members": payload["members"],
+            "shared_knowledge_set_ids": [set_id],
+            "expected_metadata_revision": body["metadata_revision"],
+        },
+    )
+    assert locked.status_code == 409, locked.text
+    assert locked.json()["code"] == "team_visibility_locked"

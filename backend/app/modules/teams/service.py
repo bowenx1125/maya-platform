@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
-from app.core.errors import not_found, stale_revision, unprocessable
+from app.core.errors import conflict, not_found, stale_revision, unprocessable
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -49,6 +49,7 @@ from app.modules.teams.schemas import (
     DirectoryMemberDTO,
     MayaTeamDirectoryEntry,
     SaveTeamVersionRequest,
+    SharedKnowledgeSetDTO,
     TeamDetail,
     TeamMemberDTO,
     TeamSummary,
@@ -92,6 +93,28 @@ def _can_access_group_scope(db: Session, user_id: str, group_id: str, course_id:
         # A teacher is inside a group only after joining it. This function is
         # deliberately shared by create, save, and read paths.
         raise not_found()
+
+
+def can_read_team(db: Session, user_id: str, team: Team) -> bool:
+    """Private stays with the owner. Public follows who published the Team."""
+
+    if team.deleted_at is not None or course_member_role(db, user_id, team.course_id) is None:
+        return False
+    if team.owner_user_id == user_id:
+        if team.group_id is None:
+            return True
+        return scoped_group_role_for_user(db, user_id, team.group_id) == "student"
+    if team.visibility != "public" or team.owner_user_id is None:
+        return False
+    owner_role = course_member_role(db, team.owner_user_id, team.course_id)
+    viewer_role = course_member_role(db, user_id, team.course_id)
+    if owner_role == "teacher":
+        return viewer_role in {"student", "teacher"}
+    if viewer_role == "teacher":
+        return True
+    if team.group_id is None or viewer_role != "student":
+        return False
+    return scoped_group_role_for_user(db, user_id, team.group_id) is not None
 
 
 def _get_team_for_owner(db: Session, actor: AuthContext | str, team_id: str) -> Team:
@@ -711,16 +734,30 @@ def _team_summary(db: Session, team: Team, *, can_edit: bool) -> TeamSummary:
     )
 
 
+def _shared_knowledge_set_dtos(db: Session, version_id: str) -> list[SharedKnowledgeSetDTO]:
+    named: list[SharedKnowledgeSetDTO] = []
+    for binding in _set_rows(db, version_id):
+        row = db.get(KnowledgeSet, binding.knowledge_set_id)
+        if row is None:
+            raise not_found()
+        named.append(SharedKnowledgeSetDTO(id=_uid(row.id), display_name=row.display_name))
+    return named
+
+
 def get_team_detail(db: Session, actor: AuthContext | str, team_id: str) -> TeamDetail:
-    team = _get_team_for_owner(db, actor, team_id)
+    user_id = _actor_id(actor)
+    team = db.scalar(select(Team).where(Team.id == team_id, Team.deleted_at.is_(None)))
+    if team is None or not can_read_team(db, user_id, team):
+        raise not_found()
     version = _version_for_seq(db, team)
-    summary = _team_summary(db, team, can_edit=True)
+    summary = _team_summary(db, team, can_edit=team.owner_user_id == user_id)
     return TeamDetail(
         **summary.model_dump(),
         created_at=team.created_at,
         updated_at=team.updated_at,
         members=[_team_member_dto(row) for row in _member_rows(db, version.id)],
         shared_knowledge_set_ids=[_uid(row.knowledge_set_id) for row in _set_rows(db, version.id)],
+        shared_knowledge_sets=_shared_knowledge_set_dtos(db, version.id),
         publication_state=_publication_state(db, team, version),  # type: ignore[arg-type]
     )
 
@@ -1005,6 +1042,11 @@ def save_team_version(
     request: SaveTeamVersionRequest,
 ) -> TeamDetail:
     team = _get_team_for_owner(db, actor, team_id)
+    if request.visibility != team.visibility:
+        raise conflict(
+            "team_visibility_locked",
+            "Private or Public is chosen when the Team is created.",
+        )
     if team.metadata_revision != request.expected_metadata_revision:
         raise stale_revision(team.metadata_revision)
     members = _validate_members(db, actor, team.course_id, team.group_id, request)
@@ -1086,22 +1128,9 @@ def list_course_teams(db: Session, actor: AuthContext, course_id: str) -> list[T
     ).all()
     visible: list[TeamSummary] = []
     for team in rows:
-        owned = team.owner_user_id == user_id
-        if owned:
-            if (
-                team.group_id is not None
-                and scoped_group_role_for_user(db, user_id, team.group_id) != "student"
-            ):
-                continue
-            visible.append(_team_summary(db, team, can_edit=True))
+        if not can_read_team(db, user_id, team):
             continue
-        if (
-            team.ownership_scope == "group"
-            and team.visibility == "public"
-            and team.group_id is not None
-            and scoped_group_role_for_user(db, user_id, team.group_id) == "student"
-        ):
-            visible.append(_team_summary(db, team, can_edit=False))
+        visible.append(_team_summary(db, team, can_edit=team.owner_user_id == user_id))
     return visible
 
 
@@ -1223,40 +1252,29 @@ def resolve_chat_entry(
         or version.authorization_epoch != team.authorization_epoch
     ):
         raise not_found()
-    if require_publication:
-        if (
-            team.ownership_scope != "personal"
-            or team.visibility != "public"
-            or team.current_version_seq != version.version_seq
-        ):
-            raise not_found()
-        publication = db.scalar(
-            select(CourseTeamPublication).where(
-                CourseTeamPublication.team_id == team.id,
-                CourseTeamPublication.team_version_id == version.id,
-                CourseTeamPublication.course_id == team.course_id,
-                CourseTeamPublication.publisher_user_id == team.owner_user_id,
-                CourseTeamPublication.authorization_epoch == team.authorization_epoch,
-                CourseTeamPublication.state == "published",
-            )
+    publication = db.scalar(
+        select(CourseTeamPublication).where(
+            CourseTeamPublication.team_id == team.id,
+            CourseTeamPublication.team_version_id == version.id,
+            CourseTeamPublication.course_id == team.course_id,
+            CourseTeamPublication.publisher_user_id == team.owner_user_id,
+            CourseTeamPublication.authorization_epoch == team.authorization_epoch,
+            CourseTeamPublication.state == "published",
         )
-        if (
-            publication is None
-            or course_member_role(db, team.owner_user_id, team.course_id) != "teacher"
-        ):
-            raise not_found()
-    else:
+    )
+    teacher_public = (
+        publication is not None
+        and team.ownership_scope == "personal"
+        and team.visibility == "public"
+        and team.owner_user_id is not None
+        and course_member_role(db, team.owner_user_id, team.course_id) == "teacher"
+    )
+    if require_publication and not teacher_public:
+        raise not_found()
+    if not teacher_public:
         publication = None
-        if team.owner_user_id != user_id:
-            if (
-                team.ownership_scope != "group"
-                or team.visibility != "public"
-                or team.group_id is None
-                or scoped_group_role_for_user(db, user_id, team.group_id) != "student"
-            ):
-                raise not_found()
-        if team.group_id is not None:
-            _can_access_group_scope(db, user_id, team.group_id, team.course_id)
+        if not can_read_team(db, user_id, team):
+            raise not_found()
     members = _member_rows(db, version.id)
     all_member_ids = {member.id for member in members}
     requested_targets = all_member_ids if target_binding_ids is None else set(target_binding_ids)

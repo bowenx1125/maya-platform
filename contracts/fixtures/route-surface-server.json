@@ -16911,6 +16911,26 @@
         ],
         "title": "SaveTeamVersionRequest"
       },
+      "SharedKnowledgeSetDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "title": "SharedKnowledgeSetDTO"
+      },
       "TeamDetail": {
         "properties": {
           "id": {
@@ -17013,6 +17033,13 @@
             },
             "type": "array",
             "title": "Shared Knowledge Set Ids"
+          },
+          "shared_knowledge_sets": {
+            "items": {
+              "$ref": "#/components/schemas/SharedKnowledgeSetDTO"
+            },
+            "type": "array",
+            "title": "Shared Knowledge Sets"
           },
           "publication_state": {
             "type": "string",

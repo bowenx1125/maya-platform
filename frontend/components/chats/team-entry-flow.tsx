@@ -54,6 +54,7 @@ type PendingTeamMutation = {
 
 type FormState = {
   name: string;
+  visibility: "private" | "public";
   memberVersionIds: string[];
   leaderVersionId: string;
   sharedSetIds: string[];
@@ -61,6 +62,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   name: "",
+  visibility: "private",
   memberVersionIds: [],
   leaderVersionId: "",
   sharedSetIds: [],
@@ -79,15 +81,16 @@ function teamApi(api: PlatformApi): TeamEntryApi | null {
 }
 
 /**
- * The server publishes a Teacher's public personal Team to the course as a
- * Maya Team; any other Team stays readable only by its owner. The variant
- * therefore fixes visibility instead of offering it as a choice.
+ * Private or Public is chosen only while creating a Team. Afterwards the
+ * form keeps that choice, and a reader who is not the owner sees the saved
+ * members, Leader and Brainform names without being able to change them.
  */
 export function TeamEntryFlow({
   api,
   courseId,
   agents,
   variant = "team",
+  groupId = null,
   standalone = false,
   backHref,
   initialRouteMode,
@@ -99,6 +102,7 @@ export function TeamEntryFlow({
   courseId: string;
   agents: ChatAgent[];
   variant?: "team" | "maya";
+  groupId?: string | null;
   standalone?: boolean;
   backHref?: string;
   initialRouteMode?: string;
@@ -113,8 +117,6 @@ export function TeamEntryFlow({
   const apiForTeams = useMemo(() => teamApi(api), [api]);
   const formId = useId();
   const headingId = useId();
-  const visibility: TeamWriteRequest["visibility"] =
-    variant === "maya" ? "public" : "private";
   const dataScope = `${user?.id ?? "anonymous"}:${identityGeneration}:${courseId}:${variant}`;
   const actionScope = `${dataScope}:${standalone ? pathname : "inline"}:${initialRouteMode ?? ""}:${initialTeamId ?? ""}`;
   const routeOpensForm = !standalone || initialRouteMode === "team-new";
@@ -294,8 +296,7 @@ export function TeamEntryFlow({
 
   function syncManageRoute(modeValue: string, teamId?: string) {
     if (!standalone || typeof window === "undefined") return;
-    // Studyform keeps Maya Team and private Team on different query modes.
-    // Writing the shared internal name back would reopen the other form.
+    // Older Maya Team links still open this same form.
     const nextMode =
       variant === "maya" && modeValue === "team-edit"
         ? "maya-edit"
@@ -368,7 +369,6 @@ export function TeamEntryFlow({
         actionScopeRef.current !== scopeKey
       )
         return;
-      if (!detail.can_edit) throw new Error(t("teamNotEditable"));
       editScope.current = dataScope;
       setEditing(detail);
       const memberIds = [...detail.members]
@@ -376,6 +376,7 @@ export function TeamEntryFlow({
         .map((member) => member.agent_version_id);
       setForm({
         name: detail.display_name,
+        visibility: detail.visibility,
         memberVersionIds: memberIds,
         leaderVersionId:
           detail.members.find((member) => member.is_leader)?.agent_version_id ??
@@ -419,7 +420,7 @@ export function TeamEntryFlow({
 
   async function saveTeam(event: FormEvent) {
     event.preventDefault();
-    if (!apiForTeams || saving) return;
+    if (!apiForTeams || saving || readOnly) return;
     const intentScope = actionScopeRef.current;
     const sequence = ++saveSequence.current;
     const isCurrentIntent = () =>
@@ -433,8 +434,8 @@ export function TeamEntryFlow({
             handle: createIdempotencyHandle(),
             body: {
               display_name: form.name.trim(),
-              group_id: null,
-              visibility,
+              group_id: groupId,
+              visibility: editing?.visibility ?? form.visibility,
               members: form.memberVersionIds.map(
                 (agent_version_id, position) => ({
                   agent_version_id,
@@ -506,13 +507,44 @@ export function TeamEntryFlow({
     onSaved?.(savedTeam);
   }
 
-  const formErrors = !form.name.trim()
-    ? t("teamNameRequired")
-    : form.memberVersionIds.length < 2
-      ? t("teamNeedsTwoMembers")
-      : !form.leaderVersionId
-        ? t("teamChooseLeader")
-        : "";
+  const readOnly = Boolean(editing && !editing.can_edit);
+  const memberChoices =
+    readOnly && editing
+      ? [...editing.members]
+          .sort((left, right) => left.position - right.position)
+          .map((member) => ({
+            versionId: member.agent_version_id,
+            name: member.display_name,
+            versionLabel: "",
+            available: true,
+          }))
+      : agents.map((agent) => ({
+          versionId: agent.version_id,
+          name: agent.name,
+          versionLabel: agent.version_label,
+          available: agent.available,
+        }));
+  const namedSets = new Map(
+    visibleKnowledgeSets.map((set) => [set.id, set.name]),
+  );
+  for (const set of editing?.shared_knowledge_sets ?? []) {
+    namedSets.set(set.id, set.display_name);
+  }
+  const knowledgeChoices = readOnly
+    ? form.sharedSetIds.map((id) => ({
+        id,
+        name: namedSets.get(id) ?? id,
+      }))
+    : visibleKnowledgeSets;
+  const formErrors = readOnly
+    ? ""
+    : !form.name.trim()
+      ? t("teamNameRequired")
+      : form.memberVersionIds.length < 2
+        ? t("teamNeedsTwoMembers")
+        : !form.leaderVersionId
+          ? t("teamChooseLeader")
+          : "";
   const title = variant === "maya" ? t("mayaTeams") : t("chatTargetTeams");
 
   return (
@@ -554,7 +586,7 @@ export function TeamEntryFlow({
         !loading &&
         !loadError &&
         !visibleTeams.length ? (
-          <p className={styles.entryHint}>{t("mayaTeamNoneYet")}</p>
+          <p className={styles.entryHint}>{t("teamNoneYet")}</p>
         ) : null}
 
         {saved ? (
@@ -581,7 +613,11 @@ export function TeamEntryFlow({
         {!loading && apiForTeams && (editing || formOpen) ? (
           <form
             id={formId}
-            className={styles.teamForm}
+            className={
+              readOnly
+                ? `${styles.teamForm} ${styles.teamFormReadOnly}`
+                : styles.teamForm
+            }
             onSubmit={(event) => void saveTeam(event)}
           >
             <label>
@@ -589,7 +625,7 @@ export function TeamEntryFlow({
               <input
                 value={form.name}
                 maxLength={120}
-                disabled={saving || mutationUnknown}
+                disabled={readOnly || saving || mutationUnknown}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
@@ -599,6 +635,34 @@ export function TeamEntryFlow({
                 required
               />
             </label>
+            {!editing ? (
+              <div className="agent-identity">
+                <div
+                  className="visibility-toggle"
+                  role="group"
+                  aria-label={t("agentVisibility")}
+                >
+                  {(["private", "public"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={form.visibility === option}
+                      disabled={saving || mutationUnknown}
+                      onClick={() =>
+                        setForm((current) => ({
+                          ...current,
+                          visibility: option,
+                        }))
+                      }
+                    >
+                      {t(
+                        option === "private" ? "privateOption" : "publicOption",
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <fieldset>
               <legend
                 data-ui-guide="chat.teamMembers"
@@ -608,25 +672,27 @@ export function TeamEntryFlow({
                 {t("teamMembers")}
               </legend>
               <div className={styles.entryMemberList}>
-                {agents.map((agent) => {
+                {memberChoices.map((agent) => {
                   const checked = form.memberVersionIds.includes(
-                    agent.version_id,
+                    agent.versionId,
                   );
                   return (
-                    <div className={styles.entryMember} key={agent.version_id}>
+                    <div className={styles.entryMember} key={agent.versionId}>
                       <label className={styles.entryChoice}>
                         <input
                           type="checkbox"
                           checked={checked}
                           disabled={
+                            readOnly ||
                             agent.available === false ||
                             saving ||
                             mutationUnknown
                           }
-                          onChange={() => toggleMember(agent.version_id)}
+                          onChange={() => toggleMember(agent.versionId)}
                         />
                         <span>
-                          {agent.name} · {agent.version_label}
+                          {agent.name}
+                          {agent.versionLabel ? ` · ${agent.versionLabel}` : ""}
                         </span>
                       </label>
                       <label className={styles.entryChoice}>
@@ -636,12 +702,14 @@ export function TeamEntryFlow({
                           aria-label={t("teamSetLeader", {
                             name: agent.name,
                           })}
-                          checked={form.leaderVersionId === agent.version_id}
-                          disabled={!checked || saving || mutationUnknown}
+                          checked={form.leaderVersionId === agent.versionId}
+                          disabled={
+                            readOnly || !checked || saving || mutationUnknown
+                          }
                           onChange={() =>
                             setForm((current) => ({
                               ...current,
-                              leaderVersionId: agent.version_id,
+                              leaderVersionId: agent.versionId,
                             }))
                           }
                         />
@@ -660,13 +728,13 @@ export function TeamEntryFlow({
               >
                 {t("teamSharedKnowledge")}
               </legend>
-              {visibleKnowledgeSets.length ? (
-                visibleKnowledgeSets.map((set) => (
+              {knowledgeChoices.length ? (
+                knowledgeChoices.map((set) => (
                   <label className={styles.entryChoice} key={set.id}>
                     <input
                       type="checkbox"
                       checked={form.sharedSetIds.includes(set.id)}
-                      disabled={saving || mutationUnknown}
+                      disabled={readOnly || saving || mutationUnknown}
                       onChange={() =>
                         setForm((current) => ({
                           ...current,
@@ -688,11 +756,13 @@ export function TeamEntryFlow({
                 {mutationUnknown ? t("teamSaveUnknown") : t("teamSaveFailed")}
               </p>
             ) : null}
-            <PageAction
-              name="done"
-              form={formId}
-              disabled={saving || (!mutationUnknown && Boolean(formErrors))}
-            />
+            {readOnly ? null : (
+              <PageAction
+                name="done"
+                form={formId}
+                disabled={saving || (!mutationUnknown && Boolean(formErrors))}
+              />
+            )}
             {formErrors ? (
               <p className={styles.entryHint}>{formErrors}</p>
             ) : null}

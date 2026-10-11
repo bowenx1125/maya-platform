@@ -22,7 +22,6 @@ import {
   type KnowledgeGenerationStatus,
   type KnowledgeMarkdown,
   type MemoryEntrySource,
-  type MayaTeamDirectoryDto,
   type TeamSummaryDto,
 } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
@@ -551,7 +550,6 @@ function BrainformWorkspaceBody({
   const [knowledgeRows, setKnowledgeRows] = useState<BrainformKnowledge[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
-  const [mayaTeams, setMayaTeams] = useState<MayaTeamDirectoryDto[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -763,7 +761,6 @@ function BrainformWorkspaceBody({
           nextAgents,
           nextGroups,
           nextTeams,
-          nextMayaTeams,
         ] = await Promise.all([
           api.courses(),
           loadRagDocuments(courseId),
@@ -772,9 +769,6 @@ function BrainformWorkspaceBody({
           loadGroups(courseId),
           typeof api.teams === "function"
             ? api.teams(courseId).catch(() => [])
-            : Promise.resolve([]),
-          typeof api.mayaTeams === "function"
-            ? api.mayaTeams(courseId).catch(() => [])
             : Promise.resolve([]),
         ]);
         if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
@@ -789,7 +783,6 @@ function BrainformWorkspaceBody({
         setChatAgents(nextAgents);
         setGroups(nextGroups);
         setTeams(nextTeams);
-        setMayaTeams(nextMayaTeams);
         const latestJobs: Record<string, string | null> = {};
         for (const row of nextKnowledge) {
           const setId = row.canonical_set_id;
@@ -1925,16 +1918,8 @@ function BrainformWorkspaceBody({
           detail: "",
           label: "brainformMemoryTeam" as const,
         })),
-      ...mayaTeams
-        .filter((team) => team.course_id === courseId)
-        .map((team) => ({
-          source: { kind: "maya_team" as const, team_id: team.id },
-          name: team.display_name,
-          detail: team.leader_display_name,
-          label: "brainformMemoryMayaTeam" as const,
-        })),
     ],
-    [accessibleAgents, courseId, mayaTeams, teams],
+    [accessibleAgents, courseId, teams],
   );
 
   function memoryHref(source: MemoryEntrySource): string {

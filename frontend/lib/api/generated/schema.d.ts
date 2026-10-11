@@ -4544,6 +4544,16 @@ export interface components {
             /** Expected Metadata Revision */
             expected_metadata_revision: number;
         };
+        /** SharedKnowledgeSetDTO */
+        SharedKnowledgeSetDTO: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Display Name */
+            display_name: string;
+        };
         /** TeamDetail */
         TeamDetail: {
             /**
@@ -4604,6 +4614,8 @@ export interface components {
             members: components["schemas"]["TeamMemberDTO"][];
             /** Shared Knowledge Set Ids */
             shared_knowledge_set_ids: string[];
+            /** Shared Knowledge Sets */
+            shared_knowledge_sets?: components["schemas"]["SharedKnowledgeSetDTO"][];
             /**
              * Publication State
              * @enum {string}
