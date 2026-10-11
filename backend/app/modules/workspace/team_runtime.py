@@ -204,6 +204,10 @@ def _revoked_assessment_lifecycle_context(
     try:
         get_assessment_runtime_context(db, actor_context, row.id)
     except PlatformError as error:
+        # A deleted Team or Agent removes the live assessment, not the saved
+        # chat. History must still load; there is just no continuation target.
+        if error.code == "not_found":
+            return None
         if error.code not in {"assessment_resource_revoked", "assessment_question_source_stale"}:
             raise
         lifecycle = get_assessment_lifecycle_context(db, actor_context, row.id)

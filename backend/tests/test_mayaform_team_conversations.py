@@ -698,3 +698,26 @@ def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
     assert ready["turns"][0]["member_results"][0]["assistant_text"].startswith("我是 Leader")
     with database.session() as db:
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
+
+
+def test_deleted_published_team_chat_remains_readable(
+    client: TestClient, database: Database
+) -> None:
+    team, _versions, _csrf = _team(client, database)
+    _, student_csrf = login(client, "bowen")
+    session = _create(client, student_csrf, {"kind": "maya_team", "team_id": team["id"]})
+    _, teacher_csrf = login(client, "maya")
+    deleted = client.delete(
+        f"/api/v1/teams/{team['id']}",
+        headers=_headers(teacher_csrf, f"delete-published-team-{uuid4()}"),
+    )
+    assert deleted.status_code == 204, deleted.text
+    _, student_csrf = login(client, "bowen")
+    listed = client.get("/api/v1/conversations")
+    assert listed.status_code == 200, listed.text
+    saved = next(item for item in listed.json() if item["id"] == session["id"])
+    assert saved["entry_kind"] == "maya_team"
+    assert saved["team"]["available"] is False
+    opened = client.get(f"/api/v1/conversations/{session['id']}")
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["team"]["name"] == session["team"]["name"]
