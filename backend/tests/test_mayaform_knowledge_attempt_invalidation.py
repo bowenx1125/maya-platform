@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from app.core.errors import PlatformError
@@ -22,19 +22,16 @@ from app.modules.learning.attempts import (
     apply_assessment_decision,
     get_assessment_runtime_context,
     mark_attempt_question_presented,
-    read_attempt_answers,
     start_or_resume_attempt,
 )
 from app.modules.learning.execution import (
     _scope_answers,
     attempt_has_final_evidence,
-    read_own_formal_attempt,
     write_formal_assessment,
 )
 from app.modules.learning.models import (
     AssessmentActivity,
     AssessmentAttempt,
-    AssessmentAttemptEvent,
     LearningAssessment,
     LearningAssessmentRevision,
     LearningBoundary,
@@ -586,9 +583,7 @@ def test_teacher_canonical_save_invalidates_current_evidence_and_fences_old_team
     assert response.status_code == 200, response.text
     assert "老师已更改当前回合的 Knowledge，请重新答题。" in response.text
     with database.session() as db:
-        restarted = start_or_resume_attempt(
-            db, learner, conversation_id, client_event_id=uuid4()
-        )
+        restarted = start_or_resume_attempt(db, learner, conversation_id, client_event_id=uuid4())
         assert restarted is not None
         assert str(restarted.attempt.id) != str(started.attempt.id)
         context = get_assessment_runtime_context(db, learner, conversation_id)

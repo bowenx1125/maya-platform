@@ -2247,6 +2247,11 @@ def test_teacher_knowledge_update_requires_reanswer_after_real_rag_source_replac
 
     with database.session() as db:
         actor = _service_actor(db, settings, STUDENT_ID)
+        # A Knowledge update drops the unfinished attempt; the student starts
+        # a new one on the current Questions.
+        restarted = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert restarted is not None
+        assert str(restarted.attempt.id) != str(started.attempt.id)
         refreshed = get_assessment_runtime_context(db, actor, conversation_id)
         assert refreshed is not None and refreshed.current_question is not None
         assert refreshed.current_question.question_version_id != first_question_version_id
@@ -2353,6 +2358,12 @@ def test_teacher_knowledge_update_requires_reanswer_after_real_rag_source_replac
         assert manual_second_question.rubric.criteria[0].guidance == "MANUAL_RUBRIC_SECOND"
         manual_second_canonical_version_id = manual_second_question_version.id
 
+        # The manual save is another Knowledge update: answer again from a new attempt.
+        manual_restart = start_or_resume_attempt(
+            db, actor, conversation_id, client_event_id=uuid4()
+        )
+        assert manual_restart is not None
+        assert str(manual_restart.attempt.id) != str(restarted.attempt.id)
         refreshed = get_assessment_runtime_context(db, actor, conversation_id)
         assert refreshed is not None and refreshed.current_question is not None
         assert refreshed.current_question.prompt == "Updated first question"
@@ -2507,7 +2518,7 @@ def test_teacher_knowledge_update_requires_reanswer_after_real_rag_source_replac
             },
         ) == {"saved": True}
         _finish_executor_turn(db, boundary_execution)
-        saved_attempt = db.get(AssessmentAttempt, str(started.attempt.id))
+        saved_attempt = db.get(AssessmentAttempt, str(manual_restart.attempt.id))
         assert saved_attempt is not None and saved_attempt.status == "completed"
         assert attempt_has_final_evidence(db, saved_attempt)
 
@@ -2519,26 +2530,28 @@ def test_teacher_knowledge_update_requires_reanswer_after_real_rag_source_replac
         current_activity = db.get(AssessmentActivity, str(next_attempt.attempt.activity_id))
         assert current_activity is not None
         assert current_activity.question_selection_revision == 3
-        original_attempt_questions = db.scalars(
+        # Each Knowledge update deleted the unfinished attempt with its Question
+        # rows; the completed attempt kept the revision it was answered on.
+        for dropped_id in (started.attempt.id, restarted.attempt.id):
+            assert db.get(AssessmentAttempt, str(dropped_id)) is None
+            assert (
+                db.scalars(
+                    select(AssessmentAttemptQuestion).where(
+                        AssessmentAttemptQuestion.attempt_id == str(dropped_id)
+                    )
+                ).all()
+                == []
+            )
+        completed_questions = db.scalars(
             select(AssessmentAttemptQuestion)
-            .where(AssessmentAttemptQuestion.attempt_id == str(started.attempt.id))
+            .where(AssessmentAttemptQuestion.attempt_id == str(manual_restart.attempt.id))
             .order_by(AssessmentAttemptQuestion.ordinal)
         ).all()
-        assert len(original_attempt_questions) == 7
-        assert all(
-            db.get(AssessmentActivityQuestion, question.activity_question_id).selection_revision
-            == 1
-            for question in original_attempt_questions[:2]
-        )
-        assert all(
-            db.get(AssessmentActivityQuestion, question.activity_question_id).selection_revision
-            == 2
-            for question in original_attempt_questions[2:5]
-        )
+        assert len(completed_questions) == 2
         assert all(
             db.get(AssessmentActivityQuestion, question.activity_question_id).selection_revision
             == 3
-            for question in original_attempt_questions[5:]
+            for question in completed_questions
         )
         next_attempt_questions = db.scalars(
             select(AssessmentAttemptQuestion)

@@ -209,16 +209,26 @@ describe("teacher Chat Provider approval page", () => {
     expect(fixtures.api.teams).toHaveBeenCalledWith("course-1");
     expect(fixtures.api.team).toHaveBeenCalledWith("team-1");
     expect(fixtures.api.team).not.toHaveBeenCalledWith("team-private");
-    expect(fixtures.api.previewTeamProviderStandingGrant).toHaveBeenCalledWith({
-      team_version_id: "team-version-1",
-      provider_operation: "llm_agent_chat",
-      policy_hash: fixtures.disclosure.policy_hash,
-    });
-    expect(fixtures.api.previewTeamProviderStandingGrant).toHaveBeenCalledWith({
-      team_version_id: "team-version-1",
-      provider_operation: "embedding_query",
-      policy_hash: fixtures.embeddingDisclosure.policy_hash,
-    });
+    // The previews follow the Team read; on a loaded machine they can land
+    // after the headings, so wait for the same exact calls.
+    await waitFor(() =>
+      expect(
+        fixtures.api.previewTeamProviderStandingGrant,
+      ).toHaveBeenCalledWith({
+        team_version_id: "team-version-1",
+        provider_operation: "llm_agent_chat",
+        policy_hash: fixtures.disclosure.policy_hash,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        fixtures.api.previewTeamProviderStandingGrant,
+      ).toHaveBeenCalledWith({
+        team_version_id: "team-version-1",
+        provider_operation: "embedding_query",
+        policy_hash: fixtures.embeddingDisclosure.policy_hash,
+      }),
+    );
     expect(
       await screen.findByText(fixtures.preview.resource_hash),
     ).toBeTruthy();

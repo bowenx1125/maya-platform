@@ -529,16 +529,11 @@ describe("Wave 1C real workbench locale boundary", () => {
     ).not.toContain("# Identity");
   });
 
-  it("preserves API/session/CSRF, selected docs, pending File, conflict, and retry identity across locale switches", async () => {
+  // RAG files are uploaded in Brainform, not from this editor, so a locale
+  // switch here only has to keep the session, selection and local edits.
+  it("preserves API/session/CSRF, selected docs and local edits across locale switches", async () => {
     const identities: IdentitySnapshot[] = [];
-    const firstUploadFile = new File(["# pending"], "pending.md");
     const { api } = makeApi();
-    api.uploadKnowledge
-      .mockRejectedValueOnce(new TypeError("connection reset"))
-      .mockResolvedValueOnce({
-        agent_version: makeVersion({ revision: 2 }),
-        document: makeDocument(),
-      });
     renderWorkbench(api as unknown as PlatformApi, (value) => {
       identities.push(value);
     });
@@ -565,15 +560,8 @@ describe("Wave 1C real workbench locale boundary", () => {
       ),
     );
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
-      target: { value: "# Local while uploading" },
+      target: { value: "# Local before switching" },
     });
-    const uploadInput = screen.getAllByLabelText("Upload")[1];
-    fireEvent.change(uploadInput, { target: { files: [firstUploadFile] } });
-    await waitFor(() =>
-      expect(screen.getByText("connection reset")).toBeTruthy(),
-    );
-    const firstCall = api.uploadKnowledge.mock.calls[0];
-    const firstHandle = (firstCall[4] as { idempotency: unknown }).idempotency;
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
     const lastIdentity = identities.at(-1);
@@ -582,7 +570,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(lastIdentity?.csrf).toBe(firstIdentity?.csrf);
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe("# Local while uploading");
+    ).toBe("# Local before switching");
     expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
       true,
     );
@@ -593,100 +581,13 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.version.mock.calls.length).toBe(countsBefore.version);
     expect(api.agent.mock.calls.length).toBe(countsBefore.agent);
     expect(api.knowledge.mock.calls.length).toBe(countsBefore.knowledge);
-    expect(api.ragPreview.mock.calls.length).toBe(countsBefore.ragPreview + 1);
     expect(api.avatarTemplates.mock.calls.length).toBe(
       countsBefore.avatarTemplates,
     );
     expect(api.voiceProfiles.mock.calls.length).toBe(
       countsBefore.voiceProfiles,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "切换到英文" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(api.uploadKnowledge).toHaveBeenCalledTimes(2));
-    const secondCall = api.uploadKnowledge.mock.calls[1];
-    expect(secondCall[2]).toBe(firstUploadFile);
-    expect((secondCall[4] as { idempotency: unknown }).idempotency).toBe(
-      firstHandle,
-    );
-  });
-
-  it("retries preview refresh after a successful file upload without reuploading", async () => {
-    const { api } = makeApi();
-    let resolvePreview!: (preview: RagPreview) => void;
-    api.uploadKnowledge.mockResolvedValueOnce({
-      agent_version: makeVersion(),
-      document: {
-        ...makeDocument(),
-        id: "uploaded-document-id",
-        source_filename: "lesson.pdf.md",
-      },
-    });
-    api.ragPreview
-      .mockResolvedValueOnce(makePreview())
-      .mockRejectedValueOnce(new Error("preview unavailable"))
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolvePreview = resolve;
-          }),
-      );
-    renderWorkbench(api as unknown as PlatformApi, () => undefined);
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
-    );
-    const file = new File(["lesson"], "lesson.pdf", {
-      type: "application/pdf",
-    });
-    fireEvent.change(screen.getAllByLabelText("Upload")[1], {
-      target: { files: [file] },
-    });
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "The file was uploaded successfully, but the evidence preview could not be refreshed.",
-        ),
-      ).toBeTruthy(),
-    );
-    expect(
-      screen.getByText(
-        "File converted to Markdown and enabled for this draft.",
-      ),
-    ).toBeTruthy();
-    expect(api.uploadKnowledge).toHaveBeenCalledTimes(1);
-
-    const retryButton = screen.getByRole("button", { name: "Retry" });
-    fireEvent.click(retryButton);
-    expect(screen.getByText("Refreshing the Markdown preview…")).toBeTruthy();
-    expect((retryButton as HTMLButtonElement).disabled).toBe(true);
-    expect(
-      (screen.getAllByLabelText("Upload")[1] as HTMLInputElement).disabled,
-    ).toBe(true);
-    expect(
-      screen
-        .getAllByRole("checkbox")
-        .every((checkbox) => (checkbox as HTMLInputElement).disabled),
-    ).toBe(true);
-    fireEvent.click(retryButton);
-    expect(api.ragPreview).toHaveBeenCalledTimes(3);
-
-    resolvePreview(makePreview());
-
-    await waitFor(() => expect(api.ragPreview).toHaveBeenCalledTimes(3));
-    expect(api.uploadKnowledge).toHaveBeenCalledTimes(1);
-    expect(
-      screen.queryByText(
-        "The file was uploaded successfully, but the evidence preview could not be refreshed.",
-      ),
-    ).toBeNull();
-    expect(screen.queryByText("Refreshing the Markdown preview…")).toBeNull();
-    expect(
-      screen.getByText(
-        "File converted to Markdown and enabled for this draft.",
-      ),
-    ).toBeTruthy();
+    expect(api.uploadKnowledge).not.toHaveBeenCalled();
   });
 
   it("keeps a local AGENT.md and revision conflict visible after locale changes", async () => {

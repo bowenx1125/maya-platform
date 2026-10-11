@@ -3,13 +3,14 @@
 from uuid import uuid4
 
 import pytest
-from app.core.models import AgentVersion
+from app.core.models import Agent, AgentVersion
 from app.modules.agents.persona import agent_name_from_markdown
 from app.modules.debates.models import DebateParticipant
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tests.conftest import login
+from tests.test_mayaform_teams import BOWEN_ID
 from tests.test_wave1_agents_knowledge import _make_agent
 from tests.test_wave2_playback import COURSE_ID, GROUP_DEMO_ID, _headers, _insert_published_agent
 
@@ -71,6 +72,11 @@ def test_renaming_next_draft_keeps_published_source_and_debate_participant_name(
                 )
                 for index in range(2)
             ]
+            # Only the publishing account edits an Agent; bowen renames below.
+            with database.session() as db:
+                edited = db.get(Agent, agents[0])
+                assert edited is not None
+                edited.owner_user_id = BOWEN_ID
             _, csrf = login(client)
             created = client.post(
                 f"/api/v1/courses/{COURSE_ID}/debates",
