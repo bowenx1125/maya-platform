@@ -159,7 +159,8 @@ describe("teacher account management", () => {
       ".account-row",
     ) as HTMLElement;
     expect(within(account).getByText("Team Aurora")).toBeTruthy();
-    expect(within(account).getByText(/^active$/i)).toBeTruthy();
+    // Active is the normal state and is not labelled; only removed is.
+    expect(within(account).queryByText(/^active$/i)).toBeNull();
     expect(screen.getByText("student-bowen-1")).toBeTruthy();
     expect(screen.queryByText("New Student")).toBeNull();
     expect(screen.queryByText("Self-registered")).toBeNull();
@@ -189,12 +190,8 @@ describe("teacher account management", () => {
       ".account-row",
     ) as HTMLElement;
     expect(within(own).getByRole("button", { name: "Edit" })).toBeTruthy();
-    expect(
-      within(own).queryByRole("button", { name: "Deactivate" }),
-    ).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Deactivate" })).toHaveLength(
-      1,
-    );
+    expect(within(own).queryByRole("button", { name: "Remove" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
   });
 
   it("saves a renamed student", async () => {
@@ -225,12 +222,12 @@ describe("teacher account management", () => {
     expect(options).toEqual(["Team Aurora", "Team Borealis"]);
   });
 
-  it("confirms before deactivating and sends the new status", async () => {
+  it("confirms before removing and sends the new status", async () => {
     const api = apiForTeacher();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     mount(api, "en");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Deactivate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     expect(confirm).toHaveBeenCalled();
     await waitFor(() =>
       expect(api.updateCourseMember).toHaveBeenCalledWith(courseId, studentId, {
@@ -244,9 +241,43 @@ describe("teacher account management", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     mount(api, "en");
 
-    fireEvent.click(await screen.findByRole("button", { name: "Deactivate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await waitFor(() => expect(api.courseRoster).toHaveBeenCalled());
     expect(api.updateCourseMember).not.toHaveBeenCalled();
+  });
+
+  it("folds removed accounts away under Removed, where they can be restored", async () => {
+    const api = apiForTeacher();
+    const removed = entry({
+      user_id: "removed-id",
+      username: "old-student",
+      display_name: "Old Student",
+      status: "inactive",
+    });
+    api.courseRoster.mockResolvedValue({
+      ...roster(),
+      entries: [...(roster().entries ?? []), removed],
+    });
+    const { container } = mount(api, "en");
+
+    const members = await screen.findByRole("region", { name: /Members/ });
+    // Three current members are counted; the removed one is not among them.
+    expect(within(members).getByText("3")).toBeTruthy();
+    const fold = container.querySelector("details.roster-removed");
+    expect(fold?.querySelector("summary")?.textContent).toBe("Removed · 1");
+    expect(within(fold as HTMLElement).getByText("old-student")).toBeTruthy();
+    expect(within(fold as HTMLElement).getByText("removed")).toBeTruthy();
+
+    fireEvent.click(
+      within(fold as HTMLElement).getByRole("button", { name: "Restore" }),
+    );
+    await waitFor(() =>
+      expect(api.updateCourseMember).toHaveBeenCalledWith(
+        courseId,
+        "removed-id",
+        { status: "active" },
+      ),
+    );
   });
 
   it("shows an issued password once", async () => {
