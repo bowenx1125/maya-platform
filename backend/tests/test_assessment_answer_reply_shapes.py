@@ -138,7 +138,7 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
     version_ids: list[str] = []
     for name in ("Bowen", "Jade", "Kaikai"):
         _agent_id, version_id = _make_agent_version(
-            database, owner_id=MAYA_ID, name=name, visibility="private"
+            database, owner_id=MAYA_ID, name=name, visibility="public"
         )
         version_ids.append(version_id)
         lines = [f"# {name}"]

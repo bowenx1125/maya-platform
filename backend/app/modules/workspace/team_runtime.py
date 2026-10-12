@@ -2001,6 +2001,21 @@ def _dispatch_provider(
             raise PlatformError("team_context_changed", "This Team target changed.", 409)
         _recheck_assessment_executor_context(db, claim, request)
         dispatch_tools = _assessment_scoped_tool_schemas(tools, request)
+        if (
+            ordinal == 0
+            and request.assessment_active
+            and not request.assessment_source_revoked
+            and request.assessment_revoked_scope is None
+        ):
+            # An assessment turn without this call is rejected as
+            # assessment_action_required, so the call cannot be optional: left
+            # on "auto", a short answer such as "忘了" came back as prose and
+            # the student's answer was lost. The revoked-source protocol keeps
+            # "auto"; its closed wire check requires it.
+            tool_choice = {
+                "type": "function",
+                "function": {"name": _assessment_tool_name(request)},
+            }
         result = dispatch_team_model(
             db,
             claim.settings,
@@ -2055,17 +2070,20 @@ def _recheck_assessment_executor_context(
         )
 
 
+def _assessment_tool_name(request: MemberRequest) -> str:
+    if request.assessment_purpose == "assessment_evaluate":
+        return "edit_assessment"
+    if request.assessment_purpose == "boundary_summarize":
+        return "update_learning_boundary"
+    return "assessment_action"
+
+
 def _assessment_scoped_tool_schemas(
     tools: list[dict[str, Any]] | None, request: MemberRequest
 ) -> list[dict[str, Any]] | None:
     if not request.assessment_active:
         return tools
-    if request.assessment_purpose == "assessment_evaluate":
-        allowed = "edit_assessment"
-    elif request.assessment_purpose == "boundary_summarize":
-        allowed = "update_learning_boundary"
-    else:
-        allowed = "assessment_action"
+    allowed = _assessment_tool_name(request)
     if not isinstance(tools, list):
         raise PlatformError(
             "assessment_action_required",

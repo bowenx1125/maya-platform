@@ -52,7 +52,9 @@ def _chat(
 ) -> tuple[dict[str, Any], str, str]:
     _, csrf = login(client, "maya")
     versions = [
-        _make_agent_version(database, owner_id=MAYA_ID, name=f"Member {index}")[1]
+        _make_agent_version(
+            database, owner_id=MAYA_ID, name=f"Member {index}", visibility="public"
+        )[1]
         for index in range(member_count)
     ]
     response = client.post(

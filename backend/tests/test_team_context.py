@@ -67,7 +67,9 @@ def test_team_runtime_context_combines_each_member_own_and_shared_evidence(
 ) -> None:
     _, teacher_csrf = login(client, "maya")
     versions = [
-        _make_agent_version(database, owner_id=MAYA_ID, name=f"Context member {index}")[1]
+        _make_agent_version(
+            database, owner_id=MAYA_ID, name=f"Context member {index}", visibility="public"
+        )[1]
         for index in range(2)
     ]
     _attach_personal_snapshot(database, versions[0])
@@ -162,7 +164,9 @@ def test_team_runtime_uses_latest_safe_canonical_markdown_for_frozen_binding(
 ) -> None:
     _, teacher_csrf = login(client, "maya")
     versions = [
-        _make_agent_version(database, owner_id=MAYA_ID, name=f"Canonical member {index}")[1]
+        _make_agent_version(
+            database, owner_id=MAYA_ID, name=f"Canonical member {index}", visibility="public"
+        )[1]
         for index in range(2)
     ]
     _, owner_csrf = login(client, "maya")

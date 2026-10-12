@@ -376,6 +376,7 @@ def real_reply(
     canonical_knowledge: list[dict[str, Any]] | None = None,
     allow_not_sent_retry: bool = False,
     generation_waker: Callable[[str], None] | None = None,
+    required_tool: str | None = None,
 ) -> tuple[str, str]:
     selected = llm_provider(settings.model_copy(update={"llm_provider": "dashscope"}))
     if not isinstance(selected, DashScopeLLMAdapter):
@@ -457,6 +458,15 @@ def real_reply(
         }
         if tool_schemas is not None:
             body["tools"] = tool_schemas
+        offered = {
+            tool.get("function", {}).get("name")
+            for tool in tool_schemas or []
+            if isinstance(tool, dict) and isinstance(tool.get("function"), dict)
+        }
+        if dispatch_ordinal == 0 and required_tool is not None and required_tool in offered:
+            # The caller rejects this turn unless the tool runs, so the model
+            # is not allowed to answer in prose instead.
+            tool_choice = {"type": "function", "function": {"name": required_tool}}
         if tool_choice is not None:
             body["tool_choice"] = tool_choice
         try:

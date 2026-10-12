@@ -71,7 +71,12 @@ def _prepared(
     owner_id = BOWEN_ID if custom else MAYA_ID
     _, csrf = login(client, "bowen" if custom else "maya")
     versions = [
-        _make_agent_version(database, owner_id=owner_id, name=f"Granted {index}")[1]
+        _make_agent_version(
+            database,
+            owner_id=owner_id,
+            name=f"Granted {index}",
+            visibility="private" if custom else "public",
+        )[1]
         for index in range(2)
     ]
     document_id = _attach_personal_snapshot(database, versions[0])

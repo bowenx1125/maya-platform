@@ -72,6 +72,29 @@ const EMPTY_FORM: FormState = {
   sharedSetIds: [],
 };
 
+// A public Team's roster is visible to others, so it may hold only public
+// Agents; switching to Public drops any private member already chosen.
+function withTeamVisibility(
+  form: FormState,
+  visibility: FormState["visibility"],
+  agents: ChatAgent[],
+): FormState {
+  if (visibility === "private") return { ...form, visibility };
+  const privateIds = new Set(
+    agents
+      .filter((agent) => agent.visibility === "private")
+      .map((agent) => agent.version_id),
+  );
+  return {
+    ...form,
+    visibility,
+    memberVersionIds: form.memberVersionIds.filter((id) => !privateIds.has(id)),
+    leaderVersionId: privateIds.has(form.leaderVersionId)
+      ? ""
+      : form.leaderVersionId,
+  };
+}
+
 function teamApi(api: PlatformApi): TeamEntryApi | null {
   const candidate = api as PlatformApi & Partial<TeamEntryApi>;
   return [
@@ -524,12 +547,17 @@ export function TeamEntryFlow({
             versionLabel: "",
             available: true,
           }))
-      : agents.map((agent) => ({
-          versionId: agent.version_id,
-          name: agent.name,
-          versionLabel: agent.version_label,
-          available: agent.available,
-        }));
+      : agents
+          .filter(
+            (agent) =>
+              form.visibility === "private" || agent.visibility !== "private",
+          )
+          .map((agent) => ({
+            versionId: agent.version_id,
+            name: agent.name,
+            versionLabel: agent.version_label,
+            available: agent.available,
+          }));
   const namedSets = new Map(
     visibleKnowledgeSets.map((set) => [set.id, set.name]),
   );
@@ -657,10 +685,9 @@ export function TeamEntryFlow({
                       aria-pressed={form.visibility === option}
                       disabled={saving || mutationUnknown}
                       onClick={() =>
-                        setForm((current) => ({
-                          ...current,
-                          visibility: option,
-                        }))
+                        setForm((current) =>
+                          withTeamVisibility(current, option, agents),
+                        )
                       }
                     >
                       {t(

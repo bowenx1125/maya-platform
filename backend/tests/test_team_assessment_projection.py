@@ -251,6 +251,7 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
     app.state.settings = app_settings
     calls: list[tuple[str, list[Any], list[dict[str, Any]] | None]] = []
     requests: list[runtime.MemberRequest] = []
+    choices: list[Any] = []
 
     def dispatch_provider(
         _db: Any,
@@ -258,11 +259,12 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
         request: runtime.MemberRequest,
         messages: list[Any],
         tools: list[dict[str, Any]] | None,
-        _tool_choice: Any,
+        tool_choice: Any,
         **_kwargs: Any,
     ) -> TeamProviderDispatch:
         requests.append(request)
         calls.append((request.participant_id, messages, tools))
+        choices.append(tool_choice)
         return TeamProviderDispatch(
             response=ModelResponse(role="assistant", content="synthetic internal output"),
             call_id=f"synthetic-{request.participant_id}",
@@ -296,6 +298,16 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
         assert requests[-1].sources == ()
         participant_id, messages, tools = calls[-1]
         assert participant_id == participant.id
+        # Without its action the turn is rejected, so the model is not left
+        # free to answer in prose.
+        assert choices[-1] == {
+            "type": "function",
+            "function": {
+                "name": "edit_assessment"
+                if expected_purpose == "assessment_evaluate"
+                else "update_learning_boundary"
+            },
+        }
         assert messages and messages[0].role == "system"
         system = messages[0].content
         assert isinstance(system, str)
@@ -355,7 +367,7 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
     version_ids: list[str] = []
     for name in names:
         _agent_id, version_id = _make_agent_version(
-            database, owner_id=MAYA_ID, name=name, visibility="private"
+            database, owner_id=MAYA_ID, name=name, visibility="public"
         )
         version_ids.append(version_id)
         instructions = [f"# {name}"]

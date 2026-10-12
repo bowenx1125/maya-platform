@@ -2372,8 +2372,12 @@ def test_team_shared_question_bank_is_reviewable_in_brainform(
     assert hidden.status_code == 200, hidden.text
     assert all(item["canonical_set_id"] != set_id for item in hidden.json())
 
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Diagnostic Leader")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="Diagnostic Member")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Diagnostic Leader", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Diagnostic Member", visibility="public"
+    )
     team = client.post(
         f"/api/v1/courses/{COURSE_ID}/teams",
         headers=_headers(csrf, f"k3-brainform-team-share-{uuid4()}"),

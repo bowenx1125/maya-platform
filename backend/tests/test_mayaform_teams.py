@@ -230,8 +230,12 @@ def test_personal_teacher_public_team_creates_directory_and_invoke_grants_atomic
     client: TestClient, database: Any
 ) -> None:
     _, csrf = login(client, "maya")
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Private Seed A")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="Private Seed B")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Private Seed A", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Private Seed B", visibility="public"
+    )
     payload = _team_payload([first[1], second[1]], visibility="public")
 
     created_response = client.post(
@@ -274,12 +278,20 @@ def test_personal_teacher_public_team_creates_directory_and_invoke_grants_atomic
         selection = resolve_chat_entry(db, BOWEN_ID, created["id"], require_publication=True)
         assert {member.agent_version_id for member in selection.members} == {first[1], second[1]}
         assert all(member.invoke_grant_id for member in selection.members)
-        assert (
-            can_invoke_version(
-                db, BOWEN_ID, db.get(AgentVersion, first[1]), db.get(Agent, first[0])
-            )
-            is False
-        )
+        # New public Teams take only public Agents, but a Team saved earlier,
+        # or a member made private later, still holds one. Its grant stays
+        # Team-only and never opens a direct Chat with that Agent.
+        private_agent = db.get(Agent, first[0])
+        private_version = db.get(AgentVersion, first[1])
+        private_agent.visibility = "private"
+        private_version.draft_visibility = "private"
+        private_version.published_visibility = "private"
+        db.flush()
+        assert can_invoke_version(db, BOWEN_ID, private_version, private_agent) is False
+        private_agent.visibility = "public"
+        private_version.draft_visibility = "public"
+        private_version.published_visibility = "public"
+        db.flush()
         readable = resolve_chat_entry(db, BOWEN_ID, created["id"], require_publication=False)
         assert readable.publication_id == publication.id
 
@@ -371,8 +383,12 @@ def test_student_public_team_is_not_registered_and_foreign_private_member_is_hid
     client: TestClient, database: Any
 ) -> None:
     _, student_csrf = login(client, "bowen")
-    first = _make_agent_version(database, owner_id=BOWEN_ID, name="Student Agent A")
-    second = _make_agent_version(database, owner_id=BOWEN_ID, name="Student Agent B")
+    first = _make_agent_version(
+        database, owner_id=BOWEN_ID, name="Student Agent A", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=BOWEN_ID, name="Student Agent B", visibility="public"
+    )
     public_payload = _team_payload([first[1], second[1]], visibility="public")
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/teams",
@@ -650,8 +666,12 @@ def test_selected_team_target_does_not_depend_on_an_unselected_revoked_member(
     client: TestClient, database: Any
 ) -> None:
     _, csrf = login(client, "maya")
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Selected Member")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="Unselected Member")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Selected Member", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Unselected Member", visibility="public"
+    )
     revoked_source_id = _attach_personal_snapshot(database, second[1])
     created = client.post(
         f"/api/v1/courses/{COURSE_ID}/teams",
@@ -694,8 +714,12 @@ def test_maya_team_grant_rechecks_frozen_raw_source_epoch(
     client: TestClient, database: Any
 ) -> None:
     _, csrf = login(client, "maya")
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Raw source member")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="No source member")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Raw source member", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="No source member", visibility="public"
+    )
     document_id = _attach_personal_snapshot(database, first[1])
     created = client.post(
         f"/api/v1/courses/{COURSE_ID}/teams",
@@ -825,8 +849,12 @@ def test_maya_team_grant_rechecks_shared_set_authorization_epoch(
     client: TestClient, database: Any
 ) -> None:
     _, csrf = login(client, "maya")
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Shared Set A")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="Shared Set B")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Shared Set A", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Shared Set B", visibility="public"
+    )
     set_response = client.post(
         f"/api/v1/courses/{COURSE_ID}/knowledge-sets",
         headers=_headers(csrf, "k3-create-epoch-set-for-team-01"),
@@ -863,8 +891,12 @@ def test_publication_failure_rolls_back_team_version_directory_and_grants(
     client: TestClient, database: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     del client
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Atomic Agent A")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="Atomic Agent B")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Atomic Agent A", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Atomic Agent B", visibility="public"
+    )
     from app.modules.auth.service import AuthContext
     from app.modules.teams import service
     from app.modules.teams.models import (
@@ -1444,8 +1476,12 @@ def test_owner_soft_deletes_a_maya_team_and_replays_the_same_key(
     client: TestClient, database: Any
 ) -> None:
     _, csrf = login(client, "maya")
-    first = _make_agent_version(database, owner_id=MAYA_ID, name="Delete Seed A")
-    second = _make_agent_version(database, owner_id=MAYA_ID, name="Delete Seed B")
+    first = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Delete Seed A", visibility="public"
+    )
+    second = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Delete Seed B", visibility="public"
+    )
     created = client.post(
         f"/api/v1/courses/{COURSE_ID}/teams",
         headers=_headers(csrf, "k3-delete-team-create-01"),
@@ -1590,3 +1626,27 @@ def test_student_public_team_is_read_only_for_the_same_group_and_teachers(
     )
     assert locked.status_code == 409, locked.text
     assert locked.json()["code"] == "team_visibility_locked"
+
+
+def test_public_team_takes_only_public_agents_and_private_team_takes_both(
+    client: TestClient, database: Any
+) -> None:
+    # A public Team's roster is visible to others; a private Agent there would
+    # reveal that it exists. A private Team is the owner's own and may mix both.
+    _, csrf = login(client, "maya")
+    hidden = _make_agent_version(database, owner_id=MAYA_ID, name="Hidden Seed")
+    shown = _make_agent_version(database, owner_id=MAYA_ID, name="Shown Seed", visibility="public")
+    refused = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, "k3-public-team-private-member-01"),
+        json=_team_payload([hidden[1], shown[1]], visibility="public"),
+    )
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "team_member_private"
+
+    mixed = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, "k3-private-team-mixed-members-01"),
+        json=_team_payload([hidden[1], shown[1]], visibility="private"),
+    )
+    assert mixed.status_code == 201, mixed.text

@@ -742,6 +742,7 @@ def generate_reply(
         canonical_knowledge=canonical_knowledge,
         allow_not_sent_retry=allow_not_sent_retry,
         generation_waker=generation_waker,
+        required_tool="assessment_action" if assessment_active else None,
     )
     assessment_result = _assessment_result_for_turn(db, row.id, request_id, row.user_id)
     if assessment_active and assessment_result is None:

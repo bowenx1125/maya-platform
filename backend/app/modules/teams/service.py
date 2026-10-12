@@ -173,6 +173,15 @@ def _validate_members(
             raise not_found("An Agent version is not available to the current user.")
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")
+        # Other members can read a public Team's roster, so a private Agent
+        # there would reveal that it exists. Private Teams may mix both.
+        if request.visibility == "public" and (
+            agent.visibility != "public" or version.published_visibility == "private"
+        ):
+            raise unprocessable(
+                "team_member_private",
+                "A public Team can only contain public Agents.",
+            )
         raw_source_fences = _capture_raw_source_fences(db, version, course_id)
         if not _raw_source_fences_current(
             db,

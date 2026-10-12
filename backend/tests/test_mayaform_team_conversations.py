@@ -69,7 +69,9 @@ def _make_agent_version(database: Database, **kwargs: Any) -> tuple[str, str]:
 def _team(client: TestClient, database: Database) -> tuple[dict[str, Any], list[str], str]:
     _, csrf = login(client, "maya")
     versions = [
-        _make_agent_version(database, owner_id=MAYA_ID, name=f"Teacher member {index}")[1]
+        _make_agent_version(
+            database, owner_id=MAYA_ID, name=f"Teacher member {index}", visibility="public"
+        )[1]
         for index in range(2)
     ]
     payload = _team_payload(versions, visibility="public")
@@ -192,7 +194,8 @@ def test_team_freezes_own_shared_sets_and_names_without_private_body_projection(
 ) -> None:
     _, csrf = login(client, "maya")
     versions = [
-        _make_agent_version(database, owner_id=MAYA_ID, name=f"Frozen {i}")[1] for i in range(2)
+        _make_agent_version(database, owner_id=MAYA_ID, name=f"Frozen {i}", visibility="public")[1]
+        for i in range(2)
     ]
     _attach_personal_snapshot(database, versions[0])
     set_ids = []
@@ -365,6 +368,17 @@ def test_publication_grant_is_not_a_single_or_custom_entry_grant(
     client: TestClient, database: Database
 ) -> None:
     team, versions, _csrf = _team(client, database)
+    # New public Teams take only public Agents; a Team saved earlier, or a
+    # member made private later, still holds one, and its grant must not open
+    # a direct Chat with it.
+    with database.session() as db:
+        version = db.get(AgentVersion, versions[0])
+        assert version is not None
+        agent = db.get(Agent, version.agent_id)
+        assert agent is not None
+        agent.visibility = "private"
+        version.draft_visibility = "private"
+        version.published_visibility = "private"
     _, csrf = login(client, "bowen")
     agent_denied = client.post(
         "/api/v1/conversations",
@@ -630,7 +644,7 @@ def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
 
     _, csrf = login(client, "maya")
     versions = [
-        _make_agent_version(database, owner_id=MAYA_ID, name=name)[1]
+        _make_agent_version(database, owner_id=MAYA_ID, name=name, visibility="public")[1]
         for name in ("Leader", "Evaluator", "Boundary")
     ]
     created_set = client.post(
