@@ -6,10 +6,15 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import not_found
 from app.modules.auth.service import AuthContext
+from app.modules.learning.models import (
+    AssessmentCourseReport,
+    AssessmentCourseReportRevision,
+)
 from app.modules.learning.reports import (
     create_assessment_course_report,
     list_authorized_assessment_activities,
@@ -132,11 +137,59 @@ def create_report(
     return {
         "report_id": str(receipt.report.id),
         "revision_id": str(receipt.report.revision_id),
-        "download_path": (
-            f"/api/v1/learning/reports/{receipt.report.id}/download"
-            f"?revision_id={receipt.report.revision_id}"
+        "download_path": report_download_path(
+            str(receipt.report.id), str(receipt.report.revision_id)
         ),
     }
+
+
+def report_download_path(report_id: str, revision_id: str) -> str:
+    return f"/api/v1/learning/reports/{report_id}/download?revision_id={revision_id}"
+
+
+def list_reports(
+    db: Session,
+    actor: AuthContext,
+    row: Conversation,
+    _payload: BaseModel,
+    _event_id: str,
+    _identity: ToolCallIdentity,
+) -> dict[str, Any]:
+    """This teacher's saved reports in the course, newest first.
+
+    Owner request (2026-10-13): a teacher asking where an earlier report is gets
+    its download link again; the server adds the links under the reply.
+    """
+
+    reports = db.scalars(
+        select(AssessmentCourseReport)
+        .where(
+            AssessmentCourseReport.course_id == row.course_id,
+            AssessmentCourseReport.owner_user_id == actor.user.id,
+        )
+        .order_by(AssessmentCourseReport.updated_at.desc(), AssessmentCourseReport.id)
+        .limit(10)
+    ).all()
+    items: list[dict[str, Any]] = []
+    for report in reports:
+        revision = db.scalar(
+            select(AssessmentCourseReportRevision).where(
+                AssessmentCourseReportRevision.report_id == report.id,
+                AssessmentCourseReportRevision.revision_seq == report.current_revision_seq,
+            )
+        )
+        if revision is None:
+            continue
+        items.append(
+            {
+                "report_id": report.id,
+                "activity_id": report.activity_id,
+                "revision_id": revision.id,
+                "saved_at": revision.created_at.isoformat(),
+                "download_path": report_download_path(report.id, revision.id),
+            }
+        )
+    return {"reports": items}
 
 
 def teacher_tools() -> dict[str, ToolSpec]:
@@ -185,5 +238,16 @@ def teacher_tools() -> dict[str, ToolSpec]:
             ActivityArguments,
             authorize_activity,
             create_report,
+        ),
+        "list_course_reports": ToolSpec(
+            "list_course_reports",
+            "Teacher",
+            "List the reports you saved in the current course, newest first. Use it when "
+            "the teacher asks for an earlier report or its link. Do not write a download "
+            "link, path or token in your reply: the server adds the real links under it.",
+            CourseArguments,
+            authorize_course,
+            list_reports,
+            replay_read=list_reports,
         ),
     }

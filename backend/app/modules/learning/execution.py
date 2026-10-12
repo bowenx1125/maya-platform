@@ -1159,6 +1159,26 @@ def write_formal_assessment(
     db.flush()
     db.add(mutation)
     db.flush()
+    if not follow_ups:
+        from .attempts import knowledge_question_number, wrong_answer_follow_ups
+
+        scored: dict[int, tuple[float | None, float | None]] = {}
+        for item in evaluation.questions:
+            row = next(
+                question
+                for question in questions
+                if question.ordinal - selection_ordinal_offset == item.question_ordinal
+            )
+            if row.resolution == "skipped":
+                continue
+            parsed = QuestionContent.model_validate_json(
+                _pinned_question_currently_readable(db, row)[1]
+            )
+            maximum = parsed.rubric.total_points
+            if maximum is None and parsed.rubric.criteria:
+                maximum = sum(criterion.points for criterion in parsed.rubric.criteria)
+            scored[knowledge_question_number(db, row)] = (item.points_awarded, maximum)
+        follow_ups = wrong_answer_follow_ups(db, attempt, scored)
     append_follow_up_questions(db, actor, attempt, follow_ups)
     return {"saved": True}
 

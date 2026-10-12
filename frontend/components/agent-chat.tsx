@@ -2410,33 +2410,12 @@ function AgentChatScope({
           />
         </>
       ) : null}
-      {memoryLoading ? (
-        <p className={styles.memoryStatus} role="status">
-          {t("brainformMemoryLoading")}
-        </p>
-      ) : null}
+      {/* Owner decision (2026-10-13): opening Memory shows no status line
+          and no "continue" button; the Chat itself shows what happened. */}
       {invalidMemoryRoute ? (
         <p className={styles.memoryStatus} role="alert">
           {t("brainformMemoryInvalid")}
         </p>
-      ) : null}
-      {memoryRetryEntry &&
-      !memoryRetryEntry.session.turns.some(
-        (turn) => turn.id === memoryRetryEntry.request_id,
-      ) ? (
-        <button
-          type="button"
-          className="inline-button"
-          disabled={
-            memoryRetryBusy ||
-            busy ||
-            teamBusy ||
-            selectedTeam?.turns.at(-1)?.state === "pending"
-          }
-          onClick={() => void retryMemoryQuery()}
-        >
-          {t("brainformMemoryRetry")}
-        </button>
       ) : null}
       {error && !showConversation ? (
         <ErrorNotice

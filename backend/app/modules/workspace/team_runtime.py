@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -1232,8 +1232,9 @@ def _member_system(
 
         return ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
     message = (
-        "Reply in the language the user has been writing in across this conversation, unless "
-        "they ask you to translate or switch. "
+        "Reply in the language of the user's latest sentence, unless they ask you to "
+        "translate or switch. A reply that is only an option letter, a number or an ID is "
+        "not a sentence: keep the language you were using. "
         "Every Chat is seen only by its owner; there are no Public Chats. A formal test's "
         "answers and test messages are saved for the course teacher. "
         "Preserve the full conversation context. "
@@ -1533,7 +1534,15 @@ def settle_member(
             assert reply is not None
             result.state = "ready"
             result.assistant_text = "\n\n".join(
-                [reply.text, *_report_download_links(db, turn, result)]
+                [
+                    reply.text,
+                    *_report_download_links(
+                        db,
+                        turn,
+                        result,
+                        whole_turn=participant is not None and participant.is_leader,
+                    ),
+                ]
             )
             result.sources_json = _canonical(
                 [source.model_dump(mode="json") for source in reply.sources]
@@ -1544,43 +1553,62 @@ def settle_member(
     return True
 
 
+def report_paths(raw_receipts: Iterable[str]) -> list[str]:
+    """Download paths in saved report Tool results, in order and once each."""
+
+    links: list[str] = []
+    for raw in raw_receipts:
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            continue
+        value = payload.get("result")
+        items = value.get("reports") if isinstance(value, dict) else None
+        for item in items if isinstance(items, list) else [value]:
+            path = item.get("download_path") if isinstance(item, dict) else None
+            if (
+                isinstance(path, str)
+                and path.startswith("/api/v1/learning/reports/")
+                and path not in links
+            ):
+                links.append(path)
+    return links
+
+
 def _report_download_links(
-    db: Session, turn: ConversationTurn, result: TeamTurnResult
+    db: Session,
+    turn: ConversationTurn,
+    result: TeamTurnResult,
+    *,
+    whole_turn: bool = False,
 ) -> list[str]:
     """Links to reports this reply saved, written by the server.
 
     A model copying a download path invents tokens and breaks the link, so the
-    tool tells it not to write one and the real path is appended here.
+    tool tells it not to write one and the real path is appended here. The
+    Leader's reply, the one the teacher reads, carries every report made in
+    its turn, including one a member such as the Summarizer created.
     """
 
-    links: list[str] = []
-    for raw in db.scalars(
+    query = (
         select(RuntimeToolReceipt.result_json)
         .join(
             TeamProviderCall,
             TeamProviderCall.operation_id == RuntimeToolReceipt.model_operation_id,
         )
+        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
         .where(
             RuntimeToolReceipt.turn_id == turn.id,
-            RuntimeToolReceipt.tool_name == "create_course_report",
-            TeamProviderCall.result_id == result.id,
+            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+            TeamTurnResult.turn_id == turn.id,
         )
         .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
-    ):
-        try:
-            payload = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        value = payload.get("result") if isinstance(payload, dict) else None
-        path = value.get("download_path") if isinstance(value, dict) else None
-        if (
-            isinstance(payload, dict)
-            and payload.get("ok") is True
-            and isinstance(path, str)
-            and path.startswith("/api/v1/learning/reports/")
-            and path not in links
-        ):
-            links.append(path)
+    )
+    if not whole_turn:
+        query = query.where(TeamProviderCall.result_id == result.id)
+    links = report_paths(db.scalars(query))
     return [f"[下载报告 / Download report]({path})" for path in links]
 
 

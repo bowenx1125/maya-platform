@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
@@ -484,6 +485,41 @@ def _add_attempt_questions(
         )
 
 
+# Owner decision (2026-10-13): after the questions, the test follows up only on
+# the ones answered wrongly, asking for the student's reasoning. The teacher
+# writes each follow-up in the Knowledge and marks it in its hidden Rubric:
+# a criterion labelled "Follow-up for Question 3; at most 3" (or
+# "追问第 3 题；最多 3 道"). "at most" caps how many one test asks.
+_FOLLOW_UP_LABEL = re.compile(
+    r"^\s*(?:follow[- ]?up\s+(?:for|on)\s+(?:question\s*|q)?(?P<en>\d+)"
+    r"(?:\s*[;；,，]\s*at\s+most\s+(?P<en_limit>\d+))?"
+    r"|追问\s*第?\s*(?P<zh>\d+)\s*题"
+    r"(?:\s*[;；,，]\s*最多\s*(?P<zh_limit>\d+)\s*道?)?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def follow_up_target(content: QuestionContent) -> tuple[int, int | None] | None:
+    """The Question number this item follows up on, and its cap, if it is one."""
+
+    for criterion in content.rubric.criteria:
+        match = _FOLLOW_UP_LABEL.match(criterion.label)
+        if match is None:
+            continue
+        number = match.group("en") or match.group("zh")
+        limit = match.group("en_limit") or match.group("zh_limit")
+        return int(number), int(limit) if limit else None
+    return None
+
+
+def _is_follow_up_item(db: Session, row: AssessmentActivityQuestion) -> bool:
+    try:
+        _version, content = _verify_question_source(db, row, require_current=False)
+    except PlatformError:
+        return False
+    return follow_up_target(content) is not None
+
+
 def _copy_activity_questions(
     db: Session,
     activity: AssessmentActivity,
@@ -502,8 +538,10 @@ def _copy_activity_questions(
     )
     # Owner decision (2026-10-12): the test asks every Question in the Knowledge.
     # How many there are, and of what kind, is the question-writing Agent's
-    # choice, not a server count.
-    _add_attempt_questions(db, attempt, source_rows)
+    # choice, not a server count. Follow-up items wait for a wrong answer.
+    _add_attempt_questions(
+        db, attempt, [row for row in source_rows if not _is_follow_up_item(db, row)]
+    )
 
 
 def follow_up_candidates(
@@ -544,8 +582,78 @@ def unasked_questions(
             _version, content = _verify_question_source(db, row, require_current=False)
         except PlatformError:
             continue
+        if follow_up_target(content) is not None:
+            # Asked only after a wrong answer, never chosen as a new topic.
+            continue
         candidates.append((row, content))
     return candidates
+
+
+def wrong_answer_follow_ups(
+    db: Session,
+    attempt: AssessmentAttempt,
+    scored: dict[int, tuple[float | None, float | None]],
+) -> list[AssessmentActivityQuestion]:
+    """Follow-up items for the Questions this evaluation scored below full marks.
+
+    ``scored`` maps each asked Question's number in the Knowledge (from 1) to
+    its awarded and maximum points. A skipped Question has no reasoning to ask
+    about. Only one follow-up round runs, and none after the student ends
+    early.
+    """
+
+    if attempt.status != "in_progress" or attempt.submitted_at is not None:
+        return []
+    asked_rows = _attempt_question_rows(db, attempt.id)
+    sources = {
+        row.id: row
+        for row in db.scalars(
+            select(AssessmentActivityQuestion).where(
+                AssessmentActivityQuestion.activity_id == attempt.activity_id,
+                AssessmentActivityQuestion.selection_revision
+                == attempt.question_selection_revision,
+            )
+        ).all()
+    }
+    if any(
+        (source := sources.get(row.activity_question_id)) is not None
+        and _is_follow_up_item(db, source)
+        for row in asked_rows
+    ):
+        return []
+    items: list[tuple[int, int | None, AssessmentActivityQuestion]] = []
+    for source in sorted(sources.values(), key=lambda item: item.ordinal):
+        if not source.required:
+            continue
+        try:
+            _version, content = _verify_question_source(db, source, require_current=False)
+        except PlatformError:
+            continue
+        target = follow_up_target(content)
+        if target is None:
+            continue
+        awarded, maximum = scored.get(target[0], (None, None))
+        if awarded is None or maximum is None or maximum <= 0 or awarded >= maximum:
+            continue
+        items.append((target[0], target[1], source))
+    limits = [limit for _number, limit, _source in items if limit is not None]
+    cap = min(limits) if limits else len(items)
+    return [source for _number, _limit, source in items[:cap]]
+
+
+def knowledge_question_number(db: Session, attempt_question: AssessmentAttemptQuestion) -> int:
+    """This Question's number in its Knowledge, counting from 1."""
+
+    source = db.get(AssessmentActivityQuestion, attempt_question.activity_question_id)
+    if source is None:
+        return 0
+    first = db.scalar(
+        select(func.min(AssessmentActivityQuestion.ordinal)).where(
+            AssessmentActivityQuestion.activity_id == source.activity_id,
+            AssessmentActivityQuestion.selection_revision == source.selection_revision,
+        )
+    )
+    return source.ordinal - int(first or 0) + 1
 
 
 def validated_follow_ups(
