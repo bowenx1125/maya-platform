@@ -65,7 +65,6 @@ type StagedRagFile = { file: File; fingerprint: string };
 
 type KnowledgeDraft = { markdown: string; expectedVersionSeq: number };
 type BrainformKnowledgeAssetRow = BrainformKnowledge & {
-  used_by_agents: string[];
   agent_ids: string[];
 };
 
@@ -81,7 +80,8 @@ type Pane =
   | { kind: "rag-edit"; draftKey: string }
   | { kind: "rag-view"; documentId: string; markdown: string; filename: string }
   | { kind: "knowledge-view"; documentId: string }
-  | { kind: "knowledge-edit"; documentId: string };
+  | { kind: "knowledge-edit"; documentId: string }
+  | { kind: "knowledge-new" };
 
 type PendingGeneration = {
   documentId: string;
@@ -607,6 +607,8 @@ function BrainformWorkspaceBody({
   const [renameDocumentId, setRenameDocumentId] = useState<string | null>(
     null,
   );
+  // New opens this draft; a picked Markdown file fills it, Done saves it.
+  const [newKnowledge, setNewKnowledge] = useState({ name: "", markdown: "" });
   // One click opens the editor, which replaces this list; a double-click
   // renames in place. The open waits out a double-click before it runs.
   const titleClickTimer = useRef<number | null>(null);
@@ -1429,10 +1431,17 @@ function BrainformWorkspaceBody({
     }
   }
 
-  // A Markdown file becomes its own Knowledge, named after the file. Its
-  // question sections are recognised the same way as an edit in Brainform.
-  async function uploadKnowledge(file: File) {
-    if (busyKeyRef.current || !courseId) return;
+  function beginNewKnowledge() {
+    setNewKnowledge({ name: "", markdown: "" });
+    setPane({ kind: "knowledge-new" });
+    setNotice("");
+    setLoadError(null);
+  }
+
+  // A picked Markdown file fills the new Knowledge, named after the file
+  // unless a name was typed. Its question sections are recognised on save
+  // the same way as an edit in Brainform.
+  async function importNewKnowledge(file: File) {
     if (!/\.md$/i.test(file.name)) {
       setNotice(t("brainformMarkdownRequired"));
       return;
@@ -1450,15 +1459,32 @@ function BrainformWorkspaceBody({
       setNotice(t("brainformMarkdownRequired"));
       return;
     }
-    const name = file.name.replace(/\.md$/i, "").trim() || file.name;
-    const fileKey = `${courseId}:${file.name}:${file.size}:${file.lastModified}`;
-    commitBusy("knowledge-upload");
+    const fileName = file.name.replace(/\.md$/i, "").trim() || file.name;
+    setNotice("");
+    setNewKnowledge((current) => ({
+      name: current.name.trim() ? current.name : fileName,
+      markdown: content,
+    }));
+  }
+
+  async function saveNewKnowledge() {
+    const name = newKnowledge.name.trim();
+    const content = newKnowledge.markdown;
+    if (busyKeyRef.current || !courseId || !name || !content.trim()) return;
+    // Done returns to the list at once; New shows the work until it lands.
+    commitBusy("knowledge-new");
+    setPane(null);
     setLoadError(null);
     setNotice("");
     try {
+      // Keyed by the exact draft, so a retried Done after a lost reply
+      // replays the same create instead of making a second Knowledge.
+      const draftKey = `${courseId}:${name}:${await fingerprintRagFile(
+        new File([content], "knowledge.md"),
+      )}`;
       const created = await runKnowledgeMutation(
         mutationStore,
-        `knowledge-upload:${fileKey}`,
+        `knowledge-new:${draftKey}`,
         (idempotency) =>
           api.createKnowledgeSet(
             courseId,
@@ -1468,7 +1494,7 @@ function BrainformWorkspaceBody({
       );
       await runKnowledgeMutation(
         mutationStore,
-        `knowledge-upload-save:${created.id}`,
+        `knowledge-new-save:${created.id}`,
         (idempotency) =>
           api.saveKnowledgeMarkdown(
             created.id,
@@ -1477,11 +1503,13 @@ function BrainformWorkspaceBody({
           ),
       );
       if (!scopeIsCurrent()) return;
-      setNotice(t("brainformKnowledgeUploaded", { name }));
-      // A background reload keeps this notice; a full one clears it.
-      void loadWorkspace(true);
+      setNewKnowledge({ name: "", markdown: "" });
+      await loadWorkspace(true);
     } catch (cause) {
-      if (scopeIsCurrent()) setLoadError(cause);
+      if (!scopeIsCurrent()) return;
+      // The draft is kept: reopen it beside the error so Done can retry.
+      setPane({ kind: "knowledge-new" });
+      setLoadError(cause);
     } finally {
       if (scopeIsCurrent()) commitBusy(null);
     }
@@ -1975,9 +2003,6 @@ function BrainformWorkspaceBody({
             version_seq:
               rows.find((row) => row.version_seq != null)?.version_seq ??
               representative.version_seq,
-            used_by_agents: [
-              ...new Set(rows.map((row) => row.source_agent_display_name)),
-            ],
             agent_ids: [
               ...new Set(
                 rows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
@@ -2033,7 +2058,29 @@ function BrainformWorkspaceBody({
 
   return (
     <main className={styles.page}>
-      {/* RAG is added inside its Agent, so the overview has no New. */}
+      {/* RAG is added inside its Agent; the overview's New adds Knowledge. */}
+      {!pane &&
+      !initialMode &&
+      courseId &&
+      !(role === "teacher" && initialGroupId) ? (
+        <WorkspaceAction
+          name="new"
+          onClick={beginNewKnowledge}
+          disabled={Boolean(busyKey)}
+          busy={busyKey === "knowledge-new"}
+        />
+      ) : null}
+      {pane?.kind === "knowledge-new" ? (
+        <WorkspaceAction
+          name="done"
+          onClick={() => void saveNewKnowledge()}
+          disabled={
+            Boolean(busyKey) ||
+            !newKnowledge.name.trim() ||
+            !newKnowledge.markdown.trim()
+          }
+        />
+      ) : null}
       {pane || initialMode ? (
         <WorkspaceAction
           name="back"
@@ -2299,30 +2346,9 @@ function BrainformWorkspaceBody({
                   {t("brainformKnowledgeHeading")}
                 </h2>
               </div>
-              <div className={styles.sectionTools}>
-                <label
-                  className="secondary-action file-button"
-                  aria-busy={busyKey === "knowledge-upload"}
-                >
-                  {busyKey === "knowledge-upload"
-                    ? t("working")
-                    : t("brainformUploadKnowledge")}
-                  <input
-                    type="file"
-                    aria-label={t("brainformUploadKnowledgeFile")}
-                    accept=".md,text/markdown"
-                    disabled={Boolean(busyKey)}
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0];
-                      event.currentTarget.value = "";
-                      if (file) void uploadKnowledge(file);
-                    }}
-                  />
-                </label>
-                <span className={styles.count}>
-                  {displayedKnowledgeRows.length}
-                </span>
-              </div>
+              <span className={styles.count}>
+                {displayedKnowledgeRows.length}
+              </span>
             </div>
             {displayedKnowledgeRows.length ? (
               <ul className={styles.list}>
@@ -2400,11 +2426,6 @@ function BrainformWorkspaceBody({
                             {row.knowledge_display_name}
                           </button>
                         )}
-                        <span className={styles.rowMeta}>
-                          {t("brainformRagUsedByAgents", {
-                            names: row.used_by_agents.join(", "),
-                          })}
-                        </span>
                         {!isGenerating &&
                         row.generation_state &&
                         row.generation_state !== "completed" ? (
@@ -2590,10 +2611,57 @@ function BrainformWorkspaceBody({
                   ? (selectedDraft?.filename ?? t("loading"))
                   : pane.kind === "rag-view"
                     ? pane.filename
-                    : (markdown?.knowledge_display_name ?? t("loading"))}
+                    : pane.kind === "knowledge-new"
+                      ? newKnowledge.name.trim() || t("brainformNewKnowledge")
+                      : (markdown?.knowledge_display_name ?? t("loading"))}
               </h2>
             </div>
           </div>
+
+          {pane.kind === "knowledge-new" ? (
+            <div className={styles.editorForm}>
+              <label
+                className="secondary-action file-button"
+                aria-busy={busyKey === "knowledge-new"}
+              >
+                {t("knowledgeImportAction")}
+                <input
+                  type="file"
+                  aria-label={t("brainformUploadKnowledgeFile")}
+                  accept=".md,text/markdown"
+                  disabled={Boolean(busyKey)}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (file) void importNewKnowledge(file);
+                  }}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>{t("brainformSetName")}</span>
+                <input
+                  value={newKnowledge.name}
+                  disabled={busyKey === "knowledge-new"}
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    setNewKnowledge((current) => ({ ...current, name }));
+                  }}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>{t("knowledgeContent")}</span>
+                <textarea
+                  value={newKnowledge.markdown}
+                  rows={18}
+                  readOnly={busyKey === "knowledge-new"}
+                  onChange={(event) => {
+                    const markdown = event.target.value;
+                    setNewKnowledge((current) => ({ ...current, markdown }));
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
 
           {pane.kind === "rag-edit" && selectedDraft ? (
             <div className={styles.editorForm}>

@@ -332,7 +332,6 @@ const enMessages = {
     "Hide {filename} from Brainform? Published Agent snapshots and retained Knowledge versions remain available.",
   brainformRagFileStaged:
     "{filename} is selected. It will be imported when you save.",
-  brainformRagUsedByAgents: "Used by: {names}",
   brainformAgentsUsingKnowledge: "Agents using this Knowledge",
   brainformKnowledgeFirstVersionEmpty:
     "No Knowledge version is published yet. This is an empty Markdown draft.",
@@ -365,9 +364,8 @@ const enMessages = {
   brainformDeleteKnowledgeConfirm:
     "Delete the Knowledge {name}? Agents and Teams that use it stop seeing it.",
   brainformKnowledgeDeleted: "Knowledge deleted.",
-  brainformUploadKnowledge: "Upload",
+  brainformNewKnowledge: "New Knowledge",
   brainformUploadKnowledgeFile: "Upload a Markdown file as Knowledge",
-  brainformKnowledgeUploaded: "Uploaded {name} as Knowledge.",
   brainformReindexRagNamed: "Reindex {name}",
   brainformViewKnowledge: "View Knowledge",
   brainformOpenKnowledgeNamed: "Open {name}",
@@ -1094,7 +1092,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformRagHideConfirm:
     "从 Brainform 隐藏 {filename}？已发布的 Agent 快照和保留的 Knowledge 版本仍然可用。",
   brainformRagFileStaged: "已选择 {filename}。保存时才会导入。",
-  brainformRagUsedByAgents: "正在使用：{names}",
   brainformAgentsUsingKnowledge: "正在使用此 Knowledge 的 Agents",
   brainformKnowledgeFirstVersionEmpty:
     "当前还没有 Knowledge 版本。这是空白 Markdown 草稿。",
@@ -1124,9 +1121,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformDeleteKnowledgeConfirm:
     "删除 Knowledge「{name}」？使用它的 Agent 和 Team 将不再读取它。",
   brainformKnowledgeDeleted: "Knowledge 已删除。",
-  brainformUploadKnowledge: "上传",
+  brainformNewKnowledge: "新建 Knowledge",
   brainformUploadKnowledgeFile: "上传 Markdown 文件作为 Knowledge",
-  brainformKnowledgeUploaded: "已上传 {name}。",
   brainformReindexRagNamed: "重新索引 {name}",
   brainformViewKnowledge: "查看 Knowledge",
   brainformOpenKnowledgeNamed: "进入 {name}",

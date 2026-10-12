@@ -70,7 +70,11 @@ function ActionsHost({ children }: { children: ReactNode }) {
   return (
     <WorkspaceActionsContext.Provider value={registry}>
       {actions.new ? (
-        <button onClick={actions.new.onClick} disabled={actions.new.disabled}>
+        <button
+          onClick={actions.new.onClick}
+          disabled={actions.new.disabled}
+          aria-busy={actions.new.busy || undefined}
+        >
           New
         </button>
       ) : null}
@@ -268,7 +272,12 @@ describe("Brainform workspace actions", () => {
     state.api.workspaceDocuments.mockResolvedValue([source]);
     const view = renderWithActions();
     await screen.findAllByText("lesson.md");
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    // Owner decision (2026-10-13): the overview's New adds Knowledge, not RAG.
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    expect(
+      screen.getByLabelText("Upload a Markdown file as Knowledge"),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Import a file")).toBeNull();
     view.unmount();
 
     // An old deep link to the removed form opens nothing.
@@ -326,19 +335,27 @@ describe("Brainform workspace actions", () => {
     );
   });
 
-  // Owner request (2026-10-13): a teacher uploads a questionnaire file as
-  // Knowledge, named after the file, then shares it into a Team.
-  it("uploads a Markdown file as its own Knowledge", async () => {
+  // Owner request (2026-10-13): the sidebar New opens a new Knowledge; a
+  // picked Markdown file fills it and Done saves it, named after the file.
+  it("adds Knowledge from a Markdown file through New and Done", async () => {
     state.role = "teacher";
     state.api.createKnowledgeSet = vi
       .fn()
       .mockResolvedValue({ id: "set-new", display_name: "Form A" });
-    state.api.saveKnowledgeMarkdown = vi.fn().mockResolvedValue({});
+    let finishSave: (value: object) => void = () => {};
+    state.api.saveKnowledgeMarkdown = vi.fn(
+      () => new Promise((resolve) => (finishSave = resolve)),
+    );
     renderWorkspace("teacher");
 
+    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    expect(
+      (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     const markdown = "# Form A\n\n## Questions\n";
     fireEvent.change(
-      await screen.findByLabelText("Upload a Markdown file as Knowledge"),
+      screen.getByLabelText("Upload a Markdown file as Knowledge"),
       {
         target: {
           files: [
@@ -351,6 +368,15 @@ describe("Brainform workspace actions", () => {
       },
     );
     await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Knowledge title") as HTMLInputElement).value,
+      ).toBe("Form A"),
+    );
+    expect(
+      (screen.getByLabelText("Markdown content") as HTMLTextAreaElement).value,
+    ).toBe(markdown);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
       expect(state.api.saveKnowledgeMarkdown).toHaveBeenCalledWith(
         "set-new",
         { expected_version_seq: 0, markdown },
@@ -362,7 +388,33 @@ describe("Brainform workspace actions", () => {
       { display_name: "Form A" },
       expect.anything(),
     );
-    expect(await screen.findByText("Uploaded Form A as Knowledge.")).toBeTruthy();
+    // Done returns to the list; New shows the work and no notice follows.
+    const busyNew = screen.getByRole("button", { name: "New" });
+    expect(busyNew.getAttribute("aria-busy")).toBe("true");
+    finishSave({});
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New" }).getAttribute("aria-busy"),
+      ).toBeNull(),
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    // The section itself has no upload button any more.
+    expect(
+      screen.queryByLabelText("Upload a Markdown file as Knowledge"),
+    ).toBeNull();
+  });
+
+  it("leaves a new Knowledge unsaved on Back", async () => {
+    state.role = "teacher";
+    state.api.createKnowledgeSet = vi.fn();
+    renderWorkspace("teacher");
+    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    fireEvent.change(screen.getByLabelText("Knowledge title"), {
+      target: { value: "Draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
+    expect(state.api.createKnowledgeSet).not.toHaveBeenCalled();
   });
 
   it("keeps a private Agent's RAG out of Brainform", async () => {
@@ -875,9 +927,10 @@ describe("Brainform workspace actions", () => {
     ]);
     renderWorkspace("teacher");
 
-    expect(await screen.findByText("Used by: Socrates, Mencius")).toBeTruthy();
-    // Owner decision (2026-10-13): the name opens the editor; a
-    // double-click renames.
+    // Owner decision (2026-10-13): rows show no "Used by" line; the name opens
+    // the editor and a double-click renames.
+    await screen.findByRole("button", { name: "Edit Knowledge Shared notes" });
+    expect(screen.queryByText(/Used by/)).toBeNull();
     expect(
       screen.getAllByRole("button", { name: "Edit Knowledge Shared notes" }),
     ).toHaveLength(1);

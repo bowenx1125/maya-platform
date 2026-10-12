@@ -428,7 +428,11 @@ export function AppShell({
               const faded = Boolean(action.disabled);
               const content = (
                 <>
-                  <WorkspaceIcon name={name} />
+                  {action.busy ? (
+                    <span className="spinner" aria-hidden="true" />
+                  ) : (
+                    <WorkspaceIcon name={name} />
+                  )}
                   <span>{label}</span>
                 </>
               );
@@ -451,6 +455,7 @@ export function AppShell({
                   type={action.form ? "submit" : "button"}
                   form={action.form}
                   disabled={faded}
+                  aria-busy={action.busy || undefined}
                   onClick={action.onClick}
                   data-ui-guide={`workspace.${name}`}
                 >
