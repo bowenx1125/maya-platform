@@ -129,6 +129,12 @@
   border-bottom: 1px solid #e8e1d8;
 }
 
+.sectionTools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .sectionHeading h2 {
   margin: 0;
   font-family: var(--display-serif);

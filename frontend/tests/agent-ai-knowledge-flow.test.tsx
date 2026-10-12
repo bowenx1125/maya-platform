@@ -34,12 +34,14 @@ vi.mock("../components/avatar/avatar-canvas", () => ({
   AvatarCanvas: () => <div role="img" aria-label="Agent avatar" />,
 }));
 
+// A library file another Agent shared. Owner decision (2026-10-13): a new
+// Agent is offered only the library Brainform lists, never a private file.
 const source: KnowledgeDocument = {
   id: "source-1",
   course_id: "course-1",
   group_id: null,
   ownership_scope: "personal",
-  visibility: "private",
+  visibility: "public",
   can_manage_visibility: true,
   authorization_epoch: 0,
   source_filename: "lesson.md",

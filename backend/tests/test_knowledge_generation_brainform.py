@@ -2368,9 +2368,15 @@ def test_team_shared_question_bank_is_reviewable_in_brainform(
         },
     )
     assert saved.status_code == 201, saved.text
-    hidden = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
-    assert hidden.status_code == 200, hidden.text
-    assert all(item["canonical_set_id"] != set_id for item in hidden.json())
+    # Owner decision (2026-10-13): the teacher's own question bank is listed
+    # under its own name before any Team shares it, so it can be shared.
+    unshared = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert unshared.status_code == 200, unshared.text
+    assert [
+        item["source_agent_display_name"]
+        for item in unshared.json()
+        if item["canonical_set_id"] == set_id
+    ] == ["Diagnostic questions"]
 
     first = _make_agent_version(
         database, owner_id=MAYA_ID, name="Diagnostic Leader", visibility="public"
@@ -2408,3 +2414,58 @@ def test_team_shared_question_bank_is_reviewable_in_brainform(
     assert "What stays after the lesson?" in document.json()["markdown"]
     assert "The idea you can explain." in document.json()["markdown"]
     assert "#### Rubric" in document.json()["markdown"]
+
+
+# Owner request (2026-10-13): a teacher uploads a questionnaire file straight
+# into Knowledge, then shares it into a Team. Before a Team or Agent uses it,
+# Brainform lists it under its own name; a deleted Agent's Knowledge stays out.
+def test_uploaded_knowledge_is_listed_before_any_agent_uses_it(
+    client: TestClient,
+) -> None:
+    _teacher, csrf = login(client, "maya")
+    uploaded = _create_set(client, csrf, "Pre-class Form A")
+    markdown = (
+        "# Pre-class Form A\n\n"
+        "## Questions\n\n"
+        "### Question 1\n\n"
+        "Pick one.\n\n- A. One\n- B. Two\n\n"
+        "#### Rubric\n\n"
+        "- **Correct choice** (1): 1 point for B.\n"
+        "Total: 1 points\n\n"
+        "#### Reference answer\n\n"
+        "UPLOADED_ANSWER_SECRET\n"
+    )
+    saved = _save(client, csrf, uploaded["id"], markdown)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["source_agent_display_name"] == "Pre-class Form A"
+    assert saved.json()["markdown"] == markdown
+
+    listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert listing.status_code == 200, listing.text
+    rows = [row for row in listing.json() if row["canonical_set_id"] == uploaded["id"]]
+    assert len(rows) == 1
+    assert rows[0]["agent_id"] is None
+    assert rows[0]["knowledge_display_name"] == "Pre-class Form A"
+    assert rows[0]["can_edit"] is True
+
+    # An empty set (a create whose first save never landed) is not listed.
+    empty = _create_set(client, csrf, "Never saved")
+    listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert all(row["canonical_set_id"] != empty["id"] for row in listing.json())
+
+
+def test_deleted_agent_knowledge_stays_out_of_brainform(client: TestClient) -> None:
+    _owner, csrf = login(client, "bowen")
+    knowledge_set = _create_set(client, csrf, "Old Agent notes", group_id=GROUP_ID)
+    agent = _create_agent_and_bind(client, csrf, knowledge_set["id"], name="Old Agent")
+    saved = _save(client, csrf, knowledge_set["id"], "# Old Agent notes\n\nKept.\n")
+    assert saved.status_code == 200, saved.text
+    deleted = client.delete(
+        f"/api/v1/agents/{agent['id']}",
+        headers=_headers(csrf, f"k3-brainform-delete-{uuid4()}"),
+    )
+    assert deleted.status_code == 204, deleted.text
+
+    listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert listing.status_code == 200, listing.text
+    assert all(row["canonical_set_id"] != knowledge_set["id"] for row in listing.json())

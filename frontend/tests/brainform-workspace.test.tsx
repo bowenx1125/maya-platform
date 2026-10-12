@@ -326,6 +326,45 @@ describe("Brainform workspace actions", () => {
     );
   });
 
+  // Owner request (2026-10-13): a teacher uploads a questionnaire file as
+  // Knowledge, named after the file, then shares it into a Team.
+  it("uploads a Markdown file as its own Knowledge", async () => {
+    state.role = "teacher";
+    state.api.createKnowledgeSet = vi
+      .fn()
+      .mockResolvedValue({ id: "set-new", display_name: "Form A" });
+    state.api.saveKnowledgeMarkdown = vi.fn().mockResolvedValue({});
+    renderWorkspace("teacher");
+
+    const markdown = "# Form A\n\n## Questions\n";
+    fireEvent.change(
+      await screen.findByLabelText("Upload a Markdown file as Knowledge"),
+      {
+        target: {
+          files: [
+            markdownUpload(
+              "Form A.md",
+              Promise.resolve(new TextEncoder().encode(markdown).buffer),
+            ),
+          ],
+        },
+      },
+    );
+    await waitFor(() =>
+      expect(state.api.saveKnowledgeMarkdown).toHaveBeenCalledWith(
+        "set-new",
+        { expected_version_seq: 0, markdown },
+        expect.anything(),
+      ),
+    );
+    expect(state.api.createKnowledgeSet).toHaveBeenCalledWith(
+      "course-1",
+      { display_name: "Form A" },
+      expect.anything(),
+    );
+    expect(await screen.findByText("Uploaded Form A as Knowledge.")).toBeTruthy();
+  });
+
   it("keeps a private Agent's RAG out of Brainform", async () => {
     state.role = "teacher";
     state.api.workspaceDocuments.mockResolvedValue([

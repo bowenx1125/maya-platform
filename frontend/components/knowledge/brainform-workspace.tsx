@@ -1368,6 +1368,64 @@ function BrainformWorkspaceBody({
     }
   }
 
+  // A Markdown file becomes its own Knowledge, named after the file. Its
+  // question sections are recognised the same way as an edit in Brainform.
+  async function uploadKnowledge(file: File) {
+    if (busyKeyRef.current || !courseId) return;
+    if (!/\.md$/i.test(file.name)) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    let content: string;
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+    } catch {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    if (!content.trim()) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    const name = file.name.replace(/\.md$/i, "").trim() || file.name;
+    const fileKey = `${courseId}:${file.name}:${file.size}:${file.lastModified}`;
+    commitBusy("knowledge-upload");
+    setLoadError(null);
+    setNotice("");
+    try {
+      const created = await runKnowledgeMutation(
+        mutationStore,
+        `knowledge-upload:${fileKey}`,
+        (idempotency) =>
+          api.createKnowledgeSet(
+            courseId,
+            { display_name: name },
+            { idempotency },
+          ),
+      );
+      await runKnowledgeMutation(
+        mutationStore,
+        `knowledge-upload-save:${created.id}`,
+        (idempotency) =>
+          api.saveKnowledgeMarkdown(
+            created.id,
+            { expected_version_seq: 0, markdown: content },
+            { idempotency },
+          ),
+      );
+      if (!scopeIsCurrent()) return;
+      setNotice(t("brainformKnowledgeUploaded", { name }));
+      // A background reload keeps this notice; a full one clears it.
+      void loadWorkspace(true);
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
   async function deleteKnowledge(row: BrainformKnowledge) {
     if (
       !row.can_edit ||
@@ -2108,9 +2166,30 @@ function BrainformWorkspaceBody({
                   {t("brainformKnowledgeHeading")}
                 </h2>
               </div>
-              <span className={styles.count}>
-                {displayedKnowledgeRows.length}
-              </span>
+              <div className={styles.sectionTools}>
+                <label
+                  className="secondary-action file-button"
+                  aria-busy={busyKey === "knowledge-upload"}
+                >
+                  {busyKey === "knowledge-upload"
+                    ? t("working")
+                    : t("brainformUploadKnowledge")}
+                  <input
+                    type="file"
+                    aria-label={t("brainformUploadKnowledgeFile")}
+                    accept=".md,text/markdown"
+                    disabled={Boolean(busyKey)}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      if (file) void uploadKnowledge(file);
+                    }}
+                  />
+                </label>
+                <span className={styles.count}>
+                  {displayedKnowledgeRows.length}
+                </span>
+              </div>
             </div>
             {displayedKnowledgeRows.length ? (
               <ul className={styles.list}>

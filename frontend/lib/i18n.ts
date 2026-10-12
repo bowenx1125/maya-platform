@@ -363,6 +363,9 @@ const enMessages = {
   brainformDeleteKnowledgeConfirm:
     "Delete the Knowledge {name}? Agents and Teams that use it stop seeing it.",
   brainformKnowledgeDeleted: "Knowledge deleted.",
+  brainformUploadKnowledge: "Upload",
+  brainformUploadKnowledgeFile: "Upload a Markdown file as Knowledge",
+  brainformKnowledgeUploaded: "Uploaded {name} as Knowledge.",
   brainformReindexRagNamed: "Reindex {name}",
   brainformViewKnowledge: "View Knowledge",
   brainformOpenKnowledgeNamed: "Open {name}",
@@ -1114,6 +1117,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformDeleteKnowledgeConfirm:
     "删除 Knowledge「{name}」？使用它的 Agent 和 Team 将不再读取它。",
   brainformKnowledgeDeleted: "Knowledge 已删除。",
+  brainformUploadKnowledge: "上传",
+  brainformUploadKnowledgeFile: "上传 Markdown 文件作为 Knowledge",
+  brainformKnowledgeUploaded: "已上传 {name}。",
   brainformReindexRagNamed: "重新索引 {name}",
   brainformViewKnowledge: "查看 Knowledge",
   brainformOpenKnowledgeNamed: "进入 {name}",

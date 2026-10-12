@@ -217,6 +217,48 @@ export function AgentOverview({ agentId }: { agentId: string }) {
   );
 }
 
+// The editor offers the library Brainform lists, plus whatever this Agent
+// already uses. A private file belongs only to the Agent it was uploaded into,
+// and a Knowledge set whose Agent was deleted is no longer in the library.
+function libraryDocuments(
+  rows: KnowledgeDocument[],
+  boundIds: string[],
+): KnowledgeDocument[] {
+  const bound = new Set(boundIds);
+  return rows.filter(
+    (document) => document.visibility !== "private" || bound.has(document.id),
+  );
+}
+
+function librarySetIds(
+  rows: { canonical_set_id: string }[] | null,
+): Set<string> | null {
+  return rows === null ? null : new Set(rows.map((row) => row.canonical_set_id));
+}
+
+function libraryKnowledgeSets(
+  rows: KnowledgeSetSummary[],
+  listed: Set<string> | null,
+  boundIds: string[],
+): KnowledgeSetSummary[] {
+  if (listed === null) return rows;
+  const bound = new Set(boundIds);
+  return rows.filter((set) => listed.has(set.id) || bound.has(set.id));
+}
+
+function brainformSetIds(
+  api: { brainformKnowledge?: (courseId: string) => Promise<{ canonical_set_id: string }[]> },
+  courseId: string,
+): Promise<Set<string> | null> {
+  // Without Brainform's list the editor keeps every readable set rather than
+  // hiding real ones.
+  if (typeof api.brainformKnowledge !== "function") return Promise.resolve(null);
+  return api
+    .brainformKnowledge(courseId)
+    .then(librarySetIds)
+    .catch(() => null);
+}
+
 export function AgentWorkbench({
   versionId,
   backHref,
@@ -268,6 +310,9 @@ export function AgentWorkbench({
   const [version, setVersion] = useState<AgentVersion | null>(null);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+  // Private files this editor has already offered stay offered, so a file
+  // unticked here can be ticked again after a reload of the same editor.
+  const offeredDocumentIds = useRef<Set<string>>(new Set());
   const [knowledgeSets, setKnowledgeSets] = useState<KnowledgeSetSummary[]>([]);
   const [agentKnowledge, setAgentKnowledge] =
     useState<AgentKnowledgeSets | null>(null);
@@ -372,6 +417,7 @@ export function AgentWorkbench({
             nextAvatarTemplates,
             nextVoiceProfiles,
             nextKnowledgeSets,
+            nextLibrarySetIds,
           ] = await Promise.all([
             unsavedGroupId
               ? api.knowledge(unsavedGroupId)
@@ -383,6 +429,7 @@ export function AgentWorkbench({
                 ? api.personalVoiceProfiles(courseId).catch(() => [])
                 : Promise.resolve([]),
             api.knowledgeSets(courseId),
+            brainformSetIds(api, courseId),
           ]);
           if (!isCurrentScope(requestScope)) return;
           const baselineAvatar =
@@ -420,8 +467,17 @@ export function AgentWorkbench({
             current_published_version_id: null,
             versions: [],
           } as unknown as AgentDetail);
-          setDocuments(nextDocuments);
-          setKnowledgeSets(nextKnowledgeSets);
+          if (!keepLocal) offeredDocumentIds.current = new Set();
+          const offered = libraryDocuments(nextDocuments, [
+            ...offeredDocumentIds.current,
+          ]);
+          offered.forEach((document) =>
+            offeredDocumentIds.current.add(document.id),
+          );
+          setDocuments(offered);
+          setKnowledgeSets(
+            libraryKnowledgeSets(nextKnowledgeSets, nextLibrarySetIds, []),
+          );
           setAgentKnowledge({
             agent_id: "",
             agent_metadata_revision: 0,
@@ -454,6 +510,7 @@ export function AgentWorkbench({
           nextVoiceProfiles,
           nextKnowledgeSets,
           nextAgentKnowledge,
+          nextLibrarySetIds,
         ] = await Promise.all([
           nextAgent.group_id
             ? api.knowledge(nextAgent.group_id)
@@ -473,19 +530,32 @@ export function AgentWorkbench({
               : Promise.resolve([]),
           api.knowledgeSets(nextAgent.course_id),
           api.agentKnowledgeSets(nextAgent.id),
+          brainformSetIds(api, nextAgent.course_id),
         ]);
         if (!isCurrentScope(requestScope)) return;
         setVersion(nextVersion);
         setAgent(nextAgent);
-        setDocuments(nextDocuments);
+        if (!keepLocal) offeredDocumentIds.current = new Set();
+        const offered = libraryDocuments(nextDocuments, [
+          ...(nextVersion.enabled_documents ?? []).map((document) => document.id),
+          ...offeredDocumentIds.current,
+        ]);
+        offered.forEach((document) =>
+          offeredDocumentIds.current.add(document.id),
+        );
+        setDocuments(offered);
+        const boundSetIds = nextAgentKnowledge.sets.map((set) => set.id);
         setKnowledgeSets(
-          Array.from(
-            new Map(
-              [...nextKnowledgeSets, ...nextAgentKnowledge.sets].map((set) => [
-                set.id,
-                set,
-              ]),
-            ).values(),
+          libraryKnowledgeSets(
+            Array.from(
+              new Map(
+                [...nextKnowledgeSets, ...nextAgentKnowledge.sets].map(
+                  (set) => [set.id, set],
+                ),
+              ).values(),
+            ),
+            nextLibrarySetIds,
+            boundSetIds,
           ),
         );
         setAgentKnowledge(nextAgentKnowledge);
@@ -827,6 +897,7 @@ export function AgentWorkbench({
       );
       setRetryAction(null);
       setVersion(mutation.agent_version);
+      offeredDocumentIds.current.add(mutation.document.id);
       setDocuments((current) => [...current, mutation.document]);
       setSelectedDocumentIds((current) =>
         current.includes(mutation.document.id)
@@ -946,6 +1017,7 @@ export function AgentWorkbench({
         persistedVersionRef.current = saved;
         setVersion(saved);
         setPendingKnowledgeUpload(null);
+        offeredDocumentIds.current.add(mutation.document.id);
         setDocuments((current) =>
           current.some((item) => item.id === mutation.document.id)
             ? current
