@@ -60,6 +60,14 @@ export function AvatarCanvas({
   const hasAsset = Boolean(resolvedAssetUrl);
   const [status, setStatus] = useState<CanvasStatus>("loading");
   const [failure, setFailure] = useState<Error | null>(null);
+  const previewKey = `${framing}:${resolvedAssetUrl}`;
+  const [previousPreviewKey, setPreviousPreviewKey] = useState(previewKey);
+
+  if (previousPreviewKey !== previewKey) {
+    setPreviousPreviewKey(previewKey);
+    setStatus("loading");
+    setFailure(null);
+  }
 
   useEffect(() => {
     configRef.current = config;
@@ -87,8 +95,6 @@ export function AvatarCanvas({
     const canvas = canvasRef.current;
     if (!hasAsset || !assetUrlRef.current) return undefined;
     if (!canvas) return undefined;
-    setStatus("loading");
-    setFailure(null);
     void import("./avatar-renderer")
       .then(({ AvatarRenderer }) => {
         if (!active || !canvas) return;
@@ -99,6 +105,7 @@ export function AvatarCanvas({
             framing,
             onReady: () => {
               if (!active) return;
+              setFailure(null);
               setStatus("ready");
               onLoadRef.current?.();
             },
@@ -176,7 +183,7 @@ export function AvatarCanvas({
       <canvas
         ref={canvasRef}
         className={styles.canvas}
-        hidden={!resolvedAssetUrl || status === "failed"}
+        hidden={!resolvedAssetUrl || status !== "ready"}
       />
       {resolvedAssetUrl && status === "loading" ? (
         <span className={styles.loading}>{t("avatarPreviewLoading")}</span>

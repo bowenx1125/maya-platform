@@ -229,21 +229,20 @@ October 11: PR #50 (`f6b1338`) merged onto `762a810` as `556fdc5`. Reports count
 
 October 12: main4d0c981, Mock Demo,0 Provider calls; user deploys.0061 fixes teacher personal Agent Debate404: nullable group_id/FK-checked rebuild; setup/generation use Agent course. Initial assessment calls force the action tool after assessment_action_required (not revoked-source). Public Teams, including Maya, accept Public Agents only (team_member_private); Private Teams mix both. Deleted Agents hide their unshared RAG; Brainform excludes Private RAG. Removed accounts leave member lists; Accounts uses display names. Enter never sends; pre-Done RAG is listed; Private tiles show versions; Team cards have fixed width; zh round caps50/50/50/100. Deleted 苏格拉底 recreation did not reproduce. Local DOCX/PDF ingest tests also fail on4d0c981.
 
-## Debates/Live integration — October 12
+## Debates/Live and Studyform — October 12
 
-On entaiaki, local accb346281b05f1542934dc8b3bc689fad4294a1 merges main
-12f84c7ce192d59faca6bfd2253933b252eab3ec; upstream APIs and text-only Chats remain.
-
-0062_active_debate_slot excludes archived Debates from the running-slot index
-and startup/accepted-stage recovery; rows remain. Both directions use
-SQLite transactions. Downgrade refuses historical/current running conflicts.
-Failure injection passed. Frontend 734 PASS/1 SKIP; type/build PASS.
-Full backend rerun: 170 files; 31 failures/1 error reproduce on unchanged
-12f84c7; head/schema failures corrected/retested. Preview tests cover nine safe TTS codes and reject unknown codes.
-
-Production FAIL: archived acceptance classroom GET404 blocked Start409. Teacher
-recovery returned 200/stopped. New Start ran but published 0/9 prepared texts;
-End failed, so teacher recovery stopped that run too. No new class or manual
-generation retry; extra provider charges unverified. No push/production SSH/
-rebuild. 0062 remains local. Publication requires renewed authorization, SQLite
-backup/integrity and GitHub-first ordering; production reacceptance is pending.
+entaiaki integrates accb346281b05f1542934dc8b3bc689fad4294a1
+with main 12f84c7ce192d59faca6bfd2253933b252eab3ec.
+0062 excludes archived activity; conflicting downgrade is refused. Voice failures
+allow text only for nine known codes.
+Studyform fixes media retry/save ownership, personal Voice binding, Avatar
+textures/framing and upload overflow. Frontend 764 PASS/1 upstream SKIP;
+build/types/lint and review 77 PASS. Windows: 31 FAIL/1 ERROR
+also on main 12f84c7; head fixtures fixed. Linux pending. Local Mock UI passes
+Avatar save/refresh/narrow view, upload/media retry, Voice preview/binding,
+text-only Start/Next, Final 8/8, End and refresh. Preview Retry preserved prior text.
+Started classes finished; retry draft Ready; logged out.
+Live UI passed discovery/Next (teacher API), refresh/offline/session expiry. Mock Voice ledger: one charged entry; no real-call claim.
+Production FAIL: archived GET404 blocked Start409; recovered/stopped. Next Start
+published 0/9 and End failed; also stopped. Extra charges unverified; undeployed.
+Release needs renewed authorization, GitHub first, SQLite backup/integrity and retest.

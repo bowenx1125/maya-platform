@@ -294,6 +294,14 @@ export class AvatarRenderer {
     this.draco.setDecoderPath(options.decoderPath ?? AVATAR_DECODER_PATH);
     this.loader = new GLTFLoader();
     this.loader.setDRACOLoader(this.draco);
+    this.loader.register((parser) => {
+      // Embedded GLB images belong to img-src; ImageBitmapLoader fetches them
+      // through connect-src, which intentionally excludes blob: in production.
+      parser.textureLoader = new THREE.TextureLoader(parser.options.manager)
+        .setCrossOrigin(parser.options.crossOrigin)
+        .setRequestHeader(parser.options.requestHeader);
+      return { name: "MAYA_avatar_image_textures" };
+    });
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.resize();
     this.setAsset(options.assetUrl ?? AVATAR_ASSET_URL);
@@ -320,6 +328,7 @@ export class AvatarRenderer {
           return;
         }
         this.bodySize = null;
+        this.hideDetachedFragments(gltf.scene);
         this.installPose(gltf.scene, gltf.animations, assetUrl);
         const nextRoot =
           this.framing === "full-body"
