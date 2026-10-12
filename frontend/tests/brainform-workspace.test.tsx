@@ -290,6 +290,42 @@ describe("Brainform workspace actions", () => {
     expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
   });
 
+  it("deletes a Knowledge with its current revisions after confirming", async () => {
+    state.role = "teacher";
+    state.api.brainformKnowledge.mockResolvedValue([
+      {
+        canonical_set_id: "set-1",
+        source_agent_display_name: "Socrates",
+        knowledge_display_name: "Socrates Knowledge",
+        version_seq: 1,
+        content_hash: "b".repeat(64),
+        projection_available: true,
+        can_read: true,
+        can_edit: true,
+        created_at: "2026-10-06T00:00:00Z",
+      },
+    ]);
+    state.api.knowledgeSet.mockResolvedValue({
+      id: "set-1",
+      metadata_revision: 3,
+      content_revision: 5,
+    });
+    state.api.deleteKnowledgeSet = vi.fn().mockResolvedValue({});
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWorkspace("teacher");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete Socrates Knowledge" }),
+    );
+    await waitFor(() =>
+      expect(state.api.deleteKnowledgeSet).toHaveBeenCalledWith(
+        "set-1",
+        { expected_metadata_revision: 3, expected_content_revision: 5 },
+        expect.anything(),
+      ),
+    );
+  });
+
   it("keeps a private Agent's RAG out of Brainform", async () => {
     state.role = "teacher";
     state.api.workspaceDocuments.mockResolvedValue([

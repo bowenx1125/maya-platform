@@ -12,6 +12,7 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import select
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError
-from app.core.models import User
+from app.core.models import SessionRecord, User
 from app.modules.auth.service import AuthContext
 from app.modules.workspace.models import Conversation, ConversationParticipant
 
@@ -108,9 +109,26 @@ def drive_assessment(
             )
             if participant is None:
                 return
-            # The student owns the attempt; the run acts as them, as their own
-            # Team turn would, and every executor check still applies.
-            actor = AuthContext("", None, user, "")  # type: ignore[arg-type]
+            # The student owns the attempt; the run acts as them through their
+            # newest live sign-in, which every Tool call re-checks. Signed out,
+            # the attempt waits and resumes on their next message.
+            sign_in = db.scalar(
+                select(SessionRecord)
+                .where(
+                    SessionRecord.user_id == user.id,
+                    SessionRecord.revoked_at.is_(None),
+                    SessionRecord.expires_at > datetime.now(UTC),
+                )
+                .order_by(SessionRecord.created_at.desc())
+                .limit(1)
+            )
+            if sign_in is None:
+                return
+            # The claim commits, which would expire these rows; the run reads
+            # them later from other sessions, so keep their loaded values.
+            db.expunge(sign_in)
+            db.expunge(user)
+            actor = AuthContext("", sign_in, user, "")
             claim = claim_assessment_executor_turn(
                 db,
                 settings,

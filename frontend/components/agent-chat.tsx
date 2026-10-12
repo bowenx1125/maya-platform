@@ -1064,9 +1064,18 @@ function AgentChatScope({
     };
   }, []);
 
+  // Opening or updating a Chat shows its newest message, Team Chats included.
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "nearest" });
-  }, [selected?.id, selected?.turns.length, busy, pendingMessage]);
+  }, [
+    selected?.id,
+    selected?.turns.length,
+    selectedTeam?.id,
+    selectedTeam?.turns.length,
+    selectedTeam?.assessment_stage,
+    busy,
+    pendingMessage,
+  ]);
 
   function start(nextVersionId = versionId) {
     if (busy) return;
@@ -2779,15 +2788,6 @@ function AgentChatScope({
                         onClick={() => void resumePausedTeam()}
                       >
                         {t("teamResume")}
-                      </button>
-                    ) : selectedTeam.turns.at(-1)?.state === "pending" ? (
-                      <button
-                        type="button"
-                        className="inline-button"
-                        disabled={teamBusy}
-                        onClick={() => void checkTeamStatus()}
-                      >
-                        {t("teamCheckStatus")}
                       </button>
                     ) : null}
                   </div>
