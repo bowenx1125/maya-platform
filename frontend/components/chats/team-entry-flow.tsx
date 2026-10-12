@@ -400,16 +400,21 @@ export function TeamEntryFlow({
         return;
       editScope.current = dataScope;
       setEditing(detail);
+      // A member Agent published again since the Team was saved: edit with its
+      // current version. Keeping the old id beside the new choice put the same
+      // Agent in twice ("An Agent can only appear once in a Team").
+      const currentVersion = (member: TeamDetailDto["members"][number]) =>
+        agents.find((agent) => agent.agent_id === member.agent_id)
+          ?.version_id ?? member.agent_version_id;
       const memberIds = [...detail.members]
         .sort((left, right) => left.position - right.position)
-        .map((member) => member.agent_version_id);
+        .map(currentVersion);
+      const leader = detail.members.find((member) => member.is_leader);
       setForm({
         name: detail.display_name,
         visibility: detail.visibility,
         memberVersionIds: memberIds,
-        leaderVersionId:
-          detail.members.find((member) => member.is_leader)?.agent_version_id ??
-          "",
+        leaderVersionId: leader ? currentVersion(leader) : "",
         sharedSetIds: detail.shared_knowledge_set_ids,
       });
       setFormOpen(true);

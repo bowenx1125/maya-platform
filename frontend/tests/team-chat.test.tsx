@@ -522,6 +522,39 @@ describe("Studyform Teams", () => {
     expect(state.api.createConversation).not.toHaveBeenCalled();
   });
 
+  it("saves a Team with the current version of a member published again", async () => {
+    // Socrates was published again as version-1b after the Team was saved.
+    state.api.teams.mockResolvedValue([publicTeam]);
+    state.api.team.mockResolvedValue(publicTeam);
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeamEntryFlow
+            api={state.api as never}
+            courseId="course"
+            agents={
+              [{ ...agents[0], version_id: "version-1b" }, agents[1]] as never
+            }
+            standalone
+            backHref="/teacher/studyform"
+            initialRouteMode="teams"
+          />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Reasoning circle" }),
+    );
+    await screen.findByLabelText("Name");
+    fireEvent.click(sidebarButton("Done"));
+
+    await screen.findByText("Team saved. You can now start a Team Chat.");
+    expect(state.api.updateTeam.mock.calls[0][1].members).toEqual([
+      { agent_version_id: "version-1b", is_leader: true, position: 0 },
+      { agent_version_id: "version-2", is_leader: false, position: 1 },
+    ]);
+  });
+
   it("loads the new routed Team edit while an older Team request is still pending", async () => {
     const nextTeam = { ...team, id: "team-2", display_name: "Second circle" };
     let resolveFirst!: (value: typeof team) => void;
