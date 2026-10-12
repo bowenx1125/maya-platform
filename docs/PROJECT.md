@@ -229,20 +229,22 @@ October 11: PR #50 (`f6b1338`) merged onto `762a810` as `556fdc5`. Reports count
 
 October 12: main4d0c981, Mock Demo,0 Provider calls; user deploys.0061 fixes teacher personal Agent Debate404: nullable group_id/FK-checked rebuild; setup/generation use Agent course. Initial assessment calls force the action tool after assessment_action_required (not revoked-source). Public Teams, including Maya, accept Public Agents only (team_member_private); Private Teams mix both. Deleted Agents hide their unshared RAG; Brainform excludes Private RAG. Removed accounts leave member lists; Accounts uses display names. Enter never sends; pre-Done RAG is listed; Private tiles show versions; Team cards have fixed width; zh round caps50/50/50/100. Deleted 苏格拉底 recreation did not reproduce. Local DOCX/PDF ingest tests also fail on4d0c981.
 
-## Debates/Live and Studyform — October 12
+## Debates/Live and Studyform — October 12–13
 
-entaiaki integrates accb346281b05f1542934dc8b3bc689fad4294a1
-with main 12f84c7ce192d59faca6bfd2253933b252eab3ec.
-0062 excludes archived activity; conflicting downgrade is refused. Voice failures
-allow text only for nine known codes.
-Studyform fixes media retry/save ownership, personal Voice binding, Avatar
-textures/framing and upload overflow. Frontend 764 PASS/1 upstream SKIP;
-build/types/lint and review 77 PASS. Windows: 31 FAIL/1 ERROR
-also on main 12f84c7; head fixtures fixed. Linux pending. Local Mock UI passes
-Avatar save/refresh/narrow view, upload/media retry, Voice preview/binding,
-text-only Start/Next, Final 8/8, End and refresh. Preview Retry preserved prior text.
-Started classes finished; retry draft Ready; logged out.
-Live UI passed discovery/Next (teacher API), refresh/offline/session expiry. Mock Voice ledger: one charged entry; no real-call claim.
-Production FAIL: archived GET404 blocked Start409; recovered/stopped. Next Start
-published 0/9 and End failed; also stopped. Extra charges unverified; undeployed.
-Release needs renewed authorization, GitHub first, SQLite backup/integrity and retest.
+`entaiaki` candidate `67629041362a53f97776ad049b8c207d58ce9dc7` integrates
+`accb346281b05f1542934dc8b3bc689fad4294a1` + `12f84c7ce192d59faca6bfd2253933b252eab3ec`.
+Diff: 60 files (50 M, 9 A, 1 D); E reviewed all, D/root independently reviewed
+Studyform and D06; no new P1/P2.
+
+Frontend 764 PASS/1 upstream SKIP; type/lint/build and 11 contract gates PASS.
+`pnpm check` blocked by WSL Bash. Windows: 31 FAIL/1 ERROR, also on main.
+Linux: 2,245 collected; stale 6% status, no final result. hn01 access unavailable;
+no other host ran it. Boundary (990 files) and LF checks PASS.
+
+Isolated UI: Avatar/Voice, text-only Debate Start/Next, Live refresh/offline/session expiry,
+Final 8/8, End/logout PASS. D06: turn 0 unchanged; turns 0–5 delegated once, 1–5 generated
+once, attempt=1, provider operations=0. Double-click/in-flight refresh untested.
+
+Production FAIL (Start 0/9; End failed); test classes stopped, not deployed. Five accounts
+logged in/out; charges unverified. Report, checklists and 55 screenshots packaged.
+20:00 deadline missed. No push, production SSH, rebuild or history change.
