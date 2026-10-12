@@ -2427,6 +2427,9 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
                 claim.token,
                 result_id,
                 reply=MemberReply(output.content, request.sources),
+                # A server-run scorer or summarizer settles as that executor;
+                # without it a saved evaluation read as a missing action.
+                assessment_purpose=request.assessment_purpose,
                 actor_context=claim.actor_context,
                 assessment_revoked_scope=request.assessment_revoked_scope,
             )
@@ -2506,6 +2509,12 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     )
                 )
             tool_context = (row.id, turn.id)
+        if leader.assessment_active:
+            # During an open test the Leader records answers alone. Scoring and
+            # the summary run as the server's own executor turns; a member
+            # called into the student's turn is not authorized there and only
+            # fails ("Your answer was not recorded") or hangs the turn.
+            specs = [spec for spec in specs if spec.is_leader]
         leader = replace(
             leader,
             coordinate_members=tuple(spec.participant_id for spec in specs if not spec.is_leader),

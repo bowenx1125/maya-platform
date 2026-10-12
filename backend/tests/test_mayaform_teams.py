@@ -1650,3 +1650,72 @@ def test_public_team_takes_only_public_agents_and_private_team_takes_both(
         json=_team_payload([hidden[1], shown[1]], visibility="private"),
     )
     assert mixed.status_code == 201, mixed.text
+
+
+def test_team_follows_a_member_published_again_without_a_teacher_save(
+    client: TestClient, database: Any
+) -> None:
+    # Owner decision (2026-10-12): a Team keeps up with its members' new
+    # versions on its own; opening it to check is optional.
+    from app.modules.teams.models import Team, TeamVersion, TeamVersionMember
+    from app.modules.teams.service import follow_published_agent
+
+    _, csrf = login(client, "maya")
+    first = _make_agent_version(database, owner_id=MAYA_ID, name="Follow A", visibility="public")
+    second = _make_agent_version(database, owner_id=MAYA_ID, name="Follow B", visibility="public")
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, "k3-follow-published-member-01"),
+        json=_team_payload([first[1], second[1]], visibility="public"),
+    )
+    assert created.status_code == 201, created.text
+    team_id = created.json()["id"]
+
+    republished = str(uuid4())
+    timestamp = datetime.now(UTC)
+    with database.session() as db:
+        old = db.get(AgentVersion, first[1])
+        assert old is not None
+        old.state = "superseded"
+        db.add(
+            AgentVersion(
+                id=republished,
+                agent_id=first[0],
+                version_seq=2,
+                state="published",
+                revision=1,
+                agent_md="# Follow A v2",
+                avatar_config_json="{}",
+                authorization_epoch=0,
+                draft_visibility="public",
+                published_visibility="public",
+                published_at=timestamp,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        db.flush()
+        agent = db.get(Agent, first[0])
+        assert agent is not None
+        agent.current_published_version_id = republished
+        db.commit()
+        follow_published_agent(db, first[0])
+
+    with database.session() as db:
+        team = db.get(Team, team_id)
+        assert team is not None and team.current_version_seq == 2
+        version = db.scalar(
+            select(TeamVersion).where(TeamVersion.team_id == team_id, TeamVersion.version_seq == 2)
+        )
+        assert version is not None
+        members = {
+            row.agent_version_id: row.is_leader
+            for row in db.scalars(
+                select(TeamVersionMember).where(TeamVersionMember.team_version_id == version.id)
+            )
+        }
+    leader_before = next(
+        member["agent_version_id"] for member in created.json()["members"] if member["is_leader"]
+    )
+    assert set(members) == {republished, second[1]}
+    assert members[republished if leader_before == first[1] else second[1]] is True

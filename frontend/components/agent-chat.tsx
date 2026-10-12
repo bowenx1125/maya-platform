@@ -2292,6 +2292,12 @@ function AgentChatScope({
   const deletedMember = selectedTeam?.team.members.find(
     (member) => member.deleted,
   );
+  // A running turn, including the server's own scoring and summary, blocks
+  // sending only for now; it is not a reason the Chat cannot continue.
+  const teamWorking =
+    selectedTeam?.turns.at(-1)?.state === "pending" ||
+    selectedTeam?.assessment_stage === "scoring" ||
+    selectedTeam?.assessment_stage === "summarizing";
   // Why this Chat cannot continue, shown once under its latest message.
   const closedNotice = selectedTeam
     ? selectedTeam.team.deleted
@@ -2300,7 +2306,7 @@ function AgentChatScope({
         ? t("chatTeamMemberDeleted", { name: deletedMember.name })
         : selectedTeam.read_only
           ? t("teamChatReadOnly")
-          : !selectedTeam.can_send
+          : !selectedTeam.can_send && !teamWorking
             ? t("teamChatUnavailable")
             : null
     : selected?.agent.deleted

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
-from app.core.errors import conflict, not_found, stale_revision, unprocessable
+from app.core.errors import PlatformError, conflict, not_found, stale_revision, unprocessable
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -20,6 +21,7 @@ from app.core.models import (
     KnowledgeSnapshot,
     SnapshotDocument,
     StoredFile,
+    User,
 )
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
@@ -52,11 +54,14 @@ from app.modules.teams.schemas import (
     SharedKnowledgeSetDTO,
     TeamDetail,
     TeamMemberDTO,
+    TeamMemberInput,
     TeamSummary,
     TeamVersionDTO,
 )
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
+
+LOGGER = logging.getLogger("maya.teams")
 
 
 def now_utc() -> datetime:
@@ -1568,3 +1573,75 @@ def assert_current_chat_targets(
 ) -> None:
     """Fence a frozen Team before chat claim/send/result publication."""
     resolve_frozen_chat_selection(db, actor, frozen_selection, target_binding_ids)
+
+
+def follow_published_agent(db: Session, agent_id: str) -> None:
+    """Move every live Team holding this Agent to its members' current versions.
+
+    Owner decision (2026-10-12): publishing a member Agent again updates its
+    Teams with no Done from the teacher. Each Team is saved as its owner,
+    through the same checks as an edit; one that can no longer be saved, for
+    example a Public Team whose member became Private, keeps its version.
+    """
+
+    candidates = (
+        db.execute(
+            select(Team.id)
+            .join(
+                TeamVersion,
+                (TeamVersion.team_id == Team.id)
+                & (TeamVersion.version_seq == Team.current_version_seq),
+            )
+            .join(TeamVersionMember, TeamVersionMember.team_version_id == TeamVersion.id)
+            .where(
+                Team.deleted_at.is_(None),
+                Team.owner_user_id.is_not(None),
+                TeamVersionMember.agent_id == agent_id,
+            )
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    for team_id in candidates:
+        team = db.get(Team, team_id)
+        owner = db.get(User, team.owner_user_id) if team and team.owner_user_id else None
+        if team is None or owner is None or owner.status != "active":
+            continue
+        version = _version_for_seq(db, team)
+        members = _member_rows(db, version.id)
+        current: list[TeamMemberInput] = []
+        changed = False
+        for member in members:
+            agent = db.get(Agent, member.agent_id)
+            latest = agent.current_published_version_id if agent is not None else None
+            target = latest or member.agent_version_id
+            changed = changed or target != member.agent_version_id
+            current.append(
+                TeamMemberInput(
+                    agent_version_id=UUID(target),
+                    is_leader=member.is_leader,
+                    position=member.position,
+                )
+            )
+        if not changed:
+            continue
+        request = SaveTeamVersionRequest(
+            display_name=team.display_name,
+            visibility=team.visibility,  # type: ignore[arg-type]
+            members=current,
+            shared_knowledge_set_ids=[
+                UUID(row.knowledge_set_id) for row in _set_rows(db, version.id)
+            ],
+            expected_metadata_revision=team.metadata_revision,
+        )
+        try:
+            save_team_version(db, AuthContext("", None, owner, ""), team.id, request)  # type: ignore[arg-type]
+            db.commit()
+        except PlatformError as error:
+            db.rollback()
+            LOGGER.warning(
+                "Team kept its version after a member was published team_id=%s code=%s",
+                team_id,
+                error.code,
+            )

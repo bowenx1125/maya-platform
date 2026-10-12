@@ -92,8 +92,7 @@ successful generation/report. .env updates require scoped recreation; backup and
 sending/job/turn inspection precede deployment. Other services and private config
 must remain unchanged.
 
-Historical results stay in Git history, not current acceptance; billed failures are
-never silently retried. Real RAG/classroom load/voice quality remain unverified.徐伯闻 owns teaching content, 古月 3D/voice/TTS,
+Billed failures are never silently retried. Real RAG/classroom load/voice quality remain unverified.徐伯闻 owns teaching content, 古月 3D/voice/TTS,
 Kaikai accounts/student UI. [Architecture](ARCHITECTURE.md), [contracts](contracts/),
 [ADRs](adr/) retain the implementation agreements.
 
@@ -237,4 +236,4 @@ October 11: PR #50 (`f6b1338`) merged onto `762a810` as `556fdc5`. Reports count
 
 October 12: From main 4d0c981; mock Demo only, 0 Provider calls; user deploys. Debates 404: setup required a group that teacher Studyform Agents lack; 0061 makes debate_participants.group_id nullable (FK-checked rebuild); setup and generation use the Agent's course. Lost assessment answers: the Leader replied in prose (assessment_action_required); the first assessment model call now forces its action tool (not revoked-source). User decision: every Public Team, Maya Teams included, takes only Public Agents (team_member_private); Private Teams mix both. Deleted Agents take their unshared RAG; Brainform lists no Private RAG; removed accounts leave member lists. zh round caps 50/50/50/100. Local DOCX/PDF ingest tests fail on 4d0c981 too.
 0062 adds teacher personal voices (personal scope, owner-only); students choose groupmates' ready voices but manage only their own; a missing voice never blocks publishing or Debates. 我不知道/忘了 is a scored answer, not a skip.
-After the last answer the server runs scorer then summarizer as the student's live sign-in (no retry of a step that saved nothing); assessment_stage drives the progress bar; results list points/feedback/summary. Teachers read raw test messages, Private included; the server appends report links. A test asks every Knowledge Question (no sampling). The Leader picks reply_language for server lines. Old Chats generate Knowledge from the current version's RAG; Brainform deletes Knowledge.
+After the last answer the server runs scorer then summarizer as the student's live sign-in (no retry of a step that saved nothing); assessment_stage drives the progress bar; results list points/feedback/summary. Teachers read raw test messages, Private included; the server appends report links. A test asks every Knowledge Question (no sampling). The Leader picks reply_language for server lines. Old Chats generate Knowledge from the current version's RAG; Brainform deletes Knowledge. Publishing an Agent saves its Teams with current member versions. Open tests run the Leader alone; transcripts keep attempts apart.

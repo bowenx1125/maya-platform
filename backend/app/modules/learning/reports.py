@@ -683,6 +683,7 @@ def read_attempt_transcripts(
     course_id: str,
     activity_id: str,
     learner_ref: str | None = None,
+    include_abandoned: bool = False,
 ) -> list[dict[str, object]]:
     """The raw messages of each formal attempt, from its start to its end.
 
@@ -699,9 +700,16 @@ def read_attempt_transcripts(
 
     activity = _validated_activity(db, actor, course_id=course_id, activity_id=activity_id)
     transcripts: list[dict[str, object]] = []
-    for attempt in _eligible_attempts(db, activity):
+    # Newest first, each attempt on its own: blending an abandoned run into the
+    # finished one put messages in a student's record they never sent there.
+    attempts = sorted(
+        _eligible_attempts(db, activity), key=lambda row: row.started_at, reverse=True
+    )
+    for attempt in attempts:
         ref = f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}"
         if learner_ref is not None and learner_ref != ref:
+            continue
+        if attempt.status == "abandoned" and not include_abandoned:
             continue
         user = db.get(User, attempt.actor_user_id)
         ended_at = attempt.completed_at or attempt.abandoned_at
@@ -730,6 +738,7 @@ def read_attempt_transcripts(
                     )
         transcripts.append(
             {
+                "attempt_id": attempt.id,
                 "student_name": user.display_name if user is not None else "Student",
                 "learner_ref": ref,
                 "attempt_status": attempt.status,

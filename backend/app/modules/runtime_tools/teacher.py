@@ -32,6 +32,7 @@ class TranscriptArguments(BaseModel):
 
     activity_id: UUID
     learner_ref: str | None = None
+    include_abandoned: bool = False
 
 
 class CourseArguments(BaseModel):
@@ -93,6 +94,7 @@ def read_transcripts(
             course_id=row.course_id,
             activity_id=str(arguments.activity_id),
             learner_ref=arguments.learner_ref,
+            include_abandoned=arguments.include_abandoned,
         )
     }
 
@@ -163,9 +165,11 @@ def teacher_tools() -> dict[str, ToolSpec]:
             "Teacher",
             "Read the raw messages of students' formal test attempts in an activity, from "
             "the start of each test to its end, Public and Private Chats alike. Use "
-            "learner_ref from the statistics to read one student. Quote these messages "
-            "when the teacher asks what a student answered; chat outside a test is not "
-            "included.",
+            "learner_ref from the statistics to read one student. Each item is one attempt, "
+            "newest first: never combine messages from different attempts, and name the "
+            "attempt you quote. Abandoned attempts are left out unless include_abandoned "
+            "is true; their answers were discarded. Quote these messages when the teacher "
+            "asks what a student answered; chat outside a test is not included.",
             TranscriptArguments,
             authorize_transcripts,
             read_transcripts,

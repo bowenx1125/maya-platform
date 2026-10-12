@@ -345,7 +345,7 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
             assert "Internal answer" not in system
 
 
-def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wire(
+def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
 ) -> None:
     app, _database, base_settings = app_bundle
@@ -639,24 +639,6 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
                             "answer_span": "FINAL_ANSWER_CANARY",
                         },
                     )
-                if ordinal == 1:
-                    return tool_body(
-                        f"delegate-evaluator-{request.turn_id}",
-                        "delegate_task_to_member",
-                        {
-                            "member_id": evaluator.id,
-                            "task": "Evaluate the saved responses using the assigned task.",
-                        },
-                    )
-                if ordinal == 2:
-                    return tool_body(
-                        f"delegate-boundary-{request.turn_id}",
-                        "delegate_task_to_member",
-                        {
-                            "member_id": boundary.id,
-                            "task": "Summarize the saved evaluation using the assigned task.",
-                        },
-                    )
                 return text_body("Untrusted coordinator prose after formal work.")
             raise AssertionError("Assessment completion must not require a second student turn.")
         if request.participant_id == evaluator.id:
@@ -714,9 +696,15 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
         "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
     )
     runtime.execute_team_turn(database.session_factory, claim)
+    # An open test's turn runs the Leader alone; nothing is delegated to the
+    # scorer or summarizer from the student's turn.
+    assert wires[evaluator.id] == [] and wires[boundary.id] == []
+    from app.modules.learning import finalizer
 
-    assert len(wires[leader.id]) >= 4
-    assert len(wires[evaluator.id]) >= 2
+    finalizer.drive_assessment(database.session_factory, settings, conversation_id)
+
+    assert len(wires[leader.id]) >= 1
+    assert len(wires[evaluator.id]) >= 1
     assert len(wires[boundary.id]) == 1
     assert (
         "edit_assessment",
@@ -726,55 +714,39 @@ def test_real_coordinate_keeps_evaluator_and_boundary_canaries_out_of_leader_wir
         "update_learning_boundary",
         {"ok": True, "result": {"saved": True}},
     ) in tool_results
-    assert ("edit_assessment", False) in function_flags[evaluator.id]
-    assert ("update_learning_boundary", True) in function_flags[boundary.id]
     assert any(b"Internal only" in wire for wire in wires[evaluator.id])
     assert all(
         b"EVALUATOR_RAW_CANARY" not in wire
         and b"BOUNDARY_RAW_CANARY" not in wire
         and b"Internal only" not in wire
-        for wire in wires[leader.id][1:]
+        for wire in wires[leader.id]
     )
     with database.session() as db:
         turn = db.get(ConversationTurn, claim.turn_id)
         assert turn is not None and turn.state == "ready"
-        results = db.scalars(
-            select(TeamTurnResult)
-            .where(TeamTurnResult.turn_id == turn.id)
-            .order_by(TeamTurnResult.ordinal)
+        shown = db.scalars(
+            select(TeamTurnResult.assistant_text).where(
+                TeamTurnResult.conversation_id == conversation_id
+            )
         ).all()
-        assert [result.state for result in results] == ["ready", "ready", "ready"]
         assert all(
-            "EVALUATOR_RAW_CANARY" not in (result.assistant_text or "")
-            and "BOUNDARY_RAW_CANARY" not in (result.assistant_text or "")
-            for result in results
+            "EVALUATOR_RAW_CANARY" not in (text or "") and "BOUNDARY_RAW_CANARY" not in (text or "")
+            for text in shown
         )
-        assert results[1].assistant_text == "This round's answers have been reviewed."
-        assert any("Congratulations" in (result.assistant_text or "") for result in results)
-        child_stages = list(
-            db.scalars(
-                select(TeamProviderCall).where(
-                    TeamProviderCall.result_id.in_([results[1].id, results[2].id])
-                )
+        # Every server turn settles cleanly; a failed one showed as "could not reply".
+        assert all(
+            result.state == "ready"
+            for result in db.scalars(
+                select(TeamTurnResult).where(TeamTurnResult.conversation_id == conversation_id)
             )
         )
-        assert any("EVALUATOR_RAW_CANARY" in stage.accepted_response_json for stage in child_stages)
-        assert not any(
-            "BOUNDARY_RAW_CANARY" in stage.accepted_response_json for stage in child_stages
-        )
-        assert sum(stage.result_id == results[2].id for stage in child_stages) == 1
-        attempt_context = get_assessment_runtime_context(db, actor, conversation_id)
-        assert attempt_context is None
-        attempt_id = str(context.attempt.id)
-        attempt = db.get(AssessmentAttempt, attempt_id)
+        assert any("This round's answers have been reviewed." in (text or "") for text in shown)
+        assert any("Congratulations" in (text or "") for text in shown)
+        assert get_assessment_runtime_context(db, actor, conversation_id) is None
+        attempt = db.get(AssessmentAttempt, str(context.attempt.id))
         assert attempt is not None and attempt.status == "completed"
         assert attempt_has_final_evidence(db, attempt)
-        owner_projection = runtime.project_team_turn(db, turn, read_only=False).assessment_result
-        assert owner_projection is not None
-        assert owner_projection.response_key == "assessment.completed"
-        assert owner_projection.context.attempt.status == "completed"
-        assert owner_projection.context.current_question is None
-        # One student turn completes the attempt; the stored Leader opening has no user text.
+        # The student sent one message; the server's own turns carry no text.
         assert (
             db.scalar(
                 select(func.count())
@@ -1706,6 +1678,21 @@ def test_teacher_reads_a_private_test_window_but_not_chat_around_it(
         texts = [message["text"] for message in transcripts[0]["messages"]]  # type: ignore[index]
         assert "我不知道" in texts and "已记录你的回答。" in texts
         assert "随便聊聊" not in texts
+        # An abandoned attempt is its own record and stays out unless asked for.
+        attempt = db.get(AssessmentAttempt, transcripts[0]["attempt_id"])
+        assert attempt is not None
+        attempt.status = "abandoned"
+        attempt.abandoned_at = datetime.now(UTC)
+        db.flush()
+        assert (
+            read_attempt_transcripts(db, teacher, course_id=COURSE_ID, activity_id=activity_id)
+            == []
+        )
+        kept = read_attempt_transcripts(
+            db, teacher, course_id=COURSE_ID, activity_id=activity_id, include_abandoned=True
+        )
+        assert [item["attempt_status"] for item in kept] == ["abandoned"]
+        db.rollback()
     # Signing the teacher in rotated this client's session; sign the student back in.
     student_token, _student_csrf = _login(client, "bowen")
     with database.session() as db:
