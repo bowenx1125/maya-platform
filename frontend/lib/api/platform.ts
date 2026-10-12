@@ -362,6 +362,7 @@ export type TeamChatSession = {
   created_at: string;
   title?: string | null;
   pinned_at?: string | null;
+  assessment_stage?: "scoring" | "summarizing" | "completed" | null;
 };
 export type TeamVisibility =
   components["schemas"]["CreateTeamRequest"]["visibility"];

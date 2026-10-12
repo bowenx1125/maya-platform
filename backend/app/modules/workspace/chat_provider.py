@@ -935,11 +935,24 @@ def assessment_safe_reply_text(
         ),
         "assessment.redirect": redirect,
     }
+    progress = context.progress
+    # Every Question of the round is resolved: the server is already scoring,
+    # so nothing is left for the student to submit or say.
+    grading = (
+        context.attempt.status == "in_progress"
+        and progress.question_count > 0
+        and progress.resolved_count >= progress.question_count
+    )
     lines = []
-    if prose and prose.strip():
+    if prose and prose.strip() and not grading:
         lines.append(prose.strip())
     lines.append(labels[result.response_key])
-    progress = context.progress
+    if grading and result.response_key != "assessment.results_pending":
+        lines.append(
+            "本轮题目已全部作答，正在保存并评分，请稍候。"
+            if chinese
+            else "Every question this round is answered. Saving and scoring now."
+        )
     if result.response_key in {"assessment.progress", "assessment.answers"}:
         if chinese:
             lines.append(

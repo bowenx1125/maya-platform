@@ -756,6 +756,10 @@ const enMessages = {
   teamPartialResult:
     "Some members could not reply. Successful replies are kept.",
   teamCheckStatus: "Check Team Chat status",
+  assessmentStageScoring: "Answers saved · scoring",
+  assessmentStageSummarizing: "Scored · writing the summary",
+  assessmentStageCompleted: "Scoring finished · the test is complete",
+  assessmentProgress: "Test progress",
   teamResume: "Resume",
   teamTurnPending:
     "This Team turn is still running. Check its status to resume updates.",
@@ -1461,6 +1465,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamAllMembers: "All",
   teamPartialResult: "部分成员未能回复；已成功的回复已保留。",
   teamCheckStatus: "检查 Team 聊天状态",
+  assessmentStageScoring: "作答已保存 · 正在评分",
+  assessmentStageSummarizing: "评分完成 · 正在生成总结",
+  assessmentStageCompleted: "评分完毕 · 正式测评结束",
+  assessmentProgress: "测评进度",
   teamResume: "继续",
   teamTurnPending: "Team 回复仍在运行。请检查状态以恢复更新。",
 };

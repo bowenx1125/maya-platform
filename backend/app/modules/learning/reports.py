@@ -674,3 +674,69 @@ __all__ = [
     "list_authorized_assessment_activities",
     "read_assessment_activity_aggregate",
 ]
+
+
+def read_attempt_transcripts(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+    activity_id: str,
+    learner_ref: str | None = None,
+) -> list[dict[str, object]]:
+    """The raw messages of each formal attempt, from its start to its end.
+
+    Owner decision (2026-10-12): the course teacher may read the whole test
+    window of a student's formal attempt, Private Chats included. Messages
+    before the start or after the end are ordinary chat and stay out.
+    """
+
+    from app.modules.workspace.models import (
+        ConversationParticipant,
+        ConversationTurn,
+        TeamTurnResult,
+    )
+
+    activity = _validated_activity(db, actor, course_id=course_id, activity_id=activity_id)
+    transcripts: list[dict[str, object]] = []
+    for attempt in _eligible_attempts(db, activity):
+        ref = f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}"
+        if learner_ref is not None and learner_ref != ref:
+            continue
+        user = db.get(User, attempt.actor_user_id)
+        ended_at = attempt.completed_at or attempt.abandoned_at
+        statement = select(ConversationTurn).where(
+            ConversationTurn.conversation_id == attempt.source_conversation_id,
+            ConversationTurn.created_at >= attempt.started_at,
+        )
+        if ended_at is not None:
+            statement = statement.where(ConversationTurn.created_at <= ended_at)
+        messages: list[dict[str, str]] = []
+        for turn in db.scalars(statement.order_by(ConversationTurn.position)):
+            if turn.user_text:
+                messages.append({"speaker": "student", "text": turn.user_text})
+            for result, participant in db.execute(
+                select(TeamTurnResult, ConversationParticipant)
+                .join(
+                    ConversationParticipant,
+                    ConversationParticipant.id == TeamTurnResult.participant_id,
+                )
+                .where(TeamTurnResult.turn_id == turn.id, TeamTurnResult.state == "ready")
+                .order_by(TeamTurnResult.ordinal)
+            ):
+                if result.assistant_text:
+                    messages.append(
+                        {"speaker": participant.display_name, "text": result.assistant_text}
+                    )
+        transcripts.append(
+            {
+                "student_name": user.display_name if user is not None else "Student",
+                "learner_ref": ref,
+                "attempt_status": attempt.status,
+                "chat_visibility": attempt.chat_visibility,
+                "started_at": attempt.started_at.isoformat(),
+                "ended_at": ended_at.isoformat() if ended_at is not None else None,
+                "messages": messages,
+            }
+        )
+    return transcripts

@@ -637,6 +637,15 @@ def _saved_chat_history(
     return history
 
 
+def _wake_assessment_finalizer(request: Request, conversation_id: str) -> None:
+    """After a Team turn, finish a formal attempt whose last answer is in."""
+
+    finalizer = getattr(request.app.state, "assessment_finalizer", None)
+    wake = getattr(finalizer, "wake", None)
+    if callable(wake):
+        wake(conversation_id)
+
+
 def _knowledge_generation_waker(request: Request) -> Callable[[str], None] | None:
     task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
     wake = getattr(task_manager, "wake", None)
@@ -1494,6 +1503,7 @@ def send_message(
             actor_context=context,
         )
         execute_team_turn_with_natural_assessment_resume(database.session_factory, claim)
+        _wake_assessment_finalizer(request, row.id)
         db.expire_all()
         return session_view(
             db, owned_conversation(db, context, str(conversation_id)), context, settings
@@ -1595,7 +1605,14 @@ def stream_message(
         set_committed_value(context.session, "id_hash", actor_session_id_hash)
         db.close()
         return StreamingResponse(
-            stream_team_events(database, owned_id, actor_id, claim, last_event_id),
+            stream_team_events(
+                database,
+                owned_id,
+                actor_id,
+                claim,
+                last_event_id,
+                on_finished=lambda: _wake_assessment_finalizer(request, owned_id),
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
@@ -1776,6 +1793,7 @@ def resume_team_conversation_turn(
         actor_context=context,
     )
     execute_team_turn(database.session_factory, claim)
+    _wake_assessment_finalizer(request, row.id)
     db.expire_all()
     return session_view(db, owned_conversation(db, context, row.id), context, settings)
 

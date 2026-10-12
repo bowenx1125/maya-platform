@@ -1525,3 +1525,172 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         and b"Internal only" not in wire
         for wire in wires
     )
+
+
+def test_last_answer_starts_the_scorer_once_without_a_student_message(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    # After the last answer the student sends nothing more. The server must
+    # ask the scorer itself, and must not retry a step that saved nothing.
+    from app.modules.learning import finalizer
+
+    _app, _database, settings = app_bundle
+    token, csrf = _login(client, "bowen")
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        _recipe_id, team_id, *_rest = _create_formal_conversation(db, visibility="private")
+    conversation_id = _create(client, csrf, {"kind": "maya_team", "team_id": team_id})["id"]
+    claims: list[str] = []
+
+    def run_without_saving(factory: Any, claim: runtime.TeamClaim) -> None:
+        with factory() as db:
+            turn = db.get(ConversationTurn, claim.turn_id)
+            assert turn is not None and turn.user_text == ""
+            result = db.scalar(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id))
+            assert result is not None
+            claims.append(result.participant_id)
+            result.state = "failed"
+            turn.state = "failed"
+            row = db.get(Conversation, turn.conversation_id)
+            assert row is not None
+            row.active_request_id = None
+            db.commit()
+
+    monkeypatch.setattr(runtime, "execute_team_turn", run_without_saving)
+    with database.session() as db:
+        actor = get_auth_context(db, settings, token)
+        assert actor is not None
+        context = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert context is not None
+        while context.current_question is not None:
+            question = context.current_question
+            # Questions remain: nothing is run yet.
+            finalizer.drive_assessment(database.session_factory, settings, conversation_id)
+            assert claims == []
+            mark_attempt_question_presented(
+                db, actor, conversation_id, question_version_id=question.question_version_id
+            )
+            recorded = apply_assessment_decision(
+                db,
+                actor,
+                conversation_id,
+                user_message="我不知道",
+                decision=AssessmentRuntimeDecision(
+                    client_event_id=uuid4(),
+                    classification="answer_only",
+                    answer_span="我不知道",
+                    question_version_id=question.question_version_id,
+                ),
+            )
+            assert recorded is not None
+            context = recorded.context
+        db.commit()
+        activity = db.scalar(
+            select(AssessmentActivity).where(AssessmentActivity.team_id == team_id)
+        )
+        assert activity is not None
+        evaluator = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id,
+                ConversationParticipant.team_member_id == activity.evaluator_team_member_id,
+            )
+        )
+        assert evaluator is not None
+
+    finalizer.drive_assessment(database.session_factory, settings, conversation_id)
+    assert claims == [evaluator.id]
+
+
+def test_teacher_reads_a_private_test_window_but_not_chat_around_it(
+    client: TestClient, database: Any, app_bundle: Any
+) -> None:
+    # Owner decision (2026-10-12): the course teacher may read the raw messages
+    # of a formal test, Private Chats included; chat outside the test is not.
+    from app.modules.learning.reports import read_attempt_transcripts
+
+    _app, _database, settings = app_bundle
+    token, csrf = _login(client, "bowen")
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        _recipe_id, team_id, *_rest = _create_formal_conversation(db, visibility="private")
+    conversation_id = _create(client, csrf, {"kind": "maya_team", "team_id": team_id})["id"]
+
+    def add_turn(db: Any, text: str, reply: str, when: datetime) -> None:
+        row = db.get(Conversation, conversation_id)
+        leader = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id,
+                ConversationParticipant.is_leader.is_(True),
+            )
+        )
+        turn_id = str(uuid4())
+        row.revision += 1
+        db.add(
+            ConversationTurn(
+                id=turn_id,
+                conversation_id=conversation_id,
+                position=row.revision,
+                user_text=text,
+                assistant_text=None,
+                sources_json="[]",
+                mode="mock",
+                state="ready",
+                routing_json="{}",
+                request_hash="c" * 64,
+                claim_token=str(uuid4()),
+                created_at=when,
+            )
+        )
+        db.flush()
+        db.add(
+            TeamTurnResult(
+                id=str(uuid4()),
+                turn_id=turn_id,
+                conversation_id=conversation_id,
+                participant_id=leader.id,
+                ordinal=0,
+                state="ready",
+                assistant_text=reply,
+                sources_json="[]",
+                created_at=when,
+                completed_at=when,
+            )
+        )
+        db.flush()
+
+    with database.session() as db:
+        add_turn(db, "随便聊聊", "好的", datetime(2026, 1, 1, tzinfo=UTC))
+        actor = get_auth_context(db, settings, token)
+        assert actor is not None
+        assert start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        add_turn(db, "我不知道", "已记录你的回答。", datetime.now(UTC))
+        db.commit()
+        activity = db.scalar(
+            select(AssessmentActivity).where(AssessmentActivity.team_id == team_id)
+        )
+        assert activity is not None
+        activity_id = activity.id
+
+    teacher_token, _teacher_csrf = _login(client, "maya")
+    with database.session() as db:
+        teacher = get_auth_context(db, settings, teacher_token)
+        assert teacher is not None
+        transcripts = read_attempt_transcripts(
+            db, teacher, course_id=COURSE_ID, activity_id=activity_id
+        )
+        assert len(transcripts) == 1
+        assert transcripts[0]["chat_visibility"] == "private"
+        texts = [message["text"] for message in transcripts[0]["messages"]]  # type: ignore[index]
+        assert "我不知道" in texts and "已记录你的回答。" in texts
+        assert "随便聊聊" not in texts
+    # Signing the teacher in rotated this client's session; sign the student back in.
+    student_token, _student_csrf = _login(client, "bowen")
+    with database.session() as db:
+        student = get_auth_context(db, settings, student_token)
+        assert student is not None
+        try:
+            read_attempt_transcripts(db, student, course_id=COURSE_ID, activity_id=activity_id)
+        except Exception as exc:
+            assert getattr(exc, "status_code", None) == 404
+        else:
+            raise AssertionError("A student must not read test transcripts.")

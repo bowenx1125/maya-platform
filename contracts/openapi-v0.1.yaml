@@ -11915,6 +11915,16 @@ components:
     TeamChatSession:
       additionalProperties: false
       properties:
+        assessment_stage:
+          enum:
+          - scoring
+          - summarizing
+          - completed
+          - null
+          title: Assessment Stage
+          type:
+          - string
+          - 'null'
         can_send:
           default: false
           title: Can Send

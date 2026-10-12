@@ -312,6 +312,7 @@ async def stream_team_events(
     actor_id: str,
     claim: TeamClaim,
     after_sequence: int = 0,
+    on_finished: Callable[[], None] | None = None,
 ) -> AsyncIterator[bytes]:
     from .team_runtime import (
         execute_team_turn_with_natural_assessment_resume,
@@ -339,6 +340,9 @@ async def stream_team_events(
         )
         _TEAM_BACKGROUND_RUNS.add(task)
         task.add_done_callback(_TEAM_BACKGROUND_RUNS.discard)
+        if on_finished is not None:
+            # Runs even if the browser left; the run itself is not tied to it.
+            task.add_done_callback(lambda _task: on_finished())
     while True:
         events, state, active = await asyncio.to_thread(poll)
         for sequence, kind, payload in events:

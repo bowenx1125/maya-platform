@@ -5097,6 +5097,11 @@ export interface components {
         /** TeamChatSession */
         TeamChatSession: {
             /**
+             * Assessment Stage
+             * @enum {string|null}
+             */
+            assessment_stage?: "scoring" | "summarizing" | "completed" | null;
+            /**
              * Can Send
              * @default false
              */

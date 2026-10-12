@@ -71,15 +71,15 @@ def test_actual_registry_mounts_learning_tools_and_serializes_formal_reads(
             "read_learning_boundary",
             "update_learning_boundary",
         } <= mounted
-        assert {
+        teacher_only = {
             "list_course_assessments",
             "read_course_statistics",
+            "read_student_test_transcripts",
             "create_course_report",
-        } <= registry.keys()
-        assert (
-            not {"list_course_assessments", "read_course_statistics", "create_course_report"}
-            & mounted
-        )
+        }
+        assert teacher_only <= registry.keys()
+        # A student never gets the teacher's reads, including test transcripts.
+        assert not teacher_only & mounted
         row = db.get(Conversation, conversation_id)
         assert row is not None
         identity = ToolCallIdentity(

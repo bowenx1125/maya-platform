@@ -67,21 +67,20 @@ removes only the authorized revision after commit; sent calls cannot be retracte
 Remake/recovery preserves charged/accepted/unknown receipts and explicit retry
 identity. Audio fallback never bypasses supplier-download SSRF protection.
 
-Topic and optional Background are separate (0026). Current default Rulesets are
-`backend/app/modules/debates/default_rules/{zh,en}.md`; language and teaching guidance
-are editable/frozen Ruleset content, not hidden Chat instructions. Old protocols
-were removed; immutable legacy IDs/data remain. Report Markdown and sources stay
-complete. Classes/config/3D work owned by other authorized contributors is preserved.
+Topic and Background are separate (0026). Default Rulesets live in
+`backend/app/modules/debates/default_rules/{zh,en}.md` as editable, frozen content,
+not hidden Chat instructions. Legacy IDs/data remain; Report Markdown/sources stay
+complete; other contributors' Classes/config/3D work is preserved.
 
 Single-course Demo registration and usernames/group normalization retain collision
 checks (0029). Teacher Enter keeps the Teacher role and resource ACL; restarting
 catalog sync preserves memberships. Password changes keep the current session and
-revoke other sessions. Voice clones stay uploader-owned; live classroom access does
-not grant student generation/control. No usage reset or real speech acceptance is
-implied. Next.js/FastAPI/SQLite/files/Caddy share localhost:8080.
+revoke other sessions. Only a voice's creator manages it; live classroom access does
+not grant student generation/control. Next.js/FastAPI/SQLite/files/Caddy share
+localhost:8080.
 
-Agent.md and RAG have no artificial total authored-text caps. Supplier embedding
-batches retain their supported shape (10 items/30,000 estimated tokens). 0031
+Agent.md and RAG have no authored-text caps. Embedding batches keep the supplier
+shape (10 items/30,000 estimated tokens). 0031
 Agent tombstones preserve historical Chats/snapshots. Chats is text-only, with full
 history, current-message language and no hidden locale/language suffix; Voice/Debate
 speech is separate. Unknown acceptance affects one request, not later sends.
@@ -93,10 +92,8 @@ successful generation/report. .env updates require scoped recreation; backup and
 sending/job/turn inspection precede deployment. Other services and private config
 must remain unchanged.
 
-Historical browser/provider results remain in Git history and are not current
-v1.4 acceptance. Prior observed Voice/Report failures and billed calls cannot be
-silently retried or converted into success. Real RAG quality/classroom load/voice
-quality remain separately unverified.徐伯闻 owns teaching content, 古月 3D/voice/TTS,
+Historical results stay in Git history, not current acceptance; billed failures are
+never silently retried. Real RAG/classroom load/voice quality remain unverified.徐伯闻 owns teaching content, 古月 3D/voice/TTS,
 Kaikai accounts/student UI. [Architecture](ARCHITECTURE.md), [contracts](contracts/),
 [ADRs](adr/) retain the implementation agreements.
 
@@ -165,7 +162,7 @@ page whose Done creates a Chat only its owner reads. Brainform has no
 disclosure entry; operator `PROVIDER_STANDING_CONSENT` covers classroom/production,
 otherwise Teachers confirm at the unlinked approvals route. Teacher Accounts (read-only
 Public group visit, temporary membership removed on return) and Debates are restored.
-Reuse sidebar New/Back/Done; New bright when useful/dim otherwise, Back/Done only contextual. Voice
+Sidebar New/Back/Done; Back/Done only contextual. Voice
 New is module-right exception; Home Voices Guide goes directly to its new form.
 Colleague Mayaform Home preserved except Components, Guide destinations and data-use
 entry moved to Brainform. All decorative heading explanations become immediate help;
@@ -234,9 +231,10 @@ Colleague line `15f5450`: pose
 `e9b000a` keeps one canvas; preset voice `b8f65e7` is `0056` and Chat stays
 text-only; TTS bar `054f420` and the revert were not taken.
 
-October 9: Brainform, Chatform and Studyform use the Debates card. Local browser imported the week 6–10 PDF as RAG and published Maya Team Keynotes from Studyform. A real Public Keynotes turn answered from the keynotes (two charged `llm_agent_chat` successes). An earlier single-Agent turn was also charged once. A Private Keynotes turn called `read_memory` and paused with `team_no_progress`. Unseeable requests get 看不到。; missing functions get 做不到。 A complete published recipe opens with the Leader whoever opens the Chat; without it the Team waits for the first message. No @ asks only the Leader. A Knowledge update deletes an unfinished attempt; completed attempts stay. Team dispatch no longer fails on SQLite `database is locked`: the session commits and rolls back before `BEGIN IMMEDIATE`. Tool classes stay permission-based: students get Public+Student, teachers get Public+Teacher. A student-published public Agent is for that group and teachers; a teacher-published public Agent is for the course; private is the owner. Teachers have no Live. Brainform shows 课后诊断题, six editable questions, used by Maya Team 课后诊断. The publishing account opens Agent.md, Brainform, Avatar and Voice, with Back and Done. Anyone else gets that page read-only: view or download Agent.md and attached Brainform, an eye opens rendered Markdown, Avatar is view-only, and Voice, Done and New are absent. Done still creates or publishes only for the publisher. Back does not save a draft. Teams are one Studyform list. Private or Public is chosen only when the Team is created. Private stays with the owner. A student Public Team is read-only for that group and teachers. A teacher Public Team is read-only for the course. A reader sees the saved name, members, Leader and Knowledge with those controls disabled, and no Done. Chatform lists Teams once. Brainform Memory opens a new chat. Notes belong to that account and the speaking Agent, stay out of Debates, and are separate from assessment records. Deleting a Team or its Agents leaves that chat in Chatform, read-only, noted under its last message. Card room `0058`: Online tables by 4-digit code. Students rename themselves; Accounts folds Removed; new accounts get one tour. `https://app.mayaform.net/` serves `1f34fea` (HTTP 200, backend ready 200, healthy, schema `0057`, backup20261011T045859Z integrity ok).
+October 9: Brainform, Chatform and Studyform use the Debates card. Local browser imported the week 6–10 PDF as RAG and published Maya Team Keynotes from Studyform. A real Public Keynotes turn answered from the keynotes (two charged `llm_agent_chat` successes). An earlier single-Agent turn was also charged once. A Private Keynotes turn called `read_memory` and paused with `team_no_progress`. Unseeable requests get 看不到。; missing functions get 做不到。 A complete published recipe opens with the Leader whoever opens the Chat; without it the Team waits for the first message. No @ asks only the Leader. A Knowledge update deletes an unfinished attempt; completed attempts stay. Team dispatch no longer fails on SQLite `database is locked`: the session commits and rolls back before `BEGIN IMMEDIATE`. Tool classes stay permission-based: students get Public+Student, teachers get Public+Teacher. A student-published public Agent is for that group and teachers; a teacher-published public Agent is for the course; private is the owner. Teachers have no Live. Brainform shows 课后诊断题, six editable questions, used by Maya Team 课后诊断. The publishing account opens Agent.md, Brainform, Avatar and Voice, with Back and Done. Anyone else gets that page read-only: view or download Agent.md and attached Brainform, an eye opens rendered Markdown, Avatar is view-only, and Voice, Done and New are absent. Done publishes only for the publisher; Back saves no draft. Teams are one Studyform list. Private or Public is chosen only when the Team is created. Private stays with the owner. A student Public Team is read-only for that group and teachers. A teacher Public Team is read-only for the course. A reader sees the saved name, members, Leader and Knowledge with those controls disabled, and no Done. Chatform lists Teams once. Brainform Memory opens a new chat. Notes belong to that account and the speaking Agent, stay out of Debates, and are separate from assessment records. Deleting a Team or its Agents leaves that chat in Chatform, read-only, noted under its last message. Card room `0058`: Online tables by 4-digit code. Students rename themselves; Accounts folds Removed; new accounts get one tour. `https://app.mayaform.net/` serves `1f34fea` (HTTP 200, backend ready 200, healthy, schema `0057`, backup20261011T045859Z integrity ok).
 
 October 11: PR #50 (`f6b1338`) merged onto `762a810` as `556fdc5`. Reports count old Private formal attempts. Formal answers survive a textless Leader reply or flat Tool arguments. Team pills read V1.0; green Public, gray Private. RAG rows show only a checkbox and name. Errors name what was deleted, close with X and float bottom-right. Done keeps the Chat it created. Double-click or F2 renames a history Chat; a pin beside delete keeps it on top (`0059`). RAG is uploaded only in its Agent and takes that Agent's Private or Public, fixed at creation; teachers read a group's Brainform on an Accounts visit. `0060` soft-retires all prior Agents, Chats, RAG, Teams, Knowledge, Debates, attempts and notes (downgrade restores); only the Demo keeps Laozi, Plato and Socrates. Not deployed; the operator deploys.
 
 October 12: From main 4d0c981; mock Demo only, 0 Provider calls; user deploys. Debates 404: setup required a group that teacher Studyform Agents lack; 0061 makes debate_participants.group_id nullable (FK-checked rebuild); setup and generation use the Agent's course. Lost assessment answers: the Leader replied in prose (assessment_action_required); the first assessment model call now forces its action tool (not revoked-source). User decision: every Public Team, Maya Teams included, takes only Public Agents (team_member_private); Private Teams mix both. Deleting an Agent hides its own unshared RAG; Brainform lists no Private RAG. Removed accounts leave course/group member lists; Accounts leads with display name. Enter never sends. Pre-Done RAG is listed; Private tiles show versions; Team card is fixed-width; zh round caps 50/50/50/100. Recreating a deleted 苏格拉底 did not reproduce. Local DOCX/PDF ingest tests fail on 4d0c981 too.
 0062 adds teacher personal voices (personal scope, owner-only); students choose groupmates' ready voices but manage only their own; a missing voice never blocks publishing or Debates. 我不知道/忘了 is a scored answer, not a skip.
+After a round's last answer the server runs the scorer then summarizer (real provider; a step that saved nothing is not retried). Team sessions expose assessment_stage for the progress bar; the finished reply lists points/feedback and the summary. Teachers read raw test messages, Private included. The server appends report links. Team sends show message and loading at once.

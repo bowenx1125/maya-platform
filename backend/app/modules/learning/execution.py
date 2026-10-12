@@ -1825,3 +1825,61 @@ __all__ = [
     "write_formal_assessment",
     "write_formal_boundary",
 ]
+
+
+def student_result_lines(db: Session, attempt_id: str, user_texts: list[str]) -> list[str]:
+    """The finished attempt's saved results, as the student sees them.
+
+    Owner decision (2026-10-12): after completion the student sees each
+    Question's points and feedback and the summary. Nothing is generated here;
+    an attempt without its saved evaluation shows no result lines.
+    """
+
+    from app.modules.workspace.chat_provider import prefers_chinese
+
+    attempt = db.get(AssessmentAttempt, attempt_id)
+    if attempt is None or attempt.status != "completed":
+        return []
+    evaluation = _assessment_for_attempt(db, attempt)
+    if evaluation is None:
+        return []
+    chinese = prefers_chinese(user_texts)
+    content = AssessmentEvaluationContent.model_validate_json(evaluation[1].content_json)
+    question_rows = _current_attempt_question_rows(db, attempt)
+    offset = question_rows[0].ordinal if question_rows else 0
+    totals: dict[int, float | None] = {}
+    for row in question_rows:
+        total = None
+        if row.content_json:
+            try:
+                total = QuestionContent.model_validate_json(row.content_json).rubric.total_points
+            except ValueError:
+                total = None
+        totals[row.ordinal - offset] = total
+    lines = ["你的结果：" if chinese else "Your results:"]
+    for item in sorted(content.questions, key=lambda entry: entry.question_ordinal):
+        number = item.question_ordinal + 1
+        label = f"第 {number} 题" if chinese else f"Question {number}"
+        if item.points_awarded is not None:
+            total = totals.get(item.question_ordinal)
+            score = f"{item.points_awarded:g}" + (f"/{total:g}" if total is not None else "")
+            label += f"：{score} 分" if chinese else f": {score} points"
+        lines.append(f"{label}\n{item.feedback}")
+    lines.append(content.overall_feedback)
+    boundary = _boundary_for_attempt(db, attempt)
+    if boundary is not None:
+        summary = BoundarySummaryContent.model_validate_json(boundary[1].content_json)
+        lines.append(("总结：" if chinese else "Summary: ") + summary.summary)
+        for title_zh, title_en, values in (
+            ("掌握较好", "Strengths", summary.strengths),
+            ("值得加强", "Areas to explore", summary.areas_to_explore),
+        ):
+            if values:
+                lines.append(
+                    f"{title_zh}：" + "；".join(values)
+                    if chinese
+                    else f"{title_en}: " + "; ".join(values)
+                )
+        if summary.next_step:
+            lines.append(("下一步：" if chinese else "Next step: ") + summary.next_step)
+    return lines

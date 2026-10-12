@@ -368,6 +368,43 @@ def frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSelection
     )
 
 
+def _assessment_stage(
+    db: Session, row: Conversation
+) -> Literal["scoring", "summarizing", "completed"] | None:
+    from app.modules.learning.finalizer import _next_purpose
+    from app.modules.learning.models import AssessmentAttempt
+
+    attempt = db.scalar(
+        select(AssessmentAttempt)
+        .where(
+            AssessmentAttempt.source_conversation_id == row.id,
+            AssessmentAttempt.actor_user_id == row.user_id,
+        )
+        .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id.desc())
+        .limit(1)
+    )
+    if attempt is None:
+        return None
+    if attempt.status == "in_progress":
+        purpose = _next_purpose(db, attempt)
+        if purpose == "assessment_evaluate":
+            return "scoring"
+        return "summarizing" if purpose == "boundary_summarize" else None
+    if attempt.status != "completed" or attempt.completed_at is None:
+        return None
+    # The finished bar stays until the student writes again.
+    later_message = db.scalar(
+        select(ConversationTurn.id)
+        .where(
+            ConversationTurn.conversation_id == row.id,
+            ConversationTurn.user_text != "",
+            ConversationTurn.created_at > attempt.completed_at,
+        )
+        .limit(1)
+    )
+    return None if later_message is not None else "completed"
+
+
 def team_session_view(
     db: Session,
     row: Conversation,
@@ -434,6 +471,7 @@ def team_session_view(
         created_at=row.created_at,
         title=row.title,
         pinned_at=row.pinned_at,
+        assessment_stage=_assessment_stage(db, row),
         read_only=row.user_id != context.user.id,
         can_send=(
             runtime_available

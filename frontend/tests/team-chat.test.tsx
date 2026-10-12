@@ -1070,6 +1070,59 @@ describe("Chatform", () => {
     expect(screen.queryByText("This Team member could not reply.")).toBeNull();
   });
 
+  it("shows a sent Team message at once with its loading state", async () => {
+    state.api.streamTeamConversation.mockImplementation(
+      () => new Promise(() => {}),
+    );
+    renderChats();
+    await startMayaTeamChat("还在等回复");
+
+    const log = await screen.findByRole("log");
+    expect(await within(log).findByText("还在等回复")).toBeTruthy();
+    expect(within(log).getByRole("status").textContent).toContain("Loading");
+    const box = screen.getByRole("textbox", {
+      name: "Message",
+    }) as HTMLTextAreaElement;
+    expect(box.value).toBe("");
+  });
+
+  it("shows the formal test progress and checks until scoring finishes", async () => {
+    const scoring = {
+      ...teamSession,
+      assessment_stage: "scoring",
+      turns: [
+        {
+          id: "last-answer",
+          user_text: "B",
+          state: "ready",
+          member_results: [],
+        },
+      ],
+    };
+    const finished = { ...scoring, assessment_stage: "completed" };
+    state.api.conversationSessions.mockResolvedValue([scoring]);
+    state.api.conversationSession
+      .mockResolvedValueOnce(scoring)
+      .mockResolvedValue(finished);
+    renderChats();
+    fireEvent.click(await screen.findByRole("button", { name: "B" }));
+    const bar = await screen.findByRole("progressbar", {
+      name: "Test progress",
+    });
+    expect(bar.getAttribute("aria-valuenow")).toBe("40");
+    expect(screen.getByText("Answers saved · scoring · 40%")).toBeTruthy();
+    await waitFor(
+      () =>
+        expect(
+          screen.getByRole("progressbar").getAttribute("aria-valuenow"),
+        ).toBe("100"),
+      { timeout: 4000 },
+    );
+    expect(
+      screen.getByText("Scoring finished · the test is complete · 100%"),
+    ).toBeTruthy();
+  });
+
   it("shows no privacy or target controls on an existing Chat", async () => {
     const history = {
       ...teamSession,

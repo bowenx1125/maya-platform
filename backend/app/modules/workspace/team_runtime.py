@@ -565,6 +565,94 @@ def claim_team_turn(
     return TeamClaim(request_id, token, True, settings, actor_context)
 
 
+ASSESSMENT_EXECUTOR_RUN_MESSAGE = "Run the assigned assessment task now."
+
+
+def claim_assessment_executor_turn(
+    db: Session,
+    settings: Settings,
+    *,
+    conversation_id: str,
+    participant_id: str,
+    actor_context: AuthContext,
+) -> TeamClaim | None:
+    """Open a server-run turn for one assessment executor.
+
+    The student sends nothing after the last answer, so the server itself asks
+    the scorer and then the summarizer. The turn has no student text: the chat
+    shows only the executor's student-safe reply, and team history skips it.
+    """
+
+    _begin(db)
+    row = _owner(db, conversation_id, actor_context.user.id)
+    if row.active_request_id is not None:
+        db.rollback()
+        return None
+    participant = db.get(ConversationParticipant, participant_id)
+    if participant is None or participant.conversation_id != row.id:
+        raise not_found()
+    _validate_members(db, row, [participant])
+    if settings.llm_provider not in {"mock", "dashscope"}:
+        raise conflict(
+            "team_chat_runtime_unavailable", "This Team routing mode is not available yet."
+        )
+    request_id = str(uuid4())
+    route_json = _canonical(
+        TeamRouting(mode="selected", participant_ids=[UUID(participant.id)]).model_dump(mode="json")
+    )
+    request_hash = hashlib.sha256(
+        _canonical(
+            {"conversation_id": row.id, "assessment_executor": participant.id, "id": request_id}
+        ).encode()
+    ).hexdigest()
+    changed = db.execute(
+        update(Conversation)
+        .where(
+            Conversation.id == row.id,
+            Conversation.revision == row.revision,
+            Conversation.active_request_id.is_(None),
+        )
+        .values(active_request_id=request_id, revision=Conversation.revision + 1)
+    )
+    if getattr(changed, "rowcount", 0) != 1:
+        db.rollback()
+        return None
+    now = datetime.now(UTC)
+    token = str(uuid4())
+    turn = ConversationTurn(
+        id=request_id,
+        conversation_id=row.id,
+        position=row.revision + 1,
+        user_text="",
+        assistant_text=None,
+        sources_json="[]",
+        mode="real" if settings.llm_provider == "dashscope" else "mock",
+        state="pending",
+        routing_json=route_json,
+        request_hash=request_hash,
+        claim_token=token,
+        created_at=now,
+    )
+    db.add(turn)
+    db.flush()
+    db.add(
+        TeamTurnResult(
+            id=str(uuid4()),
+            turn_id=turn.id,
+            conversation_id=row.id,
+            participant_id=participant.id,
+            ordinal=0,
+            state="pending",
+            sources_json="[]",
+            created_at=now,
+        )
+    )
+    db.flush()
+    _append_event(db, turn, "turn_started")
+    db.commit()
+    return TeamClaim(request_id, token, True, settings, actor_context)
+
+
 def pause_team_turn(
     db: Session,
     *,
@@ -929,6 +1017,9 @@ def _start_member(
             assessment_revoked_scope,
         ) = _assessment_request_context(db, actor_context, row, turn, participant, result_id)
         assessment_source_revoked = assessment_revoked_scope is not None
+        if not message and assessment_purpose is not None:
+            # A server-run executor turn carries no student text.
+            message = ASSESSMENT_EXECUTOR_RUN_MESSAGE
         if assessment_purpose is None and saved_protocol is not None:
             assessment_active = True
         if assessment_active:
@@ -1326,10 +1417,16 @@ def settle_member(
                 if assessment_purpose == "assessment_evaluate":
                     from .chat_provider import conversation_user_texts, prefers_chinese
 
+                    chinese = prefers_chinese(conversation_user_texts(db, row.id))
                     reply = MemberReply(
-                        "本轮回答已评估。"
-                        if prefers_chinese(conversation_user_texts(db, row.id))
-                        else "This round's answers have been reviewed."
+                        "\n\n".join(
+                            [
+                                "本轮回答已评估。"
+                                if chinese
+                                else "This round's answers have been reviewed.",
+                                *_opened_follow_up_lines(db, row, chinese),
+                            ]
+                        )
                     )
                 else:
                     reply = MemberReply(_assessment_executor_completion_text(assessment_purpose))
@@ -1419,7 +1516,9 @@ def settle_member(
         else:
             assert reply is not None
             result.state = "ready"
-            result.assistant_text = reply.text
+            result.assistant_text = "\n\n".join(
+                [reply.text, *_report_download_links(db, turn, result)]
+            )
             result.sources_json = _canonical(
                 [source.model_dump(mode="json") for source in reply.sources]
             )
@@ -1427,6 +1526,46 @@ def settle_member(
         _append_event(db, turn, "member_result", result.id)
         _finish_run(db, row, turn)
     return True
+
+
+def _report_download_links(
+    db: Session, turn: ConversationTurn, result: TeamTurnResult
+) -> list[str]:
+    """Links to reports this reply saved, written by the server.
+
+    A model copying a download path invents tokens and breaks the link, so the
+    tool tells it not to write one and the real path is appended here.
+    """
+
+    links: list[str] = []
+    for raw in db.scalars(
+        select(RuntimeToolReceipt.result_json)
+        .join(
+            TeamProviderCall,
+            TeamProviderCall.operation_id == RuntimeToolReceipt.model_operation_id,
+        )
+        .where(
+            RuntimeToolReceipt.turn_id == turn.id,
+            RuntimeToolReceipt.tool_name == "create_course_report",
+            TeamProviderCall.result_id == result.id,
+        )
+        .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
+    ):
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        value = payload.get("result") if isinstance(payload, dict) else None
+        path = value.get("download_path") if isinstance(value, dict) else None
+        if (
+            isinstance(payload, dict)
+            and payload.get("ok") is True
+            and isinstance(path, str)
+            and path.startswith("/api/v1/learning/reports/")
+            and path not in links
+        ):
+            links.append(path)
+    return [f"[下载报告 / Download report]({path})" for path in links]
 
 
 def _with_follow_up_question(
@@ -1533,6 +1672,37 @@ _FOLLOW_UP_OPENED_TEXT = (
 )
 
 
+def _opened_follow_up_lines(db: Session, row: Conversation, chinese: bool) -> list[str]:
+    """Show the next round's first Question when this evaluation opened one.
+
+    Nobody else posts it: after the last answer the student sends nothing, so
+    the scorer's reply is where the next round starts.
+    """
+
+    from app.modules.learning.attempts import owner_attempt_context
+
+    attempt_id = db.scalar(
+        select(AssessmentAttempt.id).where(
+            AssessmentAttempt.source_conversation_id == row.id,
+            AssessmentAttempt.actor_user_id == row.user_id,
+            AssessmentAttempt.status == "in_progress",
+        )
+    )
+    if attempt_id is None:
+        return []
+    context = owner_attempt_context(db, row.user_id, row.id, attempt_id)
+    if context is None or context.current_question is None:
+        return []
+    question = context.current_question
+    ordinal = question.ordinal + 1
+    return [
+        "下面是追问。" if chinese else "Next, a follow-up question.",
+        f"第 {ordinal} 题：{question.prompt}"
+        if chinese
+        else f"Question {ordinal}: {question.prompt}",
+    ]
+
+
 def _assessment_executor_completion_text(
     purpose: Literal["assessment_evaluate", "boundary_summarize"],
 ) -> str:
@@ -1636,10 +1806,16 @@ def settle_completed_boundary_tool_call(
     if result.state != "running":
         raise conflict("tool_run_inactive", "The Boundary executor is unavailable.")
     result.state = "ready"
+    from app.modules.learning.execution import student_result_lines
+
     from .chat_provider import assessment_safe_reply_text, conversation_user_texts
 
-    result.assistant_text = assessment_safe_reply_text(
-        completion, conversation_user_texts(db, row.id)
+    user_texts = conversation_user_texts(db, row.id)
+    result.assistant_text = "\n\n".join(
+        [
+            assessment_safe_reply_text(completion, user_texts),
+            *student_result_lines(db, str(completion.context.attempt.id), user_texts),
+        ]
     )
     result.sources_json = "[]"
     result.safe_error_code = None

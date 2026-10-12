@@ -773,3 +773,31 @@
     transform: none;
   }
 }
+
+/* Progress of a formal test the server is scoring, under the newest message. */
+.assessmentProgress {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 8px;
+  max-width: 420px;
+}
+.assessmentProgressTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line, #e4e1d9);
+  overflow: hidden;
+}
+.assessmentProgressTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #76591f);
+  transition: width 400ms ease;
+}
+.assessmentProgress[data-stage="completed"] .assessmentProgressTrack > span {
+  background: var(--green, #2d8a68);
+}
+.assessmentProgressLabel {
+  color: var(--muted, #62626a);
+  font-size: 0.85rem;
+}

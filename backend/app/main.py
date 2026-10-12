@@ -67,6 +67,7 @@ from app.modules.knowledge.router import router as knowledge_router
 from app.modules.knowledge_sets.generation import recover_generation_runs_at_startup
 from app.modules.knowledge_sets.router import router as knowledge_sets_router
 from app.modules.knowledge_sets.task_manager import KnowledgeGenerationTaskManager
+from app.modules.learning.finalizer import AssessmentFinalizer
 from app.modules.learning.router import router as learning_router
 from app.modules.org.router import router as org_router
 from app.modules.provider_disclosure.router import (
@@ -186,6 +187,10 @@ def create_app(
         runtime_settings.resolved_data_root,
     )
     playback_tasks = TaskManager()
+    # Reads app.state.settings when it runs, so provider changes apply.
+    assessment_finalizer = AssessmentFinalizer(
+        runtime_database.session_factory, lambda: app.state.settings
+    )
     playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
     selected_tts = tts_provider(runtime_settings)
     report_runtime = build_report_runtime(runtime_settings, runtime_database)
@@ -399,9 +404,11 @@ def create_app(
             report_tasks.schedule_pending()
             if not runtime_settings.is_test:
                 knowledge_generation_tasks.schedule_pending()
+                assessment_finalizer.recover()
         try:
             yield
         finally:
+            assessment_finalizer.close()
             await prewarm.close()
             await report_tasks.close()
             await knowledge_generation_tasks.close()
@@ -415,6 +422,7 @@ def create_app(
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
+    app.state.assessment_finalizer = assessment_finalizer
     app.state.auth_abuse_limiter = AuthAbuseLimiter()
     app.state.playback_service = playback_service
     app.state.interaction_service = interaction_service

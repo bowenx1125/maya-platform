@@ -180,6 +180,44 @@ function isAgentSession(
   return session.entry_kind === undefined || session.entry_kind === "agent";
 }
 
+const ASSESSMENT_STAGE_PERCENT = {
+  scoring: 40,
+  summarizing: 75,
+  completed: 100,
+} as const;
+const ASSESSMENT_STAGE_LABEL = {
+  scoring: "assessmentStageScoring",
+  summarizing: "assessmentStageSummarizing",
+  completed: "assessmentStageCompleted",
+} as const;
+
+/** Shown under the newest message while the server finishes a formal test. */
+function AssessmentProgress({
+  stage,
+}: {
+  stage: keyof typeof ASSESSMENT_STAGE_PERCENT;
+}) {
+  const t = useT();
+  const percent = ASSESSMENT_STAGE_PERCENT[stage];
+  return (
+    <div className={styles.assessmentProgress} data-stage={stage}>
+      <div
+        className={styles.assessmentProgressTrack}
+        role="progressbar"
+        aria-label={t("assessmentProgress")}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+      >
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      <span className={styles.assessmentProgressLabel}>
+        {t(ASSESSMENT_STAGE_LABEL[stage])} · {percent}%
+      </span>
+    </div>
+  );
+}
+
 function isTeamSession(
   session: ConversationSession,
 ): session is TeamChatSession {
@@ -382,6 +420,38 @@ function AgentChatScope({
   const teamRecipientMenuRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
+  // The server scores and summarizes after the last answer, with no message
+  // from the student, so the open Chat keeps checking until it is finished.
+  // So does a turn still running after the student left and came back,
+  // which no stream on this page is following.
+  const finishingTeamId =
+    selectedTeam?.assessment_stage === "scoring" ||
+    selectedTeam?.assessment_stage === "summarizing" ||
+    (!teamBusy && selectedTeam?.turns.at(-1)?.state === "pending")
+      ? selectedTeam.id
+      : null;
+  useEffect(() => {
+    if (!finishingTeamId || typeof api.conversationSession !== "function")
+      return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void api
+        .conversationSession(finishingTeamId)
+        .then((next) => {
+          if (active && isTeamSession(next))
+            setSelectedTeam((current) =>
+              current?.id === next.id ? next : current,
+            );
+        })
+        .catch(() => {
+          // The next tick asks again; sending still reports a lasting failure.
+        });
+    }, 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [api, finishingTeamId]);
   const [teamError, setTeamError] = useState<unknown>(null);
   const [teamLastEventId, setTeamLastEventId] = useState(0);
   const [memoryRetryEntry, setMemoryRetryEntry] =
@@ -1436,6 +1506,27 @@ function AgentChatScope({
       conversationId: session.id,
       body: request,
     };
+    // Like a single-Agent Chat, the message shows at once with its loading
+    // state; streamed member results fill this same turn by its request id.
+    setSelectedTeam((current) =>
+      current?.id === sentSessionId &&
+      !current.turns.some((turn) => turn.id === requestId)
+        ? {
+            ...current,
+            turns: [
+              ...current.turns,
+              {
+                id: requestId,
+                user_text: message,
+                state: "pending",
+                routing,
+                member_results: [],
+              } as unknown as TeamChatTurn,
+            ],
+          }
+        : current,
+    );
+    setTeamDraft("");
     setTeamBusy(true);
     setTeamError(null);
     setTeamLastEventId(0);
@@ -1516,6 +1607,8 @@ function AgentChatScope({
           rememberTeam(refreshed);
           setSelectedTeam(refreshed);
           const turn = refreshed.turns.find((item) => item.id === requestId);
+          // Nothing was saved: give the message back to resend.
+          if (!turn) setTeamDraft(message);
           setTeamError(
             turn?.state === "pending"
               ? new ChatRequestPendingError()
@@ -1530,7 +1623,10 @@ function AgentChatScope({
           );
         }
       } catch {
-        if (sequence === teamSendSequence.current) setTeamError(cause);
+        if (sequence === teamSendSequence.current) {
+          setTeamDraft(message);
+          setTeamError(cause);
+        }
       }
     } finally {
       if (
@@ -2666,6 +2762,9 @@ function AgentChatScope({
                     >
                       {teamErrorText(teamError)}
                     </Notice>
+                  ) : null}
+                  {selectedTeam?.assessment_stage ? (
+                    <AssessmentProgress stage={selectedTeam.assessment_stage} />
                   ) : null}
                   <div ref={endRef} />
                 </div>
