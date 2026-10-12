@@ -55,11 +55,13 @@ def _group_dto(group: Group) -> GroupDTO:
     return GroupDTO(id=UUID(group.id), course_id=UUID(group.course_id), name=group.name)
 
 
+# A removed account reads as deleted to everyone else in the course: its work
+# is kept for a Restore, but it no longer appears as a member anywhere.
 def _members_for_course(db: Session, course_id: str) -> list[Member]:
     rows = db.execute(
         select(User.id, User.display_name, User.avatar, CourseMember.role)
         .join(CourseMember, CourseMember.user_id == User.id)
-        .where(CourseMember.course_id == course_id)
+        .where(CourseMember.course_id == course_id, User.status == "active")
         .order_by(User.id)
     ).all()
     return [
@@ -77,7 +79,7 @@ def _members_for_group(db: Session, group_id: str) -> list[Member]:
     rows = db.execute(
         select(User.id, User.display_name, User.avatar, GroupMember.role)
         .join(GroupMember, GroupMember.user_id == User.id)
-        .where(GroupMember.group_id == group_id)
+        .where(GroupMember.group_id == group_id, User.status == "active")
         .order_by(User.id)
     ).all()
     return [

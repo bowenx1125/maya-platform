@@ -1570,6 +1570,13 @@ button.agent-tile-name {
   min-width: 0;
 }
 
+/* The name is the one students see in their group; the sign-in name sits
+   beside it so the teacher can still match the account. */
+.roster-headline .roster-username {
+  color: var(--muted, #62626a);
+  font-size: 0.85rem;
+}
+
 /* Quieter than the badge's default: at a name's scale, 800 weight on a word
    this small reads as a shout rather than a label. */
 .roster-headline .status-badge {

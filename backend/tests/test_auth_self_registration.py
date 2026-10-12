@@ -243,3 +243,36 @@ def test_a_deactivated_account_says_so(app_factory: Any) -> None:
         )
         assert response.status_code == 401
         assert response.json()["code"] == "account_inactive"
+
+
+def test_a_removed_account_leaves_its_group_for_everyone_else(app_factory: Any) -> None:
+    # Owner decision (2026-10-12): Remove reads as delete. The account's work
+    # is kept for Restore, but classmates no longer see it in their group.
+    app, _database, _settings = app_factory()
+    with TestClient(app) as student:
+        assert register(student).status_code == 201
+    with TestClient(app) as classmate:
+        joined = register(classmate, username="classmate")
+        assert joined.status_code == 201, joined.text
+        group_id = joined.json()["user"]["groups"][0]["group_id"]
+
+        def names() -> set[str]:
+            group = classmate.get(f"/api/v1/groups/{group_id}")
+            assert group.status_code == 200, group.text
+            return {member["display_name"] for member in group.json()["members"]}
+
+        assert "new-student" in names()
+        with TestClient(app) as teacher:
+            _payload, csrf = login(teacher)
+            roster = teacher.get(f"/api/v1/courses/{COURSE_ID}/roster").json()
+            target = next(item for item in roster["entries"] if item["username"] == "new-student")
+            removed = teacher.patch(
+                f"/api/v1/courses/{COURSE_ID}/members/{target['user_id']}",
+                json={"status": "inactive"},
+                headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+            )
+            assert removed.status_code == 200, removed.text
+            course = teacher.get(f"/api/v1/courses/{COURSE_ID}").json()
+            assert target["user_id"] not in {m["user_id"] for m in course["members"]}
+        assert "new-student" not in names()
+        assert "classmate" in names()

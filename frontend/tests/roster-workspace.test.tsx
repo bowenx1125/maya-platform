@@ -162,7 +162,8 @@ describe("teacher account management", () => {
     // Active is the normal state and is not labelled; only removed is.
     expect(within(account).queryByText(/^active$/i)).toBeNull();
     expect(screen.getByText("student-bowen-1")).toBeTruthy();
-    expect(screen.queryByText("New Student")).toBeNull();
+    // The name students see in their group leads; the sign-in name follows.
+    expect(within(account).getByText("New Student").tagName).toBe("STRONG");
     expect(screen.queryByText("Self-registered")).toBeNull();
     expect(screen.queryByText("Student view")).toBeNull();
     expect(screen.getByRole("heading", { name: "Accounts" }).className).toBe(

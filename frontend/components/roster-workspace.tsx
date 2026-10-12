@@ -246,7 +246,8 @@ export function RosterWorkspace() {
           />
           <span>
             <span className="roster-headline">
-              <strong>{entry.username}</strong>
+              <strong>{entry.display_name}</strong>
+              <small className="roster-username">{entry.username}</small>
               {/* Active is the normal state, and removed accounts are folded
                   away under their own heading, so only they carry a word. */}
               {entry.status === "active" ? null : (
