@@ -1368,6 +1368,43 @@ function BrainformWorkspaceBody({
     }
   }
 
+  async function deleteKnowledge(row: BrainformKnowledge) {
+    if (
+      !row.can_edit ||
+      !window.confirm(
+        t("brainformDeleteKnowledgeConfirm", {
+          name: row.knowledge_display_name,
+        }),
+      )
+    )
+      return;
+    const intent = `knowledge-set-delete:${row.canonical_set_id}`;
+    commitBusy(`delete-set:${row.canonical_set_id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      // The delete is fenced by the Set's current revisions, read just now.
+      const detail = await api.knowledgeSet(row.canonical_set_id);
+      await runKnowledgeMutation(mutationStore, intent, (idempotency) =>
+        api.deleteKnowledgeSet(
+          row.canonical_set_id,
+          {
+            expected_metadata_revision: detail.metadata_revision ?? 0,
+            expected_content_revision: detail.content_revision ?? 0,
+          },
+          { idempotency },
+        ),
+      );
+      if (!scopeIsCurrent()) return;
+      setNotice(t("brainformKnowledgeDeleted"));
+      void loadWorkspace();
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
   async function reindexRag(document: KnowledgeDocument, retry = false) {
     if (!document.can_manage_visibility || document.index_status !== "failed")
       return;
@@ -2220,6 +2257,22 @@ function BrainformWorkspaceBody({
                             }
                           >
                             <IconArrowRight />
+                          </button>
+                        ) : null}
+                        {row.can_edit && !isGenerating ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformDeleteKnowledgeNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            data-ui-guide="knowledge.hide"
+                            disabled={
+                              busyKey === `delete-set:${row.canonical_set_id}`
+                            }
+                            onClick={() => void deleteKnowledge(row)}
+                          >
+                            <IconClose />
                           </button>
                         ) : null}
                       </div>

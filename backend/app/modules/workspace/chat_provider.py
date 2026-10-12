@@ -358,6 +358,30 @@ def _single_chat_inputs_are_current(
     )
 
 
+def _turn_generated_knowledge(db: Session, conversation_id: str, turn_id: str) -> bool:
+    """This turn's own Knowledge generation is the expected change, not a stale context.
+
+    Starting generation binds the new Knowledge to the Agent at once, so the
+    reply after the Tool call would otherwise fail its own turn.
+    """
+
+    from app.modules.runtime_tools.knowledge import GENERATE_AGENT_KNOWLEDGE_TOOL
+    from app.modules.runtime_tools.models import RuntimeToolReceipt
+
+    return (
+        db.scalar(
+            select(RuntimeToolReceipt.id)
+            .where(
+                RuntimeToolReceipt.conversation_id == conversation_id,
+                RuntimeToolReceipt.turn_id == turn_id,
+                RuntimeToolReceipt.tool_name == GENERATE_AGENT_KNOWLEDGE_TOOL,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def real_reply(
     db: Session,
     settings: Settings,
@@ -445,7 +469,9 @@ def real_reply(
                     )
                 except PlatformError:
                     raise TeamDispatchError("chat_context_changed") from None
-                if current_knowledge != canonical_knowledge:
+                if current_knowledge != canonical_knowledge and not _turn_generated_knowledge(
+                    db, scope_id, request_id
+                ):
                     raise TeamDispatchError("chat_context_changed")
         dispatch_ordinal = cursors.get(member_id, 0)
         cursors[member_id] = dispatch_ordinal + 1
@@ -852,12 +878,51 @@ def prefers_chinese(user_texts: list[str]) -> bool:
     return chinese_count * 2 > len(votes)
 
 
+def reply_language_from_projection(value: dict[str, Any]) -> tuple[dict[str, Any], bool | None]:
+    """Split the Leader's chosen reply language off a stored assessment result."""
+
+    projection = dict(value)
+    language = projection.pop("reply_language", None)
+    return projection, (language == "zh" if language in {"zh", "en"} else None)
+
+
+def assessment_reply_chinese(db: Session, conversation_id: str, user_texts: list[str]) -> bool:
+    """The Leader decides the language of server sentences; history is the fallback.
+
+    A student who writes in Chinese but asks for English answers must get
+    English progress and Question lines too.
+    """
+
+    from app.modules.runtime_tools.models import RuntimeToolReceipt
+
+    for raw in db.scalars(
+        select(RuntimeToolReceipt.result_json)
+        .where(
+            RuntimeToolReceipt.conversation_id == conversation_id,
+            RuntimeToolReceipt.tool_name == "assessment_action",
+        )
+        .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
+        .limit(20)
+    ):
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        value = payload.get("result") if isinstance(payload, dict) else None
+        if isinstance(value, dict):
+            _projection, chinese = reply_language_from_projection(value)
+            if chinese is not None:
+                return chinese
+    return prefers_chinese(user_texts)
+
+
 def assessment_safe_reply_text(
     result: AssessmentRuntimeResult,
     user_texts: list[str],
     *,
     prose: str | None = None,
     follow_up: bool = False,
+    chinese: bool | None = None,
 ) -> str:
     """Render the server's student-safe assessment projection.
 
@@ -865,7 +930,8 @@ def assessment_safe_reply_text(
     may answer an unrelated or formatting question before the server restates
     progress and the current Question.
     """
-    chinese = prefers_chinese(user_texts)
+    if chinese is None:
+        chinese = prefers_chinese(user_texts)
     context = result.context
     if result.response_key == "assessment.redirect":
         if context.redirect_to_original_conversation:

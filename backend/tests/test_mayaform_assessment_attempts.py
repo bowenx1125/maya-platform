@@ -3161,10 +3161,12 @@ def _answer_current(db: Any, actor: Any, conversation_id: str, answer: str) -> A
     return recorded
 
 
-def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boundary(
+def test_diagnosis_asks_every_question_then_scores_and_summarizes(
     attempt_env: Any,
     app_bundle: Any,
 ) -> None:
+    # Owner decision (2026-10-12): the test asks every Question in the
+    # Knowledge, so nothing is left to offer as a follow-up.
     _app, database, settings, client = attempt_env
     _template_database, _repository, template_operation_id = _dispatch(client, app_bundle)
     token, _csrf = _login(client, "bowen")
@@ -3181,7 +3183,7 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
         actor = _context(db, settings, token)
         started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
         assert started is not None and started.current_question is not None
-        assert started.progress.question_count == 2
+        assert started.progress.question_count == 4
         assert started.current_question.prompt == "Q1"
         activity = db.get(AssessmentActivity, str(started.attempt.activity_id))
         assert activity is not None
@@ -3189,11 +3191,11 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
             db, conversation_id, activity.evaluator_team_member_id
         )
         boundary_id = _participant_for_member(db, conversation_id, activity.boundary_team_member_id)
-
-        first = _answer_current(db, actor, conversation_id, "first survey answer")
-        assert first.context.current_question is not None
-        assert first.context.current_question.prompt == "Q3"
-        _answer_current(db, actor, conversation_id, "second survey answer")
+        for prompt in ("Q1", "Q2", "Q3", "Q4"):
+            shown = get_assessment_runtime_context(db, actor, conversation_id)
+            assert shown is not None and shown.current_question is not None
+            assert shown.current_question.prompt == prompt
+            _answer_current(db, actor, conversation_id, f"answer to {prompt}")
 
         evaluation = _begin_pending_executor_turn(
             db, conversation_id=conversation_id, participant_id=evaluator_id, position=0
@@ -3208,16 +3210,15 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
             purpose="assessment_evaluate",
         )
         assert context is not None
-        candidates = json.loads(context.task_payload_json)["follow_up_candidates"]
-        assert [candidate["prompt"] for candidate in candidates] == ["Q2", "Q4"]
-        round_one = {
-            "overall_feedback": "Survey reviewed.",
+        assert json.loads(context.task_payload_json)["follow_up_candidates"] == []
+        scored = {
+            "overall_feedback": "All four reviewed.",
             "questions": [
-                {"question_ordinal": 0, "feedback": "Secure.", "points_awarded": 2},
-                {"question_ordinal": 1, "feedback": "Unclear.", "points_awarded": 0},
+                {"question_ordinal": ordinal, "feedback": "Reviewed.", "points_awarded": 1}
+                for ordinal in range(4)
             ],
         }
-        rejected_identity = _accepted_tool_identity(
+        identity = _accepted_tool_identity(
             db,
             template_stage_id=template_stage_id,
             conversation_id=conversation_id,
@@ -3227,99 +3228,13 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
             execution=evaluation,
         )
         with pytest.raises(PlatformError) as invented_ref:
-            write_formal_assessment(db, actor, rejected_identity, round_one, [str(uuid4())])
+            write_formal_assessment(db, actor, identity, scored, [str(uuid4())])
         assert invented_ref.value.code == "assessment_follow_up_invalid"
-        assert (
-            db.scalar(
-                select(func.count(LearningAssessment.id)).where(
-                    LearningAssessment.attempt_id == str(started.attempt.id)
-                )
-            )
-            == 0
-        )
+        assert write_formal_assessment(db, actor, identity, scored) == {"saved": True}
         _finish_executor_turn(db, evaluation)
-        evaluation = _begin_pending_executor_turn(
-            db, conversation_id=conversation_id, participant_id=evaluator_id, position=1
-        )
-        identity = _accepted_tool_identity(
-            db,
-            template_stage_id=template_stage_id,
-            conversation_id=conversation_id,
-            participant_id=evaluator_id,
-            position=1,
-            tool_name="edit_assessment",
-            execution=evaluation,
-        )
-        assert write_formal_assessment(db, actor, identity, round_one, [candidates[1]["ref"]]) == {
-            "saved": True
-        }
-        _finish_executor_turn(db, evaluation)
-
-        follow_up = get_assessment_runtime_context(db, actor, conversation_id)
-        assert follow_up is not None and follow_up.current_question is not None
-        assert follow_up.current_question.prompt == "Q4"
-        assert follow_up.current_question.ordinal == 2
-        assert follow_up.progress.question_count == 3
-        assert follow_up.progress.presented_count == 3
-
-        _answer_current(db, actor, conversation_id, "follow-up answer")
-        stale = _begin_pending_executor_turn(
-            db, conversation_id=conversation_id, participant_id=boundary_id, position=2
-        )
-        with pytest.raises(PlatformError) as stale_evaluation:
-            get_assessment_executor_context(
-                db,
-                actor,
-                conversation_id,
-                turn_id=stale[0],
-                participant_id=boundary_id,
-                result_id=stale[1],
-                purpose="boundary_summarize",
-            )
-        assert stale_evaluation.value.code == "assessment_evaluation_missing"
-        _finish_executor_turn(db, stale)
-
-        second_evaluation = _begin_pending_executor_turn(
-            db, conversation_id=conversation_id, participant_id=evaluator_id, position=3
-        )
-        context = get_assessment_executor_context(
-            db,
-            actor,
-            conversation_id,
-            turn_id=second_evaluation[0],
-            participant_id=evaluator_id,
-            result_id=second_evaluation[1],
-            purpose="assessment_evaluate",
-        )
-        assert context is not None
-        assert [
-            candidate["prompt"]
-            for candidate in json.loads(context.task_payload_json)["follow_up_candidates"]
-        ] == ["Q2"]
-        identity = _accepted_tool_identity(
-            db,
-            template_stage_id=template_stage_id,
-            conversation_id=conversation_id,
-            participant_id=evaluator_id,
-            position=3,
-            tool_name="edit_assessment",
-            execution=second_evaluation,
-        )
-        assert write_formal_assessment(
-            db,
-            actor,
-            identity,
-            {
-                "overall_feedback": "Both rounds reviewed.",
-                "questions": [
-                    {"question_ordinal": ordinal, "feedback": "Reviewed."} for ordinal in range(3)
-                ],
-            },
-        ) == {"saved": True}
-        _finish_executor_turn(db, second_evaluation)
 
         boundary = _begin_pending_executor_turn(
-            db, conversation_id=conversation_id, participant_id=boundary_id, position=4
+            db, conversation_id=conversation_id, participant_id=boundary_id, position=1
         )
         context = get_assessment_executor_context(
             db,
@@ -3331,13 +3246,13 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
             purpose="boundary_summarize",
         )
         assert context is not None
-        assert json.loads(context.task_payload_json)["not_asked"] == ["Q2"]
+        assert json.loads(context.task_payload_json)["not_asked"] == []
         identity = _accepted_tool_identity(
             db,
             template_stage_id=template_stage_id,
             conversation_id=conversation_id,
             participant_id=boundary_id,
-            position=4,
+            position=1,
             tool_name="update_learning_boundary",
             execution=boundary,
         )
@@ -3346,10 +3261,10 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
             actor,
             identity,
             {
-                "summary": "Two rounds located one weak point.",
+                "summary": "One round located one weak point.",
                 "strengths": ["Q1 topic"],
                 "areas_to_explore": ["Q3 topic"],
-                "not_yet_verified": ["Q2 topic"],
+                "not_yet_verified": [],
                 "next_step": "Revisit the Q3 topic.",
             },
         ) == {"saved": True}
@@ -3367,18 +3282,11 @@ def test_diagnosis_surveys_half_then_evaluator_opens_follow_up_round_before_boun
             client_event_id=uuid4(),
         ).report
         [learner] = report.content.actors
-        assert learner.boundary_summary == "Two rounds located one weak point."
-        assert (learner.mastery_evidence, learner.weak_points, learner.not_yet_verified) == (
-            ["Q1 topic"],
-            ["Q3 topic"],
-            ["Q2 topic"],
-        )
+        assert learner.boundary_summary == "One round located one weak point."
         markdown = download_assessment_course_report(
             db, teacher, report_id=str(report.id), revision_id=str(report.revision_id)
         ).content
-        assert "## Knowledge boundaries" in markdown
         assert "- Weak points: Q3 topic" in markdown
-        assert "- Not yet verified: Q2 topic" in markdown
 
 
 def test_ending_early_submits_answered_work_and_closes_follow_ups(
@@ -3400,7 +3308,7 @@ def test_ending_early_submits_answered_work_and_closes_follow_ups(
         )
         actor = _context(db, settings, token)
         started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
-        assert started is not None and started.progress.question_count == 3
+        assert started is not None and started.progress.question_count == 6
         _answer_current(db, actor, conversation_id, "only answer")
         shown = get_assessment_runtime_context(db, actor, conversation_id)
         assert shown is not None and shown.current_question is not None
@@ -3493,16 +3401,11 @@ def test_ending_early_submits_answered_work_and_closes_follow_ups(
             tool_name="edit_assessment",
             execution=evaluation,
         )
+        # Ending early leaves no follow-up to choose; any catalog ref is refused.
         unasked_ref = db.scalar(
             select(AssessmentActivityQuestion.id)
-            .where(
-                AssessmentActivityQuestion.activity_id == activity.id,
-                AssessmentActivityQuestion.id.not_in(
-                    select(AssessmentAttemptQuestion.activity_question_id).where(
-                        AssessmentAttemptQuestion.attempt_id == attempt.id
-                    )
-                ),
-            )
+            .where(AssessmentActivityQuestion.activity_id == activity.id)
+            .order_by(AssessmentActivityQuestion.ordinal.desc())
             .limit(1)
         )
         assert unasked_ref is not None

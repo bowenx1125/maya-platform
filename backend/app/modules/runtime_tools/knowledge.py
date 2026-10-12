@@ -44,8 +44,16 @@ def _current_agent(
 ) -> tuple[Agent, AgentVersion]:
     if row.entry_kind != "agent" or row.user_id != actor.user.id or row.agent_version_id is None:
         raise not_found()
-    version = db.get(AgentVersion, row.agent_version_id)
-    agent = db.get(Agent, version.agent_id) if version is not None else None
+    chat_version = db.get(AgentVersion, row.agent_version_id)
+    agent = db.get(Agent, chat_version.agent_id) if chat_version is not None else None
+    # A Chat keeps the version it opened with; after the teacher swaps the RAG
+    # and publishes again, generation follows the Agent's current version and
+    # its current RAG, whatever Knowledge the old version had.
+    version = (
+        db.get(AgentVersion, agent.current_published_version_id)
+        if agent is not None and agent.current_published_version_id
+        else None
+    )
     if (
         version is None
         or agent is None
@@ -140,7 +148,7 @@ def generate_agent_knowledge(
     identity: ToolCallIdentity,
 ) -> dict[str, Any]:
     agent, version = _current_agent(db, actor, row)
-    if identity.participant_id != version.id:
+    if identity.participant_id != row.agent_version_id:
         raise not_found()
     documents = _enabled_documents(db, version.id)
     if not documents:

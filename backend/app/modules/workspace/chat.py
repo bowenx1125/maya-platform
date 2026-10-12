@@ -47,10 +47,12 @@ from app.providers.control_repository import ProviderSendingGuard
 
 from .access import course_member
 from .chat_provider import (
+    assessment_reply_chinese,
     assessment_safe_reply_text,
     chat_messages,
     conversation_user_texts,
     real_reply,
+    reply_language_from_projection,
     retrieve_sources,
 )
 from .chat_stream import accepts_event_stream, chat_audio_path, stream_events, stream_team_events
@@ -764,6 +766,7 @@ def generate_reply(
         reply = assessment_safe_reply_text(
             assessment_result,
             conversation_user_texts(db, row.id),
+            chinese=assessment_reply_chinese(db, row.id, conversation_user_texts(db, row.id)),
             prose=(
                 reply
                 if assessment_result.disposition == "read"
@@ -795,7 +798,9 @@ def _assessment_result_for_turn(
                 continue
             value = receipt.get("result")
             if isinstance(value, dict):
-                projection = AssessmentRuntimeResult.model_validate(value)
+                projection = AssessmentRuntimeResult.model_validate(
+                    reply_language_from_projection(value)[0]
+                )
                 break
         except (json.JSONDecodeError, TypeError, ValueError):
             continue

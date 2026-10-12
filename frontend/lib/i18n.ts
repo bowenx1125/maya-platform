@@ -359,6 +359,10 @@ const enMessages = {
   brainformEditRagNamed: "Edit {name}",
   brainformDownloadRagNamed: "Download {name}",
   brainformHideRagNamed: "Hide {name}",
+  brainformDeleteKnowledgeNamed: "Delete {name}",
+  brainformDeleteKnowledgeConfirm:
+    "Delete the Knowledge {name}? Agents and Teams that use it stop seeing it.",
+  brainformKnowledgeDeleted: "Knowledge deleted.",
   brainformReindexRagNamed: "Reindex {name}",
   brainformViewKnowledge: "View Knowledge",
   brainformOpenKnowledgeNamed: "Open {name}",
@@ -1106,6 +1110,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformEditRagNamed: "编辑 {name}",
   brainformDownloadRagNamed: "下载 {name}",
   brainformHideRagNamed: "隐藏 {name}",
+  brainformDeleteKnowledgeNamed: "删除 {name}",
+  brainformDeleteKnowledgeConfirm:
+    "删除 Knowledge「{name}」？使用它的 Agent 和 Team 将不再读取它。",
+  brainformKnowledgeDeleted: "Knowledge 已删除。",
   brainformReindexRagNamed: "重新索引 {name}",
   brainformViewKnowledge: "查看 Knowledge",
   brainformOpenKnowledgeNamed: "进入 {name}",

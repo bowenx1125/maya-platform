@@ -777,3 +777,62 @@ def test_teacher_tool_is_not_exposed_to_students_or_cross_actor_or_revoked_sourc
             )
             == 0
         )
+
+
+def test_an_old_chat_generates_from_the_swapped_rag_and_keeps_its_turn(
+    runtime_tool_workspace: Any, monkeypatch: Any
+) -> None:
+    # The teacher swapped the RAG and published again, then asked an earlier
+    # Chat for Knowledge. That Chat is pinned to the old version; generation
+    # must follow the current version's RAG, and the reply after the Tool call
+    # must not fail its own turn because the Agent's Knowledge just changed.
+    app, database, client, base_settings = runtime_tool_workspace
+    transport = _configure_chat(app, database, base_settings, monkeypatch)
+    _teacher, csrf = login(client, "maya")
+    agent_id, old_version_id, _old_document, conversation_id = _teacher_agent_chat(
+        client,
+        csrf,
+        agent_markdown="# Course Guide\n\nWhen asked, call generate_agent_knowledge.",
+    )
+    monkeypatch.setattr(app.state.knowledge_generation_task_manager, "wake", lambda _run: None)
+    draft = client.post(
+        f"/api/v1/agents/{agent_id}/versions",
+        headers=_headers(csrf, **{"Idempotency-Key": f"swap-draft-{uuid4()}"}),
+    )
+    assert draft.status_code == 201, draft.text
+    uploaded = client.post(
+        f"/api/v1/courses/{COURSE_ID}/workspace-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": f"swap-source-{uuid4()}"}),
+        files={"file": ("new.md", b"# New lesson\n\nA swapped source.", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    new_document = uploaded.json()["document"]["id"]
+    selected = client.put(
+        f"/api/v1/agent-versions/{draft.json()['id']}/knowledge-documents",
+        headers=_headers(csrf),
+        json={"expected_revision": draft.json()["revision"], "document_ids": [new_document]},
+    )
+    assert selected.status_code == 200, selected.text
+    published = client.post(
+        f"/api/v1/agent-versions/{draft.json()['id']}/publish",
+        headers=_headers(csrf, **{"Idempotency-Key": f"swap-publish-{uuid4()}"}),
+        json={"expected_revision": selected.json()["revision"]},
+    )
+    assert published.status_code == 200, published.text
+    new_version_id = published.json()["id"]
+    assert new_version_id != old_version_id
+
+    transport.side_effect = [_tool_response("swap-call-1"), _reply_response()]
+    sent = _send_tool_turn(
+        client, csrf, conversation_id, expected_revision=0, call_id="swap-call-1"
+    )
+    turn = sent.json()["turns"][0]
+    assert turn["state"] == "ready", turn
+    receipt = _result_for_turn(database, turn["id"])
+    with database.session() as db:
+        run = db.get(KnowledgeGenerationRun, receipt["run_id"])
+        assert run is not None
+        assert run.agent_version_id == new_version_id
+        assert [item["document_id"] for item in json.loads(run.source_manifest_json)] == [
+            new_document
+        ]

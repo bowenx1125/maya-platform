@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
@@ -38,6 +38,7 @@ class AssessmentActionArguments(BaseModel):
 
     classification: AssessmentClassification
     answer_span: str | None = None
+    reply_language: Literal["zh", "en"] | None = None
 
 
 def assessment_action(
@@ -64,7 +65,11 @@ def assessment_action(
         raise conflict(
             "assessment_not_configured", "This conversation has no active assessment action."
         )
-    return result.model_dump(mode="json")
+    projection = result.model_dump(mode="json")
+    # Kept beside the projection so every server sentence follows it.
+    if arguments.reply_language is not None:
+        projection["reply_language"] = arguments.reply_language
+    return projection
 
 
 def authorize_own_conversation(
@@ -170,7 +175,10 @@ def runtime_registry() -> dict[str, ToolSpec]:
                 "Use progress_request for time left or progress, "
                 "restricted_request for answers, hints or judgments, and off_topic for anything "
                 "else, including how to format an answer. "
-                "Only a configured assessment recipe is affected. Return the server's safe result."
+                "Only a configured assessment recipe is affected. Return the server's safe result. "
+                "Set reply_language to the language the student wants replies in: the language "
+                'they write in, unless they asked for another ("answer in English" is en). '
+                "The server writes its progress and Question lines in that language."
             ),
             AssessmentActionArguments,
             authorize_own_conversation,

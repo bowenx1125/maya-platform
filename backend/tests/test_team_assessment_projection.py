@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from agno.models.response import ModelResponse
-from app.core.models import AgentVersion
+from app.core.models import AgentVersion, SessionRecord
 from app.modules.auth.service import get_auth_context
 from app.modules.demo_baseline.service import ensure_demo_baseline
 from app.modules.knowledge_sets.models import KnowledgeSet
@@ -1543,9 +1543,22 @@ def test_last_answer_starts_the_scorer_once_without_a_student_message(
     claims: list[str] = []
 
     def run_without_saving(factory: Any, claim: runtime.TeamClaim) -> None:
+        from app.modules.runtime_tools.builtin import runtime_registry
+        from app.modules.runtime_tools.registry import exposed_tools
+
         with factory() as db:
             turn = db.get(ConversationTurn, claim.turn_id)
             assert turn is not None and turn.user_text == ""
+            # Every Tool call re-checks a live sign-in; a session-less actor
+            # failed here before the scorer reached the model.
+            assert claim.actor_context is not None
+            mounted = {
+                spec.name
+                for spec in exposed_tools(
+                    db, claim.actor_context, turn.conversation_id, runtime_registry()
+                )
+            }
+            assert "edit_assessment" in mounted
             result = db.scalar(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id))
             assert result is not None
             claims.append(result.participant_id)
@@ -1597,6 +1610,16 @@ def test_last_answer_starts_the_scorer_once_without_a_student_message(
         )
         assert evaluator is not None
 
+    # Signed out everywhere: the attempt waits for the student's next message.
+    with database.session() as db:
+        for record in db.scalars(
+            select(SessionRecord).where(SessionRecord.user_id == actor.user.id)
+        ):
+            record.revoked_at = datetime.now(UTC)
+        db.commit()
+    finalizer.drive_assessment(database.session_factory, settings, conversation_id)
+    assert claims == []
+    _login(client, "bowen")
     finalizer.drive_assessment(database.session_factory, settings, conversation_id)
     assert claims == [evaluator.id]
 

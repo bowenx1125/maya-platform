@@ -450,15 +450,6 @@ def get_assessment_lifecycle_context(
     return _lifecycle_context(db, attempt, conversation.id)
 
 
-def _survey_rows(rows: list[AssessmentActivityQuestion]) -> list[AssessmentActivityQuestion]:
-    """Sample the catalog evenly; the remainder feeds evaluator-chosen follow-ups."""
-
-    if len(rows) <= 3:
-        return rows
-    size = (len(rows) + 1) // 2
-    return [rows[index * len(rows) // size] for index in range(size)]
-
-
 def _add_attempt_questions(
     db: Session,
     attempt: AssessmentAttempt,
@@ -509,7 +500,10 @@ def _copy_activity_questions(
             .order_by(AssessmentActivityQuestion.ordinal)
         ).all()
     )
-    _add_attempt_questions(db, attempt, _survey_rows(source_rows))
+    # Owner decision (2026-10-12): the test asks every Question in the Knowledge.
+    # How many there are, and of what kind, is the question-writing Agent's
+    # choice, not a server count.
+    _add_attempt_questions(db, attempt, source_rows)
 
 
 def follow_up_candidates(

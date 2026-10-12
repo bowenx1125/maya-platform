@@ -39,8 +39,13 @@ from .schemas import (
     TeamChatSession,
 )
 
+# Both languages: nothing yet says which one the student writes in. Later
+# replies follow the student's language.
 MAYA_TEAM_OPENING = (
     "我是 Leader。直接发消息，由我来带。要叫某一位成员，输入 @ 再选。要正式测评，直接说你要测评。"
+    "\n\n"
+    "I'm the Leader. Message me and I'll lead. To call one member, type @ and choose them. "
+    "For a formal test, just say you want to take the test."
 )
 
 

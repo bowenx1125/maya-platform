@@ -1827,7 +1827,7 @@ __all__ = [
 ]
 
 
-def student_result_lines(db: Session, attempt_id: str, user_texts: list[str]) -> list[str]:
+def student_result_lines(db: Session, attempt_id: str, chinese: bool) -> list[str]:
     """The finished attempt's saved results, as the student sees them.
 
     Owner decision (2026-10-12): after completion the student sees each
@@ -1835,15 +1835,12 @@ def student_result_lines(db: Session, attempt_id: str, user_texts: list[str]) ->
     an attempt without its saved evaluation shows no result lines.
     """
 
-    from app.modules.workspace.chat_provider import prefers_chinese
-
     attempt = db.get(AssessmentAttempt, attempt_id)
     if attempt is None or attempt.status != "completed":
         return []
     evaluation = _assessment_for_attempt(db, attempt)
     if evaluation is None:
         return []
-    chinese = prefers_chinese(user_texts)
     content = AssessmentEvaluationContent.model_validate_json(evaluation[1].content_json)
     question_rows = _current_attempt_question_rows(db, attempt)
     offset = question_rows[0].ordinal if question_rows else 0
