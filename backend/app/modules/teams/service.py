@@ -27,6 +27,7 @@ from app.modules.knowledge.services import (
     can_read_source,
     can_read_version,
     course_member_role,
+    observes_group,
     scoped_group_role_for_user,
 )
 from app.modules.knowledge_sets import service as knowledge_set_service
@@ -115,6 +116,16 @@ def can_read_team(db: Session, user_id: str, team: Team) -> bool:
     if team.group_id is None or viewer_role != "student":
         return False
     return scoped_group_role_for_user(db, user_id, team.group_id) is not None
+
+
+def can_view_team(db: Session, user_id: str, team: Team) -> bool:
+    """``can_read_team`` for the read routes, plus a teacher looking round
+    the Team's group. Chat entry keeps ``can_read_team``: an observer reads a
+    student's private Team but does not talk to it."""
+
+    return can_read_team(db, user_id, team) or (
+        team.deleted_at is None and observes_group(db, user_id, team.group_id)
+    )
 
 
 def _get_team_for_owner(db: Session, actor: AuthContext | str, team_id: str) -> Team:
@@ -756,7 +767,7 @@ def _shared_knowledge_set_dtos(db: Session, version_id: str) -> list[SharedKnowl
 def get_team_detail(db: Session, actor: AuthContext | str, team_id: str) -> TeamDetail:
     user_id = _actor_id(actor)
     team = db.scalar(select(Team).where(Team.id == team_id, Team.deleted_at.is_(None)))
-    if team is None or not can_read_team(db, user_id, team):
+    if team is None or not can_view_team(db, user_id, team):
         raise not_found()
     version = _version_for_seq(db, team)
     summary = _team_summary(db, team, can_edit=team.owner_user_id == user_id)
@@ -1127,17 +1138,26 @@ def delete_team(db: Session, actor: AuthContext, team_id: str) -> None:
     db.flush()
 
 
-def list_course_teams(db: Session, actor: AuthContext, course_id: str) -> list[TeamSummary]:
+def list_course_teams(
+    db: Session, actor: AuthContext, course_id: str, group_id: str | None = None
+) -> list[TeamSummary]:
+    """The course's Teams this caller may use, or one group's Teams.
+
+    Only the group listing adds the private Teams of a group a teacher has
+    entered: the course listing feeds Chatform and Memory, which would offer
+    a Team the teacher may read but not talk to.
+    """
+
     user_id = actor.user.id
     _course_scope(db, user_id, course_id)
-    rows = db.scalars(
-        select(Team)
-        .where(Team.course_id == course_id, Team.deleted_at.is_(None))
-        .order_by(Team.updated_at.desc(), Team.id)
-    ).all()
+    query = select(Team).where(Team.course_id == course_id, Team.deleted_at.is_(None))
+    if group_id is not None:
+        query = query.where(Team.group_id == group_id)
+    rows = db.scalars(query.order_by(Team.updated_at.desc(), Team.id)).all()
+    readable = can_view_team if group_id is not None else can_read_team
     visible: list[TeamSummary] = []
     for team in rows:
-        if not can_read_team(db, user_id, team):
+        if not readable(db, user_id, team):
             continue
         visible.append(_team_summary(db, team, can_edit=team.owner_user_id == user_id))
     return visible

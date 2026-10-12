@@ -66,7 +66,7 @@ const enMessages = {
   makeAgentPublic: "Make Agent public",
   makeAgentPrivate: "Make Agent private",
   privateVisibilityLede:
-    "Private Agents and sources stay with their owner. Public group Agents are available to group students and course teachers after publication; only Public sources are shared.",
+    "Private Agents and sources stay with their owner, though a course teacher who enters the group can read them. Public group Agents are available to group students and course teachers after publication; only Public sources are shared.",
   personalVisibilityLede:
     "A Public personal Agent is shareable, but course students do not get access automatically. They need a separate invocation grant to use it; its prompt and sources remain visible only to its owner.",
   deleteAgent: "Delete",
@@ -826,7 +826,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   makeAgentPublic: "公开 Agent",
   makeAgentPrivate: "设为私有 Agent",
   privateVisibilityLede:
-    "私有 Agent 和来源仅所有者可见。公开的小组 Agent 发布后可供本组学生和课程教师使用；只有公开来源会共享。",
+    "私有 Agent 和来源只属于你，进入本组查看的课程教师也能阅读。公开的小组 Agent 发布后可供本组学生和课程教师使用；只有公开来源会共享。",
   personalVisibilityLede:
     "个人 Agent 设为公开后可分享，但课程学生不会自动获得访问权限。学生需要单独的调用授权才能使用；提示词和来源仍只有所有者可见。",
   deleteAgent: "删除",

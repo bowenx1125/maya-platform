@@ -88,6 +88,7 @@ from app.modules.knowledge.services import (
     finish_idempotency,
     job_dto,
     load_file_operation,
+    observes_group,
     parse_json_payload_hash,
     rag_preview,
     recover_operation_now,
@@ -172,18 +173,20 @@ def list_knowledge_documents(
     db: Session = Depends(get_db),
 ) -> list[KnowledgeDocumentDTO]:
     scoped_student_group_role(db, context, str(group_id))
-    docs = db.scalars(
-        select(KnowledgeDocument)
-        .where(
-            KnowledgeDocument.group_id == str(group_id),
-            KnowledgeDocument.workspace_state == "active",
+    # A teacher looking round the group reads its members' private sources
+    # too; only their owners can change them.
+    query = select(KnowledgeDocument).where(
+        KnowledgeDocument.group_id == str(group_id),
+        KnowledgeDocument.workspace_state == "active",
+    )
+    if not observes_group(db, context.user.id, str(group_id)):
+        query = query.where(
             or_(
                 KnowledgeDocument.owner_user_id == context.user.id,
                 KnowledgeDocument.visibility == "public",
-            ),
+            )
         )
-        .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
-    ).all()
+    docs = db.scalars(query.order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)).all()
     return [
         _document_dto(
             document,

@@ -695,7 +695,7 @@ describe("Studyform Team cards", () => {
     ]);
   });
 
-  it("does not offer Team creation on a teacher's group visit", async () => {
+  it("shows a visiting teacher the group's Teams read-only, without creating one", async () => {
     state.role = "teacher";
     state.api.group = vi.fn().mockResolvedValue({
       id: "group-1",
@@ -712,7 +712,11 @@ describe("Studyform Team cards", () => {
     );
 
     await screen.findByRole("heading", { name: "Agents" });
-    expect(screen.queryByRole("heading", { name: "Teams" })).toBeNull();
+    // The group's Teams are listed for the teacher to look at, asked for by
+    // group so its members' private Teams come too.
+    expect(screen.getByRole("heading", { name: "Teams" })).toBeTruthy();
+    expect(state.api.teams).toHaveBeenCalledWith("course", "group-1");
+    // But a visit never starts one: no form, and no New.
     expect(screen.queryByLabelText("Name")).toBeNull();
     expect(screen.queryByRole("link", { name: "New" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Voices" })).toBeTruthy();

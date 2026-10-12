@@ -100,8 +100,11 @@ from app.modules.knowledge.services import (
     course_member_role,
     create_snapshot,
     finish_idempotency,
+    observes_group,
     parse_json_payload_hash,
     publish_without_snapshot,
+    readable_agent,
+    readable_version,
     renew_idempotency_lease,
     retrieval_response,
     saga_checkpoint,
@@ -109,10 +112,8 @@ from app.modules.knowledge.services import (
     scoped_student_group_role,
     version_dto,
     version_is_currently_public,
-    visible_agent,
     visible_student_agent,
     visible_student_version,
-    visible_version,
 )
 from app.modules.knowledge_sets.generation import (
     enqueue_generation_for_publish,
@@ -329,12 +330,13 @@ def _version_dto_for_actor(
     version: AgentVersion,
     agent: Agent,
     context: AuthContext,
+    role: str | None = None,
 ) -> AgentVersionDTO:
     return version_dto(
         db,
         version,
         agent,
-        include_private_sources=agent.owner_user_id == context.user.id,
+        include_private_sources=agent.owner_user_id == context.user.id or role == "observer",
     )
 
 
@@ -730,9 +732,32 @@ def list_group_agents(
             ),
         )
     ).all()
+    listed = [agent for (agent,) in rows]
+    if observes_group(db, context.user.id, str(group_id)):
+        # A teacher looking round the group sees its members' private work
+        # too, read-only: the Agents it already lists keep their own role.
+        seen = {agent.id for agent in listed}
+        listed += [
+            agent
+            for agent in db.scalars(
+                select(Agent)
+                .where(
+                    Agent.group_id == str(group_id),
+                    Agent.ownership_scope == "group",
+                    Agent.deleted_at.is_(None),
+                    Agent.visibility != "public",
+                    Agent.owner_user_id != context.user.id,
+                )
+                .order_by(Agent.created_at, Agent.id)
+            ).all()
+            if agent.id not in seen
+        ]
     agents = []
-    for (agent,) in rows:
+    for agent in listed:
         if not include_archived and agent.status != "active":
+            continue
+        if agent.visibility != "public" and agent.owner_user_id != context.user.id:
+            agents.append((agent, "observer"))
             continue
         if agent.owner_user_id == context.user.id and role == "student":
             agents.append((agent, "owner"))
@@ -980,7 +1005,7 @@ def get_agent(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
-    scoped = visible_agent(db, context, str(agent_id))
+    scoped = readable_agent(db, context, str(agent_id))
     return _detail_with_metadata(db, scoped.agent, scoped.role, context)
 
 
@@ -1149,7 +1174,7 @@ def list_agent_versions(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[AgentVersionDTO]:
-    scoped = visible_agent(db, context, str(agent_id))
+    scoped = readable_agent(db, context, str(agent_id))
     query = select(AgentVersion).where(AgentVersion.agent_id == scoped.agent.id)
     if scoped.role == "teacher":
         query = query.where(AgentVersion.state.in_(("published", "superseded")))
@@ -1161,7 +1186,10 @@ def list_agent_versions(
     ]
     if scoped.role == "teacher" and not versions:
         raise not_found()
-    return [_version_dto_for_actor(db, version, scoped.agent, context) for version in versions]
+    return [
+        _version_dto_for_actor(db, version, scoped.agent, context, scoped.role)
+        for version in versions
+    ]
 
 
 @router.post(
@@ -1290,8 +1318,8 @@ def get_agent_version(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> AgentVersionDTO:
-    scoped = visible_version(db, context, str(version_id))
-    return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
+    scoped = readable_version(db, context, str(version_id))
+    return _version_dto_for_actor(db, scoped.version, scoped.agent, context, scoped.role)
 
 
 @router.post(
@@ -1568,7 +1596,7 @@ def download_agent_md(
 ) -> Response:
     """Download AGENT.md only from a published/superseded visible version."""
 
-    scoped = visible_version(db, context, str(version_id))
+    scoped = readable_version(db, context, str(version_id))
     if scoped.version.state not in {"published", "superseded"}:
         raise not_found()
     filename = frozen_download_filename(
