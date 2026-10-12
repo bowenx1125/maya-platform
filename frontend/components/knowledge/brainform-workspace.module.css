@@ -176,9 +176,15 @@
   color: #3f3424;
 }
 
-.addButton:focus-visible {
+.addButton:focus-visible,
+.addButton:has(input:focus-visible) {
   outline: 3px solid #967c50;
   outline-offset: 2px;
+}
+
+.addButton[aria-disabled="true"] {
+  color: #8b887f;
+  cursor: not-allowed;
 }
 
 .addButton:disabled {
