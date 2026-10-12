@@ -46,7 +46,7 @@ Create AI Knowledge 与 New Agent 复用同一创建/编辑流程，不保留第
 
 ## E. Brainform 与成熟 RAG
 
-保留 RAG/Knowledge/Memory 三列，同一结构按 read/edit 权限提供对象与操作。旧 Knowledge 的成熟 RAG 编辑、查看、下载、删除和 Markdown 能力完整融入 RAG 列，Files 改 RAG；不再保留独立重复 Knowledge 管理展示。New 使用左侧栏当前 RAG 创建动作。
+保留 RAG/Knowledge/Memory 三列，同一结构按 read/edit 权限提供对象与操作。旧 Knowledge 的成熟 RAG 编辑、查看、下载、删除和 Markdown 能力完整融入 RAG 列，Files 改 RAG；不再保留独立重复 Knowledge 管理展示。Brainform 不新建 RAG、左栏没有 RAG 的 New：RAG 只在 Agent 页 Brainform 区的 + 上传，与该 Agent 同为私有或公开（Agent 的私有/公开在创建时选定，之后不能改）。私有 Agent 的 RAG 只有创建者看得到；公开 Agent 上传的 RAG 出现在同组 Brainform；勾选他人已有 RAG 不改变它的可见范围。老师自己的 Brainform 不列学生资料，老师从 Accounts 进入小组后，左栏 Brainform 打开该组的只读公开 Brainform，访问不结束；老师公开 Agent 的资料只在该 Agent 页只读出现。
 
 RAG 完整复用原 Knowledge 的查看/编辑/下载/删除动作，删除沿现有权限及后台 hide/delete 语义，不能只做本地隐藏或物理清除原始证据。Knowledge 主列表使用资产名进入同一 canonical 对象，详情显示当前 actor 可读的引用 Agent，并允许修改；保存后这些 Agent 后续使用更新后的同一资产，不复制。Agent 页进入自身 Knowledge 的入口保留。本条替代仅按 Agent 名进入的旧决定。资产名单击改名保留。Knowledge 保留 eye/pencil/合法 regenerate 和单击改名；Memory 保留进入 Chats 的原符号。canonical 对象、Graph可视化、版本、原生成关系和一次授权 Memory 查询不改。
 

@@ -100,7 +100,7 @@ Provider 模式、API Key 和连通性检查由维护层管理，教师首页不
 
 v1.4 的 Agent 和 Voice 在 **Studyform** 创建；普通 Team 由师生在 Studyform 的 Teams 中勾选成员和 Leader 创建；教师在 Studyform 发布 Maya Team。当前部署与验收状态见 [PROJECT](docs/PROJECT.md)。教师手动检查 Maya Team 的路径是：
 
-1. 在 Brainform 添加 RAG；在 Studyform 用 Agents 模块右侧的 + 创建 Agent，填写 Agent.md，从 **Brainform** 选择 RAG 或已有 Knowledge，用左栏 **Done** 保存。
+1. 在 Studyform 用 Agents 模块右侧的 + 创建 Agent，创建时选 Private 或 Public（之后不能更改），填写 Agent.md；RAG 只在 Agent 页 **Brainform** 区的 + 上传，与该 Agent 同为私有或公开，也可勾选已有 RAG 或 Knowledge，用左栏 **Done** 保存。
 2. 在 Studyform 打开 Maya Team，用左栏 **New** 选择已有成员、Leader 和共享 Knowledge。每个成员使用自己的资料加共享 Knowledge，其他成员私人资料不会自动共享。
 3. 用左栏 **Done** 发布；Team 以 Public 保存并进入 Maya Team 列表。
 4. 学生打开 **Chatform → New**，在 Teams 中选中这个 Team，点左栏 **Done** 开始自己的会话。这里不重新选择成员、Leader 或 Knowledge。
