@@ -491,7 +491,9 @@ def _revoked_assessment_wire_is_closed(
         return False
     if not isinstance(body, dict):
         return False
-    allowed_keys = {"model", "messages", "stream", "enable_thinking", "tools"}
+    from app.providers.llm_price_card import LLM_RESERVED_OUTPUT_TOKEN_CAP
+
+    allowed_keys = {"model", "messages", "stream", "enable_thinking", "tools", "max_tokens"}
     if "tool_choice" in body:
         allowed_keys.add("tool_choice")
     if (
@@ -499,6 +501,7 @@ def _revoked_assessment_wire_is_closed(
         or body.get("model") != expected_model
         or body.get("stream") is not False
         or body.get("enable_thinking") is not False
+        or body.get("max_tokens") != LLM_RESERVED_OUTPUT_TOKEN_CAP
         or body.get("tool_choice", "auto") != "auto"
     ):
         return False

@@ -2277,6 +2277,19 @@ def _recheck_assessment_executor_context(
             "The authorized assessment task is unavailable.",
             409,
         )
+    # Once this executor's write is saved, its task is done: its closing call
+    # only ends the turn. Saving scores may already have opened follow-up
+    # Questions, so the task as first handed out no longer exists.
+    saved_turn = db.get(ConversationTurn, request.turn_id)
+    saved_result = db.get(TeamTurnResult, request.result_id)
+    if (
+        saved_turn is not None
+        and saved_result is not None
+        and _assessment_executor_write_saved(
+            db, saved_turn, saved_result, request.assessment_purpose
+        )
+    ):
+        return
     from app.modules.learning.execution import get_assessment_executor_context
 
     context = get_assessment_executor_context(
@@ -2373,7 +2386,10 @@ def pause_team_for_no_progress(factory: SessionFactory, claim: TeamClaim) -> Non
 
 
 def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: str) -> None:
-    from .chat_team_provider import has_repeated_no_progress_tool_cycle
+    from .chat_team_provider import (
+        has_repeated_no_progress_tool_cycle,
+        without_repeated_successful_tool,
+    )
     from .chat_team_sdk import MemberSpec, TeamDispatchError, run_selected_agent
 
     request: MemberRequest | None = None
@@ -2407,6 +2423,7 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
             run_context: Any,
         ) -> ModelResponse:
             nonlocal no_progress_resume_remaining
+            tools = without_repeated_successful_tool(messages, tools)
             repeated_cycle = has_repeated_no_progress_tool_cycle(list(messages), tools)
             allow_cycle = repeated_cycle and no_progress_resume_remaining
             if allow_cycle:
@@ -2486,7 +2503,11 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
     from app.modules.learning.attempts import has_open_question
 
     from .chat_team_context import load_member_context
-    from .chat_team_provider import has_repeated_no_progress_tool_cycle, stalled_refusal_code
+    from .chat_team_provider import (
+        has_repeated_no_progress_tool_cycle,
+        stalled_refusal_code,
+        without_repeated_successful_tool,
+    )
     from .chat_team_sdk import MemberSpec, TeamDispatchError, run_coordinate_team
 
     leader_result = result_ids(factory, claim.turn_id)[0]
@@ -2671,10 +2692,11 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     member_messages.insert(
                         0, Message(role="system", content=request.system_message)
                     )
-                repeated_cycle = has_repeated_no_progress_tool_cycle(member_messages, tools)
+                call_tools = without_repeated_successful_tool(member_messages, tools)
+                repeated_cycle = has_repeated_no_progress_tool_cycle(member_messages, call_tools)
                 allow_cycle = repeated_cycle and no_progress_resume_remaining
                 if not allow_cycle:
-                    refusal = stalled_refusal_code(member_messages, tools)
+                    refusal = stalled_refusal_code(member_messages, call_tools)
                     if refusal is not None:
                         raise TeamDispatchError(refusal)
                     if repeated_cycle:
@@ -2688,7 +2710,7 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                         request,
                         member_id,
                         member_messages,
-                        tools,
+                        call_tools,
                         choice,
                         call_cursors,
                         selected_binding_ids,
@@ -2696,7 +2718,7 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                         allow_no_progress_once=allow_cycle,
                     )
                 else:
-                    response = invoke_mock_team_model(request, member_messages, tools)
+                    response = invoke_mock_team_model(request, member_messages, call_tools)
                 if member_id != leader.participant_id and not response.tool_calls:
                     if not isinstance(response.content, str):
                         raise TeamDispatchError("team_response_invalid")

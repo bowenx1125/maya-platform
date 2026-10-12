@@ -746,6 +746,8 @@ const enMessages = {
     "Team Chat sending is unavailable in the current runtime.",
   teamRequestFailure: "The Team Chat request could not be completed.",
   teamMemberFailure: "This Team member could not reply.",
+  teamReplyCutOff:
+    "The reply was cut off before it finished, so nothing was saved. Please send your message again.",
   teamProviderConfirmationStudent:
     "A Team member could not reply because the current Team data-use authorization needs Teacher confirmation. Ask a Teacher to review and confirm it, then explicitly send a new message.",
   teamProviderConfirmationTeacher:
@@ -1468,6 +1470,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
   teamRequestFailure: "Team 聊天请求无法完成。",
   teamMemberFailure: "这位 Team 成员未能回复。",
+  teamReplyCutOff: "回复没有写完就被截断了，这次没有保存。请再发一次。",
   teamProviderConfirmationStudent:
     "Team 成员的回复需要教师确认当前 Team 数据调用授权。请教师先核对并确认该授权，然后显式发送一条新消息。",
   teamProviderConfirmationTeacher:

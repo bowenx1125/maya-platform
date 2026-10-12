@@ -485,22 +485,28 @@ def _add_attempt_questions(
         )
 
 
-# Owner decision (2026-10-13): after the questions, the test follows up only on
-# the ones answered wrongly, asking for the student's reasoning. The teacher
-# writes each follow-up in the Knowledge and marks it in its hidden Rubric:
-# a criterion labelled "Follow-up for Question 3; at most 3" (or
-# "追问第 3 题；最多 3 道"). "at most" caps how many one test asks.
+# Owner decision (2026-10-13): after the questions, the test follows up on the
+# ones answered wrongly, asking for the student's reasoning. The teacher writes
+# each follow-up in the Knowledge and marks it in its hidden Rubric with a
+# criterion label such as "Follow-up for Question 3; at most 1; also when all
+# correct" (or "追问第 3 题；最多 1 道；全对时也问"):
+# - "at most" caps how many Questions one test follows up on; every item for
+#   a chosen Question is asked, so a reason and a confidence step go together;
+# - the order of the items in the Knowledge is the priority order;
+# - "also when all correct" items are asked when nothing was answered wrongly.
 _FOLLOW_UP_LABEL = re.compile(
     r"^\s*(?:follow[- ]?up\s+(?:for|on)\s+(?:question\s*|q)?(?P<en>\d+)"
     r"(?:\s*[;；,，]\s*at\s+most\s+(?P<en_limit>\d+))?"
+    r"(?P<en_all>\s*[;；,，]\s*also\s+when\s+all\s+(?:are\s+)?correct)?"
     r"|追问\s*第?\s*(?P<zh>\d+)\s*题"
-    r"(?:\s*[;；,，]\s*最多\s*(?P<zh_limit>\d+)\s*道?)?)\s*$",
+    r"(?:\s*[;；,，]\s*最多\s*(?P<zh_limit>\d+)\s*道?)?"
+    r"(?P<zh_all>\s*[;；,，]\s*全对时也问)?)\s*[.。]?\s*$",
     re.IGNORECASE,
 )
 
 
-def follow_up_target(content: QuestionContent) -> tuple[int, int | None] | None:
-    """The Question number this item follows up on, and its cap, if it is one."""
+def follow_up_target(content: QuestionContent) -> tuple[int, int | None, bool] | None:
+    """The Question this item follows up on, its cap and its all-correct mark."""
 
     for criterion in content.rubric.criteria:
         match = _FOLLOW_UP_LABEL.match(criterion.label)
@@ -508,7 +514,8 @@ def follow_up_target(content: QuestionContent) -> tuple[int, int | None] | None:
             continue
         number = match.group("en") or match.group("zh")
         limit = match.group("en_limit") or match.group("zh_limit")
-        return int(number), int(limit) if limit else None
+        when_all_correct = bool(match.group("en_all") or match.group("zh_all"))
+        return int(number), int(limit) if limit else None, when_all_correct
     return None
 
 
@@ -621,7 +628,7 @@ def wrong_answer_follow_ups(
         for row in asked_rows
     ):
         return []
-    items: list[tuple[int, int | None, AssessmentActivityQuestion]] = []
+    items: list[tuple[tuple[int, int | None, bool], AssessmentActivityQuestion]] = []
     for source in sorted(sources.values(), key=lambda item: item.ordinal):
         if not source.required:
             continue
@@ -630,15 +637,26 @@ def wrong_answer_follow_ups(
         except PlatformError:
             continue
         target = follow_up_target(content)
-        if target is None:
-            continue
-        awarded, maximum = scored.get(target[0], (None, None))
-        if awarded is None or maximum is None or maximum <= 0 or awarded >= maximum:
-            continue
-        items.append((target[0], target[1], source))
-    limits = [limit for _number, limit, _source in items if limit is not None]
-    cap = min(limits) if limits else len(items)
-    return [source for _number, _limit, source in items[:cap]]
+        if target is not None:
+            items.append((target, source))
+    if not items:
+        return []
+
+    def wrong(number: int) -> bool:
+        awarded, maximum = scored.get(number, (None, None))
+        return awarded is not None and maximum is not None and maximum > 0 and awarded < maximum
+
+    eligible = [(target, source) for target, source in items if wrong(target[0])]
+    if not eligible and not any(wrong(number) for number in scored):
+        eligible = [(target, source) for target, source in items if target[2]]
+    limits = [target[1] for target, _source in items if target[1] is not None]
+    chosen: list[int] = []
+    for target, _source in eligible:
+        if target[0] not in chosen:
+            chosen.append(target[0])
+    if limits:
+        chosen = chosen[: min(limits)]
+    return [source for target, source in eligible if target[0] in chosen]
 
 
 def knowledge_question_number(db: Session, attempt_question: AssessmentAttemptQuestion) -> int:

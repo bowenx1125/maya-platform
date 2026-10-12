@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
+
 from agno.models.response import ModelResponse
 from app.core.models import AgentVersion, SessionRecord
 from app.modules.auth.service import get_auth_context
@@ -345,8 +347,12 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
             assert "Internal answer" not in system
 
 
+# Bug (2026-10-13): with a follow-up for a wrong answer, the scorer's closing
+# model call rechecked the test after the follow-up was added, found it
+# unanswered and failed as "This Team member could not reply".
+@pytest.mark.parametrize("follow_up", [False, True])
 def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
-    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any, follow_up: bool
 ) -> None:
     app, _database, base_settings = app_bundle
     teacher_token, teacher_csrf = _login(client, "maya")
@@ -361,7 +367,14 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
             _publication_id,
             set_id,
             _questions,
-        ) = _create_formal_conversation(db, visibility="private")
+        ) = _create_formal_conversation(
+            db,
+            visibility="private",
+            prompts=("Question one", "Question two", "Why question one?")
+            if follow_up
+            else ("Question one", "Question two"),
+            labels={"Why question one?": "Follow-up for Question 1; at most 1"},
+        )
 
     names = ("Bowen", "Jade", "Kaikai", "Maya")
     version_ids: list[str] = []
@@ -705,6 +718,29 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
 
     assert len(wires[leader.id]) >= 1
     assert len(wires[evaluator.id]) >= 1
+    if follow_up:
+        with database.session() as db:
+            assert all(
+                result.state == "ready"
+                for result in db.scalars(
+                    select(TeamTurnResult).where(TeamTurnResult.conversation_id == conversation_id)
+                )
+            )
+            shown = db.scalars(
+                select(TeamTurnResult.assistant_text).where(
+                    TeamTurnResult.conversation_id == conversation_id
+                )
+            ).all()
+            assert any(
+                "Next, a follow-up question." in (text or "")
+                and "Why question one?" in (text or "")
+                for text in shown
+            )
+            waiting = get_assessment_runtime_context(db, actor, conversation_id)
+            assert waiting is not None and waiting.current_question is not None
+            assert waiting.current_question.prompt == "Why question one?"
+        assert wires[boundary.id] == []
+        return
     assert len(wires[boundary.id]) == 1
     assert (
         "edit_assessment",
@@ -1474,7 +1510,8 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         strict=True,
     ):
         provider_wire = json.loads(wire)
-        base_keys = {"model", "messages", "stream", "enable_thinking", "tools"}
+        # max_tokens (2026-10-13): every Team call states its output cap.
+        base_keys = {"model", "messages", "stream", "enable_thinking", "tools", "max_tokens"}
         assert set(provider_wire) in {frozenset(base_keys), frozenset(base_keys | {"tool_choice"})}
         assert provider_wire.get("tool_choice", "auto") == "auto"
         assert provider_wire["messages"] == [

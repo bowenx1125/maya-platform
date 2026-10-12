@@ -332,6 +332,7 @@ function AgentChatScope({
   ) => {
     if (code === "assessment_action_required")
       return t("teamAnswerNotRecorded");
+    if (code === "team_response_truncated") return t("teamReplyCutOff");
     if (code === "provider_confirmation_required") {
       return t(
         role === "teacher"
