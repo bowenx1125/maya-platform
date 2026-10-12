@@ -406,12 +406,16 @@ export function TeacherStudyformWorkspace({
                 />
               ))}
               {ownedAgents.map((agent) => {
+                // Same fallback as a student's own tile: a draft reads V1.0.
+                const label =
+                  chatAgents.find((item) => item.agent_id === agent.id)
+                    ?.version_label ?? "V1.0";
                 return (
                   <VersionTile
                     key={agent.id}
                     name={agent.name}
                     href={`/teacher/agents/${agent.id}`}
-                    label=""
+                    label={label}
                     pending={false}
                     visibility={agent.visibility}
                     deleting={deletingId !== null}

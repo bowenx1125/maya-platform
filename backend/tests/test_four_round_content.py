@@ -88,7 +88,7 @@ def output(snapshot, count):
 def test_exact_body_boundaries_count_only_displayed_paragraphs(language, round_no):
     ctx = context(round_no, language)
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
-    high = {"zh": [500, 450, 550, 650], "en": [320, 280, 350, 420]}[language][round_no - 1]
+    high = {"zh": [50, 50, 50, 100], "en": [320, 280, 350, 420]}[language][round_no - 1]
     for count in (1, high, high + 1):
         value = output(snapshot, count)
         result = validate_segment_output(value, snapshot)

@@ -582,6 +582,9 @@
 .entryFlow {
   display: grid;
   gap: 20px;
+  /* A fixed track, not shrink-to-fit: otherwise the validation hint sets the
+     card's width and choosing a Leader (which clears it) narrows the card. */
+  width: 100%;
   max-width: 980px;
   margin: 0 auto;
   padding: clamp(16px, 3vw, 32px);

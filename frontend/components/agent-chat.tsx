@@ -2764,14 +2764,9 @@ function AgentChatScope({
                       ) {
                         setTeamRecipientMenu(true);
                       }
-                      if (
-                        event.key === "Enter" &&
-                        !event.shiftKey &&
-                        !event.nativeEvent.isComposing
-                      ) {
-                        event.preventDefault();
-                        submitMessage();
-                      }
+                      // Enter never sends: pinyin input confirms a candidate
+                      // with Enter, and Safari reports that keydown as no
+                      // longer composing. Only the Send button submits.
                     }}
                   />
                   <div className={styles.composerBar}>

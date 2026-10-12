@@ -1562,15 +1562,16 @@ describe("Chatform", () => {
     },
   );
 
-  it("does not send Enter during Chinese IME composition", async () => {
+  it("sends only from the Send button, never from Enter", async () => {
     renderChats();
     await chooseTarget(/Course Dialogue Team/);
     const message = await screen.findByRole("textbox", { name: "Message" });
     fireEvent.change(message, { target: { value: "你好" } });
 
     fireEvent.keyDown(message, { key: "Enter", isComposing: true });
-    expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
     fireEvent.keyDown(message, { key: "Enter", isComposing: false });
+    expect(state.api.streamTeamConversation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
       expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1),
     );
