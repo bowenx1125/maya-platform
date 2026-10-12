@@ -1006,7 +1006,6 @@ class DashScopeLLMAdapter:
             "stream": False,
             "temperature": 0.2,
             "top_p": 0.8,
-            "max_completion_tokens": LLM_REQUESTED_OUTPUT_TOKEN_CAP,
             "n": 1,
             "response_format": {
                 "type": "json_schema",
@@ -1257,15 +1256,6 @@ class DashScopeLLMAdapter:
                 usage=None,
                 content_hash=content_hash,
                 safe_error_code="provider_usage_unknown",
-            )
-        if usage.completion_tokens > LLM_RESERVED_OUTPUT_TOKENS:
-            return _stage_candidate(
-                request,
-                http_status=status_code,
-                finish_reason=finish_text,
-                usage=usage,
-                content_hash=content_hash,
-                safe_error_code="provider_usage_overrun",
             )
         if finish_reason == "length":
             return _stage_candidate(

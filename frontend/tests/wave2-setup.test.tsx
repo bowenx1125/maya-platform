@@ -147,7 +147,7 @@ describe("Wave 2 teacher debate setup", () => {
     );
   });
 
-  it("renders teacher debate summaries without a Preview list entry", async () => {
+  it("opens the retained Preview screen from a debate summary", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const rows = [
       {
@@ -167,9 +167,10 @@ describe("Wave 2 teacher debate setup", () => {
       />,
     );
 
-    const link = await screen.findByRole("heading", { name: /TikTok/ });
-    expect(link).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /TikTok/ })).toBeNull();
+    const link = await screen.findByRole("link", { name: /TikTok/ });
+    expect(link.getAttribute("href")).toBe(
+      "/teacher/debates/debate-one/control",
+    );
     expect(screen.getByText("4 Rounds")).toBeTruthy();
   });
 
@@ -591,7 +592,14 @@ describe("Wave 2 teacher debate setup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Maya could not be reached. Check your connection and try again.",
+    );
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() =>
+      expect((done as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(done);
     await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
@@ -671,9 +679,25 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 仅本场中文修改" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const navigation = within(screen.getByRole("navigation"));
+    fireEvent.click(await navigation.findByRole("button", { name: "Back" }));
     expect(create).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "默认规则" })).toBeTruthy();
+    expect(
+      navigation.getByRole("link", { name: "Back" }).getAttribute("href"),
+    ).toBe("/teacher/debates");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
+      target: { value: "# 仅本场中文修改" },
+    });
+    fireEvent.click(await navigation.findByRole("button", { name: "Done" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "仅本场中文修改" }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "English" }));
     const input = screen.getByLabelText("Topic");
     const mixedTopic = "Should TikTok be banned? 推荐算法";
@@ -769,11 +793,15 @@ it("removes bulk Refresh and never retries stalled records when reading the list
   await screen.findByText("Needs recovery");
   expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
   expect(
+    (
+      await within(screen.getByRole("navigation")).findByRole("link", {
+        name: "New",
+      })
+    ).getAttribute("href"),
+  ).toBe("/teacher/debates/new");
+  expect(
     within(screen.getByRole("main")).queryByRole("link", { name: "New" }),
   ).toBeNull();
-  expect(
-    within(screen.getByRole("navigation")).getByRole("link", { name: "New" }),
-  ).toBeTruthy();
   fireEvent.focus(window);
   await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
   expect(api.remakeDebate).not.toHaveBeenCalled();

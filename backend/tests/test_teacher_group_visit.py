@@ -87,7 +87,7 @@ def test_the_whole_workspace_opens_and_closes_with_the_visit(app_factory: Any) -
         group_id = payload["user"]["groups"][0]["group_id"]
         agent = student.post(
             f"/api/v1/groups/{group_id}/agents",
-            json={"name": "Aurora"},
+            json={"name": "Aurora", "visibility": "public"},
             headers={
                 **ORIGIN,
                 "X-CSRF-Token": payload["csrf_token"],

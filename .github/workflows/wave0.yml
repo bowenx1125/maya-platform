@@ -134,7 +134,6 @@ jobs:
           test -f backend/tests/test_wave4_prompt.py
           test -f backend/tests/test_wave4_evidence_trace.py
           test -f frontend/tests/wave4-mutual-learning.test.tsx
-          test -f frontend/tests/wave4-persona.test.tsx
           test -f frontend/tests/wave4-evidence-trace.test.tsx
           test -f frontend/tests/wave4-provider-preflight.test.tsx
 

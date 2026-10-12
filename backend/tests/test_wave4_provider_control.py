@@ -11,7 +11,6 @@ import pytest
 from app.providers.control import (
     FIXED_MODELS,
     FIXED_REGION,
-    BudgetExceeded,
     DuplicateOperation,
     ExportConfirmationV1,
     ExportFieldV1,
@@ -250,15 +249,15 @@ def test_acceptance_unknown_retains_allowance_and_forbids_retry() -> None:
     assert repository.reservation(operation.id).state == "acceptance_unknown"
     assert not can_transition("acceptance_unknown", "sending")
     assert startup_recovery_state("sending") == "acceptance_unknown"
-    with pytest.raises(BudgetExceeded):
-        second = repository.create_prepared(_request(attempt_no=2))
-        repository.reserve(second.id)
+    other = repository.create_prepared(_request(logical_item_id="independent-item"))
+    assert repository.reserve(other.id).state == "reserved"
+    assert repository.operation(operation.id).charged_request_count == 1
     result = ProviderAcceptanceUnknownResultV1("acceptance_unknown", unknown)
     assert result.retry_allowed is False
     assert result.requires_reconciliation
 
 
-def test_abandoning_an_uncertain_attempt_does_not_silently_release_consumed_cap() -> None:
+def test_abandoning_an_uncertain_attempt_retains_its_charge() -> None:
     repository = InMemoryProviderOperationRepository(
         default_budget=ProviderScopeBudgetV1(
             max_requests=1, max_total_tokens=100, max_cost_cny=0.01
@@ -270,9 +269,8 @@ def test_abandoning_an_uncertain_attempt_does_not_silently_release_consumed_cap(
     repository.mark_acceptance_unknown(operation.id)
     abandoned = repository.abandon(operation.id)
     assert abandoned.state == "abandoned"
-    with pytest.raises(BudgetExceeded):
-        retry = repository.create_prepared(_request(attempt_no=2))
-        repository.reserve(retry.id)
+    assert abandoned.charged_request_count == 1
+    assert repository.reservation(operation.id).state == "abandoned"
 
 
 def test_startup_recovery_is_idempotent_and_distinguishes_staged_acceptance() -> None:
@@ -301,7 +299,7 @@ def test_startup_recovery_is_idempotent_and_distinguishes_staged_acceptance() ->
     assert repository.recover_one(staged.id, staged_response_complete=True).state == "accepted"
 
 
-def test_scope_cap_reservation_is_atomic_under_concurrency() -> None:
+def test_reservation_accounting_is_atomic_without_scope_caps() -> None:
     repository = InMemoryProviderOperationRepository(
         default_budget=ProviderScopeBudgetV1(
             max_requests=1, max_total_tokens=100, max_cost_cny=0.01
@@ -312,17 +310,14 @@ def test_scope_cap_reservation_is_atomic_under_concurrency() -> None:
     ]
 
     def reserve(operation: ProviderOperationV1) -> str:
-        try:
-            repository.reserve(operation.id)
-        except BudgetExceeded:
-            return "rejected"
+        repository.reserve(operation.id)
         return "reserved"
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         outcomes = tuple(executor.map(reserve, operations))
-    assert outcomes.count("reserved") == 1
-    assert outcomes.count("rejected") == 7
-    assert sum(operation.state == "reserved" for operation in repository.operations()) == 1
+    assert outcomes.count("reserved") == 8
+    assert outcomes.count("rejected") == 0
+    assert sum(operation.state == "reserved" for operation in repository.operations()) == 8
 
 
 def test_execute_provider_call_records_redacted_failure_and_unknown_outcomes() -> None:

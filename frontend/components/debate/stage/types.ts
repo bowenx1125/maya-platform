@@ -140,6 +140,7 @@ export type SegmentTurnPublic = {
     source_ids: string[];
     support_mode?: "direct" | "contextual" | "no_match" | null;
     reply_to: string | null;
+    reply_text?: string | null;
   }>;
 };
 
@@ -223,7 +224,8 @@ export type PrivatePlaybackMessage = {
   command_id?: string;
   controller_epoch?: string;
   turn_id?: string;
-  media_url?: string;
+  media_url?: string | null;
+  text_only?: boolean;
   expires_at?: string;
   control_version?: number;
   current_control_version?: number;

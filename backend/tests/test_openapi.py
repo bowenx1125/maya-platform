@@ -26,7 +26,13 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
     }
 
     expected: dict[str, tuple[Any, ...]] = {
-        "/auth/login": ("post", "login", [], {"200", "401"}),
+        "/auth/login": ("post", "login", [], {"200", "401", "403", "413", "429"}),
+        "/auth/register": (
+            "post",
+            "registerStudent",
+            [],
+            {"201", "403", "409", "413", "422", "429"},
+        ),
         "/auth/me": ("get", "getCurrentUser", [{"sessionCookie": []}], {"200", "401"}),
         "/auth/switch": (
             "post",
@@ -72,7 +78,7 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
         assert operation["operationId"] == operation_id
         assert operation["security"] == security
         assert set(operation["responses"]) == statuses
-        for status_code in statuses - {"200", "204"}:
+        for status_code in statuses - {"200", "201", "204"}:
             response = operation["responses"][status_code]
             content = response.get("content")
             if content is not None:
@@ -83,6 +89,12 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
     assert (
         login_body["content"]["application/json"]["schema"]["$ref"]
         == "#/components/schemas/LoginRequest"
+    )
+    register_body = document["paths"]["/auth/register"]["post"]["requestBody"]
+    assert register_body["required"] is True
+    assert (
+        register_body["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/RegisterRequest"
     )
     switch_operation = document["paths"]["/auth/switch"]["post"]
     assert switch_operation["requestBody"]["required"] is True

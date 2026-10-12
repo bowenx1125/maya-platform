@@ -127,13 +127,6 @@ def idempotency_conflict() -> PlatformError:
     return conflict("idempotency_conflict", "The idempotency key was used for a different request.")
 
 
-def rag_over_limit() -> PlatformError:
-    return unprocessable(
-        "rag_over_limit",
-        "A Markdown file exceeds the 100000 character limit.",
-    )
-
-
 def publish_blockers(blockers: list[str]) -> PlatformError:
     """Expose the first frozen publish blocker as the primary 422 code."""
 

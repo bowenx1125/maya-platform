@@ -80,9 +80,10 @@ def _boundary(content_type: str) -> bytes:
 
 def _header_map(header_bytes: bytes) -> dict[str, str]:
     try:
+        # Browser FormData encodes non-ASCII filenames as UTF-8 bytes.
+        text = header_bytes.decode("utf-8")
+    except UnicodeDecodeError:
         text = header_bytes.decode("latin-1")
-    except UnicodeDecodeError as exc:  # pragma: no cover - latin-1 never fails
-        raise VoiceUploadError("audio_invalid") from exc
     result: dict[str, str] = {}
     for line in text.split("\r\n"):
         if not line or ":" not in line:

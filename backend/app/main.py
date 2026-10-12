@@ -27,12 +27,16 @@ from app.core.errors import (
     request_validation_handler,
 )
 from app.core.logging import configure_application_logging
-from app.core.models import Course, ProviderOperation
+from app.core.models import Course, CourseMember, ProviderOperation, User
 from app.modules.agents.router import router as agents_router
+from app.modules.auth.abuse import AuthAbuseLimiter
+from app.modules.auth.credentials import active_catalog_snapshot
 from app.modules.auth.dependencies import get_db
+from app.modules.auth.models import UserCredential
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import bootstrap_demo_accounts
 from app.modules.avatars.router import router as avatars_router
+from app.modules.cardroom.router import router as cardroom_router
 from app.modules.debates.cleanup import resume_cleanup_journals
 from app.modules.debates.cleanup_router import router as debate_cleanup_router
 from app.modules.debates.playback.audio import AudioStore
@@ -55,9 +59,14 @@ from app.modules.demo_baseline.router import router as demo_baseline_router
 from app.modules.demo_baseline.service import ensure_demo_baseline
 from app.modules.interactions.router import router as interaction_router
 from app.modules.interactions.service import InteractionService
+from app.modules.knowledge.metadata_router import router as knowledge_metadata_router
 from app.modules.knowledge.providers import recover_embedding_provider_startup
 from app.modules.knowledge.recovery import recover_startup
 from app.modules.knowledge.router import router as knowledge_router
+from app.modules.knowledge_sets.generation import recover_generation_runs_at_startup
+from app.modules.knowledge_sets.router import router as knowledge_sets_router
+from app.modules.knowledge_sets.task_manager import KnowledgeGenerationTaskManager
+from app.modules.learning.router import router as learning_router
 from app.modules.org.router import router as org_router
 from app.modules.provider_disclosure.router import (
     get_provider_disclosure_service,
@@ -77,11 +86,16 @@ from app.modules.reports.service import (
     recover_report_jobs,
 )
 from app.modules.reports.task_manager import ReportTaskManager
+from app.modules.runtime_tools.recovery import (
+    accepted_chat_stage_complete,
+    recover_single_chat_runs,
+)
+from app.modules.teams.router import router as teams_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.modules.workspace.chat import router as chat_router
 from app.modules.workspace.live import router as live_router
-from app.modules.workspace.models import Conversation, ConversationTurn, ProviderPreferences
+from app.modules.workspace.models import ProviderPreferences
 from app.modules.workspace.providers import preferences_settings
 from app.modules.workspace.providers import router as provider_settings_router
 from app.providers.control_repository import ProviderRepository
@@ -118,6 +132,41 @@ def build_report_runtime(
     return report_runtime
 
 
+def _production_teacher_auth_available(database: Database, settings: Settings) -> bool:
+    """Require one active Teacher whose credential source survives startup."""
+
+    with database.session() as session:
+        teacher_ids = set(
+            session.scalars(
+                select(User.id)
+                .join(CourseMember, CourseMember.user_id == User.id)
+                .where(User.status == "active", CourseMember.role == "teacher")
+            ).all()
+        )
+        if not teacher_ids:
+            return False
+        credentialed_teacher = session.scalar(
+            select(User.id)
+            .join(CourseMember, CourseMember.user_id == User.id)
+            .join(UserCredential, UserCredential.user_id == User.id)
+            .where(
+                User.status == "active",
+                CourseMember.role == "teacher",
+                User.id.in_(teacher_ids),
+            )
+            .limit(1)
+        )
+        if credentialed_teacher is not None:
+            return True
+        if not settings.production_account_catalog_available:
+            return False
+        snapshot = active_catalog_snapshot(settings)
+        return any(
+            account.role == "teacher" and snapshot.user_id_for(account) in teacher_ids
+            for account in snapshot.accounts
+        )
+
+
 def create_app(
     settings: Settings | None = None,
     database: Database | None = None,
@@ -145,6 +194,10 @@ def create_app(
         runtime_database.session_factory,
         wave3_events.publish_summary,
         real_runtime=report_runtime,
+    )
+    knowledge_generation_tasks = KnowledgeGenerationTaskManager(
+        runtime_database.session_factory,
+        settings=runtime_settings,
     )
     playback_service = PlaybackService(
         playback_repository,
@@ -231,6 +284,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
+        knowledge_generation_tasks.bind_running_loop()
         prewarm.bind_running_loop()
         runtime_settings.validate_runtime()
         runtime_settings.ensure_data_root()
@@ -244,26 +298,23 @@ def create_app(
                 if preferences is not None:
                     next_settings = preferences_settings(app.state.base_settings, preferences)
                     app.state.prepare_provider_settings(next_settings)()
-                for conversation in session.scalars(
-                    select(Conversation).where(Conversation.active_request_id.is_not(None))
-                ):
-                    turn = session.get(ConversationTurn, conversation.active_request_id)
-                    if turn is not None and turn.state == "pending":
-                        turn.state = "acceptance_unknown" if turn.mode == "real" else "failed"
-                        turn.safe_error_code = "chat_interrupted"
-                    conversation.active_request_id = None
+                recover_single_chat_runs(session)
+                from app.modules.workspace.team_runtime import recover_team_runs
+
+                recover_team_runs(session)
             with runtime_database.session() as session:
-                stranded = list(
-                    session.scalars(
-                        select(ProviderOperation.id).where(
+                stranded = [
+                    (operation.id, accepted_chat_stage_complete(session, operation))
+                    for operation in session.scalars(
+                        select(ProviderOperation).where(
                             ProviderOperation.provider_operation == "llm_agent_chat",
                             ProviderOperation.state.in_(("reserved", "sending", "accepted")),
                         )
                     )
-                )
-            for operation_id in stranded:
+                ]
+            for operation_id, stage_complete in stranded:
                 ProviderRepository(runtime_database).recover_one(
-                    operation_id, staged_response_complete=False
+                    operation_id, staged_response_complete=stage_complete
                 )
             if runtime_settings.demo_mode:
                 # Parse first, then seed a fresh organization and apply the
@@ -280,11 +331,32 @@ def create_app(
                     runtime_settings,
                     seed_if_empty,
                 )
+            elif runtime_settings.production_account_catalog_available:
+                # Production reuses the strict private account synchronizer
+                # while Demo discovery, quick-login and switching stay off.
+                def seed_if_empty(session: Any) -> None:
+                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
+                        seed_demo_data(session)
+
+                bootstrap_demo_accounts(
+                    runtime_database,
+                    runtime_settings,
+                    seed_if_empty,
+                )
             else:
                 with runtime_database.session() as session:
                     if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
                         seed_demo_data(session)
-            if not runtime_settings.is_test:
+            if runtime_settings.is_production and not _production_teacher_auth_available(
+                runtime_database, runtime_settings
+            ):
+                raise RuntimeError(
+                    "Production requires a separate private Teacher credential catalog or "
+                    "an active Teacher account with a database password credential"
+                )
+            # Laozi, Plato and Socrates are Demo fixtures. A classroom starts
+            # without them, so production never creates or revives them.
+            if not runtime_settings.is_test and runtime_settings.demo_mode:
                 with runtime_database.session() as session:
                     ensure_demo_baseline(session, runtime_settings.resolved_data_root)
                 # A reviewed provider policy is operator evidence, not runtime
@@ -310,12 +382,16 @@ def create_app(
                 startup_voice_cleanup(runtime_settings.resolved_data_root)
                 await playback_service.recover_startup(session)
                 recover_report_jobs(session)
+                recover_generation_runs_at_startup(session)
             report_tasks.schedule_pending()
+            if not runtime_settings.is_test:
+                knowledge_generation_tasks.schedule_pending()
         try:
             yield
         finally:
             await prewarm.close()
             await report_tasks.close()
+            await knowledge_generation_tasks.close()
             await playback_tasks.close()
             runtime_database.dispose()
 
@@ -326,6 +402,7 @@ def create_app(
     )
     app.state.settings = runtime_settings
     app.state.database = runtime_database
+    app.state.auth_abuse_limiter = AuthAbuseLimiter()
     app.state.playback_service = playback_service
     app.state.interaction_service = interaction_service
     app.state.interaction_event_publisher = publish_interaction_event
@@ -333,6 +410,7 @@ def create_app(
     app.state.wave3_event_publisher = wave3_events
     app.state.prewarm_scheduler = prewarm
     app.state.report_task_manager = report_tasks
+    app.state.knowledge_generation_task_manager = knowledge_generation_tasks
     app.state.report_runtime = report_runtime
     app.state.base_settings = runtime_settings
     app.state.workspace_lock = RLock()
@@ -348,6 +426,7 @@ def create_app(
             playback_service.settings = next_settings
             report_tasks.real_runtime = next_report
             app.state.report_runtime = next_report
+            knowledge_generation_tasks.settings = next_settings
             runtime_settings = next_settings
             app.state.settings = next_settings
 
@@ -362,7 +441,18 @@ def create_app(
 
     app.dependency_overrides[get_provider_disclosure_service] = request_provider_disclosure_service
 
-    app.add_exception_handler(PlatformError, platform_error_handler)  # type: ignore[arg-type]
+    async def platform_error_response(request: Request, exc: PlatformError) -> JSONResponse:
+        response = await platform_error_handler(request, exc)
+        retry_after = exc.details.get("retry_after_seconds")
+        if (
+            exc.status_code == 429
+            and isinstance(retry_after, int)
+            and not isinstance(retry_after, bool)
+        ):
+            response.headers["Retry-After"] = str(max(1, retry_after))
+        return response
+
+    app.add_exception_handler(PlatformError, platform_error_response)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_handler)  # type: ignore[arg-type]
 
     async def framework_error_handler(
@@ -416,7 +506,13 @@ def create_app(
         request.state.request_id = str(uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         path = request.url.path
+        if path.startswith("/api/"):
+            # Auth, private projections, downloads, and errors share one cache
+            # rule; SSE keeps its route-specific streaming headers untouched.
+            response.headers["Cache-Control"] = "private, no-store"
         teacher_interaction_path = path.startswith("/api/v1/debates/") and path.endswith(
             ("/interaction", "/interaction/open", "/interaction/close")
         )
@@ -443,6 +539,10 @@ def create_app(
     app.include_router(org_router, prefix="/api/v1")
     app.include_router(agents_router, prefix="/api/v1")
     app.include_router(knowledge_router, prefix="/api/v1")
+    app.include_router(knowledge_metadata_router, prefix="/api/v1")
+    app.include_router(knowledge_sets_router, prefix="/api/v1")
+    app.include_router(learning_router, prefix="/api/v1")
+    app.include_router(teams_router, prefix="/api/v1")
     app.include_router(avatars_router, prefix="/api/v1")
     app.include_router(voices_router, prefix="/api/v1")
     app.include_router(debate_setup_router, prefix="/api/v1")
@@ -453,6 +553,7 @@ def create_app(
     app.include_router(provider_disclosure_router, prefix="/api/v1")
     app.include_router(chat_router, prefix="/api/v1")
     app.include_router(live_router, prefix="/api/v1")
+    app.include_router(cardroom_router, prefix="/api/v1")
     app.include_router(provider_settings_router, prefix="/api/v1")
     app.include_router(demo_baseline_router, prefix="/api/v1")
     app.include_router(demo_acceptance_router, prefix="/api/v1")
@@ -494,6 +595,14 @@ def create_app(
                         ),
                         None,
                     )
+                    if isinstance(string_branch, dict):
+                        value.update(
+                            {
+                                key: constraint
+                                for key, constraint in string_branch.items()
+                                if key not in {"type", "enum", "const"}
+                            }
+                        )
                     value.pop("anyOf", None)
                     value["type"] = ["string", "null"]
                     if isinstance(string_branch, dict) and isinstance(
@@ -510,6 +619,43 @@ def create_app(
 
         freeze_nullable_scalars(schema)
         component_schemas = schema.get("components", {}).get("schemas", {})
+        for name, field in (
+            ("PublicInteractionForm", "round_no"),
+            ("ReportRevisionSummary", "word_count"),
+        ):
+            property_schema = component_schemas.get(name, {}).get("properties", {}).get(field, {})
+            branches = property_schema.get("anyOf", [])
+            integer_branch = next(
+                (branch for branch in branches if branch.get("type") == "integer"), None
+            )
+            if integer_branch is not None and any(
+                branch.get("type") == "null" for branch in branches
+            ):
+                property_schema.pop("anyOf", None)
+                property_schema.update(integer_branch)
+                property_schema["type"] = ["integer", "null"]
+        # These response serializers always emit their nullable/default fields.
+        required_output_fields = {
+            "ReportRevisionSummary": ["word_count", "safe_error_code"],
+            "GeneratingReportRevision": ["english_markdown", "word_count", "safe_error_code"],
+            "ReadyReportRevision": ["safe_error_code"],
+            "FailedReportRevision": ["english_markdown", "word_count"],
+            "ProviderDataCallManifestSummaryV1": ["turn_id"],
+            "ProviderDataCallManifestListResponseV1": ["items"],
+            "ProviderDataCallDebateManifestListResponseV1": ["items"],
+            "ProviderDataCallPublicationManifestListResponseV1": ["items"],
+        }
+        for name, fields in required_output_fields.items():
+            component = component_schemas.get(name)
+            if isinstance(component, dict):
+                component["required"] = list(
+                    dict.fromkeys([*component.get("required", []), *fields])
+                )
+        interaction_properties = component_schemas.get("TeacherInteractionOpen", {}).get(
+            "properties", {}
+        )
+        if "public_url" in interaction_properties:
+            interaction_properties["public_url"]["format"] = "uri"
         participant_schema = component_schemas.get("DebateParticipant", {})
         participant_properties = participant_schema.get("properties", {})
         if "effective_voice_profile_id" in participant_properties:
@@ -548,6 +694,29 @@ def create_app(
                         # business-validation 422 keep that response in the
                         # generated server contract.
                         operation_id = operation.get("operationId")
+                        if operation_id in {
+                            "getClassroomInteractionForm",
+                            "submitVote",
+                            "submitBarrage",
+                        }:
+                            operation["security"] = []
+                            for parameter in operation.get("parameters", []):
+                                if parameter.get("name") == "access_token":
+                                    parameter["schema"] = {
+                                        "type": "string",
+                                        "minLength": 111,
+                                        "maxLength": 111,
+                                        "pattern": r"^v1\.[A-Za-z0-9_-]{64}\.[A-Za-z0-9_-]{43}$",
+                                    }
+                        if operation_id in {"openInteraction", "closeInteraction"}:
+                            operation.setdefault("parameters", []).append(
+                                {
+                                    "in": "header",
+                                    "name": "X-CSRF-Token",
+                                    "required": True,
+                                    "schema": {"type": "string", "minLength": 32},
+                                }
+                            )
                         if operation_id == "streamConversationMessage":
                             content = (
                                 operation.get("responses", {}).get("200", {}).get("content", {})
@@ -608,6 +777,14 @@ def create_app(
                             "submitVote",
                             "submitBarrage",
                             "translateCurrentPublishedContent",
+                            "createTeam",
+                            "saveTeamVersion",
+                            "updateCourseMember",
+                            "rebirthDebate",
+                            "getRegistrationOptions",
+                            "resetStudentPassword",
+                            "registerStudent",
+                            "remakeDebate",
                         }:
                             operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]

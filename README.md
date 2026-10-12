@@ -6,15 +6,15 @@ Mayaform 是面向文化互学的 RAG 教学平台。学生编写 Agent 人设�
 
 - **账号**：学生自由注册，填写用户名、至少五字符的密码和小组名；同一课程内的同名小组自动归并。用户名不区分大小写，并发重名注册只提示冲突，不改变已有登录。
 - **教师 Accounts**：查看成员、修改显示名、调组、停用/恢复、重置密码。私有 Demo 目录账号由目录管理，自注册账号可在页面编辑。
-- **教师进入小组**：在 Accounts 的 Groups 中点击 **Enter**，以教师身份使用完整学生工作区，包括创建、编辑和删除；使用 **Homeward** 返回 Accounts。访问关系独立保存，重启同步 Demo 目录不会清除它。已发布历史及费用授权规则仍适用。
+- **教师访问小组**：在 Accounts 的 Groups 中点击 **Enter**，以临时成员身份只读查看该组的 Public Agent，不能创建或删除；聊天只属于本人，老师看不到学生的聊天；左栏 **Back** 回到 Accounts，任何教师页面都会结束访问并删除这个临时成员关系。
 - **工作区**：老师、学生和扫码互动页面统一采用系统字体、灰白表面与登录页的暖黄色，保留原版 Logo；Chat 和 Immerse 共用按钮与配色，支持窄屏与键盘操作。登录页不变，移除解释性介绍，保留权限、费用和错误提示。
-- **Chat**：老师和学生选择本课程已发布 Agent 进行私人文字对话，显示 3D 形象；历史、引用与绑定版本由服务器保存。其他用户（包括老师）不能读取个人会话。
-- **Live**：老师进入 Immerse 后，学生的 Live 入口亮起，同步公开发言、人物和已有音频。学生不获得控制权，观看不额外调用模型；退出或租约过期关闭。
-- **声音**：克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
+- **Chatform**：Agent 和 Team 使用同一通用聊天界面，文字回复流式显示；保留圆角悬浮输入框与聊天历史，不展示 3D 模型或播放语音。历史、引用与版本由服务器保存，每个聊天只有本人能看；形象在 Workspace 中编辑。
+- **Live**：老师进入 Immerse 后，学生的 Live 入口亮起，同步公开发言、人物和已有音频。学生不获得控制权，观看不额外调用模型；退出或租约过期关闭。Live 画面下方的 Interact 直接打开扫码同款填写页面，弹幕不限发送次数，Final 前自动停止收集。
+- **声音**：Voices 点击文件名可直接改名，Enter／移开焦点保存，Escape 取消；不显示内部 ID。上传页不选择语言，试听默认英语，辩论朗读跟随 Ruleset。克隆音色属于上传者；同组其他学生和教师不能查看、试听、绑定或删除该音色。
 - **3D 课堂**：2–5 位国风人物围绕圆桌站立，气泡和 Transcript 随音频显示；音频失败时仍保留完整文字。实验性高斯院落需要额外的本地生成资源，不是默认课堂依赖。
-- **教学内容**：Topic 与可选 Background 分开保存；中英文 Markdown Ruleset 可编辑，创建辩论时冻结。Agent.md 的总编写预算为 12,000 字符。
+- **教学内容**：Topic 与可选 Background 分开保存；中英文 Markdown Ruleset 可编辑，创建辩论时冻结；发言身份和指代要求也在 Ruleset 内，可修改或删除。Agent.md 和 RAG 不设人为编写字数配额。
 
-当前产品范围是 **单课程本地 Demo**。无需邀请码；登录保留“用户名不存在”和“密码错误”的区分。多课程注册和公共部署尚不属于已验收范围。
+当前产品采用 **单课程**，保留本地 Demo 启动方式；公网部署使用独立的生产配置，步骤和验收要求见 [发布说明](docs/RELEASE_POLICY.md)。学生课程注册仍无需邀请码，登录保留“用户名不存在”和“密码错误”的区分。实际部署、完整验收和未测范围以 PROJECT 为准。
 
 ## 首次启动
 
@@ -34,15 +34,17 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 
 ## 一次课堂
 
-**New / Back / Done** 统一在侧栏，只显示当前可用的操作；主内容区不重复放创建、返回和提交按钮。Chats 只有 New 和输入框内的发送箭头；全屏 Immerse 保留自己的控制键。
+**New / Back / Done** 沿用当前页面的统一操作，只显示当前可用的操作。Chatform 保持通用聊天交互；全屏 Immerse 保留自己的控制键。
 
-1. **准备 Agent**：学生进入 Workspace，New 创建 Agent；自由编写中英文 AGENT.md（最多 12,000 字符）、启用 RAG（每文件最多 100,000 字符），配置形象及声音，侧栏 **Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chats** 与已发布 Agent 多轮对话。点击 Agent 直接检查当前版本；此处 **New** 创建下一版，已有草稿则直接打开。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
+1. **准备 Agent**：学生进入 Studyform，用 Agents 模块右侧的 + 创建 Agent；自由编写中英文 AGENT.md、启用 RAG，配置形象及声音，AGENT.md 首行 `# 名字` 会在保存时同步当前 Agent 名称；左侧栏 **Back** 返回，**Done** 保存并发布。不再需要 Persona、Compile / Confirm 或 Test Chat；用 **Chatform** 与已发布 Agent 多轮对话。点击 Agent 检查当前版本；初始 Draft 和已有 Published 都使用 **New** 打开草稿编辑（需要时创建下一版），由 **Done** 保存并发布。每个 Workspace 内名称不能重复（忽略大小写、首尾空格及全半角差异）；重名时请换名或先删除重复 Agent。下一版 Draft 可重新选择本人已就绪音色，或切回平台默认音色，旧版本保持不变。Workspace 的 **Delete** 统一移除师生入口，任何 Debate 引用都会阻止删除，已有单聊保留只读历史。
 2. **创建辩论**：教师进入 **Debates → New**，填写 Topic / Background，选择 2–5 位 Agent、顺序和立场，确认 Ruleset 的语言及内容后点击 **Done**。
-3. **准备前三轮**：Preview 展示 Background 和各轮发言。固定流程为 **Opening → Discussion → Response → Conclusion**；前三轮保存正文与音频，后续发言能看到此前成功完成的发言，包括同轮上下文。
-4. **进入课堂**：准备就绪后点击 **Immerse**。操作键独立放在屏幕最右侧；**Transcript** 展开发言记录侧栏，保留 Public Debate、课堂状态和 Check RAG。**Interact / Hide** 显示或收起消息二维码；Hide 不关闭已有扫码入口。第四轮冻结可用消息后生成回应。
+3. **准备前三轮**：点击 Debates 列表中的辩论卡片进入预览，查看 Background 和各轮发言；页面保留议题标题，不显示额外的“Preview”标题。固定流程为 **Opening → Discussion → Response → Conclusion**；前三轮保存正文及可用音频；自定义音色不可用时使用平台默认音色，默认音色也不可用时保留文字发布与手动 Next，后续发言能看到此前成功完成的发言，包括同轮上下文。
+4. **进入课堂**：准备就绪后点击 **Immerse**。操作键独立放在屏幕最右侧；**Transcript** 展开发言记录侧栏，保留 Public Debate、课堂状态和 Check RAG。**Interact / Hide** 显示或收起消息二维码；Hide 不关闭已有扫码入口。进入 Final 时自动停止接收新弹幕，不设手动暂停按钮。第四轮冻结可用消息后生成回应，并在 Transcript 的回复段落旁展示对应匿名留言；弹幕不是逐条即时回复。
 5. **查看结果**：**Check RAG** 查看证据。课堂播放完成后使用 **Conclude** 查看 Evaluation 和 Report；报告提供版本/历史、Review 和 Regenerate。
 
-证据支持等级为直接支持 **+5**、间接支持 **+2**、No match **+0**，不等于事实真伪评分。发言篇幅由 Prompt 指导，不因长度自动截断、补齐或拒收。
+Report 不因供应商返回的 model/object 标识不同而拒收；usage 缺失或不一致也不阻止生成，仍校验报告正文与完成状态。
+
+证据支持等级为直接支持 **+5**、间接支持 **+2**、No match **+0**；缺少等级时也显示 No match，不另列 unscored 计数，不等于事实真伪评分。发言篇幅由 Prompt 指导，不因长度自动截断、补齐或拒收。
 
 ## 课堂恢复与清理
 
@@ -67,7 +69,7 @@ Bootstrap 创建本地私有配置和 Demo 账号；已有配置不会被覆盖�
 | 更新后重建     | `docker compose up -d --build --wait` |
 | 查看状态       | `docker compose ps`                   |
 
-后端启动时自动迁移，`0030` 增加私人聊天、加密配置和 Live 租约。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
+后端启动时自动迁移，当前代码迁移 head 为 `0058_card_rooms`（实际部署版本见 PROJECT）；`0030` 增加私人聊天、加密配置和 Live 租约，`0031` 增加 Agent 删除标记，`0032` 移除恢复输入大小限制，`0033` 移除预算与调用序号上限并保留历史账本。若旧用户名或小组名规范化后冲突，迁移会停止，不会静默合并身份。
 
 修改 `.env` 后执行 `docker compose up -d --wait` 以重新创建需要更新配置的容器。更换 Wi-Fi 后，可运行：
 
@@ -90,13 +92,27 @@ MAYA_REPORT_PROVIDER=dashscope
 
 首次启用还需要配置本地凭据、区域、`LLM_MODEL` 和已审核的 Provider policy，并完成教师披露确认；详见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。仅修改上述选择项或填写 API Key 不足以完成配置。聊天、辩论和报告共用 `LLM_MODEL`，改这一项即可换模型。
 
-教师首页的 Components 可切换 LLM、Embedding、Report 的 Real/Mock；缺 Key 时弹窗填写，服务器加密保存，不回传 Key。右上角仅一个 **Check**，只检查尚未 Ready 或已更改的能力；真实检测先确认本批最多请求数，失败即停止。改模式仅使该项检查失效，改 Key 使全部检查失效。活跃生成期间禁止切换，网页配置重启后保留。Mock 与真实 Embedding 快照不混用。
+Provider 模式、API Key 和连通性检查由维护层管理，教师首页不提供 Components 控件。现有配置和调用账本继续保留，Mock 与真实 Embedding 快照不混用；资料外发按当前身份、用途和准确清单授权。Knowledge 的保存或明确生成/重生成表达当次意图，不要求另外打开披露页面确认；权限、供应商政策、去重与费用记录仍校验。
 
-老师和学生均可在 **Chat** 选择已有已发布 Agent；会话与引用仅本人可读，重新进入保留历史。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。界面没有 Refresh 按钮；列表仍自动读取最新状态，断线可重新进入。
+没有选中会话时，Chatform 显示 “No chats yet.”。左栏 **New** 打开 Teams 和 Agents 选择页（没有时显示 No Teams yet. 或 No Agents yet.），选中一个后用左栏 **Done** 立即创建会话；配方完整的老师 Team 由 Leader 先发开场白。每个聊天都只属于本人，老师和同学都看不到；学生在老师发布的 Team 里做的正式测评照常写入记录、进入老师报告，普通聊天不进入报告。重新进入保留历史，Chatform 只输出文字。老师进入 Immerse 后，学生 **Live** 亮起，共享人物、当前发言和公开发言记录；不投屏，也不重复生成内容。列表自动更新，断线可重新进入。
 
-TTS 与 Voice 默认仍是 mock。需要语音克隆或聊天朗读时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。教师首页 Components 仍把 TTS 与 Voice 标为 Deferred，不能在网页上切换。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
+课堂或正式实例由部署方在 `.env` 设置 `PROVIDER_STANDING_CONSENT=true`，一次性授权外部 AI 发送，师生不再看到披露页面；每个准确清单仍逐一记录、去重，未知结果不会自动重发。未设置时，教师需要在 `/teacher/provider-approvals/chats` 确认（按用户要求已无导航入口）。缺少授权时请求不会发出；确认后由学生明确发送新消息，旧失败请求不会自动重发。
+
+v1.4 的 Agent 和 Voice 在 **Studyform** 创建；普通 Team 由师生在 Studyform 的 Teams 中勾选成员和 Leader 创建；教师在 Studyform 发布 Maya Team。当前部署与验收状态见 [PROJECT](docs/PROJECT.md)。教师手动检查 Maya Team 的路径是：
+
+1. 在 Studyform 用 Agents 模块右侧的 + 创建 Agent，创建时选 Private 或 Public（之后不能更改），填写 Agent.md；RAG 只在 Agent 页 **Brainform** 区的 + 上传，与该 Agent 同为私有或公开，也可勾选已有 RAG 或 Knowledge，用左栏 **Done** 保存。
+2. 在 Studyform 打开 Maya Team，用左栏 **New** 选择已有成员、Leader 和共享 Knowledge。每个成员使用自己的资料加共享 Knowledge，其他成员私人资料不会自动共享。
+3. 用左栏 **Done** 发布；Team 以 Public 保存并进入 Maya Team 列表。
+4. 学生打开 **Chatform → New**，在 Teams 中选中这个 Team，点左栏 **Done** 开始自己的会话。这里不重新选择成员、Leader 或 Knowledge。
+5. 测评中用自然语言作答、暂停、继续或放弃。老师成功更新相关 Knowledge 后，进行中或已暂停的回合会在普通 Chat 提示重新答题；旧作答不再参与重答评估，已完成回合不追溯修改。
+
+TTS 与 Voice 默认仍是 mock。需要语音克隆或课堂语音播放时，把 `TTS_PROVIDER` 和 `VOICE_PROVIDER` 设为 `dashscope`，它们与 LLM 共用 `DASHSCOPE_API_KEY`，没有单独的语音密钥。轮换密钥只改这一项并重启后端，工作区、区域和 `SESSION_SECRET` 保持不变；已克隆的音色属于工作区，不随密钥改变。苏格拉底、柏拉图、老子不能改资料，要用 `BASELINE_DEFAULT_VOICES` 指定音色档案 id，不写进代码；省略的角色使用 `FALLBACK_VOICE_PROFILE_ID`。柏拉图的预置音色 Eldric Sage 用 `scripts/seed_preset_voice.py` 写入，再把打印的档案 id 配成 `plato=<id>`。步骤见 [真实服务配置](docs/REAL_PROVIDER_SETUP.md)。TTS / Voice 由本地环境配置管理，不能在网页上切换；Real 表示已选择真实适配器，不等于音色已准备好或供应商请求已验收。面对面实时语音另行接百炼北京，按用户要求最后实施，当前 Chat 不宣称支持实时语音。详见 [接入边界](docs/adr/ADR-008-agent-chat-live-provider-controls.md)。
+
+后端不再按请求次数、Token 数或金额预算阻止调用，也不向 LLM / Report 发送固定输出 Token 上限。实际用量、费用、权限、披露确认和去重仍保留；供应商自身的容量限制仍适用。
 
 ## 开发与验证
+
+工作区和课堂操作支持即时的中英文悬停、键盘焦点及触控提示；RAG 复用 Markdown 编辑与已有 PDF/DOCX 转换导入，查看、编辑、下载和删除集中在 Brainform。
 
 ```sh
 pnpm check
@@ -107,3 +123,6 @@ pnpm check
 [工作约定](AGENTS.md) · [架构说明](docs/ARCHITECTURE.md) · [接口契约](contracts/openapi-v0.1.yaml)
 
 `.env`、私有账号目录、运行数据库、Provider 私有配置和生成音频不提交 Git。日常备份应包含本地运行数据及必要的私有配置，并自行安全保管。
+
+署名 **Work With Bowen** 显示在 Logout 上方的分隔线上方。
+Chatform 仅生成文本，不再调用 TTS 或自动播放语音。

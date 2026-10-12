@@ -97,6 +97,51 @@ describe("segments_v2 public debate presentation", () => {
     expect(activeSpeech?.textContent).toContain("Second paragraph.");
   });
 
+  it("shows the frozen anonymous message beside its reply without rewriting speech", () => {
+    const turn: StreamTurn = {
+      ...segmentTurn,
+      round_no: 4,
+      segment_turn: {
+        schema_version: "segment_turn_v2",
+        segments: [
+          {
+            text: "First paragraph.",
+            source_ids: [],
+            reply_to: "B1",
+            reply_text: "How can [redacted] challenge the criterion?",
+          },
+          { text: "Second paragraph.", source_ids: [], reply_to: null },
+        ],
+      },
+    };
+    const view = renderStream([turn]);
+    const quote = screen.getByRole("blockquote", {
+      name: "In reply to a classroom message",
+    });
+    expect(quote.textContent).toContain(
+      "How can [redacted] challenge the criterion?",
+    );
+    expect(view.container.querySelectorAll("blockquote")).toHaveLength(1);
+    expect(quote.nextElementSibling?.textContent).toBe("First paragraph.");
+    expect(turn.speech).toBe("First paragraph.\n\nSecond paragraph.");
+  });
+
+  it("keeps older reply references readable without inventing missing classroom text", () => {
+    renderStream([
+      {
+        ...segmentTurn,
+        segment_turn: {
+          schema_version: "segment_turn_v2",
+          segments: [
+            { text: "Existing reply.", source_ids: [], reply_to: "B1" },
+          ],
+        },
+      },
+    ]);
+    expect(screen.queryByRole("blockquote")).toBeNull();
+    expect(screen.getAllByText("Existing reply.").length).toBeGreaterThan(0);
+  });
+
   it("renders paragraphs and keeps source receipts collapsed until Check RAG opens", () => {
     renderStream([segmentTurn]);
 
@@ -173,7 +218,8 @@ describe("segments_v2 playback read model", () => {
           {
             text: "A paragraph.",
             source_ids: ["source-a"],
-            reply_to: null,
+            reply_to: "B1",
+            reply_text: "A frozen anonymous classroom question.",
             support_mode: "direct",
           },
         ],
@@ -189,6 +235,9 @@ describe("segments_v2 playback read model", () => {
       ],
     });
 
+    expect(raw?.segment_turn?.segments[0]?.reply_text).toBe(
+      "A frozen anonymous classroom question.",
+    );
     expect(raw?.segment_turn?.segments[0]?.text).toBe("A paragraph.");
     expect(raw?.segment_turn?.segments[0]?.support_mode).toBe("direct");
     expect(raw?.source_details?.[0]).toMatchObject({

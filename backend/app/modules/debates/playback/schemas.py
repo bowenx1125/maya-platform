@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.debates.generation.evidence_trace import EvidenceTraceV1
 from app.modules.debates.schemas import SegmentSourceDetail, SegmentTurnPublic
@@ -96,7 +96,7 @@ class PlaybackStartedPayload(ClosedModel):
     evidence_trace: list[EvidenceTraceV1] | None = None
     segment_turn: SegmentTurnPublic | None = None
     source_details: list[SegmentSourceDetail] = Field(default_factory=list)
-    playback_url: str = Field(
+    playback_url: str | None = Field(
         pattern=(
             r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
             r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
@@ -107,6 +107,12 @@ class PlaybackStartedPayload(ClosedModel):
     avatar_states: list[AvatarStateDTO] = Field(min_length=1)
     cursor_ms: Literal[0] = 0
     playback_rate: float | None = Field(default=None, ge=0.95, le=1.25)
+
+    @model_validator(mode="after")
+    def require_explicit_text_playback(self) -> PlaybackStartedPayload:
+        if self.playback_url is None and self.audio_ready is not False:
+            raise ValueError("Text playback requires audio_ready=false.")
+        return self
 
 
 class PlaybackCursorPayload(ClosedModel):
@@ -414,7 +420,8 @@ class MediaPreparedResult(PrivateResultBase):
     command_id: UUID
     controller_epoch: UUID
     turn_id: UUID
-    media_url: str = Field(
+    text_only: bool = False
+    media_url: str | None = Field(
         pattern=(
             r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
             r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
@@ -423,6 +430,12 @@ class MediaPreparedResult(PrivateResultBase):
         )
     )
     expires_at: datetime
+
+    @model_validator(mode="after")
+    def require_matching_media_mode(self) -> MediaPreparedResult:
+        if self.text_only != (self.media_url is None):
+            raise ValueError("Text-only preparation requires a null media URL.")
+        return self
 
 
 class CommandRejectedResult(PrivateResultBase):

@@ -26,7 +26,73 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
-SCHEMA_HEAD = "0033_teacher_courseware"
+K2A_SCHEMA_HEAD = "0037_knowledge_generation_runs"
+K2B1_SCHEMA_HEAD = "0038_knowledge_generation_provider_stage"
+K2B2_SCHEMA_HEAD = "0039_knowledge_generation_materialization"
+K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
+K3B1_SCHEMA_HEAD = "0041_team_conversations"
+K3B2_SCHEMA_HEAD = "0042_team_turn_results"
+K4A_SCHEMA_HEAD = "0043_learning_evidence"
+SCHEMA_HEAD = "0062_active_debate_slot"
+KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
+SUPPORTED_SCHEMA_HEADS = {
+    "0035_w1_resource_ownership",
+    KNOWLEDGE_SETS_SCHEMA_HEAD,
+    K2A_SCHEMA_HEAD,
+    K2B1_SCHEMA_HEAD,
+    K2B2_SCHEMA_HEAD,
+    K3A_SCHEMA_HEAD,
+    K3B1_SCHEMA_HEAD,
+    K3B2_SCHEMA_HEAD,
+    K4A_SCHEMA_HEAD,
+}
+# These additive tables are outside the Debate cleanup's ownership.
+V14_PRESERVED_BY_HEAD = {
+    "0044_team_provider_stage": (
+        "team_provider_calls",
+        "team_provider_standing_grants",
+        "team_provider_consent_bindings",
+    ),
+    "0045_assessment_attempts": (
+        "assessment_activities",
+        "assessment_activity_questions",
+        "assessment_attempts",
+        "learning_assessment_resource_grants",
+        "assessment_attempt_questions",
+        "assessment_attempt_events",
+        "learning_boundaries",
+        "learning_boundary_revisions",
+        "learning_boundary_evidence",
+        "assessment_course_reports",
+        "assessment_course_report_revisions",
+        "assessment_course_report_evidence",
+        "assessment_course_report_mutations",
+    ),
+    "0046_chat_withdrawal": (),
+    "0047_brainform_markdown": (
+        "knowledge_document_versions",
+        "knowledge_set_markdown_versions",
+    ),
+    "0048_runtime_tool_receipts": ("runtime_tool_receipts",),
+    "0049_runtime_model_call_stages": ("runtime_model_call_stages",),
+    "0050_chat_provider_standing_grants": (
+        "chat_provider_standing_grants",
+        "chat_provider_consent_bindings",
+    ),
+    "0051_chat_memory_entry_actions": ("chat_memory_entry_actions",),
+    "0052_teacher_courseware": (),
+    "0053_user_profile": (),
+    "0054_assessment_attempt_question_selection": (),
+    "0055_assessment_attempt_submission": (),
+    "0056_preset_voice_profiles": (),
+    "0057_agent_account_memory": ("agent_account_memories",),
+    "0058_card_rooms": ("card_rooms",),
+    "0059_chat_titles_pins": (),
+    "0060_legacy_data_reset": ("data_reset_rows",),
+    "0061_personal_agent_debaters": (),
+    "0062_active_debate_slot": (),
+}
+SUPPORTED_SCHEMA_HEADS.update(V14_PRESERVED_BY_HEAD)
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
 DELETE_GUARD = "trg_llm_recovery_inputs_immutable_delete"
 
@@ -97,6 +163,81 @@ PRESERVED_TABLES = (
     "voice_previews",
     "provider_policy_snapshots",
     "audit_logs",
+    "knowledge_sets",
+    "knowledge_set_sources",
+    "knowledge_assets",
+    "knowledge_asset_versions",
+    "knowledge_asset_version_sources",
+    "agent_knowledge_sets",
+    "knowledge_generation_runs",
+    "knowledge_generation_target_snapshots",
+    "knowledge_generation_accepted_stages",
+    "knowledge_generation_source_receipts",
+    "knowledge_generation_items",
+    "teams",
+    "team_versions",
+    "team_version_members",
+    "team_version_sets",
+    "course_team_publications",
+    "team_member_invoke_grants",
+    "conversation_participants",
+    "conversation_participant_sets",
+    "conversation_shared_sets",
+    "team_turn_results",
+    "team_chat_events",
+    "learning_records",
+    "learning_assessments",
+    "learning_assessment_revisions",
+    "learning_assessment_mutations",
+)
+PRESERVED_TABLES += tuple(
+    table for tables in V14_PRESERVED_BY_HEAD.values() for table in tables
+)
+K1_PRESERVED_TABLES = frozenset(
+    {
+        "knowledge_sets",
+        "knowledge_set_sources",
+        "knowledge_assets",
+        "knowledge_asset_versions",
+        "knowledge_asset_version_sources",
+        "agent_knowledge_sets",
+    }
+)
+K2_PRESERVED_TABLES = frozenset(
+    {"knowledge_generation_runs", "knowledge_generation_accepted_stages"}
+)
+K2B2_PRESERVED_TABLES = frozenset(
+    {
+        "knowledge_generation_source_receipts",
+        "knowledge_generation_items",
+        "knowledge_generation_target_snapshots",
+    }
+)
+K3A_PRESERVED_TABLES = frozenset(
+    {
+        "teams",
+        "team_versions",
+        "team_version_members",
+        "team_version_sets",
+        "course_team_publications",
+        "team_member_invoke_grants",
+    }
+)
+K3B1_PRESERVED_TABLES = frozenset(
+    {
+        "conversation_participants",
+        "conversation_participant_sets",
+        "conversation_shared_sets",
+    }
+)
+K3B2_PRESERVED_TABLES = frozenset({"team_turn_results", "team_chat_events"})
+K4A_PRESERVED_TABLES = frozenset(
+    {
+        "learning_records",
+        "learning_assessments",
+        "learning_assessment_revisions",
+        "learning_assessment_mutations",
+    }
 )
 
 IDEMPOTENCY_OPERATIONS = (
@@ -310,17 +451,66 @@ def _table_names(connection: sqlite3.Connection) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
-def _validate_schema(connection: sqlite3.Connection) -> None:
+def _validate_schema(connection: sqlite3.Connection) -> str:
     tables = _table_names(connection)
-    required = set(TARGET_TABLES) | set(PRESERVED_TABLES) | {"alembic_version"}
-    if required.difference(tables):
+    if "alembic_version" not in tables:
         raise CleanupError("schema_tables_missing")
     heads = {
         str(row[0])
         for row in connection.execute("SELECT version_num FROM alembic_version")
     }
-    if heads != {SCHEMA_HEAD}:
+    if len(heads) != 1 or not heads.issubset(SUPPORTED_SCHEMA_HEADS):
         raise CleanupError("schema_head_invalid")
+    schema_head = next(iter(heads))
+    required_preserved = set(PRESERVED_TABLES)
+    for introduced_at, additions in V14_PRESERVED_BY_HEAD.items():
+        if int(schema_head[:4]) < int(introduced_at[:4]):
+            required_preserved.difference_update(additions)
+    if schema_head == "0035_w1_resource_ownership":
+        required_preserved.difference_update(K1_PRESERVED_TABLES)
+        required_preserved.difference_update(K2_PRESERVED_TABLES)
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == KNOWLEDGE_SETS_SCHEMA_HEAD:
+        required_preserved.difference_update(K2_PRESERVED_TABLES)
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K2A_SCHEMA_HEAD:
+        required_preserved.discard("knowledge_generation_accepted_stages")
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K2B1_SCHEMA_HEAD:
+        required_preserved.difference_update(K2B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K2B2_SCHEMA_HEAD:
+        required_preserved.difference_update(K3A_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K3A_SCHEMA_HEAD:
+        required_preserved.difference_update(K3B1_PRESERVED_TABLES)
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K3B1_SCHEMA_HEAD:
+        required_preserved.difference_update(K3B2_PRESERVED_TABLES)
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    elif schema_head == K3B2_SCHEMA_HEAD:
+        required_preserved.difference_update(K4A_PRESERVED_TABLES)
+    required = set(TARGET_TABLES) | required_preserved | {"alembic_version"}
+    if required.difference(tables):
+        raise CleanupError("schema_tables_missing")
     if list(connection.execute("PRAGMA foreign_key_check")):
         raise CleanupError("foreign_key_violations_before")
     triggers = {
@@ -333,6 +523,7 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
         actual = triggers.get(name)
         if actual is None or _normalise_sql(actual) != _normalise_sql(expected):
             raise CleanupError("trigger_definition_unexpected")
+    return schema_head
 
 
 @dataclass(frozen=True)
@@ -362,6 +553,7 @@ class CleanupPlan:
     directory_paths: tuple[Path, ...]
     table_counts: Mapping[str, int]
     preserved_counts: Mapping[str, int]
+    schema_head: str
     file_bytes: int
 
     @property
@@ -558,7 +750,9 @@ def _stored_file_survivor_check(
             raise CleanupError("stored_file_shared")
 
 
-def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
+def _build_plan(
+    connection: sqlite3.Connection, data_root: Path, schema_head: str
+) -> CleanupPlan:
     debate_ids = _select_all(connection, "debates", "id")
     debate_course_ids = {
         str(row["id"]): str(row["course_id"])
@@ -803,9 +997,7 @@ def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
         | cleanup_idempotency_ids
     )
     cleanup_debate_ids = debate_ids | {
-        str(row["entity_id"])
-        for row in cleanup_rows
-        if row["entity_id"]
+        str(row["entity_id"]) for row in cleanup_rows if row["entity_id"]
     }
     if cleanup_debate_ids:
         operation_clause, operation_values = _in(("deleteVoice", "deleteAll"))
@@ -979,6 +1171,7 @@ def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
     preserved_counts = {
         table: int(connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
         for table in PRESERVED_TABLES
+        if table in _table_names(connection)
     }
     return CleanupPlan(
         debate_ids=frozenset(debate_ids),
@@ -1004,6 +1197,7 @@ def _build_plan(connection: sqlite3.Connection, data_root: Path) -> CleanupPlan:
         directory_paths=tuple(directory_paths_by_string.values()),
         table_counts=target_counts,
         preserved_counts=preserved_counts,
+        schema_head=schema_head,
         file_bytes=file_bytes,
     )
 
@@ -1014,8 +1208,8 @@ def inspect_cleanup(database_path: Path, data_root: Path) -> CleanupPlan:
     database, root = _validate_paths(database_path, data_root)
     connection = _connect(database, read_only=True)
     try:
-        _validate_schema(connection)
-        return _build_plan(connection, root)
+        schema_head = _validate_schema(connection)
+        return _build_plan(connection, root, schema_head)
     finally:
         connection.close()
 
@@ -1480,8 +1674,8 @@ def apply_cleanup(
     moved: list[tuple[Path, Path]] = []
     try:
         connection.execute("BEGIN IMMEDIATE")
-        _validate_schema(connection)
-        plan = _build_plan(connection, root)
+        schema_head = _validate_schema(connection)
+        plan = _build_plan(connection, root, schema_head)
         quarantine, moved = _move_files(plan, root)
         try:
             _apply_plan(connection, plan)
@@ -1509,7 +1703,7 @@ def audit_payload(plan: CleanupPlan, *, mode: str, status: str) -> dict[str, obj
         "schema_version": AUDIT_SCHEMA_VERSION,
         "status": status,
         "mode": mode,
-        "schema_head": SCHEMA_HEAD,
+        "schema_head": plan.schema_head,
         "app_must_be_stopped": True,
         "debates_seen": len(plan.debate_ids),
         "planned_turns": plan.table_counts.get("debate_turns", 0),

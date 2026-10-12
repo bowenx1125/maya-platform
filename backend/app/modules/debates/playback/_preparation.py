@@ -14,7 +14,7 @@ from typing import Any
 from app.core.errors import PlatformError
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.round_count import debate_round_count, uses_segment_protocol
-from app.providers.tts import TTS_UNAVAILABLE_CODES, TTSProviderError, TTSProviderUnavailableError
+from app.providers.tts import TTS_UNAVAILABLE_CODES, TTSProviderError, TTSVoiceUnavailableError
 
 from ._core import (
     _SAFE_GENERATION_CODES,
@@ -293,12 +293,14 @@ class PlaybackPreparationMixin(PlaybackCore):
             if isinstance(value, ResolvedTurnVoice):
                 return value
             if isinstance(value, Mapping):
+                raw_model = value.get("target_model_key")
                 return ResolvedTurnVoice(
                     kind=str(value.get("kind", "mock_sentinel")),
                     profile_id=(
                         str(value["profile_id"]) if value.get("profile_id") is not None else None
                     ),
                     voice_token=str(value.get("voice_token", "mock")),
+                    target_model_key=str(raw_model) if raw_model else None,
                 )
         return ResolvedTurnVoice(
             kind="mock_sentinel",
@@ -373,18 +375,20 @@ class PlaybackPreparationMixin(PlaybackCore):
     def _provider_allowed(self) -> None:
         if self.settings is not None:
             embedding = getattr(self.settings, "embedding_provider", "mock")
-            blocked_selectors = (
+            speech_selectors = (
                 getattr(self.settings, "tts_provider", "mock"),
                 getattr(self.settings, "voice_provider", "mock"),
             )
-            if embedding not in {"mock", "dashscope"}:
+            if embedding not in {"mock", "dashscope"} or any(
+                value not in {"mock", "dashscope"} for value in speech_selectors
+            ):
                 raise PlatformError(
                     "provider_unavailable", "The service is temporarily unavailable.", 503
                 )
-            if any(value != "mock" for value in blocked_selectors):
-                raise TTSProviderUnavailableError()
-        if getattr(self.tts_provider, "key", "mock") != "mock":
-            raise TTSProviderUnavailableError()
+        if getattr(self.tts_provider, "key", "mock") not in {"mock", "dashscope"}:
+            raise PlatformError(
+                "provider_unavailable", "The service is temporarily unavailable.", 503
+            )
 
     def _release_claim(
         self,
@@ -615,7 +619,8 @@ class PlaybackPreparationMixin(PlaybackCore):
                             self._participant_for_turn(self._participants(db, debate), turn)
                         ),
                         "round_no": self._round(turn),
-                        "audio_ready": True,
+                        "audio_ready": self._get(turn, "audio_file_id", "audio_relative_path")
+                        is not None,
                         "retrieval_status": str(
                             self._get(turn, "retrieval_status", default="no_match")
                         ),
@@ -774,6 +779,8 @@ class PlaybackPreparationMixin(PlaybackCore):
                 )
                 self._provider_allowed()
                 voice_token = prepared.voice_token
+                if not voice_token:
+                    raise TTSVoiceUnavailableError()
                 if self.audio_store is None:
                     from .audio import AudioStore
 
@@ -796,6 +803,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                             speech=prepared.speech,
                             voice_token=voice_token,
                             language=debate_output_language(debate),
+                            target_model_key=voice.target_model_key,
                         )
                     )
                     try:
@@ -816,6 +824,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                         speech=prepared.speech,
                         voice_token=voice_token,
                         language=debate_output_language(debate),
+                        target_model_key=voice.target_model_key,
                     )
                     synthesis_work = asyncio.create_task(asyncio.to_thread(synthesize))
                     try:
@@ -947,7 +956,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if is_current:
                     current_state.status = "ready"
                     current_state.cursor_ms = 0
-                    current_state.audio_duration_ms = audio.duration_ms
+                    current_state.audio_duration_ms = audio.duration_ms if audio is not None else 0
                     current_state.pending_action = None
                     current_state.pending_ticket_hash = None
                     current_state.pending_media_command_id = None
@@ -966,10 +975,10 @@ class PlaybackPreparationMixin(PlaybackCore):
                                     )
                                 ),
                                 "round_no": self._round(fresh_turn),
-                                "audio_ready": True,
+                                "audio_ready": audio is not None,
                                 "retrieval_status": prepared.retrieval_status,
                                 "grounding_mode": prepared.grounding_mode,
-                                "audio_duration_ms": audio.duration_ms,
+                                "audio_duration_ms": audio.duration_ms if audio is not None else 0,
                                 **self._mutual_phase_payload(fresh_debate, fresh_turn),
                             },
                         )
@@ -1032,7 +1041,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 # A safe code is the same string the browser already receives,
                 # so recording it leaks nothing and is often the only thing
                 # that distinguishes a missing policy from a refused request.
-                getattr(exc, "code", "-"),
+                getattr(exc, "code", None) or getattr(exc, "safe_code", "-"),
                 # Where it was raised, never what it said. An exception that
                 # carries no safe code -- a bare ValueError from somewhere deep
                 # in generation -- otherwise leaves a line that names a type and

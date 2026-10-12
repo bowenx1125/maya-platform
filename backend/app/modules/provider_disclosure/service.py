@@ -8,12 +8,15 @@ manifest and confirmation rows through :class:`ProviderDisclosureStore`.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
 import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from threading import RLock
-from typing import Protocol, cast
-from uuid import uuid4
+from typing import Any, Literal, Protocol, cast
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,21 +26,34 @@ from app.core.models import (
     AgentVersion,
     CourseMember,
     Group,
+    KnowledgeSnapshot,
     ProviderExportConfirmation,
     ProviderExportManifest,
     ProviderOperation,
     ProviderPolicySnapshot,
 )
+from app.modules.agents.markdown import markdown_hash
+from app.modules.knowledge.providers.query_embedding import persisted_snapshot_identity
+from app.modules.knowledge.services import (
+    can_invoke_version,
+    scoped_group_role_for_user,
+    snapshot_sources_are_readable,
+)
+from app.modules.knowledge.vector import REAL_EMBEDDING_IDENTITY
+from app.modules.knowledge_sets.generation import _current_generation_authorized
+from app.modules.knowledge_sets.models import KnowledgeGenerationRun, KnowledgeSet
 from app.providers.control import (
     ALLOWED_ACCOUNT_PRODUCTS,
     FIXED_MODELS,
     FIXED_REGION,
     ExportConfirmationV1,
+    ExportFieldV1,
     ExportManifestV1,
     ProviderControlError,
     ProviderPolicySnapshotV1,
     ProviderPreflightV1,
     authorized_provider_model,
+    canonical_json_bytes,
     confirm_export_manifest,
     validate_provider_preflight,
 )
@@ -58,6 +74,8 @@ from .schemas import (
     ProviderDataCallReportManifestSummaryV1,
 )
 
+LOGGER = logging.getLogger(__name__)
+
 PROVIDER_DISCLOSURE_VERSION = "ProviderDataCallV1"
 SUPPLIER_DISPLAY_NAME = "Alibaba Cloud Model Studio"
 STORAGE_FACT = "The supplier stores call data as required by applicable law."
@@ -65,8 +83,293 @@ EMBEDDING_OPERATION = "embedding"
 EMBEDDING_QUERY_OPERATION = "embedding_query"
 LLM_DEBATE_OPERATION = "llm_debate_turn"
 LLM_REPORT_OPERATION = "llm_maya_report"
+LLM_KNOWLEDGE_OPERATION = "llm_knowledge_generate"
+TEAM_RESULT_SCOPE_PREFIX = "team-result:"
+CHAT_STANDING_SCOPE_PREFIX = "chat-course:"
+CHAT_STANDING_FIELD_CLASSES = (
+    "authorized_courseware_text",
+    "private_conversation_messages",
+    "teacher_agent_instructions",
+    "topic_and_platform_rules",
+)
+CHAT_STANDING_OPERATION_FIELD_CLASSES: Mapping[str, tuple[str, ...]] = {
+    "llm_agent_chat": CHAT_STANDING_FIELD_CLASSES,
+    "embedding_query": ("current_evidence_excerpt",),
+}
+
+
+def chat_field_classes_hash(field_classes: tuple[str, ...]) -> str:
+    """Hash a closed, order-independent set of outbound Chat disclosure classes."""
+
+    canonical = json.dumps(sorted(set(field_classes)), separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def confirm_chat_manifest_from_standing_grant(
+    db: Session,
+    manifest: ExportManifestV1,
+    *,
+    actor_user_id: str,
+    conversation_id: str,
+    turn_id: str,
+    claim_revision: int | None = None,
+    current_policy_hash: str | None = None,
+    operator_consent: bool = False,
+) -> bool:
+    """Persist exact Chat consent under the current operation's course grant."""
+
+    return SqlAlchemyProviderDisclosureStore(db).confirm_chat_manifest_from_standing_grant(
+        manifest,
+        actor_user_id=actor_user_id,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+        claim_revision=claim_revision,
+        current_policy_hash=current_policy_hash,
+        operator_consent=operator_consent,
+    )
+
+
+def prepare_chat_standing_disclosure(
+    db: Session,
+    *,
+    actor_user_id: str,
+    course_id: str,
+    policy_hash: str,
+    provider_operation: Literal["llm_agent_chat", "embedding_query"] = "llm_agent_chat",
+) -> ProviderDataCallDisclosureResponseV1:
+    """Build one static course Chat or retrieval disclosure without Chat data."""
+
+    manifest = _ensure_chat_standing_manifest(
+        db,
+        course_id=course_id,
+        policy_hash=policy_hash,
+        provider_operation=provider_operation,
+    )
+    service = ProviderDisclosureService(SqlAlchemyProviderDisclosureStore(db))
+    return service.disclose(
+        actor_user_id,
+        policy_ref=policy_hash,
+        manifest_ref=manifest.manifest_hash,
+    )
+
+
+def _ensure_chat_standing_manifest(
+    db: Session,
+    *,
+    course_id: str,
+    policy_hash: str,
+    provider_operation: Literal["llm_agent_chat", "embedding_query"] = "llm_agent_chat",
+) -> ExportManifestV1:
+    repository = ProviderRepository(db)
+    policy = repository.get_policy_snapshot(policy_hash)
+    policy_id = db.scalar(
+        select(ProviderPolicySnapshot.id).where(ProviderPolicySnapshot.policy_hash == policy_hash)
+    )
+    if policy is None or policy_id is None or policy.policy_hash != policy_hash:
+        raise ProviderDisclosureError(
+            "provider_policy_unavailable", "The reviewed Provider policy is unavailable."
+        )
+    field_classes = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(provider_operation)
+    if field_classes is None:
+        raise ProviderDisclosureError(
+            "provider_operation_invalid", "This Provider operation is unavailable."
+        )
+    field_salt = (
+        "maya-chat-standing-v1"
+        if provider_operation == "llm_agent_chat"
+        else "maya-team-query-standing-v1"
+    )
+    field_values = tuple(
+        ExportFieldV1(
+            field_class,
+            hashlib.sha256(f"{field_salt}:{field_class}".encode()).hexdigest(),
+        )
+        for field_class in field_classes
+    )
+    model_key = authorized_provider_model(provider_operation)
+    if model_key is None:
+        raise ProviderDisclosureError(
+            "provider_model_invalid", "The Provider model is unavailable."
+        )
+    contract = {
+        "contract": (
+            "maya-chat-course-standing-v1"
+            if provider_operation == "llm_agent_chat"
+            else "maya-team-query-standing-v1"
+        ),
+        "policy_hash": policy_hash,
+        "field_classes": list(field_classes),
+    }
+    manifest = ExportManifestV1(
+        scope_id=f"{CHAT_STANDING_SCOPE_PREFIX}{course_id}",
+        provider_operation=provider_operation,
+        model_key=model_key,
+        policy_hash=policy_hash,
+        build_manifest_hash=hashlib.sha256(canonical_json_bytes(contract)).hexdigest(),
+        persona_spec_hash=hashlib.sha256(b"maya-chat-course-standing-v1").hexdigest(),
+        fields=field_values,
+        max_total_tokens=0,
+        max_cost_cny=0.0,
+    )
+    repository.ensure_export_manifest(
+        manifest,
+        policy_snapshot_id=policy_id,
+        course_id=course_id,
+        group_id=None,
+        agent_version_id=None,
+    )
+    return manifest
+
+
+def single_chat_consent_is_current(
+    connection: Any,
+    *,
+    manifest_hash: str,
+    conversation_id: str,
+    actor_user_id: str,
+    course_id: str,
+    policy_hash: str,
+    field_classes: tuple[str, ...],
+    provider_operation: Literal["llm_agent_chat", "embedding_query"] = "llm_agent_chat",
+) -> bool:
+    """Recheck a recorded Chat consent at stage creation and Provider send."""
+
+    from app.core.models import (
+        CourseMember,
+        ProviderExportConfirmation,
+        ProviderExportManifest,
+        User,
+    )
+    from app.modules.workspace.models import (
+        ChatProviderConsentBinding,
+        ChatProviderStandingGrant,
+        Conversation,
+    )
+
+    binding_table = ChatProviderConsentBinding.__table__
+    binding = (
+        connection.execute(
+            select(binding_table).where(binding_table.c.manifest_hash == manifest_hash)
+        )
+        .mappings()
+        .first()
+    )
+    expected_fields = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(provider_operation)
+    if expected_fields is None or tuple(sorted(set(field_classes))) != tuple(
+        sorted(expected_fields)
+    ):
+        return False
+    conversation_table = Conversation.__table__
+    current = (
+        connection.execute(
+            select(conversation_table.c.user_id, conversation_table.c.course_id).where(
+                conversation_table.c.entry_kind == "agent",
+                conversation_table.c.id == conversation_id,
+                conversation_table.c.withdrawn_at.is_(None),
+            )
+        )
+        .mappings()
+        .first()
+    )
+    course_member_table = CourseMember.__table__
+    active_owner = connection.execute(
+        select(User.__table__.c.id)
+        .join(
+            course_member_table,
+            course_member_table.c.user_id == User.__table__.c.id,
+        )
+        .where(
+            User.__table__.c.id == actor_user_id,
+            User.__table__.c.status == "active",
+            course_member_table.c.course_id == course_id,
+            course_member_table.c.role.in_(("student", "teacher")),
+        )
+    ).first()
+    if (
+        current is None
+        or current["user_id"] != actor_user_id
+        or current["course_id"] != course_id
+        or active_owner is None
+    ):
+        return False
+    if binding is None:
+        return provider_operation == "llm_agent_chat"
+
+    classes_hash = chat_field_classes_hash(field_classes)
+    confirm_table = ProviderExportConfirmation.__table__
+    confirmation = connection.execute(
+        select(confirm_table.c.id).where(
+            confirm_table.c.id == binding["confirmation_id"],
+            confirm_table.c.manifest_hash == manifest_hash,
+            confirm_table.c.policy_hash == policy_hash,
+        )
+    ).first()
+    manifest_table = ProviderExportManifest.__table__
+    manifest = connection.execute(
+        select(manifest_table.c.manifest_hash).where(
+            manifest_table.c.manifest_hash == manifest_hash,
+            manifest_table.c.scope_id == conversation_id,
+            manifest_table.c.course_id == course_id,
+            manifest_table.c.policy_hash == policy_hash,
+            manifest_table.c.provider_operation == provider_operation,
+        )
+    ).first()
+    teacher = connection.execute(
+        select(User.__table__.c.id)
+        .join(
+            course_member_table,
+            course_member_table.c.user_id == User.__table__.c.id,
+        )
+        .where(
+            User.__table__.c.id == binding["confirmed_by_user_id"],
+            User.__table__.c.status == "active",
+            course_member_table.c.course_id == course_id,
+            course_member_table.c.role == "teacher",
+        )
+    ).first()
+    if (
+        binding["conversation_id"] != conversation_id
+        or binding["course_id"] != course_id
+        or binding["actor_user_id"] != actor_user_id
+        or confirmation is None
+        or manifest is None
+        or teacher is None
+        or (provider_operation == "embedding_query" and active_owner is None)
+    ):
+        return False
+    grant_id = binding["standing_grant_id"]
+    if grant_id is None:
+        return provider_operation == "llm_agent_chat"
+    grant_table = ChatProviderStandingGrant.__table__
+    grant = (
+        connection.execute(
+            select(grant_table).where(
+                grant_table.c.id == grant_id,
+                grant_table.c.course_id == course_id,
+                grant_table.c.provider_operation == provider_operation,
+                grant_table.c.policy_hash == policy_hash,
+                grant_table.c.field_classes_hash == classes_hash,
+                grant_table.c.confirmed_by_user_id == binding["confirmed_by_user_id"],
+                grant_table.c.revoked_at.is_(None),
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if grant is None:
+        return False
+    try:
+        persisted_classes = tuple(json.loads(grant["field_classes_json"]))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return False
+    return persisted_classes == tuple(sorted(set(field_classes)))
+
 
 _PURPOSES: Mapping[str, str] = {
+    "llm_agent_chat": (
+        "Generate a reply from the selected Team member using the authorized "
+        "conversation and teaching material."
+    ),
     "embedding": "Build an evidence search index from an approved immutable snapshot.",
     "embedding_query": (
         "Embed approved retrieval questions to search one immutable evidence snapshot."
@@ -74,6 +377,10 @@ _PURPOSES: Mapping[str, str] = {
     "llm_debate": "Generate the teacher-approved classroom debate speech.",
     "llm_debate_turn": "Generate the teacher-approved classroom debate speech.",
     "llm_maya_report": "Generate the teacher-approved civilization mutual-learning report.",
+    LLM_KNOWLEDGE_OPERATION: (
+        "Derive editable teaching concepts, questions with rubrics, and notes "
+        "from the selected teaching instructions and courseware."
+    ),
     "tts": "Synthesize the current classroom speech for teacher-controlled playback.",
     "voice_enrollment": "Enroll an approved voice sample for a separate voice operation.",
 }
@@ -267,7 +574,12 @@ class ProviderDisclosureService:
         manifest_ref: str | None = None,
     ) -> ProviderDataCallDisclosureResponseV1:
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
-        self._assert_teacher(actor_user_id, manifest.manifest_hash)
+        self._assert_teacher(
+            actor_user_id,
+            manifest.manifest_hash,
+            provider_operation=manifest.provider_operation,
+            scope_id=manifest.scope_id,
+        )
         return self._response(policy, manifest)
 
     def list_embedding_query_manifests(
@@ -287,6 +599,8 @@ class ProviderDisclosureService:
 
         if not isinstance(scope_id, str) or not _SAFE_OPAQUE_ID_RE.fullmatch(scope_id):
             raise ProviderDisclosureError("not_found", "The provider export scope was not found.")
+        if scope_id.startswith(TEAM_RESULT_SCOPE_PREFIX):
+            raise ProviderDisclosureError("forbidden", "The provider export scope is unavailable.")
         list_manifests = getattr(self.store, "list_export_manifests", None)
         if not callable(list_manifests):
             raise _blocked("provider_manifest_listing_unavailable")
@@ -622,7 +936,12 @@ class ProviderDisclosureService:
         manifest_ref: str | None = None,
     ) -> ProviderDataCallDisclosureResponseV1:
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
-        self._assert_teacher(actor_user_id, manifest.manifest_hash)
+        self._assert_teacher(
+            actor_user_id,
+            manifest.manifest_hash,
+            provider_operation=manifest.provider_operation,
+            scope_id=manifest.scope_id,
+        )
         revision = self._revision(manifest)
         if request.policy_hash != policy.policy_hash:
             raise _stale("The provider policy changed; review the current disclosure again.")
@@ -637,6 +956,8 @@ class ProviderDisclosureService:
             raise _blocked("provider_confirmation_unavailable") from exc
         if existing is not None:
             if self._confirmation_matches(existing, policy, manifest, revision):
+                self._bind_team_consent(actor_user_id, manifest)
+                self._bind_chat_consent(actor_user_id, manifest)
                 return self._response(policy, manifest)
             raise _stale("A previous provider confirmation no longer matches this disclosure.")
 
@@ -664,6 +985,8 @@ class ProviderDisclosureService:
                 confirmation,
                 expected_revision=revision,
             )
+            self._bind_team_consent(actor_user_id, manifest)
+            self._bind_chat_consent(actor_user_id, manifest)
         except ProviderDisclosureError:
             raise
         except ProviderDisclosureStoreError as exc:
@@ -681,6 +1004,7 @@ class ProviderDisclosureService:
             if current is not None and self._confirmation_matches(
                 current, policy, manifest, revision
             ):
+                self._bind_chat_consent(actor_user_id, manifest)
                 return self._response(policy, manifest)
             raise ProviderDisclosureError(
                 "provider_confirmation_unavailable",
@@ -703,7 +1027,12 @@ class ProviderDisclosureService:
         """Validate a confirmed operation without invoking a transport."""
 
         policy, manifest = self._load(policy_ref=policy_ref, manifest_ref=manifest_ref)
-        self._assert_teacher(actor_user_id, manifest.manifest_hash)
+        self._assert_teacher(
+            actor_user_id,
+            manifest.manifest_hash,
+            provider_operation=manifest.provider_operation,
+            scope_id=manifest.scope_id,
+        )
         revision = self._revision(manifest)
         try:
             confirmation = self.store.get_export_confirmation(manifest.manifest_hash)
@@ -732,7 +1061,47 @@ class ProviderDisclosureService:
                 raise _stale() from exc
             raise _blocked() from exc
 
-    def _assert_teacher(self, actor_user_id: str, manifest_hash: str) -> None:
+    def _bind_team_consent(self, actor_user_id: str, manifest: ExportManifestV1) -> None:
+        if not manifest.scope_id.startswith(TEAM_RESULT_SCOPE_PREFIX):
+            return
+        bind = getattr(self.store, "bind_team_confirmation", None)
+        if not callable(bind):
+            raise _blocked("provider_confirmation_unavailable")
+        bind(actor_user_id, manifest.manifest_hash)
+
+    def _bind_chat_consent(self, actor_user_id: str, manifest: ExportManifestV1) -> None:
+        if manifest.provider_operation in {
+            "llm_agent_chat",
+            EMBEDDING_QUERY_OPERATION,
+        } and manifest.scope_id.startswith(CHAT_STANDING_SCOPE_PREFIX):
+            bind_standing = getattr(self.store, "bind_chat_standing_confirmation", None)
+            if not callable(bind_standing):
+                raise _blocked("provider_confirmation_unavailable")
+            bind_standing(actor_user_id, manifest.manifest_hash)
+            return
+        if manifest.provider_operation != "llm_agent_chat":
+            return
+        if manifest.scope_id.startswith(TEAM_RESULT_SCOPE_PREFIX):
+            return
+        bind = getattr(self.store, "bind_chat_confirmation", None)
+        if not callable(bind):
+            return
+        bind(actor_user_id, manifest.manifest_hash)
+
+    def _assert_teacher(
+        self, actor_user_id: str, manifest_hash: str, *, provider_operation: str, scope_id: str
+    ) -> None:
+        if provider_operation in {LLM_KNOWLEDGE_OPERATION, "llm_agent_chat"} or scope_id.startswith(
+            TEAM_RESULT_SCOPE_PREFIX
+        ):
+            self._assert_teacher_for_manifest_scope(actor_user_id, manifest_hash)
+            return
+        if provider_operation == EMBEDDING_QUERY_OPERATION:
+            if scope_id.startswith(CHAT_STANDING_SCOPE_PREFIX):
+                self._assert_teacher_for_manifest_scope(actor_user_id, manifest_hash)
+                return
+            self._assert_teacher_for_query_scope(actor_user_id, scope_id)
+            return
         if not isinstance(actor_user_id, str) or not actor_user_id.strip():
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
         authorizer = self.teacher_authorizer
@@ -782,6 +1151,25 @@ class ProviderDisclosureService:
             allowed = (
                 bool(self.teacher_authorizer(actor_user_id)) if self.teacher_authorizer else False
             )
+        if not allowed:
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+
+    def _assert_teacher_for_query_scope(self, actor_user_id: str, scope_id: str) -> None:
+        """Authorize a non-Chat query scope through its exact owning course."""
+
+        if (
+            not isinstance(actor_user_id, str)
+            or not actor_user_id.strip()
+            or scope_id.startswith((CHAT_STANDING_SCOPE_PREFIX, TEAM_RESULT_SCOPE_PREFIX))
+        ):
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+        authorizer = getattr(self.store, "is_teacher_for_scope", None)
+        if not callable(authorizer):
+            raise ProviderDisclosureError("forbidden", "A teacher account is required.")
+        try:
+            allowed = bool(authorizer(actor_user_id, scope_id))
+        except Exception as exc:
+            raise _blocked("provider_manifest_authorization_unavailable") from exc
         if not allowed:
             raise ProviderDisclosureError("forbidden", "A teacher account is required.")
 
@@ -1286,7 +1674,843 @@ class SqlAlchemyProviderDisclosureStore:
             is not None
         )
 
+    def _is_knowledge_owner_for_manifest(
+        self, user_id: str, manifest: ProviderExportManifest
+    ) -> bool:
+        run = self.db.scalar(
+            select(KnowledgeGenerationRun).where(
+                KnowledgeGenerationRun.id == manifest.scope_id,
+                KnowledgeGenerationRun.provider_manifest_hash == manifest.manifest_hash,
+                KnowledgeGenerationRun.owner_user_id == user_id,
+                KnowledgeGenerationRun.course_id == manifest.course_id,
+                KnowledgeGenerationRun.agent_version_id == manifest.agent_version_id,
+            )
+        )
+        if run is None:
+            return False
+        agent = self.db.get(Agent, run.agent_id)
+        set_row = self.db.get(KnowledgeSet, run.knowledge_set_id)
+        if (
+            agent is None
+            or set_row is None
+            or manifest.group_id != agent.group_id
+            or manifest.debate_id is not None
+            or manifest.turn_id is not None
+        ):
+            return False
+        # A course Teacher outside a Group has only its public summary view,
+        # which cannot authorize writes to that Group's generation target.
+        if set_row.ownership_scope == "group" and (
+            set_row.group_id is None
+            or scoped_group_role_for_user(self.db, user_id, set_row.group_id) != "student"
+        ):
+            return False
+        return _current_generation_authorized(self.db, run)
+
+    def _is_team_confirmer_for_manifest(
+        self, user_id: str, manifest: ProviderExportManifest
+    ) -> bool:
+        from app.core.errors import PlatformError
+        from app.core.models import User
+        from app.modules.teams.models import CourseTeamPublication, TeamMemberInvokeGrant
+        from app.modules.teams.service import resolve_frozen_chat_selection
+        from app.modules.workspace.models import (
+            Conversation,
+            ConversationParticipant,
+            ConversationTurn,
+            TeamTurnResult,
+        )
+        from app.modules.workspace.schemas import TeamRouting
+        from app.modules.workspace.team_conversation import frozen_team_selection
+
+        if manifest.provider_operation not in {"llm_agent_chat", EMBEDDING_QUERY_OPERATION}:
+            return False
+        try:
+            result_id = str(UUID(manifest.scope_id.removeprefix(TEAM_RESULT_SCOPE_PREFIX)))
+        except ValueError:
+            return False
+        result = self.db.get(TeamTurnResult, result_id)
+        if result is None:
+            return False
+        conversation = self.db.get(Conversation, result.conversation_id)
+        participant = self.db.get(ConversationParticipant, result.participant_id)
+        turn = self.db.get(ConversationTurn, result.turn_id)
+        confirmer = self.db.get(User, user_id)
+        if (
+            conversation is None
+            or participant is None
+            or turn is None
+            or confirmer is None
+            or confirmer.status != "active"
+            or conversation.entry_kind not in {"team", "maya_team"}
+            or turn.conversation_id != conversation.id
+            or participant.conversation_id != conversation.id
+            or participant.team_version_id != conversation.team_version_id
+            or manifest.course_id != conversation.course_id
+            or manifest.agent_version_id != participant.agent_version_id
+            or manifest.debate_id is not None
+            or manifest.turn_id is not None
+        ):
+            return False
+        role = self.db.scalar(
+            select(CourseMember.role).where(
+                CourseMember.course_id == conversation.course_id,
+                CourseMember.user_id == user_id,
+            )
+        )
+        publication = (
+            self.db.get(CourseTeamPublication, conversation.publication_id)
+            if conversation.publication_id is not None
+            else None
+        )
+        chat_owner = self.db.get(User, conversation.user_id)
+        agent = self.db.get(Agent, participant.agent_id)
+        agent_version = self.db.get(AgentVersion, participant.agent_version_id)
+        if (
+            chat_owner is None
+            or chat_owner.status != "active"
+            or agent is None
+            or agent_version is None
+            or agent_version.agent_id != participant.agent_id
+            or agent_version.knowledge_snapshot_id != participant.snapshot_id
+            or agent.authorization_epoch != participant.agent_authorization_epoch
+            or manifest.group_id != agent.group_id
+        ):
+            return False
+        if conversation.entry_kind == "team":
+            if (
+                conversation.origin != "custom_team"
+                or conversation.publication_id is not None
+                or conversation.user_id != user_id
+                or role is None
+            ):
+                return False
+            try:
+                routing = TeamRouting.model_validate_json(turn.routing_json or "{}")
+                participants = list(
+                    self.db.scalars(
+                        select(ConversationParticipant).where(
+                            ConversationParticipant.conversation_id == conversation.id
+                        )
+                    )
+                )
+                requested = {str(value) for value in routing.participant_ids}
+                selected = (
+                    [member for member in participants if member.id in requested]
+                    if routing.mode == "selected"
+                    else participants
+                )
+                if (
+                    not selected
+                    or participant.id not in {member.id for member in selected}
+                    or any(member.invoke_grant_id is not None for member in selected)
+                    or (routing.mode == "selected" and len(selected) != len(requested))
+                ):
+                    return False
+                for member in selected:
+                    current_agent = self.db.get(Agent, member.agent_id)
+                    current_version = self.db.get(AgentVersion, member.agent_version_id)
+                    if (
+                        current_agent is None
+                        or current_version is None
+                        or current_version.agent_id != member.agent_id
+                        or current_version.knowledge_snapshot_id != member.snapshot_id
+                        or current_agent.authorization_epoch != member.agent_authorization_epoch
+                    ):
+                        return False
+                # A Custom Chat owner confirms only their own currently readable
+                # inputs. Team authorship never supplies the confirmer's role.
+                resolve_frozen_chat_selection(
+                    self.db,
+                    user_id,
+                    frozen_team_selection(self.db, conversation),
+                    {member.team_member_id for member in selected},
+                )
+            except (PlatformError, ValueError, TypeError):
+                return False
+            return True
+        grant = (
+            self.db.get(TeamMemberInvokeGrant, participant.invoke_grant_id)
+            if participant.invoke_grant_id
+            else None
+        )
+        if (
+            role != "teacher"
+            or conversation.origin != "published_course_team"
+            or publication is None
+            or grant is None
+            or publication.publisher_user_id != user_id
+            or conversation.team_owner_user_id != user_id
+            or publication.course_id != conversation.course_id
+            or publication.team_id != conversation.team_id
+            or publication.team_version_id != conversation.team_version_id
+            or publication.authorization_epoch != conversation.publication_epoch
+            or publication.state not in {"published", "retained"}
+            or grant.publication_id != publication.id
+            or grant.team_version_id != conversation.team_version_id
+            or grant.team_member_id != participant.team_member_id
+            or grant.agent_id != participant.agent_id
+            or grant.agent_version_id != participant.agent_version_id
+            or grant.authorization_epoch != conversation.team_authorization_epoch
+        ):
+            return False
+        try:
+            # Consent belongs to the publisher, but invocation rights and data
+            # remain scoped to the real Chat owner, never the Teacher's role.
+            resolve_frozen_chat_selection(
+                self.db,
+                conversation.user_id,
+                frozen_team_selection(self.db, conversation),
+                {participant.team_member_id},
+            )
+        except (PlatformError, ValueError, TypeError):
+            return False
+        return True
+
+    def _is_chat_confirmer_for_manifest(
+        self, user_id: str, manifest: ProviderExportManifest
+    ) -> bool:
+        from app.core.models import User
+        from app.modules.knowledge.services import can_invoke_version
+        from app.modules.workspace.models import Conversation
+
+        expected_fields = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(manifest.provider_operation)
+        if expected_fields is None:
+            return False
+        if manifest.scope_id.startswith(CHAT_STANDING_SCOPE_PREFIX):
+            scoped_course_id = manifest.scope_id.removeprefix(CHAT_STANDING_SCOPE_PREFIX)
+            try:
+                UUID(scoped_course_id)
+                fields = tuple(
+                    sorted(
+                        {
+                            item["field_class"]
+                            for item in json.loads(manifest.fields_json)
+                            if isinstance(item, dict)
+                        }
+                    )
+                )
+            except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                return False
+            confirmer = self.db.get(User, user_id)
+            return bool(
+                scoped_course_id == manifest.course_id
+                and manifest.group_id is None
+                and manifest.agent_version_id is None
+                and manifest.debate_id is None
+                and manifest.turn_id is None
+                and fields == tuple(sorted(expected_fields))
+                and confirmer is not None
+                and confirmer.status == "active"
+                and self.db.scalar(
+                    select(CourseMember.user_id).where(
+                        CourseMember.course_id == scoped_course_id,
+                        CourseMember.user_id == user_id,
+                        CourseMember.role == "teacher",
+                    )
+                )
+                is not None
+            )
+        if manifest.provider_operation != "llm_agent_chat":
+            return False
+        if manifest.scope_id.startswith(TEAM_RESULT_SCOPE_PREFIX):
+            return False
+        try:
+            conversation_id = str(UUID(manifest.scope_id))
+        except ValueError:
+            return False
+        conversation = self.db.get(Conversation, conversation_id)
+        confirmer = self.db.get(User, user_id)
+        if (
+            conversation is None
+            or confirmer is None
+            or confirmer.status != "active"
+            or conversation.entry_kind != "agent"
+            or conversation.withdrawn_at is not None
+            or manifest.course_id != conversation.course_id
+            or manifest.agent_version_id != conversation.agent_version_id
+            or manifest.debate_id is not None
+            or manifest.turn_id is not None
+        ):
+            return False
+        if (
+            self.db.scalar(
+                select(CourseMember.user_id).where(
+                    CourseMember.course_id == conversation.course_id,
+                    CourseMember.user_id == user_id,
+                    CourseMember.role == "teacher",
+                )
+            )
+            is None
+        ):
+            return False
+        owner = self.db.get(User, conversation.user_id)
+        version = self.db.get(AgentVersion, conversation.agent_version_id)
+        agent = self.db.get(Agent, version.agent_id) if version is not None else None
+        if (
+            owner is None
+            or owner.status != "active"
+            or agent is None
+            or version is None
+            or version.agent_id != agent.id
+            or version.knowledge_snapshot_id != conversation.snapshot_id
+            or manifest.group_id != agent.group_id
+            or agent.deleted_at is not None
+            or agent.status != "active"
+            or not can_invoke_version(self.db, conversation.user_id, version, agent)
+        ):
+            return False
+        return True
+
+    def _chat_conversation_for_manifest(self, manifest: ExportManifestV1) -> Any | None:
+        from app.modules.workspace.models import Conversation
+
+        if manifest.provider_operation != "llm_agent_chat" or manifest.scope_id.startswith(
+            TEAM_RESULT_SCOPE_PREFIX
+        ):
+            return None
+        try:
+            conversation_id = str(UUID(manifest.scope_id))
+        except ValueError:
+            return None
+        conversation = self.db.get(Conversation, conversation_id)
+        if (
+            conversation is None
+            or conversation.entry_kind != "agent"
+            or conversation.withdrawn_at is not None
+        ):
+            return None
+        return conversation
+
+    def _active_chat_grant(
+        self,
+        *,
+        course_id: str,
+        provider_operation: str,
+        policy_hash: str,
+        field_classes: tuple[str, ...],
+    ) -> Any | None:
+        from app.modules.workspace.models import ChatProviderStandingGrant
+
+        expected_classes = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(provider_operation)
+        if expected_classes is None or tuple(sorted(set(field_classes))) != tuple(
+            sorted(expected_classes)
+        ):
+            return None
+        classes_hash = chat_field_classes_hash(field_classes)
+        grants = self.db.scalars(
+            select(ChatProviderStandingGrant)
+            .join(
+                CourseMember,
+                CourseMember.user_id == ChatProviderStandingGrant.confirmed_by_user_id,
+            )
+            .where(
+                ChatProviderStandingGrant.course_id == course_id,
+                ChatProviderStandingGrant.provider_operation == provider_operation,
+                ChatProviderStandingGrant.policy_hash == policy_hash,
+                ChatProviderStandingGrant.field_classes_hash == classes_hash,
+                ChatProviderStandingGrant.revoked_at.is_(None),
+                CourseMember.course_id == course_id,
+                CourseMember.role == "teacher",
+            )
+            .order_by(ChatProviderStandingGrant.confirmed_at.desc(), ChatProviderStandingGrant.id)
+        )
+        from app.core.models import User
+
+        for grant in grants:
+            teacher = self.db.get(User, grant.confirmed_by_user_id)
+            try:
+                persisted_classes = tuple(json.loads(grant.field_classes_json))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+            if (
+                teacher is not None
+                and teacher.status == "active"
+                and persisted_classes == tuple(sorted(set(field_classes)))
+            ):
+                return grant
+        return None
+
+    def _operator_chat_grant(
+        self,
+        *,
+        course_id: str,
+        provider_operation: str,
+        policy_hash: str,
+        field_classes: tuple[str, ...],
+    ) -> Any | None:
+        """Record the operator's standing consent as the course's Chat grant.
+
+        The grant table binds consent to an active course teacher, so the
+        operator's decision is recorded on that teacher's behalf; the exact
+        per-turn binding and every later currency check stay unchanged.
+        """
+
+        from app.core.models import User
+        from app.modules.workspace.models import ChatProviderStandingGrant
+
+        teacher_id = self.db.scalar(
+            select(CourseMember.user_id)
+            .join(User, User.id == CourseMember.user_id)
+            .where(
+                CourseMember.course_id == course_id,
+                CourseMember.role == "teacher",
+                User.status == "active",
+            )
+            .order_by(CourseMember.user_id)
+            .limit(1)
+        )
+        if teacher_id is None:
+            return None
+        classes = tuple(sorted(set(field_classes)))
+        self.db.add(
+            ChatProviderStandingGrant(
+                id=str(uuid4()),
+                course_id=course_id,
+                provider_operation=provider_operation,
+                policy_hash=policy_hash,
+                field_classes_json=json.dumps(classes, separators=(",", ":")),
+                field_classes_hash=chat_field_classes_hash(classes),
+                confirmed_by_user_id=teacher_id,
+                confirmed_at=datetime.now(UTC),
+                revoked_at=None,
+            )
+        )
+        self.db.flush()
+        LOGGER.warning(
+            "Chat Provider grant recorded by standing operator consent operation=%s",
+            provider_operation,
+        )
+        return self._active_chat_grant(
+            course_id=course_id,
+            provider_operation=provider_operation,
+            policy_hash=policy_hash,
+            field_classes=field_classes,
+        )
+
+    def bind_chat_standing_confirmation(self, user_id: str, manifest_hash: str) -> None:
+        from app.modules.workspace.models import ChatProviderStandingGrant
+
+        manifest = self.db.scalar(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.manifest_hash == manifest_hash
+            )
+        )
+        confirmation = self.db.scalar(
+            select(ProviderExportConfirmation).where(
+                ProviderExportConfirmation.manifest_hash == manifest_hash
+            )
+        )
+        if (
+            manifest is None
+            or confirmation is None
+            or manifest.course_id is None
+            or not manifest.scope_id.startswith(CHAT_STANDING_SCOPE_PREFIX)
+            or not self._is_chat_confirmer_for_manifest(user_id, manifest)
+        ):
+            raise ProviderDisclosureError("forbidden", "The confirmation subject is unavailable.")
+        fields = tuple(
+            sorted(
+                item["field_class"]
+                for item in json.loads(manifest.fields_json)
+                if isinstance(item, dict)
+            )
+        )
+        expected_fields = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(manifest.provider_operation)
+        if expected_fields is None or fields != tuple(sorted(expected_fields)):
+            raise ProviderDisclosureError("provider_preflight_stale", "The disclosure changed.")
+        if (
+            self._active_chat_grant(
+                course_id=manifest.course_id,
+                provider_operation=manifest.provider_operation,
+                policy_hash=manifest.policy_hash,
+                field_classes=fields,
+            )
+            is not None
+        ):
+            return
+        self.db.add(
+            ChatProviderStandingGrant(
+                id=str(uuid4()),
+                course_id=manifest.course_id,
+                provider_operation=manifest.provider_operation,
+                policy_hash=manifest.policy_hash,
+                field_classes_json=json.dumps(fields, separators=(",", ":")),
+                field_classes_hash=chat_field_classes_hash(fields),
+                confirmed_by_user_id=user_id,
+                confirmed_at=datetime.now(UTC),
+                revoked_at=None,
+            )
+        )
+        self.db.flush()
+
+    def bind_chat_confirmation(self, user_id: str, manifest_hash: str) -> None:
+        from app.modules.workspace.models import (
+            ChatProviderConsentBinding,
+        )
+
+        manifest = self._control.get_export_manifest(manifest_hash)
+        conversation = self._chat_conversation_for_manifest(manifest) if manifest else None
+        manifest_row = self.db.scalar(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.manifest_hash == manifest_hash
+            )
+        )
+        confirmation = self.db.scalar(
+            select(ProviderExportConfirmation).where(
+                ProviderExportConfirmation.manifest_hash == manifest_hash
+            )
+        )
+        version = (
+            self.db.get(AgentVersion, conversation.agent_version_id)
+            if conversation is not None and conversation.agent_version_id is not None
+            else None
+        )
+        agent = self.db.get(Agent, version.agent_id) if version is not None else None
+        if (
+            manifest is None
+            or conversation is None
+            or manifest_row is None
+            or confirmation is None
+            or manifest_row.course_id != conversation.course_id
+            or manifest_row.agent_version_id != conversation.agent_version_id
+            or version is None
+            or agent is None
+            or manifest_row.group_id != agent.group_id
+            or not self._is_chat_confirmer_for_manifest(user_id, manifest_row)
+        ):
+            raise ProviderDisclosureError("forbidden", "The confirmation subject is unavailable.")
+        values = {
+            "confirmation_id": confirmation.id,
+            "conversation_id": conversation.id,
+            "course_id": conversation.course_id,
+            "actor_user_id": conversation.user_id,
+            "confirmed_by_user_id": user_id,
+            "standing_grant_id": None,
+        }
+        existing = self.db.get(ChatProviderConsentBinding, manifest_hash)
+        if existing is not None:
+            if any(getattr(existing, key) != value for key, value in values.items()):
+                raise ProviderDisclosureError(
+                    "provider_preflight_stale", "The recorded Chat consent changed."
+                )
+            return
+        self.db.add(
+            ChatProviderConsentBinding(
+                manifest_hash=manifest_hash,
+                **values,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.db.flush()
+
+    def confirm_chat_manifest_from_standing_grant(
+        self,
+        manifest: ExportManifestV1,
+        *,
+        actor_user_id: str,
+        conversation_id: str,
+        turn_id: str,
+        claim_revision: int | None,
+        current_policy_hash: str | None,
+        operator_consent: bool = False,
+    ) -> bool:
+        from app.core.models import User
+        from app.modules.workspace.models import (
+            ChatProviderConsentBinding,
+            Conversation,
+            ConversationTurn,
+        )
+        from app.providers.control import confirm_export_manifest
+
+        provider_operation = manifest.provider_operation
+        expected_fields = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(provider_operation)
+        fields = tuple(sorted({field.field_class for field in manifest.fields}))
+        if (
+            expected_fields is None
+            or fields != tuple(sorted(expected_fields))
+            or manifest.scope_id != conversation_id
+        ):
+            return False
+        if provider_operation == "embedding_query":
+            expected_current_policy_hash = current_policy_hash or ""
+            if (
+                not isinstance(claim_revision, int)
+                or isinstance(claim_revision, bool)
+                or claim_revision < 0
+                or not expected_current_policy_hash
+                or manifest.policy_hash != expected_current_policy_hash
+                or manifest.model_key != authorized_provider_model("embedding_query")
+            ):
+                return False
+        elif provider_operation != "llm_agent_chat":
+            return False
+        query_agent: Agent | None = None
+        conversation = self.db.get(Conversation, conversation_id)
+        turn = self.db.get(ConversationTurn, turn_id)
+        owner = self.db.get(User, actor_user_id)
+        if (
+            conversation is None
+            or turn is None
+            or owner is None
+            or owner.status != "active"
+            or conversation.user_id != actor_user_id
+            or conversation.entry_kind != "agent"
+            or conversation.withdrawn_at is not None
+            or turn.conversation_id != conversation_id
+            or turn.state != "pending"
+            or conversation.active_request_id != turn_id
+            or conversation.course_id is None
+        ):
+            return False
+        if provider_operation == "embedding_query":
+            if conversation.revision != claim_revision:
+                return False
+            member_role = self.db.scalar(
+                select(CourseMember.role).where(
+                    CourseMember.course_id == conversation.course_id,
+                    CourseMember.user_id == actor_user_id,
+                )
+            )
+            version = (
+                self.db.get(AgentVersion, conversation.agent_version_id)
+                if conversation.agent_version_id is not None
+                else None
+            )
+            query_agent = self.db.get(Agent, version.agent_id) if version is not None else None
+            snapshot = (
+                self.db.get(KnowledgeSnapshot, conversation.snapshot_id)
+                if conversation.snapshot_id is not None
+                else None
+            )
+            if (
+                member_role not in {"student", "teacher"}
+                or conversation.snapshot_id is None
+                or conversation.agent_version_id is None
+                or manifest.debate_id is not None
+                or manifest.turn_id is not None
+                or version is None
+                or query_agent is None
+                or snapshot is None
+                or version.agent_id != query_agent.id
+                or version.knowledge_snapshot_id != snapshot.id
+                or snapshot.agent_version_id != version.id
+                or version.state not in {"published", "superseded"}
+                or query_agent.course_id != conversation.course_id
+                or query_agent.deleted_at is not None
+                or query_agent.status != "active"
+                or (
+                    query_agent.owner_user_id != actor_user_id
+                    and conversation.agent_authorization_epoch != query_agent.authorization_epoch
+                )
+                or not can_invoke_version(self.db, actor_user_id, version, query_agent)
+                or not snapshot_sources_are_readable(
+                    self.db,
+                    actor_user_id,
+                    snapshot.id,
+                    agent=query_agent,
+                    allow_historical_epoch_for_owner=True,
+                )
+            ):
+                return False
+            try:
+                identity = persisted_snapshot_identity(snapshot)
+            except (TypeError, ValueError):
+                return False
+            query_text = turn.user_text.strip()
+            if not query_text or "\x00" in query_text or identity != REAL_EMBEDDING_IDENTITY:
+                return False
+            persona_hash = markdown_hash(version.agent_md)
+            transcript_hash = hashlib.sha256(
+                json.dumps(turn.user_text, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            query_hash = hashlib.sha256(query_text.encode("utf-8")).hexdigest()
+            expected_field_hash = hashlib.sha256(canonical_json_bytes([query_text])).hexdigest()
+            expected_build_hash = hashlib.sha256(
+                canonical_json_bytes(
+                    {
+                        "version": "embedding-query-export-v1",
+                        "scope_id": conversation.id,
+                        "turn_id": turn.id,
+                        "snapshot_id": snapshot.id,
+                        "identity": {
+                            "provider": identity.provider,
+                            "model_key": identity.model_key,
+                            "region": identity.region,
+                            "dimension": identity.dimension,
+                            "policy_version": identity.policy_version,
+                        },
+                        "transcript_hash": transcript_hash,
+                        "persona_spec_hash": persona_hash,
+                        "subqueries": [
+                            {
+                                "kind": "viewpoint",
+                                "text": query_text,
+                                "query_hash": query_hash,
+                            }
+                        ],
+                    }
+                )
+            ).hexdigest()
+            if (
+                manifest.persona_spec_hash != persona_hash
+                or manifest.build_manifest_hash != expected_build_hash
+                or manifest.fields
+                != (ExportFieldV1("current_evidence_excerpt", expected_field_hash),)
+                or manifest.max_attempts != 1
+                or manifest.contains_secret
+                or manifest.contains_identity
+                or manifest.contains_private_audio
+                or manifest.contains_teacher_note
+            ):
+                return False
+            policy = self._control.get_policy_snapshot(expected_current_policy_hash)
+            if policy is None or policy.policy_hash != expected_current_policy_hash:
+                return False
+            try:
+                policy.validate()
+            except ProviderControlError:
+                return False
+        else:
+            policy = self._control.get_policy_snapshot(manifest.policy_hash)
+            if policy is None or policy.policy_hash != manifest.policy_hash:
+                return False
+        manifest_row = self.db.scalar(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.manifest_hash == manifest.manifest_hash
+            )
+        )
+        if (
+            manifest_row is None
+            or manifest_row.scope_id != conversation_id
+            or manifest_row.course_id != conversation.course_id
+            or manifest_row.agent_version_id != conversation.agent_version_id
+            or manifest_row.provider_operation != provider_operation
+            or manifest_row.build_manifest_hash != manifest.build_manifest_hash
+            or manifest_row.policy_hash != manifest.policy_hash
+            or (
+                provider_operation == "embedding_query"
+                and (query_agent is None or manifest_row.group_id != query_agent.group_id)
+            )
+        ):
+            return False
+        grant = self._active_chat_grant(
+            course_id=conversation.course_id,
+            provider_operation=provider_operation,
+            policy_hash=manifest.policy_hash,
+            field_classes=fields,
+        )
+        if grant is None and operator_consent:
+            grant = self._operator_chat_grant(
+                course_id=conversation.course_id,
+                provider_operation=provider_operation,
+                policy_hash=manifest.policy_hash,
+                field_classes=fields,
+            )
+        if grant is None:
+            return False
+        if self.get_export_confirmation(manifest.manifest_hash) is not None:
+            return False
+        confirmation = confirm_export_manifest(
+            manifest,
+            policy,
+            confirmed_at=datetime.now(UTC).isoformat(),
+            expected_manifest_hash=manifest.manifest_hash,
+            expected_policy_hash=manifest.policy_hash,
+        )
+        confirmation_id = self.save_export_confirmation(
+            str(manifest_row.id),
+            confirmation,
+            expected_revision=manifest.operation_revision,
+        )
+        self.db.add(
+            ChatProviderConsentBinding(
+                manifest_hash=manifest.manifest_hash,
+                confirmation_id=confirmation_id,
+                conversation_id=conversation.id,
+                course_id=conversation.course_id,
+                actor_user_id=actor_user_id,
+                confirmed_by_user_id=grant.confirmed_by_user_id,
+                standing_grant_id=grant.id,
+                created_at=datetime.now(UTC),
+            )
+        )
+        self.db.flush()
+        self.db.commit()
+        return True
+
+    def bind_team_confirmation(self, user_id: str, manifest_hash: str) -> None:
+        from app.modules.workspace.models import (
+            Conversation,
+            TeamProviderConsentBinding,
+            TeamTurnResult,
+        )
+
+        manifest = self.db.scalar(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.manifest_hash == manifest_hash
+            )
+        )
+        confirmation = self.db.scalar(
+            select(ProviderExportConfirmation).where(
+                ProviderExportConfirmation.manifest_hash == manifest_hash
+            )
+        )
+        if (
+            manifest is None
+            or confirmation is None
+            or not self._is_team_confirmer_for_manifest(user_id, manifest)
+        ):
+            raise ProviderDisclosureError("forbidden", "The confirmation subject is unavailable.")
+        result = self.db.get(
+            TeamTurnResult, manifest.scope_id.removeprefix(TEAM_RESULT_SCOPE_PREFIX)
+        )
+        conversation = self.db.get(Conversation, result.conversation_id) if result else None
+        if conversation is None or result is None or conversation.team_authorization_epoch is None:
+            raise _blocked()
+        expected = {
+            "confirmation_id": confirmation.id,
+            "result_id": result.id,
+            "actor_user_id": conversation.user_id,
+            "confirmer_user_id": user_id,
+            "confirmer_kind": (
+                "custom_owner" if conversation.entry_kind == "team" else "publisher_teacher"
+            ),
+            "team_epoch": conversation.team_authorization_epoch,
+            "publication_epoch": conversation.publication_epoch,
+        }
+        existing = self.db.get(TeamProviderConsentBinding, manifest_hash)
+        if existing is not None:
+            if any(getattr(existing, key) != value for key, value in expected.items()):
+                raise _stale("The recorded confirmation subject changed.")
+            return
+        self.db.add(
+            TeamProviderConsentBinding(
+                manifest_hash=manifest_hash, **expected, created_at=datetime.now(UTC)
+            )
+        )
+        self.db.flush()
+
     def is_teacher_for_manifest(self, user_id: str, manifest_hash: str) -> bool:
+        manifest = self.db.scalar(
+            select(ProviderExportManifest).where(
+                ProviderExportManifest.manifest_hash == manifest_hash
+            )
+        )
+        if manifest is not None and manifest.scope_id.startswith(TEAM_RESULT_SCOPE_PREFIX):
+            return self._is_team_confirmer_for_manifest(user_id, manifest)
+        if manifest is not None and manifest.provider_operation == "llm_agent_chat":
+            return self._is_chat_confirmer_for_manifest(user_id, manifest)
+        if (
+            manifest is not None
+            and manifest.provider_operation == EMBEDDING_QUERY_OPERATION
+            and manifest.scope_id.startswith(CHAT_STANDING_SCOPE_PREFIX)
+        ):
+            return self._is_chat_standing_teacher_for_manifest(user_id, manifest)
+        if manifest is not None and manifest.provider_operation == EMBEDDING_QUERY_OPERATION:
+            return self._is_query_teacher_for_manifest(user_id, manifest)
+        if manifest is not None and manifest.provider_operation == LLM_KNOWLEDGE_OPERATION:
+            return self._is_knowledge_owner_for_manifest(user_id, manifest)
         return (
             self.db.scalar(
                 select(ProviderExportManifest.id)
@@ -1315,7 +2539,130 @@ class SqlAlchemyProviderDisclosureStore:
             is not None
         )
 
+    def _is_chat_standing_teacher_for_manifest(
+        self, user_id: str, manifest: ProviderExportManifest
+    ) -> bool:
+        course_id = manifest.course_id
+        expected_fields = CHAT_STANDING_OPERATION_FIELD_CLASSES.get(manifest.provider_operation)
+        try:
+            fields = tuple(
+                sorted(
+                    item["field_class"]
+                    for item in json.loads(manifest.fields_json)
+                    if isinstance(item, dict)
+                )
+            )
+        except (TypeError, ValueError, KeyError, json.JSONDecodeError):
+            return False
+        if (
+            course_id is None
+            or expected_fields is None
+            or fields != tuple(sorted(expected_fields))
+            or manifest.scope_id != f"{CHAT_STANDING_SCOPE_PREFIX}{course_id}"
+            or manifest.group_id is not None
+            or manifest.debate_id is not None
+            or manifest.turn_id is not None
+            or manifest.agent_version_id is not None
+        ):
+            return False
+        from app.core.models import User
+
+        return (
+            self.db.scalar(
+                select(CourseMember.user_id)
+                .join(User, User.id == CourseMember.user_id)
+                .where(
+                    CourseMember.course_id == course_id,
+                    CourseMember.user_id == user_id,
+                    CourseMember.role == "teacher",
+                    User.status == "active",
+                )
+            )
+            is not None
+        )
+
+    def _is_query_teacher_for_manifest(
+        self, user_id: str, manifest: ProviderExportManifest
+    ) -> bool:
+        """Authorize one non-Chat query manifest through its exact Agent course."""
+
+        if (
+            manifest.scope_id.startswith((CHAT_STANDING_SCOPE_PREFIX, TEAM_RESULT_SCOPE_PREFIX))
+            or manifest.course_id is None
+            or manifest.group_id is None
+            or manifest.agent_version_id is None
+        ):
+            return False
+        from app.modules.workspace.models import Conversation
+
+        # A Single-Agent Chat scope is private to its owner even when the
+        # selected Agent happens to belong to a course group.
+        if (
+            self.db.scalar(
+                select(Conversation.id).where(
+                    Conversation.id == manifest.scope_id,
+                    Conversation.entry_kind == "agent",
+                )
+            )
+            is not None
+        ):
+            return False
+        return (
+            self.db.scalar(
+                select(ProviderExportManifest.id)
+                .join(
+                    AgentVersion,
+                    AgentVersion.id == ProviderExportManifest.agent_version_id,
+                )
+                .join(Agent, Agent.id == AgentVersion.agent_id)
+                .join(Group, Group.id == Agent.group_id)
+                .join(
+                    CourseMember,
+                    CourseMember.course_id == ProviderExportManifest.course_id,
+                )
+                .where(
+                    ProviderExportManifest.manifest_hash == manifest.manifest_hash,
+                    ProviderExportManifest.scope_id == manifest.scope_id,
+                    ProviderExportManifest.provider_operation == EMBEDDING_QUERY_OPERATION,
+                    ProviderExportManifest.course_id == manifest.course_id,
+                    ProviderExportManifest.group_id == manifest.group_id,
+                    ProviderExportManifest.agent_version_id == manifest.agent_version_id,
+                    ProviderExportManifest.group_id == Agent.group_id,
+                    ProviderExportManifest.group_id == Group.id,
+                    ProviderExportManifest.course_id == Group.course_id,
+                    CourseMember.user_id == user_id,
+                    CourseMember.role == "teacher",
+                )
+            )
+            is not None
+        )
+
     def is_teacher_for_scope(self, user_id: str, scope_id: str) -> bool:
+        if (
+            scope_id.startswith((CHAT_STANDING_SCOPE_PREFIX, TEAM_RESULT_SCOPE_PREFIX))
+            or self.db.scalar(
+                select(ProviderExportManifest.id)
+                .where(
+                    ProviderExportManifest.scope_id == scope_id,
+                    ProviderExportManifest.provider_operation == EMBEDDING_QUERY_OPERATION,
+                )
+                .limit(1)
+            )
+            is None
+        ):
+            return False
+        from app.modules.workspace.models import Conversation
+
+        if (
+            self.db.scalar(
+                select(Conversation.id).where(
+                    Conversation.id == scope_id,
+                    Conversation.entry_kind == "agent",
+                )
+            )
+            is not None
+        ):
+            return False
         return (
             self.db.scalar(
                 select(ProviderExportManifest.id)
@@ -1578,6 +2925,7 @@ __all__ = [
     "EMBEDDING_QUERY_OPERATION",
     "LLM_DEBATE_OPERATION",
     "LLM_REPORT_OPERATION",
+    "LLM_KNOWLEDGE_OPERATION",
     "InMemoryProviderDisclosureStore",
     "PROVIDER_DISCLOSURE_VERSION",
     "ProviderDisclosureError",

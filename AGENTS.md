@@ -15,6 +15,11 @@ enough — this repository has no task-packet ceremony any more.
 
 Work on a branch. Never commit directly to `main` unless the user says so.
 
+For branch integration, fetch remote refs, compare ancestry and preserve dirty
+work before merging. Follow the user's selected refs; a newer sibling or revert
+branch is not implicitly in scope. Keep a recoverable local checkpoint, resolve
+overlapping behavior deliberately, and record exact input refs in `docs/PROJECT.md`.
+
 ## 2. How to write code here
 
 **Simplicity first.** Solve the requested problem with the smallest clear change.
@@ -22,6 +27,22 @@ Do not add unrequested features, speculative extension points or dependencies
 that existing code can reasonably replace. Keep single-use code in place;
 introduce an abstraction only for a concrete shared need. UI redesigns preserve
 existing wording unless a copy change is explicitly requested.
+Teaching and attribution guidance belongs in editable Rulesets; do not silently
+reinsert removed guidance through the execution contract.
+
+Shared help must distinguish keyboard focus from mouse-click focus and clear on
+pointer leave, navigation, removed targets, scrolling and window blur. Keep
+keyboard dismissal and touch behavior when changing hover interactions. For
+history-row actions, date and Delete must be mutually exclusive; clicking a row
+must not pin Delete after the pointer leaves.
+Immerse has no manual barrage pause control. Final input freezing automatically
+ends message collection; retain that transactional cutoff.
+
+Chats is text-only: never dispatch TTS after a chat reply or play chat audio.
+
+Voice availability must not gate Debate text publication. Use a configured
+fallback, or explicit text-only playback when none is available; never fabricate
+audio or weaken supplier-download SSRF checks to hide a DNS/proxy failure.
 
 **Match the surrounding code.** Comment density, naming, error handling and
 module layout are already consistent; follow what is next to your change
@@ -41,6 +62,9 @@ wrong. Fix the code, or change the check deliberately and record why in the
 same commit. Deleting an assertion to get green is the one thing that is
 always wrong here.
 
+Report response model/object/usage metadata never gates generation. Validate
+content and completion; preserve request accounting without inventing missing usage.
+
 **State every rule you enforce.** If the server rejects a provider response
 for violating a rule, the prompt that produced that response must state the
 rule. Enforcing an unstated rule is a defect, and it is how several real
@@ -55,6 +79,14 @@ provider response body, a credential, a private path or student data.
 Run these from the repository root before you report a change complete. Keep
 the scope proportional: a docs-only change does not need the full battery, and
 anything touching `backend/app` or `contracts/` needs all of it.
+
+`pnpm check` runs the complete deterministic suite. Also run the generated-file
+boundary probe below. Fix stale fixtures against the current product contract;
+retain consent, ownership and charged-request assertions when budgets change.
+The owner removed all product request/token/CNY budget ceilings. Legacy max_*
+fields are accounting estimates; do not restore budget rejection in code, database
+checks, tests or outbound model output caps. Keep explicit retry authorization and
+unknown-acceptance recovery separate from budgeting.
 
 ```bash
 cd backend && uv run pytest -p no:warnings && uv run ruff check . && uv run mypy app
@@ -131,6 +163,10 @@ Adding a migration means updating `ALEMBIC_HEAD` in `app/core/db.py`; the
 readiness probe compares the database against that constant and the container
 stays unhealthy until they agree.
 
+When adding an API operation, update the implemented operation set in
+`scripts/generate_route_fixture.mjs`, regenerate its fixture and update the exact
+route count in `scripts/test_route_surface.mjs` together.
+
 ## 5. Real provider work
 
 A real provider request costs money and is never automatically retried. Before
@@ -139,7 +175,10 @@ the first request of a run:
 - confirm the run is new and its charged-request count is zero;
 - confirm the provider, `LLM_MODEL`, region, dimension and policy hash
   are the reviewed ones;
-- confirm the teacher disclosure was confirmed for that exact manifest.
+- confirm the applicable authorization covers that exact manifest. For Knowledge
+  generation, the Teacher's explicit save/generate/regenerate or authorized Tool
+  call records this authorization; do not add a second confirmation screen.
+  Other operations retain their documented disclosure/authorization rules.
 
 A structure repair is the one exception to "no retry": it re-sends the same
 authorized manifest once with frozen feedback, inherits its first attempt's
@@ -154,6 +193,12 @@ policy/manifest hashes, and nothing else.
 
 ## 6. Running the Demo locally
 
+After an authorized update, back up the active SQLite database using SQLite's
+backup API inside the backend container, then rebuild with
+`docker compose up -d --build --wait`. Preserve `.env`, private configuration and
+runtime assets. Verify Compose health, container `/health/ready`, the schema head
+and `http://localhost:8080/`; distinguish these from manual product acceptance.
+
 The committed Compose file publishes `8080`. To run an isolated stack, write an
 override **outside** the repository and tag the port list so Compose replaces
 it instead of appending:
@@ -165,10 +210,11 @@ services:
       - "127.0.0.1:18080:8080"
 ```
 
-`CLASSROOM_PUBLIC_BASE_URL` must satisfy two independent rules at once: the
-classroom QR code rejects loopback and needs a private-LAN address, while the
-CSRF origin check compares the port. Use the host's LAN address with the port
-the stack actually publishes.
+`CLASSROOM_PUBLIC_BASE_URL` must satisfy the classroom QR and exact CSRF origin
+checks, including the port. Local Demo uses the host's private-LAN address and
+published port. The separate production profile uses the reviewed public HTTPS
+origin; never expose the Demo profile publicly. See `docs/RELEASE_POLICY.md` for
+production credentials, isolated data/config mounts and release checks.
 
 `scripts/reset_demo_runtime.py` renames the runtime directory rather than
 deleting it. A container bind mount follows the original inode, so a container
@@ -193,11 +239,55 @@ commit as the work it describes, and only with facts you have observed:
 - record a deviation from a frozen contract explicitly, with the reason, rather
   than letting the code and the document drift apart.
 
+Keep `docs/PROJECT.md` below 20,000 bytes by compacting repeated history while
+preserving current decisions, acceptance boundaries and charged-call records.
+README explains how to use/run the product; AGENTS contains working rules, not a
+second progress log. Refresh those documents when their instructions change.
+
 Do not create status files, handoff notes or worklogs beside it. If something
 is worth keeping, it belongs in `docs/PROJECT.md`, an ADR under `docs/adr/`, or a
 contract under `docs/contracts/`.
 
-## 8. Commits
+## 8. Publishing the public site
+
+Push GitHub `main` first. Only after that push succeeds, update the public
+site. Do not rebuild or restart production from a commit that is not already
+on GitHub `main`.
+
+The public site is `https://app.mayaform.net/`. The server is `8.210.57.144`,
+SSH user `root`, SSH host name `maya-prod`. Login uses the private key
+`~/.ssh/maya_deploy` with `IdentitiesOnly`. There is no SSH password. Do not
+invent one, do not commit the key, and do not copy it into a chat, log, or
+document.
+
+The server bare repo is `/opt/maya-platform.git`. The working tree is
+`/opt/maya-platform`. After GitHub `main` is updated:
+
+```bash
+git push origin HEAD:main
+git push maya-prod:/opt/maya-platform.git HEAD:main
+ssh maya-prod 'cd /opt/maya-platform && git pull --ff-only'
+```
+
+Before a rebuild, back up `/app/data/maya.sqlite3` with SQLite's backup API
+inside `maya-production-backend-1`. Write the backup under
+`/srv/maya-production/backups/` and require `PRAGMA integrity_check` to be
+`ok`. Then, from `/opt/maya-platform`:
+
+```bash
+docker compose --project-name maya-production \
+  --env-file /protected/maya-production.env \
+  -f docker-compose.yml -f docker-compose.production.yml \
+  up -d --build --wait
+```
+
+Do not use `docker compose down -v`. Confirm container health,
+`/health/ready`, the Alembic head, and `https://app.mayaform.net/` returning
+200. A docs-only commit still updates GitHub and the server git tree; it does
+not by itself require a rebuild. Record the built commit, backup name, schema
+head, and HTTP result in `docs/PROJECT.md`.
+
+## 9. Commits
 
 One commit per coherent change, with its tests and its documentation update.
 Write the subject as what the change does, not what you did.

@@ -59,7 +59,7 @@ def test_tts_request_uses_extended_read_timeout_without_changing_default_client(
         return _FakeClient()
 
     monkeypatch.setattr(dashscope, "_client", client_factory)
-    monkeypatch.setattr(dashscope, "validate_technical_audio", lambda _audio: None)
+    monkeypatch.setattr(dashscope, "validate_speech_audio", lambda _audio: None)
     provider = DashScopeTTSProvider(
         DashScopeConfig(api_key="fixture-key", workspace_id="workspace123"),
         downloader=_FakeDownloader(),  # type: ignore[arg-type]

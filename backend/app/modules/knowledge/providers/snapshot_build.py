@@ -18,7 +18,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from app.modules.knowledge.markdown import MarkdownDocument, chunk_markdown, normalize_markdown
 
-DEFAULT_CHUNKING_VERSION = "markdown-heading-paragraph-v1"
+DEFAULT_CHUNKING_VERSION = "markdown-heading-paragraph-v2"
 
 # Embedding identity is deliberately closed.  In particular, the Mock and
 # real resources do not share a model name with a dimension-based switch: a

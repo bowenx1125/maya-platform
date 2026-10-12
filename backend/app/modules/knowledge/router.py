@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Request, Response
-from sqlalchemy import case, delete, select, update
+from sqlalchemy import case, delete, or_, select, text, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -16,17 +16,19 @@ from app.core.config import Settings, get_settings
 from app.core.errors import (
     Error,
     PlatformError,
+    conflict,
     invalid_state,
     not_found,
-    rag_over_limit,
     stale_revision,
     validation_failure,
     version_immutable,
 )
 from app.core.models import (
+    Agent,
     AgentVersion,
     AgentVersionDocument,
     FileReference,
+    Group,
     Job,
     KnowledgeChunk,
     KnowledgeDocument,
@@ -64,24 +66,21 @@ from app.modules.knowledge.ingest import (
     convert_knowledge_upload,
 )
 from app.modules.knowledge.markdown import (
-    MAX_RAG_CHARS,
     MarkdownInputError,
     build_chunks,
     normalize_markdown,
 )
-from app.modules.knowledge.multipart import (
-    UploadTooLargeError,
-    integer_field,
-    parse_upload,
-)
+from app.modules.knowledge.multipart import UploadTooLargeError, integer_field, parse_upload
 from app.modules.knowledge.replacement import replace_document_copy_on_write
-from app.modules.knowledge.schemas import JobStatus
+from app.modules.knowledge.schemas import JobStatus, UpdateKnowledgeDocumentVisibility
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.services import (
     _document_dto,
     _enabled_documents,
     abandon_claim,
     assert_claim_owned,
+    can_bind_source,
+    can_mutate_source,
     claim_idempotency,
     course_member_role,
     create_file_operation,
@@ -95,15 +94,16 @@ from app.modules.knowledge.services import (
     renew_idempotency_lease,
     replace_document_chunks,
     saga_checkpoint,
-    scoped_group_role,
+    scoped_student_group_role,
     snapshot_dto,
     transition_file_operation,
     version_dto,
-    visible_knowledge_library_document,
+    visible_mutable_document,
     visible_snapshot,
     visible_student_document,
     visible_student_version,
 )
+from app.modules.knowledge_sets.models import KnowledgeDocumentVersion, KnowledgeSetSource
 
 router = APIRouter(tags=["Knowledge"])
 KNOWLEDGE_UPLOAD_LEASE_SECONDS = 90
@@ -116,16 +116,10 @@ _UPLOAD_BODY = {
                 "type": "object",
                 "required": ["file"],
                 "properties": {
-                    "file": {
-                        "type": "string",
-                        "format": "binary",
-                        "description": (
-                            "UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted "
-                            "on the Maya server."
-                        ),
-                    },
+                    "file": {"type": "string", "format": "binary"},
                     "target_agent_version_id": {"type": "string", "format": "uuid"},
                     "expected_revision": {"type": "integer", "minimum": 0},
+                    "visibility": {"type": "string", "enum": ["private", "public"]},
                 },
             }
         }
@@ -133,52 +127,31 @@ _UPLOAD_BODY = {
 }
 
 
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _raise_knowledge_import_failure(reason: str, *, source_filename: str | None = None) -> None:
-    if (
-        reason == "content_too_large"
-        and source_filename is not None
-        and source_filename.rsplit(".", 1)[-1].casefold() == "md"
-    ):
-        raise rag_over_limit()
-    if reason in {"upload_size", "content_too_large", "pdf_limit", "docx_limit"}:
+def _raise_knowledge_import_failure(reason: str) -> None:
+    if reason in {"upload_size", "pdf_limit", "docx_limit"}:
         raise validation_failure(
-            "The upload exceeds the 10 MB, 200-page PDF, or 100,000-character extraction limit.",
+            "The document exceeds the local PDF/Word conversion capacity. "
+            "Convert it to Markdown externally and upload that Markdown.",
             code="knowledge_import_too_large",
-        ) from None
-    if reason in {"pdf_no_text", "docx_no_text"}:
-        raise validation_failure(
-            "The document has no selectable text. Scanned pages and embedded images are not "
-            "OCR-processed.",
-            code="knowledge_import_no_text",
-        ) from None
+        )
     if reason == "unsupported_format":
         raise validation_failure(
-            "Upload Markdown, PDF, or Word (.docx).", code="knowledge_import_unsupported"
-        ) from None
-    if reason == "processing_failed":
+            "Upload Markdown, PDF or Word (.docx).", code="knowledge_import_unsupported"
+        )
+    if reason in {"pdf_no_text", "docx_no_text"}:
         raise validation_failure(
-            "Maya could not safely process this document. Try a smaller or less complex file.",
-            code="knowledge_import_processing_failed",
-        ) from None
+            "No readable text could be extracted from this document.",
+            code="knowledge_import_no_text",
+        )
     raise validation_failure(
-        "Use a readable PDF with a text layer, a DOCX file, or UTF-8 Markdown. "
-        "Scanned pages and embedded images are not OCR-processed.",
-        code="knowledge_import_invalid",
-    ) from None
+        "The document could not be converted safely. "
+        "Keep the original and upload converted Markdown.",
+        code="knowledge_import_processing_failed",
+    )
 
 
-def _assert_can_reindex_document(
-    db: Session, context: AuthContext, document: KnowledgeDocument
-) -> None:
-    if (
-        document.source_owner_role == "teacher"
-        and course_member_role(db, context, document.group_id) != "teacher"
-    ):
-        raise not_found()
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 @router.get(
@@ -188,9 +161,7 @@ def _assert_can_reindex_document(
     responses={
         200: {
             "model": list[KnowledgeDocumentDTO],
-            "description": (
-                "Current group knowledge library, including PDF/DOCX converted on the Maya server."
-            ),
+            "description": "Current group Markdown library.",
         },
         404: {"model": Error, "description": "Group not found."},
     },
@@ -200,22 +171,68 @@ def list_knowledge_documents(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[KnowledgeDocumentDTO]:
-    group_role = scoped_group_role(db, context, str(group_id))
-    if group_role is None:
-        raise not_found()
-    statement = select(KnowledgeDocument).where(
-        KnowledgeDocument.group_id == str(group_id),
-        KnowledgeDocument.workspace_state == "active",
-    )
-    if group_role == "teacher":
-        statement = statement.where(KnowledgeDocument.source_owner_role == "teacher")
-    docs = db.scalars(statement.order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)).all()
-    if group_role == "teacher" and not docs:
-        # Outside a workspace visit, an empty courseware list is not group access.
-        raise not_found()
-    return [_document_dto(document) for document in docs]
+    scoped_student_group_role(db, context, str(group_id))
+    docs = db.scalars(
+        select(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.group_id == str(group_id),
+            KnowledgeDocument.workspace_state == "active",
+            or_(
+                KnowledgeDocument.owner_user_id == context.user.id,
+                KnowledgeDocument.visibility == "public",
+            ),
+        )
+        .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
+    ).all()
+    return [
+        _document_dto(
+            document,
+            can_manage_visibility=document.owner_user_id == context.user.id,
+        )
+        for document in docs
+    ]
 
 
+@router.get(
+    "/courses/{course_id}/workspace-documents",
+    response_model=list[KnowledgeDocumentDTO],
+    operation_id="listCourseWorkspaceDocuments",
+    responses={404: {"model": Error, "description": "Course not found."}},
+)
+def list_course_workspace_documents(
+    course_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[KnowledgeDocumentDTO]:
+    course_key = str(course_id)
+    if course_member_role(db, context.user.id, course_key) != "teacher":
+        raise not_found()
+    documents = db.scalars(
+        select(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.course_id == course_key,
+            KnowledgeDocument.owner_user_id == context.user.id,
+            KnowledgeDocument.ownership_scope == "personal",
+            KnowledgeDocument.workspace_state == "active",
+        )
+        .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
+    ).all()
+    return [_document_dto(document, can_manage_visibility=True) for document in documents]
+
+
+@router.post(
+    "/courses/{course_id}/workspace-documents",
+    response_model=KnowledgeDocumentMutation,
+    status_code=201,
+    operation_id="uploadCourseWorkspaceDocument",
+    openapi_extra={"requestBody": _UPLOAD_BODY},
+    responses={
+        201: {"model": KnowledgeDocumentMutation, "description": "Document stored and indexed."},
+        404: {"model": Error, "description": "Course or draft not found."},
+        409: {"model": Error, "description": "Revision or idempotency conflict."},
+        422: {"model": Error, "description": "Invalid Markdown upload."},
+    },
+)
 @router.post(
     "/groups/{group_id}/knowledge-documents",
     response_model=KnowledgeDocumentMutation,
@@ -226,22 +243,36 @@ def list_knowledge_documents(
         201: {"model": KnowledgeDocumentMutation, "description": "Document stored and indexed."},
         404: {"model": Error, "description": "Group or draft not found."},
         409: {"model": Error, "description": "Revision or idempotency conflict."},
-        422: {"model": Error, "description": "Invalid Markdown, PDF, or DOCX upload."},
+        422: {"model": Error, "description": "Invalid Markdown upload."},
     },
 )
 async def upload_knowledge_document(
-    group_id: UUID,
     request: Request,
+    group_id: UUID | None = None,
+    course_id: UUID | None = None,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> KnowledgeDocumentMutation:
-    group_role = scoped_group_role(db, context, str(group_id))
-    source_owner_role = course_member_role(db, context, str(group_id))
-    if group_role is None or source_owner_role not in {"student", "teacher"}:
+    if (group_id is None) == (course_id is None):
         raise not_found()
+    personal_workspace = course_id is not None
+    scope_key = str(course_id or group_id)
+    resource_course_id: str
+    if personal_workspace:
+        if course_member_role(db, context.user.id, scope_key) != "teacher":
+            raise not_found()
+        group_role = "owner"
+        resource_course_id = scope_key
+    else:
+        assert group_id is not None
+        group_role = scoped_student_group_role(db, context, str(group_id))
+        group_course_id = db.scalar(select(Group.course_id).where(Group.id == str(group_id)))
+        if group_course_id is None:
+            raise not_found()
+        resource_course_id = group_course_id
     try:
         fields, source_filename, source_content = await parse_upload(request)
     except UploadTooLargeError:
@@ -249,46 +280,75 @@ async def upload_knowledge_document(
     except (ValueError, UnicodeDecodeError):
         _raise_knowledge_import_failure("invalid")
     source_sha256 = hashlib.sha256(source_content).hexdigest()
+    source_owner_role = course_member_role(db, context.user.id, resource_course_id)
     try:
         target_id_raw = fields.get("target_agent_version_id")
         target_id = str(UUID(target_id_raw)) if target_id_raw else None
         expected_revision = integer_field(fields, "expected_revision", required=False)
-    except (TypeError, ValueError):
+        visibility = fields.get("visibility", "private")
+        if visibility not in {"private", "public"}:
+            raise ValueError("visibility must be private or public")
+    except (ValueError, MarkdownInputError, UnicodeDecodeError):
         raise validation_failure(
-            "The target Agent version or expected revision field is invalid.",
-            code="invalid_request",
+            "The Markdown upload is not valid.", code="file_operation_failed"
         ) from None
-    # A target draft keeps the original Wave 1A CAS contract. Omitting it
-    # creates a group-library document only; it does not create or enable an
-    # AgentVersion relation. Teachers can contribute to the shared library but
-    # cannot use this route to mutate a student draft.
+    # A target draft keeps the original Wave 1A CAS contract.  Omitting it
+    # creates a group-library document only; in particular it does not create
+    # or enable an AgentVersion relation.  Teachers retain read-only access to
+    # this endpoint and therefore cannot use the standalone create path.
     if target_id is not None:
         reject_baseline_version_mutation(target_id)
     scoped = visible_student_version(db, context, target_id) if target_id else None
-    if target_id and scoped is not None and scoped.agent.group_id != str(group_id):
-        raise not_found()
+    if target_id and scoped is not None:
+        if personal_workspace:
+            if (
+                scoped.agent.ownership_scope != "personal"
+                or scoped.agent.group_id is not None
+                or scoped.agent.owner_user_id != context.user.id
+                or scoped.agent.course_id != resource_course_id
+            ):
+                raise not_found()
+        elif scoped.agent.group_id != str(group_id):
+            raise not_found()
     if target_id and scoped is not None and scoped.version.state != "draft":
         raise version_immutable()
+    if target_id and scoped is not None:
+        # RAG uploaded into an Agent takes that Agent's Private or Public, so a
+        # private Agent's material never reaches the group's Brainform and a
+        # public Agent's material is shared with the group it serves.
+        if "visibility" not in fields:
+            visibility = scoped.agent.visibility
+        elif visibility != scoped.agent.visibility:
+            raise conflict(
+                "document_visibility_follows_agent",
+                "RAG added to an Agent has the same Private or Public as the Agent.",
+            )
+    if (
+        target_id
+        and scoped is not None
+        and visibility == "private"
+        and scoped.agent.owner_user_id != context.user.id
+    ):
+        raise not_found()
     if target_id and expected_revision is None and scoped is not None:
         # The multipart contract keeps this field wire-optional, but the
         # business operation is always CAS-protected.  Resolve the
         # authorized draft first so the response carries its current
         # revision and cannot be used as an existence oracle.
         raise stale_revision(scoped.version.revision)
-    if target_id is not None and (group_role != "student" or source_owner_role != "student"):
-        raise not_found()
-    if target_id is None and group_role not in {"student", "teacher"}:
+    if target_id is None and group_role not in {"student", "owner"}:
         raise not_found()
     body_hash = parse_json_payload_hash(
         "uploadKnowledgeDocument",
         context,
-        [str(group_id), target_id or "library"],
+        [scope_key, "personal" if personal_workspace else "group", target_id or "library"],
         {
             "upload_filename": source_filename,
             "upload_sha256": source_sha256,
             "ingest_version": INGEST_VERSION,
             "target_agent_version_id": target_id,
             "expected_revision": expected_revision,
+            "visibility": visibility,
         },
     )
     record, replay = claim_idempotency(
@@ -308,17 +368,25 @@ async def upload_knowledge_document(
         # This is the authoritative pre-staging check; no file is touched if
         # the draft has already advanced.
         db.rollback()
-        scoped = visible_student_version(db, context, target_id) if target_id else None
-        if course_member_role(db, context, str(group_id)) != source_owner_role:
+        if personal_workspace and course_member_role(db, context.user.id, scope_key) != "teacher":
             raise not_found()
+        if not personal_workspace:
+            assert group_id is not None
+            scoped_student_group_role(db, context, str(group_id))
+        scoped = visible_student_version(db, context, target_id) if target_id else None
         if target_id and scoped is not None:
-            if scoped.agent.group_id != str(group_id) or scoped.version.state != "draft":
+            wrong_scope = (
+                scoped.agent.ownership_scope != "personal"
+                or scoped.agent.owner_user_id != context.user.id
+                or scoped.agent.course_id != resource_course_id
+                if personal_workspace
+                else scoped.agent.group_id != str(group_id)
+            )
+            if wrong_scope or scoped.version.state != "draft":
                 raise version_immutable() if scoped.version.state != "draft" else not_found()
             if scoped.version.revision != expected_revision:
                 raise stale_revision(scoped.version.revision)
             current_docs = _enabled_documents(db, scoped.version.id)
-            if any(item.char_count > MAX_RAG_CHARS for item in current_docs):
-                raise rag_over_limit()
         else:
             current_docs = []
 
@@ -329,16 +397,17 @@ async def upload_knowledge_document(
             )
             document = normalize_markdown(filename, content)
         except KnowledgeImportError as exc:
-            _raise_knowledge_import_failure(exc.reason, source_filename=source_filename)
+            _raise_knowledge_import_failure(exc.reason)
         except (MarkdownInputError, UnicodeDecodeError, ValueError):
             _raise_knowledge_import_failure("invalid")
-        if document.char_count > MAX_RAG_CHARS:
-            _raise_knowledge_import_failure("content_too_large", source_filename=source_filename)
-
         timestamp = _now()
         document_id = str(uuid4())
         operation_id = str(uuid4())
-        relative_path = f"groups/{group_id}/knowledge/{document_id}/source.md"
+        relative_path = (
+            f"groups/{group_id}/knowledge/{document_id}/source.md"
+            if visibility == "public" and not personal_workspace
+            else f"users/{context.user.id}/knowledge/{document_id}/source.md"
+        )
         staging_root = f"tmp/publish/{operation_id}"
         staging_path = f"{staging_root}/source.md"
         create_file_operation(
@@ -423,15 +492,25 @@ async def upload_knowledge_document(
         # after the filesystem boundary to make races deterministic.
         db.rollback()
         assert_claim_owned(db, record)
+        if personal_workspace and course_member_role(db, context.user.id, scope_key) != "teacher":
+            raise not_found()
+        if not personal_workspace:
+            assert group_id is not None
+            scoped_student_group_role(db, context, str(group_id))
         scoped = visible_student_version(db, context, target_id) if target_id else None
         if target_id and scoped is not None:
-            if scoped.agent.group_id != str(group_id) or scoped.version.state != "draft":
+            wrong_scope = (
+                scoped.agent.ownership_scope != "personal"
+                or scoped.agent.owner_user_id != context.user.id
+                or scoped.agent.course_id != resource_course_id
+                if personal_workspace
+                else scoped.agent.group_id != str(group_id)
+            )
+            if wrong_scope or scoped.version.state != "draft":
                 raise version_immutable() if scoped.version.state != "draft" else not_found()
             if scoped.version.revision != expected_revision:
                 raise stale_revision(scoped.version.revision)
             current_docs = _enabled_documents(db, scoped.version.id)
-            if any(item.char_count > MAX_RAG_CHARS for item in current_docs):
-                raise rag_over_limit()
             changed = db.execute(
                 update(AgentVersion)
                 .where(
@@ -457,10 +536,9 @@ async def upload_knowledge_document(
                 )
                 raise stale_revision(current_revision)
             db.refresh(scoped.version)
-        elif scoped_group_role(db, context, str(group_id)) != group_role:
-            raise not_found()
-        if course_member_role(db, context, str(group_id)) != source_owner_role:
-            raise not_found()
+        elif not personal_workspace:
+            assert group_id is not None
+            scoped_student_group_role(db, context, str(group_id))
         stored_file = StoredFile(
             id=str(uuid4()),
             kind="markdown",
@@ -474,7 +552,12 @@ async def upload_knowledge_document(
         db.add(stored_file)
         row = KnowledgeDocument(
             id=document_id,
-            group_id=str(group_id),
+            group_id=str(group_id) if group_id is not None else None,
+            owner_user_id=context.user.id,
+            course_id=resource_course_id,
+            ownership_scope="personal" if personal_workspace else "group",
+            visibility=visibility,
+            authorization_epoch=0,
             source_filename=document.filename,
             source_owner_role=source_owner_role,
             stored_file_id=stored_file.id,
@@ -522,13 +605,20 @@ async def upload_knowledge_document(
                     order_index=len(current_docs),
                 )
             )
+            if visibility != "public" or scoped.agent.visibility != "public":
+                scoped.version.draft_visibility = "private"
         operation = load_file_operation(db, operation_id)
         operation.state = "committed"
         operation.updated_at = _now()
         result = KnowledgeDocumentMutation(
-            document=_document_dto(row),
+            document=_document_dto(row, can_manage_visibility=True),
             agent_version=(
-                version_dto(db, scoped.version, scoped.agent)
+                version_dto(
+                    db,
+                    scoped.version,
+                    scoped.agent,
+                    include_private_sources=scoped.agent.owner_user_id == context.user.id,
+                )
                 if target_id and scoped is not None
                 else None
             ),
@@ -595,14 +685,7 @@ async def upload_knowledge_document(
                             "expected_index_revision",
                         ],
                         "properties": {
-                            "file": {
-                                "type": "string",
-                                "format": "binary",
-                                "description": (
-                                    "UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted "
-                                    "on the Maya server."
-                                ),
-                            },
+                            "file": {"type": "string", "format": "binary"},
                             "expected_content_hash": {"type": "string"},
                             "expected_index_revision": {
                                 "type": "integer",
@@ -618,7 +701,7 @@ async def upload_knowledge_document(
         201: {"model": KnowledgeDocumentDTO, "description": "Immutable replacement created."},
         404: {"model": Error, "description": "Document not found."},
         409: {"model": Error, "description": "Replacement CAS conflict."},
-        422: {"model": Error, "description": "Invalid Markdown, PDF, or DOCX replacement."},
+        422: {"model": Error, "description": "Invalid Markdown replacement."},
     },
 )
 async def replace_knowledge_document(
@@ -630,12 +713,13 @@ async def replace_knowledge_document(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> KnowledgeDocumentDTO:
-    """Replace one group Markdown source using copy-on-write semantics."""
+    """Edit one group Markdown source using copy-on-write semantics."""
 
     reject_baseline_document_mutation(str(document_id))
-    scoped = visible_student_document(db, context, str(document_id))
-    if scoped.document.source_owner_role == "teacher":
-        raise not_found()
+    # Keep owner-scoped stale CAS requests distinguishable from guessed
+    # cross-scope IDs. A winning replacement hides the old source, so a
+    # concurrent request by its owner must still reach the 409 CAS branch.
+    scoped = visible_mutable_document(db, context, str(document_id), require_active=False)
     try:
         fields, source_filename, source_content = await parse_upload(request)
     except UploadTooLargeError:
@@ -643,6 +727,10 @@ async def replace_knowledge_document(
     except (ValueError, UnicodeDecodeError):
         _raise_knowledge_import_failure("invalid")
     try:
+        filename, content = await run_in_threadpool(
+            convert_knowledge_upload, source_filename, source_content
+        )
+        replacement = normalize_markdown(filename, content)
         expected_content_hash = fields.get("expected_content_hash")
         if (
             expected_content_hash is None
@@ -651,30 +739,23 @@ async def replace_knowledge_document(
         ):
             raise ValueError("expected_content_hash is invalid")
         expected_index_revision = integer_field(fields, "expected_index_revision", required=True)
-    except (TypeError, ValueError):
+    except KnowledgeImportError as exc:
+        _raise_knowledge_import_failure(exc.reason)
+    except (ValueError, MarkdownInputError, UnicodeDecodeError):
         raise validation_failure(
-            "The expected content hash or index revision field is invalid.",
-            code="invalid_request",
+            "The Markdown replacement is not valid.", code="file_operation_failed"
         ) from None
-    if scoped.document.content_hash != expected_content_hash:
-        raise stale_revision(scoped.document.index_revision)
-    if expected_index_revision is None or scoped.document.index_revision != expected_index_revision:
-        raise stale_revision(scoped.document.index_revision)
-    if scoped.document.workspace_state != "active":
-        raise stale_revision(scoped.document.index_revision)
-    source_sha256 = hashlib.sha256(source_content).hexdigest()
-
     body_hash = parse_json_payload_hash(
         "replaceKnowledgeDocument",
         context,
-        [str(document_id), scoped.document.group_id],
+        [str(document_id), scoped.document.group_id or scoped.document.course_id],
         {
             "old_document_id": str(document_id),
             "expected_content_hash": expected_content_hash,
             "expected_index_revision": expected_index_revision,
-            "upload_filename": source_filename,
-            "upload_sha256": source_sha256,
-            "ingest_version": INGEST_VERSION,
+            "filename": replacement.filename,
+            "content_hash": replacement.content_hash,
+            "source_sha256": replacement.source_sha256,
         },
     )
     record, replay = claim_idempotency(
@@ -689,59 +770,21 @@ async def replace_knowledge_document(
         return KnowledgeDocumentDTO.model_validate(json.loads(bytes(replay.body)))
 
     try:
-        # A keyed retry must not trust the read snapshot used to authorize the
-        # request. Recheck membership and the source CAS after the durable claim.
-        db.rollback()
-        scoped = visible_student_document(db, context, str(document_id))
-        if scoped.document.source_owner_role == "teacher":
-            raise not_found()
-        if scoped.document.workspace_state != "active":
-            raise stale_revision(scoped.document.index_revision)
+        # A successful stable-ID write advances the document head, so an
+        # identical retry must resolve from its accepted idempotency record
+        # before comparing the old expected hash/revision with that new head.
         if (
             scoped.document.content_hash != expected_content_hash
+            or expected_index_revision is None
             or scoped.document.index_revision != expected_index_revision
+            or scoped.document.workspace_state != "active"
         ):
             raise stale_revision(scoped.document.index_revision)
-
-        try:
-            renew_idempotency_lease(db, record, lease_seconds=KNOWLEDGE_UPLOAD_LEASE_SECONDS)
-            filename, content = await run_in_threadpool(
-                convert_knowledge_upload, source_filename, source_content
-            )
-            replacement = normalize_markdown(filename, content)
-        except KnowledgeImportError as exc:
-            _raise_knowledge_import_failure(exc.reason)
-        except (MarkdownInputError, UnicodeDecodeError, ValueError):
-            _raise_knowledge_import_failure("invalid")
-        if replacement.char_count > MAX_RAG_CHARS:
-            _raise_knowledge_import_failure("content_too_large")
-
-        # Conversion may take long enough for a group membership or source CAS
-        # to change. The replacement service repeats the membership check under
-        # its final SQLite writer lock before changing any relations.
-        db.rollback()
-        scoped = visible_student_document(db, context, str(document_id))
-        if scoped.document.source_owner_role == "teacher":
-            raise not_found()
-        if (
-            scoped.document.workspace_state != "active"
-            or scoped.document.content_hash != expected_content_hash
-            or scoped.document.index_revision != expected_index_revision
-        ):
-            raise stale_revision(scoped.document.index_revision)
-
-        def revalidate_replacement_access(session: Session, group_id: str) -> None:
-            final_scope = visible_student_document(session, context, str(document_id))
-            if (
-                final_scope.document.group_id != group_id
-                or final_scope.document.source_owner_role == "teacher"
-            ):
-                raise not_found()
-
         # ``replace_document_copy_on_write`` re-captures this source and all
         # draft references after the claim, stages/indexes/promotes bytes via
         # its typed journal, and owns the final BEGIN IMMEDIATE transaction.
         db.rollback()
+        enqueued_run_ids: list[str] = []
         new_document, _affected_versions, _operation_id = replace_document_copy_on_write(
             db,
             settings.resolved_data_root,
@@ -752,14 +795,23 @@ async def replace_knowledge_document(
             expected_index_revision=expected_index_revision,
             idempotency_record_id=record.id,
             claim_token=record.claim_token,
-            authorization_check=revalidate_replacement_access,
+            actor_user_id=context.user.id,
+            enqueued_generation_run_ids=enqueued_run_ids,
             checkpoint=saga_checkpoint,
         )
-        result = _document_dto(new_document)
+        result = _document_dto(
+            new_document,
+            can_manage_visibility=scoped.role == "owner",
+        )
         finish_idempotency(db, record, 201, result.model_dump(mode="json"))
         db.flush()
         db.commit()
         saga_checkpoint("replace.after_final_commit")
+        if not settings.is_test:
+            task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
+            if task_manager is not None:
+                for run_id in enqueued_run_ids:
+                    task_manager.wake(run_id)
         return result
     except PlatformError:
         # The service has already recovered its promoted tree for business
@@ -783,8 +835,80 @@ def get_knowledge_document(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> KnowledgeDocumentDTO:
-    scoped = visible_knowledge_library_document(db, context, str(document_id))
-    return _document_dto(scoped.document)
+    scoped = visible_student_document(db, context, str(document_id))
+    return _document_dto(
+        scoped.document,
+        can_manage_visibility=scoped.document.owner_user_id == context.user.id,
+    )
+
+
+@router.patch(
+    "/knowledge-documents/{document_id}",
+    response_model=KnowledgeDocumentDTO,
+    operation_id="updateKnowledgeDocumentVisibility",
+    responses={
+        200: {"model": KnowledgeDocumentDTO, "description": "Source visibility updated."},
+        404: {"model": Error, "description": "Document not found."},
+        409: {"model": Error, "description": "Source authorization revision conflict."},
+    },
+)
+def update_knowledge_document_visibility(
+    document_id: UUID,
+    payload: UpdateKnowledgeDocumentVisibility,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> KnowledgeDocumentDTO:
+    scoped = visible_mutable_document(db, context, str(document_id))
+    if scoped.document.owner_user_id != context.user.id:
+        raise not_found()
+    db.rollback()
+    db.execute(text("BEGIN IMMEDIATE"))
+    current = db.scalar(
+        select(KnowledgeDocument).where(
+            KnowledgeDocument.id == str(document_id),
+            KnowledgeDocument.owner_user_id == context.user.id,
+            KnowledgeDocument.course_id == scoped.document.course_id,
+            KnowledgeDocument.authorization_epoch == payload.expected_authorization_epoch,
+        )
+    )
+    if current is None:
+        latest = db.scalar(
+            select(KnowledgeDocument.authorization_epoch).where(
+                KnowledgeDocument.id == str(document_id),
+                KnowledgeDocument.owner_user_id == context.user.id,
+            )
+        )
+        db.rollback()
+        if latest is None:
+            raise not_found()
+        raise stale_revision(latest)
+    if not can_mutate_source(db, context, current):
+        db.rollback()
+        raise not_found()
+    if current.visibility != payload.visibility:
+        current.visibility = payload.visibility
+        current.authorization_epoch += 1
+        current.updated_at = _now()
+        if payload.visibility == "private":
+            drafts = db.scalars(
+                select(AgentVersion)
+                .join(
+                    AgentVersionDocument,
+                    AgentVersionDocument.agent_version_id == AgentVersion.id,
+                )
+                .where(
+                    AgentVersion.state == "draft",
+                    AgentVersionDocument.document_id == current.id,
+                    AgentVersionDocument.enabled.is_(True),
+                )
+            ).all()
+            for draft in drafts:
+                draft.draft_visibility = "private"
+    db.flush()
+    result = _document_dto(current, can_manage_visibility=True)
+    db.commit()
+    return result
 
 
 @router.get(
@@ -805,7 +929,7 @@ def download_knowledge_document(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> Response:
-    scoped = visible_knowledge_library_document(db, context, str(document_id))
+    scoped = visible_student_document(db, context, str(document_id))
     return Response(
         document_file_content(settings.resolved_data_root, scoped.document),
         media_type="text/markdown",
@@ -833,8 +957,7 @@ def reindex_knowledge_document(
     settings: Settings = Depends(get_settings),
 ) -> JobStatus:
     reject_baseline_document_mutation(str(document_id))
-    scoped = visible_knowledge_library_document(db, context, str(document_id))
-    _assert_can_reindex_document(db, context, scoped.document)
+    scoped = visible_mutable_document(db, context, str(document_id))
     body_hash = parse_json_payload_hash("reindexKnowledgeDocument", context, [str(document_id)], {})
     record, replay = claim_idempotency(
         db,
@@ -846,9 +969,6 @@ def reindex_knowledge_document(
     )
     if replay is not None:
         return replay  # type: ignore[return-value]
-    db.rollback()
-    scoped = visible_knowledge_library_document(db, context, str(document_id))
-    _assert_can_reindex_document(db, context, scoped.document)
     assert_claim_owned(db, record)
     if scoped.document.workspace_state != "active":
         abandon_claim(db, record)
@@ -900,8 +1020,7 @@ def reindex_knowledge_document(
     try:
         db.rollback()
         assert_claim_owned(db, record)
-        final_scoped = visible_knowledge_library_document(db, context, str(document_id))
-        _assert_can_reindex_document(db, context, final_scoped.document)
+        final_scoped = visible_mutable_document(db, context, str(document_id))
         final_job = db.get(Job, job.id)
         if final_job is None:
             raise invalid_state("The indexing job could not be recovered.")
@@ -968,9 +1087,7 @@ def hide_knowledge_document(
     """
 
     reject_baseline_document_mutation(str(document_id))
-    scoped = visible_student_document(db, context, str(document_id))
-    if scoped.document.source_owner_role == "teacher":
-        raise not_found()
+    scoped = visible_mutable_document(db, context, str(document_id))
     body_hash = parse_json_payload_hash("hideKnowledgeDocument", context, [str(document_id)], {})
     record, replay = claim_idempotency(
         db, context, "hideKnowledgeDocument", idempotency_key, body_hash
@@ -1013,6 +1130,18 @@ def hide_knowledge_document(
         )
     snapshot_bound = (
         db.scalar(
+            select(KnowledgeDocumentVersion.id)
+            .where(KnowledgeDocumentVersion.document_id == scoped.document.id)
+            .limit(1)
+        )
+        is not None
+        or db.scalar(
+            select(KnowledgeSetSource.id)
+            .where(KnowledgeSetSource.document_id == scoped.document.id)
+            .limit(1)
+        )
+        is not None
+        or db.scalar(
             select(SnapshotDocument.id)
             .where(SnapshotDocument.document_id == scoped.document.id)
             .limit(1)
@@ -1040,9 +1169,15 @@ def hide_knowledge_document(
         # own frozen file bytes; neither is rewritten here.
         scoped.document.workspace_state = "hidden"
         scoped.document.updated_at = _now()
-        result = _document_dto(scoped.document)
+        result = _document_dto(
+            scoped.document,
+            can_manage_visibility=scoped.document.owner_user_id == context.user.id,
+        )
     else:
-        result = _document_dto(scoped.document)
+        result = _document_dto(
+            scoped.document,
+            can_manage_visibility=scoped.document.owner_user_id == context.user.id,
+        )
         result = result.model_copy(update={"workspace_state": "hidden"})
         stored_file_id = scoped.document.stored_file_id
         db.execute(
@@ -1113,23 +1248,28 @@ def set_agent_version_documents(
             "document_ids must not contain duplicates.",
             code="file_operation_failed",
         )
-    documents = []
-    if document_ids:
-        documents = list(
+    agent = db.get(Agent, scoped.agent.id)
+    if agent is None:
+        raise not_found()
+    documents = (
+        list(
             db.scalars(
                 select(KnowledgeDocument).where(
                     KnowledgeDocument.id.in_(document_ids),
-                    KnowledgeDocument.group_id == scoped.agent.group_id,
+                    KnowledgeDocument.course_id == agent.course_id,
                     KnowledgeDocument.workspace_state == "active",
                 )
             ).all()
         )
-    if len(documents) != len(document_ids):
+        if document_ids
+        else []
+    )
+    if len(documents) != len(document_ids) or any(
+        not can_bind_source(db, context, agent, document) for document in documents
+    ):
         raise not_found()
     documents_by_id = {document.id: document for document in documents}
     ordered = [documents_by_id[item] for item in document_ids]
-    if any(item.char_count > MAX_RAG_CHARS for item in ordered):
-        raise rag_over_limit()
     changed = db.execute(
         update(AgentVersion)
         .where(
@@ -1169,8 +1309,17 @@ def set_agent_version_documents(
                 order_index=index,
             )
         )
+    if scoped.agent.visibility != "public" or any(
+        document.visibility != "public" for document in ordered
+    ):
+        scoped.version.draft_visibility = "private"
     db.flush()
-    return version_dto(db, scoped.version, scoped.agent)
+    return version_dto(
+        db,
+        scoped.version,
+        scoped.agent,
+        include_private_sources=scoped.agent.owner_user_id == context.user.id,
+    )
 
 
 @router.get(

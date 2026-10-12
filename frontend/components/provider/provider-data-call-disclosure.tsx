@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import styles from "./provider-data-call-disclosure.module.css";
 
@@ -34,33 +34,159 @@ export type ProviderDataCallDisclosureController = {
   ) => Promise<ProviderDataCallDisclosureResponse>;
 };
 
+type DisclosureViewState = {
+  controller: ProviderDataCallDisclosureController;
+  scopeKey: string;
+  value: ProviderDataCallDisclosureResponse | null;
+  confirmedKey: string | null;
+  loading: boolean;
+  busy: boolean;
+  error: unknown;
+};
+
+function confirmationKey(value: ProviderDataCallDisclosureResponse): string {
+  return `${value.policy_hash}:${value.manifest_hash}:${value.confirmation_revision}`;
+}
+
+function emptyViewState(
+  controller: ProviderDataCallDisclosureController,
+  scopeKey: string,
+): DisclosureViewState {
+  return {
+    controller,
+    scopeKey,
+    value: null,
+    confirmedKey: null,
+    loading: true,
+    busy: false,
+    error: null,
+  };
+}
+
 export function ProviderDataCallDisclosure({
   controller,
+  scopeKey = "",
+  confirmable = true,
+  existingDisclosure,
+  existingDisclosureError,
+  onRetry,
 }: {
   controller: ProviderDataCallDisclosureController;
+  scopeKey?: string;
+  confirmable?: boolean;
+  existingDisclosure?: ProviderDataCallDisclosureResponse | null;
+  existingDisclosureError?: unknown;
+  onRetry?: () => void;
 }) {
-  const [value, setValue] = useState<ProviderDataCallDisclosureResponse | null>(
-    null,
+  const currentScopeKey = scopeKey;
+  const usesExistingDisclosure = existingDisclosure !== undefined;
+  const [state, setState] = useState<DisclosureViewState>(() =>
+    emptyViewState(controller, currentScopeKey),
   );
-  const [confirmedRevision, setConfirmedRevision] = useState<number | null>(
-    null,
+  const stateMatchesScope =
+    state.controller === controller && state.scopeKey === currentScopeKey;
+  const currentState = stateMatchesScope
+    ? state
+    : emptyViewState(controller, currentScopeKey);
+  const storedValue = currentState.value;
+  const value = usesExistingDisclosure
+    ? existingDisclosure === null
+      ? null
+      : currentState.confirmedKey !== null &&
+          storedValue !== null &&
+          currentState.confirmedKey === confirmationKey(storedValue) &&
+          storedValue.policy_hash === existingDisclosure?.policy_hash &&
+          storedValue.manifest_hash === existingDisclosure.manifest_hash
+        ? storedValue
+        : existingDisclosure
+    : storedValue;
+  const confirmedKey = currentState.confirmedKey;
+  const loading = usesExistingDisclosure
+    ? existingDisclosure === null && existingDisclosureError == null
+    : currentState.loading;
+  const busy =
+    usesExistingDisclosure && value !== storedValue ? false : currentState.busy;
+  const error = currentState.error ?? existingDisclosureError;
+  const requestSequence = useRef(0);
+  const activeScope = useRef<{
+    controller: ProviderDataCallDisclosureController;
+    scopeKey: string;
+  } | null>(null);
+
+  useEffect(() => {
+    activeScope.current = { controller, scopeKey: currentScopeKey };
+    return () => {
+      activeScope.current = null;
+      requestSequence.current += 1;
+    };
+  }, [controller, currentScopeKey]);
+
+  const updateCurrentState = useCallback(
+    (update: Partial<DisclosureViewState>) => {
+      setState((previous) => {
+        const base =
+          previous.controller === controller &&
+          previous.scopeKey === currentScopeKey
+            ? previous
+            : emptyViewState(controller, currentScopeKey);
+        return { ...base, ...update };
+      });
+    },
+    [controller, currentScopeKey],
   );
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setValue(await controller.load());
-      setConfirmedRevision(null);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
+    if (usesExistingDisclosure) {
+      if (existingDisclosure === null) {
+        updateCurrentState({
+          value: null,
+          confirmedKey: null,
+          loading: existingDisclosureError == null,
+          busy: false,
+          error: existingDisclosureError ?? null,
+        });
+        return;
+      }
+      updateCurrentState({
+        value: existingDisclosure,
+        confirmedKey: null,
+        loading: false,
+        busy: false,
+        error: null,
+      });
+      return;
     }
-  }, [controller]);
+    const requestId = ++requestSequence.current;
+    const isCurrent = () => {
+      const active = activeScope.current;
+      return (
+        requestSequence.current === requestId &&
+        active?.controller === controller &&
+        active.scopeKey === currentScopeKey
+      );
+    };
+    updateCurrentState({ loading: true, error: null });
+    try {
+      const next = await controller.load();
+      if (!isCurrent()) return;
+      updateCurrentState({
+        value: next,
+        confirmedKey: null,
+      });
+    } catch (cause) {
+      if (!isCurrent()) return;
+      updateCurrentState({ error: cause });
+    } finally {
+      if (isCurrent()) updateCurrentState({ loading: false });
+    }
+  }, [
+    controller,
+    currentScopeKey,
+    existingDisclosure,
+    existingDisclosureError,
+    updateCurrentState,
+    usesExistingDisclosure,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -68,21 +194,34 @@ export function ProviderDataCallDisclosure({
   }, [load]);
 
   async function confirm() {
-    if (!value || confirmedRevision === value.confirmation_revision) return;
-    setBusy(true);
-    setError(null);
+    if (!confirmable || !value || confirmedKey === confirmationKey(value))
+      return;
+    const requestId = ++requestSequence.current;
+    const isCurrent = () => {
+      const active = activeScope.current;
+      return (
+        requestSequence.current === requestId &&
+        active?.controller === controller &&
+        active.scopeKey === currentScopeKey
+      );
+    };
+    updateCurrentState({ busy: true, error: null });
     try {
       const next = await controller.confirm({
         policy_hash: value.policy_hash,
         manifest_hash: value.manifest_hash,
         expected_revision: value.confirmation_revision,
       });
-      setValue(next);
-      setConfirmedRevision(next.confirmation_revision);
+      if (!isCurrent()) return;
+      updateCurrentState({
+        value: next,
+        confirmedKey: confirmationKey(next),
+      });
     } catch (cause) {
-      setError(cause);
+      if (!isCurrent()) return;
+      updateCurrentState({ error: cause });
     } finally {
-      setBusy(false);
+      if (isCurrent()) updateCurrentState({ busy: false });
     }
   }
 
@@ -102,7 +241,7 @@ export function ProviderDataCallDisclosure({
         <button
           className={styles.retry}
           type="button"
-          onClick={() => void load()}
+          onClick={() => (onRetry ? onRetry() : void load())}
         >
           Try again
         </button>
@@ -111,7 +250,7 @@ export function ProviderDataCallDisclosure({
   }
 
   const disclosure = value.disclosure;
-  const confirmed = confirmedRevision === value.confirmation_revision;
+  const confirmed = confirmable && confirmedKey === confirmationKey(value);
   return (
     <section
       className={styles.card}
@@ -125,10 +264,26 @@ export function ProviderDataCallDisclosure({
         <span
           className={`${styles.status} ${confirmed ? styles.confirmed : styles.pending}`}
         >
-          {confirmed ? "Confirmed" : "Needs confirmation"}
+          {confirmable
+            ? confirmed
+              ? "Confirmed"
+              : "Needs confirmation"
+            : "Reference only"}
         </span>
       </div>
       <dl className={styles.fields}>
+        <div className={styles.field}>
+          <dt>Policy hash</dt>
+          <dd className={styles.hash}>{value.policy_hash}</dd>
+        </div>
+        <div className={styles.field}>
+          <dt>Manifest hash</dt>
+          <dd className={styles.hash}>{value.manifest_hash}</dd>
+        </div>
+        <div className={styles.field}>
+          <dt>Disclosure revision</dt>
+          <dd>{value.confirmation_revision}</dd>
+        </div>
         <div className={styles.field}>
           <dt>Supplier</dt>
           <dd>{disclosure.supplier_display_name}</dd>
@@ -166,21 +321,24 @@ export function ProviderDataCallDisclosure({
       </dl>
       <div className={styles.actionRow}>
         <p className={styles.hint}>
-          Confirmation is tied to this disclosure revision and expires when the
-          policy or manifest changes.
+          {confirmable
+            ? "Confirmation is tied to this disclosure revision and expires when the policy or manifest changes."
+            : "Team authorization is confirmed for each exact published resource binding below."}
         </p>
-        <button
-          className={styles.confirm}
-          type="button"
-          disabled={busy || confirmed}
-          onClick={() => void confirm()}
-        >
-          {busy
-            ? "Confirming…"
-            : confirmed
-              ? "Disclosure confirmed"
-              : "Confirm disclosure"}
-        </button>
+        {confirmable ? (
+          <button
+            className={styles.confirm}
+            type="button"
+            disabled={busy || confirmed}
+            onClick={() => void confirm()}
+          >
+            {busy
+              ? "Confirming…"
+              : confirmed
+                ? "Disclosure confirmed"
+                : "Confirm disclosure"}
+          </button>
+        ) : null}
       </div>
     </section>
   );

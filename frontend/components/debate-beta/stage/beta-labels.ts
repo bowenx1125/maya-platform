@@ -10,8 +10,6 @@ export type BetaStageLabels = {
   sceneUnavailable: string;
   barrageLane: string;
   joinLabel: string;
-  barragePause: string;
-  barrageResume: string;
   barrageCount: (count: number) => string;
   openInteraction: string;
   hideInteraction: string;
@@ -25,8 +23,6 @@ export const defaultBetaStageLabels: BetaStageLabels = {
   sceneUnavailable: "3D bench unavailable — the debate continues in text.",
   barrageLane: "Classroom messages",
   joinLabel: "Scan to join",
-  barragePause: "Pause messages",
-  barrageResume: "Resume messages",
   barrageCount: (count) => `${count} message${count === 1 ? "" : "s"}`,
   openInteraction: "Interact",
   hideInteraction: "Hide",
@@ -41,8 +37,6 @@ export const betaStageLabelsZh: BetaStageLabels = {
   sceneUnavailable: "3D 讲席无法显示，辩论以文字继续。",
   barrageLane: "课堂弹幕",
   joinLabel: "扫码参与",
-  barragePause: "暂停弹幕",
-  barrageResume: "恢复弹幕",
   barrageCount: (count) => `${count} 条弹幕`,
   openInteraction: "开启课堂弹幕",
   hideInteraction: "隐藏",

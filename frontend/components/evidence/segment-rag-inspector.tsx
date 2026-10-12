@@ -9,6 +9,7 @@ export type SegmentRagSegment = SegmentEvidence & {
   text: string;
   source_ids: readonly string[];
   reply_to: string | null;
+  reply_text?: string | null;
 };
 
 export type SegmentRagSource = {

@@ -200,7 +200,6 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
         "stream",
         "temperature",
         "top_p",
-        "max_completion_tokens",
         "n",
         "response_format",
     }
@@ -209,7 +208,7 @@ def test_valid_response_is_mapped_once_and_wire_contract_is_exact() -> None:
     assert transport.last_json["stream"] is False
     assert transport.last_json["temperature"] == 0.2
     assert transport.last_json["top_p"] == 0.8
-    assert transport.last_json["max_completion_tokens"] == 1500
+    assert "max_completion_tokens" not in transport.last_json
     assert transport.last_json["n"] == 1
     messages = cast(list[dict[str, str]], transport.last_json["messages"])
     assert [message["role"] for message in messages] == ["system", "user"]
@@ -328,32 +327,30 @@ def test_output_extra_field_and_malformed_json_fail_once() -> None:
 
 
 @pytest.mark.parametrize(
-    ("usage", "expected"),
-    (
-        (
-            {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 201},
-            "report_usage_overrun",
-        ),
-        (
-            {"prompt_tokens": 32_001, "completion_tokens": 1, "total_tokens": 32_002},
-            "report_usage_overrun",
-        ),
-        (
-            {"prompt_tokens": 80, "completion_tokens": 1_511, "total_tokens": 1_591},
-            "report_usage_overrun",
-        ),
-        (
-            {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": "200"},
-            "report_usage_invalid",
-        ),
-    ),
+    "usage",
+    [
+        None,
+        {},
+        "unavailable",
+        [],
+        {"prompt_tokens": 80, "completion_tokens": 120, "total_tokens": 201},
+        {"prompt_tokens": -1, "completion_tokens": True, "total_tokens": "200"},
+        {"prompt_tokens_details": {"cached_tokens": "unknown"}},
+    ],
 )
-def test_usage_shape_and_caps_fail_after_one_received_response(
-    usage: Mapping[str, object], expected: str
-) -> None:
-    transport = FakeTransport(_response(usage=usage))
-    with pytest.raises(ReportProviderError, match=expected):
-        _provider(transport).execute(_request())
+def test_usage_metadata_never_blocks_a_valid_report(usage: object) -> None:
+    response = _response()
+    response["usage"] = usage
+    transport = FakeTransport(response)
+    assert _provider(transport).execute(_request()).model_dump() == _sections()
+    assert transport.calls == 1
+
+
+def test_missing_usage_does_not_block_a_valid_report() -> None:
+    response = _response()
+    response.pop("usage")
+    transport = FakeTransport(response)
+    assert _provider(transport).execute(_request()).model_dump() == _sections()
     assert transport.calls == 1
 
 
@@ -375,16 +372,11 @@ def test_transport_failure_is_never_retried_or_echoed(
     assert "raw transport details" not in str(error.value)
 
 
-def test_http_rejection_wrong_model_and_finish_reason_are_one_call_terminal_failures() -> None:
+def test_http_rejection_and_finish_reason_are_one_call_terminal_failures() -> None:
     rejected = FakeTransport(_response(), status_code=429)
     with pytest.raises(ReportProviderError, match="report_http_rejected"):
         _provider(rejected).execute(_request())
     assert rejected.calls == 1
-
-    wrong_model = FakeTransport(_response(model="other-model"))
-    with pytest.raises(ReportProviderError, match="report_response_resource"):
-        _provider(wrong_model).execute(_request())
-    assert wrong_model.calls == 1
 
     truncated = FakeTransport(_response(finish_reason="length"))
     with pytest.raises(ReportProviderError, match="report_finish_reason"):
@@ -393,16 +385,9 @@ def test_http_rejection_wrong_model_and_finish_reason_are_one_call_terminal_fail
 
 
 def test_response_shape_and_private_or_provider_fields_fail_closed() -> None:
-    """A missing field this parser reads is terminal; a documented extra is not.
+    """Required content remains validated; metadata is informational."""
 
-    Requiring the envelope to contain nothing beyond the four fields read here
-    rejected every genuine DashScope reply, which returns ``id`` and
-    ``created`` as well -- so no real report could ever be produced. Nothing
-    from the envelope is echoed anywhere, and the checks that matter are the
-    ones below: model identity, one choice, a stop finish, and the usage caps.
-    """
-
-    for missing in ("object", "model", "choices", "usage"):
+    for missing in ("choices",):
         response = _response()
         response.pop(missing)
         transport = FakeTransport(response)
@@ -456,3 +441,37 @@ def test_conservative_tokenizer_backs_a_real_report_request() -> None:
     prepared = provider.build_request(_request())
     assert prepared.tokenizer_id == tokenizer.tokenizer_id
     assert prepared.tokenizer_asset_hash == tokenizer.asset_hash
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {"prompt_tokens": 320_001, "completion_tokens": 1, "total_tokens": 320_002},
+        {"prompt_tokens": 80, "completion_tokens": 15_110, "total_tokens": 15_190},
+    ],
+)
+def test_report_accepts_usage_above_legacy_estimates(usage: Mapping[str, object]) -> None:
+    transport = FakeTransport(_response(usage=usage))
+    _provider(transport).execute(_request())
+    assert transport.calls == 1
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"object": "provider.completion", "model": "provider-model-revision"},
+        {"model": "provider-model-revision"},
+        {"object": "provider.completion"},
+        {},
+    ],
+)
+def test_report_resource_metadata_does_not_reject_valid_content(metadata: dict[str, str]) -> None:
+    response = _response()
+    response.pop("object")
+    response.pop("model")
+    response.update(metadata)
+    transport = FakeTransport(response)
+    result = _provider(transport).execute(_request())
+    assert result.model_dump() == _sections()
+    assert transport.calls == 1
+    assert transport.last_json["model"] == REAL_REPORT_MODEL

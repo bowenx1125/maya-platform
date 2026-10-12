@@ -26,7 +26,7 @@ from app.modules.debates.setup.segment_projection import segment_projection
 from app.modules.debates.topic_language import model_topic, validate_topic
 from app.providers.llm import LLMUsageV1, MockLLMProvider
 from app.providers.llm_segments import SegmentAcceptedCandidateV2, SegmentLLMAdapter
-from app.providers.tts import MockTTSProvider
+from app.providers.tts import TTS_UNAVAILABLE_CODES, MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
@@ -596,4 +596,77 @@ async def test_public_segment_snapshot_accepts_actual_audio_readiness(app_factor
             assert decoded.public_turns[0].segment_turn.segments[0].text == "Saved paragraph."
     finally:
         await tasks.close()
+        database.dispose()
+
+
+@pytest.mark.parametrize("audio_error_code", sorted(TTS_UNAVAILABLE_CODES))
+def test_completed_preview_text_counts_as_ready_without_audio_and_is_not_rewarmed(
+    app_factory, audio_error_code
+):
+    app, database, _settings = app_factory()
+    try:
+        with TestClient(app) as client:
+            agents = [
+                _insert_published_agent(
+                    database,
+                    group_id=GROUP_DEMO_ID,
+                    name=f"Text-only {index}",
+                    evidence="A community shares responsibility for its resources.",
+                )
+                for index in range(2)
+            ]
+            _, csrf = login(client)
+            response = client.post(
+                f"/api/v1/courses/{COURSE_ID}/debates",
+                headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+                json={
+                    "topic": "How should the community share resources?",
+                    "output_language": "en",
+                    "round_count": 4,
+                    "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
+                },
+            )
+            assert response.status_code == 201, response.text
+            debate_id = response.json()["id"]
+            scheduler = app.state.prewarm_scheduler
+            plan = scheduler._plan(debate_id)
+            assert len(plan) == 6
+            with database.session() as db:
+                for turn_id, _ in plan:
+                    turn = db.get(DebateTurn, turn_id)
+                    turn.speech = "Saved text remains usable when speech synthesis is unavailable."
+                    turn.structured_json = json.dumps(
+                        {
+                            "schema_version": "segment_turn_v2",
+                            "segments": [{"text": turn.speech, "source_ids": [], "reply_to": None}],
+                        }
+                    )
+                    turn.generation_status = "final_ready"
+                    turn.preparation_stage = "ready"
+                    turn.transcript_hash = "a" * 64
+                    turn.cutoff_turn_index = turn.turn_index - 1
+                    turn.retrieval_status = "no_match"
+                    turn.grounding_mode = "general_reasoning"
+                    turn.word_count = len(turn.speech.split())
+                    turn.audio_file_id = None
+                    turn.audio_duration_ms = None
+                    turn.safe_error_code = audio_error_code
+            detail_response = client.get(f"/api/v1/debates/{debate_id}")
+            assert detail_response.status_code == 200, detail_response.text
+            detail = detail_response.json()
+            assert detail["preview"] == {
+                "prepared_turns": 6,
+                "expected_turns": 6,
+                "ready": True,
+            }
+            assert all(not turn["audio_ready"] for turn in detail["preview_turns"])
+            assert all(
+                turn["safe_error_code"] == audio_error_code for turn in detail["preview_turns"]
+            )
+            listing = client.get(f"/api/v1/courses/{COURSE_ID}/debates")
+            assert listing.status_code == 200, listing.text
+            summary = next(item for item in listing.json() if item["id"] == debate_id)
+            assert summary["preview"] == detail["preview"]
+            assert all(ready for _, ready in scheduler._plan(debate_id))
+    finally:
         database.dispose()

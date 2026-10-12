@@ -4,9 +4,15 @@ venv
 .pytest_cache
 .mypy_cache
 .ruff_cache
+.env
+.env.*
+!.env.example
 data
 config/demo_users.yaml
 config/demo-accounts/accounts.private.md
+config/**/*.private.md
+config/provider-policies/
+**/*.private.md
 *.db
 *.db-*
 *.sqlite

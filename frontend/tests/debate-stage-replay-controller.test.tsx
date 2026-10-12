@@ -26,12 +26,15 @@ vi.mock("../components/stage3d/scholar-scene", () => ({
   ScholarScene: ({
     bubbleText,
     visuals,
+    overlay,
   }: {
+    overlay?: import("react").ReactNode;
     bubbleText?: string;
     visuals: Record<string, string>;
   }) => (
     <aside data-motion={Object.values(visuals)[0]} data-testid="speech-bubble">
       {bubbleText}
+      {overlay}
     </aside>
   ),
 }));
@@ -245,6 +248,32 @@ function renderStage(
 }
 
 describe("terminal segments replay controller", () => {
+  it("keeps messages flowing without manual Pause or Collect controls", () => {
+    const initial = detail();
+    render(
+      <BetaDebateStage
+        api={apiFor(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => new ReplaySocket()}
+        joinUrl="https://example.test/classroom/test"
+        joinCodeVisible={false}
+        headerActions={(replayButton) => (
+          <>
+            <button>Interact</button>
+            {replayButton}
+          </>
+        )}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Classroom messages").getAttribute("data-paused"),
+    ).toBe("false");
+    expect(
+      screen.queryByRole("button", { name: /Pause|Collect|Resume messages/i }),
+    ).toBeNull();
+  });
+
   it("places terminal Replay between Back and Conclude while Next is disabled", () => {
     const initial = detail();
     render(
@@ -930,13 +959,11 @@ describe("waiting generation reconciliation", () => {
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Generating")).toBeTruthy();
-    await waitFor(
-      () =>
-        expect(
-          (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
-            .disabled,
-        ).toBe(false),
-      { timeout: 3000 },
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
     );
     expect(screen.getByText("Waiting")).toBeTruthy();
     expect(refreshSnapshot).toHaveBeenCalledTimes(1);

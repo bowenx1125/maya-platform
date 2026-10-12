@@ -18,6 +18,12 @@ backend/.mypy_cache
 backend/.ruff_cache
 backend/config/demo_users.yaml
 backend/config/demo-accounts/accounts.private.md
+backend/config/**/*.private.md
+backend/config/provider-policies/
+backend/.env
+backend/.env.*
+!backend/.env.example
+**/*.private.md
 data
 *.db
 *.db-*

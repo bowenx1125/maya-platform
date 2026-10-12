@@ -7,7 +7,11 @@ export default async function TeacherAgentPage({
   params,
 }: {
   params: Promise<{ agent_id: string }>;
-  searchParams: Promise<{ snapshot?: string }>;
+  searchParams: Promise<{
+    snapshot?: string;
+    flow?: string;
+    update_set_id?: string;
+  }>;
 }) {
   const [{ agent_id: agentId }, query] = await Promise.all([
     params,
@@ -16,7 +20,12 @@ export default async function TeacherAgentPage({
   return (
     <RouteGuard role="teacher">
       <AppShell role="teacher">
-        <TeacherAgentDetail agentId={agentId} snapshotId={query.snapshot} />
+        <TeacherAgentDetail
+          agentId={agentId}
+          snapshotId={query.snapshot}
+          generationFlow={query.flow === "ai-knowledge"}
+          generationSetId={query.update_set_id}
+        />
       </AppShell>
     </RouteGuard>
   );

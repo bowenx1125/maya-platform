@@ -22,6 +22,41 @@ export type AgentSummary = components["schemas"]["AgentSummary"];
 export type AgentDetail = components["schemas"]["AgentDetail"];
 export type AgentVersion = components["schemas"]["AgentVersion"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocument"];
+export type KnowledgeSetSummary = components["schemas"]["KnowledgeSetSummary"];
+export type KnowledgeSetDetail = components["schemas"]["KnowledgeSetDetail"];
+export type KnowledgeGenerationStatus =
+  components["schemas"]["KnowledgeGenerationStatus"];
+export type KnowledgeSetSource = components["schemas"]["KnowledgeSetSourceDTO"];
+export type KnowledgeSetRevocation =
+  components["schemas"]["KnowledgeSetRevocation"];
+export type CreateKnowledgeSetRequest =
+  components["schemas"]["CreateKnowledgeSetRequest"];
+export type UpdateKnowledgeSetRequest =
+  components["schemas"]["UpdateKnowledgeSetRequest"];
+export type DeleteKnowledgeSetRequest =
+  components["schemas"]["DeleteKnowledgeSetRequest"];
+export type ReplaceKnowledgeSetSourcesRequest =
+  components["schemas"]["ReplaceKnowledgeSetSourcesRequest"];
+export type KnowledgeAsset =
+  | components["schemas"]["KnowledgeAssetFullDTO"]
+  | components["schemas"]["KnowledgeAssetStudentDTO"];
+export type KnowledgeAssetFull = components["schemas"]["KnowledgeAssetFullDTO"];
+export type AssetContent =
+  | components["schemas"]["ConceptContent"]
+  | components["schemas"]["QuestionContent"]
+  | components["schemas"]["NoteContent"];
+export type AssetCitation = components["schemas"]["AssetCitation"];
+export type KnowledgeAssetRequest =
+  components["schemas"]["CreateKnowledgeAssetRequest"];
+export type UpdateKnowledgeAssetRequest =
+  components["schemas"]["UpdateKnowledgeAssetRequest"];
+export type KnowledgeAssetVersions =
+  | components["schemas"]["KnowledgeAssetVersionHistoryFull"]
+  | components["schemas"]["KnowledgeAssetVersionHistoryStudent"];
+export type KnowledgeGraph = components["schemas"]["KnowledgeGraph"];
+export type AgentKnowledgeSets = components["schemas"]["AgentKnowledgeSets"];
+export type ReplaceAgentKnowledgeSetsRequest =
+  components["schemas"]["ReplaceAgentKnowledgeSetsRequest"];
 export type KnowledgeDocumentMutation = {
   document: KnowledgeDocument;
   agent_version: AgentVersion | null;
@@ -77,6 +112,14 @@ export type ProviderDataCallDisclosureResponse =
   components["schemas"]["ProviderDataCallDisclosureResponseV1"];
 export type ProviderDataCallConfirmationRequest =
   components["schemas"]["ProviderDataCallConfirmationRequestV1"];
+export type TeamStandingGrantRequest =
+  components["schemas"]["TeamStandingGrantRequestV1"];
+export type TeamStandingGrantPreview =
+  components["schemas"]["TeamStandingGrantPreviewV1"];
+export type TeamStandingGrantConfirmationRequest =
+  components["schemas"]["TeamStandingGrantConfirmationRequestV1"];
+export type TeamStandingGrantConfirmation =
+  components["schemas"]["TeamStandingGrantConfirmationV1"];
 export type ProviderDataCallManifestListResponse =
   components["schemas"]["ProviderDataCallManifestListResponseV1"];
 export type ProviderDataCallPublicationManifestListResponse =
@@ -110,6 +153,112 @@ export type ProviderDataCallDebateManifestSummaryV1 =
 export type ProviderDataCallDebateManifestListResponseV1 =
   ProviderDataCallDebateManifestListResponse;
 export type KnowledgeSnapshot = components["schemas"]["KnowledgeSnapshot"];
+export type BrainformKnowledge = {
+  agent_id: string;
+  canonical_set_id: string;
+  source_agent_display_name: string;
+  knowledge_display_name: string;
+  generation_job_id: string | null;
+  can_read: true;
+  can_edit: boolean;
+  version_seq: number | null;
+  content_hash: string | null;
+  generation_state:
+    | "pending"
+    | "running"
+    | "blocked"
+    | "completed"
+    | "failed"
+    | "interrupted"
+    | null;
+  safe_error_code: string | null;
+};
+export type KnowledgeMarkdown = {
+  audience: "full" | "student";
+  agent_id: string;
+  canonical_set_id: string;
+  source_agent_display_name: string;
+  knowledge_display_name: string;
+  version_seq: number;
+  content_hash: string;
+  markdown: string;
+  projection_available: boolean;
+  can_read: true;
+  can_edit: boolean;
+  created_at: string;
+};
+export type KnowledgeRegeneration = {
+  action_id: string;
+  agent_id: string;
+  canonical_set_id: string;
+  run_id: string;
+  job_id: string;
+  state: NonNullable<BrainformKnowledge["generation_state"]>;
+};
+export type AssessmentRuntimeResult = {
+  disposition: "recorded" | "transitioned" | "read" | "redirected";
+  response_key:
+    | "assessment.started"
+    | "assessment.answer_recorded"
+    | "assessment.answer_recorded_restricted_request"
+    | "assessment.paused"
+    | "assessment.resumed"
+    | "assessment.completed"
+    | "assessment.abandoned"
+    | "assessment.abandoned_and_restarted"
+    | "assessment.progress"
+    | "assessment.answers"
+    | "assessment.results_pending"
+    | "assessment.restart_requires_choice"
+    | "assessment.redirect";
+  context: {
+    attempt: {
+      id: string;
+      activity_id: string;
+      conversation_id: string;
+      chat_visibility: "private" | "public";
+      status: "in_progress" | "paused" | "completed" | "abandoned";
+      revision: number;
+    };
+    progress: {
+      attempt_id: string;
+      status: "in_progress" | "paused" | "completed" | "abandoned";
+      question_count: number;
+      presented_count: number;
+      resolved_count: number;
+      answered_count: number;
+      skipped_count: number;
+      current_ordinal: number | null;
+      current_question_version_id: string | null;
+    };
+    current_question: {
+      ordinal: number;
+      question_version_id: string;
+      prompt: string;
+    } | null;
+    canonical_conversation_id: string;
+    redirect_to_original_conversation: boolean;
+  };
+  answers: Array<{
+    question_ordinal: number;
+    question_version_id: string;
+    answer_text: string;
+    created_at: string;
+  }>;
+};
+export type AssessmentLifecycleAction = "pause" | "resume" | "abandon" | "redo";
+export type MemoryEntrySource =
+  | { kind: "conversation"; id: string }
+  | { kind: "agent"; agent_id: string }
+  | { kind: "team"; team_id: string }
+  | { kind: "maya_team"; team_id: string };
+export type MemoryEntryResult = {
+  action_id: string;
+  conversation_id: string;
+  request_id: string;
+  message: string;
+  session: ConversationSession;
+};
 export type PublishedAgentSummary =
   components["schemas"]["PublishedAgentSummary"];
 export type DebateSummary = components["schemas"]["DebateSummary"];
@@ -139,7 +288,90 @@ export type DemoComposition = {
   components: DemoComponent[];
 };
 export type ChatAgent = components["schemas"]["ChatAgent"];
-export type ChatSession = components["schemas"]["ChatSession"];
+export type ChatSession = Omit<
+  components["schemas"]["ChatSession"],
+  "turns"
+> & {
+  turns: ChatTurn[];
+};
+export type AgentChatSession = ChatSession & {
+  entry_kind?: "agent";
+  chat_visibility?: "private" | "public";
+  origin?: "single_agent";
+  read_only?: boolean;
+  can_send?: boolean;
+};
+export type ConversationSession = AgentChatSession | TeamChatSession;
+export type TeamChatEntry =
+  | { kind: "team"; team_id: string; team_version_id?: string | null }
+  | { kind: "maya_team"; team_id: string };
+export type TeamRouting = {
+  mode: "auto" | "selected" | "all";
+  participant_ids: string[];
+};
+export type TeamChatParticipant = {
+  id: string;
+  name: string;
+  avatar_config: components["schemas"]["AvatarConfig"];
+  position: number;
+  is_leader: boolean;
+  available: boolean;
+  deleted?: boolean;
+};
+export type TeamMemberResult = {
+  id: string;
+  participant_id: string;
+  speaker_name: string;
+  ordinal: number;
+  state: "pending" | "running" | "ready" | "failed" | "acceptance_unknown";
+  assistant_text: string | null;
+  sources: ChatTurn["sources"];
+  safe_error_code: string | null;
+};
+export type TeamChatTurn = Omit<ChatTurn, "assistant_text" | "state"> & {
+  assistant_text: null;
+  state:
+    | "pending"
+    | "ready"
+    | "partial"
+    | "failed"
+    | "acceptance_unknown"
+    | "paused";
+  routing: TeamRouting;
+  member_results: TeamMemberResult[];
+  assessment_result?: AssessmentRuntimeResult | null;
+};
+export type TeamChatSession = {
+  entry_kind: "team" | "maya_team";
+  chat_visibility: "private" | "public";
+  origin: "custom_team" | "published_course_team";
+  read_only: boolean;
+  can_send: boolean;
+  id: string;
+  team: {
+    id: string;
+    version_id: string;
+    course_id: string;
+    name: string;
+    members: TeamChatParticipant[];
+    available: boolean;
+    deleted?: boolean;
+  };
+  revision: number;
+  turns: TeamChatTurn[];
+  created_at: string;
+  title?: string | null;
+  pinned_at?: string | null;
+};
+export type TeamVisibility =
+  components["schemas"]["CreateTeamRequest"]["visibility"];
+export type TeamMemberInput = components["schemas"]["TeamMemberInput"];
+export type TeamWriteRequest = components["schemas"]["CreateTeamRequest"];
+export type TeamUpdateRequest = components["schemas"]["SaveTeamVersionRequest"];
+export type TeamSummaryDto = components["schemas"]["TeamSummary"];
+export type TeamDetailDto = components["schemas"]["TeamDetail"];
+export type MayaTeamDirectoryDto =
+  components["schemas"]["MayaTeamDirectoryEntry"];
 
 export type ChatStreamResult = {
   session: ChatSession;
@@ -153,11 +385,38 @@ export type ChatStreamResult = {
 export type ChatStreamHooks = {
   /** Fired when text_done is parsed, before later TTS events are read. */
   onTextDone?: (session: ChatSession) => void;
+  /** Fired while the request's persisted turn is still pending. */
+  onPending?: (session: ChatSession, pendingTurnId: string) => void;
+  /** Fired for a confirmed failed/unknown turn or safe preclaim rejection. */
+  onTerminalError?: (
+    session: ChatSession | null,
+    error: PlatformApiError,
+  ) => void;
+  /** Fired when the response is ambiguous and no persisted turn is visible yet. */
+  onUncertain?: (session: ChatSession | null, error: PlatformApiError) => void;
 };
-export type ChatTurn = components["schemas"]["ChatTurn"];
+export type ChatTurn = Omit<components["schemas"]["ChatTurn"], "state"> & {
+  state:
+    | "pending"
+    | "ready"
+    | "partial"
+    | "failed"
+    | "acceptance_unknown"
+    | "paused";
+  assessment_result?: AssessmentRuntimeResult | null;
+};
+
+export class ChatRequestPendingError extends Error {
+  constructor() {
+    super("The Chat request is still pending.");
+    this.name = "ChatRequestPendingError";
+  }
+}
 export type ProviderSettings = components["schemas"]["ProviderSettings"];
 export type LiveSummary = components["schemas"]["LiveSummary"];
 export type LiveSnapshot = components["schemas"]["LiveSnapshot"];
+export type CardRoom = components["schemas"]["CardRoomView"];
+export type CardRoomAction = components["schemas"]["CardAction"];
 export type DemoBaseline = {
   agent_id: string;
   version_id: string;
@@ -288,14 +547,16 @@ export class SseBlockError extends Error {
   }
 }
 
-export type SseEvent = { event: string; [key: string]: unknown };
+export type SseEvent = { event: string; id?: string; [key: string]: unknown };
 
 /** Parse one SSE block. Empty blocks are skipped. Invalid JSON throws. */
 export function parseSseBlock(block: string): SseEvent | null {
   let event = "message";
+  let id: string | undefined;
   const data: string[] = [];
   for (const line of block.split("\n")) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("id:")) id = line.slice(3).trim();
     else if (line.startsWith("data:")) data.push(line.slice(5).trim());
   }
   if (!data.length) return null;
@@ -308,7 +569,11 @@ export function parseSseBlock(block: string): SseEvent | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new SseBlockError();
   }
-  return { event, ...(payload as Record<string, unknown>) };
+  return {
+    event,
+    ...(id ? { id } : {}),
+    ...(payload as Record<string, unknown>),
+  };
 }
 
 export async function readSseEvents(
@@ -441,6 +706,7 @@ export type IdempotentMutationOptions = {
 export type PublishAgentVersionOptions = IdempotentMutationOptions & {
   acceptance_run_id?: string;
   call_no?: 1;
+  generation?: { source_document_ids: string[] };
 };
 
 async function commitMutation<T>(
@@ -603,6 +869,44 @@ export class PlatformApi {
     return payload as T;
   }
 
+  private async mutateJson<T>(
+    method: "POST" | "PUT",
+    path: string,
+    body: unknown,
+    idempotencyKey: string,
+  ): Promise<T> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    const response = await fetch(
+      `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
+      {
+        method,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+          "X-CSRF-Token": this.csrfToken ?? "",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const raw = await response.text();
+    let payload: unknown;
+    try {
+      payload = raw ? JSON.parse(raw) : undefined;
+    } catch {
+      payload = undefined;
+    }
+    if (!response.ok) {
+      const errorPayload = readErrorPayload(payload);
+      throw new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+    }
+    return payload as T;
+  }
+
   private async deleteJson(path: string): Promise<void> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     const response = await fetch(
@@ -646,6 +950,34 @@ export class PlatformApi {
     const session = await unwrap<AuthSession>(result);
     this.setCsrfToken(session.csrf_token);
     return session;
+  }
+
+  async updateCurrentUser(
+    changes: components["schemas"]["UpdateCurrentUserRequest"],
+  ): Promise<AuthSession> {
+    const session = await unwrap<AuthSession>(
+      await this.client.PATCH("/auth/me", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: changes,
+      }),
+    );
+    this.setCsrfToken(session.csrf_token);
+    return session;
+  }
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    await unwrap<void>(
+      await this.client.POST("/auth/password", {
+        params: { header: { "X-CSRF-Token": this.csrfToken ?? "" } },
+        body: {
+          current_password: currentPassword,
+          new_password: newPassword,
+        },
+      }),
+    );
   }
 
   async registrationOptions(): Promise<RegistrationOptions> {
@@ -708,46 +1040,132 @@ export class PlatformApi {
     return this.getJson(`courses/${courseId}/chat-agents`);
   }
 
-  conversations(): Promise<ChatSession[]> {
+  conversations(): Promise<ConversationSession[]> {
     return this.getJson("conversations");
   }
 
+  conversationSessions(): Promise<ConversationSession[]> {
+    return this.getJson("conversations");
+  }
+
+  teams(courseId: string): Promise<TeamSummaryDto[]> {
+    return this.getJson(`courses/${encodeURIComponent(courseId)}/teams`);
+  }
+
+  mayaTeams(courseId: string): Promise<MayaTeamDirectoryDto[]> {
+    return this.getJson(`courses/${encodeURIComponent(courseId)}/maya-teams`);
+  }
+
+  team(teamId: string): Promise<TeamDetailDto> {
+    return this.getJson(`teams/${encodeURIComponent(teamId)}`);
+  }
+
+  createTeam(
+    courseId: string,
+    body: TeamWriteRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TeamDetailDto> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "POST",
+        `courses/${encodeURIComponent(courseId)}/teams`,
+        body,
+        key,
+      ),
+    );
+  }
+
+  updateTeam(
+    teamId: string,
+    body: TeamUpdateRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<TeamDetailDto> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson("PUT", `teams/${encodeURIComponent(teamId)}`, body, key),
+    );
+  }
+
+  deleteTeam(
+    teamId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<void> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE("/teams/{team_id}", {
+        params: {
+          path: { team_id: teamId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+      });
+      return unwrap<void>(result);
+    });
+  }
+
   createConversation(versionId: string): Promise<ChatSession> {
-    return this.postJson("conversations", { version_id: versionId });
+    return this.postJson("conversations", {
+      entry: { kind: "agent", version_id: versionId },
+    });
+  }
+
+  createTeamConversation(entry: TeamChatEntry): Promise<TeamChatSession> {
+    return this.postJson("conversations", { entry });
   }
 
   conversation(id: string): Promise<ChatSession> {
     return this.getJson(`conversations/${id}`);
   }
 
-  deleteConversation(id: string): Promise<void> {
-    return this.deleteJson(`conversations/${id}`);
+  conversationSession(id: string): Promise<ConversationSession> {
+    return this.getJson(`conversations/${encodeURIComponent(id)}`);
   }
 
-  sendConversation(
-    id: string,
-    body: components["schemas"]["SendChat"],
-  ): Promise<ChatSession> {
-    return this.postJson(`conversations/${id}/messages`, body);
+  memoryEntry(body: {
+    action_id: string;
+    course_id: string;
+    source: MemoryEntrySource;
+  }): Promise<MemoryEntryResult> {
+    return this.postJson("conversations/memory-entry", body);
   }
 
-  /**
-   * Stream one chat turn. The JSON messages route stays available.
-   * Audio is a same-origin URL; the body never carries audio bytes.
-   */
-  async streamConversation(
+  controlConversationTurn(
+    conversationId: string,
+    turnId: string,
+    action: "pause" | "stop" | "resume",
+  ): Promise<ConversationSession> {
+    return this.postJson(
+      `conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}:${action}`,
+      undefined,
+    );
+  }
+
+  assessmentAttemptAction(
+    attemptId: string,
+    body: { client_event_id: string; action: AssessmentLifecycleAction },
+  ): Promise<AssessmentRuntimeResult> {
+    return this.postJson(
+      `learning/attempts/${encodeURIComponent(attemptId)}/actions`,
+      body,
+    );
+  }
+
+  async streamTeamConversation(
     id: string,
     body: {
       request_id: string;
       expected_revision: number;
       message: string;
-      lang: "zh-CN" | "en";
+      routing: TeamRouting;
     },
-    hooks?: ChatStreamHooks,
-  ): Promise<ChatStreamResult> {
+    options: {
+      afterEventId?: number;
+      onEvent?: (event: SseEvent) => void;
+    } = {},
+  ): Promise<TeamChatSession> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     const response = await fetch(
-      `${this.baseUrl}${separator}conversations/${id}/messages:stream`,
+      `${this.baseUrl}${separator}conversations/${encodeURIComponent(id)}/messages:stream`,
       {
         method: "POST",
         credentials: "include",
@@ -755,6 +1173,9 @@ export class PlatformApi {
           Accept: "text/event-stream",
           "Content-Type": "application/json",
           "X-CSRF-Token": this.csrfToken ?? "",
+          ...(options.afterEventId
+            ? { "Last-Event-ID": String(options.afterEventId) }
+            : {}),
         },
         body: JSON.stringify(body),
       },
@@ -774,12 +1195,176 @@ export class PlatformApi {
         errorPayload,
       );
     }
+    await readSseEvents(response, (event) => options.onEvent?.(event));
+    const session = await this.conversationSession(id);
+    if (session.entry_kind !== "team" && session.entry_kind !== "maya_team") {
+      throw new PlatformApiError(502, "chat_response_invalid", {
+        code: "chat_response_invalid",
+        message: "chat_response_invalid",
+      });
+    }
+    return session as TeamChatSession;
+  }
+
+  private async recoverChatResponse(
+    id: string,
+    requestId: string,
+    hooks: ChatStreamHooks | undefined,
+    failure: PlatformApiError,
+  ): Promise<ChatSession> {
+    let refreshed: ChatSession | null = null;
+    try {
+      refreshed = await this.conversation(id);
+    } catch {
+      // The response classification below keeps an unobserved request ID intact.
+    }
+    const turn = refreshed?.turns.find((item) => item.id === requestId);
+    if (turn?.state === "ready" && refreshed) {
+      hooks?.onTextDone?.(refreshed);
+      return refreshed;
+    }
+    if (
+      turn &&
+      (turn.state === "failed" || turn.state === "acceptance_unknown")
+    ) {
+      const code = turn.safe_error_code ?? failure.code ?? "chat_failed";
+      const settledFailure = new PlatformApiError(failure.status, code, {
+        code,
+        message: code,
+        request_id: failure.requestId,
+      });
+      hooks?.onTerminalError?.(refreshed, settledFailure);
+      throw settledFailure;
+    }
+    const pendingTurn =
+      (turn?.state === "pending" ? turn : undefined) ??
+      refreshed?.turns.find((item) => item.state === "pending");
+    if (pendingTurn && refreshed) {
+      hooks?.onPending?.(refreshed, String(pendingTurn.id));
+      throw new ChatRequestPendingError();
+    }
+    if (failure.status < 500) {
+      hooks?.onTerminalError?.(refreshed, failure);
+      throw failure;
+    }
+    const uncertain =
+      failure.code === "chat_transport_uncertain"
+        ? failure
+        : new PlatformApiError(503, "chat_transport_uncertain", {
+            code: "chat_transport_uncertain",
+            message: "chat_transport_uncertain",
+            request_id: failure.requestId,
+          });
+    hooks?.onUncertain?.(refreshed, uncertain);
+    throw uncertain;
+  }
+
+  deleteConversation(id: string): Promise<void> {
+    return this.deleteJson(`conversations/${id}`);
+  }
+
+  /** Rename or pin a Chat; a field left out keeps its value. */
+  async updateConversation(
+    id: string,
+    changes: components["schemas"]["UpdateChat"],
+  ): Promise<ConversationSession> {
+    const session = await unwrap(
+      await this.client.PATCH("/conversations/{conversation_id}", {
+        params: {
+          path: { conversation_id: id },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: changes,
+      }),
+    );
+    // The same narrowed session shape every other Chat read returns.
+    return session as unknown as ConversationSession;
+  }
+
+  sendConversation(
+    id: string,
+    body: components["schemas"]["SendChat"],
+  ): Promise<ChatSession> {
+    return this.postJson(`conversations/${id}/messages`, body);
+  }
+
+  /**
+   * Stream one chat turn. The JSON messages route stays available.
+   * Legacy audio events are parsed for compatibility; Chats never plays them.
+   */
+  async streamConversation(
+    id: string,
+    body: {
+      request_id: string;
+      expected_revision: number;
+      message: string;
+    },
+    hooks?: ChatStreamHooks,
+  ): Promise<ChatStreamResult> {
     let sawText = false;
     let session: ChatSession | null = null;
     let audioUrl: string | null = null;
     let voiceProfileId: string | null = null;
     let contentType: string | null = null;
     let ttsErrorCode: string | null = null;
+    const resultFor = (saved: ChatSession): ChatStreamResult => ({
+      session: saved,
+      audioUrl,
+      voiceProfileId,
+      contentType,
+      ttsErrorCode,
+    });
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.baseUrl}${separator}conversations/${id}/messages:stream`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "text/event-stream",
+            "Content-Type": "application/json",
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+          body: JSON.stringify(body),
+        },
+      );
+    } catch {
+      const failure = new PlatformApiError(503, "chat_transport_uncertain", {
+        code: "chat_transport_uncertain",
+        message: "chat_transport_uncertain",
+      });
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
+      return resultFor(session);
+    }
+    if (!response.ok) {
+      const raw = await response.text();
+      let payload: unknown;
+      try {
+        payload = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        payload = undefined;
+      }
+      const errorPayload = readErrorPayload(payload);
+      const failure = new PlatformApiError(
+        response.status,
+        errorPayload?.message ?? tm("httpError", { status: response.status }),
+        errorPayload,
+      );
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
+      return resultFor(session);
+    }
     try {
       await readSseEvents(response, async (event) => {
         if (event.event === "error") {
@@ -788,9 +1373,38 @@ export class PlatformApi {
               ? event.safe_error_code
               : "chat_failed";
           if (!sawText) {
-            throw new PlatformApiError(502, code, { code, message: code });
+            const failure = new PlatformApiError(502, code, {
+              code,
+              message: code,
+            });
+            session = await this.recoverChatResponse(
+              id,
+              body.request_id,
+              hooks,
+              failure,
+            );
+            sawText = true;
+            return;
           }
           ttsErrorCode = code;
+          return;
+        }
+        if (event.event === "pending") {
+          const failure = new PlatformApiError(
+            503,
+            "chat_transport_uncertain",
+            {
+              code: "chat_transport_uncertain",
+              message: "chat_transport_uncertain",
+            },
+          );
+          session = await this.recoverChatResponse(
+            id,
+            body.request_id,
+            hooks,
+            failure,
+          );
+          sawText = true;
           return;
         }
         if (event.event === "text_done") {
@@ -812,27 +1426,56 @@ export class PlatformApi {
         }
       });
     } catch (error) {
-      if (error instanceof SseBlockError) {
-        throw new PlatformApiError(502, "chat_stream_invalid", {
-          code: "chat_stream_invalid",
-          message: "chat_stream_invalid",
-        });
+      if (error instanceof ChatRequestPendingError) throw error;
+      if (sawText && session) return resultFor(session);
+      if (sawText) {
+        const failure =
+          error instanceof PlatformApiError
+            ? error
+            : new PlatformApiError(503, "chat_transport_uncertain", {
+                code: "chat_transport_uncertain",
+                message: "chat_transport_uncertain",
+              });
+        session = await this.recoverChatResponse(
+          id,
+          body.request_id,
+          hooks,
+          failure,
+        );
+        return resultFor(session);
       }
-      throw error;
+      if (error instanceof PlatformApiError) throw error;
+      const failure =
+        error instanceof SseBlockError
+          ? new PlatformApiError(502, "chat_stream_invalid", {
+              code: "chat_stream_invalid",
+              message: "chat_stream_invalid",
+            })
+          : new PlatformApiError(503, "chat_transport_uncertain", {
+              code: "chat_transport_uncertain",
+              message: "chat_transport_uncertain",
+            });
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
+      return resultFor(session);
     }
     if (!sawText || session === null) {
-      throw new PlatformApiError(502, "chat_failed", {
+      const failure = new PlatformApiError(502, "chat_failed", {
         code: "chat_failed",
         message: "chat_failed",
       });
+      session = await this.recoverChatResponse(
+        id,
+        body.request_id,
+        hooks,
+        failure,
+      );
     }
-    return {
-      session,
-      audioUrl,
-      voiceProfileId,
-      contentType,
-      ttsErrorCode,
-    };
+    return resultFor(session);
   }
 
   providerSettings(courseId: string): Promise<ProviderSettings> {
@@ -871,6 +1514,46 @@ export class PlatformApi {
     keepalive = false,
   ): Promise<LiveSummary | null> {
     return this.postJson(`debates/${debateId}/live`, body, keepalive);
+  }
+
+  createCardRoom(): Promise<CardRoom> {
+    return this.postJson("card-rooms", undefined);
+  }
+
+  cardRoom(code: string): Promise<CardRoom> {
+    return this.getJson(`card-rooms/${encodeURIComponent(code)}`);
+  }
+
+  joinCardRoom(code: string): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/seat`,
+      undefined,
+    );
+  }
+
+  leaveCardRoom(code: string): Promise<void> {
+    return this.deleteJson(`card-rooms/${encodeURIComponent(code)}/seat`);
+  }
+
+  startCardRoom(code: string): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/start`,
+      undefined,
+    );
+  }
+
+  actInCardRoom(code: string, body: CardRoomAction): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/actions`,
+      body,
+    );
+  }
+
+  rebuyInCardRoom(code: string): Promise<CardRoom> {
+    return this.postJson(
+      `card-rooms/${encodeURIComponent(code)}/rebuy`,
+      undefined,
+    );
   }
 
   async course(courseId: string): Promise<CourseDetail> {
@@ -979,6 +1662,7 @@ export class PlatformApi {
     name: string,
     description: string,
     options: IdempotentMutationOptions = {},
+    visibility: "private" | "public" = "private",
   ): Promise<AgentDetail> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST("/groups/{group_id}/agents", {
@@ -989,8 +1673,41 @@ export class PlatformApi {
             "X-CSRF-Token": this.csrfToken ?? "",
           },
         },
-        body: { name, description },
+        body: { name, description, visibility },
       });
+      return unwrap(result);
+    });
+  }
+
+  async workspaceAgents(courseId: string): Promise<AgentSummary[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/workspace-agents", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async createWorkspaceAgent(
+    courseId: string,
+    name: string,
+    description: string,
+    options: IdempotentMutationOptions = {},
+    visibility: "private" | "public" = "private",
+  ): Promise<AgentDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST(
+        "/courses/{course_id}/workspace-agents",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body: { name, description, visibility },
+        },
+      );
       return unwrap(result);
     });
   }
@@ -1132,11 +1849,43 @@ export class PlatformApi {
     );
   }
 
+  async getChatStandingProviderDisclosure(
+    courseId: string,
+    providerOperation: TeamStandingGrantRequest["provider_operation"] = "llm_agent_chat",
+  ): Promise<ProviderDataCallDisclosureResponse> {
+    const query = `course_id=${encodeURIComponent(courseId)}`;
+    const operation =
+      providerOperation === "llm_agent_chat"
+        ? ""
+        : `&provider_operation=${encodeURIComponent(providerOperation)}`;
+    return this.getJson<ProviderDataCallDisclosureResponse>(
+      `provider/data-call/chat-standing/disclosure?${query}${operation}`,
+    );
+  }
+
   async confirmProviderDataCallDisclosure(
     body: ProviderDataCallConfirmationRequest,
   ): Promise<ProviderDataCallDisclosureResponse> {
     return this.postJson<ProviderDataCallDisclosureResponse>(
       "provider/data-call/disclosure/confirm",
+      body,
+    );
+  }
+
+  async previewTeamProviderStandingGrant(
+    body: TeamStandingGrantRequest,
+  ): Promise<TeamStandingGrantPreview> {
+    return this.postJson<TeamStandingGrantPreview>(
+      "provider/data-call/team-standing-grants/preview",
+      body,
+    );
+  }
+
+  async confirmTeamProviderStandingGrant(
+    body: TeamStandingGrantConfirmationRequest,
+  ): Promise<TeamStandingGrantConfirmation> {
+    return this.postJson<TeamStandingGrantConfirmation>(
+      "provider/data-call/team-standing-grants/confirm",
       body,
     );
   }
@@ -1204,11 +1953,12 @@ export class PlatformApi {
   }
 
   async ragPreview(versionId: string): Promise<RagPreview> {
-    return unwrap(
+    const preview = await unwrap(
       await this.client.GET("/agent-versions/{version_id}/rag-preview", {
         params: { path: { version_id: versionId } },
       }),
     );
+    return { ...preview, limit: null };
   }
 
   async uploadAgentMd(
@@ -1270,6 +2020,7 @@ export class PlatformApi {
                   call_no: options.call_no ?? 1,
                 }
               : {}),
+            ...(options.generation ? { generation: options.generation } : {}),
           },
         },
       );
@@ -1283,6 +2034,344 @@ export class PlatformApi {
         params: { path: { group_id: groupId } },
       }),
     );
+  }
+
+  async knowledgeSets(courseId: string): Promise<KnowledgeSetSummary[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/knowledge-sets", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async knowledgeGenerationJob(
+    jobId: string,
+  ): Promise<KnowledgeGenerationStatus> {
+    return unwrap(
+      await this.client.GET("/knowledge-generation-jobs/{job_id}", {
+        params: { path: { job_id: jobId } },
+      }),
+    );
+  }
+
+  async createKnowledgeSet(
+    courseId: string,
+    body: CreateKnowledgeSetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST(
+        "/courses/{course_id}/knowledge-sets",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async knowledgeSet(setId: string): Promise<KnowledgeSetDetail> {
+    return unwrap(
+      await this.client.GET("/knowledge-sets/{set_id}", {
+        params: { path: { set_id: setId } },
+      }),
+    );
+  }
+
+  async brainformKnowledge(courseId: string): Promise<BrainformKnowledge[]> {
+    return this.getJson(
+      `courses/${encodeURIComponent(courseId)}/brainform/knowledge`,
+    );
+  }
+
+  async knowledgeMarkdown(setId: string): Promise<KnowledgeMarkdown> {
+    return this.getJson(`knowledge-sets/${encodeURIComponent(setId)}/markdown`);
+  }
+
+  async saveKnowledgeMarkdown(
+    setId: string,
+    body: { expected_version_seq: number; markdown: string },
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeMarkdown> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "PUT",
+        `knowledge-sets/${encodeURIComponent(setId)}/markdown`,
+        body,
+        key,
+      ),
+    );
+  }
+
+  async regenerateKnowledgeMarkdown(
+    setId: string,
+    actionId: string,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeRegeneration> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "POST",
+        `knowledge-sets/${encodeURIComponent(setId)}/regenerate`,
+        { action_id: actionId },
+        key,
+      ),
+    );
+  }
+
+  async updateKnowledgeSet(
+    setId: string,
+    body: UpdateKnowledgeSetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PATCH("/knowledge-sets/{set_id}", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async deleteKnowledgeSet(
+    setId: string,
+    body: DeleteKnowledgeSetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetRevocation> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE("/knowledge-sets/{set_id}", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async replaceKnowledgeSetSources(
+    setId: string,
+    body: ReplaceKnowledgeSetSourcesRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PUT("/knowledge-sets/{set_id}/sources", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async removeKnowledgeSetSource(
+    setId: string,
+    bindingId: string,
+    body: components["schemas"]["RemoveKnowledgeSetSourceRequest"],
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeSetDetail> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.DELETE(
+        "/knowledge-sets/{set_id}/sources/{binding_id}",
+        {
+          params: {
+            path: { set_id: setId, binding_id: bindingId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async knowledgeSetAssets(
+    setId: string,
+    kind?: "concept" | "question" | "note",
+  ): Promise<KnowledgeAsset[]> {
+    return unwrap(
+      await this.client.GET("/knowledge-sets/{set_id}/assets", {
+        params: { path: { set_id: setId }, query: kind ? { kind } : {} },
+      }),
+    );
+  }
+
+  async knowledgeSetAsset(assetId: string): Promise<KnowledgeAsset> {
+    return unwrap(
+      await this.client.GET("/knowledge-assets/{asset_id}", {
+        params: { path: { asset_id: assetId } },
+      }),
+    );
+  }
+
+  async createKnowledgeSetAsset(
+    setId: string,
+    body: KnowledgeAssetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeAssetFull> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.POST("/knowledge-sets/{set_id}/assets", {
+        params: {
+          path: { set_id: setId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async updateKnowledgeSetAsset(
+    assetId: string,
+    body: UpdateKnowledgeAssetRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeAssetFull> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PATCH("/knowledge-assets/{asset_id}", {
+        params: {
+          path: { asset_id: assetId },
+          header: {
+            "Idempotency-Key": key,
+            "X-CSRF-Token": this.csrfToken ?? "",
+          },
+        },
+        body,
+      });
+      return unwrap(result);
+    });
+  }
+
+  async knowledgeSetAssetVersions(
+    assetId: string,
+  ): Promise<KnowledgeAssetVersions> {
+    return unwrap(
+      await this.client.GET("/knowledge-assets/{asset_id}/versions", {
+        params: { path: { asset_id: assetId } },
+      }),
+    );
+  }
+
+  async knowledgeSetGraph(setId: string): Promise<KnowledgeGraph> {
+    return unwrap(
+      await this.client.GET("/knowledge-sets/{set_id}/graph", {
+        params: { path: { set_id: setId } },
+      }),
+    );
+  }
+
+  async agentKnowledgeSets(agentId: string): Promise<AgentKnowledgeSets> {
+    return unwrap(
+      await this.client.GET("/agents/{agent_id}/knowledge-sets", {
+        params: { path: { agent_id: agentId } },
+      }),
+    );
+  }
+
+  async replaceAgentKnowledgeSets(
+    agentId: string,
+    body: ReplaceAgentKnowledgeSetsRequest,
+    options: IdempotentMutationOptions = {},
+  ): Promise<AgentKnowledgeSets> {
+    return commitMutation(options.idempotency, async (key) => {
+      const result = await this.client.PUT(
+        "/agents/{agent_id}/knowledge-sets",
+        {
+          params: {
+            path: { agent_id: agentId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
+  async workspaceDocuments(courseId: string): Promise<KnowledgeDocument[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/workspace-documents", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async updateKnowledgeVisibility(
+    documentId: string,
+    body: components["schemas"]["UpdateKnowledgeDocumentVisibility"],
+  ): Promise<KnowledgeDocument> {
+    return unwrap(
+      await this.client.PATCH("/knowledge-documents/{document_id}", {
+        params: {
+          path: { document_id: documentId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body,
+      }),
+    );
+  }
+
+  async uploadWorkspaceKnowledge(
+    courseId: string,
+    versionId: string,
+    file: File,
+    expectedRevision: number,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocumentMutation> {
+    return commitMutation(options.idempotency, async (key) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("target_agent_version_id", versionId);
+      form.append("expected_revision", String(expectedRevision));
+      // The server gives the file its Agent's Private or Public.
+      const result = await this.client.POST(
+        "/courses/{course_id}/workspace-documents",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body: form as unknown as never,
+        },
+      );
+      const mutation = await unwrap(result);
+      return {
+        document: mutation.document,
+        agent_version: mutation.agent_version ?? null,
+      };
+    });
   }
 
   async uploadKnowledge(
@@ -1337,6 +2426,21 @@ export class PlatformApi {
     );
   }
 
+  async createWorkspaceKnowledge(
+    courseId: string,
+    file: File,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocumentMutation> {
+    return commitMutation(options.idempotency, (key) =>
+      this.multipart<KnowledgeDocumentMutation>(
+        `/courses/${encodeURIComponent(courseId)}/workspace-documents`,
+        file,
+        {},
+        key,
+      ),
+    );
+  }
+
   async replaceKnowledgeDocument(
     documentId: string,
     file: File,
@@ -1355,6 +2459,21 @@ export class PlatformApi {
         key,
       );
     });
+  }
+
+  async renameKnowledgeDocument(
+    documentId: string,
+    body: { expected_filename: string; filename: string },
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocument> {
+    return commitMutation(options.idempotency, (key) =>
+      this.mutateJson(
+        "POST",
+        `/knowledge-documents/${encodeURIComponent(documentId)}:rename`,
+        body,
+        key,
+      ),
+    );
   }
 
   async replaceKnowledge(
@@ -1462,7 +2581,7 @@ export class PlatformApi {
       const form = new FormData();
       form.append("file", file);
       form.append("consent_accepted", "true");
-      form.append("language", options.language ?? "en");
+      if (options.language) form.append("language", options.language);
       if (consentCopyVersion)
         form.append("consent_copy_version", consentCopyVersion);
       const result = await this.client.POST(
@@ -1486,6 +2605,21 @@ export class PlatformApi {
     return unwrap(
       await this.client.GET("/voice-profiles/{voice_profile_id}", {
         params: { path: { voice_profile_id: profileId } },
+      }),
+    );
+  }
+
+  async renameVoiceProfile(
+    profileId: string,
+    sourceFilename: string,
+  ): Promise<VoiceProfile> {
+    return unwrap(
+      await this.client.PATCH("/voice-profiles/{voice_profile_id}", {
+        params: {
+          path: { voice_profile_id: profileId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body: { source_filename: sourceFilename },
       }),
     );
   }
@@ -1999,7 +3133,7 @@ export class PlatformApi {
     revisionId: string,
     body: ContinueRealReportRequest,
   ): Promise<ContinueRealReportResponse> {
-    return unwrap(
+    const response = await unwrap(
       await this.client.POST(
         "/debates/{debate_id}/report/revisions/{revision_id}/continue",
         {
@@ -2011,6 +3145,19 @@ export class PlatformApi {
         },
       ),
     );
+    switch (response.status) {
+      case "generating":
+        return {
+          ...response,
+          english_markdown: null,
+          word_count: null,
+          safe_error_code: null,
+        };
+      case "ready":
+        return { ...response, safe_error_code: null };
+      case "failed":
+        return { ...response, english_markdown: null, word_count: null };
+    }
   }
 
   async downloadCurrentReport(

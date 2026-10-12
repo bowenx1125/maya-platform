@@ -30,8 +30,6 @@ async def parse_upload(request: Request) -> tuple[dict[str, str], str, bytes]:
             raise ValueError("invalid content length") from exc
         if declared_length < 0:
             raise ValueError("invalid content length")
-        if declared_length > MAX_UPLOAD_REQUEST_BYTES:
-            raise UploadTooLargeError("upload is too large")
     chunks = bytearray()
     total_seen = 0
     try:
@@ -39,8 +37,6 @@ async def parse_upload(request: Request) -> tuple[dict[str, str], str, bytes]:
             if not isinstance(chunk, bytes):
                 raise ValueError("invalid upload body")
             total_seen += len(chunk)
-            if total_seen > MAX_UPLOAD_REQUEST_BYTES:
-                raise UploadTooLargeError("upload is too large")
             chunks.extend(chunk)
     except ClientDisconnect as exc:
         raise ValueError("upload was interrupted") from exc
@@ -68,9 +64,9 @@ async def parse_upload(request: Request) -> tuple[dict[str, str], str, bytes]:
             if file_seen or part.get_filename() is None:
                 raise ValueError("exactly one file is required")
             file_seen = True
-            if len(value) > MAX_UPLOAD_FILE_BYTES:
-                raise UploadTooLargeError("upload is too large")
             filename = part.get_filename() or ""
+            if not filename.casefold().endswith(".md") and len(value) > MAX_UPLOAD_FILE_BYTES:
+                raise UploadTooLargeError("binary conversion input is too large")
             payload = value
         else:
             if part.get_filename() is not None or len(value) > MAX_UPLOAD_FIELD_BYTES:

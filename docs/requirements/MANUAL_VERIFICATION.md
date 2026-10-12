@@ -6,7 +6,8 @@ real-provider acceptance.
 
 ## Start
 
-1. Run `docker compose up -d --build --wait`.
+1. Follow the [current startup procedure](../validation/MAYAFORM_V14_STARTUP.md)
+   for validation, SQLite backup and the scoped Docker rebuild.
 2. Confirm `docker compose ps` shows healthy backend and frontend.
 3. Open [localhost:8080](http://localhost:8080) and sign in as the teacher.
 
@@ -14,22 +15,25 @@ real-provider acceptance.
 
 - Create or use a student account and confirm case-insensitive duplicate usernames
   are rejected without changing the existing session.
-- In **Accounts → Groups**, use **Enter** and confirm the teacher receives full group
-  workspace CRUD under the teacher identity; **Homeward** returns to Accounts.
+- In **Accounts → Groups**, use **Enter** and confirm the visible scope follows
+  the selected group. The actual teacher role and resource read/edit permissions
+  remain separate; Enter does not grant access to student Private records or
+  ownership of their sources. **Mayaform** returns to the teacher home.
 - Confirm teacher group access survives a container restart.
 
 ## Agent workspace
 
-- Verify sidebar **New / Back / Done** appear in this order, only when available;
-  no duplicate creation, return or submission button remains in the content.
-  Chat has New/Send only; fullscreen Immerse retains its own controls. File pickers
-  and explicit safety/consent dialogs remain separate.
+- Ordinary pages use **New** at the list/empty state and **Back / Done** with the
+  page/editor they act on. Preserve the existing sidebar actions for
+  Brainform and General Chat: Brainform's left **New** creates RAG with existing Markdown/PDF/DOCX import.
+  Chats retains its existing New, history, composer and Send interactions.
+  Fullscreen Immerse, file pickers and Provider consent remain separately scoped.
 - In Workspace, New creates an Agent. Opening an Agent shows its current version
   directly, without Info or a version chooser. New there creates the next version,
   or opens its existing draft instead of making a duplicate.
-- Compile saves current edits before compiling. After Persona confirmation and
-  indexed knowledge selection, Done saves changes and publishes only if the
-  returned server revision passes all checks; success returns to Agent inspection.
+- Save authored Agent.md and authorized source selections using Done. No Persona
+  or Capability approval is required. Explicit Create AI Knowledge uses its
+  generation intent; ordinary Agent Done does not silently start generation.
 - Back warns before discarding unsaved Agent edits. A revision conflict or failed
   request keeps the editor and local content; ambiguous retries keep request identity.
 - Knowledge has one active editor; failed creation retains text, Back cancels,
@@ -40,6 +44,9 @@ real-provider acceptance.
   immutable.
 - Enroll a voice and confirm only the uploading student can list, preview, bind,
   confirm or delete that cloned voice.
+- In an assessment recipe, send natural-language start, pause, continue, abandon,
+  abandon-and-redo and submitted-record queries through ordinary Chats. No new
+  assessment cards, status controls, dedicated input or Maya Team layout appears.
 
 ## Four-round classroom
 
@@ -53,16 +60,16 @@ real-provider acceptance.
   Conclusion uses only eligible frozen classroom messages.
 - Complete playback and confirm **Conclude** opens Evaluation and Report.
 
-## Chat, Components and Live
+## Chat, maintenance configuration and Live
 
 - In teacher and student **Chat**, choose an existing published Agent.
   Send two messages, inspect **Check RAG**, leave/reenter, and confirm the
   conversation and bound version survive. Another identity must not read it.
-- In **Components**, one **Check** skips Ready/deferred items and asks for the
-  maximum paid requests before checking the rest; stop on the first failure.
-  All-Ready Check makes no provider call. Mode changes invalidate only that item;
-  key changes invalidate all. Changes require idle generation and current revision.
-  A missing key opens the dialog without selecting Real. TTS/Voice stay **Deferred**.
+- Teacher Home has no Components, API Key editor, Check, Real/Mock selector or
+  provider readiness badges, and opening it sends no configuration/check request.
+  Preserve the existing guide, profile, Agents and other page actions. Provider
+  configuration stays in the maintenance layer; exact data-call disclosure remains
+  accessible where required. Removing controls must not change saved settings.
 - With two identities, enter teacher **Immerse**, then student **Live**. Verify the
   current speaker and speech follow **Next**, including late entry and manual
   reentry. The area below the scene shows all published speeches without Refresh.

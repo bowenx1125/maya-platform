@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,7 +20,7 @@ from app.core.models import (
 )
 from app.providers.control import (
     FIXED_MODELS,
-    BudgetExceeded,
+    LLM_DEBATE_TURN_BUCKET,
     ExportFieldV1,
     ExportManifestV1,
     ProviderAcceptanceUnknownResultV1,
@@ -280,6 +281,102 @@ def test_not_sent_releases_budget_and_new_attempt_keeps_unique_history(tmp_path:
     database.dispose()
 
 
+def _knowledge_operation(
+    tmp_path: Path,
+    scope_id: str,
+) -> tuple[Database, ProviderRepository, str]:
+    database = Database(f"sqlite:///{tmp_path / f'{scope_id}.sqlite3'}")
+    database.upgrade_schema()
+    repository = ProviderRepository(database)
+    policy = _policy()
+    policy_id = repository.save_policy_snapshot(policy, snapshot_id=f"policy-{scope_id}")
+    manifest = ExportManifestV1(
+        scope_id=scope_id,
+        provider_operation="llm_knowledge_generate",
+        model_key=FIXED_MODELS["llm_knowledge_generate"],
+        policy_hash=policy.policy_hash,
+        build_manifest_hash=_digest("knowledge-build"),
+        persona_spec_hash=_digest("knowledge-agent-md"),
+        fields=(ExportFieldV1("teacher_agent_instructions", _digest("agent-md")),),
+    )
+    manifest_id = repository.save_export_manifest(
+        manifest,
+        policy_snapshot_id=policy_id,
+        manifest_id=f"manifest-{scope_id}",
+    )
+    confirmation = confirm_export_manifest(manifest, policy, confirmed_at="2026-09-28T00:00:00Z")
+    repository.save_export_confirmation(manifest_id, confirmation)
+    repository.save_scope_budget(
+        scope_id,
+        ProviderScopeBudgetV1(
+            max_requests=1,
+            max_total_tokens=0,
+            max_cost_cny=0,
+            budget_bucket=LLM_DEBATE_TURN_BUCKET,
+        ),
+    )
+    request = ProviderReservationRequestV1(
+        scope_id=scope_id,
+        provider_operation=manifest.provider_operation,
+        logical_item_id=scope_id,
+        attempt_no=1,
+        request_hash=_digest(f"wire:{scope_id}"),
+        max_tokens=0,
+        max_cost_cny=0,
+        policy_hash=manifest.policy_hash,
+        export_manifest_hash=manifest.manifest_hash,
+        build_manifest_hash=manifest.build_manifest_hash,
+        model_key=manifest.model_key,
+    )
+    return database, repository, repository.create_prepared(request).id
+
+
+def test_knowledge_not_sent_releases_reservation_and_clears_charged_count(
+    tmp_path: Path,
+) -> None:
+    database, repository, operation_id = _knowledge_operation(tmp_path, "knowledge-not-sent")
+    repository.reserve(operation_id)
+    repository.transition(operation_id, expected="reserved", state="sending")
+
+    operation = repository.mark_not_sent(operation_id, safe_error_code="llm_transport_not_sent")
+
+    assert operation.state == "not_sent"
+    assert operation.request_count == operation.charged_request_count == 0
+    assert repository.reservation(operation_id).state == "not_sent"
+    with database.engine.connect() as connection:
+        budget = (
+            connection.execute(
+                select(ProviderScopeBudget.__table__).where(
+                    ProviderScopeBudget.scope_id == "knowledge-not-sent"
+                )
+            )
+            .mappings()
+            .one()
+        )
+    assert budget["allocated_requests"] == 0
+    assert budget["allocated_total_tokens"] == 0
+    assert budget["allocated_cost_cny"] == 0
+    database.dispose()
+
+
+def test_knowledge_startup_recovery_marks_sending_unknown_and_never_reopens_it(
+    tmp_path: Path,
+) -> None:
+    database, repository, operation_id = _knowledge_operation(tmp_path, "knowledge-unknown")
+    repository.reserve(operation_id)
+    repository.transition(operation_id, expected="reserved", state="sending")
+
+    recovered = repository.recover_llm_startup()
+
+    assert len(recovered) == 1
+    assert recovered[0].id == operation_id
+    assert recovered[0].state == "acceptance_unknown"
+    assert recovered[0].charged_request_count == 1
+    assert repository.recover_llm_startup() == ()
+    assert repository.operation(operation_id).state == "acceptance_unknown"
+    database.dispose()
+
+
 def test_acceptance_unknown_retains_budget_and_never_auto_retries(tmp_path: Path) -> None:
     database, repository, manifest = _repository_with_confirmed_manifest(tmp_path)
     repository.save_scope_budget(
@@ -305,9 +402,9 @@ def test_acceptance_unknown_retains_budget_and_never_auto_retries(tmp_path: Path
             .one()
         )
         assert budget["allocated_requests"] == 1
-    with pytest.raises(BudgetExceeded):
-        second = repository.create_prepared(_request(manifest, attempt_no=2))
-        repository.reserve(second.id)
+    other = repository.create_prepared(_request(manifest, logical_item_id="independent-item"))
+    assert repository.reserve(other.id).state == "reserved"
+    assert repository.operation(first.id).charged_request_count == 1
     database.dispose()
 
 
@@ -328,16 +425,13 @@ def test_sqlite_scope_reservation_is_atomic_under_concurrency(tmp_path: Path) ->
     ]
 
     def reserve(operation_id: str) -> str:
-        try:
-            repository.reserve(operation_id)
-        except BudgetExceeded:
-            return "rejected"
+        repository.reserve(operation_id)
         return "reserved"
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         outcomes = tuple(executor.map(reserve, (operation.id for operation in operations)))
-    assert outcomes.count("reserved") == 1
-    assert outcomes.count("rejected") == 7
+    assert outcomes.count("reserved") == 8
+    assert outcomes.count("rejected") == 0
     database.dispose()
 
 
@@ -416,27 +510,42 @@ def test_missing_scope_budget_and_invalid_orm_state_fail_closed(tmp_path: Path) 
 def test_0010_downgrade_refuses_nonempty_provider_data_and_allows_empty_round_trip(
     tmp_path: Path,
 ) -> None:
-    database, repository, manifest = _repository_with_confirmed_manifest(tmp_path)
+    database = Database(f"sqlite:///{tmp_path / 'provider-control-downgrade.sqlite3'}")
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     config.set_main_option(
         "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
     )
     config.set_main_option("sqlalchemy.url", database.database_url)
     config.attributes["database_url"] = database.database_url
-    with pytest.raises(RuntimeError, match="ProviderDataCallV1 data"):
+    try:
+        command.upgrade(config, "0009_persona_structured_fields")
+        command.upgrade(config, "0010_provider_control_ledger")
+        now = datetime.now(UTC)
+        with database.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO provider_scope_budgets "
+                    "(scope_id,max_requests,max_total_tokens,max_cost_cny,created_at,updated_at) "
+                    "VALUES ('migration-scope',2,20,0.02,:now,:now)"
+                ),
+                {"now": now},
+            )
+        with pytest.raises(RuntimeError, match="ProviderDataCallV1 data"):
+            command.downgrade(config, "0009_persona_structured_fields")
+        with database.engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == ("0010_provider_control_ledger")
+            assert (
+                connection.execute(text("SELECT COUNT(*) FROM provider_scope_budgets")).scalar_one()
+                == 1
+            )
+
+        with database.engine.begin() as connection:
+            connection.execute(text("DELETE FROM provider_scope_budgets"))
         command.downgrade(config, "0009_persona_structured_fields")
-    with database.engine.begin() as connection:
-        for table in (
-            cast(Table, ProviderReservation.__table__),
-            cast(Table, ProviderOperation.__table__),
-            cast(Table, ProviderScopeBudget.__table__),
-            # These rows are the only policy/export data created by this test.
-        ):
-            connection.execute(table.delete())
-        connection.execute(text("DELETE FROM provider_export_confirmations"))
-        connection.execute(text("DELETE FROM provider_export_manifests"))
-        connection.execute(text("DELETE FROM provider_policy_snapshots"))
-    command.downgrade(config, "0009_persona_structured_fields")
-    command.upgrade(config, "0010_provider_control_ledger")
-    assert inspect(database.engine).has_table("provider_operations")
-    database.dispose()
+        assert not inspect(database.engine).has_table("provider_operations")
+        command.upgrade(config, "0010_provider_control_ledger")
+        assert inspect(database.engine).has_table("provider_operations")
+    finally:
+        database.dispose()

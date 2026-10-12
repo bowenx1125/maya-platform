@@ -8,12 +8,28 @@ from logging.config import fileConfig
 from alembic import context
 from app.core.db import _sqlite_pragmas
 from app.core.models import Base
+from app.modules.cardroom import models as _cardroom_models
 from app.modules.debates import models as _debate_models
 from app.modules.interactions import models as _interaction_models
+from app.modules.knowledge_sets import models as _knowledge_set_models
+from app.modules.learning import models as _learning_models
 from app.modules.reports import models as _report_models
+from app.modules.runtime_tools import models as _runtime_tool_models
+from app.modules.teams import models as _team_models
+from app.modules.workspace import models as _workspace_models
 from sqlalchemy import engine_from_config, event, pool
 
-del _debate_models, _interaction_models, _report_models
+del (
+    _cardroom_models,
+    _debate_models,
+    _interaction_models,
+    _knowledge_set_models,
+    _learning_models,
+    _report_models,
+    _runtime_tool_models,
+    _team_models,
+    _workspace_models,
+)
 
 config = context.config
 if config.config_file_name is not None:
@@ -65,9 +81,23 @@ def run_migrations_online() -> None:
     if connectable.dialect.name == "sqlite":
         event.listen(connectable, "connect", _sqlite_pragmas)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
-        with context.begin_transaction():
-            context.run_migrations()
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            transactional_ddl=True,
+            transaction_per_migration=True,
+        )
+        try:
+            with context.begin_transaction():
+                context.run_migrations()
+        finally:
+            if connectable.dialect.name == "sqlite":
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 1:
+                    raise RuntimeError(
+                        "Migrations failed to restore SQLite foreign-key enforcement."
+                    )
 
 
 if context.is_offline_mode():

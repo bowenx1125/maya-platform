@@ -59,6 +59,13 @@ _SAFE_GENERATION_CODES = {
     "acceptance_unknown",
     "debate_stopped",
     "audio_invalid",
+    "tts_timeout",
+    "tts_http_rejected",
+    "tts_response_invalid",
+    "tts_result_url_rejected",
+    "tts_result_dns_failed",
+    "tts_result_download_failed",
+    "tts_audio_invalid",
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",
@@ -180,7 +187,7 @@ class PlaybackCore:
         # same in-process command replay its original private result without
         # issuing a second ticket.
         self._media_command_results: dict[
-            tuple[str, str], tuple[PreparedMedia, MediaPreparedResult]
+            tuple[str, str], tuple[PreparedMedia | None, MediaPreparedResult]
         ] = {}
         self._lock = asyncio.Lock()
 
@@ -719,10 +726,22 @@ class PlaybackCore:
         return status in {"public", "published"}
 
     @staticmethod
+    def _turn_text_only(turn: Any) -> bool:
+        return (
+            PlaybackCore._get(turn, "generation_status") == "final_ready"
+            and PlaybackCore._get(turn, "safe_error_code", "failed_code") == "tts_voice_unavailable"
+            and bool(str(PlaybackCore._get(turn, "speech", default="")).strip())
+            and PlaybackCore._get(turn, "audio_file_id", "audio_relative_path") is None
+            and PlaybackCore._get(turn, "audio_duration_ms") == 0
+        )
+
+    @staticmethod
     def _turn_ready(turn: Any) -> bool:
         generation = str(PlaybackCore._get(turn, "generation_status", "status", default="pending"))
         audio = PlaybackCore._get(turn, "audio_relative_path", "audio_file_id", default=None)
-        return generation in {"ready", "final_ready", "completed"} and audio is not None
+        return generation in {"ready", "final_ready", "completed"} and (
+            audio is not None or PlaybackCore._turn_text_only(turn)
+        )
 
     @staticmethod
     def _turn_text_fallback_ready(turn: Any) -> bool:
@@ -1209,6 +1228,7 @@ class PlaybackCore:
             return False
         if (
             not self._turn_text_fallback_ready(successor)
+            and not self._turn_text_only(successor)
             and self._validated_turn_audio(db, debate, successor) is None
         ):
             return False

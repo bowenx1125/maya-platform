@@ -20,6 +20,7 @@ import type {
   KnowledgeDocument,
   PlatformApi,
   RagPreview,
+  VoiceProfile,
 } from "../lib/api";
 import { PlatformApiError } from "../lib/api";
 
@@ -73,8 +74,16 @@ function makeDocument(): KnowledgeDocument {
   return {
     id: "document-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_manage_visibility: false,
+    authorization_epoch: 0,
     source_filename: "evidence.md",
     source_owner_role: "student",
+    content_hash: "a".repeat(64),
+    created_at: "2026-10-04T00:00:00Z",
+    index_revision: 0,
     char_count: 42,
     workspace_state: "active",
     index_status: "ready",
@@ -111,6 +120,10 @@ function makeAgent(): AgentDetail {
   return {
     id: "agent-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_edit: true,
     name: "Agent",
     description: "A stable Agent description",
     metadata_revision: 0,
@@ -139,7 +152,7 @@ function makePreview(): RagPreview {
   return {
     version_id: "version-id",
     total_char_count: 42,
-    limit: 100000,
+    limit: null,
     document_count: 1,
     index_status: "ready",
     combined_markdown: "# Evidence\n\nA stable source excerpt.",
@@ -179,10 +192,26 @@ function makeApi() {
     version: vi.fn(async () => version),
     agent: vi.fn(async () => agent),
     knowledge: vi.fn(async () => [document]),
+    knowledgeSets: vi.fn(async () => []),
+    agentKnowledgeSets: vi.fn(async () => ({
+      agent_id: agent.id,
+      agent_metadata_revision: agent.metadata_revision,
+      sets: [],
+    })),
+    replaceAgentKnowledgeSets: vi.fn(
+      async (
+        _agentId: string,
+        body: { expected_agent_metadata_revision: number },
+      ) => ({
+        agent_id: agent.id,
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      }),
+    ),
     ragPreview: vi.fn(async () => makePreview()),
     avatarTemplates: vi.fn(async () => makeTemplates()),
-    voiceProfiles: vi.fn(async () => []),
-    updateDraft: vi.fn(async () => version),
+    voiceProfiles: vi.fn(async (): Promise<VoiceProfile[]> => []),
+    updateDraft: vi.fn(async (..._args: unknown[]) => version),
     compilePersona: vi.fn(),
     uploadKnowledge: vi.fn(async (..._args: unknown[]) => ({
       agent_version: version,
@@ -229,13 +258,16 @@ describe("Wave 1C real workbench locale boundary", () => {
     const { api } = makeApi();
     const saved = makeVersion({ revision: 1, agent_md: "# Local Agent" });
     api.updateDraft.mockResolvedValue(saved);
+    api.agent
+      .mockResolvedValueOnce(makeAgent())
+      .mockResolvedValue({ ...makeAgent(), name: "Local Agent" });
     api.publish.mockResolvedValue({ ...saved, state: "published" });
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
 
     await screen.findByRole("button", { name: "Done" });
     const editor = screen.getByLabelText("AGENT.md editor");
     fireEvent.change(editor, { target: { value: "# Local Agent" } });
-    expect(screen.getAllByText("Unsaved local changes")).toHaveLength(1);
+    expect(screen.queryByText("Unsaved local changes")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
       expect(api.publish).toHaveBeenCalledWith(
@@ -254,8 +286,144 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(
       api.publish.mock.invocationCallOrder[0],
     );
+    expect(api.agent).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByRole("heading", { name: "Local Agent · V1.0" }),
+    ).toBeTruthy();
     expect(navigation.replace).toHaveBeenCalledWith("/student/agents/agent-id");
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
+  });
+
+  it("does not infer a generation intent from already-selected courseware", async () => {
+    const { api, document } = makeApi();
+    const withSource = makeVersion({ enabled_documents: [document] });
+    api.version.mockResolvedValue(withSource);
+    api.publish.mockResolvedValue({ ...withSource, state: "published" });
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalled());
+    expect(api.publish).toHaveBeenCalledWith(
+      "version-id",
+      withSource.revision,
+      expect.not.objectContaining({ generation: expect.anything() }),
+    );
+  });
+
+  it.each(["own-ready", ""])(
+    "changes a later draft voice to %s without editing the published version",
+    async (choice) => {
+      const { api } = makeApi();
+      const draft = makeVersion({
+        version_label: "V1.1",
+        voice_profile_id: "inherited-private",
+      });
+      const ownVoice = {
+        id: "own-ready",
+        source_filename: "My voice",
+        status: "ready",
+      } as VoiceProfile;
+      api.version.mockResolvedValue(draft);
+      api.voiceProfiles.mockResolvedValue([
+        ownVoice,
+        {
+          ...ownVoice,
+          id: "unfinished",
+          status: "preview_ready",
+          source_filename: "Not confirmed",
+        },
+      ]);
+      const saved = { ...draft, revision: 1, voice_profile_id: choice || null };
+      api.updateDraft.mockResolvedValue(saved);
+      api.publish.mockResolvedValue({ ...saved, state: "published" });
+      renderWorkbench(api as unknown as PlatformApi, () => undefined);
+      expect(
+        await screen.findByRole("button", { name: "Current voice" }),
+      ).toBeTruthy();
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Not confirmed",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      if (choice) {
+        fireEvent.click(screen.getByRole("button", { name: "My voice" }));
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "Current voice" }));
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      await waitFor(() =>
+        expect(api.publish).toHaveBeenCalledWith(
+          "version-id",
+          1,
+          expect.anything(),
+        ),
+      );
+      expect(api.updateDraft).toHaveBeenCalledWith(
+        "version-id",
+        expect.objectContaining({ voice_profile_id: choice || null }),
+      );
+      expect(draft.voice_profile_id).toBe("inherited-private");
+    },
+  );
+
+  it("keeps an inherited voice untouched when only the next draft text changes", async () => {
+    const { api } = makeApi();
+    const draft = makeVersion({
+      version_label: "V1.1",
+      voice_profile_id: "inherited-private",
+    });
+    const saved = { ...draft, revision: 1, agent_md: "# Changed" };
+    api.version.mockResolvedValue(draft);
+    api.updateDraft.mockResolvedValue(saved);
+    api.publish.mockResolvedValue({ ...saved, state: "published" });
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const editor = await screen.findByLabelText("AGENT.md editor");
+    fireEvent.change(editor, { target: { value: "# Changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    expect(api.updateDraft.mock.calls[0][1]).not.toHaveProperty(
+      "voice_profile_id",
+    );
+  });
+
+  it("refreshes available voices on focus without discarding the next draft", async () => {
+    const { api } = makeApi();
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const editor = await screen.findByLabelText("AGENT.md editor");
+    fireEvent.change(editor, { target: { value: "# Unsaved" } });
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "new-ready",
+        source_filename: "New voice",
+        status: "ready",
+      } as VoiceProfile,
+    ]);
+    fireEvent.focus(window);
+    expect(
+      await screen.findByRole("button", { name: "New voice" }),
+    ).toBeTruthy();
+    expect(editor).toHaveProperty("value", "# Unsaved");
+  });
+
+  it("shows a name conflict as an actionable error while retaining the local draft", async () => {
+    const { api } = makeApi();
+    api.updateDraft.mockRejectedValue(
+      new PlatformApiError(409, "Conflict", { code: "agent_name_conflict" }),
+    );
+    renderWorkbench(api as unknown as PlatformApi, () => undefined);
+    const editor = await screen.findByLabelText("AGENT.md editor");
+    fireEvent.change(editor, { target: { value: "# Duplicate" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringContaining(
+        "An Agent with this name already exists. Choose another name or delete the duplicate Agent first.",
+      ),
+    );
+    expect(editor).toHaveProperty("value", "# Duplicate");
+    expect(api.publish).not.toHaveBeenCalled();
   });
 
   it("keeps Done from publishing when saving introduces new server blockers", async () => {
@@ -274,12 +442,17 @@ describe("Wave 1C real workbench locale boundary", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Done" })).toBeNull(),
+      expect(
+        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true),
     );
     expect(api.updateDraft).toHaveBeenCalledTimes(1);
     expect(api.publish).not.toHaveBeenCalled();
     expect(
-      within(screen.getByRole("main")).getByText("Knowledge"),
+      within(screen.getByRole("main")).getByRole("heading", {
+        name: "Brainform",
+      }),
     ).toBeTruthy();
     expect(screen.getByLabelText("AGENT.md editor")).toHaveProperty(
       "value",
@@ -317,7 +490,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(screen.queryByRole("heading", { name: "Test Chat" })).toBeNull();
   });
 
-  it("keeps Back in the sidebar and asks before discarding local edits", async () => {
+  it("leads the page with Back and asks before discarding local edits", async () => {
     const { api } = makeApi();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
@@ -326,6 +499,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       target: { value: "# Unsaved" },
     });
     expect(back.closest("nav")).not.toBeNull();
+    expect(back.closest("main")).toBeNull();
     expect(back.getAttribute("href")).toBe("/student/agents/agent-id");
     expect(fireEvent.click(back)).toBe(false);
     expect(confirm).toHaveBeenCalledTimes(1);
@@ -355,16 +529,11 @@ describe("Wave 1C real workbench locale boundary", () => {
     ).not.toContain("# Identity");
   });
 
-  it("preserves API/session/CSRF, selected docs, pending File, conflict, and retry identity across locale switches", async () => {
+  // RAG files are uploaded in Brainform, not from this editor, so a locale
+  // switch here only has to keep the session, selection and local edits.
+  it("preserves API/session/CSRF, selected docs and local edits across locale switches", async () => {
     const identities: IdentitySnapshot[] = [];
-    const firstUploadFile = new File(["# pending"], "pending.md");
     const { api } = makeApi();
-    api.uploadKnowledge
-      .mockRejectedValueOnce(new TypeError("connection reset"))
-      .mockResolvedValueOnce({
-        agent_version: makeVersion({ revision: 2 }),
-        document: makeDocument(),
-      });
     renderWorkbench(api as unknown as PlatformApi, (value) => {
       identities.push(value);
     });
@@ -391,15 +560,8 @@ describe("Wave 1C real workbench locale boundary", () => {
       ),
     );
     fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
-      target: { value: "# Local while uploading" },
+      target: { value: "# Local before switching" },
     });
-    const uploadInput = screen.getAllByLabelText("Upload")[1];
-    fireEvent.change(uploadInput, { target: { files: [firstUploadFile] } });
-    await waitFor(() =>
-      expect(screen.getByText("connection reset")).toBeTruthy(),
-    );
-    const firstCall = api.uploadKnowledge.mock.calls[0];
-    const firstHandle = (firstCall[4] as { idempotency: unknown }).idempotency;
 
     fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
     const lastIdentity = identities.at(-1);
@@ -408,111 +570,24 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(lastIdentity?.csrf).toBe(firstIdentity?.csrf);
     expect(
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe("# Local while uploading");
+    ).toBe("# Local before switching");
     expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
       true,
     );
     expect(screen.getByText("evidence.md")).toBeTruthy();
-    expect(screen.getByText(/# Evidence/)).toBeTruthy();
+    expect(screen.queryByText(/# Evidence/)).toBeNull();
     expect(screen.getByText("Agent · V1.0")).toBeTruthy();
     expect(api.me.mock.calls.length).toBe(countsBefore.me);
     expect(api.version.mock.calls.length).toBe(countsBefore.version);
     expect(api.agent.mock.calls.length).toBe(countsBefore.agent);
     expect(api.knowledge.mock.calls.length).toBe(countsBefore.knowledge);
-    expect(api.ragPreview.mock.calls.length).toBe(countsBefore.ragPreview + 1);
     expect(api.avatarTemplates.mock.calls.length).toBe(
       countsBefore.avatarTemplates,
     );
     expect(api.voiceProfiles.mock.calls.length).toBe(
       countsBefore.voiceProfiles,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "切换到英文" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(api.uploadKnowledge).toHaveBeenCalledTimes(2));
-    const secondCall = api.uploadKnowledge.mock.calls[1];
-    expect(secondCall[2]).toBe(firstUploadFile);
-    expect((secondCall[4] as { idempotency: unknown }).idempotency).toBe(
-      firstHandle,
-    );
-  });
-
-  it("retries preview refresh after a successful file upload without reuploading", async () => {
-    const { api } = makeApi();
-    let resolvePreview!: (preview: RagPreview) => void;
-    api.uploadKnowledge.mockResolvedValueOnce({
-      agent_version: makeVersion(),
-      document: {
-        ...makeDocument(),
-        id: "uploaded-document-id",
-        source_filename: "lesson.pdf.md",
-      },
-    });
-    api.ragPreview
-      .mockResolvedValueOnce(makePreview())
-      .mockRejectedValueOnce(new Error("preview unavailable"))
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolvePreview = resolve;
-          }),
-      );
-    renderWorkbench(api as unknown as PlatformApi, () => undefined);
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
-    );
-    const file = new File(["lesson"], "lesson.pdf", {
-      type: "application/pdf",
-    });
-    fireEvent.change(screen.getAllByLabelText("Upload")[1], {
-      target: { files: [file] },
-    });
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "The file was uploaded successfully, but the evidence preview could not be refreshed.",
-        ),
-      ).toBeTruthy(),
-    );
-    expect(
-      screen.getByText(
-        "File converted to Markdown and enabled for this draft.",
-      ),
-    ).toBeTruthy();
-    expect(api.uploadKnowledge).toHaveBeenCalledTimes(1);
-
-    const retryButton = screen.getByRole("button", { name: "Retry" });
-    fireEvent.click(retryButton);
-    expect(screen.getByText("Refreshing the Markdown preview…")).toBeTruthy();
-    expect((retryButton as HTMLButtonElement).disabled).toBe(true);
-    expect(
-      (screen.getAllByLabelText("Upload")[1] as HTMLInputElement).disabled,
-    ).toBe(true);
-    expect(
-      screen
-        .getAllByRole("checkbox")
-        .every((checkbox) => (checkbox as HTMLInputElement).disabled),
-    ).toBe(true);
-    fireEvent.click(retryButton);
-    expect(api.ragPreview).toHaveBeenCalledTimes(3);
-
-    resolvePreview(makePreview());
-
-    await waitFor(() => expect(api.ragPreview).toHaveBeenCalledTimes(3));
-    expect(api.uploadKnowledge).toHaveBeenCalledTimes(1);
-    expect(
-      screen.queryByText(
-        "The file was uploaded successfully, but the evidence preview could not be refreshed.",
-      ),
-    ).toBeNull();
-    expect(screen.queryByText("Refreshing the Markdown preview…")).toBeNull();
-    expect(
-      screen.getByText(
-        "File converted to Markdown and enabled for this draft.",
-      ),
-    ).toBeTruthy();
+    expect(api.uploadKnowledge).not.toHaveBeenCalled();
   });
 
   it("keeps a local AGENT.md and revision conflict visible after locale changes", async () => {

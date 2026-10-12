@@ -48,7 +48,7 @@ class PersonaVersionState(PersonaDomainModel):
     agent_name: str = Field(min_length=1)
     state: Literal["draft", "published", "superseded"]
     revision: int = Field(ge=0)
-    agent_md: str = Field(max_length=12_000)
+    agent_md: str
     raw_agent_md_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     persona_spec_json: str | None = None
     persona_spec_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")

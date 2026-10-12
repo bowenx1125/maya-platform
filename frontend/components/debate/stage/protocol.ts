@@ -429,6 +429,9 @@ function normaliseSegment(
     text: value.text,
     source_ids: sourceIds as string[],
     reply_to: value.reply_to as string | null,
+    ...(typeof value.reply_text === "string" && value.reply_to !== null
+      ? { reply_text: value.reply_text }
+      : {}),
     ...(supportMode !== undefined ? { support_mode: supportMode } : {}),
   };
 }

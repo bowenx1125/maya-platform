@@ -19,6 +19,7 @@ from app.core.models import (
     IdempotencyRecord,
     KnowledgeDocument,
     KnowledgeSnapshot,
+    ProviderOperation,
     StoredFile,
     User,
     VoiceProfile,
@@ -126,6 +127,7 @@ def _insert_published_agent(
             Agent(
                 id=agent_id,
                 group_id=group_id,
+                owner_user_id=STUDENT_BOWEN_ID,
                 name=name,
                 description=f"{name} perspective",
                 metadata_revision=0,
@@ -171,11 +173,16 @@ def _create_agent(
     csrf: str,
     key: str = "wave3-create-agent-001",
     description: str = "",
+    name: str = "Metadata Agent",
 ) -> dict[str, Any]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": key}),
-        json={"name": "Metadata Agent", "description": description},
+        json={
+            "name": name,
+            "description": description,
+            "visibility": "public",
+        },
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -202,7 +209,11 @@ def _prepare_draft_for_publish(
     uploaded = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": f"wave3-race-upload-{key_suffix}"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={"file": ("race.md", b"# Race\n\nEvidence", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
@@ -267,18 +278,36 @@ def test_metadata_patch_is_cas_only_and_empty_description_has_no_fallback(
     assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 200
 
 
-def test_delete_eligible_agent_removes_only_agent_draft_state(client: TestClient) -> None:
+def test_delete_agent_takes_its_own_rag_out_of_brainform(client: TestClient) -> None:
+    # Owner decision (2026-10-12): deleting an Agent deletes its RAG with it,
+    # unless another live Agent still uses that file.
     _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-delete-agent-001")
+    keeper = _create_agent(client, csrf, "wave3-delete-keeper-001", name="Keeper Agent")
     version_id = agent["versions"][0]["id"]
     upload = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-delete-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
-        files={"file": ("shared.md", b"# Shared\n\nPreserve me", "text/markdown")},
+        files={"file": ("own.md", b"# Own\n\nLeaves with its Agent", "text/markdown")},
     )
     assert upload.status_code == 201, upload.text
-    document_id = upload.json()["document"]["id"]
+    own_id = upload.json()["document"]["id"]
+    shared = client.post(
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "wave3-delete-upload-002"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        files={"file": ("shared.md", b"# Shared\n\nPreserve me", "text/markdown")},
+    )
+    assert shared.status_code == 201, shared.text
+    shared_id = shared.json()["document"]["id"]
+    keeper_version = keeper["versions"][0]["id"]
+    bound = client.put(
+        f"/api/v1/agent-versions/{keeper_version}/knowledge-documents",
+        headers=_headers(csrf),
+        json={"expected_revision": 0, "document_ids": [shared_id]},
+    )
+    assert bound.status_code == 200, bound.text
 
     deleted = client.delete(
         f"/api/v1/agents/{agent['id']}",
@@ -286,7 +315,12 @@ def test_delete_eligible_agent_removes_only_agent_draft_state(client: TestClient
     )
     assert deleted.status_code == 204, deleted.text
     assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 404
-    assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 200
+    listed = {
+        row["id"]
+        for row in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents").json()
+    }
+    assert own_id not in listed
+    assert shared_id in listed
 
 
 def test_delete_hides_agent_and_preserves_versions_group_files_and_audit(
@@ -417,7 +451,9 @@ def test_delete_rejects_history_teacher_and_cross_group(
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(teacher_csrf, **{"Idempotency-Key": "wave3-teacher-delete-001"}),
     )
-    assert teacher_delete.status_code == 403, teacher_delete.text
+    # A teacher cannot discover an unpublished student draft, even when its
+    # owner has marked it Public; it is available after publication.
+    assert teacher_delete.status_code == 404, teacher_delete.text
 
     # Delete is group-membership scoped. There is one seeded group, so the
     # cross-group branch is exercised by moving the Agent into a group the
@@ -429,7 +465,9 @@ def test_delete_rejects_history_teacher_and_cross_group(
         moved.group_id = foreign_group_id
         session.commit()
 
-    _other, other_csrf = login(client, "bowen")
+    # A different course member is not the Agent owner and has no membership
+    # in the new group, so the moved resource stays undiscoverable.
+    _other, other_csrf = login(client, "kaikai")
     cross_group = client.delete(
         f"/api/v1/agents/{agent['id']}",
         headers=_headers(other_csrf, **{"Idempotency-Key": "wave3-cross-delete-001"}),
@@ -460,7 +498,11 @@ def test_delete_removes_unreferenced_published_agent_from_both_workspaces(
     uploaded = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-publish-upload-001"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={"file": ("published.md", b"# Published", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
@@ -718,6 +760,38 @@ def test_delete_and_publish_race_has_one_serialized_winner(
     database = cast(Any, client.app).state.database
     settings = cast(Any, client.app).state.settings
     student_context = _context(database, STUDENT_BOWEN_ID)
+    charged_operation_id = str(uuid4())
+    with database.session() as session:
+        draft = session.get(AgentVersion, version_id)
+        assert draft is not None
+        saved_draft = (draft.agent_md, draft.revision)
+        saved_documents = set(
+            session.scalars(
+                select(AgentVersionDocument.document_id).where(
+                    AgentVersionDocument.agent_version_id == version_id
+                )
+            )
+        )
+        now = datetime.now(UTC)
+        session.add(
+            ProviderOperation(
+                id=charged_operation_id,
+                scope_id=agent_id,
+                provider_operation="llm",
+                logical_item_id=version_id,
+                attempt_no=1,
+                request_hash="a" * 64,
+                max_tokens=0,
+                max_cost_cny=0,
+                policy_hash="b" * 64,
+                export_manifest_hash="c" * 64,
+                state="succeeded",
+                request_count=1,
+                charged_request_count=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
 
     def delete_operation(db: Any) -> Any:
         return delete_agent(
@@ -749,19 +823,19 @@ def test_delete_and_publish_race_has_one_serialized_winner(
     publish_result = second_result if operation_order == "delete-first" else first_result
 
     if _result_status(delete_result) == 204:
-        # Delete commits a retained soft-delete marker. Publication must lose
-        # after that marker, without publishing the preserved draft version or
-        # creating a snapshot/guard for the deleted Agent.
+        # Removal now retains a tombstone and draft for existing chat history.
+        # Publication must still lose and must not create a snapshot.
         assert isinstance(publish_result, PlatformError), repr(publish_result)
         assert _result_code(publish_result) in {"not_found", "invalid_state"}
         with database.session() as session:
-            deleted = session.get(Agent, agent_id)
-            version = session.get(AgentVersion, version_id)
-            assert deleted is not None and deleted.deleted_at is not None
-            assert deleted.status == "archived"
-            assert deleted.current_published_version_id is None
-            assert version is not None and version.state == "draft"
-            assert version.knowledge_snapshot_id is None
+            removed = session.get(Agent, agent_id)
+            retained = session.get(AgentVersion, version_id)
+            assert removed is not None and retained is not None
+            assert removed.status == "archived" and removed.deleted_at is not None
+            assert removed.current_published_version_id is None
+            assert retained.agent_id == removed.id and retained.state == "draft"
+            assert (retained.agent_md, retained.revision) == saved_draft
+            assert retained.knowledge_snapshot_id is None
             assert (
                 session.scalar(
                     select(KnowledgeSnapshot.id).where(
@@ -771,14 +845,20 @@ def test_delete_and_publish_race_has_one_serialized_winner(
                 is None
             )
             assert (
-                session.scalar(
-                    select(FileOperation.id).where(
-                        FileOperation.entity_id == agent_id,
-                        FileOperation.operation_kind == "agent_publish_guard",
+                set(
+                    session.scalars(
+                        select(AgentVersionDocument.document_id).where(
+                            AgentVersionDocument.agent_version_id == version_id
+                        )
                     )
                 )
-                is None
+                == saved_documents
             )
+        assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
+        assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
+        visible = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents")
+        assert visible.status_code == 200, visible.text
+        assert agent_id not in {item["id"] for item in visible.json()}
     else:
         # Publication committed first: the delete's final history check must
         # lose with the stable retained-history error.
@@ -790,6 +870,16 @@ def test_delete_and_publish_race_has_one_serialized_winner(
             assert published is not None and version is not None
             assert version.state == "published"
             assert published.current_published_version_id == version_id
+
+    with database.session() as session:
+        charged = session.get(ProviderOperation, charged_operation_id)
+        assert charged is not None
+        assert (charged.state, charged.request_count, charged.charged_request_count) == (
+            "succeeded",
+            1,
+            1,
+        )
+        assert charged.logical_item_id == version_id
 
 
 @pytest.mark.parametrize("operation_order", ["delete-first", "debate-first"])

@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.core.db import ALEMBIC_HEAD, Database
+from app.core.db import Database
 from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
@@ -523,7 +523,7 @@ def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
             ),
             {"id": "legacy-operation", "hash": HASH_A, "now": now},
         )
-    command.upgrade(config, "head")
+    command.upgrade(config, "0016_real_core_acceptance_run")
     with Database(database_url).engine.connect() as connection:
         assert connection.execute(
             text(
@@ -533,7 +533,7 @@ def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
         ).one() == (None, None, 0, 0)
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == ALEMBIC_HEAD
+            == "0016_real_core_acceptance_run"
         )
     command.downgrade(config, "0015_llm_recovery_input")
     inspector = inspect(Database(database_url).engine)
@@ -789,20 +789,18 @@ def test_attach_accepts_an_explainable_extra_call_but_rejects_the_ceiling_and_du
                 run_id=run_id,
                 request=DemoAcceptanceCallRequest(
                     manifest_hash=_manifest_hash("semantic-extra-query"),
-                    call_no=8,
+                    call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1,
                 ),
             )
             assert response.call_count == 2
             assert response.charged_request_count == 0
             assert "calls" not in response.model_dump()
-        # The ordinal ceiling is no longer the old fixed eight: the plan is
-        # derived from the Debate shape, so only an ordinal past the absolute
-        # ceiling for the widest supported shape is rejected here.
-        DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=9)
+        # Ordinals identify calls; they no longer cap a run's request count.
+        DemoAcceptanceCallRequest(
+            manifest_hash=second_manifest, call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1
+        )
         with pytest.raises(ValidationError):
-            DemoAcceptanceCallRequest(
-                manifest_hash=second_manifest, call_no=DEMO_ACCEPTANCE_MAX_CALLS + 1
-            )
+            DemoAcceptanceCallRequest(manifest_hash=second_manifest, call_no=0)
         with database.engine.begin() as connection:
             connection.execute(
                 text(

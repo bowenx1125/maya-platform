@@ -40,7 +40,11 @@ def _make_agent(client: TestClient, csrf: str) -> tuple[dict[str, Any], str]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": "create-wave1-agent-001"}),
-        json={"name": "Maya Guide", "description": "A small Demo guide."},
+        json={
+            "name": "Maya Guide",
+            "description": "A small Demo guide.",
+            "visibility": "public",
+        },
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -147,6 +151,7 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
 ) -> None:
     _user, csrf = login(client, "bowen")
     agent, version_id = _make_agent(client, csrf)
+    assert agent["can_edit"] is True
     avatar = agent["versions"][0]["avatar_config"]
 
     response = client.patch(
@@ -164,7 +169,11 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-document-001"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={
             "file": (
                 "lesson.md",
@@ -184,7 +193,11 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     replay = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "upload-wave1-document-001"}),
-        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
         files={
             "file": (
                 "lesson.md",
@@ -242,6 +255,15 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     # belong to is not found at all. The teacher's pre-publication 404 is
     # covered by test_wave1_teacher_prepublication_visibility_and_authorized_empty_list.
     _student, other_csrf = login(client, "kaikai")
+    visible = client.get(f"/api/v1/agents/{agent['id']}")
+    assert visible.status_code == 200
+    assert visible.json()["can_edit"] is False
+    denied = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(other_csrf),
+        json={"expected_revision": 2, "agent_md": "# not the publisher"},
+    )
+    assert denied.status_code == 404
     assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 200
     assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 200
     assert client.get(f"/api/v1/knowledge-snapshots/{snapshot_id}").status_code == 200
@@ -474,7 +496,11 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
         uploaded = client.post(
             f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "cross-snapshot-upload-001"}),
-            data={"target_agent_version_id": version_id, "expected_revision": "1"},
+            data={
+                "target_agent_version_id": version_id,
+                "expected_revision": "1",
+                "visibility": "public",
+            },
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
         )
         assert uploaded.status_code == 201, uploaded.text
@@ -702,10 +728,10 @@ def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(
     )
     publish_body = _assert_business_error(publish_error, "agent_md_missing")
     assert "agent_md_missing" in publish_body["details"]["publish_blockers"]
-    assert "rag_missing" in publish_body["details"]["publish_blockers"]
+    assert "rag_missing" not in publish_body["details"]["publish_blockers"]
 
 
-def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(
+def test_wave1_rag_length_does_not_block_upload_set_or_chat(
     app_factory: Any,
 ) -> None:
     app, database, settings = app_factory()
@@ -728,32 +754,32 @@ def test_wave1_rag_over_limit_is_422_for_upload_set_and_chat(
             version_id,
         )
 
-        upload_error = client.post(
+        uploaded = client.post(
             f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
             headers=_headers(csrf, **{"Idempotency-Key": "over-limit-upload-001"}),
             data={"target_agent_version_id": version_id, "expected_revision": "1"},
             files={"file": ("small.md", b"# Small", "text/markdown")},
         )
-        _assert_business_error(upload_error, "rag_over_limit")
+        assert uploaded.status_code == 201, uploaded.text
 
-        set_error = client.put(
+        selected = client.put(
             f"/api/v1/agent-versions/{version_id}/knowledge-documents",
             headers=_headers(csrf),
-            json={"expected_revision": 1, "document_ids": [document_id]},
+            json={"expected_revision": 2, "document_ids": [document_id]},
         )
-        _assert_business_error(set_error, "rag_over_limit")
+        assert selected.status_code == 200, selected.text
 
-        chat_error = client.post(
+        chat = client.post(
             f"/api/v1/agent-versions/{version_id}/chat",
             headers=_headers(csrf),
             json={"message": "hello"},
         )
-        _assert_business_error(chat_error, "rag_over_limit")
+        assert chat.status_code == 200, chat.text
 
         with database.session() as session:
             version = session.get(AgentVersion, version_id)
             assert version is not None
-            assert version.revision == 1
+            assert version.revision == 3
             relations = session.scalars(
                 select(AgentVersionDocument).where(
                     AgentVersionDocument.agent_version_id == version_id

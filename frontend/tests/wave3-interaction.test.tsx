@@ -206,6 +206,43 @@ describe("M13 teacher interaction panel", () => {
 });
 
 describe("M13 anonymous audience form", () => {
+  it("keeps the mobile message composer first, keyboard reachable, and announces errors", async () => {
+    const api = audienceApi();
+    const form = {
+      ...(await api.getForm("token")),
+      current_turn_id: "turn-1",
+      round_no: 1,
+    };
+    vi.mocked(api.getForm).mockResolvedValue(form);
+    vi.mocked(api.submitBarrage).mockRejectedValueOnce(
+      new Error("Please try again"),
+    );
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    const nickname = await screen.findByLabelText("Nickname");
+    fireEvent.change(nickname, { target: { value: "Learner" } });
+    fireEvent.keyDown(nickname, { key: "Enter" });
+    const message = screen.getByRole("textbox", { name: "Barrage" });
+    expect(document.activeElement).toBe(message);
+    expect(message.getAttribute("maxlength")).toBe("300");
+    const messageForm = screen.getByRole("form", { name: "Barrage" });
+    const voteForm = screen.getByRole("form", { name: "Vote" });
+    expect(
+      messageForm.compareDocumentPosition(voteForm) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.change(message, { target: { value: "Hello" } });
+    expect(screen.getByText("5 / 300")).toBeTruthy();
+    fireEvent.submit(messageForm);
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "Please try again",
+    );
+    expect(message.getAttribute("aria-invalid")).toBe("true");
+    expect(message.getAttribute("aria-describedby")).toContain("message-error");
+    expect(message).toHaveProperty("value", "Hello");
+    expect(api.submitVote).not.toHaveBeenCalled();
+  });
+
   it("refreshes a refused stale turn without discarding the student's text", async () => {
     const api = audienceApi();
     const form = {
@@ -379,12 +416,16 @@ describe("M13 anonymous audience form", () => {
         raw_text: "A useful question",
       }),
     );
-    expect(
-      screen.getByRole("heading", {
-        name: "Submitted",
-      }),
-    ).toBeTruthy();
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    const message = screen.getByRole("textbox", { name: "Barrage" });
+    await waitFor(() => expect(message).toHaveProperty("value", ""));
+    fireEvent.change(message, { target: { value: "Another useful question" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Send$/ }));
+    await waitFor(() => expect(api.submitBarrage).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(api.submitBarrage).mock.calls;
+    expect(calls[0][1].client_submission_id).not.toBe(
+      calls[1][1].client_submission_id,
+    );
+    expect(api.submitVote).toHaveBeenCalledTimes(1);
   });
 
   it("reuses valid UUID submission identities after an ambiguous failure", async () => {

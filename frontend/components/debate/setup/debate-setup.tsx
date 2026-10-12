@@ -39,7 +39,7 @@ import {
 } from "../../ui";
 import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
-import { WorkspaceAction } from "../../workspace-actions";
+import { PageAction } from "../../page-action";
 
 export type { DebateDetail, DebateDraftRequest, DebateSummary };
 
@@ -134,27 +134,30 @@ export function TeacherDebateList({
     };
   }, [load]);
 
+  const newDebate = (
+    <PageAction name="new" href="/teacher/debates/new" disabled={!courseId} />
+  );
+
   return (
     <div className={styles.pageStack}>
       <PageIntro title={t("debatePreviewTitle")} />
-      <WorkspaceAction
-        name="new"
-        href="/teacher/debates/new"
-        disabled={!courseId}
-      />
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
-        <SectionCard>
+        <SectionCard action={debates.length > 0 ? newDebate : undefined}>
           {debates.length === 0 ? (
             <div className={styles.emptyState}>
               <strong>{t("debateNoDebates")}</strong>
+              {newDebate}
             </div>
           ) : (
             <div className={styles.list}>
               {debates.map((debate) => (
                 <div className={styles.debateRow} key={debate.id}>
-                  <div className={styles.debateCard}>
+                  <Link
+                    className={styles.debateCard}
+                    href={`/teacher/debates/${debate.id}/control`}
+                  >
                     <div>
                       <h2>{debate.topic}</h2>
                       <div className={styles.metaRow}>
@@ -173,7 +176,7 @@ export function TeacherDebateList({
                       debate can stall too: the lesson that stopped generating
                       mid-round used to read Running with nothing to act on. */}
                     <DebateStatus debate={debate} />
-                  </div>
+                  </Link>
                   <div className={styles.debateActions}>
                     {["completed", "debate_finished"].includes(
                       debate.status,
@@ -507,21 +510,14 @@ export function TeacherDebateCreate({
 
   if (loading) return <LoadingCard />;
   if (error && candidates.length === 0) {
-    return <ErrorNotice error={error} onRetry={() => void load()} />;
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   }
 
   return (
     <div className={styles.pageStack}>
       <PageIntro title={copy(t, "newDebateTitle")} />
       {!rulesEditing ? (
-        <WorkspaceAction name="back" href="/teacher/debates" disabled={busy} />
-      ) : null}
-      {!rulesEditing ? (
-        <WorkspaceAction
-          name="done"
-          form="create-debate-form"
-          disabled={busy || candidates.length === 0}
-        />
+        <PageAction name="back" href="/teacher/debates" disabled={busy} />
       ) : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       <form
@@ -725,6 +721,17 @@ export function TeacherDebateCreate({
         {formError ? (
           <div className="form-error" role="alert">
             {formError}
+          </div>
+        ) : null}
+        {/* Creating mid-edit would freeze rules other than the ones on
+          screen, so Done waits until the ruleset edit is saved or discarded. */}
+        {!rulesEditing ? (
+          <div className="button-row">
+            <PageAction
+              name="done"
+              form="create-debate-form"
+              disabled={busy || candidates.length === 0}
+            />
           </div>
         ) : null}
       </form>

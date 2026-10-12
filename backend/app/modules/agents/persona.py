@@ -45,8 +45,6 @@ CURRENT_PERSONA_COMPILER_VERSION = DEFAULT_PERSONA_COMPILER_VERSION
 PersonaSchemaVersion = Literal["persona_spec_v1", "persona_spec_v2"]
 PersonaProviderViewVersion = Literal["persona_provider_view_v1", "persona_provider_view_v2"]
 PersonaCompilerVersion = Literal["persona_template_v1", "persona_template_v2"]
-MAX_AGENT_MD_CHARS = 12_000
-
 _SECTIONS = (
     "Identity",
     "Cultural lens",
@@ -461,13 +459,6 @@ def _compile_persona_v1(
         expected_name = agent_name
 
     diagnostics: list[PersonaDiagnostic] = []
-    if len(normalized) > MAX_AGENT_MD_CHARS:
-        diagnostics.append(
-            _diagnostic(
-                "document_too_large",
-                "AGENT.md exceeds the 12,000 character limit.",
-            )
-        )
     invalid_control = _first_disallowed_control(normalized)
     if invalid_control is not None:
         position, _character = invalid_control
@@ -632,10 +623,6 @@ def compile_persona_v2(
         expected_name = agent_name
 
     diagnostics: list[PersonaDiagnostic] = []
-    if len(normalized) > MAX_AGENT_MD_CHARS:
-        diagnostics.append(
-            _diagnostic("document_too_large", "AGENT.md exceeds the 12,000 character limit.")
-        )
     invalid_control = _first_disallowed_control(normalized)
     if invalid_control is not None:
         position, _character = invalid_control
@@ -1305,6 +1292,21 @@ def _value(raw: str, *, line: int, field: str) -> tuple[str | None, PersonaDiagn
     return cleaned, None
 
 
+def agent_name_from_markdown(source: str) -> str | None:
+    """Read an authored name heading without treating identity sections as names."""
+
+    first_line = source.lstrip("\ufeff \t\r\n").split("\n", 1)[0].strip()
+    if not first_line.startswith("# "):
+        return None
+    raw_name = re.sub(r"\s+#+\s*$", "", first_line[2:]).strip()
+    if _has_forbidden_markup(raw_name) or _first_disallowed_control(raw_name) is not None:
+        return None
+    name = _clean_inline(raw_name)
+    if not name or name.casefold() in {"who i am", "我是谁"}:
+        return None
+    return name
+
+
 def _clean_inline(value: str) -> str:
     """Reduce emphasis/code delimiters to visible text without interpreting it."""
 
@@ -1434,7 +1436,6 @@ __all__ = [
     "DEFAULT_PERSONA_COMPILER_VERSION",
     "DEFAULT_PERSONA_PROVIDER_VIEW_VERSION",
     "DEFAULT_PERSONA_SCHEMA_VERSION",
-    "MAX_AGENT_MD_CHARS",
     "PERSONA_COMPILER_VERSION",
     "PERSONA_COMPILER_VERSION_V1",
     "PERSONA_COMPILER_VERSION_V2",

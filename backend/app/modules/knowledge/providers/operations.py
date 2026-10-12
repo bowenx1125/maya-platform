@@ -412,13 +412,6 @@ class InMemoryEmbeddingLedger(ProviderOperationStore, ReservationStore):
             current = self.operation(operation.id)
             if current.state not in {"prepared", "export_confirmed"}:
                 raise OperationStateError("embedding operation is not reservable")
-            requests, tokens, cost = self._scope_totals(current.scope_id)
-            if (
-                requests + 1 > self.max_requests
-                or tokens + current.max_tokens > self.max_total_tokens
-                or cost + current.max_cost_cny > self.max_cost_cny + 1e-12
-            ):
-                raise BudgetExceeded("embedding scope allowance exceeded")
             reservation = EmbeddingReservationV1(
                 id=str(uuid4()),
                 operation_id=current.id,

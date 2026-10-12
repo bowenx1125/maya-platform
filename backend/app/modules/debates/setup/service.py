@@ -215,7 +215,9 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
         return False
     from app.modules.debates.playback._core import PlaybackCore
 
-    text_fallback = PlaybackCore._turn_text_fallback_ready(successor)
+    text_fallback = PlaybackCore._turn_text_fallback_ready(
+        successor
+    ) or PlaybackCore._turn_text_only(successor)
     if not successor.audio_file_id and not text_fallback:
         return False
     if successor.transcript_hash is None:
@@ -321,7 +323,7 @@ def _resolve_agent_version(
     settings: Settings,
 ) -> tuple[
     Agent,
-    Group,
+    Group | None,
     AgentVersion,
     KnowledgeSnapshot,
     dict[str, Any],
@@ -345,9 +347,11 @@ def _resolve_agent_version(
     # Agent -> Group -> current AgentVersion -> KnowledgeSnapshot chain.  The
     # outer joins let the service preserve stable validation codes for a
     # missing current pointer or snapshot without issuing a second probe.
+    # A teacher's personal Agent has no group, so the group is optional; the
+    # course is then checked on the Agent itself.
     resolved = db.execute(
         select(Agent, Group, AgentVersion, KnowledgeSnapshot)
-        .join(Group, Group.id == Agent.group_id)
+        .outerjoin(Group, Group.id == Agent.group_id)
         .outerjoin(
             AgentVersion,
             and_(
@@ -368,8 +372,13 @@ def _resolve_agent_version(
     if resolved is None:
         raise not_found()
     agent, group, version, snapshot = resolved
-    if group.course_id != course_id:
+    if agent.course_id != course_id or (group is not None and group.course_id != course_id):
         raise not_found()
+    if agent.deleted_at is not None:
+        raise validation_failure(
+            "Archived Agents are not available for new classroom work.",
+            code="agent_archived",
+        )
     if agent.status == "archived":
         raise validation_failure(
             "Archived Agents are not available for new classroom work.",
@@ -412,7 +421,7 @@ def _resolve_agent_version(
         custom = db.get(VoiceProfile, requested_voice_id)
         # A baseline character has no row to edit. An operator may point it at
         # a ready system profile; a student's own binding stays group-scoped.
-        same_group = custom is not None and custom.group_id == group.id
+        same_group = custom is not None and group is not None and custom.group_id == group.id
         operator_system = (
             custom is not None
             and own_voice_id is None
@@ -432,6 +441,8 @@ def _resolve_agent_version(
         ):
             effective_voice_id = configured_fallback.id
             effective_voice_kind = "platform_profile"
+    # Missing speech configuration must not prevent a text Debate. Playback
+    # revalidates the custom/system mapping before deciding whether audio exists.
     return (
         agent,
         group,
@@ -449,7 +460,7 @@ def _fence_resolved_agent_chain(
     db: Session,
     *,
     agent: Agent,
-    group: Group,
+    group: Group | None,
     version: AgentVersion,
     snapshot: KnowledgeSnapshot,
 ) -> None:
@@ -461,22 +472,24 @@ def _fence_resolved_agent_chain(
     draft/revision atomically.
     """
 
-    group_fence = db.execute(
-        update(Group)
-        .where(Group.id == group.id, Group.course_id == group.course_id)
-        .values(created_at=Group.created_at)
-    )
-    if int(getattr(group_fence, "rowcount", 0)) != 1:
-        raise validation_failure(
-            "The selected Agent group changed before the Debate draft was saved.",
-            code="agent_not_current",
+    if group is not None:
+        group_fence = db.execute(
+            update(Group)
+            .where(Group.id == group.id, Group.course_id == group.course_id)
+            .values(created_at=Group.created_at)
         )
+        if int(getattr(group_fence, "rowcount", 0)) != 1:
+            raise validation_failure(
+                "The selected Agent group changed before the Debate draft was saved.",
+                code="agent_not_current",
+            )
 
     agent_fence = db.execute(
         update(Agent)
         .where(
             Agent.id == agent.id,
-            Agent.group_id == group.id,
+            Agent.group_id.is_(None) if group is None else Agent.group_id == group.id,
+            Agent.deleted_at.is_(None),
             Agent.status == "active",
             Agent.current_published_version_id == version.id,
             Agent.name == agent.name,
@@ -576,7 +589,7 @@ def _participant_row(
         id=str(uuid4()),
         debate_id=debate.id,
         course_id=debate.course_id,
-        group_id=group.id,
+        group_id=group.id if group is not None else None,
         agent_id=agent.id,
         agent_version_id=version.id,
         knowledge_snapshot_id=snapshot.id,
@@ -825,7 +838,13 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                         DebateTurn.audio_file_id.is_not(None),
                         and_(
                             DebateTurn.audio_file_id.is_(None),
-                            DebateTurn.audio_duration_ms.is_(None),
+                            or_(
+                                DebateTurn.audio_duration_ms.is_(None),
+                                and_(
+                                    DebateTurn.audio_duration_ms == 0,
+                                    DebateTurn.safe_error_code == "tts_voice_unavailable",
+                                ),
+                            ),
                             DebateTurn.safe_error_code.in_(TTS_UNAVAILABLE_CODES),
                             func.trim(DebateTurn.speech) != "",
                         ),
@@ -1219,7 +1238,9 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     require_teacher_course(db, actor_user_id, course_id)
     _find_course(db, course_id)
     rows = db.scalars(
-        select(Debate).where(Debate.course_id == course_id).order_by(Debate.created_at.desc())
+        select(Debate)
+        .where(Debate.course_id == course_id, Debate.deleted_at.is_(None))
+        .order_by(Debate.created_at.desc())
     ).all()
     # One query for every Debate's turns rather than one per row: the list is
     # the screen a teacher watches while a draft warms, and it is polled.
@@ -1234,7 +1255,13 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
         ids = [row.id for row in rows]
         text_fallback = and_(
             DebateTurn.audio_file_id.is_(None),
-            DebateTurn.audio_duration_ms.is_(None),
+            or_(
+                DebateTurn.audio_duration_ms.is_(None),
+                and_(
+                    DebateTurn.audio_duration_ms == 0,
+                    DebateTurn.safe_error_code == "tts_voice_unavailable",
+                ),
+            ),
             DebateTurn.safe_error_code.in_(TTS_UNAVAILABLE_CODES),
             func.trim(DebateTurn.speech) != "",
         )
@@ -1303,31 +1330,6 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                     safe_error_code=str(code or "turn_generation_failed"),
                 ),
             )
-        now = datetime.now(UTC)
-        for state, current in db.execute(
-            select(PlaybackState, DebateTurn)
-            .join(DebateTurn, DebateTurn.id == PlaybackState.current_turn_id)
-            .join(Debate, Debate.id == PlaybackState.debate_id)
-            .where(Debate.id.in_(ids), Debate.status == "running", PlaybackState.mode == "live")
-        ):
-            updated = (
-                state.updated_at.replace(tzinfo=UTC)
-                if state.updated_at.tzinfo is None
-                else state.updated_at
-            )
-            age = (now - updated).total_seconds()
-            media_stalled = (state.status in {"ready", "paused"} and age >= 15) or (
-                state.status == "playing" and age >= max(30, state.audio_duration_ms / 1000 + 15)
-            )
-            if media_stalled:
-                stall_by_debate.setdefault(
-                    str(state.debate_id),
-                    DebateStall(
-                        turn_id=UUID(current.id),
-                        round_no=current.round_no,
-                        safe_error_code="playback_recovery_available",
-                    ),
-                )
     for row in rows:
         summaries.append(
             debate_summary(
@@ -1345,7 +1347,7 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
 
 def get_debate(db: Session, *, actor_user_id: str, debate_id: str) -> DebateDetail:
     debate = db.get(Debate, debate_id)
-    if debate is None:
+    if debate is None or debate.deleted_at is not None:
         raise not_found()
     require_teacher_course(db, actor_user_id, debate.course_id)
     return _detail(db, debate)

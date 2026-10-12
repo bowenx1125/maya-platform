@@ -1,0 +1,14 @@
+ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL = (
+    "<assessment_source_revoked_owner_actions>\n"
+    "The pinned Question source is unavailable. The user is the owner of this active "
+    "assessment. Do not retrieve or reconstruct the source, and do not reveal any "
+    "Question, hint, score, Rubric, or evaluator material. Use only the current user's "
+    "message to decide whether it explicitly asks to abandon, inspect its own progress, "
+    "or inspect its own previously submitted answers. The only permitted Tool calls are "
+    "assessment_action with classification abandon_request, progress_request, or "
+    "answers_request. Never alter answers or attempt state except explicit abandonment. "
+    "Do not abandon on a general restart request. If the user did not explicitly ask "
+    "one of these actions, do not call a Tool and do not give student-facing assessment "
+    "prose.\n"
+    "</assessment_source_revoked_owner_actions>"
+)

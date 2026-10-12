@@ -19,8 +19,9 @@ from uuid import uuid4
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
-from app.providers.tts import TTS_UNAVAILABLE_CODES, TTSVoiceUnavailableError
+from app.providers.tts import TTS_UNAVAILABLE_CODES
 
+from .audio import AudioMetadata
 from .events import EventRecord
 from .llm_publication import SqlLLMPublication
 from .protocols import (
@@ -260,36 +261,62 @@ class SqlPlaybackRepository(PlaybackRepository):
         participant: SqlRow,
         settings: Any,
     ) -> ResolvedTurnVoice:
-        """Revalidate the frozen custom voice, then system fallback, then Mock."""
+        """Resolve custom/system audio; an empty real token means text-only."""
 
-        def ready_profile(profile_id: str | None, *, system_only: bool = False) -> bool:
+        def ready_profile(
+            profile_id: str | None, *, system_only: bool = False
+        ) -> tuple[str, str] | None:
             if not profile_id:
-                return False
-            scope_guard = " AND scope='system'" if system_only else ""
-            row = db.execute(
-                text(
-                    "SELECT 1 FROM voice_profiles WHERE id=:profile_id AND status='ready'"
-                    + scope_guard
-                ),
-                {"profile_id": profile_id},
-            ).first()
-            return row is not None
+                return None
+            scope_guard = " AND scope='system' AND group_id IS NULL" if system_only else ""
+            row = (
+                db.execute(
+                    text(
+                        "SELECT id, scope, group_id, provider_key, target_model_key, "
+                        "external_id_encrypted FROM voice_profiles "
+                        "WHERE id=:profile_id AND status='ready'" + scope_guard
+                    ),
+                    {"profile_id": profile_id},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                return None
+            model = row["target_model_key"]
+            if not isinstance(model, str) or not model:
+                return None
+            if getattr(settings, "tts_provider", "mock") == "mock":
+                return str(profile_id), model
+            if row["provider_key"] != "dashscope" or not row["external_id_encrypted"]:
+                return None
+            from app.modules.voices.crypto import VoiceEncryptionError, decrypt_external_voice_id
+
+            try:
+                token = decrypt_external_voice_id(
+                    row["external_id_encrypted"],
+                    settings.secret_bytes,
+                    profile_id=str(profile_id),
+                    scope=row["scope"],
+                    group_id=row["group_id"],
+                    provider_key=row["provider_key"],
+                    target_model_key=model,
+                )
+            except VoiceEncryptionError:
+                return None
+            return token, model
 
         frozen_id = getattr(participant, "effective_voice_profile_id", None)
-        if getattr(
-            participant, "effective_voice_kind", None
-        ) == "platform_profile" and ready_profile(frozen_id):
-            return ResolvedTurnVoice("platform_profile", str(frozen_id), str(frozen_id))
+        if getattr(participant, "effective_voice_kind", None) == "platform_profile" and (
+            ready := ready_profile(frozen_id)
+        ):
+            return ResolvedTurnVoice("platform_profile", str(frozen_id), *ready)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
-        if ready_profile(fallback_id, system_only=True):
-            return ResolvedTurnVoice("platform_profile", str(fallback_id), str(fallback_id))
-        voice_selectors = (
-            getattr(settings, "tts_provider", "mock"),
-            getattr(settings, "voice_provider", "mock"),
-        )
-        if all(value == "mock" for value in voice_selectors):
+        if ready := ready_profile(fallback_id, system_only=True):
+            return ResolvedTurnVoice("platform_profile", str(fallback_id), *ready)
+        if getattr(settings, "tts_provider", "mock") == "mock":
             return ResolvedTurnVoice("mock_sentinel", None, "mock")
-        raise TTSVoiceUnavailableError()
+        return ResolvedTurnVoice("mock_sentinel", None, "")
 
     def recover_startup(self, db: Any) -> tuple[str, ...]:
         """Fence interrupted work and revoke process-local playback authority."""
@@ -351,18 +378,34 @@ class SqlPlaybackRepository(PlaybackRepository):
                         text(
                             "UPDATE debate_turns SET generation_status='pending', "
                             "preparation_stage='generation', safe_error_code=NULL, "
-                            "updated_at=:updated_at WHERE id IN :turn_ids"
-                        ).bindparams(bindparam("turn_ids", expanding=True)),
-                        {"updated_at": _now(), "turn_ids": tuple(accepted_recovery_turns)},
+                            "updated_at=:updated_at WHERE id IN :turn_ids "
+                            "AND COALESCE(safe_error_code,'') NOT IN :tts_codes"
+                        ).bindparams(
+                            bindparam("turn_ids", expanding=True),
+                            bindparam("tts_codes", expanding=True),
+                        ),
+                        {
+                            "updated_at": _now(),
+                            "turn_ids": tuple(accepted_recovery_turns),
+                            "tts_codes": tuple(_TTS_DEFERRED_CODES),
+                        },
                     )
                 if self._has_table(db, "jobs"):
                     db.execute(
                         text(
                             "UPDATE jobs SET state='pending', claim_token=NULL, "
                             "safe_error_code=NULL, updated_at=:updated_at "
-                            "WHERE turn_id IN :turn_ids AND state IN ('pending','running')"
-                        ).bindparams(bindparam("turn_ids", expanding=True)),
-                        {"updated_at": _now(), "turn_ids": tuple(accepted_recovery_turns)},
+                            "WHERE turn_id IN :turn_ids AND state IN ('pending','running') "
+                            "AND COALESCE(safe_error_code,'') NOT IN :tts_codes"
+                        ).bindparams(
+                            bindparam("turn_ids", expanding=True),
+                            bindparam("tts_codes", expanding=True),
+                        ),
+                        {
+                            "updated_at": _now(),
+                            "turn_ids": tuple(accepted_recovery_turns),
+                            "tts_codes": tuple(_TTS_DEFERRED_CODES),
+                        },
                     )
             if blocked_recovery_turns:
                 if self._has_table(db, "debate_turns"):
@@ -695,6 +738,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         rows = db.execute(
             text(
                 "SELECT DISTINCT t.debate_id, t.id FROM debate_turns AS t "
+                "JOIN debates AS d ON d.id=t.debate_id AND d.deleted_at IS NULL "
                 "JOIN llm_accepted_stages AS s ON s.turn_id=t.id "
                 "JOIN llm_recovery_inputs AS r ON r.operation_id=s.operation_id "
                 "JOIN provider_operations AS p ON p.id=s.operation_id "
@@ -779,7 +823,8 @@ class SqlPlaybackRepository(PlaybackRepository):
         db.execute(text(f"UPDATE {table} SET {assignments} WHERE {key}=:{key}"), values)
 
     def get_debate(self, db: Any, debate_id: str) -> SqlRow | None:
-        return self._select_one(db, "debates", debate_id)
+        row = self._select_one(db, "debates", debate_id)
+        return None if row is not None and getattr(row, "deleted_at", None) is not None else row
 
     def save_debate(self, db: Any, debate: SqlRow) -> None:
         self._update_row(db, "debates", debate)
@@ -977,7 +1022,8 @@ class SqlPlaybackRepository(PlaybackRepository):
             claim_session.execute(text("BEGIN IMMEDIATE"))
             candidate = claim_session.execute(
                 text(
-                    "SELECT ps.rowid AS claim_rowid, successor.audio_file_id "
+                    "SELECT ps.rowid AS claim_rowid, successor.audio_file_id, "
+                    "successor.audio_duration_ms "
                     "FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
                     "JOIN debate_turns AS current_turn "
@@ -1041,7 +1087,9 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "(successor.actual_tts_voice_kind='platform_profile' "
                     "AND successor.actual_tts_voice_profile_id IS NOT NULL))) OR "
                     "(successor.audio_file_id IS NULL AND successor.safe_error_code IN :tts_codes "
-                    "AND successor.audio_duration_ms IS NULL)) "
+                    "AND (successor.audio_duration_ms IS NULL OR "
+                    "(successor.safe_error_code='tts_voice_unavailable' "
+                    "AND successor.audio_duration_ms=0)))) "
                     "AND successor.transcript_hash IS NOT NULL "
                     "AND trim(successor.transcript_hash) <> '' "
                     "AND successor.cutoff_turn_index=CASE "
@@ -1103,7 +1151,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 claim_session.rollback()
                 return False
             event = None
-            if candidate[1] is None:
+            if candidate[1] is None and candidate[2] is None:
                 event = self._publish_text_current_tx(
                     claim_session,
                     debate_id=debate_id,
@@ -1937,6 +1985,48 @@ class SqlPlaybackRepository(PlaybackRepository):
         finally:
             claim_session.close()
 
+    def claim_text_media_playback(
+        self,
+        db: Any,
+        *,
+        debate_id: str,
+        turn_id: str,
+        expected_control_version: int,
+        controller_epoch: str,
+    ) -> bool:
+        result = db.execute(
+            text(
+                "UPDATE playback_states SET status='waiting_next', cursor_ms=0, "
+                "audio_duration_ms=0, server_started_at=NULL, updated_at=:now "
+                "WHERE debate_id=:debate_id AND current_turn_id=:turn_id "
+                "AND status='ready' AND mode='live' "
+                "AND control_version=:version AND controller_epoch=:epoch "
+                "AND pending_action IS NULL AND pending_ticket_hash IS NULL "
+                "AND pending_media_command_id IS NULL "
+                "AND EXISTS (SELECT 1 FROM debate_turns AS t "
+                "JOIN debates AS d ON d.id=t.debate_id "
+                "JOIN jobs AS j ON j.turn_id=t.id AND j.debate_id=d.id "
+                "WHERE t.id=:turn_id AND t.debate_id=:debate_id AND d.status='running' "
+                "AND t.generation_status='final_ready' AND t.preparation_stage='ready' "
+                "AND t.publication_status='unpublished' "
+                "AND t.safe_error_code='tts_voice_unavailable' "
+                "AND trim(COALESCE(t.speech,''))<>'' AND t.audio_file_id IS NULL "
+                "AND t.audio_duration_ms=0 AND j.state='completed' "
+                "AND j.cancellation_generation=d.cancellation_generation "
+                "AND NOT EXISTS (SELECT 1 FROM json_each(t.predecessor_turn_ids_json) AS p "
+                "LEFT JOIN debate_turns AS prior ON prior.id=p.value AND prior.debate_id=d.id "
+                "WHERE prior.id IS NULL OR prior.publication_status<>'public'))"
+            ),
+            {
+                "debate_id": debate_id,
+                "turn_id": turn_id,
+                "version": expected_control_version,
+                "epoch": controller_epoch,
+                "now": _now(),
+            },
+        )
+        return int(getattr(result, "rowcount", 0)) == 1
+
     def claim_media_prepare(
         self,
         *,
@@ -2282,7 +2372,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         db: Any,
         turn: SqlRow,
         prepared: PreparedTurn,
-        audio: Any,
+        audio: AudioMetadata | None,
         *,
         generation: int,
         attempt: int,
@@ -2290,13 +2380,19 @@ class SqlPlaybackRepository(PlaybackRepository):
         debate_status: str = "running",
         audio_error_code: str | None = None,
     ) -> bool:
+        # None retains validated text when no TTS voice is configured; publication
+        # still goes through the same job, generation and accepted-LLM fences.
         # The Debate this turn belongs to has to be in the state the caller
         # prepared it for: ``running`` for a live lesson, ``draft`` for one
         # warming ahead of its lesson. Naming it rather than assuming it is
         # what keeps a pre-warm from ever writing into a running Debate.
         if debate_status not in {"running", "draft"}:
             return False
-        if audio is None and audio_error_code not in TTS_UNAVAILABLE_CODES:
+        if (
+            audio is None
+            and audio_error_code is not None
+            and audio_error_code not in TTS_UNAVAILABLE_CODES
+        ):
             return False
         if audio is not None and audio_error_code is not None:
             return False
@@ -2379,23 +2475,30 @@ class SqlPlaybackRepository(PlaybackRepository):
             "word_count": prepared.word_count or len(prepared.speech.split()),
             "attempt": prepared.generation_attempt,
             "audio_file_id": None,
-            "audio_duration_ms": getattr(audio, "duration_ms", None),
+            "audio_duration_ms": (
+                audio.duration_ms
+                if audio is not None
+                else (0 if audio_error_code is None else None)
+            ),
             "audio_relative_path": getattr(audio, "relative_path", None),
             "audio_sha256": getattr(audio, "sha256", None),
             "actual_tts_voice_kind": prepared.actual_voice_kind if audio is not None else None,
             "actual_tts_voice_profile_id": (
                 prepared.actual_voice_profile_id if audio is not None else None
             ),
-            "safe_error_code": audio_error_code,
+            "safe_error_code": audio_error_code
+            or ("tts_voice_unavailable" if audio is None else None),
             "updated_at": _now(),
         }
         # The M10 schema stores retained bytes through StoredFile and keeps
         # only its UUID on DebateTurn.  Create that row in the same transaction
         # before pointing the turn at it; if the host adapter has a direct
         # relative-path column too, both values are written consistently.
+        if audio is None:
+            values["audio_file_id"] = None
         audio_file_id = getattr(audio, "file_id", None) or str(uuid4())
         stored_columns = self._columns(db, "stored_files")
-        if getattr(audio, "relative_path", None) and stored_columns and "id" in stored_columns:
+        if audio is not None and audio.relative_path and stored_columns and "id" in stored_columns:
             stored_values: dict[str, Any] = {
                 "id": audio_file_id,
                 "kind": "debate_audio",
@@ -2645,6 +2748,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "UPDATE jobs SET state='running', claim_token=:token, safe_error_code=NULL, "
                 "updated_at=:updated_at "
                 "WHERE debate_id=:debate_id AND turn_id=:turn_id AND state='pending' "
+                "AND (safe_error_code IS NULL OR safe_error_code NOT LIKE 'tts_%') "
                 "AND cancellation_generation=:generation"
             ),
             {
@@ -2656,6 +2760,43 @@ class SqlPlaybackRepository(PlaybackRepository):
             },
         )
         return token if int(getattr(changed, "rowcount", 0)) == 1 else None
+
+    def authorize_pending_tts_retry(
+        self, db: Any, debate: SqlRow, turn: SqlRow, *, code: str
+    ) -> bool:
+        """Clear only an explicitly requested live audio retry, preserving text."""
+
+        if code not in _TTS_DEFERRED_CODES:
+            return False
+        params = {
+            "debate_id": str(debate.id),
+            "turn_id": str(turn.id),
+            "generation": int(debate.cancellation_generation or 0),
+            "code": code,
+        }
+        job = db.execute(
+            text(
+                "UPDATE jobs SET safe_error_code=NULL WHERE debate_id=:debate_id "
+                "AND turn_id=:turn_id AND state='pending' AND safe_error_code=:code "
+                "AND cancellation_generation=:generation "
+                "AND EXISTS (SELECT 1 FROM debates WHERE id=:debate_id AND status='running')"
+            ),
+            params,
+        )
+        if int(getattr(job, "rowcount", 0)) != 1:
+            return False
+        changed = db.execute(
+            text(
+                "UPDATE debate_turns SET safe_error_code=NULL WHERE id=:turn_id "
+                "AND debate_id=:debate_id AND generation_status='pending' "
+                "AND safe_error_code=:code"
+            ),
+            params,
+        )
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            db.rollback()
+            return False
+        return True
 
     def mark_turn_prewarming(
         self,
@@ -3367,7 +3508,7 @@ class SqlPlaybackRepository(PlaybackRepository):
     def course_running(self, db: Any, course_id: str, except_debate_id: str | None = None) -> bool:
         if not self._has_table(db, "debates"):
             return False
-        where = "course_id=:course_id AND status='running'"
+        where = "course_id=:course_id AND status='running' AND deleted_at IS NULL"
         params: dict[str, Any] = {"course_id": course_id}
         if except_debate_id is not None:
             where += " AND id!=:except_id"
@@ -3385,7 +3526,10 @@ class SqlPlaybackRepository(PlaybackRepository):
         return tuple(
             str(row[0])
             for row in db.execute(
-                text("SELECT id FROM debates WHERE status IN ('running','paused')")
+                text(
+                    "SELECT id FROM debates WHERE status IN ('running','paused') "
+                    "AND deleted_at IS NULL"
+                )
             ).all()
         )
 
@@ -3400,7 +3544,7 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if not self._has_table(db, "debates"):
             return None
-        where = "course_id=:course_id AND status IN ('running','paused')"
+        where = "course_id=:course_id AND status IN ('running','paused') AND deleted_at IS NULL"
         params: dict[str, Any] = {"course_id": course_id}
         if except_debate_id is not None:
             where += " AND id!=:except_id"

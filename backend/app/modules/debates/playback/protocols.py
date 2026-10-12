@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import uuid4
 
+from .audio import AudioMetadata
 from .schemas import RetrievalSourceDTO
 
 
@@ -47,6 +48,7 @@ class ResolvedTurnVoice:
     kind: str
     profile_id: str | None
     voice_token: str
+    target_model_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -174,7 +176,7 @@ class PlaybackRepository(Protocol):
         db: Any,
         turn: Any,
         prepared: PreparedTurn,
-        audio: Any,
+        audio: AudioMetadata | None,
         *,
         generation: int,
         attempt: int,
@@ -358,7 +360,7 @@ class MemoryPlaybackRepository:
         db: Any,
         turn: MemoryTurn,
         prepared: PreparedTurn,
-        audio: Any,
+        audio: AudioMetadata | None,
         *,
         generation: int,
         attempt: int,
@@ -376,7 +378,9 @@ class MemoryPlaybackRepository:
         turn.sources = list(prepared.sources)
         turn.retrieval_status = prepared.retrieval_status
         turn.grounding_mode = prepared.grounding_mode
-        turn.audio_duration_ms = getattr(audio, "duration_ms", None)
+        turn.audio_duration_ms = (
+            audio.duration_ms if audio is not None else (0 if audio_error_code is None else None)
+        )
         turn.audio_file_id = getattr(audio, "file_id", None) or (
             f"memory-audio:{turn.id}" if getattr(audio, "relative_path", None) else None
         )
@@ -387,7 +391,7 @@ class MemoryPlaybackRepository:
         turn.predecessor_turn_ids = prepared.predecessor_turn_ids
         turn.predecessor_hash = prepared.transcript_hash
         turn.evidence_trace = [dict(item) for item in prepared.evidence_trace]
-        turn.failed_code = audio_error_code
+        turn.failed_code = audio_error_code or ("tts_voice_unavailable" if audio is None else None)
         return True
 
     def publish_turn(self, db: Any, turn: MemoryTurn) -> bool:

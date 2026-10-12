@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BetaDebateStage } from "../components/debate-beta/stage";
 import type { AvatarConfig } from "../components/avatar";
 import type {
   DebatePlaybackApi,
@@ -21,6 +22,10 @@ import {
   deriveAvatarStates,
   parsePlaybackEvent,
 } from "../components/debate/stage";
+
+vi.mock("../components/stage3d/scholar-scene", () => ({
+  ScholarScene: () => <div data-testid="scholar-scene" />,
+}));
 
 vi.mock("../components/avatar/avatar-preview", () => ({
   AvatarPreview: ({
@@ -1701,6 +1706,109 @@ describe("Wave 2 M12 playback stage", () => {
     );
     expect(socketFactory).toHaveBeenCalledTimes(1);
   });
+
+  it.each([DebateStage, BetaDebateStage])(
+    "shows explicit text-only playback without attempting audio",
+    async (Stage) => {
+      const initial = detail();
+      initial.playback.status = "ready";
+      const socket = new TestSocket();
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, "play")
+        .mockResolvedValue(undefined);
+      const { container } = render(
+        <Stage
+          api={fakeApi(initial)}
+          debateId={debateId}
+          detail={initial}
+          socketFactory={() => socket}
+        />,
+      );
+      await waitFor(() => expect(socket.hasListeners("open")).toBe(true));
+      socket.emit("open");
+      socket.emit("message", {
+        message_id: "91000000-0000-4000-8000-000000000001",
+        message_type: "controller.acquired",
+        result_version: 1,
+        debate_id: debateId,
+        occurred_at: "2026-08-27T00:00:00Z",
+        command_id: "92000000-0000-4000-8000-000000000001",
+        controller_epoch: epoch,
+        control_version: 0,
+      });
+      await waitFor(() =>
+        expect(
+          socket
+            .commands()
+            .some(
+              (command) => command.command_type === "playback.media.prepare",
+            ),
+        ).toBe(true),
+      );
+      socket.emit("message", {
+        message_id: "91000000-0000-4000-8000-000000000002",
+        message_type: "media.prepared",
+        result_version: 1,
+        debate_id: debateId,
+        occurred_at: "2026-08-27T00:00:00Z",
+        command_id: "92000000-0000-4000-8000-000000000002",
+        controller_epoch: epoch,
+        turn_id: turnId,
+        text_only: true,
+        media_url: null,
+        expires_at: "2026-08-27T00:01:00Z",
+      });
+      socket.emit(
+        "message",
+        envelope("playback.started", 1, {
+          turn_id: turnId,
+          slot: "A",
+          round_no: 1,
+          speech: "Text-only classroom speech.",
+          sources: [],
+          playback_url: null,
+          audio_ready: false,
+          cursor_ms: 0,
+          playback_rate: 1,
+          avatar_states: [],
+        }),
+      );
+      socket.emit(
+        "message",
+        envelope("playback.completed", 2, {
+          turn_id: turnId,
+          cursor_ms: 0,
+          control_version: 0,
+          playback_rate: 1,
+        }),
+      );
+      socket.emit(
+        "message",
+        envelope("playback.waiting_next", 3, {
+          mode: "live",
+          completed_turn_id: turnId,
+          control_version: 0,
+          next_turn_ready: true,
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          container.querySelector('[data-playback-status="waiting_next"]'),
+        ).toBeTruthy(),
+      );
+      expect(play).not.toHaveBeenCalled();
+      expect(
+        socket
+          .commands()
+          .some(
+            (command) =>
+              command.command_type === "playback.started_ack" ||
+              command.command_type === "playback.ended_ack",
+          ),
+      ).toBe(false);
+      expect(container.querySelector("audio")?.getAttribute("src")).toBeFalsy();
+    },
+  );
 
   it("keeps turn.ready private and only reveals speech at playback.started", async () => {
     const initial = detail();

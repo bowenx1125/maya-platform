@@ -200,6 +200,9 @@ describe("teacher debate preview", () => {
   it("keeps saved speech visible when audio failed and exposes exact RAG mapping", () => {
     renderPreview(detail);
 
+    expect(screen.getByTestId("debate-preview")).toBeTruthy();
+    expect(screen.queryByText("Preview", { exact: true })).toBeNull();
+    expect(screen.getByRole("heading", { name: detail.topic })).toBeTruthy();
     expect(
       screen.getByText("A saved speech remains available for teacher review."),
     ).toBeTruthy();
@@ -226,6 +229,54 @@ describe("teacher debate preview", () => {
     expect(
       screen.getByText("The village agreement describes shared maintenance."),
     ).toBeTruthy();
+  });
+
+  it("opens completed text Preview without audio while keeping the audio failure visible", () => {
+    renderPreview({
+      ...detail,
+      preview: null,
+      preview_turns: detail.preview_turns?.map((turn) => ({
+        ...turn,
+        generation_status: "final_ready",
+      })),
+    });
+    expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
+    expect(screen.getByText("Audio Not Ready")).toBeTruthy();
+    expect(screen.getByText("Audio needs attention.")).toBeTruthy();
+  });
+
+  it("does not treat an unfinished text turn as a completed Preview", () => {
+    renderPreview({ ...detail, preview: null });
+    expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+  });
+
+  it("retries through a labeled icon button and keeps it disabled while retrying", () => {
+    const retry = vi.fn();
+    const view = render(
+      <DebatePreview
+        detail={detail}
+        openClassroomHref="/classroom"
+        onRetryTurn={retry}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Retry turn" });
+    expect(button.querySelector("svg")).toBeTruthy();
+    expect(button.textContent).toBe("");
+    fireEvent.click(button);
+    expect(retry).toHaveBeenCalledWith("turn-a");
+    view.rerender(
+      <DebatePreview
+        detail={detail}
+        openClassroomHref="/classroom"
+        onRetryTurn={retry}
+        retryingTurnId="turn-a"
+      />,
+    );
+    const busy = screen.getByRole("button", { name: "Retrying…" });
+    expect(busy).toHaveProperty("disabled", true);
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    fireEvent.click(busy);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("shows Background before the turns only when the debate has one", () => {

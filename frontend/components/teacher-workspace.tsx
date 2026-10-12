@@ -1,26 +1,47 @@
 "use client";
 
-import { WorkspaceAction } from "./workspace-actions";
+import { CountUp } from "./count-up";
+import { HomeGuide } from "./home-guide";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   type AgentDetail,
+  type AgentSummary,
   type AgentVersion,
+  type ChatAgent,
   type Course,
   type Group,
   type GroupDetail,
+  type TeamSummaryDto,
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
 import { useT } from "./locale";
-import { IconClose, IconDownload } from "./quiet-icons";
+import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
-import { AvatarPreview } from "./avatar";
-import { DemoCompositionBadge } from "./demo-composition";
-import { ReportMarkdown } from "./report/report-markdown";
-import detailStyles from "./teacher-agent-detail.module.css";
+import { AcademyMascots } from "./academy/mascots";
+import { AccountSettings } from "./account-settings";
+import { UserAvatar } from "./user-avatar";
+import { AgentReadOnly, AgentWorkbench } from "./agent-workspace";
+import { CreateAgentForm } from "./student-workspace";
+import { TeamEntryFlow } from "./chats/team-entry-flow";
+import {
+  ModuleCard,
+  ModuleGrid,
+  ModulePlus,
+  ModuleTiles,
+  VersionTile,
+  teamVersionLabel,
+} from "./studyform-layout";
+import { VoiceLibrary } from "./voice/voice-library";
 import {
   EmptyCard,
   ErrorNotice,
@@ -31,42 +52,53 @@ import {
 
 export function TeacherDashboard() {
   const t = useT();
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const teacherMembership = user?.courses.find(
+    (item) => item.role === "teacher",
+  );
+  const teacherCourseId = teacherMembership?.course_id;
+  const workspaceScope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${identityGeneration}`;
+  const workspaceScopeRef = useRef(workspaceScope);
+  useEffect(() => {
+    workspaceScopeRef.current = workspaceScope;
+  }, [workspaceScope]);
   const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const [debateCount, setDebateCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const load = useCallback(async () => {
+    const requestScope = workspaceScope;
     setLoading(true);
     setError(null);
     try {
-      const teacherMembership = user?.courses.find(
-        (item) => item.role === "teacher",
-      );
-      const [courses, nextPublished, nextGroups] = await Promise.all([
-        api.courses(),
-        teacherMembership
-          ? api.publishedAgents(teacherMembership.course_id)
-          : Promise.resolve([]),
-        teacherMembership
-          ? api.groups(teacherMembership.course_id)
-          : Promise.resolve([]),
+      const courses = await api.courses();
+      if (workspaceScopeRef.current !== requestScope) return;
+      const courseId = teacherCourseId;
+      const [nextPublished, nextGroups, debates] = await Promise.all([
+        courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
+        courseId ? api.groups(courseId) : Promise.resolve([]),
+        courseId ? api.debates(courseId) : Promise.resolve([]),
       ]);
+      if (workspaceScopeRef.current !== requestScope) return;
       setCourse(
-        courses.find((item) => item.id === teacherMembership?.course_id) ??
-          courses[0] ??
-          null,
+        courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
       );
       setPublished(nextPublished);
       setGroups(nextGroups);
+      setDebateCount(debates.length);
     } catch (cause) {
-      setError(cause);
+      if (workspaceScopeRef.current === requestScope) setError(cause);
     } finally {
-      setLoading(false);
+      if (workspaceScopeRef.current === requestScope) {
+        setLoadedScope(requestScope);
+        setLoading(false);
+      }
     }
-  }, [api, user]);
+  }, [api, teacherCourseId, workspaceScope]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -76,33 +108,88 @@ export function TeacherDashboard() {
 
   async function deleteAgent(agentId: string) {
     if (deleting || !window.confirm(t("deleteAgentConfirm"))) return;
+    const requestScope = workspaceScope;
     setDeleting(agentId);
     setError(null);
     try {
       await api.deleteAgent(agentId);
+      if (workspaceScopeRef.current !== requestScope) return;
       setPublished((current) =>
         current.filter((item) => item.agent.id !== agentId),
       );
     } catch (cause) {
-      setError(cause);
+      if (workspaceScopeRef.current === requestScope) setError(cause);
     } finally {
-      setDeleting(null);
+      if (workspaceScopeRef.current === requestScope) setDeleting(null);
     }
   }
 
-  if (loading) return <LoadingCard />;
+  if (loading || loadedScope !== workspaceScope) return <LoadingCard />;
   if (error && published.length === 0)
-    return <ErrorNotice error={error} onRetry={() => void load()} />;
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
+  const name = user?.display_name ?? "";
+  const guide = [
+    {
+      label: t("teacherGuideCourse"),
+      complete: Boolean(course),
+      href: "/teacher/roster",
+    },
+    {
+      label: t("teacherGuideGroups"),
+      complete: groups.length > 0,
+      href: "/teacher/roster",
+    },
+    {
+      label: t("teacherGuideAgents"),
+      complete: published.length > 0,
+      href: "/teacher/studyform",
+    },
+    {
+      label: t("teacherGuideDebate"),
+      complete: debateCount > 0,
+      href: "/teacher/debates/new",
+    },
+  ];
   return (
-    <div className="teacher-home-layout">
-      <PageIntro
-        title={
-          course?.name === "Maya Cultural Exchange Demo"
-            ? t("appName")
-            : (course?.name ?? t("appName"))
-        }
-      />
-      <DemoCompositionBadge />
+    <div className="mayaform-home">
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <h1>{t("homeWelcomeTitle", { name })}</h1>
+        </div>
+        <div className="home-hero-art">
+          <AcademyMascots label={t("academyMascotsLabel")} />
+        </div>
+      </section>
+      {/* A teacher opens this page to read the class, not their own progress,
+          so the counts come before the guide. A student has one group and
+          needs no such summary, which is what keeps the two homes apart. */}
+      <div className="home-stats">
+        <div className="home-stat">
+          <b>
+            <CountUp value={groups.length} />
+          </b>
+          <span>{t("groups")}</span>
+        </div>
+        <div className="home-stat">
+          <b>
+            <CountUp value={published.length} />
+          </b>
+          <span>{t("agents")}</span>
+        </div>
+        <div className="home-stat">
+          <b>
+            <CountUp value={debateCount} />
+          </b>
+          {/* `debates` is the nav's own word for the section ("Classroom"),
+              which reads wrong over a number; `debateList` is the plural
+              noun. */}
+          <span>{t("debateList")}</span>
+        </div>
+      </div>
+      <section className="home-panel" aria-labelledby="teacher-guide-title">
+        <h2 id="teacher-guide-title">{t("guide")}</h2>
+        <HomeGuide steps={guide} />
+      </section>
       {error ? <ErrorNotice error={error} /> : null}
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
@@ -127,7 +214,285 @@ export function TeacherDashboard() {
           </div>
         </SectionCard>
       )}
+      <AccountSettings onSaved={() => void load()} />
     </div>
+  );
+}
+
+export function TeacherStudyformWorkspace({
+  initialGroupId,
+  initialMode,
+  initialTeamId,
+}: {
+  initialGroupId?: string;
+  initialMode?: string;
+  initialTeamId?: string;
+}) {
+  const t = useT();
+  const { api, identityGeneration, user } = useSession();
+  const teacherCourseId = user?.courses.find(
+    (membership) => membership.role === "teacher",
+  )?.course_id;
+  const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${initialMode ?? ""}:${initialTeamId ?? ""}:${identityGeneration}`;
+  const [personalAgents, setPersonalAgents] = useState<PublishedAgentSummary[]>(
+    [],
+  );
+  const [ownedAgents, setOwnedAgents] = useState<AgentSummary[]>([]);
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
+  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const loading = loadedScope !== scope;
+  const [error, setError] = useState<unknown>(null);
+
+  useEffect(() => {
+    let active = true;
+    const requestScope = scope;
+    const timer = window.setTimeout(() => {
+      setError(null);
+      if (!teacherCourseId) {
+        setPersonalAgents([]);
+        setOwnedAgents([]);
+        setChatAgents([]);
+        setTeams([]);
+        setLoadedScope(requestScope);
+        return;
+      }
+      void Promise.all([
+        typeof api.publishedAgents === "function"
+          ? api.publishedAgents(teacherCourseId)
+          : Promise.resolve([]),
+        api.chatAgents(teacherCourseId),
+        typeof api.teams === "function"
+          ? api.teams(teacherCourseId)
+          : Promise.resolve([]),
+        typeof api.workspaceAgents === "function"
+          ? api.workspaceAgents(teacherCourseId)
+          : Promise.resolve([]),
+      ])
+        .then(([nextPersonalAgents, nextChatAgents, nextTeams, nextOwned]) => {
+          if (!active) return;
+          const publishedIds = new Set(
+            nextPersonalAgents.map((item) => item.agent.id),
+          );
+          setPersonalAgents(nextPersonalAgents);
+          setOwnedAgents(
+            nextOwned.filter((agent) => !publishedIds.has(agent.id)),
+          );
+          setChatAgents(nextChatAgents);
+          setTeams(nextTeams);
+          setLoadedScope(requestScope);
+          setError(null);
+        })
+        .catch((cause) => {
+          if (!active) return;
+          setError(cause);
+          setLoadedScope(requestScope);
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, initialGroupId, scope, teacherCourseId]);
+
+  async function deletePersonalAgent(agentId: string) {
+    if (deletingId || !window.confirm(t("deleteAgentConfirm"))) return;
+    setDeletingId(agentId);
+    setError(null);
+    try {
+      await api.deleteAgent(agentId);
+      setPersonalAgents((current) =>
+        current.filter((item) => item.agent.id !== agentId),
+      );
+      setOwnedAgents((current) =>
+        current.filter((agent) => agent.id !== agentId),
+      );
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function deleteOwnedTeam(teamId: string, confirmMessage: string) {
+    if (deletingId || !window.confirm(confirmMessage)) return;
+    setDeletingId(teamId);
+    setError(null);
+    try {
+      await api.deleteTeam(teamId);
+      setTeams((current) => current.filter((team) => team.id !== teamId));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (loading || loadedScope !== scope) return <LoadingCard />;
+  if (
+    error &&
+    !personalAgents.length &&
+    !ownedAgents.length &&
+    !chatAgents.length
+  )
+    return <ErrorNotice inline error={error} />;
+
+  const teamForm =
+    initialMode === "team-new" ||
+    initialMode === "team-edit" ||
+    initialMode === "maya-new" ||
+    initialMode === "maya-edit";
+  if (teamForm)
+    return (
+      <>
+        <PageIntro title={t("studyform")} />
+        {teacherCourseId ? (
+          <TeamEntryFlow
+            key={scope}
+            api={api}
+            courseId={teacherCourseId}
+            agents={chatAgents}
+            variant="team"
+            standalone
+            backHref="/teacher/studyform"
+            initialRouteMode={
+              initialMode === "team-new" || initialMode === "maya-new"
+                ? "team-new"
+                : "team-edit"
+            }
+            initialTeamId={initialTeamId}
+          />
+        ) : null}
+      </>
+    );
+
+  return (
+    <>
+      <PageIntro title={t("studyform")} />
+      {error ? <ErrorNotice error={error} /> : null}
+      <ModuleGrid>
+        <ModuleCard
+          title={t("agents")}
+          labelledBy="studyform-agents"
+          empty={
+            personalAgents.length || ownedAgents.length
+              ? undefined
+              : t("noPersonalAgents")
+          }
+          action={
+            teacherCourseId ? (
+              <ModulePlus href="/teacher/agents/new" label={t("newAgent")} />
+            ) : null
+          }
+        >
+          {personalAgents.length || ownedAgents.length ? (
+            <ModuleTiles>
+              {personalAgents.map((item) => (
+                <VersionTile
+                  key={item.agent.id}
+                  name={item.agent.name}
+                  href={`/teacher/agents/${item.agent.id}`}
+                  label={item.current_version.version_label}
+                  pending={false}
+                  visibility={item.agent.visibility}
+                  deleting={deletingId !== null}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={
+                    item.author?.user_id === user?.id
+                      ? () => void deletePersonalAgent(item.agent.id)
+                      : undefined
+                  }
+                />
+              ))}
+              {ownedAgents.map((agent) => {
+                // Same fallback as a student's own tile: a draft reads V1.0.
+                const label =
+                  chatAgents.find((item) => item.agent_id === agent.id)
+                    ?.version_label ?? "V1.0";
+                return (
+                  <VersionTile
+                    key={agent.id}
+                    name={agent.name}
+                    href={`/teacher/agents/${agent.id}`}
+                    label={label}
+                    pending={false}
+                    visibility={agent.visibility}
+                    deleting={deletingId !== null}
+                    deleteLabel={t("deleteAgent")}
+                    onDelete={() => void deletePersonalAgent(agent.id)}
+                  />
+                );
+              })}
+            </ModuleTiles>
+          ) : undefined}
+        </ModuleCard>
+        <ModuleCard
+          title={t("chatTargetTeams")}
+          labelledBy="studyform-teams"
+          empty={teams.length ? undefined : t("teamNoneYet")}
+          action={
+            teacherCourseId ? (
+              <ModulePlus
+                href="/teacher/studyform?mode=team-new"
+                label={t("newAgent")}
+              />
+            ) : null
+          }
+        >
+          {teams.length ? (
+            <ModuleTiles>
+              {teams.map((team) => (
+                <VersionTile
+                  key={team.id}
+                  name={team.display_name}
+                  href={`/teacher/studyform?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                  label={teamVersionLabel(team.current_version_seq)}
+                  pending={false}
+                  visibility={team.visibility}
+                  deleting={deletingId !== null}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={
+                    team.can_edit
+                      ? () =>
+                          void deleteOwnedTeam(
+                            team.id,
+                            t("deletePrivateTeamConfirm"),
+                          )
+                      : undefined
+                  }
+                />
+              ))}
+            </ModuleTiles>
+          ) : undefined}
+        </ModuleCard>
+        <VoiceLibrary
+          id="studyform-voices"
+          key={`${scope}:voices`}
+          groupId={null}
+          membershipGroupIds={(user?.groups ?? []).map(
+            (group) => group.group_id,
+          )}
+          listenOnly
+          embedded
+        />
+      </ModuleGrid>
+    </>
+  );
+}
+
+export function TeacherPersonalAgentCreate() {
+  const t = useT();
+  const { identityGeneration, user } = useSession();
+  const teacherMembership = user?.courses.find(
+    (item) => item.role === "teacher",
+  );
+  if (!user || !teacherMembership) {
+    return <ErrorNotice inline error={new Error(t("courseNotFound"))} />;
+  }
+  const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
+  return (
+    <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
   );
 }
 
@@ -157,13 +522,23 @@ function PublishedAgentTile({
         {item.agent.name}
       </Link>
       {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
+      {item.author ? (
+        <span className="agent-tile-author">
+          <UserAvatar
+            avatar={item.author.avatar}
+            name={item.author.display_name}
+            userId={item.author.user_id}
+            size="sm"
+          />
+          <span>{item.author.display_name}</span>
+        </span>
+      ) : null}
       <button
         type="button"
         className="agent-pill agent-pill-action"
         data-pending={hasUnpublishedWork ? "true" : "false"}
         disabled={deleting}
         aria-label={t("deleteAgent")}
-        title={version.version_label}
         onClick={onDelete}
       >
         <span className="agent-pill-label">{version.version_label}</span>
@@ -178,48 +553,113 @@ function PublishedAgentTile({
 export function TeacherAgentDetail({
   agentId,
   snapshotId,
+  generationFlow = false,
+  generationSetId,
 }: {
   agentId: string;
   snapshotId?: string;
+  generationFlow?: boolean;
+  generationSetId?: string;
 }) {
   const t = useT();
-  const { api } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const actorScope = `${user?.id ?? "anonymous"}:${agentId}:${identityGeneration}`;
+  const loadScope = `${actorScope}:${generationSetId ?? "no-generation-set"}`;
+  const loadScopeRef = useRef(loadScope);
+  const actorScopeRef = useRef(actorScope);
+  useLayoutEffect(() => {
+    loadScopeRef.current = loadScope;
+    actorScopeRef.current = actorScope;
+  }, [actorScope, loadScope]);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [snapshot, setSnapshot] = useState<KnowledgeSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [verifiedGenerationSetId, setVerifiedGenerationSetId] = useState<
+    string | null
+  >(null);
   const load = useCallback(async () => {
+    const requestScope = loadScope;
     setLoading(true);
     setError(null);
     setSnapshot(null);
     try {
       const nextAgent = await api.agent(agentId);
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
       const [nextVersions, nextGroup] = await Promise.all([
         api.versions(agentId),
-        typeof api.group === "function"
+        nextAgent.group_id && typeof api.group === "function"
           ? api.group(nextAgent.group_id)
           : Promise.resolve(null),
       ]);
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
+      const generationSet = generationSetId
+        ? await api.knowledgeSet(generationSetId)
+        : null;
+      if (
+        actorScopeRef.current !== actorScope ||
+        loadScopeRef.current !== requestScope
+      )
+        return;
+      const verifiedGenerationSet =
+        generationSet &&
+        generationSet.id === generationSetId &&
+        generationSet.course_id === nextAgent.course_id &&
+        generationSet.can_edit &&
+        generationSet.owner_user_id === user?.id &&
+        generationSet.generated_by_agent_id === agentId
+          ? generationSetId
+          : null;
+      setVerifiedGenerationSetId(verifiedGenerationSet);
       setAgent(nextAgent);
       setGroup(nextGroup);
-      setVersions(nextVersions.filter((version) => version.state !== "draft"));
+      const visibleVersions =
+        nextAgent.ownership_scope === "personal"
+          ? nextVersions
+          : nextVersions.filter((version) => version.state !== "draft");
+      setVersions(visibleVersions);
       const selectedSnapshotId =
         snapshotId ||
         nextVersions.find(
           (version) => version.id === nextAgent.current_published_version_id,
         )?.knowledge_snapshot_id ||
         null;
-      if (selectedSnapshotId)
-        setSnapshot(await api.snapshot(selectedSnapshotId));
-      else setSnapshot(null);
+      if (selectedSnapshotId) {
+        const nextSnapshot = await api.snapshot(selectedSnapshotId);
+        if (
+          actorScopeRef.current !== actorScope ||
+          loadScopeRef.current !== requestScope
+        )
+          return;
+        setSnapshot(nextSnapshot);
+      } else setSnapshot(null);
     } catch (cause) {
-      setError(cause);
+      if (
+        actorScopeRef.current === actorScope &&
+        loadScopeRef.current === requestScope
+      )
+        setError(cause);
     } finally {
-      setLoading(false);
+      if (
+        actorScopeRef.current === actorScope &&
+        loadScopeRef.current === requestScope
+      ) {
+        setLoadedScope(requestScope);
+        setLoading(false);
+      }
     }
-  }, [agentId, api, snapshotId]);
+  }, [actorScope, agentId, api, generationSetId, loadScope, snapshotId, user]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -227,318 +667,62 @@ export function TeacherAgentDetail({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading) return <LoadingCard />;
+  if (loading || loadedScope !== loadScope) return <LoadingCard />;
   if (error || !agent)
     return (
       <ErrorNotice
+        inline
+        notFound="publishedAgentNotFound"
         error={error ?? new Error(t("publishedAgentNotFound"))}
         onRetry={() => void load()}
       />
     );
+  if (generationSetId && verifiedGenerationSetId !== generationSetId) {
+    return (
+      <ErrorNotice inline error={new Error(t("generatedSetAgentMismatch"))} />
+    );
+  }
   const currentAgent = agent;
-  const currentVersion = versions.find(
-    (version) => version.id === currentAgent.current_published_version_id,
-  );
-  const selectedSnapshotId = snapshotId ?? snapshot?.id ?? null;
-  const selectedVersionId = selectedSnapshotId
+  const editorVersion =
+    versions.find(
+      (version) => version.id === agent.current_published_version_id,
+    ) ?? versions.find((version) => version.state === "draft");
+  const editable =
+    agent.can_edit === true ||
+    (agent.can_edit == null && agent.ownership_scope === "personal");
+  if (editable && !snapshotId && editorVersion) {
+    const knowledgeHref = generationSetId
+      ? `/teacher/knowledge?agent_id=${encodeURIComponent(agentId)}&set_id=${encodeURIComponent(generationSetId)}`
+      : `/teacher/knowledge?agent_id=${encodeURIComponent(agentId)}`;
+    return (
+      <AgentWorkbench
+        key={`${actorScope}:${editorVersion.id}`}
+        actorScopeKey={actorScope}
+        backHref="/teacher/studyform"
+        knowledgeHref={knowledgeHref}
+        generationFlow={generationFlow}
+        publishOnDone
+        versionId={editorVersion.id}
+      />
+    );
+  }
+  const selectedVersion = snapshotId
     ? (versions.find(
-        (version) => version.knowledge_snapshot_id === selectedSnapshotId,
-      )?.id ?? null)
-    : (currentAgent.current_published_version_id ?? null);
-
-  const selectedVersion = selectedSnapshotId
-    ? versions.find((version) => version.id === selectedVersionId)
-    : currentVersion;
+        (version) => version.knowledge_snapshot_id === snapshotId,
+      ) ?? editorVersion)
+    : editorVersion;
 
   if (snapshotId && snapshot?.id !== snapshotId) return <LoadingCard />;
-
-  return (
-    <div className={detailStyles.page}>
-      <PageIntro title={agent.name} />
-      <WorkspaceAction name="back" href="/teacher" />
-      {agent.status === "archived" ? (
-        <span className="status-badge status-warn">{t("archivedAgent")}</span>
-      ) : null}
-      <div className={detailStyles.overview}>
-        <TeacherAgentMarkdown
-          key={selectedVersion?.id}
-          version={selectedVersion}
-        />
-        <SectionCard
-          title="Profile"
-          className={`${detailStyles.card} ${detailStyles.profile}`}
-        >
-          {selectedVersion ? (
-            <div className={detailStyles.avatar}>
-              <AvatarPreview
-                config={selectedVersion.avatar_config}
-                fallbackLabel={currentAgent.name}
-                framing="full-body"
-                className={detailStyles.fullBody}
-              />
-            </div>
-          ) : null}
-          <div className={detailStyles.profileFacts}>
-            {group ? (
-              <div className={detailStyles.fact}>
-                <strong>{group.name}</strong>
-                {group.members?.length ? (
-                  <p>
-                    {[...group.members]
-                      .sort((a, b) =>
-                        a.display_name.localeCompare(b.display_name),
-                      )
-                      .map((member) => member.display_name)
-                      .join(" · ")}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {selectedVersion ? (
-              <div
-                className={detailStyles.fact}
-                data-effective-voice={
-                  selectedVersion.voice_fallback_active
-                    ? "platform-fallback"
-                    : "custom-profile"
-                }
-              >
-                <span
-                  className={`status-badge status-${selectedVersion.voice_fallback_active ? "warn" : "good"}`}
-                >
-                  <span aria-hidden="true" />
-                  {selectedVersion.voice_fallback_active
-                    ? "Default voice"
-                    : "Custom voice"}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        </SectionCard>
-      </div>
-      <SectionCard
-        title="RAG"
-        className={detailStyles.card}
-        action={
-          <div className={detailStyles.actions}>
-            {group ? (
-              <Link
-                className="secondary-action"
-                href={`/teacher/groups/${group.id}/knowledge`}
-              >
-                {t("knowledgeImportLink")}
-              </Link>
-            ) : null}
-            {snapshot?.documents.length ? (
-              <button
-                className="icon-action"
-                type="button"
-                aria-label={`${t("download")} RAG`}
-                title={t("download")}
-                onClick={() => {
-                  void (async () => {
-                    for (const document of snapshot.documents) {
-                      const result = await api.downloadSnapshotDocument(
-                        snapshot.id,
-                        document.id,
-                      );
-                      downloadText(result.content, result.filename);
-                    }
-                  })();
-                }}
-              >
-                <IconDownload />
-              </button>
-            ) : null}
-          </div>
-        }
-      >
-        {snapshot?.documents.length ? (
-          <div className={detailStyles.files}>
-            {snapshot.documents.map((document) => (
-              <RagFile
-                key={`${snapshot.id}:${document.id}`}
-                snapshotId={snapshot.id}
-                document={document}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className={detailStyles.empty}>No files</p>
-        )}
-      </SectionCard>
-      {versions.length > 1 ? (
-        <SectionCard title="Versions" className={detailStyles.card}>
-          <div className={detailStyles.versions}>
-            {versions.map((version) => (
-              <Link
-                key={version.id}
-                className={detailStyles.version}
-                aria-label={`${version.version_label} ${version.state === "published" ? "Published" : "Previous"}`}
-                aria-current={
-                  version.id === selectedVersionId ? "page" : undefined
-                }
-                href={`/teacher/agents/${version.agent_id}?snapshot=${version.knowledge_snapshot_id ?? ""}`}
-              >
-                <span
-                  className="agent-pill"
-                  data-pending={version.state === "draft" ? "true" : "false"}
-                >
-                  {version.version_label}
-                </span>
-                <span>
-                  {version.state === "published" ? "Published" : "Previous"}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </SectionCard>
-      ) : null}
-    </div>
-  );
-}
-
-function TeacherAgentMarkdown({ version }: { version?: AgentVersion }) {
-  const t = useT();
-  const { api } = useSession();
-  const [busy, setBusy] = useState(false);
-  return (
-    <SectionCard
-      title="AGENT.md"
-      className={`${detailStyles.card} ${detailStyles.personaCard}`}
-      action={
-        version ? (
-          <div className={detailStyles.actions}>
-            <span
-              className="agent-pill"
-              data-pending={version.state === "draft" ? "true" : "false"}
-            >
-              {version.version_label}
-            </span>
-            <button
-              className="icon-action"
-              type="button"
-              disabled={busy}
-              aria-label={`${t("download")} AGENT.md`}
-              title={t("download")}
-              onClick={() => {
-                void (async () => {
-                  setBusy(true);
-                  try {
-                    const downloaded = await api.downloadAgentMd(version.id);
-                    downloadText(downloaded.content, downloaded.filename);
-                  } finally {
-                    setBusy(false);
-                  }
-                })();
-              }}
-            >
-              <IconDownload />
-            </button>
-          </div>
-        ) : null
-      }
-    >
-      {version?.agent_md ? (
-        <ReportMarkdown className={detailStyles.persona} label="AGENT.md">
-          {version.agent_md}
-        </ReportMarkdown>
-      ) : (
-        <p className={detailStyles.empty}>—</p>
-      )}
-    </SectionCard>
-  );
-}
-
-function RagFile({
-  snapshotId,
-  document,
-}: {
-  snapshotId: string;
-  document: KnowledgeSnapshot["documents"][number];
-}) {
-  const t = useT();
-  const { api } = useSession();
-  const [open, setOpen] = useState(false);
-  const [content, setContent] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  async function read(download = false) {
-    if (busy) return;
-    if (!download && content !== null) {
-      setOpen(!open);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api.downloadSnapshotDocument(
-        snapshotId,
-        document.id,
-      );
-      if (download) downloadText(result.content, result.filename);
-      else {
-        setContent(result.content);
-        setOpen(true);
-      }
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
+  if (!selectedVersion) {
+    return (
+      <ErrorNotice inline error={new Error(t("publishedAgentNotFound"))} />
+    );
   }
   return (
-    <div className={detailStyles.file}>
-      <div className={detailStyles.fileHeader}>
-        <div className={detailStyles.fileIdentity}>
-          <strong title={document.source_filename}>
-            {document.source_filename}
-          </strong>
-          <small>
-            {document.char_count.toLocaleString()} {t("characters")}
-          </small>
-        </div>
-        <div className={detailStyles.fileActions}>
-          <button
-            className={detailStyles.action}
-            type="button"
-            aria-expanded={open}
-            aria-controls={`rag-file-${document.id}`}
-            disabled={busy}
-            onClick={() => void read()}
-          >
-            Check
-          </button>
-          <button
-            className="icon-action"
-            type="button"
-            disabled={busy}
-            aria-label={t("download")}
-            title={t("download")}
-            onClick={() => void read(true)}
-          >
-            <IconDownload />
-          </button>
-        </div>
-      </div>
-      {open && content !== null ? (
-        <div id={`rag-file-${document.id}`} className={detailStyles.fileBody}>
-          <ReportMarkdown label={document.source_filename}>
-            {content}
-          </ReportMarkdown>
-        </div>
-      ) : null}
-      {error ? <ErrorNotice error={error} onRetry={() => void read()} /> : null}
-    </div>
+    <AgentReadOnly
+      agent={currentAgent}
+      version={selectedVersion}
+      backHref="/teacher/studyform"
+    />
   );
-}
-
-function downloadText(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }

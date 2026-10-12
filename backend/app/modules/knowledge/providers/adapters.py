@@ -27,6 +27,7 @@ from .embedding import (
 )
 from .packing import (
     MAX_BATCH_ITEMS,
+    MAX_BATCH_TOKENS,
     EmbeddingBatchV1,
     EmbeddingPlanError,
 )
@@ -396,6 +397,26 @@ def _validate_batch_before_send(
     if len(batch.items) > MAX_BATCH_ITEMS:
         raise EmbeddingPlanError(
             "embedding batch exceeds ten items", code="embedding_batch_items_exceeded"
+        )
+    if isinstance(batch.total_tokens, bool) or not isinstance(batch.total_tokens, int):
+        raise EmbeddingPlanError(
+            "embedding batch token count is invalid", code="embedding_batch_tokens_invalid"
+        )
+    if any(
+        isinstance(item.token_count, bool)
+        or not isinstance(item.token_count, int)
+        or item.token_count < 0
+        for item in batch.items
+    ):
+        raise EmbeddingPlanError(
+            "embedding item token count is invalid", code="embedding_batch_tokens_invalid"
+        )
+    if batch.total_tokens > MAX_BATCH_TOKENS or any(
+        item.token_count > MAX_BATCH_TOKENS for item in batch.items
+    ):
+        raise EmbeddingPlanError(
+            "embedding batch exceeds the 30000-token supplier limit",
+            code="embedding_batch_tokens_exceeded",
         )
     if batch.total_tokens != sum(item.token_count for item in batch.items):
         raise EmbeddingPlanError(

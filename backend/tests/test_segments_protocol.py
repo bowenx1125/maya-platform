@@ -34,7 +34,7 @@ from app.modules.debates.generation.segments import (
     parse_segment_output_json,
     validate_segment_output,
 )
-from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
+from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime, SegmentRuntimeError
 from app.providers.control import InMemoryProviderOperationRepository, ProviderScopeBudgetV1
 from app.providers.llm import MockLLMProvider
 from app.providers.llm_adapter import LLMUsageV1
@@ -592,6 +592,52 @@ def test_segment_runtime_stages_canonical_result_once_before_success() -> None:
     assert resumed.result is not None and resumed.result.used_evidence_ids == (
         snapshot.receipts[1].resolved_evidence_id(),
     )
+
+
+@pytest.mark.parametrize("state,attempt_no", [("not_sent", 1), ("failed", 2)])
+def test_segment_prepare_without_ledger_transition_fails_safely(
+    state: str, attempt_no: int
+) -> None:
+    snapshot = _snapshot()
+    message = SegmentMessageV2(role="user", content=snapshot.to_user_json())
+    request = SegmentLLMRequestV2(
+        snapshot=snapshot,
+        endpoint="https://offline.invalid/segments",
+        method="POST",
+        body={},
+        messages=(message, message),
+        budget=SimpleNamespace(),
+        request_hash="a" * 64,
+        schema_hash="b" * 64,
+        prompt_hash=snapshot.input_hash,
+        debate_id="debate-1",
+        turn_id="turn-2",
+        policy_hash="d" * 64,
+        export_manifest_hash="e" * 64,
+        build_manifest_hash="f" * 64,
+    )
+
+    def duplicate_reservation(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("reservation already exists")
+
+    runtime = SegmentLLMRuntime(
+        ledger=SimpleNamespace(
+            create_prepared=duplicate_reservation,
+            get=lambda _operation_id: SimpleNamespace(state=state),
+        ),
+        adapter=SimpleNamespace(build_request=lambda *_args, **_kwargs: request),
+    )
+    with pytest.raises(SegmentRuntimeError) as raised:
+        runtime.prepare(
+            snapshot,
+            debate_id="debate-1",
+            turn_id="turn-2",
+            policy_hash="d" * 64,
+            manifest_hash="e" * 64,
+            build_manifest_hash="f" * 64,
+            attempt_no=attempt_no,
+        )
+    assert raised.value.code == "segment_preparation_failed"
 
 
 def test_system_brief_states_phase_language_rag_and_injection_boundary() -> None:

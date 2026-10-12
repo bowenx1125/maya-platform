@@ -72,9 +72,9 @@ try {
   const placeholderCount = Object.keys(
     placeholderContract.allowed_missing_operation_ids ?? {},
   ).length;
-  // Private Chat, Provider settings and student Live add twelve operations.
-  // Chat streaming and conversation deletion add two more.
-  if (platformOperationCount !== 106 || placeholderCount !== 0) {
+  // Teams add immutable definitions, versions, and the scoped Maya directory;
+  // online card rooms add seven; renaming or pinning a Chat adds one.
+  if (platformOperationCount !== 161 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
@@ -225,8 +225,51 @@ try {
           ".*";
       },
     ],
+    [
+      "knowledge recovery hash wrong shape",
+      (doc) => {
+        doc.components.schemas.KnowledgeGenerationStatus.properties.provider_manifest_hash.pattern =
+          ".*";
+      },
+      "forbidden browser-visible response field provider_manifest_hash",
+    ],
+    [
+      "knowledge recovery hash wrong operation",
+      (doc) => {
+        doc.components.schemas.AuthSession.properties.provider_manifest_hash = {
+          type: ["string", "null"],
+          pattern: "^[0-9a-f]{64}$",
+        };
+      },
+      "forbidden browser-visible response field provider_manifest_hash",
+    ],
+    [
+      "knowledge recovery hash nested scope",
+      (doc) => {
+        doc.components.schemas.KnowledgeGenerationStatus.properties.detail = {
+          type: "object",
+          properties: {
+            provider_manifest_hash: {
+              type: ["string", "null"],
+              pattern: "^[0-9a-f]{64}$",
+            },
+          },
+        };
+      },
+      "forbidden browser-visible response field provider_manifest_hash",
+    ],
+    [
+      "knowledge recovery hash does not allow provider operation",
+      (doc) => {
+        doc.components.schemas.KnowledgeGenerationStatus.properties.provider_operation =
+          {
+            type: "string",
+          };
+      },
+      "forbidden browser-visible response field provider_operation",
+    ],
   ];
-  for (const [name, mutate] of cases) {
+  for (const [name, mutate, expectedFailure] of cases) {
     const candidate = structuredClone(base);
     mutate(candidate);
     const candidatePath = resolve(
@@ -245,6 +288,13 @@ try {
     ]);
     if (result.status === 0)
       throw new Error(`negative route fixture unexpectedly passed: ${name}`);
+    if (
+      expectedFailure &&
+      !(result.stderr + result.stdout).includes(expectedFailure)
+    )
+      throw new Error(
+        `negative route fixture missed its privacy check: ${name}`,
+      );
   }
   console.log(
     `route semantic comparator: positive fixture and ${cases.length} negative cases passed`,

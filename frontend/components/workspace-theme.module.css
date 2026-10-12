@@ -26,6 +26,31 @@
   padding: var(--workspace-inset);
 }
 
+/* A page's blocks rise into place one after another, so arriving reads as
+   the page being laid out rather than switched on. The home is one block that
+   holds the page, so its sections take the stagger instead. */
+.surface > :not(:global(.mayaform-home)),
+.surface > :global(.mayaform-home) > * {
+  animation: page-rise 520ms var(--ease-out) both;
+}
+
+.surface > :nth-child(2),
+.surface > :global(.mayaform-home) > :nth-child(2) {
+  animation-delay: 60ms;
+}
+.surface > :nth-child(3),
+.surface > :global(.mayaform-home) > :nth-child(3) {
+  animation-delay: 120ms;
+}
+.surface > :nth-child(4),
+.surface > :global(.mayaform-home) > :nth-child(4) {
+  animation-delay: 180ms;
+}
+.surface > :nth-child(n + 5),
+.surface > :global(.mayaform-home) > :nth-child(n + 5) {
+  animation-delay: 240ms;
+}
+
 .surface :global(.section-card-header) {
   flex-direction: row;
   flex-wrap: wrap;
@@ -201,11 +226,6 @@
   box-shadow: none;
 }
 
-.surface :global(.empty-mark) {
-  background: var(--gold-soft);
-  color: var(--ink, #1d1d1f);
-}
-
 .surface :global(.account-row) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -216,6 +236,74 @@
   justify-content: flex-end;
   padding-left: 12px;
   border-left: 1px solid var(--workspace-divider);
+}
+
+/* A member row carries a name, a status and three actions, so a third of the
+   page left the buttons on top of the name. Members take two of the three
+   columns, and a row that is still narrow puts its actions under the name. */
+@media (min-width: 961px) {
+  .surface
+    :global(.account-layout)
+    section[aria-labelledby="accounts-members"] {
+    grid-column: span 2;
+  }
+}
+
+.surface :global(.account-layout) :global(.compact-list) {
+  container-type: inline-size;
+}
+
+/* The face beside the name, as in the home's member list, rather than on a
+   line of its own above it. */
+.surface :global(.account-row) > :global(.roster-identity) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.surface :global(.account-row) > :global(.roster-identity) > span:last-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+@container (max-width: 460px) {
+  .surface :global(.account-row) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .surface :global(.account-row) > :global(.button-row) {
+    justify-content: flex-start;
+    padding: 10px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--workspace-divider);
+  }
+}
+
+/* "removed", in the italic the home uses for "member" and "leader". */
+.surface :global(.roster-status) {
+  color: var(--muted, #62626a);
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+/* Removed accounts fold away under the members, one click from Restore. */
+.surface :global(.roster-removed) {
+  margin-top: 14px;
+}
+
+.surface :global(.roster-removed) > summary {
+  width: fit-content;
+  padding: 6px 2px;
+  color: var(--muted, #62626a);
+  cursor: pointer;
+  font-family: var(--display-serif);
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.surface :global(.roster-removed) > :global(.compact-list) {
+  margin-top: 8px;
 }
 
 .surface :global(.account-edit) {
@@ -275,6 +363,10 @@
   .surface :is(a, button) {
     transition: none;
     transform: none;
+  }
+  .surface > *,
+  .surface > :global(.mayaform-home) > * {
+    animation: none;
   }
 }
 

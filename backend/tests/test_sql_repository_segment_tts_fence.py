@@ -93,6 +93,8 @@ def test_tts_defer_preserves_v2_text_fence_and_matching_retry_claim(segment_retr
         debate = repository.get_debate(session, ids["debate"])
         assert debate is not None
         turn = next(item for item in repository.turns(session, debate) if item.id == ids["turn"])
+        assert repository.claim_turn_job(session, debate, turn, cancellation_generation=4) is None
+        assert repository.authorize_pending_tts_retry(session, debate, turn, code="tts_timeout")
         claim = repository.claim_turn_job(session, debate, turn, cancellation_generation=4)
         assert claim is not None
         turn = next(item for item in repository.turns(session, debate) if item.id == ids["turn"])
@@ -106,6 +108,8 @@ def test_tts_defer_preserves_v2_text_fence_and_matching_retry_claim(segment_retr
         mismatch = PreparedGenerationFence((), "u" * 64, 0, 1)
         assert repository.defer_turn_job(session, debate, turn, claim, "tts_timeout")
         turn = next(item for item in repository.turns(session, debate) if item.id == ids["turn"])
+        assert repository.claim_turn_job(session, debate, turn, cancellation_generation=4) is None
+        assert repository.authorize_pending_tts_retry(session, debate, turn, code="tts_timeout")
         retry_claim = repository.claim_turn_job(session, debate, turn, cancellation_generation=4)
         assert retry_claim is not None
         turn = next(item for item in repository.turns(session, debate) if item.id == ids["turn"])
@@ -144,6 +148,9 @@ def test_startup_keeps_valid_segment_tts_retry_pending(segment_retry_db):
             text("SELECT state, safe_error_code FROM jobs WHERE id=:job_id"),
             {"job_id": ids["job"]},
         ).one() == ("pending", "tts_timeout")
+        debate = repository.get_debate(db, ids["debate"])
+        turn = next(item for item in repository.turns(db, debate) if item.id == ids["turn"])
+        assert repository.claim_turn_job(db, debate, turn, cancellation_generation=4) is None
 
 
 def test_audio_promotion_fence_holds_exact_running_claim(segment_retry_db):

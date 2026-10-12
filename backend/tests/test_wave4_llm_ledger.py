@@ -17,7 +17,6 @@ from app.core.db import Database
 from app.providers.control import (
     EMBEDDING_QUERY_BUCKET,
     LLM_DEBATE_TURN_BUCKET,
-    BudgetExceeded,
     ExportFieldV1,
     ExportManifestError,
     ExportManifestV1,
@@ -353,16 +352,13 @@ def test_sql_budget_reservation_and_release_are_bucket_isolated(tmp_path: Path) 
     ]
 
     def reserve(operation_id: str) -> str:
-        try:
-            repository.reserve(operation_id)
-        except BudgetExceeded:
-            return "rejected"
+        repository.reserve(operation_id)
         return "reserved"
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         outcomes = tuple(executor.map(reserve, (operation.id for operation in operations)))
-    assert outcomes.count("reserved") == 2
-    assert outcomes.count("rejected") == 2
+    assert outcomes.count("reserved") == 4
+    assert outcomes.count("rejected") == 0
     query_budget = repository.get_scope_budget("shared-scope", EMBEDDING_QUERY_BUCKET)
     llm_budget = repository.get_scope_budget("shared-scope", LLM_DEBATE_TURN_BUCKET)
     assert query_budget is not None and query_budget.max_requests == 1
@@ -375,8 +371,8 @@ def test_sql_budget_reservation_and_release_are_bucket_isolated(tmp_path: Path) 
             )
         ).all()
     assert dict(rows) == {
-        EMBEDDING_QUERY_BUCKET: 1,
-        LLM_DEBATE_TURN_BUCKET: 1,
+        EMBEDDING_QUERY_BUCKET: 2,
+        LLM_DEBATE_TURN_BUCKET: 2,
     }
     for operation, outcome in zip(operations, outcomes, strict=True):
         if outcome == "reserved":
@@ -443,7 +439,7 @@ def test_0014_populated_upgrade_backfills_only_unambiguous_bucket(tmp_path: Path
     config = _migration_config(database)
     command.upgrade(config, "0013_embedding_identity_stage")
     _populate_0013_budget(database, "embedding_query")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0014_llm_runtime_budget_buckets")
     with database.engine.connect() as connection:
         assert (
             connection.execute(
@@ -452,7 +448,7 @@ def test_0014_populated_upgrade_backfills_only_unambiguous_bucket(tmp_path: Path
             == EMBEDDING_QUERY_BUCKET
         )
     command.downgrade(config, "0013_embedding_identity_stage")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0014_llm_runtime_budget_buckets")
     database.dispose()
 
 
@@ -462,9 +458,92 @@ def test_0014_ambiguous_populated_backfill_fails_closed(tmp_path: Path) -> None:
     command.upgrade(config, "0013_embedding_identity_stage")
     _populate_0013_budget(database, "embedding", "embedding_query")
     with pytest.raises(RuntimeError, match="multiple operation buckets"):
-        command.upgrade(config, "head")
+        command.upgrade(config, "0014_llm_runtime_budget_buckets")
     with database.engine.connect() as connection:
         assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
             "0013_embedding_identity_stage"
         )
+    database.dispose()
+
+
+@pytest.mark.parametrize("persistent", [False, True])
+def test_accepted_usage_above_estimate_is_recorded(tmp_path: Path, persistent: bool) -> None:
+    database = Database(f"sqlite:///{tmp_path / 'unbounded-usage.sqlite3'}")
+    budget = ProviderScopeBudgetV1(
+        max_requests=1, max_total_tokens=1, max_cost_cny=0, budget_bucket=LLM_DEBATE_TURN_BUCKET
+    )
+    if persistent:
+        from tests.test_wave4_llm_recovery import _seed_turn
+
+        database.upgrade_schema()
+        _seed_turn(database, debate_id="scope", turn_id="turn")
+        repository = ProviderRepository(database, require_export_confirmation=False)
+        repository.save_scope_budget("scope", budget)
+    else:
+        repository = InMemoryProviderOperationRepository(default_budget=budget)
+    request = _request(scope_id="scope", operation="llm_debate_turn", item="turn")
+    operation = repository.create_prepared(request)
+    repository.reserve(operation.id)
+    repository.transition(operation.id, expected="reserved", state="sending")
+    stage = replace(
+        _valid_stage(operation_id=operation.id),
+        request_hash=request.request_hash,
+        prompt_tokens=400_000,
+        completion_tokens=300_000,
+        input_tokens=400_000,
+        output_tokens=300_000,
+        total_tokens=700_000,
+        estimated_cost_cny="0.7",
+        actual_cost_cny="100",
+    )
+    assert repository.stage_llm_accepted(stage) == stage
+    assert repository.mark_succeeded(operation.id).charged_request_count == 1
+    from tests.test_wave4_llm_recovery import _assert_stage_equal
+
+    stored = repository.get_llm_accepted_stage(operation.id)
+    assert stored is not None
+    _assert_stage_equal(stored, stage)
+    database.dispose()
+
+
+def test_budget_migration_preserves_allocations_and_reservations(tmp_path: Path) -> None:
+    database = Database(f"sqlite:///{tmp_path / 'unbounded-migration.sqlite3'}")
+    config = _migration_config(database)
+    command.upgrade(config, "0032_recovery_input_unbounded")
+    repository = ProviderRepository(database, require_export_confirmation=False)
+    repository.save_scope_budget(
+        "scope",
+        ProviderScopeBudgetV1(
+            max_requests=1,
+            max_total_tokens=10,
+            max_cost_cny=0.001,
+            budget_bucket=LLM_DEBATE_TURN_BUCKET,
+        ),
+    )
+    first = repository.create_prepared(
+        _request(scope_id="scope", operation="llm_debate_turn", item="first")
+    )
+    reservation = repository.reserve(first.id)
+    command.upgrade(config, "0033_budget_accounting_unbounded")
+    assert repository.reservation(first.id) == reservation
+    command.downgrade(config, "0032_recovery_input_unbounded")
+    command.upgrade(config, "0033_budget_accounting_unbounded")
+    assert repository.reservation(first.id) == reservation
+    second = repository.create_prepared(
+        _request(scope_id="scope", operation="llm_debate_turn", item="second")
+    )
+    repository.reserve(second.id)
+    with database.engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT allocated_requests, allocated_total_tokens, allocated_cost_cny "
+                "FROM provider_scope_budgets WHERE scope_id='scope'"
+            )
+        ).one()
+        assert row == (2, 20, 0.002)
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
+    with pytest.raises(RuntimeError, match="below recorded allocations"):
+        command.downgrade(config, "0032_recovery_input_unbounded")
+    assert repository.reservation(first.id) == reservation
+    assert repository.operation(second.id).charged_request_count == 1
     database.dispose()

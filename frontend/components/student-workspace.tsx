@@ -1,25 +1,38 @@
 "use client";
 
-import { WorkspaceAction } from "./workspace-actions";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   isAmbiguousMutationFailure,
   type AgentSummary,
+  type PublishedAgentSummary,
   type AgentVersion,
-  type Course,
+  type ChatAgent,
   type GroupDetail,
   type PlatformApi,
+  type TeamSummaryDto,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
+import { AcademyMascots } from "./academy/mascots";
+import { AccountSettings } from "./account-settings";
+import { HomeGuide } from "./home-guide";
+import { OnboardingTour } from "./onboarding-tour";
 import { useLocale, useT } from "./locale";
-import { IconClose } from "./quiet-icons";
+import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
+import { UserAvatar } from "./user-avatar";
+import { TeamEntryFlow } from "./chats/team-entry-flow";
+import { VoiceLibrary } from "./voice/voice-library";
+import {
+  ModuleCard,
+  ModuleGrid,
+  ModulePlus,
+  ModuleTiles,
+  VersionTile,
+  teamVersionLabel,
+} from "./studyform-layout";
 import {
   EmptyCard,
   ErrorNotice,
@@ -30,6 +43,9 @@ import {
 
 type GroupOverview = {
   group: GroupDetail;
+  agentCount: number;
+  knowledgeCount: number;
+  voiceCount: number;
 };
 
 type AgentListItem = {
@@ -42,9 +58,20 @@ async function loadGroups(
   groupIds: string[],
 ): Promise<GroupOverview[]> {
   return Promise.all(
-    groupIds.map(async (groupId) => ({
-      group: await api.group(groupId),
-    })),
+    groupIds.map(async (groupId) => {
+      const [group, agents, knowledge, voices] = await Promise.all([
+        api.group(groupId),
+        api.agents(groupId, true),
+        api.knowledge(groupId),
+        api.voiceProfiles(groupId),
+      ]);
+      return {
+        group,
+        agentCount: agents.length,
+        knowledgeCount: knowledge.length,
+        voiceCount: voices.length,
+      };
+    }),
   );
 }
 
@@ -56,14 +83,10 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
   const draft =
     versions.find((version) => version.id === agent.current_draft_version_id) ??
     versions.find((version) => version.state === "draft");
-  const hasUnpublishedWork =
-    Boolean(agent.current_draft_version_id) &&
-    agent.current_draft_version_id !== agent.current_published_version_id;
-  const onlyDraft = !agent.current_published_version_id && Boolean(draft);
   const label = published?.version_label ?? draft?.version_label ?? "V1.0";
   return {
     label,
-    pending: hasUnpublishedWork || onlyDraft || agent.status === "archived",
+    pending: agent.status === "archived",
   };
 }
 
@@ -72,31 +95,34 @@ export function StudentDashboard() {
   const { locale } = useLocale();
   const { api, user } = useSession();
   const [groups, setGroups] = useState<GroupOverview[]>([]);
-  const [course, setCourse] = useState<Course | null>(null);
+  const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const hasUser = Boolean(user);
+  const groupIdsKey = user?.groups
+    .map((membership) => membership.group_id)
+    .join(",");
+  const courseId = user?.courses[0]?.course_id;
 
   const load = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+    if (!hasUser) return;
     setError(null);
     try {
-      const groupIds = user.groups.map((membership) => membership.group_id);
-      const courseId = user.courses[0]?.course_id;
-      const [overviews, courses] = await Promise.all([
+      const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
+      const [overviews, nextPublished] = await Promise.all([
         loadGroups(api, groupIds),
-        courseId ? api.courses() : Promise.resolve([]),
+        courseId && typeof api.publishedAgents === "function"
+          ? api.publishedAgents(courseId)
+          : Promise.resolve([]),
       ]);
       setGroups(overviews);
-      setCourse(
-        courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
-      );
+      setPublished(nextPublished);
     } catch (cause) {
       setError(cause);
     } finally {
       setLoading(false);
     }
-  }, [api, user]);
+  }, [api, courseId, groupIdsKey, hasUser]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -106,83 +132,207 @@ export function StudentDashboard() {
   }, [load]);
 
   if (loading) return <LoadingCard />;
-  if (error) return <ErrorNotice error={error} onRetry={() => void load()} />;
+  if (error)
+    return <ErrorNotice inline error={error} onRetry={() => void load()} />;
 
   const name = user?.display_name ?? "";
-  const courseName = course?.name ?? t("course");
+  const primary = groups[0];
+  const guide = primary
+    ? [
+        {
+          label: t("studentGuideGroup"),
+          complete: true,
+          href: `/student/groups/${primary.group.id}`,
+        },
+        {
+          label: t("studentGuideAgent"),
+          complete: primary.agentCount > 0,
+          href: `/student/groups/${primary.group.id}`,
+        },
+        {
+          label: t("studentGuideKnowledge"),
+          complete: primary.knowledgeCount > 0,
+          href: "/student/knowledge",
+        },
+        {
+          label: t("studentGuideVoice"),
+          complete: primary.voiceCount > 0,
+          optional: true,
+          href: `/student/groups/${primary.group.id}/voices?mode=new`,
+        },
+      ]
+    : [];
 
   return (
     <div className="mayaform-home">
-      <section className="mayaform-home-welcome">
-        <p className="mayaform-home-eyebrow">{t("appName")}</p>
-        <h1>{t("homeWelcomeTitle", { name })}</h1>
-        <div className="mayaform-home-rule" aria-hidden="true">
-          <span />
-          <i />
-          <span />
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <h1>{t("homeWelcomeTitle", { name })}</h1>
         </div>
-        <p className="mayaform-home-lede">
-          {t("homeWelcomeCourse", { course: courseName })}
-        </p>
-        <ul className="mayaform-home-surfaces">
-          <li>{t("homeSurfaceChats")}</li>
-          <li>{t("homeSurfaceWorkspace")}</li>
-          <li>{t("homeSurfaceKnowledge")}</li>
-          <li>{t("homeSurfaceVoice")}</li>
-          <li>{t("homeSurfaceLive")}</li>
-        </ul>
-        <p className="mayaform-home-privacy">{t("homePrivacyNote")}</p>
+        <div className="home-hero-art">
+          <AcademyMascots label={t("academyMascotsLabel")} />
+        </div>
       </section>
+      {published.length ? (
+        <section className="home-panel" aria-labelledby="student-agents-title">
+          <h2 id="student-agents-title">
+            {t("agents")} · {published.length}
+          </h2>
+          <div className="agent-tile-grid">
+            {published.map((item) => (
+              <VersionTile
+                key={item.agent.id}
+                name={item.agent.name}
+                href={`/student/agents/${item.agent.id}`}
+                label={item.current_version.version_label}
+                pending={false}
+                visibility={item.agent.visibility}
+                deleteLabel={t("deleteAgent")}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
-        groups.map((overview) => (
-          <section className="mayaform-home-members" key={overview.group.id}>
-            <header>
-              <h2>{overview.group.name}</h2>
-              <p>{t("homeMembersIntro")}</p>
-            </header>
-            <div className="member-grid">
-              {(overview.group.members ?? []).map((member) => (
-                <div className="member-chip" key={member.user_id}>
-                  <span className="avatar-mini">
-                    {member.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>{member.display_name}</span>
-                  <small>{roleLabel(member.role, locale)}</small>
-                </div>
-              ))}
-            </div>
+        <div className="home-columns" id="student-groups">
+          <section
+            className="home-panel"
+            aria-labelledby="student-guide-title"
+            data-tour="guide"
+          >
+            <h2 id="student-guide-title">{t("guide")}</h2>
+            <HomeGuide steps={guide} />
           </section>
-        ))
+          {groups.map((overview, index) => (
+            <section
+              className="home-panel"
+              key={overview.group.id}
+              aria-labelledby={`group-${overview.group.id}`}
+              data-tour={index === 0 ? "group" : undefined}
+            >
+              <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
+              <ul className="home-people-list">
+                {(overview.group.members ?? []).map((member) => (
+                  <li
+                    className="home-person"
+                    data-role={member.role}
+                    key={member.user_id}
+                  >
+                    <UserAvatar
+                      avatar={member.avatar}
+                      name={member.display_name}
+                      userId={member.user_id}
+                      size="sm"
+                    />
+                    <strong>{member.display_name}</strong>
+                    <small>{roleLabel(member.role, locale)}</small>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       )}
+      <AccountSettings onSaved={() => void load()} />
+      {user ? <OnboardingTour userId={user.id} /> : null}
     </div>
   );
 }
 
-export function GroupWorkspace({ groupId }: { groupId: string }) {
+export function GroupWorkspace({
+  groupId,
+  initialVoiceCreate = false,
+  focusVoices = false,
+  initialMode,
+  initialTeamId,
+}: {
+  groupId: string;
+  initialVoiceCreate?: boolean;
+  focusVoices?: boolean;
+  initialMode?: string;
+  initialTeamId?: string;
+}) {
+  const { identityGeneration, user } = useSession();
+  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}:${initialMode ?? ""}:${initialTeamId ?? ""}`;
+  return (
+    <GroupWorkspaceSession
+      key={scope}
+      groupId={groupId}
+      initialVoiceCreate={initialVoiceCreate}
+      focusVoices={focusVoices}
+      initialMode={initialMode}
+      initialTeamId={initialTeamId}
+      scope={scope}
+    />
+  );
+}
+
+function GroupWorkspaceSession({
+  groupId,
+  initialVoiceCreate,
+  focusVoices,
+  initialMode,
+  initialTeamId,
+  scope,
+}: {
+  groupId: string;
+  initialVoiceCreate: boolean;
+  focusVoices: boolean;
+  initialMode?: string;
+  initialTeamId?: string;
+  scope: string;
+}) {
   const t = useT();
-  const { api } = useSession();
+  const { api, user } = useSession();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [items, setItems] = useState<AgentListItem[]>([]);
+  const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>([]);
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
+  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [retryDelete, setRetryDelete] = useState<string | null>(null);
   const mutations = useIdempotencyStore();
+  const teacherIdentity = Boolean(
+    group &&
+    user?.courses.some(
+      (membership) =>
+        membership.course_id === group.course_id &&
+        membership.role === "teacher",
+    ),
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [nextGroup, nextAgents] = await Promise.all([
-        api.group(groupId),
+      const nextGroup = await api.group(groupId);
+      const [nextAgents, nextTeams, nextChatAgents] = await Promise.all([
         api.agents(groupId, true),
+        typeof api.teams === "function"
+          ? api.teams(nextGroup.course_id)
+          : Promise.resolve([]),
+        typeof api.chatAgents === "function"
+          ? api.chatAgents(nextGroup.course_id)
+          : Promise.resolve([]),
       ]);
       const versions = await Promise.all(
         nextAgents.map((agent) => api.versions(agent.id)),
       );
+      const listedIds = new Set(nextAgents.map((agent) => agent.id));
+      const nextCourseAgents =
+        typeof api.publishedAgents === "function"
+          ? await api.publishedAgents(nextGroup.course_id)
+          : [];
       setGroup(nextGroup);
+      setCourseAgents(
+        nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
+      );
+      setTeams(Array.isArray(nextTeams) ? nextTeams : []);
+      setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
       setItems(
         nextAgents.map((agent, index) => ({
           agent,
@@ -202,16 +352,14 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const createHref = `/student/groups/${groupId}/agents/new`;
+  useEffect(() => {
+    if (loading || !(initialVoiceCreate || focusVoices)) return;
+    document.getElementById("studyform-voices")?.scrollIntoView({
+      block: "start",
+    });
+  }, [focusVoices, initialVoiceCreate, loading]);
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" href={createHref} disabled />
-        <LoadingCard />
-      </>
-    );
-  }
+  if (loading) return <LoadingCard />;
   async function deleteAgent(agentId: string, retry = false) {
     if (deleting || (!retry && !window.confirm(t("deleteAgentConfirm"))))
       return;
@@ -235,20 +383,63 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
     }
   }
 
+  async function deleteOwnedTeam(teamId: string) {
+    if (
+      deleting ||
+      teacherIdentity ||
+      typeof api.deleteTeam !== "function" ||
+      !window.confirm(t("deletePrivateTeamConfirm"))
+    )
+      return;
+    setDeleting(teamId);
+    setError(null);
+    try {
+      await api.deleteTeam(teamId);
+      setTeams((current) => current.filter((team) => team.id !== teamId));
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   if (!group)
     return (
+      <ErrorNotice
+        inline
+        notFound="groupNotFound"
+        error={error ?? new Error(t("groupNotFound"))}
+        onRetry={() => void load()}
+      />
+    );
+
+  const teamForm =
+    !teacherIdentity &&
+    (initialMode === "team-new" || initialMode === "team-edit");
+  if (teamForm)
+    return (
       <>
-        <WorkspaceAction name="new" href={createHref} disabled />
-        <ErrorNotice
-          error={error ?? new Error(t("groupNotFound"))}
-          onRetry={() => void load()}
+        <PageIntro title={t("studyform")} />
+        <TeamEntryFlow
+          key={scope}
+          api={api}
+          courseId={group.course_id}
+          agents={chatAgents}
+          variant="team"
+          groupId={groupId}
+          standalone
+          backHref={`/student/groups/${groupId}`}
+          initialRouteMode={
+            initialMode === "team-new" ? "team-new" : "team-edit"
+          }
+          initialTeamId={initialTeamId}
         />
       </>
     );
 
   return (
     <>
-      <PageIntro title={t("groupWorkspace")} />
+      <PageIntro title={t("studyform")} />
       {error ? (
         <ErrorNotice
           error={error}
@@ -257,180 +448,212 @@ export function GroupWorkspace({ groupId }: { groupId: string }) {
           }
         />
       ) : null}
-      <WorkspaceAction name="new" href={createHref} />
-      <SectionCard title={`${t("agents")} · ${items.length}`}>
-        {items.length === 0 ? (
-          <EmptyCard title={t("noAgents")} />
-        ) : (
-          <div className="agent-tile-grid">
-            {items.map(({ agent, versions }) => (
-              <GroupAgentTile
-                agent={agent}
-                groupName={group.name}
-                key={agent.id}
-                versions={versions}
-                deleting={deleting !== null}
-                onDelete={() => void deleteAgent(agent.id)}
+      <ModuleGrid>
+        <ModuleCard
+          title={t("agents")}
+          labelledBy="studyform-agents"
+          empty={
+            items.length || courseAgents.length ? undefined : t("noAgents")
+          }
+          action={
+            teacherIdentity ? null : (
+              <ModulePlus
+                href={`/student/groups/${groupId}/agents/new`}
+                label={t("newAgent")}
               />
-            ))}
-          </div>
+            )
+          }
+        >
+          {items.length ? (
+            <ModuleTiles>
+              {items.map(({ agent, versions }) => (
+                <GroupAgentRow
+                  agent={agent}
+                  key={agent.id}
+                  versions={versions}
+                  deleting={deleting !== null}
+                  onDelete={() => void deleteAgent(agent.id)}
+                  canDelete={!teacherIdentity}
+                />
+              ))}
+              {courseAgents.map((item) => (
+                <VersionTile
+                  key={item.agent.id}
+                  name={item.agent.name}
+                  href={`/student/agents/${item.agent.id}`}
+                  label={item.current_version.version_label}
+                  pending={false}
+                  visibility={item.agent.visibility}
+                  deleteLabel={t("deleteAgent")}
+                />
+              ))}
+            </ModuleTiles>
+          ) : courseAgents.length ? (
+            <ModuleTiles>
+              {courseAgents.map((item) => (
+                <VersionTile
+                  key={item.agent.id}
+                  name={item.agent.name}
+                  href={`/student/agents/${item.agent.id}`}
+                  label={item.current_version.version_label}
+                  pending={false}
+                  visibility={item.agent.visibility}
+                  deleteLabel={t("deleteAgent")}
+                />
+              ))}
+            </ModuleTiles>
+          ) : undefined}
+        </ModuleCard>
+        {teacherIdentity ? null : (
+          <ModuleCard
+            title={t("chatTargetTeams")}
+            labelledBy="studyform-teams"
+            empty={teams.length ? undefined : t("teamNoneYet")}
+            action={
+              <ModulePlus
+                href={`/student/groups/${groupId}?mode=team-new`}
+                label={t("newAgent")}
+              />
+            }
+          >
+            {teams.length ? (
+              <ModuleTiles>
+                {teams.map((team) => (
+                  <VersionTile
+                    key={team.id}
+                    name={team.display_name}
+                    href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                    label={teamVersionLabel(team.current_version_seq)}
+                    pending={false}
+                    visibility={team.visibility}
+                    deleting={deleting !== null}
+                    deleteLabel={t("deleteAgent")}
+                    onDelete={
+                      team.can_edit
+                        ? () => void deleteOwnedTeam(team.id)
+                        : undefined
+                    }
+                  />
+                ))}
+              </ModuleTiles>
+            ) : undefined}
+          </ModuleCard>
         )}
-      </SectionCard>
+        <VoiceLibrary
+          id="studyform-voices"
+          key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}
+          groupId={groupId}
+          listenOnly={teacherIdentity}
+          embedded
+          initialCreate={teacherIdentity ? false : initialVoiceCreate}
+        />
+      </ModuleGrid>
     </>
   );
 }
 
-function GroupAgentTile({
+function GroupAgentRow({
   agent,
-  groupName,
   versions,
   deleting,
+  canDelete = true,
   onDelete,
 }: {
   agent: AgentSummary;
-  groupName: string;
   versions: AgentVersion[];
   deleting: boolean;
+  canDelete?: boolean;
   onDelete: () => void;
 }) {
   const t = useT();
   const bubble = versionBubble(agent, versions);
   return (
-    <div className="agent-tile" data-agent-row={agent.id}>
-      <Link
-        className="agent-tile-name text-link"
-        href={`/student/agents/${agent.id}`}
-      >
-        {agent.name}
-      </Link>
-      <span className="agent-tile-group">{groupName}</span>
-      <button
-        type="button"
-        className="agent-pill agent-pill-action"
-        data-pending={bubble.pending ? "true" : "false"}
-        disabled={deleting}
-        aria-label={t("deleteAgent")}
-        data-ui-guide="roster.deleteAgent"
-        onClick={onDelete}
-      >
-        <span className="agent-pill-label">{bubble.label}</span>
-        <span className="agent-pill-x" aria-hidden="true">
-          <IconClose size={12} />
-        </span>
-      </button>
-    </div>
+    <VersionTile
+      name={agent.name}
+      href={`/student/agents/${agent.id}`}
+      label={bubble.label}
+      pending={bubble.pending}
+      visibility={agent.visibility}
+      deleting={deleting}
+      deleteLabel={t("deleteAgent")}
+      onDelete={canDelete ? onDelete : undefined}
+    />
   );
 }
 
-export function CreateAgentForm({ groupId }: { groupId: string }) {
-  const t = useT();
+export function CreateAgentForm({
+  groupId,
+  courseId,
+}: {
+  groupId?: string;
+  courseId?: string;
+}) {
+  const { identityGeneration, user } = useSession();
+  const actorScopeKey = `${user?.id ?? "anonymous"}:${courseId ?? groupId ?? "none"}:${identityGeneration}`;
+  return (
+    <CreateAgentFormSession
+      key={actorScopeKey}
+      actorScopeKey={actorScopeKey}
+      courseId={courseId}
+      groupId={groupId}
+    />
+  );
+}
+
+function CreateAgentFormSession({
+  groupId,
+  courseId,
+  actorScopeKey,
+}: {
+  groupId?: string;
+  courseId?: string;
+  actorScopeKey: string;
+}) {
   const { api } = useSession();
-  const router = useRouter();
   const mutationStore = useIdempotencyStore();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [retryable, setRetryable] = useState(false);
-  const mutationIntent = `create-agent:${groupId}`;
+  const mutationIntent = `create-agent:${actorScopeKey}`;
 
   function abandonCreateIntent() {
     mutationStore.abandon(mutationIntent);
-    setRetryable(false);
   }
 
-  async function createAgent() {
-    setBusy(true);
-    setError(null);
+  async function createAgent(name: string, visibility: "private" | "public") {
     const handle = mutationStore.handleFor(mutationIntent);
     try {
-      const created = await api.createAgent(
-        groupId,
-        name.trim(),
-        description.trim(),
-        { idempotency: handle },
-      );
+      const created = groupId
+        ? await api.createAgent(
+            groupId,
+            name.trim(),
+            "",
+            { idempotency: handle },
+            visibility,
+          )
+        : await api.createWorkspaceAgent(
+            courseId ?? "",
+            name.trim(),
+            "",
+            { idempotency: handle },
+            visibility,
+          );
       mutationStore.finish(mutationIntent, handle);
-      setRetryable(false);
-      const draftId =
-        created.current_draft_version_id ??
-        created.versions?.find((version) => version.state === "draft")?.id;
-      router.push(
-        draftId
-          ? `/student/agent-versions/${draftId}/edit`
-          : `/student/agents/${created.id}`,
-      );
+      return created;
     } catch (cause) {
-      if (isAmbiguousMutationFailure(cause)) {
-        setRetryable(true);
-      } else {
+      if (!isAmbiguousMutationFailure(cause))
         mutationStore.abandon(mutationIntent, handle);
-        setRetryable(false);
-      }
-      setError(cause);
-    } finally {
-      setBusy(false);
+      throw cause;
     }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    void createAgent();
-  }
-
   return (
-    <>
-      <PageIntro title={t("newAgent")} />
-      <WorkspaceAction
-        name="back"
-        href={`/student/groups/${groupId}`}
-        disabled={busy}
-      />
-      <WorkspaceAction name="done" form="create-agent-form" disabled={busy} />
-      <SectionCard title={t("agentIdentity")}>
-        <form
-          id="create-agent-form"
-          className="stack-form wide-form"
-          onSubmit={submit}
-          aria-busy={busy}
-        >
-          <label>
-            <span>{t("agentName")}</span>
-            <input
-              value={name}
-              disabled={busy}
-              maxLength={120}
-              onChange={(event) => {
-                abandonCreateIntent();
-                setName(event.target.value);
-              }}
-              required
-            />
-          </label>
-          <label>
-            <span>
-              {t("shortDescription")} <small>{t("optional")}</small>
-            </span>
-            <textarea
-              value={description}
-              disabled={busy}
-              maxLength={500}
-              onChange={(event) => {
-                abandonCreateIntent();
-                setDescription(event.target.value);
-              }}
-              rows={4}
-            />
-          </label>
-          {error ? (
-            <ErrorNotice
-              error={error}
-              onRetry={retryable ? () => void createAgent() : undefined}
-            />
-          ) : null}
-        </form>
-      </SectionCard>
-    </>
+    <AgentWorkbench
+      publishOnDone
+      backHref={groupId ? `/student/groups/${groupId}` : "/teacher/studyform"}
+      unsavedCreate={{
+        groupId,
+        courseId,
+        create: createAgent,
+        onIdentityEdit: abandonCreateIntent,
+      }}
+    />
   );
 }

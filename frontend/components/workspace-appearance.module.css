@@ -101,7 +101,22 @@
   cursor: pointer;
   transition:
     background 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    scale 160ms var(--ease-out);
+}
+
+/* Buttons give under the finger. `scale` rather than `transform`, so it adds
+   to any transform a button already carries instead of replacing it. */
+.appearance
+  :is(
+    :global(.primary-action),
+    :global(.secondary-action),
+    :global(.inline-button),
+    :global(.text-link),
+    :global(.file-button)
+  ):active:not(:disabled) {
+  scale: 0.97;
+  transition-duration: 80ms;
 }
 
 .appearance :global(.primary-action) {
@@ -193,30 +208,12 @@
 }
 
 .appearance
-  :is(
-    :global(.demo-mode-mock),
-    :global(.role-pill),
-    :global(.current-label),
-    :global(.dirty-label)
-  ) {
+  :is(:global(.role-pill), :global(.current-label), :global(.dirty-label)) {
   color: var(--muted);
   background: var(--surface-hover);
   font-weight: 500;
 }
 
-.appearance :global(.agent-pill) {
-  color: var(--green);
-  background: rgba(45, 138, 104, 0.14);
-  font-weight: 640;
-}
-
-.appearance :global(.agent-pill[data-pending="true"]) {
-  color: #8a6a1f;
-  background: var(--gold-soft);
-  font-weight: 640;
-}
-
-.appearance :global(.demo-mode-real),
 .appearance :global(.status-good) {
   color: var(--green);
   background: #eaf5ee;
@@ -338,6 +335,9 @@
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
+  .appearance :active {
+    scale: none;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -345,4 +345,3 @@
     backdrop-filter: none;
   }
 }
-

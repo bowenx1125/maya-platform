@@ -80,6 +80,10 @@ function agent(): AgentDetail {
   return {
     id: agentId,
     group_id: groupId,
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_edit: false,
     name: "Published Agent",
     description: "A released classroom perspective.",
     metadata_revision: 0,
@@ -177,7 +181,13 @@ describe("PW3-E teacher shell and responsive contract", () => {
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(api.remakeDebate).not.toHaveBeenCalled();
     expect(screen.getByText("A stalled classroom")).toBeTruthy();
-    expect(screen.getByText("Stalled")).toBeTruthy();
+    const stalled = screen.getByText("Stalled");
+    expect(stalled.getAttribute("title")).toBeNull();
+    expect(stalled.getAttribute("data-ui-guide")).toBe("debate.stalled");
+    expect(stalled.getAttribute("data-ui-guide-text")).toBe(
+      "Warming stopped at round 1: invalid_state",
+    );
+    expect((stalled as HTMLElement).tabIndex).toBe(0);
     expect(
       screen.queryByText("That action is not available in the current state."),
     ).toBeNull();
@@ -224,17 +234,19 @@ describe("PW3-E teacher shell and responsive contract", () => {
       </LocaleProvider>,
     );
 
-    await waitFor(() => expect(screen.getByText("Bowen group")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "AGENT.md" })).toBeTruthy(),
+    );
     expect(api.group).toHaveBeenCalledWith(groupId);
-    expect(screen.getByRole("heading", { name: "AGENT.md" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Avatar" })).toBeTruthy();
+    expect(screen.queryByText("Bowen group")).toBeNull();
     expect(screen.queryByText("Current release")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Versions" })).toBeNull();
+    expect(screen.queryByText("Default voice")).toBeNull();
     expect(
       screen.getByRole("img", { name: "Published Agent avatar preview" }),
     ).toBeTruthy();
-    // The state is a badge, not a paragraph explaining what the badge means.
-    expect(screen.getByText("Default voice")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /edit description/i }),
     ).toBeNull();
@@ -246,19 +258,27 @@ describe("PW3-E teacher shell and responsive contract", () => {
         ? process.cwd()
         : join(process.cwd(), "frontend");
     const css = readFileSync(join(frontendRoot, "app", "globals.css"), "utf8");
-    expect(css).toMatch(/\.brand-mark\s*\{[^}]*min-height:\s*44px/s);
+    const shell = readFileSync(
+      join(frontendRoot, "components", "app-shell.module.css"),
+      "utf8",
+    );
+    const agentDetail = readFileSync(
+      join(frontendRoot, "components", "teacher-agent-detail.module.css"),
+      "utf8",
+    );
+    expect(shell).toMatch(/\.link\s*\{[^}]*min-height:\s*44px/s);
+    expect(shell).toMatch(/\.logout\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/\.text-link\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/details > summary\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(
       /\.primary-action,\s*\.secondary-action\s*\{[^}]*min-height:\s*44px/s,
     );
     expect(css).toMatch(
-      /\.inline-button,\s*\.nav-logout,\s*\.chip-button\s*\{[^}]*min-height:\s*44px/s,
+      /\.inline-button,\s*\.chip-button\s*\{[^}]*min-height:\s*44px/s,
     );
     expect(css).toMatch(/\.file-button\s*\{[^}]*min-height:\s*44px/s);
-    expect(css).toContain(".teacher-agent-context-grid");
-    expect(css).toMatch(
-      /@media \(max-width: 900px\)[\s\S]*teacher-agent-context-grid/,
+    expect(agentDetail).toMatch(
+      /@media \(max-width: 780px\)\s*\{\s*\.overview\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
     );
     expect(css).toMatch(/@media \(max-width: 620px\)[\s\S]*\.text-link/);
   });

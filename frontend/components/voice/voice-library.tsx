@@ -1,21 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { type VoiceProfile } from "../../lib/api";
+import { PlatformApiError, type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import type { MessageKey } from "../../lib/i18n";
-import { useLocale, useT } from "../locale";
+import { useT } from "../locale";
+import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
-import { WorkspaceAction } from "../workspace-actions";
 import {
-  EmptyCard,
   ErrorNotice,
   LoadingCard,
+  Notice,
   PageIntro,
-  SectionCard,
   StatusBadge,
 } from "../ui";
+import { IconCheck, IconPlay } from "../quiet-icons";
+import { ModuleCard, ModulePlus, ModuleTiles } from "../studyform-layout";
+import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
 
 const CONSENT_COPY_VERSION = "voice-consent-v1";
@@ -25,50 +27,163 @@ type PreviewState = {
   expiresAt: string;
 };
 
-export function VoiceLibrary({ groupId }: { groupId: string }) {
+type ScopeStatus = "loading" | "ready" | "denied" | "error";
+
+type ListedVoice = VoiceProfile;
+
+export function VoiceLibrary({
+  groupId,
+  membershipGroupIds = [],
+  listenOnly = false,
+  embedded = false,
+  initialCreate = false,
+  selectedId = null,
+  onSelect,
+  id,
+}: {
+  groupId: string | null;
+  /** Groups this person belongs to. Never a course-wide picker. */
+  membershipGroupIds?: string[];
+  /** Accounts opens a group so a teacher can play its voices. */
+  listenOnly?: boolean;
+  embedded?: boolean;
+  initialCreate?: boolean;
+  selectedId?: string | null;
+  onSelect?: (profileId: string) => void;
+  id?: string;
+}) {
   const t = useT();
-  const { locale } = useLocale();
   const { api } = useSession();
-  const [profiles, setProfiles] = useState<VoiceProfile[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [sampleLanguage, setSampleLanguage] = useState<"en" | "zh-CN">(
-    locale === "zh" ? "zh-CN" : "en",
+  const membershipKey = membershipGroupIds.join("|");
+  const scopes = useMemo<string[]>(
+    () => (groupId ? [groupId] : membershipKey ? membershipKey.split("|") : []),
+    [groupId, membershipKey],
   );
-  const [creating, setCreating] = useState(false);
+  const [profiles, setProfiles] = useState<ListedVoice[]>([]);
+  const [scopeStatus, setScopeStatus] = useState<Record<string, ScopeStatus>>(
+    {},
+  );
+  const [file, setFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(initialCreate && !listenOnly);
   const [consent, setConsent] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const [preview, setPreview] = useState<Record<string, PreviewState>>({});
+  const [editingName, setEditingName] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
+  const activeName = useRef<string | null>(null);
+  const savingName = useRef(false);
+  const focusName = useRef<string | null>(null);
+  const loadSequence = useRef(0);
   const idempotency = useIdempotencyStore();
+  const focusNameInput = useCallback((input: HTMLInputElement | null) => {
+    input?.focus();
+  }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setProfiles(await api.voiceProfiles(groupId));
-    } catch (cause) {
-      setError(cause);
-    } finally {
+  const load = useCallback(
+    async (options?: { quiet?: boolean }) => {
+      const sequence = ++loadSequence.current;
+      if (scopes.length === 0) {
+        setProfiles([]);
+        setScopeStatus({});
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      // A focus refresh must not blank the list. The Agent editor keeps unsaved
+      // AGENT.md in the parent, and this list is the only place a new voice appears.
+      if (!options?.quiet) {
+        setLoading(true);
+        setError(null);
+      }
+      const results = await Promise.all(
+        scopes.map(async (scopeId) => {
+          try {
+            return {
+              scopeId,
+              status: "ready" as const,
+              profiles: await api.voiceProfiles(scopeId),
+              cause: null,
+            };
+          } catch (cause) {
+            const denied =
+              cause instanceof PlatformApiError &&
+              (cause.status === 403 || cause.status === 404);
+            return {
+              scopeId,
+              status: denied ? ("denied" as const) : ("error" as const),
+              profiles: [] as VoiceProfile[],
+              cause,
+            };
+          }
+        }),
+      );
+      if (sequence !== loadSequence.current) return;
+      setProfiles(
+        results.flatMap((result) =>
+          result.status === "denied" ? [] : result.profiles,
+        ),
+      );
+      setScopeStatus(
+        Object.fromEntries(
+          results.map((result) => [result.scopeId, result.status]),
+        ),
+      );
+      const failure = results.find((result) => result.status === "error");
+      const denial = results.find((result) => result.status === "denied");
+      const ready = results.some((result) => result.status === "ready");
+      // A refused group is not an empty library. Say so when nothing else loaded.
+      setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
       setLoading(false);
-    }
-  }, [api, groupId]);
+    },
+    [api, scopes],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      loadSequence.current += 1;
+    };
   }, [load]);
 
+  useEffect(() => {
+    function refreshVisibleVoices() {
+      if (document.visibilityState === "hidden") return;
+      void load({ quiet: true });
+    }
+    window.addEventListener("focus", refreshVisibleVoices);
+    document.addEventListener("visibilitychange", refreshVisibleVoices);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleVoices);
+      document.removeEventListener("visibilitychange", refreshVisibleVoices);
+    };
+  }, [load]);
+
+  const enrollmentGroupId = listenOnly
+    ? null
+    : groupId &&
+        (scopeStatus[groupId] === "ready" || scopeStatus[groupId] === "error")
+      ? groupId
+      : scopes.length === 1 &&
+          (scopeStatus[scopes[0]] === "ready" ||
+            scopeStatus[scopes[0]] === "error")
+        ? scopes[0]
+        : null;
+  const canEnroll = Boolean(enrollmentGroupId) && !loading && !listenOnly;
+
   async function submitEnrollment() {
-    if (!file || !consent) return;
+    if (!canEnroll || !enrollmentGroupId || !file || !consent) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await api.enrollVoice(groupId, file, CONSENT_COPY_VERSION, {
+      await api.enrollVoice(enrollmentGroupId, file, CONSENT_COPY_VERSION, {
         idempotency: idempotency.handleFor("voice-enroll"),
-        language: sampleLanguage,
       });
       idempotency.finish("voice-enroll");
       setFile(null);
@@ -79,6 +194,39 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     } catch (cause) {
       setError(cause);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  function closeNameEditor(profileId: string, restoreFocus: boolean) {
+    activeName.current = null;
+    if (restoreFocus) focusName.current = profileId;
+    setEditingName(null);
+  }
+
+  async function saveName(profile: ListedVoice, restoreFocus = false) {
+    if (activeName.current !== profile.id || !editingName || savingName.current)
+      return;
+    const value = editingName.value.trim();
+    if (value === (profile.source_filename ?? "")) {
+      closeNameEditor(profile.id, restoreFocus);
+      return;
+    }
+    savingName.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const renamed = await api.renameVoiceProfile(profile.id, value);
+      setProfiles((current) =>
+        current.map((item) =>
+          item.id === profile.id ? { ...item, ...renamed } : item,
+        ),
+      );
+      closeNameEditor(profile.id, restoreFocus);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      savingName.current = false;
       setBusy(false);
     }
   }
@@ -121,178 +269,195 @@ export function VoiceLibrary({ groupId }: { groupId: string }) {
     }
   }
 
-  async function remove(profileId: string) {
-    if (!window.confirm(t("voiceDeleteConfirm"))) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.deleteVoiceProfile(profileId, {
-        idempotency: idempotency.handleFor(`voice-delete-${profileId}`),
-      });
-      idempotency.finish(`voice-delete-${profileId}`);
-      setPreview((current) => {
-        const next = { ...current };
-        delete next[profileId];
-        return next;
-      });
-      await load();
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const form = (
+    <div className={styles.uploadCard}>
+      {error ? (
+        <ErrorNotice inline error={error} onRetry={() => void load()} />
+      ) : null}
+      <label className={styles.field}>
+        <span>{t("voiceSampleLabel")}</span>
+        <input
+          className={styles.fileInput}
+          type="file"
+          accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+          data-ui-guide="voice.uploadSample"
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          aria-label={t("voiceSampleFile")}
+        />
+      </label>
+      <label className={styles.consent}>
+        <input
+          type="checkbox"
+          aria-label={t("voiceConsent")}
+          checked={consent}
+          onChange={(event) => setConsent(event.target.checked)}
+        />
+        <span>{t("voiceConsent")}</span>
+      </label>
+      <PageAction
+        name="back"
+        disabled={busy}
+        onClick={() => {
+          setCreating(false);
+          setFile(null);
+          setConsent(false);
+        }}
+      />
+      <PageAction
+        name="done"
+        disabled={!file || !consent || busy || !canEnroll}
+        onClick={() => void submitEnrollment()}
+      />
+    </div>
+  );
 
-  if (loading) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <LoadingCard />
-      </>
-    );
-  }
-  if (error && profiles.length === 0) {
-    return (
-      <>
-        <WorkspaceAction name="new" disabled />
-        <ErrorNotice error={error} onRetry={() => void load()} />
-      </>
-    );
-  }
+  const list =
+    profiles.length > 0 ? (
+      <ModuleTiles>
+        {profiles.map((profile) => {
+          const name = profile.source_filename ?? t("voiceCustom");
+          const editing = editingName?.id === profile.id;
+          const canPlay =
+            profile.status === "preview_ready" || profile.status === "ready";
+          return (
+            <li className="agent-tile" key={profile.id}>
+              {editing ? (
+                <input
+                  className={styles.nameInput}
+                  aria-label={t("voiceName")}
+                  value={editingName.value}
+                  readOnly={busy}
+                  ref={focusNameInput}
+                  onChange={(event) =>
+                    setEditingName({
+                      id: profile.id,
+                      value: event.target.value,
+                    })
+                  }
+                  onBlur={() => void saveName(profile)}
+                  onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing) return;
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void saveName(profile, true);
+                    } else if (event.key === "Escape" && !savingName.current) {
+                      event.preventDefault();
+                      closeNameEditor(profile.id, true);
+                    }
+                  }}
+                />
+              ) : onSelect ? (
+                <button
+                  className="agent-tile-name"
+                  type="button"
+                  aria-pressed={selectedId === profile.id}
+                  disabled={busy || profile.status !== "ready"}
+                  onClick={() => onSelect(profile.id)}
+                >
+                  {name}
+                </button>
+              ) : listenOnly ? (
+                <span className="agent-tile-name">{name}</span>
+              ) : (
+                <button
+                  className="agent-tile-name"
+                  type="button"
+                  disabled={busy || profile.status === "deleted"}
+                  ref={(button) => {
+                    if (button && focusName.current === profile.id) {
+                      button.focus();
+                      focusName.current = null;
+                    }
+                  }}
+                  onClick={() => {
+                    activeName.current = profile.id;
+                    setError(null);
+                    setEditingName({
+                      id: profile.id,
+                      value: profile.source_filename ?? "",
+                    });
+                  }}
+                >
+                  {name}
+                </button>
+              )}
+              {profile.status !== "ready" ? (
+                <StatusBadge status={profile.status} />
+              ) : null}
+              {canPlay ? (
+                <button
+                  className={cards.iconButton}
+                  aria-label={t("voicePreview")}
+                  data-ui-guide="voice.preview"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void makePreview(profile.id)}
+                >
+                  <IconPlay />
+                </button>
+              ) : null}
+              {!listenOnly && profile.status === "preview_ready" ? (
+                <button
+                  className={cards.iconButton}
+                  aria-label={t("voiceConfirm")}
+                  data-ui-guide="voice.confirm"
+                  type="button"
+                  disabled={busy || !preview[profile.id]}
+                  onClick={() => void confirm(profile.id)}
+                >
+                  <IconCheck />
+                </button>
+              ) : null}
+              {preview[profile.id] ? (
+                <audio
+                  className={styles.audio}
+                  controls
+                  preload="none"
+                  src={preview[profile.id].url}
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ModuleTiles>
+    ) : null;
+
+  const body = creating ? (
+    form
+  ) : error || loading || list ? (
+    <>
+      {error ? (
+        <ErrorNotice inline error={error} onRetry={() => void load()} />
+      ) : null}
+      {loading ? <LoadingCard /> : null}
+      {list}
+    </>
+  ) : undefined;
 
   return (
-    <div className={styles.voicePanel}>
-      <PageIntro title={t("voices")} />
-      <WorkspaceAction
-        name="new"
-        disabled={busy || creating}
-        onClick={() => setCreating(true)}
-      />
-      {error ? (
-        <ErrorNotice error={error} onRetry={() => setError(null)} />
-      ) : null}
+    <div className={styles.voicePanel} id={id}>
+      {embedded ? null : <PageIntro title={t("voices")} />}
       {notice ? (
-        <div className="notice notice-success" role="status">
+        <Notice tone="success" onClose={() => setNotice(null)}>
           {t(notice)}
-        </div>
+        </Notice>
       ) : null}
-      {creating ? (
-        <SectionCard>
-          <WorkspaceAction
-            name="back"
-            disabled={busy}
-            onClick={() => {
-              setCreating(false);
-              setFile(null);
-              setConsent(false);
-            }}
-          />
-          <WorkspaceAction
-            name="done"
-            disabled={!file || !consent || busy}
-            onClick={() => void submitEnrollment()}
-          />
-          <div className={styles.uploadCard}>
-            <input
-              className={styles.fileInput}
-              type="file"
-              accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-              data-ui-guide="voice.uploadSample"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              aria-label={t("voiceSampleFile")}
+      <ModuleCard
+        title={t("voices")}
+        labelledBy={id ? `${id}-title` : "voices-title"}
+        empty={body ? undefined : t("voiceNone")}
+        action={
+          creating || listenOnly ? null : (
+            <ModulePlus
+              label={t("voiceCreateTitle")}
+              disabled={busy || !canEnroll}
+              onClick={() => setCreating(true)}
             />
-            {file ? <p className={styles.hint}>{file.name}</p> : null}
-            <label>
-              <span>{t("voiceSampleLanguage")}</span>
-              <select
-                aria-label={t("voiceSampleLanguage")}
-                value={sampleLanguage}
-                onChange={(event) =>
-                  setSampleLanguage(
-                    event.target.value === "zh-CN" ? "zh-CN" : "en",
-                  )
-                }
-              >
-                <option value="en">{t("voiceLanguageEn")}</option>
-                <option value="zh-CN">{t("voiceLanguageZh")}</option>
-              </select>
-            </label>
-            <label className={styles.consent} data-ui-guide="voice.consent">
-              <input
-                type="checkbox"
-                aria-label={t("voiceConsent")}
-                checked={consent}
-                onChange={(event) => setConsent(event.target.checked)}
-              />
-              <span>{t("voiceConsentLabel")}</span>
-            </label>
-          </div>
-        </SectionCard>
-      ) : null}
-      <SectionCard title={t("voiceGroupTitle")}>
-        {profiles.length === 0 ? (
-          <EmptyCard title={t("voiceNoCustom")} />
-        ) : (
-          <div className={styles.profileList}>
-            {profiles.map((profile) => (
-              <article className={styles.profile} key={profile.id}>
-                <div className={styles.profileHeader}>
-                  <span className={styles.profileName}>
-                    {profile.source_filename ?? t("voiceCustom")}
-                  </span>
-                  <StatusBadge status={profile.status} />
-                </div>
-                <p className={styles.profileId}>
-                  {t("voiceProfileIdLabel")}: <code>{profile.id}</code>
-                </p>
-                {preview[profile.id] ? (
-                  <audio
-                    className={styles.audio}
-                    controls
-                    preload="none"
-                    src={preview[profile.id].url}
-                  />
-                ) : null}
-                <div className={styles.actions}>
-                  {profile.status === "preview_ready" ||
-                  profile.status === "ready" ? (
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void makePreview(profile.id)}
-                    >
-                      {t("voicePreview")}
-                    </button>
-                  ) : null}
-                  {profile.status === "preview_ready" ? (
-                    <button
-                      className="primary-action"
-                      type="button"
-                      disabled={busy || !preview[profile.id]}
-                      onClick={() => void confirm(profile.id)}
-                    >
-                      {t("voiceConfirm")}
-                    </button>
-                  ) : null}
-                  {profile.status !== "deleted" ? (
-                    <button
-                      className="text-link"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void remove(profile.id)}
-                    >
-                      {t("voiceDelete")}
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+          )
+        }
+      >
+        {body}
+      </ModuleCard>
     </div>
   );
 }

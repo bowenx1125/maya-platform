@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_technical_audio
+from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_speech_audio
 from app.providers.tts import (
     TTSAudioInvalidError,
     TTSHTTPRejectedError,
@@ -39,6 +39,10 @@ from app.providers.voice import (
 )
 
 DEFAULT_TARGET_MODEL_KEY = "qwen3-tts-vc-2026-01-22"
+# Supplier preset names such as "Eldric Sage" are accepted by this flash
+# snapshot. The 2025-09-18 flash snapshot is not on the list: it rejects them.
+PRESET_TTS_MODEL_KEY = "qwen3-tts-flash-2025-11-27"
+ALLOWED_TTS_TARGET_MODELS = frozenset({DEFAULT_TARGET_MODEL_KEY, PRESET_TTS_MODEL_KEY})
 VOICE_ENROLLMENT_MODEL = "qwen-voice-enrollment"
 APPROVED_RESULT_HOST_SUFFIXES = (
     "dashscope.aliyuncs.com",
@@ -97,6 +101,20 @@ def _json(response: httpx.Response) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise VoiceProviderError("provider response invalid")
     return value
+
+
+def tts_model_for_call(configured: str, requested: str | None) -> str:
+    """Return the model for one TTS request, or refuse before any network I/O.
+
+    ``None`` keeps the adapter default, which is the clone model. A profile
+    may name either allowlisted model. Anything else is not guessed into a
+    request.
+    """
+
+    model = configured if requested is None else requested
+    if model not in ALLOWED_TTS_TARGET_MODELS:
+        raise TTSProviderError("unsupported tts model", safe_code="tts_response_invalid")
+    return model
 
 
 def _tts_json(response: httpx.Response) -> dict[str, Any]:
@@ -518,9 +536,8 @@ class SupplierAudioDownloader:
 # cannot be a length — it is that placeholder. A merely truncated file keeps
 # a small declared size and must still fail the strict check.
 _STREAMED_WAV_PLACEHOLDER = 1 << 30
-# Maya speaks en/zh. DashScope names those language_type values; any other
-# code is refused so the request is not sent as the supplier's Auto default.
-_TTS_LANGUAGE_TYPES = {"en": "English", "zh": "Chinese"}
+# Mixed-language voice previews explicitly select Auto; unknown codes still fail closed.
+_TTS_LANGUAGE_TYPES = {"en": "English", "zh": "Chinese", "auto": "Auto"}
 
 
 def _finalize_streamed_wav(raw: bytes) -> bytes:
@@ -577,12 +594,14 @@ class DashScopeTTSProvider:
         external_voice_id: str,
         *,
         language: str = "en",
+        target_model_key: str | None = None,
     ) -> TTSResult:
         language_type = _TTS_LANGUAGE_TYPES.get(language)
         if language_type is None:
             raise TTSProviderError("unsupported language")
+        model = tts_model_for_call(self.target_model_key, target_model_key)
         payload = {
-            "model": self.target_model_key,
+            "model": model,
             "input": {
                 "text": text,
                 "voice": external_voice_id,
@@ -613,7 +632,7 @@ class DashScopeTTSProvider:
             raise TTSResponseInvalidError("provider response invalid")
         raw = _finalize_streamed_wav(self.downloader.download(audio_url))
         try:
-            validate_technical_audio(raw)
+            validate_speech_audio(raw)
         except AudioValidationError as exc:
             raise TTSAudioInvalidError("provider audio invalid") from exc
         return TTSResult(raw, "audio/wav", _request_id(response, document))

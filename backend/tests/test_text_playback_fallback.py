@@ -22,7 +22,12 @@ from app.modules.debates.playback.protocols import (
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 from app.providers.llm import MockLLMProvider
-from app.providers.tts import MockTTSProvider, TTSProviderError, TTSProviderTimeout
+from app.providers.tts import (
+    MockTTSProvider,
+    TTSProviderError,
+    TTSProviderTimeout,
+    TTSProviderUnavailableError,
+)
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
@@ -67,6 +72,7 @@ def test_four_round_text_only_http_lifecycle(app_factory: Any, voice_missing: bo
         if voice_missing:
             # The selected voice adapter is never invoked: no ready profile exists.
             settings.voice_provider = "dashscope"
+            settings.tts_provider = "dashscope"
         agents = [
             _insert_published_agent(
                 database,
@@ -173,7 +179,7 @@ def test_four_round_text_only_http_lifecycle(app_factory: Any, voice_missing: bo
             )
 
 
-@pytest.mark.parametrize("error_code", [None, "acceptance_unknown", "tts_unreviewed"])
+@pytest.mark.parametrize("error_code", [None, "acceptance_unknown", "tts_unreviewed", "tts_failed"])
 def test_missing_audio_without_known_tts_failure_cannot_advance(
     app_factory: Any, error_code: str | None
 ) -> None:
@@ -378,15 +384,15 @@ async def test_selected_text_recovers_without_supplier_calls(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("blocked_provider", [False, True])
+@pytest.mark.parametrize("provider_unavailable", [False, True])
 async def test_legacy_two_round_text_flow_never_regenerates_successful_text(
-    tmp_path: Path, blocked_provider: bool
+    tmp_path: Path, provider_unavailable: bool
 ) -> None:
-    class BlockedTTS(MockTTSProvider):
+    class UnavailableProviderTTS(MockTTSProvider):
         key = "dashscope"
 
         def synthesize(self, *args: Any, **kwargs: Any) -> Any:
-            pytest.fail("a blocked speech provider must not be called")
+            raise TTSProviderUnavailableError()
 
     repository = MemoryPlaybackRepository()
     debate = repository.add_debate(
@@ -406,7 +412,7 @@ async def test_legacy_two_round_text_flow_never_regenerates_successful_text(
     async def no_background(_debate: Any, _turn: Any) -> bool:
         return False
 
-    tts = BlockedTTS() if blocked_provider else UnavailableTTS()
+    tts = UnavailableProviderTTS() if provider_unavailable else UnavailableTTS()
     service = PlaybackService(
         repository,
         turn_preparer=prepare,
@@ -430,7 +436,7 @@ async def test_legacy_two_round_text_flow_never_regenerates_successful_text(
             assert debate.playback.status == "waiting_next"
             await service.prepare_turn(None, debate.id, turn.id)
         assert calls == [turn.id for turn in turns]
-        expected = "tts_provider_unavailable" if blocked_provider else "tts_timeout"
+        expected = "tts_provider_unavailable" if provider_unavailable else "tts_timeout"
         assert all(turn.failed_code == expected and turn.audio_file_id is None for turn in turns)
         result = await service.finish(
             None,

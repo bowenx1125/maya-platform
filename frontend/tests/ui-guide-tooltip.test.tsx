@@ -5,11 +5,19 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 import { LocaleProvider, useLocale } from "../components/locale";
 
+const route = vi.hoisted(() => ({ pathname: "/student/workspace" }));
+vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
+const originalGetBoundingClientRect =
+  HTMLElement.prototype.getBoundingClientRect;
+
+beforeEach(() => {
+  route.pathname = "/student/workspace";
+});
 const originalInnerWidth = Object.getOwnPropertyDescriptor(
   window,
   "innerWidth",
@@ -18,14 +26,35 @@ const originalInnerHeight = Object.getOwnPropertyDescriptor(
   window,
   "innerHeight",
 );
-
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   if (originalInnerWidth)
     Object.defineProperty(window, "innerWidth", originalInnerWidth);
   if (originalInnerHeight)
     Object.defineProperty(window, "innerHeight", originalInnerHeight);
 });
+
+function mockTooltipMeasurement(width: number, height: number) {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      if (this.getAttribute("role") === "tooltip") {
+        return {
+          left: 0,
+          right: width,
+          top: 0,
+          bottom: height,
+          width,
+          height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+      return originalGetBoundingClientRect.call(this);
+    },
+  );
+}
 
 function LocaleSwitch() {
   const { setLocale } = useLocale();
@@ -36,19 +65,25 @@ function LocaleSwitch() {
   );
 }
 
-function renderGuide(locale: "en" | "zh" = "en") {
-  return render(
+function guideContent(locale: "en" | "zh" = "en", showButton = true) {
+  return (
     <LocaleProvider initialLocale={locale}>
       <UiGuideTooltip />
-      <button
-        type="button"
-        data-ui-guide="knowledge.edit"
-        aria-describedby="existing-description"
-      >
-        Edit
-      </button>
-    </LocaleProvider>,
+      {showButton ? (
+        <button
+          type="button"
+          data-ui-guide="knowledge.edit"
+          aria-describedby="existing-description"
+        >
+          Edit
+        </button>
+      ) : null}
+    </LocaleProvider>
   );
+}
+
+function renderGuide(locale: "en" | "zh" = "en") {
+  return render(guideContent(locale));
 }
 
 describe("workspace UI guide tooltip", () => {
@@ -147,6 +182,115 @@ describe("workspace UI guide tooltip", () => {
     );
   });
 
+  it("shows localized help on keyboard focus", () => {
+    renderGuide("zh");
+    const button = screen.getByRole("button", { name: "Edit" });
+
+    fireEvent.focusIn(button);
+
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Markdown 编辑器",
+    );
+
+    fireEvent.focusOut(button, { relatedTarget: document.body });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("does not pin mouse-click focus after the pointer leaves", () => {
+    renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+    fireEvent.pointerOver(button);
+    fireEvent.pointerDown(button);
+    fireEvent.focusIn(button);
+    fireEvent.pointerOut(button, { relatedTarget: document.body });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(button.getAttribute("aria-describedby")).toBe(
+      "existing-description",
+    );
+  });
+
+  it("clears a missed leave event when a fast pointer move reaches empty space", () => {
+    renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+    fireEvent.pointerOver(button);
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    fireEvent.pointerMove(document.body);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.pointerMove(button);
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+  });
+
+  it.each(["scroll", "blur", "resize", "pointercancel", "leave-window"])(
+    "dismisses help on %s",
+    (event) => {
+      renderGuide();
+      const button = screen.getByRole("button", { name: "Edit" });
+      fireEvent.pointerOver(button);
+      if (event === "scroll") fireEvent.scroll(document.body);
+      else if (event === "blur") fireEvent.blur(window);
+      else if (event === "resize") fireEvent.resize(window);
+      else if (event === "pointercancel") fireEvent.pointerCancel(button);
+      else fireEvent.pointerOut(document.body, { relatedTarget: null });
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      expect(button.getAttribute("aria-describedby")).toBe(
+        "existing-description",
+      );
+    },
+  );
+
+  it("clears help when the owning workspace route changes", () => {
+    const view = renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+    fireEvent.focusIn(button);
+    route.pathname = "/student/groups/another-group";
+    view.rerender(guideContent());
+    expect(button.isConnected).toBe(true);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(button.getAttribute("aria-describedby")).toBe(
+      "existing-description",
+    );
+  });
+
+  it("clears help when a control disappears without a pointer event", async () => {
+    const view = renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+    fireEvent.pointerOver(button);
+    view.rerender(guideContent("en", false));
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    expect(button.getAttribute("aria-describedby")).toBe(
+      "existing-description",
+    );
+  });
+
+  it("keeps opt-in touch help toggleable and clears it on an outside tap", () => {
+    renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+    button.dataset.uiGuideTouch = "true";
+    const tap = () => {
+      fireEvent.pointerDown(button, { pointerType: "touch" });
+      fireEvent.pointerUp(button, { pointerType: "touch" });
+      fireEvent.click(button);
+    };
+    tap();
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    tap();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    tap();
+    fireEvent.pointerDown(document.body, { pointerType: "touch" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("keeps keyboard help available after mouse use and dismisses it with Escape", () => {
+    renderGuide();
+    const button = screen.getByRole("button", { name: "Edit" });
+    fireEvent.pointerDown(document.body);
+    fireEvent.keyDown(document, { key: "Tab" });
+    fireEvent.focusIn(button);
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("keeps pointer help clear of long import instructions", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
@@ -193,25 +337,13 @@ describe("workspace UI guide tooltip", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
+    mockTooltipMeasurement(280, 70);
     fireEvent.pointerOver(label, {
       pointerType: "mouse",
       clientX: 663,
       clientY: 230,
     });
     const tooltip = screen.getByRole("tooltip");
-    tooltip.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        right: 280,
-        top: 0,
-        bottom: 70,
-        width: 280,
-        height: 70,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    fireEvent.resize(window);
 
     const left = Number.parseFloat(tooltip.style.left);
     const top = Number.parseFloat(tooltip.style.top);
@@ -222,20 +354,6 @@ describe("workspace UI guide tooltip", () => {
       top + 70 > rect.top;
     expect(overlaps(label.getBoundingClientRect())).toBe(false);
     expect(overlaps(instructions.getBoundingClientRect())).toBe(false);
-  });
-
-  it("shows localized help on keyboard focus", () => {
-    renderGuide("zh");
-    const button = screen.getByRole("button", { name: "Edit" });
-
-    fireEvent.focusIn(button);
-
-    expect(screen.getByRole("tooltip").textContent).toContain(
-      "Markdown 编辑器",
-    );
-
-    fireEvent.focusOut(button, { relatedTarget: document.body });
-    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("describes the focused control when help is marked on its label", () => {
@@ -253,7 +371,7 @@ describe("workspace UI guide tooltip", () => {
       </LocaleProvider>,
     );
     const checkbox = screen.getByRole("checkbox", { name: "Voice consent" });
-    const label = checkbox.closest("label");
+    const label = checkbox.closest("label")!;
 
     fireEvent.focusIn(checkbox);
 
@@ -283,67 +401,49 @@ describe("workspace UI guide tooltip", () => {
     );
   });
 
-  it.each([
-    {
-      guide: "agent.uploadMarkdown",
-      expectedText: "next Agent draft revision",
-      description: null,
-      inputGuide: false,
-    },
-    {
-      guide: "agent.uploadEvidence",
-      expectedText: "Agent evidence",
-      description: "knowledge-import-help",
-      inputGuide: false,
-    },
-    {
-      guide: "knowledge.importFile",
-      expectedText: "converted to Markdown",
-      description: "knowledge-import-formats",
-      inputGuide: false,
-    },
-    {
-      guide: "voice.uploadSample",
-      expectedText: "audio sample",
-      description: null,
-      inputGuide: true,
-    },
-  ])(
-    "shows upload guidance for $guide",
-    ({ guide, expectedText, description, inputGuide }) => {
-      const input = (
-        <input
-          type="file"
-          aria-label="Upload"
-          aria-describedby={description ?? undefined}
-          data-ui-guide={inputGuide ? guide : undefined}
-        />
-      );
-      render(
-        <LocaleProvider initialLocale="en">
-          <UiGuideTooltip />
-          {inputGuide ? (
-            input
-          ) : (
-            <label data-ui-guide={guide}>Upload{input}</label>
-          )}
-        </LocaleProvider>,
-      );
+  it("moves the description from a hovered label to its keyboard-focused control", () => {
+    render(
+      <LocaleProvider initialLocale="en">
+        <UiGuideTooltip />
+        <label data-ui-guide="voice.consent">
+          <input
+            type="checkbox"
+            aria-label="Voice consent transition"
+            aria-describedby="existing-description"
+          />
+          Voice consent
+        </label>
+      </LocaleProvider>,
+    );
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Voice consent transition",
+    });
+    const label = checkbox.closest("label")!;
 
-      const upload = screen.getByLabelText("Upload");
-      fireEvent.focusIn(upload);
+    fireEvent.pointerOver(label, { pointerType: "mouse" });
+    expect(label.getAttribute("aria-describedby")).toBe(
+      "maya-ui-guide-tooltip",
+    );
 
-      expect(screen.getByRole("tooltip").textContent).toContain(expectedText);
-      expect(upload.getAttribute("aria-describedby")).toBe(
-        description
-          ? `${description} maya-ui-guide-tooltip`
-          : "maya-ui-guide-tooltip",
-      );
+    fireEvent.keyDown(document, { key: "Tab" });
+    fireEvent.focusIn(checkbox);
 
-      fireEvent.focusOut(upload, { relatedTarget: document.body });
-      expect(upload.getAttribute("aria-describedby")).toBe(description);
-    },
-  );
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    expect(checkbox.getAttribute("aria-describedby")).toBe(
+      "existing-description maya-ui-guide-tooltip",
+    );
+    expect(label.hasAttribute("aria-describedby")).toBe(false);
+
+    fireEvent.pointerOver(checkbox, {
+      pointerType: "mouse",
+      clientX: 40,
+      clientY: 50,
+    });
+    expect(checkbox.getAttribute("aria-describedby")).toBe(
+      "existing-description maya-ui-guide-tooltip",
+    );
+    expect(label.hasAttribute("aria-describedby")).toBe(false);
+  });
 
   it("keeps the focused control described when the locale changes", () => {
     render(
@@ -360,9 +460,12 @@ describe("workspace UI guide tooltip", () => {
       </LocaleProvider>,
     );
     const button = screen.getByRole("button", { name: "Edit" });
+    const localeButton = screen.getByRole("button", { name: "Switch locale" });
 
     fireEvent.focusIn(button);
-    fireEvent.click(screen.getByRole("button", { name: "Switch locale" }));
+    fireEvent.focusOut(button, { relatedTarget: localeButton });
+    fireEvent.click(localeButton);
+    fireEvent.focusIn(button);
 
     expect(screen.getByRole("tooltip").textContent).toContain(
       "Markdown 编辑器",
@@ -442,23 +545,18 @@ describe("workspace UI guide tooltip", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
+    mockTooltipMeasurement(180, 40);
     fireEvent.focusIn(button);
     const tooltip = screen.getByRole("tooltip");
-    tooltip.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        right: 180,
-        top: 0,
-        bottom: 40,
-        width: 180,
-        height: 40,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    fireEvent.resize(window);
-
-    expect(Number.parseFloat(tooltip.style.top)).toBeLessThan(588);
+    const left = Number.parseFloat(tooltip.style.left);
+    const top = Number.parseFloat(tooltip.style.top);
+    const overlaps = (rect: DOMRect) =>
+      left < rect.right &&
+      left + 180 > rect.left &&
+      top < rect.bottom &&
+      top + 40 > rect.top;
+    expect(overlaps(button.getBoundingClientRect())).toBe(false);
+    expect(overlaps(neighbor.getBoundingClientRect())).toBe(false);
   });
 
   it("avoids covering nearby controls when a guided control is hovered", () => {
@@ -505,35 +603,23 @@ describe("workspace UI guide tooltip", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
+    mockTooltipMeasurement(180, 40);
     fireEvent.pointerOver(button, {
       pointerType: "mouse",
       clientX: 500,
       clientY: 500,
     });
     const tooltip = screen.getByRole("tooltip");
-    tooltip.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        right: 180,
-        top: 0,
-        bottom: 40,
-        width: 180,
-        height: 40,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    fireEvent.pointerMove(button, {
-      pointerType: "mouse",
-      clientX: 500,
-      clientY: 500,
-    });
 
     const left = Number.parseFloat(tooltip.style.left);
     const top = Number.parseFloat(tooltip.style.top);
-    expect(
-      left + 180 <= 510 || left >= 550 || top + 40 <= 510 || top >= 550,
-    ).toBe(true);
+    const overlaps = (rect: DOMRect) =>
+      left < rect.right &&
+      left + 180 > rect.left &&
+      top < rect.bottom &&
+      top + 40 > rect.top;
+    expect(overlaps(button.getBoundingClientRect())).toBe(false);
+    expect(overlaps(neighbor.getBoundingClientRect())).toBe(false);
   });
 
   it("avoids covering neighboring file text when a row action receives focus", () => {
@@ -620,21 +706,9 @@ describe("workspace UI guide tooltip", () => {
         }) as DOMRect;
     }
 
+    mockTooltipMeasurement(268, 35);
     fireEvent.focusIn(button);
     const tooltip = screen.getByRole("tooltip");
-    tooltip.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        right: 268,
-        top: 0,
-        bottom: 35,
-        width: 268,
-        height: 35,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    fireEvent.resize(window);
 
     const left = Number.parseFloat(tooltip.style.left);
     const top = Number.parseFloat(tooltip.style.top);
@@ -654,7 +728,7 @@ describe("workspace UI guide tooltip", () => {
     ).toBe(false);
   });
 
-  it("repositions focused help after scrolling and resizing", () => {
+  it("clears help on scroll and resize, then recalculates on fresh keyboard focus", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 1000,
@@ -678,33 +752,30 @@ describe("workspace UI guide tooltip", () => {
       }) as DOMRect;
     renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
-    const tooltip = {
-      width: 100,
-      height: 30,
-      left: 0,
-      right: 100,
-      top: 0,
-      bottom: 30,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    } as DOMRect;
     button.getBoundingClientRect = buttonRect;
 
+    mockTooltipMeasurement(100, 30);
     fireEvent.focusIn(button);
     const tooltipElement = screen.getByRole("tooltip");
-    tooltipElement.getBoundingClientRect = () => tooltip;
     expect(tooltipElement.style.top).toBe("140px");
 
     targetTop = 50;
     fireEvent.scroll(document);
-    expect(tooltipElement.style.top).toBe("90px");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(button.getAttribute("aria-describedby")).toBe(
+      "existing-description",
+    );
+
+    fireEvent.focusIn(button);
+    expect(screen.getByRole("tooltip").style.top).toBe("90px");
 
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       value: 150,
     });
     fireEvent.resize(window);
-    expect(tooltipElement.style.left).toBe("42px");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.focusIn(button);
+    expect(screen.getByRole("tooltip").style.left).toBe("42px");
   });
 });

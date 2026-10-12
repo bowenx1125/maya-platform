@@ -342,7 +342,7 @@ def test_runtime_handles_multiple_batches_in_stable_order() -> None:
     assert [item.status for item in result.outcomes] == ["succeeded", "succeeded"]
 
 
-def test_scope_cap_failure_for_later_batch_happens_before_any_provider_call() -> None:
+def test_scope_estimate_does_not_stop_later_embedding_batches() -> None:
     build = _multi_batch_build()
     control = InMemoryEmbeddingLedger(max_requests=1)
     runtime, transport, ledger, publisher = _runtime(build, control=control)
@@ -350,12 +350,11 @@ def test_scope_cap_failure_for_later_batch_happens_before_any_provider_call() ->
 
     result = runtime.run(build, scope_id="plan-cap", current_build=build)
 
-    assert result.status == "failed"
-    assert result.safe_error_code == "embedding_reservation_failed"
-    assert transport.calls == []
-    assert [item.state for item in result.operations] == ["not_sent", "failed"]
-    assert publisher.published_snapshot_ids == ()  # type: ignore[attr-defined]
-    assert all(item.state in {"not_sent", "failed"} for item in ledger.operations())
+    assert result.status == "succeeded"
+    assert len(transport.calls) == 2
+    assert [item.state for item in result.operations] == ["succeeded", "succeeded"]
+    assert publisher.published_snapshot_ids == (build.knowledge_snapshot_id,)  # type: ignore[attr-defined]
+    assert sum(item.charged_request_count for item in ledger.operations()) == 2
 
 
 def test_source_or_persona_drift_stops_before_control_or_provider() -> None:
@@ -477,9 +476,10 @@ def test_acceptance_unknown_retains_allowance_and_never_retries() -> None:
         publisher=publisher,
     )
     second = second_runtime.run(build, scope_id="unknown-scope", attempt_no=2)
-    assert second.status == "failed"
-    assert second.safe_error_code == "embedding_reservation_failed"
+    assert second.status == "acceptance_unknown"
+    assert second.safe_error_code == "acceptance_unknown"
     assert second_transport.calls == []
+    assert len(control.operations()) == 1
 
 
 def test_malformed_result_is_failed_and_never_published() -> None:

@@ -36,8 +36,10 @@ from app.core.models import StoredFile, VoicePreview, VoiceProfile, VoiceProvide
 from app.modules.knowledge.files import contained_path, ensure_private_dir, write_atomic
 from app.modules.voices.crypto import VoiceEncryptionError, decrypt_external_voice_id
 from app.modules.voices.lease_lock import lock_exclusive, unlock
+from app.modules.voices.preset import is_preset_profile
 from app.modules.voices.service import PREVIEW_TTL
 from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_technical_audio
+from app.providers.dashscope import ALLOWED_TTS_TARGET_MODELS
 from app.providers.tts import TTSProvider, TTSProviderError, TTSProviderTimeout
 
 TTS_OPERATION_TYPE = "tts_preview"
@@ -219,9 +221,17 @@ def _validate_operator_selectors(settings: Settings, *, allow_real: bool) -> Non
 
 
 def _system_profile(session: Session) -> VoiceProfile:
-    profiles = session.scalars(
-        select(VoiceProfile).where(VoiceProfile.scope == "system").order_by(VoiceProfile.created_at)
-    ).all()
+    # The gate belongs to the enrolled fallback. A preset in the same scope
+    # is not that profile and must not make the gate look ambiguous.
+    profiles = [
+        profile
+        for profile in session.scalars(
+            select(VoiceProfile)
+            .where(VoiceProfile.scope == "system")
+            .order_by(VoiceProfile.created_at)
+        ).all()
+        if not is_preset_profile(profile)
+    ]
     if len(profiles) != 1:
         raise TTSGateError("tts_response_invalid")
     return profiles[0]
@@ -495,7 +505,7 @@ def _run_once(
         profile = _system_profile(session)
         if profile.provider_key != "dashscope":
             raise TTSGateError("tts_response_invalid")
-        if profile.target_model_key != "qwen3-tts-vc-2026-01-22":
+        if profile.target_model_key not in ALLOWED_TTS_TARGET_MODELS:
             raise TTSGateError("tts_response_invalid")
         expected_hash = _gate_hash(profile)
         operation = _attempt_three(session, profile, expected_hash)
@@ -511,9 +521,12 @@ def _run_once(
                 provider = tts_provider(settings)
             except Exception as exc:
                 raise TTSGateError("tts_response_invalid") from exc
+        # The adapter is constructed with the clone default. This call sends
+        # the profile's allowlisted model, so a preset flash row is not
+        # rejected for differing from that default.
         if (
             getattr(provider, "key", None) != "dashscope"
-            or getattr(provider, "target_model_key", None) != profile.target_model_key
+            or profile.target_model_key not in ALLOWED_TTS_TARGET_MODELS
         ):
             raise TTSGateError("tts_response_invalid")
 
@@ -556,7 +569,10 @@ def _run_once(
         try:
             # This is the only provider method reachable from the gate.
             result = provider.synthesize(
-                TTS_GATE_TEXT, external_voice_id, language=TTS_GATE_LANGUAGE
+                TTS_GATE_TEXT,
+                external_voice_id,
+                language=TTS_GATE_LANGUAGE,
+                target_model_key=profile.target_model_key,
             )
         except TTSProviderTimeout:
             return _finish(

@@ -1,0 +1,264 @@
+{
+  "record_kind": "resume_input_fingerprint",
+  "head": "1b1bfcae73feeb2765a0b838bf967e8874a333fb",
+  "branch": "feat/mayaform-v14",
+  "attachment": "MayaForm_v1.4_Resume_Brainform_Tools_Assessment_Prompt_v2.md",
+  "attachment_sha256": "d7061b0825f39fcce022bd50a1b7ef8fe68c7056fa92dba92371649ad1f089ee",
+  "files": [
+    {
+      "path": "backend/app/core/db.py",
+      "sha256": "ee05c3aecad6eb0d7cee7c0f2d5a07cce925c6918348f3f4268ae3b3e14e8642",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/main.py",
+      "sha256": "66ece2a9d773b04e6800e666f26dadd11df7d07a6f9b2b57cc8a77250ace7020",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/debates/default_rules/en.md",
+      "sha256": "62a06d96e592f890a4fd8f2b72e52909076fa568332fb4a81de7fc7987074882",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/app/modules/debates/default_rules/zh.md",
+      "sha256": "15fd3c2fd3ce3ab6991767b96a9c3a0f0be0071df7debcf20640713836960b78",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/app/modules/debates/generation/four_round.py",
+      "sha256": "876c7b5224be6e853a0113d71745038dbcfd34f9ca5f73eb18a36654534da2d8",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/app/modules/debates/setup/service.py",
+      "sha256": "ce50d30fe068e93fafb17bb8b0718124c3aa128d61ede0f6057d7475df08073c",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/app/modules/debates/teaching_rules.py",
+      "sha256": "877813873aee64a2d5179792489a4f69e21a4e6daa221be8c8e8c6de5662309a",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/app/modules/provider_disclosure/schemas.py",
+      "sha256": "c43bc67ab5b77a20f1f7eb6fc4d2ecb5eb372d5c21674913c6479046e1e6757e",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/provider_disclosure/service.py",
+      "sha256": "ca8ae44609ca1d7973948d2510cf42d2fa79e27c12974f0d1e71d3183ba44532",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/voices/preview.py",
+      "sha256": "588e1dcfd068af53701a61ecee8584bf10f7ddc4c14a0c4a734a3a0fcd2b1d61",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/app/modules/workspace/chat.py",
+      "sha256": "8b792aba747659a60533e6e439c19ff1f83ac7fa1d7505655577b95b2506f06b",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/chat_stream.py",
+      "sha256": "b274b23377651d23e23f92e746158e6567c2f09657eda0c29bb19cb56bbbcdb4",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/models.py",
+      "sha256": "ad22d00cd5208407de6797e916b9c3e34eb8071cb6cea8343c63b4815291bdf6",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/schemas.py",
+      "sha256": "19f03663cebb73e5299b017be754c29b0414a99aa2148cb38fabf1371bf57544",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/providers/control_repository.py",
+      "sha256": "4936ffcaebcf803cd9f3f4d2123cadef8ded623c6a84ed3f4387526254ef2a8a",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/migrations/env.py",
+      "sha256": "6e225664724d37ab718175ba6e7ed0d855b74a363cd20dd36ea8d1b1caee51cb",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_classroom_lifecycle.py",
+      "sha256": "bd87fcb7717cb4cc0792322537cf4a83a9bc300e2aa62a218e8183cd408fc20a",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/tests/test_database.py",
+      "sha256": "b2cc8cc9029961666594553271910262be2f766dd423d0bbc319dba3ec1da5eb",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_debate_stall_projection.py",
+      "sha256": "8ce14363ba0ecf6825e996ebd5b4a20a80030f45d683618597e64c2583e27343",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/tests/test_four_round_provider.py",
+      "sha256": "d878dc7899d87aeec5b1b29ab7249596fc0939ec85a545f64c0d1dc26c3f9e7a",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/tests/test_frozen_teaching_rules.py",
+      "sha256": "c74b4e13136a034a01286b8cf6a079f85e11425d01c010bf857874ae368a7192",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/tests/test_knowledge_sets_migration.py",
+      "sha256": "e774c4d3adefffc9f61db7eb0105255181b36fa2eb1a74a652518978a90f5da9",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "backend/tests/test_seed.py",
+      "sha256": "e8e837b45c34d3adc2cd20012170502676f6b571c2e408f3e0c288ed54ed0778",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_wave1b_voices.py",
+      "sha256": "de15264b85ec4b3e72cd0d6862da7b3eadbd40293c0fedcfb530f84e11cef992",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "docs/contracts/DEBATE_GENERATION_CONTRACTS.md",
+      "sha256": "f76bcbb0f6fe53732d5626d0d51cdefd2b81a041b2616a1b6ea4e008836f8f39",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "docs/contracts/FOUR_ROUND_PROMPTS.md",
+      "sha256": "41c616dd4317caeaa4c9685e9a3ba06d7c7f79da753aa2aec82caa38a8dc7c4e",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "frontend/components/agent-chat.module.css",
+      "sha256": "b4f1363afefce965272bd0cbb6a0939ba4399fd1daa09edf14d787e0bffe1b02",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "frontend/components/agent-chat.tsx",
+      "sha256": "e17fd0615112d400f951dd5cb2aee6ada21bdc378d96b68bb044450cf52ce81f",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "frontend/components/app-shell.tsx",
+      "sha256": "8697775939760a3c5c2ecd5ff655eb0ba49e618aaeef5b43b057af71a2e0b1b2",
+      "ownership": "other_authorized_task"
+    },
+    {
+      "path": "frontend/components/chats/team-entry-flow.tsx",
+      "sha256": "dc3b1a0d3f87ce0c9b6d48690e71327f02eae02ca832e08e24ffecc1c8d4d490",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "frontend/lib/api/platform.ts",
+      "sha256": "760d7298fa712fedda3ba7b5958fcd75b6c1f0401698491a3cc74b1ab733cc6a",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "frontend/lib/i18n.ts",
+      "sha256": "e4adb221b1bc03243bc7d4ddc8bbf4b545d1e2251b47e1bdaa6ceb60bebc811e",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "frontend/tests/team-chat.test.tsx",
+      "sha256": "b785930472a940732464dfa661c8dc65c014da0e2f2b295ef89d974a020f8692",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "scripts/cleanup_debate_runtime.py",
+      "sha256": "123acf1d4ef89d5fdeb72cc2bf45ba9cb36129ca040fcfc8390177748d246d08",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/provider_disclosure/team_standing.py",
+      "sha256": "046094e5ef9f89a5c95bdbb7a27498697b58e18b6c1fe43969bd4c8cef252317",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/chat_team_context.py",
+      "sha256": "6f0180866d42bbebea48e5d43f3a36c9fc7e25d163b80309c02ffafb177167b3",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/chat_team_sdk.py",
+      "sha256": "96b007a8b1ea0088c1fb900aab0338e1e26dce290f09d3822a7524549de495db",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/team_conversation.py",
+      "sha256": "cb368ae31946c663ad2fd6aca6273025a4b126dc08ecccef1029780cbb421b5a",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/app/modules/workspace/team_runtime.py",
+      "sha256": "8d750e8863e80b49cbf66db4336393d496b2a7be2fe37a62c91f7b63fa632a8f",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/migrations/versions/0041_team_conversations.py",
+      "sha256": "8433327c23521f057772678273e4ad7716d65a2deba6e8a13e083018e6592c3f",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/migrations/versions/0042_team_turn_results.py",
+      "sha256": "3ec6d7f67286e8a2a57c28c8cb6205c9e871fe7287cae7472cf34c9f6171c242",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/migrations/versions/0043_learning_evidence.py",
+      "sha256": "533588d60084eb82efe3a16675bde2d5563fb4e6a5005e366594dcdd3958cfbd",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/migrations/versions/0044_team_provider_stage.py",
+      "sha256": "9f78d359e868e850193a857f3cffa00b941211f45b5bff4af8cbe5e26b91d96b",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_mayaform_learning_evidence.py",
+      "sha256": "2935551a61b608803a663ea6528889fb6d64ee52f4ea4d9769d7c76164a2fa46",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_mayaform_team_conversations.py",
+      "sha256": "6cb657317639abb90e3bc30ea1e242648c513d080063e858f8f9f43c93751309",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_mayaform_team_turns.py",
+      "sha256": "b22ec41763e0efe34dd5aac08de3c34ecea7be2e1ee86e9fbbc27a7ee4ae46cd",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_team_coordinate_runtime.py",
+      "sha256": "a050459f04451dd2ab64993222f3bbb5232de6c67769ba70ddbdeccefaa8b7a8",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_team_provider_disclosure.py",
+      "sha256": "c2e01a2c542256ed0261e93fd9c03c7973dbe3a947757c5ccfa4387eb13d4898",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_team_provider_stage.py",
+      "sha256": "d104f5ae207def97d883e417e5d538c0451c456f7cfd7762703f492353e23909",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "backend/tests/test_team_sdk_bridge.py",
+      "sha256": "3c7791bbc46cda9de8e62eb4f23e226a6d56cedb1a1864291822aeff6c595bd1",
+      "ownership": "mayaform_draft"
+    },
+    {
+      "path": "docs/contracts/MAYAFORM_V14_DIAGNOSTIC_ACTIVITY.md",
+      "sha256": "a3d41c761fca02a243db88673c76a8ee417592b2a6f5082bef46bfa79f44a59f",
+      "ownership": "mayaform_draft"
+    }
+  ]
+}

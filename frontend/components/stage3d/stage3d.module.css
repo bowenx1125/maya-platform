@@ -398,30 +398,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The one control a teacher needs the second a bullet goes wrong. */
-.barrageToggle {
-  position: absolute;
-  z-index: 9;
-  left: 20px;
-  bottom: 254px;
-  padding: 6px 12px 7px;
-  border: 1px solid rgba(38, 31, 24, 0.14);
-  border-radius: 999px;
-  background: rgba(252, 250, 245, 0.94);
-  color: var(--ink, #1d1d1f);
-  font-size: 0.76rem;
-  cursor: pointer;
-}
-
-.barrageToggle:hover {
-  background: #fff;
-}
-
-.barrageToggle[data-paused="true"] {
-  border-color: #a63328;
-  color: #a63328;
-}
-
 @media (max-width: 900px) {
   .namePlate {
     display: none;
@@ -472,10 +448,6 @@
 
   .joinCard svg {
     width: min(250px, calc(44dvh - 110px));
-  }
-
-  .barrageToggle {
-    bottom: calc(56dvh + 24px);
   }
 
   .joinCopy {

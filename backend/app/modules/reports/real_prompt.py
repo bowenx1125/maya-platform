@@ -216,7 +216,6 @@ def build_report_request(
         "stream": False,
         "temperature": 0.2,
         "top_p": 0.8,
-        "max_completion_tokens": REPORT_REQUESTED_OUTPUT_TOKENS,
         "n": 1,
         "response_format": {
             "type": "json_schema",

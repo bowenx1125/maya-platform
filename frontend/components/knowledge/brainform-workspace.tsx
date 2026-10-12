@@ -1,0 +1,2474 @@
+"use client";
+
+import { usePathname, useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  isAmbiguousMutationFailure,
+  isConflict,
+  PlatformApiError,
+  type BrainformKnowledge,
+  type ChatAgent,
+  type Group,
+  type KnowledgeDocument,
+  type KnowledgeGenerationStatus,
+  type KnowledgeMarkdown,
+  type MemoryEntrySource,
+  type TeamSummaryDto,
+} from "../../lib/api";
+import { useIdempotencyStore } from "../../lib/idempotency";
+import {
+  buildMarkdownFile,
+  downloadKnowledgeMarkdown,
+  KnowledgeFilenameField,
+  KnowledgeMarkdownField,
+} from "./markdown-editor";
+import { runKnowledgeMutation } from "./knowledge-mutation";
+import { useT } from "../locale";
+import { useSession } from "../session-provider";
+import { WorkspaceAction } from "../workspace-actions";
+import { ErrorNotice, LoadingCard } from "../ui";
+import { ReportMarkdown } from "../report/report-markdown";
+import {
+  IconArrowRight,
+  IconClose,
+  IconDownload,
+  IconEye,
+  IconRefresh,
+} from "../quiet-icons";
+
+import styles from "./brainform-workspace.module.css";
+
+type BrainformRole = "teacher" | "student";
+
+type RagDraft = {
+  filename: string;
+  markdown: string;
+  documentId?: string;
+  expectedContentHash?: string;
+  expectedIndexRevision?: number;
+  originalFilename?: string;
+  originalMarkdown?: string;
+  canEdit?: boolean;
+};
+
+type StagedRagFile = { file: File; fingerprint: string };
+
+type KnowledgeDraft = { markdown: string; expectedVersionSeq: number };
+type BrainformKnowledgeAssetRow = BrainformKnowledge & {
+  used_by_agents: string[];
+  agent_ids: string[];
+};
+
+type BrainformMemoryItem = {
+  source: MemoryEntrySource;
+  name: string;
+  detail: string;
+  label:
+    "brainformMemoryAgent" | "brainformMemoryTeam" | "brainformMemoryMayaTeam";
+};
+
+type Pane =
+  | { kind: "rag-edit"; draftKey: string }
+  | { kind: "rag-view"; documentId: string; markdown: string; filename: string }
+  | { kind: "knowledge-view"; documentId: string }
+  | { kind: "knowledge-edit"; documentId: string };
+
+type PendingGeneration = {
+  documentId: string;
+  actionId: string;
+};
+type PendingRagAction = { kind: "hide" | "reindex"; documentId: string };
+
+type KnowledgeGraphEdge = { from: string; to: string };
+type ParsedKnowledgeGraph = {
+  edges: KnowledgeGraphEdge[];
+  nodes: string[];
+  markdownWithoutGraph: string;
+};
+
+function parseKnowledgeGraph(markdown: string): ParsedKnowledgeGraph | null {
+  const lines = markdown.split("\n");
+  const headings: Array<{ index: number; level: number; title: string }> = [];
+  let fence: { marker: string; size: number } | null = null;
+  lines.forEach((line, index) => {
+    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fence) {
+      if (
+        fenceMatch &&
+        fenceMatch[1][0] === fence.marker &&
+        fenceMatch[1].length >= fence.size &&
+        line.slice(fenceMatch[0].length).trim() === ""
+      ) {
+        fence = null;
+      }
+      return;
+    }
+    if (fenceMatch) {
+      fence = { marker: fenceMatch[1][0], size: fenceMatch[1].length };
+      return;
+    }
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      headings.push({
+        index,
+        level: heading[1].length,
+        title: heading[2].trim(),
+      });
+    }
+  });
+  const graphSections = headings.filter(
+    (heading) => heading.level === 2 && heading.title.toLowerCase() === "graph",
+  );
+  if (graphSections.length !== 1) return null;
+  const start = graphSections[0].index;
+  const end =
+    headings.find((heading) => heading.index > start && heading.level === 2)
+      ?.index ?? lines.length;
+  const edges: KnowledgeGraphEdge[] = [];
+  const nodeSet = new Set<string>();
+  for (const line of lines.slice(start + 1, end)) {
+    const value = line.trim();
+    if (!value) continue;
+    const edge = value.match(/^-\s+(.+?)\s+→\s+(.+?)\s*$/);
+    if (!edge || edges.length >= 80) return null;
+    const from = edge[1].trim();
+    const to = edge[2].trim();
+    if (!from || !to || from.length > 100 || to.length > 100) return null;
+    edges.push({ from, to });
+    nodeSet.add(from);
+    nodeSet.add(to);
+    if (nodeSet.size > 40) return null;
+  }
+  if (edges.length === 0) return null;
+  const updatedLines = [...lines.slice(0, start), ...lines.slice(end)];
+  return {
+    edges,
+    nodes: [...nodeSet],
+    markdownWithoutGraph: updatedLines.join("\n").trim(),
+  };
+}
+
+function KnowledgeMarkdownView({
+  markdown,
+  graphLabel,
+}: {
+  markdown: string;
+  graphLabel: string;
+}) {
+  const graph = parseKnowledgeGraph(markdown);
+  const titleId = useId();
+  const descriptionId = useId();
+  if (!graph) return <ReportMarkdown>{markdown}</ReportMarkdown>;
+
+  const columns = 3;
+  const nodeWidth = 190;
+  const rowHeight = 94;
+  const columnGap = 42;
+  const nodePositions = new Map(
+    graph.nodes.map((node, index) => [
+      node,
+      {
+        x: 20 + (index % columns) * (nodeWidth + columnGap),
+        y: 22 + Math.floor(index / columns) * rowHeight,
+      },
+    ]),
+  );
+  const rows = Math.ceil(graph.nodes.length / columns);
+  const width = columns * nodeWidth + (columns - 1) * columnGap + 40;
+  const height = rows * rowHeight + 14;
+  return (
+    <>
+      {graph.markdownWithoutGraph ? (
+        <ReportMarkdown>{graph.markdownWithoutGraph}</ReportMarkdown>
+      ) : null}
+      <figure className={styles.graphFigure}>
+        <div className={styles.graphScroll}>
+          <svg
+            className={styles.graphSvg}
+            role="img"
+            aria-labelledby={`${titleId} ${descriptionId}`}
+            viewBox={`0 0 ${width} ${height}`}
+          >
+            <title id={titleId}>{graphLabel}</title>
+            <desc id={descriptionId}>
+              {graph.edges
+                .map((edge) => `${edge.from} → ${edge.to}`)
+                .join(". ")}
+            </desc>
+            <defs>
+              <marker
+                id="brainform-graph-arrow"
+                markerWidth="9"
+                markerHeight="8"
+                refX="8"
+                refY="4"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0,0 L9,4 L0,8 z" fill="#806b45" />
+              </marker>
+            </defs>
+            {graph.edges.map((edge, index) => {
+              const from = nodePositions.get(edge.from);
+              const to = nodePositions.get(edge.to);
+              if (!from || !to) return null;
+              const fromX = from.x + nodeWidth;
+              const fromY = from.y + 29;
+              const toX = to.x;
+              const toY = to.y + 29;
+              return (
+                <path
+                  key={`${edge.from}-${edge.to}-${index}`}
+                  className={styles.graphEdge}
+                  d={`M ${fromX} ${fromY} C ${fromX + 30} ${fromY}, ${toX - 30} ${toY}, ${toX} ${toY}`}
+                  markerEnd="url(#brainform-graph-arrow)"
+                />
+              );
+            })}
+            {graph.nodes.map((node) => {
+              const position = nodePositions.get(node);
+              if (!position) return null;
+              return (
+                <g key={node}>
+                  <rect
+                    className={styles.graphNode}
+                    x={position.x}
+                    y={position.y}
+                    width={nodeWidth}
+                    height="58"
+                    rx="12"
+                  />
+                  <text
+                    className={styles.graphLabel}
+                    x={position.x + nodeWidth / 2}
+                    y={position.y + 29}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {node}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </figure>
+    </>
+  );
+}
+
+const ragDraftsByScope = new Map<string, Record<string, RagDraft>>();
+const knowledgeDraftsByScope = new Map<
+  string,
+  Record<string, KnowledgeDraft>
+>();
+const generationJobsByScope = new Map<string, Record<string, string>>();
+
+function createUuid(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.getRandomValues === "function"
+  ) {
+    crypto.getRandomValues(bytes);
+  } else {
+    bytes.forEach((_, index) => {
+      bytes[index] = Math.floor(Math.random() * 256);
+    });
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
+function getRagDrafts(scope: string): Record<string, RagDraft> {
+  return ragDraftsByScope.get(scope) ?? {};
+}
+
+function rememberRagDrafts(scope: string, drafts: Record<string, RagDraft>) {
+  ragDraftsByScope.set(scope, drafts);
+}
+
+async function fingerprintRagFile(file: File): Promise<string> {
+  // jsdom's File#arrayBuffer can return a Node Buffer, which SubtleCrypto rejects.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
+    return `sha256:${Array.from(digest, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("")}`;
+  }
+  return `bytes:${Array.from(new Uint8Array(bytes), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("")}`;
+}
+
+function getKnowledgeDrafts(scope: string): Record<string, KnowledgeDraft> {
+  return knowledgeDraftsByScope.get(scope) ?? {};
+}
+
+function rememberKnowledgeDrafts(
+  scope: string,
+  drafts: Record<string, KnowledgeDraft>,
+) {
+  knowledgeDraftsByScope.set(scope, drafts);
+}
+
+function generationStorageKey(scope: string, setId: string): string {
+  let stableScope = scope;
+  try {
+    const parsed: unknown = JSON.parse(scope);
+    if (Array.isArray(parsed) && parsed.length >= 3) {
+      stableScope = JSON.stringify(parsed.slice(0, 3));
+    }
+  } catch {
+    // Keep the opaque scope key if it is not the workspace tuple.
+  }
+  return `maya:brainform-generation-job:${stableScope}:${setId}`;
+}
+
+function getGenerationJobs(scope: string): Record<string, string> {
+  return generationJobsByScope.get(scope) ?? {};
+}
+
+function rememberGenerationJobs(scope: string, jobs: Record<string, string>) {
+  generationJobsByScope.set(scope, jobs);
+  for (const [setId, jobId] of Object.entries(jobs)) {
+    try {
+      window.sessionStorage.setItem(generationStorageKey(scope, setId), jobId);
+    } catch {
+      // The owner-only Job route remains available for the current page session.
+    }
+  }
+}
+
+function isGenerationActive(
+  state: BrainformKnowledge["generation_state"],
+): boolean {
+  return state === "pending" || state === "running";
+}
+
+function indexStatusText(
+  document: KnowledgeDocument,
+  t: ReturnType<typeof useT>,
+) {
+  if (
+    document.index_status === "pending" ||
+    document.index_status === "indexing"
+  ) {
+    return t("brainformRagIndexing");
+  }
+  if (document.index_status === "failed") {
+    return t("brainformRagIndexFailed");
+  }
+  return "";
+}
+
+export function BrainformWorkspace({
+  role,
+  initialAgentId,
+  initialSetId,
+  initialCourseId,
+  initialJobId,
+  initialGroupId,
+  initialMode,
+  initialDocumentId,
+}: {
+  role: BrainformRole;
+  initialAgentId?: string;
+  initialSetId?: string;
+  initialCourseId?: string;
+  initialJobId?: string;
+  initialGroupId?: string;
+  initialMode?: string;
+  initialDocumentId?: string;
+}) {
+  const { api, identityGeneration, user } = useSession();
+  const [effectiveRole, setEffectiveRole] = useState(role);
+  const roleCourseIds = useMemo(
+    () =>
+      (user?.courses ?? [])
+        .filter((membership) => membership.role === effectiveRole)
+        .map((membership) => membership.course_id),
+    [effectiveRole, user?.courses],
+  );
+  const defaultCourseId =
+    (initialCourseId && roleCourseIds.includes(initialCourseId)
+      ? initialCourseId
+      : undefined) ?? roleCourseIds[0];
+  const [selectedCourseId, setSelectedCourseId] = useState(
+    defaultCourseId ?? "",
+  );
+  const [groupContextResolved, setGroupContextResolved] =
+    useState(!initialGroupId);
+  const [groupContextError, setGroupContextError] = useState<unknown>(null);
+  const courseId =
+    selectedCourseId && roleCourseIds.includes(selectedCourseId)
+      ? selectedCourseId
+      : (defaultCourseId ?? "");
+
+  useEffect(() => {
+    if (!initialGroupId) {
+      const timer = window.setTimeout(() => {
+        setEffectiveRole(role);
+        setGroupContextResolved(true);
+        setGroupContextError(null);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setGroupContextResolved(false);
+      setGroupContextError(null);
+      void api
+        .group(initialGroupId)
+        .then((group) => {
+          if (!active) return;
+          const member = (user?.groups ?? []).some(
+            (membership) => membership.group_id === initialGroupId,
+          );
+          const groupMemberships = (user?.courses ?? []).filter(
+            (membership) => membership.course_id === group.course_id,
+          );
+          const groupRole = groupMemberships.some(
+            (membership) => membership.role === role,
+          )
+            ? role
+            : role === "student" &&
+                groupMemberships.some(
+                  (membership) => membership.role === "teacher",
+                )
+              ? "teacher"
+              : role;
+          const hasGroupCourseRole = groupMemberships.some(
+            (membership) => membership.role === groupRole,
+          );
+          if (!hasGroupCourseRole || (role === "student" && !member))
+            throw new Error("group scope unavailable");
+          setEffectiveRole(groupRole);
+          setSelectedCourseId(group.course_id);
+          setGroupContextResolved(true);
+        })
+        .catch((cause) => {
+          if (!active) return;
+          setGroupContextError(cause);
+          setGroupContextResolved(true);
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [api, initialGroupId, role, user?.courses, user?.groups]);
+
+  if (!groupContextResolved) return <LoadingCard />;
+  if (groupContextError)
+    return (
+      <ErrorNotice inline notFound="groupNotFound" error={groupContextError} />
+    );
+  const dataScope = JSON.stringify([
+    user?.id ?? null,
+    effectiveRole,
+    courseId,
+    initialGroupId,
+    identityGeneration,
+  ]);
+
+  return (
+    <BrainformWorkspaceBody
+      key={dataScope}
+      role={effectiveRole}
+      courseIds={roleCourseIds}
+      courseId={courseId}
+      onCourseChange={setSelectedCourseId}
+      initialAgentId={initialAgentId}
+      initialSetId={initialSetId}
+      initialJobId={initialJobId}
+      initialGroupId={initialGroupId}
+      initialMode={initialMode}
+      initialDocumentId={initialDocumentId}
+      identityScope={dataScope}
+      ragDraftScope={JSON.stringify([
+        user?.id ?? null,
+        effectiveRole,
+        selectedCourseId,
+      ])}
+    />
+  );
+}
+
+function BrainformWorkspaceBody({
+  role,
+  courseIds,
+  courseId,
+  onCourseChange,
+  initialAgentId,
+  initialSetId,
+  initialJobId,
+  initialGroupId,
+  initialMode,
+  initialDocumentId,
+  identityScope,
+  ragDraftScope,
+}: {
+  role: BrainformRole;
+  courseIds: string[];
+  courseId: string;
+  onCourseChange: (courseId: string) => void;
+  initialAgentId?: string;
+  initialSetId?: string;
+  initialJobId?: string;
+  initialGroupId?: string;
+  initialMode?: string;
+  initialDocumentId?: string;
+  identityScope: string;
+  ragDraftScope: string;
+}) {
+  const t = useT();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { api, user } = useSession();
+  const mutationStore = useIdempotencyStore();
+  const [courseNames, setCourseNames] = useState<Record<string, string>>({});
+  const [ragDocuments, setRagDocuments] = useState<KnowledgeDocument[]>([]);
+  const [knowledgeRows, setKnowledgeRows] = useState<BrainformKnowledge[]>([]);
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
+  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [notice, setNotice] = useState("");
+  const [pendingRagAction, setPendingRagAction] =
+    useState<PendingRagAction | null>(null);
+  const [pane, setPane] = useState<Pane | null>(null);
+  const handledUrlMode = useRef("");
+  const [ragDrafts, setRagDrafts] = useState<Record<string, RagDraft>>(() =>
+    getRagDrafts(ragDraftScope),
+  );
+  const [ragFiles, setRagFiles] = useState<Record<string, StagedRagFile>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [markdown, setMarkdown] = useState<KnowledgeMarkdown | null>(null);
+  const [markdownDraft, setMarkdownDraft] = useState("");
+  const [knowledgeDrafts, setKnowledgeDrafts] = useState<
+    Record<string, KnowledgeDraft>
+  >(() => getKnowledgeDrafts(identityScope));
+  const [generationJobs, setGenerationJobs] = useState<Record<string, string>>(
+    () => getGenerationJobs(identityScope),
+  );
+  const [generationStatuses, setGenerationStatuses] = useState<
+    Record<string, KnowledgeGenerationStatus>
+  >({});
+  const [generationRetry, setGenerationRetry] =
+    useState<PendingGeneration | null>(null);
+  const [renameSetId, setRenameSetId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const currentScope = useRef(identityScope);
+  const ragActionPane = useRef<Pane | null>(pane);
+  const ragActionDrafts = useRef(ragDrafts);
+  const ragActionFiles = useRef(ragFiles);
+  const busyKeyRef = useRef(busyKey);
+  const saveRagAction = useRef<(draftKey: string) => void>(() => {});
+  function commitBusy(
+    next: string | null | ((current: string | null) => string | null),
+  ) {
+    const resolved =
+      typeof next === "function" ? next(busyKeyRef.current) : next;
+    busyKeyRef.current = resolved;
+    setBusyKey(resolved);
+  }
+  useLayoutEffect(() => {
+    ragActionPane.current = pane;
+    saveRagAction.current = (draftKey) => {
+      void saveRag(draftKey);
+    };
+  });
+  const loadSequence = useRef(0);
+  const operationSequence = useRef(0);
+  const fileSelectionSequence = useRef(0);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const initialKnowledgeOpened = useRef(false);
+  const initialJobRead = useRef<string | null>(null);
+  const latestGenerationJobs = useRef<{
+    scope: string;
+    jobs: Record<string, string | null>;
+  } | null>(null);
+
+  const syncModeUrl = useCallback(
+    (mode: string | null, documentId?: string) => {
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      if (mode) {
+        params.set("mode", mode);
+        if (documentId) params.set("document_id", documentId);
+        else params.delete("document_id");
+        handledUrlMode.current = `${mode}:${documentId ?? ""}`;
+      } else {
+        params.delete("mode");
+        params.delete("document_id");
+        handledUrlMode.current =
+          handledUrlMode.current ||
+          (initialMode
+            ? `${initialMode}:${initialDocumentId ?? initialSetId ?? ""}`
+            : "closed");
+      }
+      const query = params.toString();
+      router.push(`${pathname}${query ? `?${query}` : ""}`, { scroll: false });
+    },
+    [initialDocumentId, initialMode, initialSetId, pathname, router],
+  );
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (new URLSearchParams(window.location.search).has("mode")) return;
+      handledUrlMode.current = "";
+      setPane(null);
+      setMarkdown(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    currentScope.current = identityScope;
+    return () => {
+      currentScope.current = "";
+    };
+  }, [identityScope]);
+
+  const scopeIsCurrent = useCallback(
+    (scope = identityScope) => currentScope.current === scope,
+    [identityScope],
+  );
+
+  const generationJobIsCurrent = useCallback(
+    (scope: string, setId: string, jobId: string) => {
+      const latest = latestGenerationJobs.current;
+      return (
+        latest?.scope !== scope ||
+        !Object.prototype.hasOwnProperty.call(latest.jobs, setId) ||
+        latest.jobs[setId] === jobId
+      );
+    },
+    [],
+  );
+
+  const loadRagDocuments = useCallback(
+    async (activeCourseId: string) => {
+      if (initialGroupId) {
+        if (
+          role === "student" &&
+          !(user?.groups ?? []).some(
+            (membership) => membership.group_id === initialGroupId,
+          )
+        )
+          throw new Error(t("groupNotFound"));
+        const group = await api.group(initialGroupId);
+        if (group.course_id !== activeCourseId)
+          throw new Error(t("groupNotFound"));
+        return api.knowledge(initialGroupId);
+      }
+      if (role === "teacher") return api.workspaceDocuments(activeCourseId);
+      const joinedGroupIds = [
+        ...new Set((user?.groups ?? []).map((group) => group.group_id)),
+      ];
+      const groupRows = await Promise.allSettled(
+        joinedGroupIds.map((groupId) => api.group(groupId)),
+      );
+      const currentCourseGroups = groupRows.flatMap((result) =>
+        result.status === "fulfilled" &&
+        result.value.course_id === activeCourseId
+          ? [result.value]
+          : [],
+      );
+      const documentRows = await Promise.allSettled(
+        currentCourseGroups.map((group) => api.knowledge(group.id)),
+      );
+      const byId = new Map<string, KnowledgeDocument>();
+      for (const result of documentRows) {
+        if (result.status !== "fulfilled") continue;
+        for (const document of result.value) byId.set(document.id, document);
+      }
+      return [...byId.values()];
+    },
+    [api, initialGroupId, role, t, user?.groups],
+  );
+
+  const loadGroups = useCallback(
+    async (activeCourseId: string) => {
+      if (role === "teacher") return api.groups(activeCourseId);
+      const groupIds = [
+        ...new Set((user?.groups ?? []).map((group) => group.group_id)),
+      ];
+      const results = await Promise.allSettled(
+        groupIds.map((groupId) => api.group(groupId)),
+      );
+      return results.flatMap((result) =>
+        result.status === "fulfilled" &&
+        result.value.course_id === activeCourseId
+          ? [result.value]
+          : [],
+      );
+    },
+    [api, role, user?.groups],
+  );
+
+  const loadWorkspace = useCallback(
+    async (background = false) => {
+      const scope = identityScope;
+      const sequence = ++loadSequence.current;
+      if (!courseId) {
+        setRagDocuments([]);
+        setKnowledgeRows([]);
+        setChatAgents([]);
+        setGroups([]);
+        latestGenerationJobs.current = { scope, jobs: {} };
+        rememberGenerationJobs(scope, {});
+        setGenerationJobs({});
+        setGenerationStatuses({});
+        setLoading(false);
+        setLoadError(null);
+        return;
+      }
+      if (!background) {
+        setLoading(true);
+        setLoadError(null);
+      }
+      try {
+        const [
+          courseRows,
+          nextRag,
+          nextKnowledge,
+          nextAgents,
+          nextGroups,
+          nextTeams,
+        ] = await Promise.all([
+          api.courses(),
+          // A private Agent's files live only inside that Agent; Brainform is
+          // the group's shared library of public Agents' RAG.
+          loadRagDocuments(courseId).then((documents) =>
+            documents.filter((document) => document.visibility !== "private"),
+          ),
+          api.brainformKnowledge(courseId),
+          api.chatAgents(courseId),
+          loadGroups(courseId),
+          typeof api.teams === "function"
+            ? api.teams(courseId).catch(() => [])
+            : Promise.resolve([]),
+        ]);
+        if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
+        const accessibleCourseNames = Object.fromEntries(
+          courseRows
+            .filter((course) => courseIds.includes(course.id))
+            .map((course) => [course.id, course.name]),
+        );
+        setCourseNames(accessibleCourseNames);
+        setRagDocuments(nextRag);
+        setKnowledgeRows(nextKnowledge);
+        setChatAgents(nextAgents);
+        setGroups(nextGroups);
+        setTeams(nextTeams);
+        const latestJobs: Record<string, string | null> = {};
+        for (const row of nextKnowledge) {
+          const setId = row.canonical_set_id;
+          if (!Object.prototype.hasOwnProperty.call(latestJobs, setId)) {
+            latestJobs[setId] = null;
+          }
+          if (role === "teacher" && row.can_edit && row.generation_job_id) {
+            latestJobs[setId] = row.generation_job_id;
+          }
+        }
+        latestGenerationJobs.current = { scope, jobs: latestJobs };
+        const restoredJobs = Object.fromEntries(
+          Object.entries(latestJobs).filter(
+            (entry): entry is [string, string] => entry[1] !== null,
+          ),
+        );
+        const previousJobs = getGenerationJobs(scope);
+        const jobsChanged =
+          Object.keys(previousJobs).length !==
+            Object.keys(restoredJobs).length ||
+          Object.entries(restoredJobs).some(
+            ([setId, jobId]) => previousJobs[setId] !== jobId,
+          );
+        if (jobsChanged) {
+          rememberGenerationJobs(scope, restoredJobs);
+        }
+        setGenerationJobs((current) => {
+          const currentEntries = Object.entries(current);
+          return currentEntries.length === Object.keys(restoredJobs).length &&
+            currentEntries.every(
+              ([setId, jobId]) => restoredJobs[setId] === jobId,
+            )
+            ? current
+            : restoredJobs;
+        });
+        setGenerationStatuses((current) => {
+          const retained = Object.entries(current).filter(
+            ([setId, status]) => restoredJobs[setId] === status.job_id,
+          );
+          return retained.length === Object.keys(current).length
+            ? current
+            : Object.fromEntries(retained);
+        });
+        if (!background) setNotice("");
+      } catch (cause) {
+        if (
+          !background &&
+          scopeIsCurrent(scope) &&
+          sequence === loadSequence.current
+        ) {
+          setLoadError(cause);
+        }
+      } finally {
+        if (scopeIsCurrent(scope) && sequence === loadSequence.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [
+      api,
+      courseId,
+      courseIds,
+      identityScope,
+      loadGroups,
+      loadRagDocuments,
+      role,
+      scopeIsCurrent,
+    ],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadWorkspace(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadWorkspace]);
+
+  const generationActive = knowledgeRows.some((row) =>
+    isGenerationActive(row.generation_state),
+  );
+  // Knowledge can also be produced by an Agent's tool outside this page, so
+  // the list keeps refreshing quietly, and quickly while a run is in progress.
+  useEffect(() => {
+    if (!courseId) return;
+    const scope = identityScope;
+    const timer = window.setInterval(
+      () => {
+        if (document.visibilityState === "hidden" || !scopeIsCurrent(scope))
+          return;
+        void loadWorkspace(true);
+      },
+      generationActive ? 1500 : 10000,
+    );
+    return () => window.clearInterval(timer);
+  }, [
+    courseId,
+    generationActive,
+    identityScope,
+    loadWorkspace,
+    scopeIsCurrent,
+  ]);
+
+  useEffect(() => {
+    if (!renameSetId) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renameSetId]);
+
+  useEffect(() => {
+    if (initialMode || loading || initialKnowledgeOpened.current) return;
+    const row = initialSetId
+      ? knowledgeRows.find((item) => item.canonical_set_id === initialSetId)
+      : initialAgentId
+        ? knowledgeRows.find((item) => item.agent_id === initialAgentId)
+        : undefined;
+    if (!row || row.version_seq == null) return;
+    initialKnowledgeOpened.current = true;
+    void openKnowledge(row, "view");
+    // Opening is intentionally one-shot for a routed canonical document.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAgentId, initialMode, initialSetId, knowledgeRows, loading]);
+
+  useEffect(() => {
+    if (
+      role !== "teacher" ||
+      !initialJobId ||
+      initialJobRead.current === initialJobId
+    )
+      return;
+    initialJobRead.current = initialJobId;
+    const scope = identityScope;
+    void api
+      .knowledgeGenerationJob(initialJobId)
+      .then((status) => {
+        if (
+          !scopeIsCurrent(scope) ||
+          status.job_id !== initialJobId ||
+          !generationJobIsCurrent(scope, status.knowledge_set_id, status.job_id)
+        )
+          return;
+        setGenerationStatuses((current) => {
+          if (
+            !scopeIsCurrent(scope) ||
+            !generationJobIsCurrent(
+              scope,
+              status.knowledge_set_id,
+              status.job_id,
+            )
+          )
+            return current;
+          return { ...current, [status.knowledge_set_id]: status };
+        });
+        setGenerationJobs((current) => {
+          if (
+            !scopeIsCurrent(scope) ||
+            !generationJobIsCurrent(
+              scope,
+              status.knowledge_set_id,
+              status.job_id,
+            )
+          )
+            return current;
+          const next = {
+            ...getGenerationJobs(scope),
+            [status.knowledge_set_id]: status.job_id,
+          };
+          rememberGenerationJobs(scope, next);
+          return next;
+        });
+        const latest = latestGenerationJobs.current;
+        latestGenerationJobs.current = {
+          scope,
+          jobs: {
+            ...(latest?.scope === scope ? latest.jobs : {}),
+            [status.knowledge_set_id]: status.job_id,
+          },
+        };
+      })
+      .catch(() => {
+        // The owner-only Job endpoint decides whether a routed job is visible.
+      });
+  }, [
+    api,
+    generationJobIsCurrent,
+    identityScope,
+    initialJobId,
+    role,
+    scopeIsCurrent,
+  ]);
+
+  useEffect(() => {
+    if (role !== "teacher") return;
+    let active = true;
+    const timers = new Set<number>();
+    const scope = identityScope;
+    const poll = async (setId: string, jobId: string) => {
+      try {
+        const status = await api.knowledgeGenerationJob(jobId);
+        if (
+          !active ||
+          !scopeIsCurrent(scope) ||
+          status.job_id !== jobId ||
+          getGenerationJobs(scope)[setId] !== jobId ||
+          !generationJobIsCurrent(scope, setId, jobId)
+        )
+          return;
+        setGenerationStatuses((current) => {
+          if (
+            getGenerationJobs(scope)[setId] !== jobId ||
+            !generationJobIsCurrent(scope, setId, jobId)
+          )
+            return current;
+          return { ...current, [setId]: status };
+        });
+        if (status.state === "pending" || status.state === "running") {
+          const timer = window.setTimeout(() => {
+            timers.delete(timer);
+            void poll(setId, jobId);
+          }, 1500);
+          timers.add(timer);
+        }
+      } catch {
+        // No manifest or foreign Job status is inferred from an unreadable Job.
+      }
+    };
+    for (const [setId, jobId] of Object.entries(generationJobs))
+      void poll(setId, jobId);
+    return () => {
+      active = false;
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [
+    api,
+    generationJobs,
+    generationJobIsCurrent,
+    identityScope,
+    role,
+    scopeIsCurrent,
+  ]);
+
+  const closePane = useCallback(() => {
+    operationSequence.current += 1;
+    commitBusy((current) => (current?.startsWith("import:") ? null : current));
+    setPane(null);
+    setMarkdown(null);
+    setNotice("");
+    syncModeUrl(null);
+  }, [syncModeUrl]);
+
+  function saveRagDrafts(next: Record<string, RagDraft>) {
+    ragActionDrafts.current = next;
+    rememberRagDrafts(ragDraftScope, next);
+    setRagDrafts(next);
+  }
+
+  function abandonRagDraftMutation(draftKey: string, draft: RagDraft) {
+    if (!draft.documentId) return;
+    if (
+      draft.expectedContentHash &&
+      draft.expectedIndexRevision !== undefined
+    ) {
+      mutationStore.abandon(
+        `brainform-replace:${draft.documentId}:${draft.expectedContentHash}:${draft.expectedIndexRevision}`,
+      );
+    }
+    mutationStore.abandon(
+      `brainform-rename:${draft.documentId}:${draft.originalFilename ?? draft.filename}:${draft.filename.trim()}`,
+    );
+  }
+
+  function sameRagFile(
+    left: StagedRagFile | null | undefined,
+    right: StagedRagFile | null | undefined,
+  ) {
+    if (left === right) return true;
+    return Boolean(
+      left &&
+      right &&
+      left.file.name === right.file.name &&
+      left.file.size === right.file.size &&
+      left.file.type === right.file.type &&
+      left.fingerprint === right.fingerprint,
+    );
+  }
+
+  function updateRagDraft(
+    draftKey: string,
+    next: RagDraft,
+    stagedFile?: StagedRagFile | null,
+  ) {
+    const current = ragActionDrafts.current[draftKey];
+    const currentFile = ragActionFiles.current[draftKey];
+    const nextFile = stagedFile === undefined ? currentFile : stagedFile;
+    if (
+      current &&
+      (current.filename !== next.filename ||
+        current.markdown !== next.markdown ||
+        !sameRagFile(currentFile, nextFile))
+    ) {
+      abandonRagDraftMutation(draftKey, current);
+    }
+    saveRagDrafts({ ...ragActionDrafts.current, [draftKey]: next });
+    if (stagedFile !== undefined) {
+      const updated = { ...ragActionFiles.current };
+      if (stagedFile) updated[draftKey] = stagedFile;
+      else delete updated[draftKey];
+      ragActionFiles.current = updated;
+      setRagFiles(updated);
+    }
+  }
+
+  async function importRag(draftKey: string, file: File) {
+    const draft = ragActionDrafts.current[draftKey];
+    if (!draft || busyKeyRef.current || !draft.canEdit) return;
+    const extension = file.name.split(".").at(-1)?.toLowerCase();
+    if (!extension || !["md", "pdf", "docx"].includes(extension)) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    const scope = identityScope;
+    const selection = ++fileSelectionSequence.current;
+    const sequence = ++operationSequence.current;
+    const selectionIsCurrent = () =>
+      scopeIsCurrent(scope) &&
+      selection === fileSelectionSequence.current &&
+      sequence === operationSequence.current;
+    commitBusy(`import:${draftKey}`);
+    setLoadError(null);
+    setNotice("");
+    if (extension !== "md") {
+      try {
+        const stagedFile = {
+          file,
+          fingerprint: await fingerprintRagFile(file),
+        };
+        if (!selectionIsCurrent()) return;
+        updateRagDraft(draftKey, { ...draft, filename: file.name }, stagedFile);
+        setNotice(t("brainformRagFileStaged", { filename: file.name }));
+      } catch (cause) {
+        if (selectionIsCurrent()) setLoadError(cause);
+      } finally {
+        if (selectionIsCurrent()) commitBusy(null);
+      }
+      return;
+    }
+    try {
+      const content = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+      if (!selectionIsCurrent()) return;
+      if (!content.trim()) {
+        setNotice(t("brainformMarkdownRequired"));
+        return;
+      }
+      updateRagDraft(
+        draftKey,
+        { ...draft, filename: file.name, markdown: content },
+        null,
+      );
+    } catch {
+      if (selectionIsCurrent()) {
+        setNotice(t("brainformMarkdownRequired"));
+      }
+    } finally {
+      if (selectionIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function editRag(document: KnowledgeDocument, syncUrl = true) {
+    const draftKey = `document:${document.id}`;
+    const existing = ragDrafts[draftKey];
+    if (existing) {
+      setPane({ kind: "rag-edit", draftKey });
+      setNotice("");
+      if (syncUrl) syncModeUrl("rag-edit", document.id);
+      return;
+    }
+    const scope = identityScope;
+    const sequence = ++operationSequence.current;
+    commitBusy(`read:${document.id}`);
+    setNotice("");
+    try {
+      const downloaded = await api.downloadKnowledge(document.id);
+      if (!scopeIsCurrent(scope) || sequence !== operationSequence.current)
+        return;
+      const draft: RagDraft = {
+        filename: document.source_filename,
+        markdown: downloaded.content,
+        documentId: document.id,
+        expectedContentHash: document.content_hash,
+        expectedIndexRevision: document.index_revision,
+        originalFilename: downloaded.filename || document.source_filename,
+        originalMarkdown: downloaded.content,
+        canEdit: document.can_manage_visibility,
+      };
+      saveRagDrafts({ ...ragDrafts, [draftKey]: draft });
+      setPane({ kind: "rag-edit", draftKey });
+      if (syncUrl) syncModeUrl("rag-edit", document.id);
+    } catch (cause) {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        setLoadError(cause);
+      }
+    } finally {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        commitBusy(null);
+      }
+    }
+  }
+
+  async function viewRag(document: KnowledgeDocument, syncUrl = true) {
+    const scope = identityScope;
+    const sequence = ++operationSequence.current;
+    commitBusy(`view:${document.id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const downloaded = await api.downloadKnowledge(document.id);
+      if (!scopeIsCurrent(scope) || sequence !== operationSequence.current)
+        return;
+      setPane({
+        kind: "rag-view",
+        documentId: document.id,
+        markdown: downloaded.content,
+        filename: downloaded.filename || document.source_filename,
+      });
+      if (syncUrl) syncModeUrl("rag-view", document.id);
+    } catch (cause) {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        setLoadError(cause);
+      }
+    } finally {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        commitBusy(null);
+      }
+    }
+  }
+
+  async function saveRag(draftKey: string) {
+    const draft = ragActionDrafts.current[draftKey];
+    const stagedFile = ragActionFiles.current[draftKey]?.file;
+    if (
+      !draft ||
+      !draft.documentId ||
+      !draft.canEdit ||
+      !draft.expectedContentHash ||
+      draft.expectedIndexRevision === undefined ||
+      busyKeyRef.current
+    )
+      return;
+    const filename = draft.filename.trim();
+    const extension = filename.split(".").at(-1)?.toLowerCase();
+    const contentChanged = draft.markdown !== draft.originalMarkdown;
+    const filenameChanged = filename !== draft.originalFilename;
+    if (!extension || !["md", "pdf", "docx"].includes(extension)) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    if (
+      contentChanged &&
+      !stagedFile &&
+      (extension !== "md" || !draft.markdown.trim())
+    ) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    if (!filenameChanged && !contentChanged && !stagedFile) {
+      setNotice(t("brainformRagSaved"));
+      return;
+    }
+    const renameOnly = filenameChanged && !contentChanged && !stagedFile;
+    const intent = renameOnly
+      ? `brainform-rename:${draft.documentId}:${draft.originalFilename}:${filename}`
+      : `brainform-replace:${draft.documentId}:${draft.expectedContentHash}:${draft.expectedIndexRevision}`;
+    commitBusy(draftKey);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const next = await runKnowledgeMutation(
+        mutationStore,
+        intent,
+        (idempotency) =>
+          renameOnly
+            ? api.renameKnowledgeDocument(
+                draft.documentId as string,
+                {
+                  expected_filename: draft.originalFilename ?? draft.filename,
+                  filename,
+                },
+                { idempotency },
+              )
+            : api.replaceKnowledgeDocument(
+                draft.documentId as string,
+                stagedFile
+                  ? new File([stagedFile], filename, { type: stagedFile.type })
+                  : buildMarkdownFile(filename, draft.markdown),
+                draft.expectedContentHash as string,
+                draft.expectedIndexRevision as number,
+                { idempotency },
+              ),
+      );
+      if (!scopeIsCurrent()) return;
+      saveRagDrafts({
+        ...ragActionDrafts.current,
+        [draftKey]: {
+          ...draft,
+          filename: next.source_filename,
+          originalFilename: next.source_filename,
+          originalMarkdown: draft.markdown,
+          expectedContentHash: next.content_hash,
+          expectedIndexRevision: next.index_revision,
+        },
+      });
+      setRagDocuments((current) =>
+        current.map((document) => (document.id === next.id ? next : document)),
+      );
+      const nextFiles = { ...ragActionFiles.current };
+      delete nextFiles[draftKey];
+      ragActionFiles.current = nextFiles;
+      setRagFiles(nextFiles);
+      setNotice(renameOnly ? t("brainformRagRenamed") : t("brainformRagSaved"));
+      void loadWorkspace();
+    } catch (cause) {
+      if (isConflict(cause)) {
+        await loadWorkspace();
+        if (scopeIsCurrent()) setNotice(t("brainformRagConflictDraftKept"));
+      } else if (isAmbiguousMutationFailure(cause)) {
+        setNotice(t("brainformRetrySameSave"));
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function downloadRag(document: KnowledgeDocument) {
+    commitBusy(`download:${document.id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const downloaded = await api.downloadKnowledge(document.id);
+      if (!scopeIsCurrent()) return;
+      downloadKnowledgeMarkdown(downloaded.content, downloaded.filename);
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function hideRag(document: KnowledgeDocument, retry = false) {
+    if (!document.can_manage_visibility) return;
+    if (
+      !retry &&
+      !window.confirm(
+        t("brainformRagHideConfirm", {
+          filename: document.source_filename,
+        }),
+      )
+    )
+      return;
+    const intent = `knowledge-hide:${document.id}`;
+    commitBusy(`hide:${document.id}`);
+    setPendingRagAction(null);
+    setLoadError(null);
+    setNotice("");
+    try {
+      await runKnowledgeMutation(mutationStore, intent, (idempotency) =>
+        api.hideKnowledge(document.id, { idempotency }),
+      );
+      if (!scopeIsCurrent()) return;
+      setRagDocuments((current) =>
+        current.filter((item) => item.id !== document.id),
+      );
+      setNotice(t("knowledgeHidden"));
+      void loadWorkspace();
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setPendingRagAction({ kind: "hide", documentId: document.id });
+        setNotice(t("brainformRetrySameSave"));
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function reindexRag(document: KnowledgeDocument, retry = false) {
+    if (!document.can_manage_visibility || document.index_status !== "failed")
+      return;
+    const intent = `knowledge-reindex:${document.id}`;
+    commitBusy(`reindex:${document.id}`);
+    setPendingRagAction(null);
+    setLoadError(null);
+    setNotice("");
+    try {
+      await runKnowledgeMutation(mutationStore, intent, (idempotency) =>
+        api.reindex(document.id, { idempotency }),
+      );
+      if (!scopeIsCurrent()) return;
+      void loadWorkspace();
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setPendingRagAction({ kind: "reindex", documentId: document.id });
+        setNotice(t("brainformRetrySameSave"));
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  function retryRagAction() {
+    if (!pendingRagAction) return;
+    const document = ragDocuments.find(
+      (item) => item.id === pendingRagAction.documentId,
+    );
+    if (!document) return;
+    if (pendingRagAction.kind === "hide") void hideRag(document, true);
+    else void reindexRag(document, true);
+  }
+
+  function beginKnowledgeEdit(current: KnowledgeMarkdown, syncUrl = true) {
+    const setId = current.canonical_set_id;
+    const draft = knowledgeDrafts[setId] ?? {
+      markdown: current.markdown,
+      expectedVersionSeq: current.version_seq,
+    };
+    if (!knowledgeDrafts[setId]) {
+      const nextDrafts = { ...knowledgeDrafts, [setId]: draft };
+      rememberKnowledgeDrafts(identityScope, nextDrafts);
+      setKnowledgeDrafts(nextDrafts);
+    }
+    setMarkdownDraft(draft.markdown);
+    setPane({ kind: "knowledge-edit", documentId: setId });
+    if (syncUrl) syncModeUrl("knowledge-edit", setId);
+  }
+
+  async function openKnowledge(
+    row: BrainformKnowledge,
+    mode: "view" | "edit",
+    syncUrl = true,
+  ) {
+    const scope = identityScope;
+    const sequence = ++operationSequence.current;
+    commitBusy(`knowledge:${row.canonical_set_id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const next = await api.knowledgeMarkdown(row.canonical_set_id);
+      if (!scopeIsCurrent(scope) || sequence !== operationSequence.current)
+        return;
+      setMarkdown(next);
+      if (mode === "edit") {
+        beginKnowledgeEdit(next, syncUrl);
+        return;
+      }
+      setPane({ kind: "knowledge-view", documentId: row.canonical_set_id });
+      if (syncUrl) syncModeUrl("knowledge-view", row.canonical_set_id);
+    } catch (cause) {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        if (
+          mode === "edit" &&
+          row.can_edit &&
+          (row.version_seq == null || row.version_seq === 0) &&
+          cause instanceof PlatformApiError &&
+          cause.status === 404
+        ) {
+          const emptyDraft = {
+            markdown: knowledgeDrafts[row.canonical_set_id]?.markdown ?? "",
+            expectedVersionSeq: 0,
+          };
+          const emptyMarkdown: KnowledgeMarkdown = {
+            audience: "full",
+            agent_id: row.agent_id,
+            canonical_set_id: row.canonical_set_id,
+            source_agent_display_name: row.source_agent_display_name,
+            knowledge_display_name: row.knowledge_display_name,
+            version_seq: 0,
+            content_hash: "",
+            markdown: "",
+            projection_available: true,
+            can_read: true,
+            can_edit: true,
+            created_at: "",
+          };
+          const nextDrafts = {
+            ...knowledgeDrafts,
+            [row.canonical_set_id]: emptyDraft,
+          };
+          rememberKnowledgeDrafts(identityScope, nextDrafts);
+          setKnowledgeDrafts(nextDrafts);
+          setMarkdown(emptyMarkdown);
+          setMarkdownDraft(emptyDraft.markdown);
+          setPane({
+            kind: "knowledge-edit",
+            documentId: row.canonical_set_id,
+          });
+          if (syncUrl) syncModeUrl("knowledge-edit", row.canonical_set_id);
+          return;
+        }
+        setLoadError(cause);
+      }
+    } finally {
+      if (scopeIsCurrent(scope) && sequence === operationSequence.current) {
+        commitBusy(null);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!initialMode) {
+      return;
+    }
+    const documentId = initialDocumentId ?? initialSetId;
+    const modeKey = `${initialMode}:${documentId ?? ""}`;
+    if (handledUrlMode.current === modeKey || loading || !courseId) return;
+    const timer = window.setTimeout(() => {
+      if (handledUrlMode.current === modeKey) return;
+      if (initialMode === "rag-view" || initialMode === "rag-edit") {
+        if (!documentId) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformRagEmpty")));
+          return;
+        }
+        const document = ragDocuments.find((item) => item.id === documentId);
+        if (!document) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformRagEmpty")));
+          return;
+        }
+        handledUrlMode.current = modeKey;
+        if (initialMode === "rag-view") void viewRag(document, false);
+        else if (document.can_manage_visibility) void editRag(document, false);
+        else void viewRag(document, false);
+        return;
+      }
+      if (
+        initialMode === "knowledge-view" ||
+        initialMode === "knowledge-edit"
+      ) {
+        if (!documentId) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformKnowledgeEmpty")));
+          return;
+        }
+        const row = knowledgeRows.find(
+          (item) => item.canonical_set_id === documentId,
+        );
+        if (!row) {
+          handledUrlMode.current = modeKey;
+          setLoadError(new Error(t("brainformKnowledgeEmpty")));
+          return;
+        }
+        handledUrlMode.current = modeKey;
+        void openKnowledge(
+          row,
+          initialMode === "knowledge-view" || !row.can_edit ? "view" : "edit",
+          false,
+        );
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // The routed operation is dispatched once after its context is loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    courseId,
+    initialDocumentId,
+    initialMode,
+    initialSetId,
+    knowledgeRows,
+    loading,
+    ragDocuments,
+    t,
+  ]);
+
+  async function saveKnowledge() {
+    if (!markdown?.can_edit || busyKey) return;
+    const setId = markdown.canonical_set_id;
+    const draft = knowledgeDrafts[setId] ?? {
+      markdown: markdownDraft,
+      expectedVersionSeq: markdown.version_seq,
+    };
+    const intent = `brainform-markdown:${setId}:${draft.expectedVersionSeq}`;
+    const handle = mutationStore.handleFor(intent);
+    commitBusy(`knowledge-save:${setId}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const next = await api.saveKnowledgeMarkdown(
+        setId,
+        {
+          expected_version_seq: draft.expectedVersionSeq,
+          markdown: markdownDraft,
+        },
+        { idempotency: handle },
+      );
+      mutationStore.finish(intent, handle);
+      if (!scopeIsCurrent()) return;
+      setMarkdown(next);
+      setMarkdownDraft(next.markdown);
+      const nextDrafts = {
+        ...knowledgeDrafts,
+        [setId]: {
+          markdown: next.markdown,
+          expectedVersionSeq: next.version_seq,
+        },
+      };
+      rememberKnowledgeDrafts(identityScope, nextDrafts);
+      setKnowledgeDrafts(nextDrafts);
+      setKnowledgeRows((current) =>
+        current.map((row) =>
+          row.canonical_set_id === setId
+            ? {
+                ...row,
+                version_seq: next.version_seq,
+                content_hash: next.content_hash,
+                knowledge_display_name: next.knowledge_display_name,
+              }
+            : row,
+        ),
+      );
+      setPane({ kind: "knowledge-view", documentId: setId });
+      syncModeUrl("knowledge-view", setId);
+      setNotice(t("brainformKnowledgeSaved"));
+    } catch (cause) {
+      if (isConflict(cause)) {
+        mutationStore.abandon(intent, handle);
+        setNotice(t("brainformKnowledgeConflictDraftKept"));
+        try {
+          const latest = await api.knowledgeMarkdown(setId);
+          if (scopeIsCurrent()) setMarkdown(latest);
+        } catch {
+          // The user's draft remains in the editor and the inline conflict is enough.
+        }
+      } else if (isAmbiguousMutationFailure(cause)) {
+        setNotice(t("brainformRetrySameSave"));
+      } else {
+        mutationStore.abandon(intent, handle);
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function regenerateKnowledge(row: BrainformKnowledge, retry = false) {
+    if (!row.can_edit || busyKey) return;
+    const pending =
+      retry && generationRetry?.documentId === row.canonical_set_id
+        ? generationRetry
+        : { documentId: row.canonical_set_id, actionId: createUuid() };
+    const intent = `brainform-regenerate:${pending.documentId}:${pending.actionId}`;
+    const handle = mutationStore.handleFor(intent);
+    commitBusy(`regenerate:${pending.documentId}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const regeneration = await api.regenerateKnowledgeMarkdown(
+        pending.documentId,
+        pending.actionId,
+        { idempotency: handle },
+      );
+      mutationStore.finish(intent, handle);
+      if (!scopeIsCurrent()) return;
+      if (role === "teacher") {
+        const latest = latestGenerationJobs.current;
+        latestGenerationJobs.current = {
+          scope: identityScope,
+          jobs: {
+            ...(latest?.scope === identityScope ? latest.jobs : {}),
+            [pending.documentId]: regeneration.job_id,
+          },
+        };
+        const nextJobs = {
+          ...getGenerationJobs(identityScope),
+          [pending.documentId]: regeneration.job_id,
+        };
+        rememberGenerationJobs(identityScope, nextJobs);
+        setGenerationJobs(nextJobs);
+        setGenerationStatuses((current) => {
+          const next = { ...current };
+          delete next[pending.documentId];
+          return next;
+        });
+      }
+      setGenerationRetry(null);
+      setKnowledgeRows((current) =>
+        current.map((item) =>
+          item.canonical_set_id === pending.documentId
+            ? { ...item, generation_state: "pending", safe_error_code: null }
+            : item,
+        ),
+      );
+      setNotice(t("brainformGenerating"));
+      void loadWorkspace();
+    } catch (cause) {
+      if (isAmbiguousMutationFailure(cause)) {
+        setGenerationRetry(pending);
+        setNotice(t("brainformRetrySameGeneration"));
+      } else {
+        mutationStore.abandon(intent, handle);
+        setGenerationRetry(null);
+      }
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  async function saveSetName(setId: string) {
+    const value = renameValue.trim();
+    setRenameSetId(null);
+    if (!value || busyKey) return;
+    const current = knowledgeRows.find((row) => row.canonical_set_id === setId);
+    if (!current || value === current.knowledge_display_name) return;
+    const intent = `brainform-set-name:${setId}:${value}`;
+    const handle = mutationStore.handleFor(intent);
+    commitBusy(`rename:${setId}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const detail = await api.knowledgeSet(setId);
+      if (!scopeIsCurrent()) return;
+      if (detail.metadata_revision == null)
+        throw new Error(t("brainformSetNameUnavailable"));
+      const next = await api.updateKnowledgeSet(
+        setId,
+        {
+          expected_metadata_revision: detail.metadata_revision,
+          display_name: value,
+        },
+        { idempotency: handle },
+      );
+      mutationStore.finish(intent, handle);
+      if (!scopeIsCurrent()) return;
+      setKnowledgeRows((rows) =>
+        rows.map((row) =>
+          row.canonical_set_id === setId
+            ? { ...row, knowledge_display_name: next.display_name }
+            : row,
+        ),
+      );
+      setMarkdown((currentMarkdown) =>
+        currentMarkdown?.canonical_set_id === setId
+          ? { ...currentMarkdown, knowledge_display_name: next.display_name }
+          : currentMarkdown,
+      );
+    } catch (cause) {
+      mutationStore.abandon(intent, handle);
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  const selectedDraft =
+    pane?.kind === "rag-edit" ? ragDrafts[pane.draftKey] : null;
+  const selectedRagFile =
+    pane?.kind === "rag-edit" ? (ragFiles[pane.draftKey]?.file ?? null) : null;
+  const accessibleAgents = useMemo(() => {
+    const agentIds = new Set(
+      knowledgeRows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
+    );
+    const rows = chatAgents.filter((agent) =>
+      agentIds.size ? agentIds.has(agent.agent_id) : true,
+    );
+    return initialAgentId
+      ? [...rows].sort(
+          (left, right) =>
+            Number(right.agent_id === initialAgentId) -
+            Number(left.agent_id === initialAgentId),
+        )
+      : rows;
+  }, [chatAgents, initialAgentId, knowledgeRows]);
+  const displayedKnowledgeRows = useMemo(() => {
+    const bySet = new Map<string, BrainformKnowledge[]>();
+    for (const row of knowledgeRows) {
+      const rows = bySet.get(row.canonical_set_id) ?? [];
+      rows.push(row);
+      bySet.set(row.canonical_set_id, rows);
+    }
+    const assets: BrainformKnowledgeAssetRow[] = [...bySet.values()].flatMap(
+      (rows) => {
+        const representative = rows[0];
+        if (!representative) return [];
+        return [
+          {
+            ...representative,
+            can_edit: rows.some((row) => row.can_edit),
+            generation_job_id:
+              rows.find((row) => row.generation_job_id)?.generation_job_id ??
+              representative.generation_job_id,
+            generation_state:
+              rows.find((row) => isGenerationActive(row.generation_state))
+                ?.generation_state ?? representative.generation_state,
+            safe_error_code:
+              rows.find((row) => row.safe_error_code)?.safe_error_code ??
+              representative.safe_error_code,
+            version_seq:
+              rows.find((row) => row.version_seq != null)?.version_seq ??
+              representative.version_seq,
+            used_by_agents: [
+              ...new Set(rows.map((row) => row.source_agent_display_name)),
+            ],
+            agent_ids: [
+              ...new Set(
+                rows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
+              ),
+            ],
+          },
+        ];
+      },
+    );
+    if (!initialAgentId) return assets;
+    return assets.sort(
+      (left, right) =>
+        Number(right.agent_ids.includes(initialAgentId)) -
+        Number(left.agent_ids.includes(initialAgentId)),
+    );
+  }, [initialAgentId, knowledgeRows]);
+  const memoryItems = useMemo<BrainformMemoryItem[]>(
+    () => [
+      ...accessibleAgents.map((agent) => ({
+        source: { kind: "agent" as const, agent_id: agent.agent_id },
+        name: agent.name,
+        detail: agent.version_label,
+        label: "brainformMemoryAgent" as const,
+      })),
+      ...teams
+        .filter((team) => team.course_id === courseId)
+        .map((team) => ({
+          source: { kind: "team" as const, team_id: team.id },
+          name: team.display_name,
+          detail: "",
+          label: "brainformMemoryTeam" as const,
+        })),
+    ],
+    [accessibleAgents, courseId, teams],
+  );
+
+  function memoryHref(source: MemoryEntrySource): string {
+    const params = new URLSearchParams({
+      memory_action_id: createUuid(),
+      memory_actor_id: user?.id ?? "",
+      memory_course_id: courseId,
+      memory_source_kind: source.kind,
+    });
+    const sourceId =
+      source.kind === "agent"
+        ? source.agent_id
+        : source.kind === "conversation"
+          ? source.id
+          : source.team_id;
+    params.set("memory_source_id", sourceId);
+    return `/${role}/chat?${params.toString()}`;
+  }
+
+  return (
+    <main className={styles.page}>
+      {/* RAG is added inside its Agent, so the overview has no New. */}
+      {pane || initialMode ? (
+        <WorkspaceAction
+          name="back"
+          onClick={closePane}
+          disabled={Boolean(busyKey)}
+        />
+      ) : null}
+      {pane?.kind === "knowledge-view" &&
+      markdown?.can_edit &&
+      markdown.audience === "full" ? (
+        <WorkspaceAction
+          name="new"
+          onClick={() => beginKnowledgeEdit(markdown)}
+          disabled={Boolean(busyKey)}
+        />
+      ) : null}
+      {pane?.kind === "rag-edit" && selectedDraft ? (
+        <WorkspaceAction
+          name="done"
+          onClick={() => {
+            const current = ragActionPane.current;
+            if (current?.kind !== "rag-edit") return;
+            const draft = ragActionDrafts.current[current.draftKey];
+            if (!draft) return;
+            saveRagAction.current(current.draftKey);
+          }}
+          disabled={Boolean(busyKey) || !selectedDraft.canEdit}
+        />
+      ) : null}
+      {pane?.kind === "knowledge-edit" && markdown ? (
+        <WorkspaceAction
+          name="done"
+          onClick={() => void saveKnowledge()}
+          disabled={
+            Boolean(busyKey) ||
+            !markdown.can_edit ||
+            markdown.audience !== "full"
+          }
+        />
+      ) : null}
+      {courseIds.length > 1 && !initialGroupId ? (
+        <header className={styles.pageHeader}>
+          <label className={styles.coursePicker}>
+            <span>{t("selectCourse")}</span>
+            <select
+              value={courseId}
+              onChange={(event) => {
+                setPane(null);
+                setMarkdown(null);
+                syncModeUrl(null);
+                onCourseChange(event.target.value);
+              }}
+            >
+              {courseIds.map((id) => (
+                <option key={id} value={id}>
+                  {courseNames[id] ?? id}
+                </option>
+              ))}
+            </select>
+          </label>
+        </header>
+      ) : null}
+
+      {loadError ? (
+        <ErrorNotice
+          error={loadError}
+          onRetry={() =>
+            pendingRagAction ? retryRagAction() : void loadWorkspace()
+          }
+        />
+      ) : null}
+      {notice ? (
+        <p className={styles.notice} role="status">
+          {notice}
+        </p>
+      ) : null}
+      {!courseId ? (
+        <p className={styles.empty}>{t("brainformUnavailable")}</p>
+      ) : null}
+      {loading && courseId ? <LoadingCard /> : null}
+
+      {!pane && !initialMode && !loading && !loadError && courseId ? (
+        <div className={styles.sections}>
+          <section
+            className={styles.section}
+            aria-labelledby="brainform-rag-heading"
+          >
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2
+                  id="brainform-rag-heading"
+                  data-ui-guide="knowledge.files"
+                  data-ui-guide-text={t("brainformRagIntro")}
+                  tabIndex={0}
+                >
+                  RAG
+                </h2>
+              </div>
+              <span className={styles.count}>{ragDocuments.length}</span>
+            </div>
+            {ragDocuments.length ? (
+              <ul className={styles.list}>
+                {ragDocuments.map((document) => {
+                  const canEdit = document.can_manage_visibility;
+                  const status = indexStatusText(document, t);
+                  return (
+                    <li className={styles.row} key={document.id}>
+                      <div className={styles.rowCopy}>
+                        <button
+                          type="button"
+                          className={styles.titleButton}
+                          onClick={() =>
+                            void (canEdit
+                              ? editRag(document)
+                              : viewRag(document))
+                          }
+                          aria-label={t(
+                            canEdit
+                              ? "brainformEditRagNamed"
+                              : "brainformViewRagNamed",
+                            { name: document.source_filename },
+                          )}
+                        >
+                          {document.source_filename}
+                        </button>
+                        {status ? (
+                          <span
+                            className={styles.rowStatus}
+                            role={
+                              document.index_status === "failed"
+                                ? "alert"
+                                : "status"
+                            }
+                          >
+                            {status}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className={styles.actions}>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformViewRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            data-ui-guide="knowledge.view"
+                            data-ui-guide-text={t("brainformViewRag")}
+                            disabled={busyKey === `view:${document.id}`}
+                            onClick={() => void viewRag(document)}
+                          >
+                            <IconEye />
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          aria-label={t("brainformDownloadRagNamed", {
+                            name: document.source_filename,
+                          })}
+                          data-ui-guide="knowledge.download"
+                          disabled={busyKey === `download:${document.id}`}
+                          onClick={() => void downloadRag(document)}
+                        >
+                          <IconDownload />
+                        </button>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformHideRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            data-ui-guide="knowledge.hide"
+                            disabled={busyKey === `hide:${document.id}`}
+                            onClick={() => void hideRag(document)}
+                          >
+                            <IconClose />
+                          </button>
+                        ) : null}
+                        {canEdit && document.index_status === "failed" ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformReindexRagNamed", {
+                              name: document.source_filename,
+                            })}
+                            data-ui-guide="knowledge.reindex"
+                            disabled={busyKey === `reindex:${document.id}`}
+                            onClick={() => void reindexRag(document)}
+                          >
+                            <IconRefresh />
+                          </button>
+                        ) : null}
+                        {pendingRagAction?.documentId === document.id ? (
+                          <button
+                            className={styles.textAction}
+                            type="button"
+                            disabled={Boolean(busyKey)}
+                            onClick={retryRagAction}
+                          >
+                            {t("retry")}
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className={styles.empty}>{t("brainformRagEmpty")}</p>
+            )}
+          </section>
+
+          <section
+            className={styles.section}
+            aria-labelledby="brainform-knowledge-heading"
+          >
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2
+                  id="brainform-knowledge-heading"
+                  data-ui-guide="knowledge.files"
+                  data-ui-guide-text={t("brainformKnowledgeIntro")}
+                  tabIndex={0}
+                >
+                  {t("brainformKnowledgeHeading")}
+                </h2>
+              </div>
+              <span className={styles.count}>
+                {displayedKnowledgeRows.length}
+              </span>
+            </div>
+            {displayedKnowledgeRows.length ? (
+              <ul className={styles.list}>
+                {displayedKnowledgeRows.map((row) => {
+                  const currentDoc = (row.version_seq ?? 0) > 0;
+                  const canGenerate = row.can_edit;
+                  const isGenerating = isGenerationActive(row.generation_state);
+                  const jobStatus = generationStatuses[row.canonical_set_id];
+                  const generationErrorCode =
+                    jobStatus &&
+                    jobStatus.job_id === generationJobs[row.canonical_set_id]
+                      ? jobStatus.safe_error_code
+                      : row.safe_error_code;
+                  return (
+                    <li className={styles.row} key={row.canonical_set_id}>
+                      <div className={styles.rowCopy}>
+                        {renameSetId === row.canonical_set_id ? (
+                          <input
+                            ref={renameInputRef}
+                            className={styles.inlineNameInput}
+                            aria-label={t("brainformSetName")}
+                            value={renameValue}
+                            onChange={(event) =>
+                              setRenameValue(event.target.value)
+                            }
+                            onBlur={() =>
+                              void saveSetName(row.canonical_set_id)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                event.currentTarget.blur();
+                              }
+                              if (event.key === "Escape") setRenameSetId(null);
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.titleButton}
+                            disabled={!row.can_edit}
+                            onClick={() => {
+                              setRenameSetId(row.canonical_set_id);
+                              setRenameValue(row.knowledge_display_name);
+                            }}
+                            aria-label={
+                              row.can_edit
+                                ? t("brainformRenameSetNamed", {
+                                    name: row.knowledge_display_name,
+                                  })
+                                : row.knowledge_display_name
+                            }
+                          >
+                            {row.knowledge_display_name}
+                          </button>
+                        )}
+                        <span className={styles.rowMeta}>
+                          {t("brainformRagUsedByAgents", {
+                            names: row.used_by_agents.join(", "),
+                          })}
+                        </span>
+                        {!isGenerating &&
+                        row.generation_state &&
+                        row.generation_state !== "completed" ? (
+                          <span className={styles.rowStatus} role="alert">
+                            {generationErrorCode &&
+                            generationErrorCode !==
+                              "provider_confirmation_required"
+                              ? t("brainformGenerationFailedReason", {
+                                  reason: generationErrorCode.replaceAll(
+                                    "_",
+                                    " ",
+                                  ),
+                                })
+                              : t("brainformGenerationFailed")}
+                          </span>
+                        ) : null}
+                        {!currentDoc && !row.generation_state ? (
+                          <span className={styles.rowStatus} role="status">
+                            {t("brainformNoKnowledgeDocument")}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className={styles.actions}>
+                        {canGenerate && !isGenerating ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformRegenerateNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            data-ui-guide="knowledge.regenerate"
+                            data-ui-guide-text={t("brainformRegenerate")}
+                            disabled={
+                              busyKey === `regenerate:${row.canonical_set_id}`
+                            }
+                            onClick={() => void regenerateKnowledge(row)}
+                          >
+                            <IconRefresh />
+                          </button>
+                        ) : null}
+                        {generationRetry?.documentId ===
+                        row.canonical_set_id ? (
+                          <button
+                            className={styles.textAction}
+                            type="button"
+                            onClick={() => void regenerateKnowledge(row, true)}
+                            disabled={
+                              busyKey === `regenerate:${row.canonical_set_id}`
+                            }
+                          >
+                            {t("retry")}
+                          </button>
+                        ) : null}
+                        {isGenerating ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformGeneratingNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            aria-busy="true"
+                            disabled
+                          >
+                            <span className="spinner" aria-hidden="true" />
+                          </button>
+                        ) : currentDoc || row.can_edit ? (
+                          <button
+                            type="button"
+                            className={styles.iconButton}
+                            aria-label={t("brainformOpenKnowledgeNamed", {
+                              name: row.knowledge_display_name,
+                            })}
+                            data-ui-guide="knowledge.view"
+                            data-ui-guide-text={t("brainformViewKnowledge")}
+                            disabled={
+                              busyKey === `knowledge:${row.canonical_set_id}`
+                            }
+                            onClick={() =>
+                              void openKnowledge(
+                                row,
+                                currentDoc ? "view" : "edit",
+                              )
+                            }
+                          >
+                            <IconArrowRight />
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className={styles.empty}>{t("brainformKnowledgeEmpty")}</p>
+            )}
+          </section>
+
+          <section
+            className={styles.section}
+            aria-labelledby="brainform-memory-heading"
+          >
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2
+                  id="brainform-memory-heading"
+                  data-ui-guide="brainform.memory"
+                  data-ui-guide-text={t("brainformMemoryIntro")}
+                  tabIndex={0}
+                >
+                  Memory
+                </h2>
+              </div>
+              <span className={styles.count}>{memoryItems.length}</span>
+            </div>
+            {memoryItems.length ? (
+              <ul className={styles.list}>
+                {memoryItems.map((item) => (
+                  <li
+                    className={styles.row}
+                    key={`${item.source.kind}:${item.name}:${item.detail}`}
+                  >
+                    <div className={styles.rowCopy}>
+                      <span className={styles.staticTitle}>{item.name}</span>
+                      <span className={styles.rowMeta}>
+                        {t(item.label)}
+                        {item.detail ? ` · ${item.detail}` : ""}
+                      </span>
+                    </div>
+                    <div className={styles.actions}>
+                      <button
+                        type="button"
+                        className={styles.iconButton}
+                        aria-label={t("brainformMemoryOpenNamed", {
+                          name: item.name,
+                        })}
+                        data-ui-guide="brainform.memory"
+                        data-ui-guide-text={t("brainformMemoryOpen")}
+                        onClick={() => router.push(memoryHref(item.source))}
+                      >
+                        <IconArrowRight />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.empty}>{t("brainformMemoryEmpty")}</p>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {pane ? (
+        <section
+          className={styles.editorPanel}
+          aria-labelledby="brainform-editor-heading"
+        >
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.eyebrow}>
+                {pane.kind.startsWith("rag")
+                  ? "RAG"
+                  : t("brainformKnowledgeHeading")}
+              </p>
+              <h2 id="brainform-editor-heading">
+                {pane.kind === "rag-edit"
+                  ? (selectedDraft?.filename ?? t("loading"))
+                  : pane.kind === "rag-view"
+                    ? pane.filename
+                    : (markdown?.knowledge_display_name ?? t("loading"))}
+              </h2>
+            </div>
+          </div>
+
+          {pane.kind === "rag-edit" && selectedDraft ? (
+            <div className={styles.editorForm}>
+              {selectedDraft.canEdit ? (
+                <label
+                  className="secondary-action file-button"
+                  aria-busy={busyKey === `import:${pane.draftKey}`}
+                >
+                  {busyKey === `import:${pane.draftKey}`
+                    ? t("working")
+                    : t("knowledgeImportAction")}
+                  <input
+                    type="file"
+                    aria-label={t("knowledgeImportFile")}
+                    accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    disabled={Boolean(busyKey)}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      if (file) void importRag(pane.draftKey, file);
+                    }}
+                  />
+                </label>
+              ) : null}
+              <KnowledgeFilenameField
+                className={styles.field}
+                value={selectedDraft.filename}
+                disabled={busyKey === `import:${pane.draftKey}`}
+                readOnly={!selectedDraft.canEdit}
+                describedBy={
+                  selectedDraft.canEdit ? "brainform-rag-name-note" : undefined
+                }
+                onChange={(filename) => {
+                  if (!selectedDraft.canEdit) return;
+                  updateRagDraft(pane.draftKey, { ...selectedDraft, filename });
+                }}
+              />
+              {selectedDraft.canEdit ? (
+                <small id="brainform-rag-name-note">
+                  {t("brainformRagRenameNote")}
+                </small>
+              ) : null}
+              {selectedRagFile ? (
+                <p className={styles.empty} role="status">
+                  {t("brainformRagFileStaged", {
+                    filename: selectedRagFile.name,
+                  })}{" "}
+                  {t("brainformNotMarkdownEditor")}
+                </p>
+              ) : (
+                <KnowledgeMarkdownField
+                  className={styles.field}
+                  value={selectedDraft.markdown}
+                  disabled={busyKey === `import:${pane.draftKey}`}
+                  rows={16}
+                  readOnly={!selectedDraft.canEdit}
+                  onChange={(markdown) =>
+                    updateRagDraft(pane.draftKey, {
+                      ...selectedDraft,
+                      markdown,
+                    })
+                  }
+                />
+              )}
+            </div>
+          ) : null}
+
+          {pane.kind === "rag-view" ? (
+            <ReportMarkdown>{pane.markdown}</ReportMarkdown>
+          ) : null}
+
+          {(pane.kind === "knowledge-view" || pane.kind === "knowledge-edit") &&
+          markdown ? (
+            <>
+              {markdown.version_seq === 0 ? (
+                <p className={styles.empty} role="status">
+                  {t("brainformKnowledgeFirstVersionEmpty")}
+                </p>
+              ) : null}
+              <section
+                className={styles.usageSection}
+                aria-labelledby="brainform-knowledge-users-heading"
+              >
+                <h3 id="brainform-knowledge-users-heading">
+                  {t("brainformAgentsUsingKnowledge")}
+                </h3>
+                {knowledgeRows.some(
+                  (row) => row.canonical_set_id === markdown.canonical_set_id,
+                ) ? (
+                  <ul>
+                    {[
+                      ...new Set(
+                        knowledgeRows
+                          .filter(
+                            (row) =>
+                              row.canonical_set_id ===
+                              markdown.canonical_set_id,
+                          )
+                          .map((row) => row.source_agent_display_name),
+                      ),
+                    ].map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.empty}>
+                    {t("brainformNoKnowledgeUsers")}
+                  </p>
+                )}
+              </section>
+              {pane.kind === "knowledge-edit" ? (
+                <label className={styles.field}>
+                  <span>{t("knowledgeContent")}</span>
+                  <textarea
+                    value={markdownDraft}
+                    rows={18}
+                    readOnly={
+                      !markdown.can_edit ||
+                      markdown.audience !== "full" ||
+                      busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                    }
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      const current = knowledgeDrafts[
+                        markdown.canonical_set_id
+                      ] ?? {
+                        markdown: markdown.markdown,
+                        expectedVersionSeq: markdown.version_seq,
+                      };
+                      if (value !== markdownDraft) {
+                        mutationStore.abandon(
+                          `brainform-markdown:${markdown.canonical_set_id}:${current.expectedVersionSeq}`,
+                        );
+                      }
+                      setMarkdownDraft(value);
+                      const nextDrafts = {
+                        ...knowledgeDrafts,
+                        [markdown.canonical_set_id]: {
+                          ...current,
+                          markdown: value,
+                        },
+                      };
+                      rememberKnowledgeDrafts(identityScope, nextDrafts);
+                      setKnowledgeDrafts(nextDrafts);
+                    }}
+                  />
+                </label>
+              ) : markdown.projection_available ? (
+                <KnowledgeMarkdownView
+                  markdown={markdown.markdown}
+                  graphLabel={t("brainformGraphAccessibleLabel")}
+                />
+              ) : (
+                <p className={styles.empty} role="status">
+                  {t("brainformProjectionUnavailable")}
+                </p>
+              )}
+            </>
+          ) : null}
+        </section>
+      ) : null}
+    </main>
+  );
+}

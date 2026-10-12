@@ -787,7 +787,6 @@ class SegmentLLMAdapter:
             "stream": False,
             "temperature": 0.2,
             "top_p": 0.8,
-            "max_completion_tokens": LLM_REQUESTED_OUTPUT_TOKEN_CAP,
             "n": 1,
             "response_format": {
                 "type": "json_schema",
@@ -978,15 +977,6 @@ class SegmentLLMAdapter:
                 finish=finish,
                 usage=None,
                 code="provider_usage_unknown",
-                content_hash=content_hash,
-            )
-        if usage.completion_tokens > LLM_REQUESTED_OUTPUT_TOKEN_CAP + 10:
-            return self._candidate(
-                request,
-                status=status,
-                finish=finish,
-                usage=usage,
-                code="provider_usage_overrun",
                 content_hash=content_hash,
             )
         if finish == "length":

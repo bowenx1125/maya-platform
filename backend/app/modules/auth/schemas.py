@@ -10,8 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str = Field(json_schema_extra={"format": "password"})
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=128, json_schema_extra={"format": "password"})
 
 
 class CourseMembership(BaseModel):
@@ -28,6 +28,7 @@ class CurrentUser(BaseModel):
     id: UUID
     username: str
     display_name: str
+    avatar: str | None = None
     courses: list[CourseMembership]
     groups: list[GroupMembership]
 
@@ -59,7 +60,23 @@ class PublicMember(BaseModel):
 
     user_id: UUID
     display_name: str
+    avatar: str | None = None
     role: str
+
+
+class UpdateCurrentUserRequest(BaseModel):
+    """Change what is given; an omitted field stays as it is.
+
+    ``avatar: null`` clears the avatar, so for it "omitted" and "null" differ.
+    """
+
+    avatar: str | None = Field(default=None, max_length=64)
+    display_name: str | None = Field(default=None, max_length=200)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(max_length=128, json_schema_extra={"format": "password"})
+    new_password: str = Field(max_length=128, json_schema_extra={"format": "password"})
 
 
 class RegisterRequest(BaseModel):

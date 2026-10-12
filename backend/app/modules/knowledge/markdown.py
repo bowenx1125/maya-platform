@@ -10,9 +10,9 @@ from dataclasses import dataclass
 
 TOKEN_RE = re.compile(r"\S+")
 EMBED_TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
-MAX_RAG_CHARS = 100_000
 EMBEDDING_DIMENSION = 256
 EMBEDDING_KEY = "mock-sha256-v1"
+MAX_CHUNK_UTF8_BYTES = 15_000
 
 
 class MarkdownInputError(ValueError):
@@ -89,6 +89,39 @@ def _boundaries(text: str, tokens: list[re.Match[str]]) -> set[int]:
     return boundaries
 
 
+def _utf8_byte_length(character: str) -> int:
+    codepoint = ord(character)
+    if codepoint <= 0x7F:
+        return 1
+    if codepoint <= 0x7FF:
+        return 2
+    if codepoint <= 0xFFFF:
+        return 3
+    return 4
+
+
+def _chunk_by_utf8_bytes(text: str) -> list[tuple[int, str, int, int]]:
+    """Split oversized chunk payloads on Unicode codepoint boundaries."""
+
+    output: list[tuple[int, str, int, int]] = []
+    start = 0
+    byte_count = 0
+    for end, character in enumerate(text):
+        size = _utf8_byte_length(character)
+        if byte_count and byte_count + size > MAX_CHUNK_UTF8_BYTES:
+            chunk_text = text[start:end]
+            if chunk_text.strip():
+                output.append((len(output), chunk_text, start, end))
+            start = end
+            byte_count = 0
+        byte_count += size
+    if start < len(text):
+        chunk_text = text[start:]
+        if chunk_text.strip():
+            output.append((len(output), chunk_text, start, len(text)))
+    return output
+
+
 def chunk_markdown(text: str) -> list[tuple[int, str, int, int]]:
     tokens = list(TOKEN_RE.finditer(text))
     if not tokens:
@@ -117,6 +150,13 @@ def chunk_markdown(text: str) -> list[tuple[int, str, int, int]]:
         if end == total:
             break
         start = max(end - 100, start + 1)
+    if any(
+        len(chunk_text.encode("utf-8")) > MAX_CHUNK_UTF8_BYTES for _, chunk_text, _, _ in output
+    ):
+        # Token-count boundaries alone can still produce an oversized UTF-8
+        # payload when tokens are unusually long. Bound supplier inputs without
+        # changing saved source text or the offsets attached to each chunk.
+        return _chunk_by_utf8_bytes(text)
     return output
 
 

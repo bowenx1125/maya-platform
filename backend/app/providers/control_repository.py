@@ -11,16 +11,16 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import Engine, Table, func, select, text, update
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Executable
@@ -30,6 +30,7 @@ from app.core.models import (
     Agent,
     AgentVersion,
     DemoAcceptanceRun,
+    Job,
     LlmAcceptedStage,
     LlmRecoveryInput,
     ProviderExportConfirmation,
@@ -39,13 +40,17 @@ from app.core.models import (
     ProviderReservation,
     ProviderScopeBudget,
 )
+from app.modules.knowledge_sets.models import (
+    KnowledgeGenerationAcceptedStage,
+    KnowledgeGenerationRun,
+)
 from app.providers.control import (
     EMBEDDING_SNAPSHOT_BUCKET,
-    BudgetExceeded,
     DuplicateOperation,
     ExportConfirmationV1,
     ExportFieldV1,
     ExportManifestV1,
+    KnowledgeGenerationAcceptedStageV1,
     LLMAcceptedBundleV1,
     LLMAcceptedStageV1,
     LLMRecoveryInputV1,
@@ -60,6 +65,8 @@ from app.providers.control import (
     ReservationState,
     budget_bucket_for_operation,
     can_transition,
+    canonical_json_bytes,
+    sha256_hex,
     startup_recovery_state,
     validate_budget_bucket,
     validate_demo_acceptance_call_no,
@@ -71,12 +78,15 @@ _MANIFEST_TABLE = cast(Table, ProviderExportManifest.__table__)
 _CONFIRMATION_TABLE = cast(Table, ProviderExportConfirmation.__table__)
 _BUDGET_TABLE = cast(Table, ProviderScopeBudget.__table__)
 _OPERATION_TABLE = cast(Table, ProviderOperation.__table__)
+_JOB_TABLE = cast(Table, Job.__table__)
 _ACCEPTANCE_RUN_TABLE = cast(Table, DemoAcceptanceRun.__table__)
 _AGENT_TABLE = cast(Table, Agent.__table__)
 _AGENT_VERSION_TABLE = cast(Table, AgentVersion.__table__)
 _RESERVATION_TABLE = cast(Table, ProviderReservation.__table__)
 _LLM_STAGE_TABLE = cast(Table, LlmAcceptedStage.__table__)
 _LLM_RECOVERY_INPUT_TABLE = cast(Table, LlmRecoveryInput.__table__)
+_KNOWLEDGE_GENERATION_RUN_TABLE = cast(Table, KnowledgeGenerationRun.__table__)
+_KNOWLEDGE_GENERATION_STAGE_TABLE = cast(Table, KnowledgeGenerationAcceptedStage.__table__)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -94,6 +104,48 @@ class ScopeBudgetAmbiguous(ProviderRepositoryError):
 
 class PolicyExportStale(ProviderRepositoryError):
     """An operation does not match a confirmed policy/export hash pair."""
+
+
+class ProviderDispatchRejected(ProviderRepositoryError):
+    """A Chat-specific request fence rejected an operation before dispatch."""
+
+    code = "chat_request_stale"
+
+
+ProviderSendingGuard = Callable[[Connection, RowMapping], bool]
+
+
+@dataclass(frozen=True)
+class TeamProviderCallStageV1:
+    """One exact SDK dispatch and its durable acceptance state."""
+
+    call_id: str
+    result_id: str
+    ordinal: int
+    operation_id: str
+    request_hash: str
+    request_json: str
+    manifest_hash: str
+    state: OperationState
+    accepted_response_json: str | None
+    safe_error_code: str | None
+
+
+@dataclass(frozen=True)
+class RuntimeModelCallStageV1:
+    """One exact Single-Agent model request and its immutable response stage."""
+
+    operation_id: str
+    conversation_id: str
+    turn_id: str
+    executor_agent_version_id: str
+    ordinal: int
+    dispatch_ordinal: int
+    request_hash: str
+    request_json: str
+    state: OperationState
+    accepted_response_json: str | None
+    safe_error_code: str | None
 
 
 class ProviderRepository:
@@ -378,6 +430,14 @@ class ProviderRepository:
         )
         return _confirmation_from_row(row) if row is not None else None
 
+    def get_export_confirmation_id(self, manifest_hash: str) -> str | None:
+        row = self._read_one(
+            select(_CONFIRMATION_TABLE.c.id).where(
+                _CONFIRMATION_TABLE.c.manifest_hash == manifest_hash
+            )
+        )
+        return str(row["id"]) if row is not None else None
+
     def save_export_confirmation(
         self,
         manifest_id: str,
@@ -559,12 +619,7 @@ class ProviderRepository:
                 connection.execute(table.insert().values(**budget_row))
                 return
             if not replace_empty:
-                if (
-                    _as_int(existing["max_requests"]) != selected_budget.max_requests
-                    or _as_int(existing["max_total_tokens"]) != selected_budget.max_total_tokens
-                    or _as_float(existing["max_cost_cny"]) != float(selected_budget.max_cost_cny)
-                ):
-                    raise ProviderRepositoryError("scope budget already has different caps")
+                # Existing estimates are historical accounting metadata, not quotas.
                 return
             if (
                 _as_int(existing["allocated_requests"] or 0) != 0
@@ -720,7 +775,12 @@ class ProviderRepository:
         ).scalar_one()
         return run_id, int(highest or 0) + 1
 
-    def create_prepared(self, request: ProviderReservationRequestV1) -> ProviderOperationV1:
+    def create_prepared(
+        self,
+        request: ProviderReservationRequestV1,
+        *,
+        _binding_writer: Callable[[Connection, str], None] | None = None,
+    ) -> ProviderOperationV1:
         if request.provider_operation == "llm_debate":
             raise ProviderRepositoryError(
                 "legacy llm_debate operations cannot be created",
@@ -758,11 +818,733 @@ class ProviderRepository:
                 if inherited is not None:
                     values["acceptance_run_id"], values["call_no"] = inherited
                 connection.execute(_OPERATION_TABLE.insert().values(**values))
+                if _binding_writer is not None:
+                    _binding_writer(connection, operation_id)
         except IntegrityError as exc:
             raise DuplicateOperation("provider attempt already exists") from exc
         return self.operation(operation_id)
 
     create = create_prepared
+
+    def create_team_prepared(
+        self,
+        request: ProviderReservationRequestV1,
+        *,
+        result_id: str,
+        ordinal: int,
+        request_json: str,
+        claim_token: str,
+        binding_guard: ProviderSendingGuard,
+    ) -> ProviderOperationV1:
+        """Bind one actual Team SDK dispatch atomically to the shared operation."""
+        from app.modules.workspace.models import (
+            Conversation,
+            ConversationParticipant,
+            ConversationTurn,
+            TeamProviderCall,
+            TeamProviderConsentBinding,
+            TeamTurnResult,
+        )
+
+        if (
+            request.provider_operation not in {"llm_agent_chat", "embedding_query"}
+            or request.scope_id != f"team-result:{result_id}"
+            or request.attempt_no != 1
+            or ordinal < 0
+            or sha256_hex(request_json.encode()) != request.request_hash
+            or request.build_manifest_hash != request.request_hash
+            or not claim_token
+        ):
+            raise ProviderRepositoryError("Team dispatch identity is invalid")
+        call_table = cast(Table, TeamProviderCall.__table__)
+        result_table = cast(Table, TeamTurnResult.__table__)
+        turn_table = cast(Table, ConversationTurn.__table__)
+        chat_table = cast(Table, Conversation.__table__)
+        participant_table = cast(Table, ConversationParticipant.__table__)
+        consent_table = cast(Table, TeamProviderConsentBinding.__table__)
+
+        def bind(connection: Connection, operation_id: str) -> None:
+            current_statement = (
+                select(
+                    result_table.c.id,
+                    chat_table.c.course_id,
+                    chat_table.c.user_id,
+                    chat_table.c.team_authorization_epoch,
+                    chat_table.c.publication_epoch,
+                    participant_table.c.agent_version_id,
+                    _AGENT_TABLE.c.group_id,
+                )
+                .join(turn_table, turn_table.c.id == result_table.c.turn_id)
+                .join(chat_table, chat_table.c.id == result_table.c.conversation_id)
+                .join(participant_table, participant_table.c.id == result_table.c.participant_id)
+                .join(_AGENT_TABLE, _AGENT_TABLE.c.id == participant_table.c.agent_id)
+                .where(
+                    result_table.c.id == result_id,
+                    result_table.c.state == "running",
+                    turn_table.c.state == "pending",
+                    turn_table.c.claim_token == claim_token,
+                    chat_table.c.active_request_id == turn_table.c.id,
+                )
+            )
+            # Withdrawal is added with the forward Chat tombstone migration;
+            # old test schemas remain usable while that change is integrated.
+            if "withdrawn_at" in chat_table.c:
+                current_statement = current_statement.where(chat_table.c.withdrawn_at.is_(None))
+            current = connection.execute(current_statement).mappings().first()
+            manifest = (
+                connection.execute(
+                    select(_MANIFEST_TABLE).where(
+                        _MANIFEST_TABLE.c.manifest_hash == request.export_manifest_hash
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            consent = (
+                connection.execute(
+                    select(
+                        consent_table.c.manifest_hash,
+                        consent_table.c.actor_user_id,
+                        consent_table.c.confirmer_user_id,
+                        consent_table.c.confirmer_kind,
+                        consent_table.c.standing_grant_id,
+                        consent_table.c.team_epoch,
+                        consent_table.c.publication_epoch,
+                    ).where(
+                        consent_table.c.manifest_hash == request.export_manifest_hash,
+                        consent_table.c.result_id == result_id,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            operation = (
+                connection.execute(
+                    select(_OPERATION_TABLE).where(_OPERATION_TABLE.c.id == operation_id)
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                current is None
+                or consent is None
+                or manifest is None
+                or consent["actor_user_id"] != current["user_id"]
+                or consent["team_epoch"] != current["team_authorization_epoch"]
+                or consent["publication_epoch"] != current["publication_epoch"]
+                or consent["confirmer_kind"]
+                not in {
+                    "custom_owner",
+                    "publisher_teacher",
+                    "published_chat_owner",
+                }
+                or (
+                    consent["confirmer_kind"] in {"custom_owner", "published_chat_owner"}
+                    and consent["confirmer_user_id"] != current["user_id"]
+                )
+                or (
+                    consent["confirmer_kind"] == "publisher_teacher"
+                    and consent["standing_grant_id"] is None
+                )
+                or manifest["scope_id"] != request.scope_id
+                or manifest["provider_operation"] != request.provider_operation
+                or manifest["build_manifest_hash"] != request.request_hash
+                or manifest["policy_hash"] != request.policy_hash
+                or manifest["model_key"] != request.model_key
+                or manifest["course_id"] != current["course_id"]
+                or manifest["group_id"] != current["group_id"]
+                or manifest["agent_version_id"] != current["agent_version_id"]
+                or not binding_guard(connection, operation)
+            ):
+                raise ProviderDispatchRejected("Team dispatch authorization is stale")
+            connection.execute(
+                call_table.insert().values(
+                    id=str(uuid4()),
+                    result_id=result_id,
+                    ordinal=ordinal,
+                    operation_id=operation_id,
+                    request_hash=request.request_hash,
+                    manifest_hash=request.export_manifest_hash,
+                    request_json=request_json,
+                    created_at=self._now(),
+                )
+            )
+
+        return self.create_prepared(request, _binding_writer=bind)
+
+    def create_runtime_model_call_prepared(
+        self,
+        request: ProviderReservationRequestV1,
+        *,
+        conversation_id: str,
+        turn_id: str,
+        executor_agent_version_id: str,
+        ordinal: int,
+        dispatch_ordinal: int,
+        request_json: str,
+        binding_guard: ProviderSendingGuard,
+    ) -> ProviderOperationV1:
+        """Atomically bind a Single Agent dispatch to its exact wire request."""
+        from app.modules.runtime_tools.models import RuntimeModelCallStage
+        from app.modules.workspace.models import Conversation, ConversationTurn
+
+        if (
+            request.provider_operation != "llm_agent_chat"
+            or request.scope_id != conversation_id
+            or request.logical_item_id != turn_id
+            or request.attempt_no != ordinal + 1
+            or ordinal < 0
+            or dispatch_ordinal < 0
+            or sha256_hex(request_json.encode("utf-8")) != request.request_hash
+            or request.build_manifest_hash != request.request_hash
+        ):
+            raise ProviderRepositoryError("Single Agent dispatch identity is invalid")
+        stage_table = cast(Table, RuntimeModelCallStage.__table__)
+        conversation_table = cast(Table, Conversation.__table__)
+        turn_table = cast(Table, ConversationTurn.__table__)
+
+        def bind(connection: Connection, operation_id: str) -> None:
+            current = (
+                connection.execute(
+                    select(
+                        conversation_table.c.id,
+                        conversation_table.c.course_id,
+                        conversation_table.c.agent_version_id,
+                        conversation_table.c.user_id,
+                        conversation_table.c.active_request_id,
+                        conversation_table.c.revision,
+                        turn_table.c.id.label("turn_id"),
+                        turn_table.c.position,
+                        turn_table.c.state.label("turn_state"),
+                        _AGENT_TABLE.c.group_id,
+                    )
+                    .join(turn_table, turn_table.c.conversation_id == conversation_table.c.id)
+                    .join(
+                        _AGENT_VERSION_TABLE,
+                        _AGENT_VERSION_TABLE.c.id == conversation_table.c.agent_version_id,
+                    )
+                    .join(_AGENT_TABLE, _AGENT_TABLE.c.id == _AGENT_VERSION_TABLE.c.agent_id)
+                    .where(
+                        conversation_table.c.id == conversation_id,
+                        turn_table.c.id == turn_id,
+                        turn_table.c.state == "pending",
+                        conversation_table.c.active_request_id == turn_id,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if current is not None and "withdrawn_at" in conversation_table.c:
+                current = (
+                    connection.execute(
+                        select(
+                            conversation_table.c.id,
+                            conversation_table.c.course_id,
+                            conversation_table.c.agent_version_id,
+                            conversation_table.c.user_id,
+                            conversation_table.c.active_request_id,
+                            conversation_table.c.revision,
+                            turn_table.c.id.label("turn_id"),
+                            turn_table.c.position,
+                            turn_table.c.state.label("turn_state"),
+                            _AGENT_TABLE.c.group_id,
+                        )
+                        .join(turn_table, turn_table.c.conversation_id == conversation_table.c.id)
+                        .join(
+                            _AGENT_VERSION_TABLE,
+                            _AGENT_VERSION_TABLE.c.id == conversation_table.c.agent_version_id,
+                        )
+                        .join(_AGENT_TABLE, _AGENT_TABLE.c.id == _AGENT_VERSION_TABLE.c.agent_id)
+                        .where(
+                            conversation_table.c.id == conversation_id,
+                            conversation_table.c.withdrawn_at.is_(None),
+                            turn_table.c.id == turn_id,
+                            turn_table.c.state == "pending",
+                            conversation_table.c.active_request_id == turn_id,
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+            manifest = (
+                connection.execute(
+                    select(_MANIFEST_TABLE).where(
+                        _MANIFEST_TABLE.c.manifest_hash == request.export_manifest_hash
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            operation = (
+                connection.execute(
+                    select(_OPERATION_TABLE).where(_OPERATION_TABLE.c.id == operation_id)
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                current is None
+                or current["agent_version_id"] != executor_agent_version_id
+                or manifest is None
+                or manifest["scope_id"] != conversation_id
+                or manifest["provider_operation"] != "llm_agent_chat"
+                or manifest["build_manifest_hash"] != request.request_hash
+                or manifest["policy_hash"] != request.policy_hash
+                or manifest["model_key"] != request.model_key
+                or manifest["course_id"] != current["course_id"]
+                or manifest["group_id"] != current["group_id"]
+                or manifest["agent_version_id"] != executor_agent_version_id
+                or not binding_guard(connection, operation)
+            ):
+                raise ProviderDispatchRejected("Single Agent dispatch authorization is stale")
+            connection.execute(
+                stage_table.insert().values(
+                    operation_id=operation_id,
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
+                    executor_agent_version_id=executor_agent_version_id,
+                    ordinal=ordinal,
+                    dispatch_ordinal=dispatch_ordinal,
+                    request_hash=request.request_hash,
+                    request_json=request_json,
+                    accepted_response_json=None,
+                    accepted_response_hash=None,
+                    created_at=self._now(),
+                    accepted_at=None,
+                )
+            )
+
+        return self.create_prepared(request, _binding_writer=bind)
+
+    def stage_runtime_model_call_accepted(
+        self, operation_id: str, *, response_json: str
+    ) -> ProviderOperationV1:
+        """Commit the raw Single response and accepted ledger state together."""
+        from app.modules.runtime_tools.models import RuntimeModelCallStage
+
+        if not isinstance(response_json, str):
+            raise ProviderRepositoryError("Single response stage is invalid")
+        stage_table = cast(Table, RuntimeModelCallStage.__table__)
+        response_hash = sha256_hex(response_json.encode("utf-8"))
+        with self._write_connection() as connection:
+            operation = (
+                connection.execute(
+                    select(_OPERATION_TABLE).where(_OPERATION_TABLE.c.id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            stage = (
+                connection.execute(
+                    select(stage_table).where(stage_table.c.operation_id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                operation is None
+                or stage is None
+                or operation["provider_operation"] != "llm_agent_chat"
+                or operation["scope_id"] != stage["conversation_id"]
+                or operation["logical_item_id"] != stage["turn_id"]
+                or operation["attempt_no"] != int(stage["ordinal"]) + 1
+                or operation["request_hash"] != stage["request_hash"]
+                or sha256_hex(str(stage["request_json"]).encode("utf-8")) != stage["request_hash"]
+            ):
+                raise ProviderRepositoryError("Single response stage identity is invalid")
+            if operation["state"] in {"accepted", "succeeded"}:
+                if (
+                    stage["accepted_response_json"] != response_json
+                    or stage["accepted_response_hash"] != response_hash
+                    or operation["staged_response_hash"] != response_hash
+                ):
+                    raise ProviderRepositoryError("Single accepted response is immutable")
+            else:
+                if operation["state"] != "sending" or stage["accepted_response_json"] is not None:
+                    raise OperationStateError("Single acceptance CAS fence failed")
+                now = self._now()
+                connection.execute(
+                    update(stage_table)
+                    .where(stage_table.c.operation_id == operation_id)
+                    .values(
+                        accepted_response_json=response_json,
+                        accepted_response_hash=response_hash,
+                        accepted_at=now,
+                    )
+                )
+                connection.execute(
+                    update(_OPERATION_TABLE)
+                    .where(
+                        _OPERATION_TABLE.c.id == operation_id,
+                        _OPERATION_TABLE.c.state == "sending",
+                    )
+                    .values(state="accepted", staged_response_hash=response_hash, updated_at=now)
+                )
+                connection.execute(
+                    update(_RESERVATION_TABLE)
+                    .where(_RESERVATION_TABLE.c.operation_id == operation_id)
+                    .values(state="accepted", updated_at=now)
+                )
+        return self.operation(operation_id)
+
+    def get_runtime_model_call_stage(
+        self, turn_id: str, executor_agent_version_id: str, dispatch_ordinal: int
+    ) -> RuntimeModelCallStageV1 | None:
+        """Load an exact durable Single call stage for safe replay."""
+        from app.modules.runtime_tools.models import RuntimeModelCallStage
+
+        stage_table = cast(Table, RuntimeModelCallStage.__table__)
+        row = self._read_one(
+            select(
+                stage_table,
+                _OPERATION_TABLE.c.state,
+                _OPERATION_TABLE.c.safe_error_code,
+                _OPERATION_TABLE.c.staged_response_hash,
+            )
+            .join(_OPERATION_TABLE, _OPERATION_TABLE.c.id == stage_table.c.operation_id)
+            .where(
+                stage_table.c.turn_id == turn_id,
+                stage_table.c.executor_agent_version_id == executor_agent_version_id,
+            )
+            .where(stage_table.c.dispatch_ordinal == dispatch_ordinal)
+            .order_by(stage_table.c.ordinal.desc())
+            .limit(1)
+        )
+        if row is None:
+            return None
+        request_json = str(row["request_json"])
+        request_hash = str(row["request_hash"])
+        if sha256_hex(request_json.encode("utf-8")) != request_hash:
+            raise ProviderRepositoryError("Single request stage hash is corrupt")
+        accepted_response = (
+            str(row["accepted_response_json"])
+            if row["accepted_response_json"] is not None
+            else None
+        )
+        if accepted_response is not None and (
+            sha256_hex(accepted_response.encode("utf-8")) != row["accepted_response_hash"]
+            or row["accepted_response_hash"] != row["staged_response_hash"]
+        ):
+            raise ProviderRepositoryError("Single accepted stage hash is corrupt")
+        return RuntimeModelCallStageV1(
+            operation_id=str(row["operation_id"]),
+            conversation_id=str(row["conversation_id"]),
+            turn_id=str(row["turn_id"]),
+            executor_agent_version_id=str(row["executor_agent_version_id"]),
+            ordinal=int(cast(int, row["ordinal"])),
+            dispatch_ordinal=int(cast(int, row["dispatch_ordinal"])),
+            request_hash=request_hash,
+            request_json=request_json,
+            state=cast(OperationState, str(row["state"])),
+            accepted_response_json=accepted_response,
+            safe_error_code=(
+                str(row["safe_error_code"]) if row["safe_error_code"] is not None else None
+            ),
+        )
+
+    def next_runtime_model_call_ordinal(self, turn_id: str, executor_agent_version_id: str) -> int:
+        """Allocate the next immutable ledger ordinal for an SDK dispatch attempt."""
+        from app.modules.runtime_tools.models import RuntimeModelCallStage
+
+        stage_table = cast(Table, RuntimeModelCallStage.__table__)
+        highest = self._read_one(
+            select(func.max(stage_table.c.ordinal).label("ordinal")).where(
+                stage_table.c.turn_id == turn_id,
+                stage_table.c.executor_agent_version_id == executor_agent_version_id,
+            )
+        )
+        value = cast(int | None, highest["ordinal"]) if highest is not None else None
+        return int(value) + 1 if value is not None else 0
+
+    def stage_team_accepted(self, operation_id: str, *, response_json: str) -> ProviderOperationV1:
+        """Commit acceptance and its exact response body in one durable transaction."""
+        from app.modules.workspace.models import TeamProviderCall
+
+        call_table = cast(Table, TeamProviderCall.__table__)
+        response_hash = sha256_hex(response_json.encode())
+        if not isinstance(response_json, str):
+            raise ProviderRepositoryError("Team response stage is invalid")
+        with self._write_connection() as connection:
+            operation = (
+                connection.execute(
+                    select(_OPERATION_TABLE).where(_OPERATION_TABLE.c.id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            stage = (
+                connection.execute(
+                    select(call_table).where(call_table.c.operation_id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                operation is None
+                or stage is None
+                or str(operation["scope_id"]) != f"team-result:{stage['result_id']}"
+                or operation["request_hash"] != stage["request_hash"]
+                or operation["export_manifest_hash"] != stage["manifest_hash"]
+            ):
+                raise ProviderRepositoryError("Team response stage identity is invalid")
+            if operation["state"] in {"accepted", "succeeded"}:
+                if (
+                    stage["accepted_response_json"] != response_json
+                    or stage["accepted_response_hash"] != response_hash
+                    or operation["staged_response_hash"] != response_hash
+                ):
+                    raise ProviderRepositoryError("Team accepted response is immutable")
+            else:
+                if operation["state"] != "sending" or stage["accepted_response_json"] is not None:
+                    raise OperationStateError("Team acceptance CAS fence failed")
+                now = self._now()
+                connection.execute(
+                    update(call_table)
+                    .where(call_table.c.operation_id == operation_id)
+                    .values(
+                        accepted_response_json=response_json,
+                        accepted_response_hash=response_hash,
+                        accepted_at=now,
+                    )
+                )
+                connection.execute(
+                    update(_OPERATION_TABLE)
+                    .where(
+                        _OPERATION_TABLE.c.id == operation_id,
+                        _OPERATION_TABLE.c.state == "sending",
+                    )
+                    .values(state="accepted", staged_response_hash=response_hash, updated_at=now)
+                )
+                connection.execute(
+                    update(_RESERVATION_TABLE)
+                    .where(_RESERVATION_TABLE.c.operation_id == operation_id)
+                    .values(state="accepted", updated_at=now)
+                )
+        return self.operation(operation_id)
+
+    def get_team_provider_call_stage(
+        self, result_id: str, ordinal: int
+    ) -> TeamProviderCallStageV1 | None:
+        """Load one immutable Team call receipt for a durable SDK replay."""
+        from app.modules.workspace.models import TeamProviderCall
+
+        call_table = cast(Table, TeamProviderCall.__table__)
+        row = self._read_one(
+            select(
+                call_table.c.id,
+                call_table.c.result_id,
+                call_table.c.ordinal,
+                call_table.c.operation_id,
+                call_table.c.request_hash,
+                call_table.c.request_json,
+                call_table.c.manifest_hash,
+                call_table.c.accepted_response_json,
+                _OPERATION_TABLE.c.state,
+                _OPERATION_TABLE.c.safe_error_code,
+            )
+            .join(_OPERATION_TABLE, _OPERATION_TABLE.c.id == call_table.c.operation_id)
+            .where(call_table.c.result_id == result_id, call_table.c.ordinal == ordinal)
+        )
+        if row is None:
+            return None
+        request_json = str(row["request_json"])
+        request_hash = str(row["request_hash"])
+        if sha256_hex(request_json.encode("utf-8")) != request_hash:
+            raise ProviderRepositoryError("Team request stage hash is corrupt")
+        accepted_response = (
+            str(row["accepted_response_json"])
+            if row["accepted_response_json"] is not None
+            else None
+        )
+        if accepted_response is not None and sha256_hex(accepted_response.encode("utf-8")) != str(
+            self.operation(str(row["operation_id"])).staged_response_hash
+        ):
+            raise ProviderRepositoryError("Team accepted stage hash is corrupt")
+        return TeamProviderCallStageV1(
+            call_id=str(row["id"]),
+            result_id=str(row["result_id"]),
+            ordinal=int(cast(int, row["ordinal"])),
+            operation_id=str(row["operation_id"]),
+            request_hash=request_hash,
+            request_json=request_json,
+            manifest_hash=str(row["manifest_hash"]),
+            state=cast(OperationState, str(row["state"])),
+            accepted_response_json=accepted_response,
+            safe_error_code=(
+                str(row["safe_error_code"]) if row["safe_error_code"] is not None else None
+            ),
+        )
+
+    def create_knowledge_generation_prepared(
+        self,
+        request: ProviderReservationRequestV1,
+        *,
+        run_id: str,
+        claim_token: str,
+    ) -> ProviderOperationV1:
+        """Create and bind one exact Knowledge operation in the same transaction."""
+
+        if (
+            request.provider_operation != "llm_knowledge_generate"
+            or request.scope_id != run_id
+            or request.logical_item_id != run_id
+            or request.attempt_no != 1
+            or not claim_token
+        ):
+            raise ProviderRepositoryError("Knowledge Provider operation identity is invalid")
+
+        run_table = _KNOWLEDGE_GENERATION_RUN_TABLE
+        agent_table = _AGENT_TABLE
+        operation_table = _OPERATION_TABLE
+        with self._write_connection() as connection:
+            run_row = (
+                connection.execute(select(run_table).where(run_table.c.id == run_id))
+                .mappings()
+                .first()
+            )
+            if (
+                run_row is None
+                or run_row["state"] != "running"
+                or run_row["claim_token"] != claim_token
+                or run_row["provider_manifest_hash"] != request.export_manifest_hash
+                or run_row["agent_version_id"] is None
+            ):
+                raise ProviderRepositoryError("Knowledge run claim or manifest is stale")
+            agent_row = (
+                connection.execute(
+                    select(agent_table.c.group_id).where(agent_table.c.id == run_row["agent_id"])
+                )
+                .mappings()
+                .first()
+            )
+            manifest = (
+                connection.execute(
+                    select(_MANIFEST_TABLE).where(
+                        _MANIFEST_TABLE.c.manifest_hash == request.export_manifest_hash
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                agent_row is None
+                or manifest is None
+                or manifest["provider_operation"] != request.provider_operation
+                or manifest["scope_id"] != run_id
+                or manifest["course_id"] != run_row["course_id"]
+                or manifest["group_id"]
+                != (str(agent_row["group_id"]) if agent_row["group_id"] is not None else None)
+                or manifest["agent_version_id"] != run_row["agent_version_id"]
+                or manifest["model_key"] != request.model_key
+                or manifest["policy_hash"] != request.policy_hash
+                or manifest["build_manifest_hash"] != request.build_manifest_hash
+            ):
+                raise ProviderRepositoryError("Knowledge Provider manifest ownership is stale")
+
+            confirmation = (
+                connection.execute(
+                    select(
+                        _CONFIRMATION_TABLE.c.manifest_hash,
+                        _CONFIRMATION_TABLE.c.policy_hash,
+                        _CONFIRMATION_TABLE.c.confirmation_revision,
+                        _POLICY_TABLE.c.policy_hash.label("current_policy_hash"),
+                    )
+                    .join(
+                        _CONFIRMATION_TABLE,
+                        _CONFIRMATION_TABLE.c.manifest_id == _MANIFEST_TABLE.c.id,
+                    )
+                    .join(
+                        _POLICY_TABLE,
+                        _POLICY_TABLE.c.id == _MANIFEST_TABLE.c.policy_snapshot_id,
+                    )
+                    .where(
+                        _MANIFEST_TABLE.c.id == manifest["id"],
+                        _CONFIRMATION_TABLE.c.manifest_hash == request.export_manifest_hash,
+                        _CONFIRMATION_TABLE.c.policy_hash == request.policy_hash,
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                confirmation is None
+                or confirmation["manifest_hash"] != request.export_manifest_hash
+                or confirmation["policy_hash"] != request.policy_hash
+                or confirmation["current_policy_hash"] != request.policy_hash
+                or confirmation["confirmation_revision"] != manifest["operation_revision"]
+            ):
+                raise PolicyExportStale("Knowledge Provider manifest is not exactly confirmed")
+
+            linked_operation_id = run_row["provider_operation_id"]
+            if linked_operation_id is not None:
+                existing = (
+                    connection.execute(
+                        select(operation_table).where(operation_table.c.id == linked_operation_id)
+                    )
+                    .mappings()
+                    .first()
+                )
+                if (
+                    existing is None
+                    or existing["provider_operation"] != request.provider_operation
+                    or existing["scope_id"] != request.scope_id
+                    or existing["logical_item_id"] != request.logical_item_id
+                    or existing["attempt_no"] != request.attempt_no
+                    or existing["request_hash"] != request.request_hash
+                    or existing["policy_hash"] != request.policy_hash
+                    or existing["export_manifest_hash"] != request.export_manifest_hash
+                    or existing["build_manifest_hash"] != request.build_manifest_hash
+                    or existing["model_key"] != request.model_key
+                    or existing["state"] != "prepared"
+                ):
+                    raise ProviderRepositoryError("Knowledge Provider operation cannot be reused")
+                operation_id = str(linked_operation_id)
+            else:
+                operation_id = request.operation_id or str(uuid4())
+                now = self._now()
+                connection.execute(
+                    operation_table.insert().values(
+                        id=operation_id,
+                        scope_id=request.scope_id,
+                        provider_operation=request.provider_operation,
+                        logical_item_id=request.logical_item_id,
+                        attempt_no=request.attempt_no,
+                        request_hash=request.request_hash,
+                        max_tokens=request.max_tokens,
+                        max_cost_cny=request.max_cost_cny,
+                        policy_hash=request.policy_hash,
+                        export_manifest_hash=request.export_manifest_hash,
+                        build_manifest_hash=request.build_manifest_hash,
+                        model_key=request.model_key,
+                        state="prepared",
+                        request_count=0,
+                        charged_request_count=0,
+                        staged_response_hash=None,
+                        safe_error_code=None,
+                        acceptance_run_id=None,
+                        call_no=None,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                changed = connection.execute(
+                    update(run_table)
+                    .where(
+                        run_table.c.id == run_id,
+                        run_table.c.state == "running",
+                        run_table.c.claim_token == claim_token,
+                        run_table.c.provider_operation_id.is_(None),
+                        run_table.c.provider_manifest_hash == request.export_manifest_hash,
+                    )
+                    .values(
+                        provider_operation_id=operation_id,
+                        request_hash=request.request_hash,
+                        updated_at=now,
+                    )
+                )
+                if changed.rowcount != 1:
+                    raise ProviderRepositoryError("Knowledge Provider run binding CAS failed")
+        return self.operation(operation_id)
 
     def create_snapshot_prepared(
         self,
@@ -975,6 +1757,214 @@ class ProviderRepository:
                     raise ProviderRepositoryError("Demo acceptance run state CAS failed")
         return self.operation(operation_id)
 
+    def stage_knowledge_generation_accepted(
+        self,
+        stage: KnowledgeGenerationAcceptedStageV1,
+        *,
+        content_authorized: Callable[[Connection, str, str], bool],
+    ) -> KnowledgeGenerationAcceptedStageV1:
+        """Atomically persist the sanitized stage and accept its operation.
+
+        The supplied authorization callback runs inside this same database
+        transaction. If current source or actor permission has changed since
+        send, the accepted response is represented only by a safe receipt
+        hash; its generated content is suppressed.
+        """
+
+        stage.__post_init__()
+        if not callable(content_authorized):
+            raise ProviderRepositoryError("Knowledge accepted stage requires an ACL fence")
+        operation_table = _OPERATION_TABLE
+        run_table = _KNOWLEDGE_GENERATION_RUN_TABLE
+        stage_table = _KNOWLEDGE_GENERATION_STAGE_TABLE
+        reservation_table = _RESERVATION_TABLE
+        job_table = _JOB_TABLE
+        with self._write_connection() as connection:
+            operation_row = (
+                connection.execute(
+                    select(operation_table).where(operation_table.c.id == stage.operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            run_row = (
+                connection.execute(select(run_table).where(run_table.c.id == stage.run_id))
+                .mappings()
+                .first()
+            )
+            existing_row = (
+                connection.execute(select(stage_table).where(stage_table.c.run_id == stage.run_id))
+                .mappings()
+                .first()
+            )
+            if operation_row is None or run_row is None:
+                raise ProviderRepositoryError("Knowledge accepted stage owner does not exist")
+            if (
+                operation_row["provider_operation"] != "llm_knowledge_generate"
+                or operation_row["scope_id"] != stage.run_id
+                or operation_row["logical_item_id"] != stage.run_id
+                or operation_row["attempt_no"] != 1
+                or operation_row["request_hash"] != stage.request_hash
+                or operation_row["export_manifest_hash"] != stage.manifest_hash
+                or operation_row["policy_hash"] != stage.policy_hash
+                or operation_row["model_key"] != stage.model_key
+                or run_row["provider_operation_id"] != stage.operation_id
+                or run_row["request_hash"] != stage.request_hash
+                or run_row["provider_manifest_hash"] != stage.manifest_hash
+            ):
+                raise ProviderRepositoryError("Knowledge accepted stage does not match its run")
+
+            if existing_row is not None:
+                if (
+                    existing_row["operation_id"] != stage.operation_id
+                    or existing_row["request_hash"] != stage.request_hash
+                    or existing_row["manifest_hash"] != stage.manifest_hash
+                    or existing_row["policy_hash"] != stage.policy_hash
+                    or existing_row["model_key"] != stage.model_key
+                    or existing_row["schema_hash"] != stage.schema_hash
+                    or existing_row["canonical_stage_json"] != stage.canonical_stage_json
+                    or existing_row["canonical_stage_hash"] != stage.canonical_stage_hash
+                    or existing_row["item_count"] != stage.item_count
+                    or existing_row["usage_json"] != stage.usage_json
+                    or existing_row["safe_error_code"] != stage.safe_error_code
+                    or operation_row["state"] != "accepted"
+                    or operation_row["staged_response_hash"] != stage.canonical_stage_hash
+                ):
+                    raise ProviderRepositoryError("Knowledge accepted stage is immutable")
+                return stage
+
+            if operation_row["state"] != "sending":
+                raise ProviderRepositoryError("Knowledge stage requires a sending operation")
+            reservation_row = (
+                connection.execute(
+                    select(reservation_table).where(
+                        reservation_table.c.operation_id == stage.operation_id
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if reservation_row is None or reservation_row["state"] != "sending":
+                raise ProviderRepositoryError("Knowledge stage reservation is not sending")
+
+            claim_is_current = (
+                run_row["state"] == "running" and run_row["claim_token"] == stage.claim_token
+            )
+            authorized = False
+            if claim_is_current:
+                try:
+                    authorized = bool(
+                        content_authorized(connection, stage.run_id, stage.claim_token)
+                    )
+                except Exception:
+                    authorized = False
+
+            accepted_stage = stage
+            if not authorized:
+                safe_code = (
+                    "authorization_revoked_after_send"
+                    if claim_is_current
+                    else "knowledge_generation_claim_stale"
+                )
+                suppressed_json = canonical_json_bytes(
+                    {"safe_error_code": safe_code, "suppressed": True}
+                ).decode("utf-8")
+                accepted_stage = replace(
+                    stage,
+                    canonical_stage_json=None,
+                    canonical_stage_hash=sha256_hex(suppressed_json.encode("utf-8")),
+                    item_count=0,
+                    safe_error_code=safe_code,
+                )
+
+            now = self._now()
+            connection.execute(
+                stage_table.insert().values(
+                    run_id=accepted_stage.run_id,
+                    operation_id=accepted_stage.operation_id,
+                    request_hash=accepted_stage.request_hash,
+                    manifest_hash=accepted_stage.manifest_hash,
+                    policy_hash=accepted_stage.policy_hash,
+                    model_key=accepted_stage.model_key,
+                    schema_hash=accepted_stage.schema_hash,
+                    canonical_stage_json=accepted_stage.canonical_stage_json,
+                    canonical_stage_hash=accepted_stage.canonical_stage_hash,
+                    item_count=accepted_stage.item_count,
+                    usage_json=accepted_stage.usage_json,
+                    safe_error_code=accepted_stage.safe_error_code,
+                    accepted_at=now,
+                    created_at=now,
+                )
+            )
+            accepted = connection.execute(
+                update(operation_table)
+                .where(
+                    operation_table.c.id == stage.operation_id,
+                    operation_table.c.state == "sending",
+                    operation_table.c.request_hash == stage.request_hash,
+                )
+                .values(
+                    state="accepted",
+                    staged_response_hash=accepted_stage.canonical_stage_hash,
+                    safe_error_code=accepted_stage.safe_error_code,
+                    updated_at=now,
+                )
+            )
+            reserved = connection.execute(
+                update(reservation_table)
+                .where(
+                    reservation_table.c.operation_id == stage.operation_id,
+                    reservation_table.c.state == "sending",
+                )
+                .values(state="accepted", updated_at=now)
+            )
+            if accepted.rowcount != 1 or reserved.rowcount != 1:
+                raise ProviderRepositoryError("Knowledge accepted stage CAS failed")
+
+            if claim_is_current:
+                if accepted_stage.safe_error_code is not None:
+                    safe_error_code = accepted_stage.safe_error_code
+                    run_changed = connection.execute(
+                        update(run_table)
+                        .where(
+                            run_table.c.id == stage.run_id,
+                            run_table.c.state == "running",
+                            run_table.c.claim_token == stage.claim_token,
+                            run_table.c.provider_operation_id == stage.operation_id,
+                        )
+                        .values(
+                            state="blocked",
+                            safe_error_code=safe_error_code,
+                            claim_token=None,
+                            lease_expires_at=None,
+                            updated_at=now,
+                        )
+                    )
+                    job_changed = connection.execute(
+                        update(job_table)
+                        .where(
+                            job_table.c.id == run_row["job_id"],
+                            job_table.c.claim_token == stage.claim_token,
+                        )
+                        .values(
+                            state="failed",
+                            safe_error_code=safe_error_code,
+                            claim_token=None,
+                            updated_at=now,
+                        )
+                    )
+                    if run_changed.rowcount != 1 or job_changed.rowcount != 1:
+                        raise ProviderRepositoryError("Knowledge run accepted-stage fence failed")
+        return accepted_stage
+
+    def knowledge_generation_stage(self, run_id: str) -> Mapping[str, object] | None:
+        row = self._read_one(
+            select(_KNOWLEDGE_GENERATION_STAGE_TABLE).where(
+                _KNOWLEDGE_GENERATION_STAGE_TABLE.c.run_id == run_id
+            )
+        )
+        return row
+
     # Keep naming discoverable for callers that describe this as a bound
     # prepared operation while retaining one implementation and one seam.
     create_bound_snapshot_prepared = create_snapshot_prepared
@@ -1130,7 +2120,7 @@ class ProviderRepository:
         return _reservation_from_row(row)
 
     def reserve(self, operation_id: str) -> ProviderReservationV1:
-        """Atomically allocate one scope budget before any provider I/O."""
+        """Atomically record one reservation before provider I/O, without quota checks."""
 
         operation_table = _OPERATION_TABLE
         budget_table = _BUDGET_TABLE
@@ -1163,14 +2153,6 @@ class ProviderRepository:
             allocated_requests = _as_int(budget_row["allocated_requests"] or 0)
             allocated_tokens = _as_int(budget_row["allocated_total_tokens"] or 0)
             allocated_cost = _as_float(budget_row["allocated_cost_cny"] or 0)
-            if (
-                allocated_requests + 1 > _as_int(budget_row["max_requests"])
-                or allocated_tokens + _as_int(operation_row["max_tokens"])
-                > _as_int(budget_row["max_total_tokens"])
-                or allocated_cost + _as_float(operation_row["max_cost_cny"])
-                > _as_float(budget_row["max_cost_cny"]) + 1e-12
-            ):
-                raise BudgetExceeded("provider scope allowance exceeded")
             reservation_id = str(uuid4())
             now = self._now()
             budget_changed = connection.execute(
@@ -1239,10 +2221,12 @@ class ProviderRepository:
         state: OperationState,
         safe_error_code: str | None = None,
         response_hash: str | None = None,
+        sending_guard: ProviderSendingGuard | None = None,
     ) -> ProviderOperationV1:
         operation_table = _OPERATION_TABLE
         reservation_table = _RESERVATION_TABLE
         budget_table = _BUDGET_TABLE
+        dispatch_rejected = False
         with self._write_connection() as connection:
             row = (
                 connection.execute(
@@ -1256,9 +2240,20 @@ class ProviderRepository:
             current = cast(OperationState, str(row["state"]))
             if current != expected:
                 raise OperationStateError("provider operation CAS fence failed")
-            if not can_transition(expected, state):
+            target_state = state
+            target_safe_error_code = safe_error_code
+            if sending_guard is not None:
+                if expected != "reserved" or state != "sending":
+                    raise ProviderRepositoryError(
+                        "a provider sending guard is only valid for reserved-to-sending"
+                    )
+                if not sending_guard(connection, row):
+                    target_state = "not_sent"
+                    target_safe_error_code = "provider_dispatch_rejected"
+                    dispatch_rejected = True
+            if not can_transition(expected, target_state):
                 raise OperationStateError(
-                    f"invalid provider operation transition: {expected}->{state}"
+                    f"invalid provider operation transition: {expected}->{target_state}"
                 )
             if (
                 expected == "failed"
@@ -1272,12 +2267,23 @@ class ProviderRepository:
                 raise ProviderRepositoryError("staged response hash is invalid")
             now = self._now()
             values: dict[str, object] = {
-                "state": state,
-                "safe_error_code": _safe_code(safe_error_code)
-                if safe_error_code
+                "state": target_state,
+                "safe_error_code": _safe_code(target_safe_error_code)
+                if target_safe_error_code
                 else row["safe_error_code"],
                 "updated_at": now,
             }
+            if dispatch_rejected:
+                values["request_count"] = 0
+                values["charged_request_count"] = 0
+            elif (
+                str(row["provider_operation"]) == "llm_knowledge_generate"
+                or str(row["provider_operation"]) in {"llm_agent_chat", "embedding_query"}
+            ) and target_state == "not_sent":
+                # A dispatch proved not sent consumes neither supplier acceptance
+                # nor a billable request, for Single as well as Team calls.
+                values["request_count"] = 0
+                values["charged_request_count"] = 0
             if response_hash is not None:
                 values["staged_response_hash"] = response_hash
             connection.execute(
@@ -1298,9 +2304,9 @@ class ProviderRepository:
                 connection.execute(
                     update(reservation_table)
                     .where(reservation_table.c.operation_id == operation_id)
-                    .values(state=state, updated_at=now)
+                    .values(state=target_state, updated_at=now)
                 )
-            if state == "not_sent" and reservation_row is not None:
+            if target_state == "not_sent" and reservation_row is not None:
                 # Releasing is part of the same transaction as the state CAS.
                 budget_changed = connection.execute(
                     update(budget_table)
@@ -1320,6 +2326,8 @@ class ProviderRepository:
                 )
                 if budget_changed.rowcount != 1:
                     raise ProviderRepositoryError("scope budget release CAS failed")
+        if dispatch_rejected:
+            raise ProviderDispatchRejected("the Chat request is no longer active")
         return self.operation(operation_id)
 
     def mark_not_sent(
@@ -1386,12 +2394,6 @@ class ProviderRepository:
                 or operation_row["model_key"] != stage.model_key
             ):
                 raise ProviderRepositoryError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation_row["max_cost_cny"])
-            ):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
             existing_row = (
                 connection.execute(
                     select(stage_table).where(stage_table.c.operation_id == stage.operation_id)
@@ -1495,12 +2497,6 @@ class ProviderRepository:
                 or operation_row["model_key"] != stage.model_key
             ):
                 raise ProviderRepositoryError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation_row["max_cost_cny"])
-            ):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
 
             existing_stage_row = (
                 connection.execute(
@@ -1619,12 +2615,6 @@ class ProviderRepository:
                 or operation_row["model_key"] != stage.model_key
             ):
                 raise ProviderRepositoryError("LLM accepted stage does not match operation")
-            if stage.completion_tokens > _as_int(operation_row["max_tokens"]):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved output tokens")
-            if stage.actual_cost_cny is not None and Decimal(str(stage.actual_cost_cny)) > Decimal(
-                str(operation_row["max_cost_cny"])
-            ):
-                raise ProviderRepositoryError("LLM accepted stage exceeds reserved cost")
             existing_stage_row = (
                 connection.execute(
                     select(stage_table).where(stage_table.c.operation_id == stage.operation_id)
@@ -1914,6 +2904,13 @@ class ProviderRepository:
                 # their acceptance state and let callers surface the blocked
                 # recovery explicitly instead of relabeling it uncertain.
                 return current
+        elif current.provider_operation == "llm_knowledge_generate":
+            stage_row = self._read_one(
+                select(_KNOWLEDGE_GENERATION_STAGE_TABLE.c.run_id).where(
+                    _KNOWLEDGE_GENERATION_STAGE_TABLE.c.operation_id == operation_id
+                )
+            )
+            complete = stage_row is not None
         else:
             complete = (
                 current.staged_response_hash is not None
@@ -1943,7 +2940,7 @@ class ProviderRepository:
         with self.engine.connect() as connection:
             rows = connection.execute(
                 select(table.c.id).where(
-                    table.c.provider_operation == "llm_debate_turn",
+                    table.c.provider_operation.in_(("llm_debate_turn", "llm_knowledge_generate")),
                     table.c.state.in_(("reserved", "sending", "accepted")),
                 )
             ).all()

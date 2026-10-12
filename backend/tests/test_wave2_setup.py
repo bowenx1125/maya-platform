@@ -1152,3 +1152,52 @@ def test_published_agents_sort_by_creation_and_include_group_name(debate_app):
     rows = [row for row in response.json() if row["agent"]["id"] in {old_id, new_id}]
     assert [row["agent"]["id"] for row in rows] == [new_id, old_id]
     assert all(row["group_name"] == group_name for row in rows)
+
+
+def test_teacher_personal_agent_without_a_group_can_debate(
+    debate_app: tuple[FastAPI, Database, TestClient],
+) -> None:
+    # Studyform Agents a teacher creates belong to no group. The candidate list
+    # offered them, but setup required a group and answered 404.
+    _app, database, client = debate_app
+    group_agent_id, _version, _snapshot = _insert_published_agent(
+        database, group_id=GROUP_DEMO_ID, name="Group Seed"
+    )
+    personal_id, _version, _snapshot = _insert_published_agent(
+        database, group_id=GROUP_DEMO_ID, name="Teacher Seed"
+    )
+    session_payload, csrf = login(client)
+    with database.session() as db:
+        personal = db.get(Agent, personal_id)
+        assert personal is not None
+        personal.group_id = None
+        personal.ownership_scope = "personal"
+        personal.owner_user_id = session_payload["user"]["id"]
+        personal.course_id = COURSE_ID
+    response = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "wave2-create-personal-debate-001"}),
+        json={
+            "topic": "Is order better kept by ritual or by law?",
+            "participants": [
+                {"agent_id": group_agent_id, "stance_mode": "open"},
+                {"agent_id": personal_id, "stance_mode": "open"},
+            ],
+            "round_count": 4,
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert [item["agent_id"] for item in response.json()["participants"]] == [
+        group_agent_id,
+        personal_id,
+    ]
+    with database.session() as db:
+        rows = {
+            row.agent_id: row.group_id
+            for row in db.scalars(
+                select(DebateParticipant).where(
+                    DebateParticipant.debate_id == response.json()["id"]
+                )
+            )
+        }
+    assert rows == {group_agent_id: GROUP_DEMO_ID, personal_id: None}

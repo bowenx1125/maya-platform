@@ -56,7 +56,15 @@ class _FakeTTSProvider:
         self.mode = mode
         self.calls: list[tuple[str, str, str]] = []
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        del target_model_key
         self.calls.append((text, external_voice_id, language))
         if self.mode == "failure":
             raise TTSProviderError("provider detail must not escape")
@@ -72,7 +80,15 @@ class _BlockingTTSProvider(_FakeTTSProvider):
         self.release = Event()
         self._call_lock = Lock()
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        del target_model_key
         with self._call_lock:
             self.calls.append((text, external_voice_id, language))
         self.entered.set()
@@ -294,8 +310,14 @@ def test_truncated_attempt_three_audio_never_promotes_or_stores_preview(
 
     class TruncatedProvider(_FakeTTSProvider):
         def synthesize(
-            self, text: str, external_voice_id: str, *, language: str = "en"
+            self,
+            text: str,
+            external_voice_id: str,
+            *,
+            language: str = "en",
+            target_model_key: str | None = None,
         ) -> TTSResult:
+            del target_model_key
             self.calls.append((text, external_voice_id, language))
             return TTSResult(_valid_wav()[:-1], request_id="truncated-provider-result")
 

@@ -600,7 +600,7 @@ def test_atomic_publication_failure_rolls_operation_back(monkeypatch) -> None:
     assert ledger.operations()[0].state == "failed"
 
 
-def test_scope_cap_stops_the_ninth_call_before_adapter(monkeypatch) -> None:
+def test_scope_estimate_does_not_stop_the_ninth_call(monkeypatch) -> None:
     from app.modules.debates.generation import runtime as runtime_module
 
     monkeypatch.setattr(runtime_module, "scan_llm_outbound_messages", lambda *args, **kwargs: None)
@@ -641,11 +641,10 @@ def test_scope_cap_stops_the_ninth_call_before_adapter(monkeypatch) -> None:
             build_manifest_hash=_hash("build"),
         )
         outcomes.append(runtime.run(prepared, confirmed=True))
-    assert [item.status for item in outcomes[:8]] == ["succeeded"] * 8
-    assert outcomes[8].status == "failed"
-    assert outcomes[8].safe_error_code == "llm_reservation_failed"
-    assert adapter.calls == 8
-    assert ledger.operations()[-1].state == "failed"
+    assert [item.status for item in outcomes] == ["succeeded"] * 9
+    assert adapter.calls == 9
+    assert all(operation.state == "succeeded" for operation in ledger.operations())
+    assert sum(operation.charged_request_count for operation in ledger.operations()) == 9
 
 
 def test_teacher_debate_manifest_listing_has_stable_auth_and_exact_dto() -> None:

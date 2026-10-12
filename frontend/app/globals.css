@@ -14,7 +14,12 @@
   --green: #2d8a68;
   --red: #b74f5a;
   --shadow: 0 24px 70px rgba(72, 61, 105, 0.11);
-  /* Display face for the sign-in plate and workspace section headings. */
+  /* One settle and one spring for the whole product, so everything that moves
+     moves like the same material. */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --lift: 0 1px 2px rgba(52, 45, 30, 0.06), 0 10px 24px rgba(52, 45, 30, 0.09);
+  /* Display face for the sign-in plate only. */
   --display-serif:
     "Iowan Old Style", "Songti SC", "Source Han Serif SC", ui-serif, serif;
 }
@@ -77,34 +82,7 @@ a {
   padding: 72px 0 80px;
 }
 
-.hero-card {
-  position: relative;
-  overflow: hidden;
-  max-width: 840px;
-  padding: clamp(32px, 7vw, 76px);
-  border: 1px solid rgba(232, 225, 216, 0.9);
-  border-radius: 32px;
-  background: linear-gradient(
-    130deg,
-    rgba(255, 255, 255, 0.92),
-    rgba(248, 244, 238, 0.72)
-  );
-  box-shadow: var(--shadow);
-}
-
-.hero-card::after {
-  position: absolute;
-  right: -12%;
-  bottom: -56%;
-  width: 360px;
-  height: 360px;
-  border-radius: 50%;
-  background: rgba(84, 73, 166, 0.08);
-  content: "";
-}
-
-.eyebrow,
-.feature-index {
+.eyebrow {
   color: var(--indigo);
   font-size: 0.72rem;
   font-weight: 800;
@@ -140,15 +118,6 @@ h2 {
   color: var(--muted);
   font-size: clamp(1rem, 1.7vw, 1.2rem);
   line-height: 1.65;
-}
-
-.hero-actions {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-top: 36px;
 }
 
 .primary-action,
@@ -196,28 +165,10 @@ button:disabled {
   opacity: 0.55;
 }
 
-.landing-card {
-  max-width: none;
-  width: 100%;
-  padding: clamp(30px, 4.8vw, 56px);
-}
-
-.landing-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
-  gap: clamp(34px, 5vw, 64px);
-  align-items: start;
-}
-
-.landing-copy,
 .login-panel {
   position: relative;
   z-index: 1;
   min-width: 0;
-}
-
-.landing-copy h1 {
-  max-width: 620px;
 }
 
 .login-panel {
@@ -249,18 +200,13 @@ button:disabled {
 .stack-form label small,
 .document-main small,
 .list-row small,
-.teaching-note-grid p,
-.published-card p,
-.course-context span,
-.member-chip small,
-.snapshot-file small,
-.teacher-version p {
+.snapshot-file small {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 500;
 }
 
-input:not([type="checkbox"]),
+input:not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
   width: 100%;
@@ -281,12 +227,22 @@ textarea {
   max-width: 680px;
 }
 
+.quiet-create {
+  margin-top: 8px;
+  gap: 22px;
+}
+
+.quiet-create label span {
+  font-family: var(--display-serif);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
 .button-row,
 .chip-row,
-.nav-account,
 .workbench-meta,
 .editor-footer,
-.source-row,
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -304,14 +260,7 @@ textarea {
   max-width: 100%;
 }
 
-.compact-action {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 0;
-}
-
 .inline-button,
-.nav-logout,
 .chip-button {
   min-height: 44px;
   padding: 6px 11px;
@@ -327,11 +276,38 @@ textarea {
   text-align: center;
 }
 
+.symbol-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.symbol-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.symbol-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .inline-button:hover,
-.chip-button:hover,
-.nav-logout:hover {
+.chip-button:hover {
   border-color: #b7add5;
   background: #faf8ff;
+}
+
+.symbol-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--surface-hover, #ededf0);
+  color: var(--ink);
 }
 
 .danger-button {
@@ -367,6 +343,42 @@ textarea {
   animation: spin 900ms linear infinite;
 }
 
+.academy-loader {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.academy-loader i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  animation: academy-block-wait 1150ms ease-in-out infinite;
+}
+
+/* The intro's pigments, in the intro's order. */
+.academy-loader i:nth-child(1) {
+  background: #8f7bb5;
+}
+.academy-loader i:nth-child(2) {
+  background: #c2704f;
+  animation-delay: 110ms;
+}
+.academy-loader i:nth-child(3) {
+  background: #6f9b7d;
+  animation-delay: 220ms;
+}
+.academy-loader i:nth-child(4) {
+  background: #d8a94b;
+  animation-delay: 330ms;
+}
+
+@keyframes page-rise {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -391,25 +403,22 @@ textarea {
 
 .empty-card p,
 .muted-copy,
-.notice span,
-.teaching-copy {
+.notice span {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.6;
 }
 
 .empty-mark {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--gold);
-  background: var(--gold-soft);
+  width: 9px;
+  height: 9px;
+  margin: 4px 0 2px 2px;
+  background: rgba(201, 162, 39, 0.8);
+  transform: rotate(45deg);
 }
 
 .notice {
-  align-items: flex-start;
+  align-items: center;
   margin: 16px 0;
   line-height: 1.45;
 }
@@ -433,9 +442,69 @@ textarea {
   background: #f5fcf8;
 }
 
+.notice-close {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px -6px auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.notice-close:hover {
+  background: rgba(39, 35, 61, 0.06);
+  color: var(--ink);
+}
+
+.notice-close:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
+  outline-offset: 2px;
+}
+
+/* Notices away from a conversation float above the page's bottom edge. */
+.notice-tray {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  display: grid;
+  gap: 10px;
+  width: min(440px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.notice-tray:empty {
+  display: none;
+}
+
+.notice-tray .notice {
+  margin: 0;
+  padding: 14px 16px;
+  box-shadow: var(--lift);
+  pointer-events: auto;
+}
+
+@media (max-width: 680px) {
+  .notice-tray {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    width: auto;
+  }
+}
+
 .notice .inline-button {
   margin-left: auto;
   flex: 0 0 auto;
+}
+
+.notice .inline-button + .notice-close {
+  margin-left: 0;
 }
 
 .form-error {
@@ -549,36 +618,6 @@ details > summary {
   text-transform: uppercase;
 }
 
-.app-frame {
-  min-height: 100vh;
-}
-
-.app-nav {
-  position: sticky;
-  z-index: 20;
-  top: 0;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  min-height: 70px;
-  padding: 12px max(20px, calc((100vw - 1180px) / 2));
-  border-bottom: 1px solid rgba(232, 225, 216, 0.82);
-  background: rgba(252, 250, 246, 0.9);
-  backdrop-filter: blur(18px);
-}
-
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 44px;
-  color: var(--ink);
-  font-size: 1.12rem;
-  font-weight: 850;
-  letter-spacing: -0.04em;
-  text-decoration: none;
-}
-
 .brand-dot {
   width: 12px;
   height: 12px;
@@ -587,174 +626,13 @@ details > summary {
   box-shadow: 5px -4px 0 -1px var(--indigo);
 }
 
-.nav-links {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 6px;
-  min-width: 0;
-  margin-right: auto;
-}
-
-.nav-account {
-  flex-wrap: wrap;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.nav-account > * {
-  min-width: 0;
-}
-
-.nav-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 6px 11px;
-  border-radius: 9px;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 750;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.nav-link:hover,
-.nav-link.active {
-  color: var(--indigo);
-}
-
-.nav-link,
-.nav-logout {
-  border: 0;
-  box-shadow: none;
-  transition:
-    transform 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
-}
-.nav-link:hover,
-.nav-logout:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border: 0;
-  box-shadow: none;
-  color: var(--indigo);
-  background: rgba(196, 164, 104, 0.16);
-}
-
-.account-name {
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 750;
-}
-
-.role-pill,
-.current-label,
-.dirty-label {
-  padding: 5px 9px;
-  border-radius: 999px;
-  color: var(--indigo-dark);
-  background: #eeeafd;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.dirty-label {
-  color: #925e0a;
-  background: var(--gold-soft);
-}
-
-.nav-logout {
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-}
-
-.app-nav .locale-switcher {
-  flex: 0 0 auto;
-}
-
-.app-main {
-  width: min(1180px, calc(100% - 40px));
-  margin: 0 auto;
-  padding: 52px 0 88px;
-}
-
-.demo-mode {
-  flex: 0 0 auto;
-  padding: 3px 6px;
-  border-radius: 999px;
-  font-size: 0.64rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.demo-mode-real {
-  color: var(--green);
-  background: #e9f6f0;
-}
-
-.demo-mode-mock {
-  color: #765d1c;
-  background: var(--gold-soft);
-}
-
-/* A real component running under a locally derived policy. Deliberately plain
-   and adjacent to the REAL badge, so the qualification is read with it. */
-.demo-mode-unreviewed {
-  flex: 0 0 auto;
-  margin-left: 4px;
-  padding: 3px 6px;
-  border: 1px solid var(--gold-soft);
-  border-radius: 999px;
-  color: #765d1c;
-  font-size: 0.6rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.teacher-home-layout {
-  display: grid;
-  gap: var(--workspace-gap);
-}
-.teacher-home-layout > * {
+/* Both homes share `.mayaform-home`; the teacher's differs in what it holds,
+   not in how wide it is. */
+.mayaform-home > * {
   margin-bottom: 0;
 }
 
-.course-context {
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  text-align: center;
-  min-width: 0;
-  max-width: 100%;
-  padding: 14px 16px;
-  border: 1px solid #e5dcc5;
-  border-radius: 15px;
-  background: rgba(246, 236, 211, 0.54);
-  overflow-wrap: anywhere;
-}
-
-.course-context strong,
-.course-context span:last-child {
-  display: block;
-}
-
-.course-context strong {
-  font-size: 1.4rem;
-  line-height: 1.1;
-}
-
-.overview-grid,
-.published-grid,
-.workspace-grid,
-.teacher-detail-grid,
-.workbench-grid,
-.teacher-agent-context-grid {
+.workbench-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
@@ -762,18 +640,15 @@ details > summary {
 }
 
 /* A single group is the main student workspace, not a half-width tile. */
-.overview-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
 
 .section-card {
   min-width: 0;
   margin-bottom: 18px;
   padding: var(--workspace-inset);
   border: 1px solid var(--line);
-  border-radius: 22px;
-  background: #fdfaf3;
-  box-shadow: 0 14px 38px rgba(72, 61, 105, 0.05);
+  border-radius: 16px;
+  background: var(--panel, #fdfaf3);
+  box-shadow: none;
 }
 
 .section-card-header {
@@ -791,11 +666,12 @@ details > summary {
 }
 
 .section-card-header h2 {
-  margin: 0 0 7px;
+  margin: 0;
   font-family: var(--display-serif);
-  font-size: 1.35rem;
+  font-size: clamp(1.45rem, 2.2vw, 1.85rem);
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
 
 .section-card-header p {
@@ -806,33 +682,29 @@ details > summary {
   line-height: 1.5;
 }
 
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin: 5px 0 20px;
+.studyform-module-note {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
 }
 
-.stat-row > div,
 .rag-metrics > div {
   padding: 13px 12px;
   border-radius: 13px;
   background: rgba(247, 244, 239, 0.82);
 }
 
-.stat-row strong,
-.stat-row span,
 .rag-metrics strong,
 .rag-metrics span {
   display: block;
 }
 
-.stat-row strong,
 .rag-metrics strong {
   font-size: 1.32rem;
 }
 
-.stat-row span,
 .rag-metrics span {
   margin-top: 4px;
   color: var(--muted);
@@ -840,11 +712,27 @@ details > summary {
 }
 
 .compact-list,
-.agent-list,
 .document-list,
 .snapshot-files {
   display: grid;
   gap: 8px;
+}
+
+.brainform-source-group {
+  display: grid;
+  gap: 10px;
+}
+
+.brainform-source-group + .brainform-source-group {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.brainform-source-group h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.92rem;
 }
 
 .knowledge-tile-grid {
@@ -861,6 +749,31 @@ details > summary {
   align-items: stretch;
 }
 
+.agent-tile-grid.module-tile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.module-tile-grid > .agent-tile {
+  min-height: 112px;
+}
+
+button.agent-tile-name {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+  font-family: var(--display-serif);
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
 .knowledge-tile,
 .agent-tile {
   display: grid;
@@ -872,6 +785,19 @@ details > summary {
   background: #fdfaf3;
   justify-items: center;
   text-align: center;
+  transition:
+    translate 320ms var(--ease-spring),
+    box-shadow 240ms ease,
+    border-color 200ms ease;
+}
+
+.knowledge-tile:hover,
+.knowledge-tile:focus-within,
+.agent-tile:hover,
+.agent-tile:focus-within {
+  border-color: #dccfb6;
+  box-shadow: var(--lift);
+  translate: 0 -2px;
 }
 
 .agent-tile {
@@ -884,8 +810,9 @@ details > summary {
 
 .agent-tile .agent-pill {
   justify-self: center;
-  padding: 2px 8px;
-  font-size: 0.7rem;
+  min-height: 22px;
+  padding: 0 6px;
+  font-size: 0.86rem;
 }
 
 .agent-pill-action {
@@ -918,6 +845,22 @@ details > summary {
   display: inline-flex;
 }
 
+/* Hovered, the mark turns into Delete: the diamond gives way to the cross. */
+.agent-pill-action:hover,
+.agent-pill-action:focus-visible {
+  color: var(--red);
+}
+
+.agent-pill-action:hover::before,
+.agent-pill-action:focus-visible::before {
+  display: none;
+}
+
+.agent-pill-action:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
+  outline-offset: 2px;
+}
+
 .agent-tile-name {
   min-width: 0;
   max-width: 100%;
@@ -926,7 +869,9 @@ details > summary {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
-  font-size: 0.98rem;
+  font-family: var(--display-serif);
+  font-size: 1.05rem;
+  font-weight: 500;
   font-weight: 650;
   line-height: 1.25;
   letter-spacing: -0.01em;
@@ -941,6 +886,22 @@ details > summary {
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.3;
+}
+
+.agent-tile-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.agent-tile-author > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .knowledge-tile {
@@ -961,19 +922,6 @@ details > summary {
 
 .knowledge-tile .document-main small {
   font-size: 0.7rem;
-}
-
-.knowledge-tile-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.knowledge-tile-foot .status-badge {
-  padding: 3px 8px;
-  font-size: 0.68rem;
 }
 
 .icon-action-row {
@@ -1028,118 +976,483 @@ details > summary {
   background: rgba(183, 79, 90, 0.08);
 }
 
+/* Both home pages sit to the right of a fixed sidebar, so nothing here is
+   centred. A centred hero inside a sidebar layout floats away from the one
+   vertical edge the eye is already using, which is what made this page read
+   as "not lined up" even though every block was centred correctly inside its
+   own column. Everything now hangs off the same left margin. */
 .mayaform-home {
   display: grid;
-  gap: 48px;
-  max-width: 560px;
-  padding: 28px 8px 40px;
+  gap: 26px;
+  max-width: 1040px;
+  padding: 26px 0 44px;
 }
 
-.mayaform-home-welcome {
+.home-hero {
+  position: relative;
   display: grid;
-  justify-items: center;
-  gap: 14px;
-  padding: 8px 0 0;
-  text-align: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 20px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.5);
 }
 
-.mayaform-home-eyebrow {
+/* The sign-in's rule: a gold line with a diamond set on it, here at the
+   margin everything else hangs from. */
+.home-hero::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  background: rgba(201, 162, 39, 0.8);
+  transform: rotate(45deg);
+}
+
+.home-hero-copy {
+  display: grid;
+  align-content: end;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 20px;
+}
+
+.home-hero-eyebrow {
   margin: 0;
-  color: #8a7350;
+  color: #5449a6;
   font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.mayaform-home-welcome h1 {
+/* The same face and spacing as the sign-in's "Welcome back", so arriving
+   reads as the next room of the same building. */
+.home-hero-copy h1 {
   margin: 0;
+  max-width: 22ch;
   color: #3d3220;
   font-family: var(--display-serif);
-  font-size: clamp(1.7rem, 3vw, 2.25rem);
-  font-weight: 500;
+  font-size: clamp(2rem, 3.6vw, 2.75rem);
+  font-weight: 400;
   letter-spacing: 0.04em;
-  line-height: 1.25;
+  line-height: 1.12;
 }
 
-.mayaform-home-rule {
-  display: flex;
-  align-items: center;
+/* The scholars are the welcome, so they stand at full height on the rule
+   rather than inside the 116px letterbox that cropped them to a strip. */
+.home-hero-art {
+  position: relative;
+  align-self: end;
+  width: min(330px, 34vw);
+  height: 164px;
+}
+
+.home-hero-art .academy-mascots {
+  bottom: 0;
+  width: 100%;
+}
+
+/* The guide and the group are both required reading, and the page is wide
+   enough to answer both at once instead of stacking them a scroll apart. */
+.home-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.home-panel {
+  display: grid;
+  align-content: start;
   gap: 10px;
-  width: min(220px, 70%);
-  margin: 2px 0 4px;
+  min-width: 0;
 }
 
-.mayaform-home-rule span {
-  flex: 1;
-  height: 1px;
-  background: rgba(201, 162, 39, 0.45);
-}
-
-.mayaform-home-rule i {
-  width: 6px;
-  height: 6px;
-  background: rgba(201, 162, 39, 0.7);
-  transform: rotate(45deg);
-}
-
-.mayaform-home-lede {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-
-.mayaform-home-surfaces {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-  max-width: 34rem;
-  color: var(--ink);
-  font-size: 0.9rem;
-  line-height: 1.55;
-  text-align: left;
-}
-
-.mayaform-home-privacy {
-  margin: 10px 0 0;
-  max-width: 34rem;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.55;
-  text-align: left;
-}
-
-.mayaform-home-members {
-  display: grid;
-  gap: 14px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.mayaform-home-members header {
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.mayaform-home-members h2 {
-  margin: 0;
+.home-panel > h2 {
+  margin: 0 0 2px;
   color: #3d3220;
   font-family: var(--display-serif);
-  font-size: 1.35rem;
-  font-weight: 500;
+  font-size: 1.3rem;
+  font-weight: 400;
   letter-spacing: 0.03em;
 }
 
-.mayaform-home-members header p {
+/* A register, not a stack of buttons: these rows go nowhere, so they are
+   ruled like the guide beside them instead of boxed like links. */
+.home-people-list {
+  display: grid;
   margin: 0;
+  padding: 0;
+  border-top: 1px solid rgba(201, 162, 39, 0.35);
+  list-style: none;
+}
+
+.home-person {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 6px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+.home-person strong {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-person small {
   color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.home-person[data-role="leader"] small {
+  color: #8a6a1f;
+}
+
+/* Three numbers a teacher can read without opening anything: the difference
+   between their home and a student's, which is a single group's progress. */
+.home-stats {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 12px;
+}
+
+/* Figures set on the page, divided by gold rules, rather than three cards:
+   nothing here opens, so nothing here should look like it does. */
+.home-stat {
+  display: grid;
+  gap: 2px;
+  margin-right: 36px;
+  padding: 2px 36px 2px 0;
+  border-right: 1px solid rgba(201, 162, 39, 0.4);
+}
+
+.home-stat:last-child {
+  margin-right: 0;
+  padding-right: 0;
+  border-right: 0;
+}
+
+.home-stat b {
+  color: #3d3220;
+  font-family: var(--display-serif);
+  font-size: 2.5rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+}
+
+.home-stat > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* The guide is a `.home-panel` like the group beside it, so its heading and
+   spacing come from there; only the rows are its own. */
+
+.home-guide-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid rgba(201, 162, 39, 0.35);
+  list-style: none;
+}
+
+.home-guide-list > li {
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+.home-guide-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 10px 10px 4px;
+  border-radius: 4px;
+  color: var(--muted);
+  text-decoration: none;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.home-guide-row:hover,
+.home-guide-row:focus-visible,
+.home-guide-row[data-state="next"] {
+  color: var(--ink);
+}
+
+.home-guide-row:hover,
+.home-guide-row:focus-visible {
+  background: rgba(211, 167, 74, 0.08);
+}
+
+.home-guide-marker {
+  display: grid;
+  place-items: center;
+}
+
+.home-guide-marker::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: rgba(201, 162, 39, 0.8);
+  transform: rotate(45deg);
+}
+
+.home-guide-row[data-state="next"] .home-guide-marker::before {
+  background: #3d3220;
+}
+
+.home-guide-row strong {
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.home-guide-row[data-state="done"] strong {
+  font-weight: 500;
+}
+
+.home-guide-row small,
+.home-guide-state {
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.home-guide-row small {
+  color: var(--muted);
+}
+
+.home-guide-state {
+  color: #8a6a1f;
+}
+
+/* Only the next step points onward; the others show the way on hover. */
+.home-guide-arrow {
+  color: #b0904a;
+  opacity: 0;
+  translate: -4px 0;
+  transition:
+    opacity 200ms ease,
+    translate 280ms var(--ease-spring);
+}
+
+.home-guide-row[data-state="next"] .home-guide-arrow,
+.home-guide-row:hover .home-guide-arrow,
+.home-guide-row:focus-visible .home-guide-arrow {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.user-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(87, 69, 55, 0.12);
+  border-radius: 35%;
+  background: #f7f1e7;
+}
+
+.user-avatar svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.user-avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 0.68rem;
+}
+
+.user-avatar-md {
+  width: 38px;
+  height: 38px;
+  font-size: 0.82rem;
+}
+
+.user-avatar-lg {
+  width: 58px;
+  height: 58px;
+  font-size: 1.2rem;
+}
+
+.user-avatar-fallback {
+  color: #fff;
+  background: var(--avatar-body);
+  font-weight: 800;
+}
+
+.account-settings-card {
+  margin-top: 2px;
+}
+
+.account-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+/* Two halves of one plate with a gold rule between them, as on the sign-in,
+   rather than two boxes inside a box. */
+.profile-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: 4px 32px 4px 0;
+}
+
+.password-panel {
+  padding: 4px 0 4px 32px;
+  border-left: 1px solid rgba(201, 162, 39, 0.4);
+}
+
+.profile-panel h3 {
+  margin: 0;
+  color: #3d3220;
+  font-family: var(--display-serif);
+  font-size: 1.15rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.profile-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-panel-heading > div {
+  min-width: 0;
+}
+
+.profile-panel-heading span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.profile-saved {
+  color: #8a6a1f;
+  font-family: var(--display-serif);
+  font-size: 0.95rem;
+  font-style: italic;
+  animation: page-rise 320ms var(--ease-out) both;
+}
+
+.profile-panel-heading .profile-saved {
+  margin-left: auto;
+}
+
+/* Four across, so the eight read as two rows of a set rather than a ragged
+   five-and-three that looks like an overflow. */
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.avatar-picker label {
+  display: grid;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease,
+    translate 280ms var(--ease-spring);
+}
+
+.avatar-picker label:hover {
+  background: rgba(211, 167, 74, 0.1);
+  translate: 0 -2px;
+}
+
+.avatar-picker label[data-selected="true"] {
+  border-color: rgba(201, 162, 39, 0.9);
+  background: #fff;
+}
+
+/* The radios are hidden, so the keyboard focus has to show on the scholar. */
+.avatar-picker label:focus-within {
+  outline: 3px solid rgba(201, 162, 39, 0.55);
+  outline-offset: 2px;
+}
+
+.avatar-picker:disabled label {
+  cursor: progress;
+}
+
+/* Your name sits above the faces: an input that offers Save only once it
+   holds a new name. */
+.profile-name {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.profile-name label {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.profile-name input {
+  min-height: 40px;
+  padding-block: 8px;
+}
+
+.profile-name .profile-saved {
+  padding-bottom: 9px;
+}
+
+.password-panel label {
+  display: grid;
+  gap: 5px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.password-panel input {
+  min-height: 40px;
+  padding-block: 8px;
+}
+
+.profile-action-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.roster-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 @media (max-width: 1100px) {
@@ -1161,13 +1474,54 @@ details > summary {
   }
 
   .mayaform-home {
-    gap: 36px;
+    gap: 26px;
     padding-inline: 0;
+  }
+
+  .account-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-panel {
+    padding-right: 0;
+  }
+
+  .password-panel {
+    margin-top: 20px;
+    padding: 20px 0 0;
+    border-top: 1px solid rgba(201, 162, 39, 0.4);
+    border-left: 0;
+  }
+
+  .home-guide-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+
+  .home-guide-row small,
+  .home-guide-state {
+    display: none;
+  }
+}
+
+/* The hero's two halves and the two columns below it need roughly a laptop's
+   width to stay side by side; under that they stack, and the scholars step
+   aside rather than shrink to a smudge. */
+@media (max-width: 880px) {
+  .home-columns,
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-hero-art {
+    display: none;
+  }
+
+  .home-hero-copy {
+    padding-bottom: 14px;
   }
 }
 
 .list-row,
-.agent-row,
 .document-row,
 .snapshot-file {
   display: flex;
@@ -1181,20 +1535,17 @@ details > summary {
   background: rgba(255, 255, 255, 0.66);
 }
 
-.list-row,
-.agent-row {
+.list-row {
   text-decoration: none;
 }
 
-.list-row:hover,
-.agent-row:hover {
+.list-row:hover {
   border-color: #cfc5e6;
   background: #fff9ed;
 }
 
 .list-row > span:first-child,
 .document-main,
-.agent-row-copy,
 .snapshot-file > span {
   display: grid;
   min-width: 0;
@@ -1219,6 +1570,13 @@ details > summary {
   min-width: 0;
 }
 
+/* The name is the one students see in their group; the sign-in name sits
+   beside it so the teacher can still match the account. */
+.roster-headline .roster-username {
+  color: var(--muted, #62626a);
+  font-size: 0.85rem;
+}
+
 /* Quieter than the badge's default: at a name's scale, 800 weight on a word
    this small reads as a shout rather than a label. */
 .roster-headline .status-badge {
@@ -1234,54 +1592,6 @@ details > summary {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.9rem;
-}
-
-.agent-row {
-  justify-content: flex-start;
-}
-
-.agent-row-copy {
-  flex: 1;
-}
-
-.agent-row-copy > span {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.8rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.avatar-orb {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  place-items: center;
-  border: 1px solid #dfd3ed;
-  border-radius: 15px;
-  color: var(--indigo-dark);
-  background: linear-gradient(145deg, #f8f5ff, #eeeafd);
-  font-size: 1.1rem;
-  font-weight: 850;
-}
-
-.avatar-mini {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--indigo-dark);
-  background: var(--gold-soft);
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.row-arrow {
-  color: var(--indigo);
-  font-size: 1.2rem;
-  font-weight: 800;
 }
 
 .status-badge {
@@ -1322,62 +1632,6 @@ details > summary {
   background: #f0edf2;
 }
 
-.teaching-note-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 15px;
-}
-
-.teaching-note-grid > div {
-  padding: 16px;
-  border-radius: 15px;
-  background: rgba(247, 244, 239, 0.74);
-}
-
-.teaching-note-grid h3 {
-  margin: 11px 0 6px;
-  font-size: 0.98rem;
-}
-
-.teaching-note-grid p {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.member-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.member-chip {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  column-gap: 8px;
-  min-width: 148px;
-  padding: 10px 12px;
-  border: 1px solid #ebe5df;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.62);
-  font-size: 0.8rem;
-  font-weight: 760;
-}
-
-.member-chip small {
-  grid-column: 2;
-}
-
-.toggle-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
 .file-button {
   position: relative;
   overflow: hidden;
@@ -1411,122 +1665,129 @@ details > summary {
   margin: 0;
 }
 
-.published-grid {
-  margin-bottom: 0;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 12px;
-}
-
-.published-card {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid #e5d8bf;
-  border-radius: 14px;
-  color: inherit;
-  background: #fbf4e5;
-  text-decoration: none;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease;
-}
-.published-card:hover {
-  background: #f7ecd6;
-  border-color: #deceb0;
-}
-.published-card:focus-visible {
-  outline: 2px solid #a78342;
-  outline-offset: 3px;
-}
-.published-card-top {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
-}
-.published-card h2 {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: 1.02rem;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.published-card-top .published-card-group,
-.published-card p {
-  flex: 1 1 0;
-  min-width: 0;
-  margin: 0;
-  font-size: 0.78rem;
-  color: #796f5e;
-  line-height: 1.45;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.published-card-meta p {
-  flex: 1 1 0;
-}
-.published-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: #655332;
-  font-size: 0.75rem;
-}
-.published-card-meta .agent-pill {
-  flex: 0 0 auto;
-  font-size: 0.7rem;
-}
-.published-card-group {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The pills are two facts, not one sentence: no separator between them. */
 
 .workbench-grid {
-  grid-template-columns: minmax(0, 1.52fr) minmax(300px, 0.88fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   align-items: start;
 }
 
-.workbench-main,
-.workbench-side,
-.teacher-detail-grid > div,
-.teacher-detail-grid > aside,
-.teacher-agent-context-grid > * {
-  min-width: 0;
-}
-
-.teacher-agent-context-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.teacher-context-value {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 1.08rem;
-  font-weight: 760;
-}
-
-.teacher-voice-state {
+.agent-identity {
   display: grid;
-  gap: 9px;
-  min-width: 0;
+  justify-items: center;
+  align-content: center;
+  gap: 14px;
+  text-align: center;
 }
 
-.teacher-voice-state p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+.agent-identity .visibility-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line, #e4e1d9);
+  border-radius: 999px;
+  background: var(--surface-subtle, #f7f6f3);
+}
+
+.agent-identity .visibility-toggle button {
+  min-height: 34px;
+  padding: 4px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, #625e59);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.agent-identity .visibility-toggle button[aria-pressed="true"] {
+  background: var(--panel, #fdfaf3);
+  color: var(--ink, #292820);
+  box-shadow: 0 1px 2px rgb(48 42 30 / 8%);
+}
+
+.agent-identity .visibility-toggle button:disabled {
+  cursor: default;
+}
+
+.agent-identity .visibility-toggle button:disabled:not([aria-pressed="true"]) {
+  opacity: 0.55;
+}
+
+.agent-identity .visibility-toggle button:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
+.agent-entry {
+  display: grid;
+  gap: 18px;
+}
+
+.agent-editor-media {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.knowledge-check {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px;
+  background: rgb(48 42 30 / 28%);
+  backdrop-filter: blur(8px);
+}
+
+.knowledge-check-card {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: min(720px, calc(100dvh - 48px));
+  margin-top: 12px;
+  overflow: auto;
+  padding: 22px 22px 18px;
+  border: 1px solid #e4e1d9;
+  border-radius: 16px;
+  background: #fdfaf3;
+}
+
+.knowledge-check-close {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  float: right;
+  margin: 0 0 8px 8px;
+  background: #fdfaf3;
+}
+
+.agent-entry .icon-action:focus-visible,
+.knowledge-check-close:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .knowledge-check {
+    backdrop-filter: none;
+    background: rgb(48 42 30 / 46%);
+  }
+}
+
+@media (max-width: 800px) {
+  .agent-editor-media {
+    grid-template-columns: 1fr;
+  }
+}
+
+.workbench-main,
+.workbench-side {
+  min-width: 0;
 }
 
 .workbench-meta {
@@ -1560,11 +1821,6 @@ details > summary {
   min-height: 310px;
 }
 
-.compact-readonly {
-  min-height: 170px;
-  margin-top: 12px;
-}
-
 .editor-footer {
   justify-content: space-between;
   margin-top: 11px;
@@ -1578,7 +1834,16 @@ details > summary {
   min-height: 44px;
 }
 
-.document-row > input[type="checkbox"] {
+.document-select {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.document-select > input[type="checkbox"] {
   width: 17px;
   height: 17px;
   flex: 0 0 17px;
@@ -1591,14 +1856,6 @@ details > summary {
 
 .document-main {
   flex: 1;
-}
-
-.library-row {
-  flex-wrap: wrap;
-}
-
-.library-row .row-actions {
-  margin-left: auto;
 }
 
 .rag-metrics {
@@ -1675,65 +1932,6 @@ details > summary {
   background: #f8e2b8;
 }
 
-.chat-form {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-  gap: 10px;
-}
-
-.chat-result {
-  margin-top: 16px;
-  padding: 16px;
-  border-radius: 14px;
-}
-
-.chat-matched {
-  background: #f1faf5;
-}
-.chat-no-match {
-  background: #fffaf0;
-}
-
-.chat-result p {
-  margin: 13px 0;
-  font-size: 0.88rem;
-  line-height: 1.62;
-}
-
-.source-chip {
-  padding: 5px 8px;
-  border-radius: 7px;
-  color: var(--indigo-dark);
-  background: #e9e5f8;
-  font-size: 0.7rem;
-  font-weight: 760;
-}
-
-.teacher-version {
-  padding: 0 0 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.teacher-version + .teacher-version {
-  margin-top: 12px;
-}
-
-.teacher-version:last-child {
-  border-bottom: 0;
-}
-
-.teacher-version summary {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 10px 0;
-  color: var(--indigo);
-  cursor: pointer;
-  font-size: 0.78rem;
-  font-weight: 760;
-}
-
 .snapshot-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1781,38 +1979,7 @@ details > summary {
   margin-top: 13px;
 }
 
-.teaching-copy {
-  margin: 0;
-}
-
-.teaching-copy strong {
-  color: var(--ink);
-}
-
 @media (max-width: 900px) {
-  .app-nav {
-    flex-wrap: wrap;
-    gap: 8px 16px;
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-
-  .nav-links {
-    order: 3;
-    width: 100%;
-    flex: 1 0 100%;
-    overflow: visible;
-    padding-bottom: 0;
-  }
-
-  .app-main {
-    padding-top: 34px;
-  }
-
-  .landing-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .login-panel {
     padding-top: 30px;
     padding-left: 0;
@@ -1820,54 +1987,12 @@ details > summary {
     border-left: 0;
   }
 
-  .overview-grid,
-  .published-grid,
-  .workspace-grid,
-  .teacher-detail-grid,
-  .workbench-grid,
-  .teacher-agent-context-grid {
+  .workbench-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (min-width: 901px) {
-  .overview-grid:has(> :nth-child(2):last-child) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 620px) {
-  .app-main {
-    width: min(100% - 28px, 560px);
-    padding-bottom: 55px;
-  }
-
-  .app-nav {
-    gap: 6px 10px;
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-
-  .nav-account {
-    flex: 1 1 auto;
-    margin-left: auto;
-    justify-content: flex-end;
-    gap: 6px;
-  }
-
-  .nav-links {
-    gap: 2px 8px;
-  }
-
-  .nav-link {
-    padding-right: 4px;
-    padding-left: 4px;
-  }
-
-  .account-name {
-    display: none;
-  }
-
   .locale-label {
     display: none;
   }
@@ -1881,10 +2006,6 @@ details > summary {
     border-radius: 18px;
   }
 
-  .landing-card {
-    padding: 26px 20px 30px;
-  }
-
   .quick-switch .chip-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1893,22 +2014,11 @@ details > summary {
     flex-direction: column;
   }
 
-  .teaching-note-grid,
-  .stat-row,
   .snapshot-summary {
     grid-template-columns: 1fr;
   }
 
-  .chat-form {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-form .primary-action {
-    width: fit-content;
-  }
-
-  .document-row,
-  .library-row {
+  .document-row {
     align-items: flex-start;
     flex-wrap: wrap;
   }
@@ -1917,9 +2027,8 @@ details > summary {
     margin-left: auto;
   }
 
-  .library-row .row-actions {
-    width: 100%;
-    margin-left: 0;
+  .document-select {
+    flex-basis: 60%;
   }
 
   .row-actions .inline-button {
@@ -1973,12 +2082,6 @@ details > summary {
   cursor: pointer;
 }
 
-.quiet-label {
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-.feature-grid,
 .status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1986,7 +2089,6 @@ details > summary {
   margin-top: 20px;
 }
 
-.feature-card,
 .status-card,
 .environment-card {
   border: 1px solid var(--line);
@@ -1995,26 +2097,11 @@ details > summary {
   box-shadow: 0 14px 38px rgba(72, 61, 105, 0.06);
 }
 
-.feature-card {
-  min-height: 132px;
-  padding: 26px;
-}
-
-.feature-card p,
 .status-card p {
   margin: 0;
   color: var(--muted);
   font-size: 0.91rem;
   line-height: 1.6;
-}
-
-.accent-card {
-  border-color: #e9d6a8;
-  background: linear-gradient(
-    145deg,
-    rgba(255, 253, 246, 0.95),
-    rgba(246, 236, 211, 0.72)
-  );
 }
 
 .health-shell {
@@ -2047,12 +2134,6 @@ details > summary {
 
 .text-link:hover {
   text-decoration: underline;
-}
-
-.current-version-indicator {
-  color: var(--muted);
-  font-size: 0.88rem;
-  font-weight: 750;
 }
 
 .status-grid {
@@ -2146,31 +2227,20 @@ dd {
     padding: 32px 0 52px;
   }
 
-  .hero-card {
-    padding: 32px 24px;
-    border-radius: 24px;
-  }
-
   h1 {
     font-size: clamp(2.65rem, 15vw, 4.2rem);
   }
 
-  .hero-actions,
   .page-header,
   .card-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .hero-actions {
-    gap: 12px;
-  }
-
   .primary-action {
     width: fit-content;
   }
 
-  .feature-grid,
   .status-grid,
   .environment-list {
     grid-template-columns: 1fr;
@@ -2183,30 +2253,72 @@ dd {
 
 /* The version and the group that made it, as two pills a teacher can read at
    a glance. Amber says a newer draft exists that the class has not released. */
+/* A version reads like an edition in a library catalogue: a small gold
+   diamond and an italic number, set like the home's "member" and "leader".
+   A green status chip under every name looked like a dashboard. A draft
+   that is not published yet is marked in a darker gold. */
 .agent-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  gap: 6px;
+  padding: 0;
   border-radius: 999px;
-  background: rgba(45, 138, 104, 0.14);
-  color: var(--green);
-  font-size: 0.82rem;
-  font-weight: 640;
+  background: none;
+  color: var(--muted);
+  font-family: var(--display-serif);
+  font-size: 0.9rem;
+  font-style: italic;
+  font-weight: 400;
+  text-transform: lowercase;
+}
+
+.agent-pill::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: rgba(201, 162, 39, 0.8);
+  rotate: 45deg;
 }
 
 .agent-pill[data-pending="true"] {
-  background: var(--gold-soft);
   color: #8a6a1f;
 }
 
-/* The group's members, alphabetical, under the group's own name. */
-.teacher-group-members {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 4px;
+.agent-pill[data-pending="true"]::before {
+  background: #8a6a1f;
 }
+
+/* Where an Agent or Team carries its visibility, the version is a pill whose
+   colour says who can use it: green is Public, grey is Private. */
+.agent-pill[data-visibility] {
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 640;
+  text-transform: none;
+}
+
+.agent-pill[data-visibility]::before {
+  display: none;
+}
+
+.agent-pill[data-visibility="public"] {
+  background: rgba(45, 138, 104, 0.14);
+  color: var(--green);
+}
+
+.agent-pill[data-visibility="private"] {
+  background: #f0edf2;
+  color: var(--muted);
+}
+
+.agent-pill-action[data-visibility]:hover,
+.agent-pill-action[data-visibility]:focus-visible {
+  color: var(--red);
+}
+
+/* The group's members, alphabetical, under the group's own name. */
 
 /* ---------------------------------------------------------------------------
    Academy sign-in
@@ -2598,19 +2710,6 @@ dd {
   opacity: 0.6;
 }
 
-.academy-quiet-link {
-  margin-top: auto;
-  padding-top: 16px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  text-decoration: none;
-}
-
-.academy-quiet-link:hover {
-  color: var(--ink);
-  text-decoration: underline;
-}
-
 /* Character motion -------------------------------------------------------
    Two layers: the outer group carries the turn away from the form, the inner
    one the idle breathing and the squash on entering a mood. Pupils are moved
@@ -2904,5 +3003,64 @@ dd {
 @media (prefers-reduced-motion: reduce) {
   .academy-intro {
     display: none;
+  }
+}
+
+/* Keep the shell labels stable across routes. Only React's named sidebar
+   highlight animates when the selected destination changes. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-group(.nav-pill) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--ease-spring);
+}
+
+/* The moving highlight is its own snapshot layer, which paints above the root
+   snapshot and would hide the labels it slides past. The labels get a layer
+   above it that shows the new state at once. The name is declared here, not in
+   the shell's CSS module, because CSS Modules would scope it and these group
+   rules would never match. */
+.nav-links {
+  view-transition-name: nav-links;
+}
+
+::view-transition-group(nav-links) {
+  z-index: 1;
+}
+
+::view-transition-old(nav-links) {
+  display: none;
+}
+
+::view-transition-new(nav-links) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .academy-loader i {
+    animation: none;
+  }
+  .knowledge-tile,
+  .agent-tile,
+  .home-guide-arrow,
+  .avatar-picker label {
+    transition: none;
+  }
+  .knowledge-tile:hover,
+  .knowledge-tile:focus-within,
+  .agent-tile:hover,
+  .agent-tile:focus-within {
+    translate: none;
+  }
+  .avatar-picker label:hover {
+    translate: none;
   }
 }

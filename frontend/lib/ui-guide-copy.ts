@@ -21,9 +21,17 @@ export const uiGuideCopy = {
     en: "Files in this list are available to the group's knowledge search.",
     zh: "此列表中的文件可用于小组知识检索。",
   },
+  "teacher.personalAgents": {
+    en: "Personal Agents and private sources are visible only to you.",
+    zh: "个人 Agent 和私有来源仅你自己可见。",
+  },
   "knowledge.edit": {
     en: "Open the Markdown editor for this source.",
     zh: "打开此知识源的 Markdown 编辑器。",
+  },
+  "knowledge.view": {
+    en: "Read the current source without changing it.",
+    zh: "查看当前来源，不会修改内容。",
   },
   "knowledge.download": {
     en: "Download this source as a Markdown file.",
@@ -34,12 +42,16 @@ export const uiGuideCopy = {
     zh: "为此知识源重新建立检索索引。",
   },
   "knowledge.hide": {
-    en: "Hide this source from the active group library.",
-    zh: "从当前小组知识库中隐藏此知识源。",
+    en: "Hide this source from the active Brainform library. Existing snapshots stay available.",
+    zh: "从当前 Brainform 资源列表隐藏此来源；已有快照仍可使用。",
   },
-  "knowledge.importFile": {
-    en: "Import Markdown, PDF, or Word files. PDF and Word uploads are converted to Markdown for this library.",
-    zh: "导入 Markdown、PDF 或 Word 文件；PDF 和 Word 会转换为 Markdown 后加入此知识库。",
+  "knowledge.filename": {
+    en: "Full source filename.",
+    zh: "来源文件完整名称。",
+  },
+  "knowledge.regenerate": {
+    en: "Generate a new Knowledge version from the current Agent sources.",
+    zh: "根据当前 Agent 资料生成新版 Knowledge。",
   },
   "agent.markdown": {
     en: "Write the Agent's identity, teaching style, and response guidance here.",
@@ -48,6 +60,18 @@ export const uiGuideCopy = {
   "agent.evidence": {
     en: "Choose knowledge files this Agent can use as evidence.",
     zh: "选择此 Agent 可用于回答的证据文件。",
+  },
+  "agent.brainform": {
+    en: "Choose RAG source files and existing Knowledge that this Agent can use.",
+    zh: "选择此 Agent 可使用的 RAG 来源和现有 Knowledge。",
+  },
+  "agent.visibility": {
+    en: "A Public personal Agent is shareable, but course students do not get access automatically. They need a separate invocation grant to use it; its prompt and sources remain visible only to its owner.",
+    zh: "个人 Agent 设为公开后可分享，但课程学生不会自动获得访问权限。学生需要单独的调用授权才能使用；提示词和来源仍只有所有者可见。",
+  },
+  "agent.knowledgeSets": {
+    en: "Selected Knowledge stays linked to its canonical set and uses its current version.",
+    zh: "所选 Knowledge 始终引用同一知识集，并使用其当前版本。",
   },
   "agent.voice": {
     en: "Choose the saved voice profile used when this Agent speaks.",
@@ -69,14 +93,6 @@ export const uiGuideCopy = {
     en: "Download the file shown in this section.",
     zh: "下载此区域显示的文件。",
   },
-  "agent.uploadMarkdown": {
-    en: "Upload a Markdown file for the next Agent draft revision.",
-    zh: "上传 Markdown 文件，作为 Agent 的下一版草稿。",
-  },
-  "agent.uploadEvidence": {
-    en: "Add Markdown, PDF, or Word files as Agent evidence. PDF and Word uploads are converted to Markdown.",
-    zh: "添加 Markdown、PDF 或 Word 文件作为 Agent 证据；PDF 和 Word 会转换为 Markdown。",
-  },
   "roster.openGroup": {
     en: "Open this group's workspace and its shared resources.",
     zh: "打开此小组的工作区和共享资源。",
@@ -89,9 +105,21 @@ export const uiGuideCopy = {
     en: "Delete this conversation from your chat history.",
     zh: "从聊天记录中删除此对话。",
   },
+  "chat.pin": {
+    en: "Pin or unpin this conversation at the top of your history.",
+    zh: "将此对话置顶或取消置顶。",
+  },
+  "chat.history": {
+    en: "Conversation name.",
+    zh: "会话名称。",
+  },
   "chat.send": {
     en: "Send this message to the selected Agent.",
     zh: "将此消息发送给当前选择的 Agent。",
+  },
+  "brainform.memory": {
+    en: "Open the saved Memory context in Chatform.",
+    zh: "在 Chatform 中打开已保存的 Memory 上下文。",
   },
   "chat.readOnly": {
     en: "This Agent is unavailable for new messages.",
@@ -100,6 +128,10 @@ export const uiGuideCopy = {
   "debate.topic": {
     en: "Set the question the Agents will discuss. Keep it focused and answerable.",
     zh: "设置 Agent 要讨论的问题；尽量具体、可回答。",
+  },
+  "debate.stalled": {
+    en: "See the safe failure reason for this stalled debate.",
+    zh: "查看此辩论停滞的安全错误原因。",
   },
   "debate.background": {
     en: "Add optional context for the debate. It is context, not verified evidence.",
@@ -125,9 +157,17 @@ export const uiGuideCopy = {
     en: "Confirm that you have permission to upload and clone this speaker's voice.",
     zh: "确认你已获准上传并克隆此说话者的声音。",
   },
-  "voice.uploadSample": {
-    en: "Choose the audio sample for this voice profile.",
-    zh: "选择此语音配置要使用的音频样本。",
+  "voice.preview": {
+    en: "Generate a sample to preview this voice.",
+    zh: "生成试听样本，预览此音色。",
+  },
+  "voice.confirm": {
+    en: "Confirm the previewed voice for use by your Agents.",
+    zh: "确认已试听的音色，供你的 Agent 使用。",
+  },
+  "voice.delete": {
+    en: "Delete this voice profile.",
+    zh: "删除此音色档案。",
   },
   "camera.scene": {
     en: "Choose a classroom scene.",
@@ -160,6 +200,26 @@ export const uiGuideCopy = {
   "camera.aerial": {
     en: "Switch to the overhead camera view.",
     zh: "切换到俯视镜头。",
+  },
+  "knowledge.importFile": {
+    en: "Import Markdown, PDF, or Word files. PDF and Word uploads are converted to Markdown for this library.",
+    zh: "导入 Markdown、PDF 或 Word 文件；PDF 和 Word 会转换为 Markdown 后加入此知识库。",
+  },
+  "agent.uploadRag": {
+    en: "Upload a Markdown, PDF or Word file as this Agent's RAG. It is Private or Public like the Agent.",
+    zh: "上传 Markdown、PDF 或 Word 文件作为此 Agent 的 RAG，与该 Agent 同为私有或公开。",
+  },
+  "agent.uploadMarkdown": {
+    en: "Upload a Markdown file for the next Agent draft revision.",
+    zh: "上传 Markdown 文件，作为 Agent 的下一版草稿。",
+  },
+  "agent.uploadEvidence": {
+    en: "Add Markdown, PDF, or Word files as Agent evidence. PDF and Word uploads are converted to Markdown.",
+    zh: "添加 Markdown、PDF 或 Word 文件作为 Agent 证据；PDF 和 Word 会转换为 Markdown。",
+  },
+  "voice.uploadSample": {
+    en: "Choose the audio sample for this voice profile.",
+    zh: "选择此语音配置要使用的音频样本。",
   },
 } as const satisfies Record<string, Record<Locale, string>>;
 

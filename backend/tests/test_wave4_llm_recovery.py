@@ -611,8 +611,8 @@ def test_0015_schema_has_no_backfill_and_empty_round_trip(tmp_path: Path) -> Non
     try:
         command.upgrade(config, "0014_llm_runtime_budget_buckets")
         assert not inspect(database.engine).has_table("llm_recovery_inputs")
-        command.upgrade(config, "head")
-        command.upgrade(config, "head")
+        command.upgrade(config, "0015_llm_recovery_input")
+        command.upgrade(config, "0015_llm_recovery_input")
         inspector = inspect(database.engine)
         assert inspector.has_table("llm_recovery_inputs")
         assert [item["name"] for item in inspector.get_columns("llm_recovery_inputs")] == [
@@ -642,7 +642,7 @@ def test_0015_schema_has_no_backfill_and_empty_round_trip(tmp_path: Path) -> Non
             }
         command.downgrade(config, "0014_llm_runtime_budget_buckets")
         assert not inspect(database.engine).has_table("llm_recovery_inputs")
-        command.upgrade(config, "head")
+        command.upgrade(config, "0015_llm_recovery_input")
         assert inspect(database.engine).has_table("llm_recovery_inputs")
     finally:
         database.dispose()
@@ -667,7 +667,7 @@ def test_0014_populated_budget_survives_0015_upgrade_downgrade_and_reupgrade(
                 ),
                 {"now": now},
             )
-        command.upgrade(config, "head")
+        command.upgrade(config, "0015_llm_recovery_input")
         with database.engine.connect() as connection:
             assert connection.execute(
                 text(
@@ -678,7 +678,7 @@ def test_0014_populated_budget_survives_0015_upgrade_downgrade_and_reupgrade(
 
         command.downgrade(config, "0014_llm_runtime_budget_buckets")
         assert not inspect(database.engine).has_table("llm_recovery_inputs")
-        command.upgrade(config, "head")
+        command.upgrade(config, "0015_llm_recovery_input")
         with database.engine.connect() as connection:
             assert connection.execute(
                 text(
@@ -691,10 +691,37 @@ def test_0014_populated_budget_survives_0015_upgrade_downgrade_and_reupgrade(
 
 
 def test_0015_populated_recovery_row_refuses_downgrade(tmp_path: Path) -> None:
-    database, repository, _request_value, stage, recovery_input = _prepare_sql(tmp_path)
+    database = Database(f"sqlite:///{tmp_path / 'migration-populated.sqlite3'}")
     config = _migration_config(database)
     try:
-        repository.stage_llm_accepted_with_recovery(stage, recovery_input)
+        command.upgrade(config, "0014_llm_runtime_budget_buckets")
+        command.upgrade(config, "0015_llm_recovery_input")
+        _seed_turn(database, debate_id="debate-recovery", turn_id="turn-recovery")
+        now = datetime.now(UTC)
+        input_json = '{"identity":{},"input":{}}'
+        with database.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO provider_operations "
+                    "(id,scope_id,provider_operation,logical_item_id,attempt_no,request_hash,"
+                    "max_tokens,max_cost_cny,policy_hash,export_manifest_hash,build_manifest_hash,"
+                    "model_key,state,request_count,charged_request_count,created_at,updated_at) "
+                    "VALUES ('recovery-operation','debate-recovery','llm_debate_turn',"
+                    "'turn-recovery',1,:hash,20,0.01,:hash,:hash,:hash,'model',"
+                    "'prepared',0,0,:now,:now)"
+                ),
+                {"hash": _hash("recovery-operation"), "now": now},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO llm_recovery_inputs "
+                    "(operation_id,turn_id,attempt_no,input_version,input_json,input_hash,"
+                    "created_at) "
+                    "VALUES ('recovery-operation','turn-recovery',1,"
+                    "'llm_recovery_input_v1',:input_json,:input_hash,:now)"
+                ),
+                {"input_json": input_json, "input_hash": sha256_hex(input_json), "now": now},
+            )
         with pytest.raises(RuntimeError, match="retained"):
             command.downgrade(config, "0014_llm_runtime_budget_buckets")
         with database.engine.connect() as connection:
@@ -702,6 +729,9 @@ def test_0015_populated_recovery_row_refuses_downgrade(tmp_path: Path) -> None:
                 connection.execute(text("SELECT COUNT(*) FROM llm_recovery_inputs")).scalar_one()
                 == 1
             )
+            assert connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one() == ("0015_llm_recovery_input")
         assert inspect(database.engine).has_table("llm_recovery_inputs")
     finally:
         database.dispose()

@@ -19,16 +19,6 @@
   color: var(--ink);
 }
 
-/* A snapshot that failed to refresh must not hide behind the full-screen
-   stage, and must not push the bench around either. */
-.floatingNotice {
-  position: fixed;
-  z-index: 10;
-  bottom: 22px;
-  left: 22px;
-  width: min(420px, calc(100vw - 44px));
-}
-
 .reportDialog {
   width: min(1040px, calc(100vw - 40px));
   max-height: calc(100dvh - 48px);
@@ -51,16 +41,17 @@
   margin: 0 0 var(--workspace-gap);
 }
 
-@media (max-width: 900px) {
-  .floatingNotice {
-    right: 12px;
-    bottom: auto;
-    top: 12px;
-    left: 12px;
-    width: auto;
-  }
-}
-
 .reportDialog > section + section {
   margin-top: var(--workspace-gap);
+}
+
+.reportActions .reportClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 12px;
 }

@@ -52,12 +52,21 @@ def test_actual_wire_uses_only_frozen_markdown_and_execution_contract(language, 
     assert default_teaching_prompts()[language] not in system
     assert f"Execute round {round_number} of 4" in system
     assert "# Execution contract" in system
+    assert "Output speech in" not in system
     assert "segments" in system
+    assert "First-person pronouns in a history entry" not in system
+    assert "preserve who gave it and whom it was addressed to" not in system
     assert "frozen_system_prompt" not in json.loads(request.user_message.content)
 
 
+def test_identity_guidance_does_not_rewrite_previously_frozen_prompts():
+    original = "# Frozen teaching rules\nAn earlier exact execution contract."
+    stored = {"system_prompts": {"en": [original] * 4, "zh": [original] * 4}}
+    assert frozen_system_prompt(json.dumps(stored), 2, "zh") == original
+
+
 def test_recovery_preserves_exact_prompt_and_detects_changed_rule_hash(monkeypatch):
-    system = compile_system_prompt("# Original\nUse a concrete counterexample.", 1, "en")
+    system = compile_system_prompt("# Original\nUse a concrete counterexample.", 1)
     frozen = replace(snapshot(), frozen_system_prompt=system)
     request = adapter().build_request(
         frozen,
@@ -85,8 +94,9 @@ def test_recovery_preserves_exact_prompt_and_detects_changed_rule_hash(monkeypat
 
 
 def test_blank_markdown_does_not_restore_old_teaching_rules():
-    system = compile_system_prompt("", 2, "en")
+    system = compile_system_prompt("", 2)
     assert "# Execution contract" in system
+    assert "Output speech in" not in system
     assert "initial_position" not in system
     assert "question_target_id" in system
     assert "S IDs are internal metadata only" in system
@@ -221,3 +231,25 @@ def test_selected_language_only_uses_its_own_frozen_prompt():
     assert "Chinese-only revision" not in english
     assert "Chinese-only revision" in frozen_system_prompt(json.dumps(rules), 1, "zh")
     assert DebateDraftRequest.model_fields["output_language"].default == "zh"
+
+
+@pytest.mark.parametrize(
+    "language,heading",
+    [
+        ("zh", "## 发言身份与指代"),
+        ("en", "## Speaker identity and attribution"),
+    ],
+)
+def test_attribution_guidance_is_editable_ruleset_not_hidden_execution(language, heading):
+    authored = default_teaching_prompts()[language]
+    assert heading in authored
+    rules = freeze_teaching_rules()
+    assert rules["teaching_prompts"][language] == authored
+    message = frozen_system_prompt(json.dumps(rules), 2, language)
+    assert heading in message.split("# Execution contract", 1)[0]
+    edited = authored.split(heading, 1)[0] + "\n## Custom discussion\nUse my teaching rules."
+    edited_message = compile_system_prompt(edited, 2)
+    assert heading not in edited_message
+    assert "First-person pronouns" not in edited_message
+    assert "preserve who gave it" not in edited_message
+    assert "Only act as discussion.self_id" in edited_message

@@ -3,21 +3,53 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from app.core.db import Database
 from app.core.identity import group_name_key, username_key
-from app.core.models import Base
+from app.core.models import (
+    Base,
+    FileReference,
+    Job,
+    KnowledgeDocument,
+    ProviderOperation,
+    StoredFile,
+)
 from app.modules.auth.models import DemoAccountBinding
 from app.modules.debates import cleanup as online_cleanup
 from app.modules.debates import models as _debate_models
 from app.modules.interactions import models as _interaction_models
 from app.modules.knowledge.recovery import recover_file_operations
+from app.modules.knowledge_sets.models import (
+    AgentKnowledgeSet,
+    KnowledgeAsset,
+    KnowledgeAssetVersion,
+    KnowledgeAssetVersionSource,
+    KnowledgeGenerationAcceptedStage,
+    KnowledgeGenerationRun,
+    KnowledgeGenerationTargetSnapshot,
+    KnowledgeSet,
+    KnowledgeSetSource,
+)
+from app.modules.learning.models import AssessmentActivity, AssessmentAttempt
 from app.modules.reports import models as _report_models
+from app.modules.teams.models import (
+    CourseTeamPublication,
+    Team,
+    TeamMemberInvokeGrant,
+    TeamVersion,
+    TeamVersionMember,
+    TeamVersionSet,
+)
+from app.modules.workspace.models import Conversation
 from sqlalchemy import text
 
 del DemoAccountBinding, _debate_models, _interaction_models, _report_models
@@ -33,8 +65,30 @@ def _uid(number: int) -> str:
     return f"00000000-0000-4000-8000-{number:012d}"
 
 
+def _alembic_config(database_path: Path) -> Config:
+    backend_root = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_root / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_root / "migrations"))
+    database_url = f"sqlite:///{database_path}"
+    config.set_main_option("sqlalchemy.url", database_url)
+    config.attributes["database_url"] = database_url
+    return config
+
+
 def _hash(letter: str = "a") -> str:
     return letter * 64
+
+
+def _table_rows(
+    database_path: Path, tables: tuple[str, ...]
+) -> dict[str, list[tuple[object, ...]]]:
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        return {
+            table: connection.execute(f'SELECT * FROM "{table}" ORDER BY rowid').fetchall()
+            for table in tables
+        }
 
 
 def _add(session, table_name: str, **values: object) -> None:
@@ -975,6 +1029,456 @@ def test_dry_run_is_read_only_and_machine_audit_is_sanitized(migrated_database):
     assert "00000000-0000-4000-8000-000000000020" not in encoded
     assert "Authored knowledge" not in encoded
     assert payload["app_must_be_stopped"] is True
+
+
+def test_cleanup_accepts_known_0035_data_after_additive_0036_downgrade(migrated_database):
+    database_path, data_root = migrated_database
+    command.downgrade(_alembic_config(database_path), "0035_w1_resource_ownership")
+
+    plan = cleanup.inspect_cleanup(database_path, data_root)
+    payload = cleanup.audit_payload(plan, mode="dry_run", status="dry_run")
+    assert plan.schema_head == "0035_w1_resource_ownership"
+    assert plan.table_counts["debates"] == 1
+    assert payload["schema_head"] == "0035_w1_resource_ownership"
+
+
+def test_cleanup_preserves_knowledge_set_and_all_references(migrated_database):
+    database_path, data_root = migrated_database
+    database = Database(f"sqlite:///{database_path}", data_root)
+    set_id = _uid(110)
+    binding_id = _uid(111)
+    asset_id = _uid(112)
+    version_id = _uid(113)
+    version_source_id = _uid(114)
+    file_reference_id = _uid(115)
+    job_id = _uid(116)
+    generation_run_id = _uid(117)
+    provider_operation_id = _uid(118)
+    now = datetime.now(UTC)
+    content_json = json.dumps(
+        {"kind": "note", "title": "Kept source", "body": "Authored evidence."},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    content_hash = hashlib.sha256(content_json.encode("utf-8")).hexdigest()
+    location_json = "{}"
+    location_hash = hashlib.sha256(location_json.encode("utf-8")).hexdigest()
+    accepted_stage_json = '{"assets":[]}'
+    accepted_stage_hash = hashlib.sha256(accepted_stage_json.encode("utf-8")).hexdigest()
+    try:
+        with database.session() as session:
+            document = session.get(KnowledgeDocument, _uid(16))
+            stored = session.get(StoredFile, _uid(15))
+            assert document is not None and stored is not None
+            agent_version_id = session.scalar(
+                text("SELECT id FROM agent_versions WHERE agent_id = :agent_id LIMIT 1"),
+                {"agent_id": _uid(12)},
+            )
+            assert agent_version_id is not None
+            session.add(
+                KnowledgeSet(
+                    id=set_id,
+                    owner_user_id=_uid(1),
+                    course_id=_uid(10),
+                    group_id=_uid(11),
+                    ownership_scope="group",
+                    visibility="public",
+                    display_name="Kept Set",
+                    metadata_revision=1,
+                    content_revision=1,
+                    authorization_epoch=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeSetSource(
+                    id=binding_id,
+                    knowledge_set_id=set_id,
+                    document_id=document.id,
+                    stored_file_id=stored.id,
+                    source_content_hash=document.content_hash,
+                    source_file_sha256=stored.sha256,
+                    source_authorization_epoch=document.authorization_epoch,
+                    source_index_revision=document.index_revision,
+                    source_filename=document.source_filename,
+                    order_index=0,
+                    is_active=True,
+                    created_by_user_id=_uid(1),
+                    created_at=now,
+                )
+            )
+            session.add(
+                KnowledgeAsset(
+                    id=asset_id,
+                    knowledge_set_id=set_id,
+                    kind="note",
+                    current_version_seq=1,
+                    created_by_user_id=_uid(1),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeAssetVersion(
+                    id=version_id,
+                    asset_id=asset_id,
+                    version_seq=1,
+                    content_json=content_json,
+                    content_hash=content_hash,
+                    source_dependency_hash=_hash("5"),
+                    dependency_authorization_epoch=1,
+                    set_authorization_epoch=1,
+                    origin="manual",
+                    created_by_user_id=_uid(1),
+                    generator_agent_version_id=None,
+                    generation_job_id=None,
+                    created_at=now,
+                )
+            )
+            session.add(
+                KnowledgeAssetVersionSource(
+                    id=version_source_id,
+                    asset_version_id=version_id,
+                    source_binding_id=binding_id,
+                    document_id=document.id,
+                    stored_file_id=stored.id,
+                    source_content_hash=document.content_hash,
+                    source_file_sha256=stored.sha256,
+                    source_authorization_epoch=document.authorization_epoch,
+                    source_location_json=location_json,
+                    source_location_hash=location_hash,
+                    created_at=now,
+                )
+            )
+            session.add(
+                FileReference(
+                    id=file_reference_id,
+                    stored_file_id=stored.id,
+                    owner_type="knowledge_asset_version_source",
+                    owner_id=version_source_id,
+                    purpose="source",
+                    created_at=now,
+                )
+            )
+            session.add(
+                AgentKnowledgeSet(
+                    agent_id=_uid(12),
+                    knowledge_set_id=set_id,
+                    order_index=0,
+                    created_by_user_id=_uid(1),
+                    created_at=now,
+                )
+            )
+            session.add(
+                Team(
+                    id=_uid(130),
+                    owner_user_id=_uid(2),
+                    course_id=_uid(10),
+                    group_id=None,
+                    ownership_scope="personal",
+                    display_name="Preserved Team",
+                    visibility="public",
+                    metadata_revision=0,
+                    authorization_epoch=0,
+                    current_version_seq=1,
+                    deleted_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                TeamVersion(
+                    id=_uid(131),
+                    team_id=_uid(130),
+                    version_seq=1,
+                    display_name="Preserved Team",
+                    visibility="public",
+                    authorization_epoch=0,
+                    created_by_user_id=_uid(2),
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                TeamVersionMember(
+                    id=_uid(132),
+                    team_version_id=_uid(131),
+                    agent_id=_uid(12),
+                    agent_version_id=str(agent_version_id),
+                    position=0,
+                    is_leader=True,
+                    display_name="Preserved Agent",
+                    avatar_config_json="{}",
+                    own_knowledge_set_snapshots_json="[]",
+                    raw_source_fences_json="[]",
+                    created_at=now,
+                )
+            )
+            session.add(
+                TeamVersionSet(
+                    id=_uid(133),
+                    team_version_id=_uid(131),
+                    knowledge_set_id=set_id,
+                    authorization_epoch=1,
+                    position=0,
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                CourseTeamPublication(
+                    id=_uid(134),
+                    course_id=_uid(10),
+                    team_id=_uid(130),
+                    team_version_id=_uid(131),
+                    publisher_user_id=_uid(2),
+                    authorization_epoch=0,
+                    state="published",
+                    published_at=now,
+                    revoked_at=None,
+                )
+            )
+            session.flush()
+            session.add(
+                TeamMemberInvokeGrant(
+                    id=_uid(135),
+                    publication_id=_uid(134),
+                    team_version_id=_uid(131),
+                    team_member_id=_uid(132),
+                    agent_id=_uid(12),
+                    agent_version_id=str(agent_version_id),
+                    authorization_epoch=0,
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                Conversation(
+                    id=_uid(137),
+                    user_id=_uid(1),
+                    course_id=_uid(10),
+                    agent_version_id=None,
+                    snapshot_id=None,
+                    agent_name_snapshot="",
+                    agent_authorization_epoch=0,
+                    entry_kind="maya_team",
+                    chat_visibility="private",
+                    origin="published_course_team",
+                    team_id=_uid(130),
+                    team_version_id=_uid(131),
+                    team_owner_user_id=_uid(2),
+                    team_name_snapshot="Preserved Team",
+                    team_authorization_epoch=0,
+                    publication_id=_uid(134),
+                    publication_epoch=0,
+                    revision=0,
+                    active_request_id=None,
+                    withdrawn_at=None,
+                    created_at=now,
+                )
+            )
+            session.add(
+                AssessmentActivity(
+                    id=_uid(136),
+                    course_id=_uid(10),
+                    team_id=_uid(130),
+                    team_version_id=_uid(131),
+                    publication_id=_uid(134),
+                    recipe_id="mayaform.cleanup.test",
+                    recipe_version_id=str(agent_version_id),
+                    evaluator_team_member_id=_uid(132),
+                    evaluator_agent_version_id=str(agent_version_id),
+                    boundary_team_member_id=_uid(132),
+                    boundary_agent_version_id=str(agent_version_id),
+                    publisher_user_id=_uid(2),
+                    questions_hash=_hash("m"),
+                    question_selection_revision=2,
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                AssessmentAttempt(
+                    id=_uid(138),
+                    activity_id=_uid(136),
+                    team_id=_uid(130),
+                    recipe_id="mayaform.cleanup.test",
+                    actor_user_id=_uid(1),
+                    source_conversation_id=_uid(137),
+                    chat_visibility="private",
+                    status="in_progress",
+                    revision=3,
+                    question_selection_revision=2,
+                    started_at=now,
+                    updated_at=now,
+                    completed_at=None,
+                    abandoned_at=None,
+                    abandonment_reason=None,
+                )
+            )
+            session.add(
+                Job(
+                    id=job_id,
+                    operation="knowledge_set.generate",
+                    state="pending",
+                    idempotency_key=_hash("7"),
+                    claim_token=None,
+                    attempt=0,
+                    safe_error_code=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
+                ProviderOperation(
+                    id=provider_operation_id,
+                    scope_id=generation_run_id,
+                    provider_operation="llm_knowledge_generate",
+                    logical_item_id=generation_run_id,
+                    attempt_no=1,
+                    request_hash=_hash("p"),
+                    max_tokens=0,
+                    max_cost_cny=0,
+                    policy_hash=_hash("q"),
+                    export_manifest_hash=_hash("r"),
+                    build_manifest_hash=_hash("s"),
+                    model_key="qwen3.8-max-2026-09-02",
+                    state="accepted",
+                    request_count=1,
+                    charged_request_count=1,
+                    staged_response_hash=accepted_stage_hash,
+                    safe_error_code=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeGenerationRun(
+                    id=generation_run_id,
+                    job_id=job_id,
+                    input_key=_hash("8"),
+                    owner_user_id=_uid(1),
+                    course_id=_uid(10),
+                    agent_id=_uid(12),
+                    agent_version_id=str(agent_version_id),
+                    knowledge_set_id=set_id,
+                    provider_operation_id=provider_operation_id,
+                    provider_manifest_hash=_hash("r"),
+                    request_hash=_hash("p"),
+                    agent_md_hash=_hash("9"),
+                    agent_authorization_epoch=0,
+                    set_authorization_epoch=1,
+                    source_manifest_json="[]",
+                    source_manifest_hash=_hash("6"),
+                    state="pending",
+                    safe_error_code=None,
+                    claim_token=None,
+                    lease_expires_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeGenerationTargetSnapshot(
+                    run_id=generation_run_id,
+                    asset_heads_json="[]",
+                    created_at=now,
+                )
+            )
+            session.flush()
+            session.add(
+                KnowledgeGenerationAcceptedStage(
+                    run_id=generation_run_id,
+                    operation_id=provider_operation_id,
+                    request_hash=_hash("p"),
+                    manifest_hash=_hash("r"),
+                    policy_hash=_hash("q"),
+                    model_key="qwen3.8-max-2026-09-02",
+                    schema_hash=_hash("u"),
+                    canonical_stage_json=accepted_stage_json,
+                    canonical_stage_hash=accepted_stage_hash,
+                    item_count=0,
+                    usage_json=None,
+                    safe_error_code=None,
+                    accepted_at=now,
+                    created_at=now,
+                )
+            )
+        preserved_tables = (
+            "knowledge_sets",
+            "knowledge_set_sources",
+            "knowledge_assets",
+            "knowledge_asset_versions",
+            "knowledge_asset_version_sources",
+            "agent_knowledge_sets",
+            "knowledge_generation_runs",
+            "knowledge_generation_target_snapshots",
+            "knowledge_generation_accepted_stages",
+            "teams",
+            "team_versions",
+            "team_version_members",
+            "team_version_sets",
+            "course_team_publications",
+            "team_member_invoke_grants",
+            "assessment_activities",
+            "assessment_attempts",
+        )
+        before = _table_rows(database_path, preserved_tables)
+        with sqlite3.connect(database_path) as connection:
+            file_reference_before = connection.execute(
+                "SELECT * FROM file_references WHERE id=?", (file_reference_id,)
+            ).fetchone()
+        assert file_reference_before is not None
+        plan = cleanup.inspect_cleanup(database_path, data_root)
+        assert provider_operation_id not in plan.operation_ids, plan.operation_ids
+        for table in preserved_tables:
+            assert plan.preserved_counts[table] == 1
+
+        cleanup.apply_cleanup(database_path, data_root, offline=True)
+
+        assert _table_rows(database_path, preserved_tables) == before
+        with sqlite3.connect(database_path) as connection:
+            assert connection.execute(
+                "SELECT question_selection_revision FROM assessment_attempts WHERE id=?",
+                (_uid(138),),
+            ).fetchone() == (2,)
+        with sqlite3.connect(database_path) as connection:
+            file_reference_after = connection.execute(
+                "SELECT * FROM file_references WHERE id=?", (file_reference_id,)
+            ).fetchone()
+            assert file_reference_after == file_reference_before
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        database.dispose()
+
+
+def test_cleanup_accepts_current_0054_schema_head(migrated_database):
+    database_path, data_root = migrated_database
+    with sqlite3.connect(database_path) as connection:
+        version = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    assert version == ("0062_active_debate_slot",)
+    assert cleanup.SCHEMA_HEAD == version[0]
+    assert version[0] in cleanup.SUPPORTED_SCHEMA_HEADS
+
+    plan = cleanup.inspect_cleanup(database_path, data_root)
+    assert plan.schema_head == version[0]
+
+
+def test_cleanup_rejects_unknown_schema_head(migrated_database):
+    import sqlite3
+
+    database_path, data_root = migrated_database
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("UPDATE alembic_version SET version_num='unknown-head'")
+
+    with pytest.raises(cleanup.CleanupError, match="schema_head_invalid"):
+        cleanup.inspect_cleanup(database_path, data_root)
 
 
 def test_apply_removes_runtime_graph_preserves_authored_graph_and_is_idempotent(

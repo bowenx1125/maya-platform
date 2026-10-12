@@ -37,7 +37,8 @@ export interface paths {
         delete: operations["deleteConversation"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Conversation */
+        patch: operations["updateConversation"];
         trace?: never;
     };
     "/conversations/{conversation_id}/messages": {
@@ -194,6 +195,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/card-rooms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Card Room */
+        post: operations["createCardRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/card-rooms/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Card Room */
+        get: operations["getCardRoom"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/card-rooms/{code}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Act In Card Room */
+        post: operations["actInCardRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/card-rooms/{code}/rebuy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebuy In Card Room */
+        post: operations["rebuyInCardRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/card-rooms/{code}/seat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join Card Room */
+        post: operations["joinCardRoom"];
+        /** Leave Card Room */
+        delete: operations["leaveCardRoom"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/card-rooms/{code}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Card Room */
+        post: operations["startCardRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -308,7 +412,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Current User */
+        patch: operations["updateCurrentUser"];
         trace?: never;
     };
     "/auth/password-resets": {
@@ -484,7 +589,7 @@ export interface paths {
         };
         get: operations["listKnowledgeDocuments"];
         put?: never;
-        /** @description Converts supported PDF/DOCX uploads on the Maya server into an immutable Markdown source; only converted Markdown is retained and content is not deduplicated. */
+        /** Upload Knowledge Document */
         post: operations["uploadKnowledgeDocument"];
         delete?: never;
         options?: never;
@@ -507,7 +612,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Knowledge Document Visibility */
+        patch: operations["updateKnowledgeDocumentVisibility"];
         trace?: never;
     };
     "/knowledge-documents/{document_id}/replace": {
@@ -601,6 +707,7 @@ export interface paths {
         };
         get: operations["listGroupAgents"];
         put?: never;
+        /** Create Agent */
         post: operations["createAgent"];
         delete?: never;
         options?: never;
@@ -623,6 +730,10 @@ export interface paths {
         delete: operations["deleteAgent"];
         options?: never;
         head?: never;
+        /**
+         * Update Agent Metadata
+         * @description CAS-update description without touching any versioned Agent data.
+         */
         patch: operations["updateAgentMetadata"];
         trace?: never;
     };
@@ -860,7 +971,7 @@ export interface paths {
         delete: operations["deleteVoiceProfile"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["renameVoiceProfile"];
         trace?: never;
     };
     "/voice-profiles/{voice_profile_id}/preview": {
@@ -1578,6 +1689,571 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/workspace-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Workspace Agents */
+        get: operations["listCourseWorkspaceAgents"];
+        put?: never;
+        /** Create Course Workspace Agent */
+        post: operations["createCourseWorkspaceAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/workspace-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Workspace Documents */
+        get: operations["listCourseWorkspaceDocuments"];
+        put?: never;
+        /** Upload Knowledge Document */
+        post: operations["uploadCourseWorkspaceDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/knowledge-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Knowledge Sets */
+        get: operations["getAgentKnowledgeSets"];
+        /** Replace Agent Knowledge Sets */
+        put: operations["replaceAgentKnowledgeSets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/knowledge-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Knowledge Sets */
+        get: operations["listKnowledgeSets"];
+        put?: never;
+        /** Create Knowledge Set */
+        post: operations["createKnowledgeSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Set Asset */
+        get: operations["getKnowledgeSetAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Knowledge Set Asset */
+        patch: operations["updateKnowledgeSetAsset"];
+        trace?: never;
+    };
+    "/knowledge-assets/{asset_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Knowledge Set Asset Versions */
+        get: operations["listKnowledgeSetAssetVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-generation-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Knowledge Generation Job
+         * @description Safe generation status is available only to the current Teacher owner; it never returns source text or Provider data.
+         */
+        get: operations["getKnowledgeGenerationJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Set */
+        get: operations["getKnowledgeSet"];
+        put?: never;
+        post?: never;
+        /** Delete Knowledge Set */
+        delete: operations["deleteKnowledgeSet"];
+        options?: never;
+        head?: never;
+        /** Update Knowledge Set */
+        patch: operations["updateKnowledgeSetMetadata"];
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Knowledge Set Assets */
+        get: operations["listKnowledgeSetAssets"];
+        put?: never;
+        /** Create Knowledge Set Asset */
+        post: operations["createKnowledgeSetAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Set Graph */
+        get: operations["getKnowledgeSetGraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Knowledge Set Sources */
+        put: operations["replaceKnowledgeSetSources"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/sources/{binding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Knowledge Set Source */
+        delete: operations["removeKnowledgeSetSource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Course Teams */
+        get: operations["listCourseTeams"];
+        put?: never;
+        /** Create Team */
+        post: operations["createTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/maya-teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maya Teams */
+        get: operations["listMayaTeams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Team */
+        get: operations["getTeam"];
+        /** Save Team Version */
+        put: operations["saveTeamVersion"];
+        post?: never;
+        /** Delete Team */
+        delete: operations["deleteTeam"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{team_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Team Versions */
+        get: operations["listTeamVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/memory-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Memory Entry Action
+         * @description Resolve one durable Brainform navigation intent; sending remains explicit Chat work.
+         */
+        post: operations["createMemoryEntryAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/turns/{turn_id}:pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Team Conversation Turn */
+        post: operations["pauseTeamConversationTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/turns/{turn_id}:resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Team Conversation Turn */
+        post: operations["resumeTeamConversationTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/conversations/{conversation_id}/turns/{turn_id}:stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Team Conversation Turn Output */
+        post: operations["stopTeamConversationTurnOutput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/courses/{course_id}/brainform/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Brainform Knowledge */
+        get: operations["listBrainformKnowledge"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-documents/{document_id}:rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Knowledge Document */
+        post: operations["renameKnowledgeDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Knowledge Markdown */
+        get: operations["getKnowledgeMarkdown"];
+        /** Save Knowledge Markdown */
+        put: operations["saveKnowledgeMarkdown"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge-sets/{set_id}/regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Knowledge Markdown */
+        post: operations["regenerateKnowledgeMarkdown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/activities/{activity_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Assessment Report Route */
+        post: operations["createAssessmentCourseReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/attempts/{attempt_id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Assessment Lifecycle Action Route */
+        post: operations["applyAssessmentLifecycleAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/courses/{course_id}/assessment-activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Assessment Activities Route */
+        get: operations["listAuthorizedAssessmentActivities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/learning/reports/{report_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Assessment Report Route */
+        get: operations["downloadAssessmentCourseReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/chat-standing/disclosure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chat Standing Provider Disclosure
+         * @description Create/reuse a static course Chat disclosure, with no student Chat inputs.
+         */
+        get: operations["getChatStandingProviderDisclosure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/team-standing-grants/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Team Provider Standing Grant */
+        post: operations["confirmTeamProviderStandingGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/provider/data-call/team-standing-grants/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Team Provider Standing Grant */
+        post: operations["previewTeamProviderStandingGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Current Password */
+        post: operations["changeCurrentPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1600,6 +2276,11 @@ export interface components {
              * Format: uuid
              */
             course_id: string;
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
             /** Name */
             name: string;
             /**
@@ -1609,24 +2290,70 @@ export interface components {
             version_id: string;
             /** Version Label */
             version_label: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
         /** ChatSession */
         ChatSession: {
             agent: components["schemas"]["ChatAgent"];
+            /**
+             * Can Send
+             * @default true
+             */
+            can_send: boolean;
+            /**
+             * Chat Visibility
+             * @default private
+             * @enum {string}
+             */
+            chat_visibility: "private" | "public";
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
             /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_kind: "agent";
+            /**
              * Id
              * Format: uuid
              */
             id: string;
+            /**
+             * Origin
+             * @default single_agent
+             * @constant
+             */
+            origin: "single_agent";
+            /** Pinned At */
+            pinned_at?: string | null;
+            /**
+             * Read Only
+             * @default false
+             */
+            read_only: boolean;
             /** Revision */
             revision: number;
+            /** Title */
+            title?: string | null;
             /** Turns */
             turns: components["schemas"]["ChatTurn"][];
+        };
+        /**
+         * UpdateChat
+         * @description Rename or pin a Chat; a field left out keeps its value.
+         */
+        UpdateChat: {
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Title */
+            title?: string | null;
         };
         /** ChatSource */
         ChatSource: {
@@ -1642,6 +2369,7 @@ export interface components {
         };
         /** ChatTurn */
         ChatTurn: {
+            assessment_result?: components["schemas"]["AssessmentRuntimeResult"] | null;
             /** Assistant Text */
             assistant_text: string | null;
             /**
@@ -1662,7 +2390,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "pending" | "ready" | "failed" | "acceptance_unknown";
+            state: "pending" | "ready" | "partial" | "failed" | "acceptance_unknown" | "paused";
             /** User Text */
             user_text: string;
         };
@@ -1708,10 +2436,15 @@ export interface components {
         /** CreateChat */
         CreateChat: {
             /**
-             * Version Id
-             * Format: uuid
+             * Chat Visibility
+             * @default private
+             * @constant
              */
-            version_id: string;
+            chat_visibility: "private";
+            /** Entry */
+            entry?: (components["schemas"]["AgentChatEntry"] | components["schemas"]["SavedTeamChatEntry"] | components["schemas"]["MayaTeamChatEntry"]) | null;
+            /** Version Id */
+            version_id?: string | null;
         };
         /** LiveHeartbeat */
         LiveHeartbeat: {
@@ -1748,6 +2481,8 @@ export interface components {
              * Format: uuid
              */
             debate_id: string;
+            /** Interaction Url */
+            interaction_url?: string | null;
             /** Participants */
             participants: components["schemas"]["LiveParticipant"][];
             playback: components["schemas"]["PlaybackStateDTO"] | null;
@@ -1840,13 +2575,12 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+            routing?: components["schemas"]["TeamRouting"] | null;
         };
         /** StreamChat */
         StreamChat: {
             /** Expected Revision */
             expected_revision: number;
-            /** Lang */
-            lang: string;
             /** Message */
             message: string;
             /**
@@ -1854,6 +2588,7 @@ export interface components {
              * Format: uuid
              */
             request_id: string;
+            routing?: components["schemas"]["TeamRouting"] | null;
         };
         /** UpdateProviderSettings */
         UpdateProviderSettings: {
@@ -1889,15 +2624,28 @@ export interface components {
             manifest_hash: string;
             expected_revision: number;
         };
+        /**
+         * ProviderDataCallDisclosureV1
+         * @description Exact teacher-facing data-processing disclosure.
+         */
         ProviderDataCallDisclosureV1: {
-            supplier_display_name: string;
-            /** @constant */
-            region: "cn-beijing";
-            purpose: string;
-            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
-            storage_fact: string;
+            /** No Training Basis */
             no_training_basis: string;
+            /** Outbound Field Classes */
+            outbound_field_classes: ("topic_and_platform_rules" | "confirmed_structured_persona" | "teacher_agent_instructions" | "authorized_courseware_text" | "private_conversation_messages" | "public_predecessor_speech" | "current_evidence_excerpt" | "opaque_local_id" | "public_agent_name" | "anonymous_insight_summary" | "anonymous_classroom_barrage" | "aggregate_vote_count" | "current_tts_speech" | "server_authored_structure_repair_feedback")[];
+            /** Purpose */
+            purpose: string;
+            /**
+             * Region
+             * @constant
+             */
+            region: "cn-beijing";
+            /** Retention Setting */
             retention_setting: string;
+            /** Storage Fact */
+            storage_fact: string;
+            /** Supplier Display Name */
+            supplier_display_name: string;
         };
         ProviderDataCallDisclosureResponseV1: {
             disclosure: components["schemas"]["ProviderDataCallDisclosureV1"];
@@ -1954,9 +2702,9 @@ export interface components {
             revision_no: number;
             /** @constant */
             status: "generating";
-            english_markdown?: null;
-            word_count?: null;
-            safe_error_code?: null;
+            english_markdown: null;
+            word_count: null;
+            safe_error_code: null;
             created_at: components["schemas"]["IsoTime"];
         };
         ContinueReadyReportRevision: {
@@ -1966,7 +2714,7 @@ export interface components {
             status: "ready";
             english_markdown: string;
             word_count: number;
-            safe_error_code?: null;
+            safe_error_code: null;
             created_at: components["schemas"]["IsoTime"];
         };
         ContinueFailedReportRevision: {
@@ -1974,8 +2722,8 @@ export interface components {
             revision_no: number;
             /** @constant */
             status: "failed";
-            english_markdown?: null;
-            word_count?: null;
+            english_markdown: null;
+            word_count: null;
             safe_error_code: string;
             created_at: components["schemas"]["IsoTime"];
         };
@@ -1993,7 +2741,7 @@ export interface components {
             password: string;
             group_name: string;
             display_name?: string | null;
-            course_id?: components["schemas"]["Uuid"];
+            course_id?: components["schemas"]["Uuid"] | null;
         };
         PasswordResetRequest: {
             course_id: components["schemas"]["Uuid"];
@@ -2022,12 +2770,23 @@ export interface components {
             csrf_token: string;
             expires_at: components["schemas"]["IsoTime"];
         };
+        /** CurrentUser */
         CurrentUser: {
-            id: components["schemas"]["Uuid"];
-            username: string;
-            display_name: string;
+            /** Avatar */
+            avatar?: string | null;
+            /** Courses */
             courses: components["schemas"]["CourseMembership"][];
+            /** Display Name */
+            display_name: string;
+            /** Groups */
             groups: components["schemas"]["GroupMembership"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string;
         };
         CourseMembership: {
             course_id: components["schemas"]["Uuid"];
@@ -2056,27 +2815,59 @@ export interface components {
         GroupDetail: components["schemas"]["Group"] & {
             members?: components["schemas"]["Member"][];
         };
+        /** Member */
         Member: {
-            user_id: components["schemas"]["Uuid"];
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
             display_name: string;
+            /** Role */
             role: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         GroupRef: {
             id: components["schemas"]["Uuid"];
             name: string;
         };
+        /**
+         * RosterEntry
+         * @description One course member as the teacher's account management view sees it.
+         */
         RosterEntry: {
-            user_id: components["schemas"]["Uuid"];
-            username: string;
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
             display_name: string;
-            role: string;
-            status: string;
-            source: string;
+            /** Editable */
             editable: boolean;
+            /** Groups */
             groups?: components["schemas"]["GroupRef"][];
+            /** Role */
+            role: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Username */
+            username: string;
         };
+        /** CourseRoster */
         CourseRoster: {
-            course_id: components["schemas"]["Uuid"];
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Entries */
             entries?: components["schemas"]["RosterEntry"][];
         };
         UpdateCourseMemberRequest: {
@@ -2084,21 +2875,67 @@ export interface components {
             group_name?: string | null;
             status?: string | null;
         };
+        /** KnowledgeDocument */
         KnowledgeDocument: {
-            id: components["schemas"]["Uuid"];
-            group_id: components["schemas"]["Uuid"];
-            source_filename: string;
-            /** @enum {string} */
-            source_owner_role: "student" | "teacher";
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /**
+             * Can Manage Visibility
+             * @default false
+             */
+            can_manage_visibility: boolean;
+            /** Char Count */
             char_count: number;
+            /** Content Hash */
             content_hash: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Index Revision */
             index_revision: number;
-            /** @enum {string} */
+            /**
+             * Index Status
+             * @enum {string}
+             */
             index_status: "pending" | "indexing" | "ready" | "failed";
-            /** @enum {string} */
-            workspace_state: "active" | "hidden";
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /** Safe Error Code */
             safe_error_code?: string | null;
-            created_at: components["schemas"]["IsoTime"];
+            /** Source Filename */
+            source_filename: string;
+            /**
+             * Source Owner Role
+             * @enum {string}
+             */
+            source_owner_role: "student" | "teacher";
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /**
+             * Workspace State
+             * @enum {string}
+             */
+            workspace_state: "active" | "hidden";
         };
         SnapshotDocument: {
             id: components["schemas"]["Uuid"];
@@ -2118,45 +2955,165 @@ export interface components {
             document: components["schemas"]["KnowledgeDocument"];
             agent_version?: components["schemas"]["AgentVersion"] | null;
         };
+        /** AgentSummary */
         AgentSummary: {
-            id: components["schemas"]["Uuid"];
-            group_id: components["schemas"]["Uuid"];
-            name: string;
-            description?: string;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Current Draft Version Id */
+            current_draft_version_id?: string | null;
+            /** Current Published Version Id */
+            current_published_version_id?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
             metadata_revision: number;
-            /** @enum {string} */
+            /** Name */
+            name: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /**
+             * Status
+             * @enum {string}
+             */
             status: "active" | "archived";
-            current_published_version_id?: components["schemas"]["Uuid"] | null;
-            current_draft_version_id?: components["schemas"]["Uuid"] | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
-        AgentDetail: components["schemas"]["AgentSummary"] & {
+        /** AgentDetail */
+        AgentDetail: {
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Current Draft Version Id */
+            current_draft_version_id?: string | null;
+            /** Current Published Version Id */
+            current_published_version_id?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision: number;
+            /** Name */
+            name: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /** Versions */
             versions?: components["schemas"]["AgentVersion"][];
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
         };
+        /** AgentVersion */
         AgentVersion: {
-            id: components["schemas"]["Uuid"];
-            agent_id: components["schemas"]["Uuid"];
-            version_label: string;
-            /** @enum {string} */
-            state: "draft" | "published" | "superseded";
-            revision: number;
-            agent_md?: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Agent Md
+             * @default
+             */
+            agent_md: string;
             avatar_config: components["schemas"]["AvatarConfig"];
-            voice_profile_id?: components["schemas"]["Uuid"] | null;
-            effective_voice_profile_id?: components["schemas"]["Uuid"] | null;
-            voice_fallback_active: boolean;
-            knowledge_snapshot_id?: components["schemas"]["Uuid"] | null;
+            /** Effective Voice Profile Id */
+            effective_voice_profile_id?: string | null;
+            /** Enabled Documents */
             enabled_documents?: components["schemas"]["KnowledgeDocument"][];
-            publish_blockers?: string[];
-            raw_agent_md_hash?: string | null;
-            persona_spec?: components["schemas"]["PersonaSpecV1"] | components["schemas"]["PersonaSpecV2"] | null;
-            persona_spec_hash?: string | null;
-            /** @enum {string|null} */
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            knowledge_generation?: components["schemas"]["KnowledgeGenerationReceipt"] | null;
+            /** Knowledge Snapshot Id */
+            knowledge_snapshot_id?: string | null;
+            /**
+             * Persona Compiler Version
+             * @enum {string|null}
+             */
             persona_compiler_version?: "persona_template_v1" | "persona_template_v2" | null;
-            persona_diagnostics?: components["schemas"]["PersonaDiagnostic"][];
+            /** Persona Confirmation Revision */
             persona_confirmation_revision?: number | null;
-            /** @default false */
+            /**
+             * Persona Confirmed
+             * @default false
+             */
             persona_confirmed: boolean;
-            student_confirmed_at?: components["schemas"]["IsoTime"] | null;
+            /** Persona Diagnostics */
+            persona_diagnostics?: components["schemas"]["PersonaDiagnostic"][];
+            /** Persona Spec */
+            persona_spec?: components["schemas"]["PersonaSpecV1"] | components["schemas"]["PersonaSpecV2"] | null;
+            /** Persona Spec Hash */
+            persona_spec_hash?: string | null;
+            /** Publish Blockers */
+            publish_blockers?: string[];
+            /**
+             * Published Visibility
+             * @enum {string|null}
+             */
+            published_visibility?: "private" | "public" | null;
+            /** Raw Agent Md Hash */
+            raw_agent_md_hash?: string | null;
+            /** Revision */
+            revision: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "published" | "superseded";
+            /** Student Confirmed At */
+            student_confirmed_at?: string | null;
+            /** Version Label */
+            version_label: string;
+            /** Voice Fallback Active */
+            voice_fallback_active: boolean;
+            /** Voice Profile Id */
+            voice_profile_id?: string | null;
         };
         PersonaIdentity: {
             name: string;
@@ -2230,10 +3187,27 @@ export interface components {
             avatar_config?: components["schemas"]["AvatarConfig"];
             voice_profile_id?: components["schemas"]["Uuid"] | null;
         };
+        /**
+         * UpdateAgentMetadataRequest
+         * @description CAS payload for mutable Agent metadata and owner-controlled visibility.
+         *
+         *     ``description`` is intentionally nullable on the wire so clients can
+         *     clear an older/null value explicitly.  The database stores a non-null
+         *     empty string.
+         */
         UpdateAgentMetadataRequest: {
-            expected_metadata_revision: number;
-            /** @default  */
+            /**
+             * Description
+             * @default
+             */
             description: string | null;
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+            /**
+             * Visibility
+             * @enum {string|null}
+             */
+            visibility?: "private" | "public" | null;
         };
         AvatarConfig: {
             template_id: string;
@@ -2255,8 +3229,7 @@ export interface components {
         RagPreview: {
             version_id: components["schemas"]["Uuid"];
             total_char_count: number;
-            /** @constant */
-            limit: 100000;
+            limit: null;
             document_count: number;
             /** @enum {string} */
             index_status: "pending" | "ready" | "failed";
@@ -2285,6 +3258,10 @@ export interface components {
             safe_error_code?: string | null;
             created_at: components["schemas"]["IsoTime"];
         };
+        RenameVoiceProfileRequest: {
+            /** @description Trimmed display filename; path separators, control characters, dot and double-dot are rejected. */
+            source_filename: string;
+        };
         VoicePreviewPlaybackResource: {
             /** Format: uri-reference */
             playback_url: string;
@@ -2294,10 +3271,13 @@ export interface components {
             playback_url: string;
             expires_at: components["schemas"]["IsoTime"];
         };
+        /** PublishedAgentSummary */
         PublishedAgentSummary: {
-            group_name: string;
             agent: components["schemas"]["AgentSummary"];
+            author?: components["schemas"]["PublishedAgentAuthor"] | null;
             current_version: components["schemas"]["AgentVersion"];
+            /** Group Name */
+            group_name: string;
         };
         DebateParticipantInput: {
             agent_id: components["schemas"]["Uuid"];
@@ -2439,6 +3419,8 @@ export interface components {
         DebateSegment: {
             /** @enum {string|null} */
             support_mode?: "direct" | "contextual" | "no_match" | null;
+            /** @description Anonymous classroom message from the frozen Final input addressed by reply_to. */
+            reply_text?: string | null;
             reply_to: string | null;
             source_ids: string[];
             text: string;
@@ -2874,6 +3856,1867 @@ export interface components {
              */
             turn_id: string;
         };
+        /** AgentCreateRequest */
+        AgentCreateRequest: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Name */
+            name: string;
+            /**
+             * Visibility
+             * @default private
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** UpdateKnowledgeDocumentVisibility */
+        UpdateKnowledgeDocumentVisibility: {
+            /** Expected Authorization Epoch */
+            expected_authorization_epoch: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** AgentKnowledgeSets */
+        AgentKnowledgeSets: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Agent Metadata Revision */
+            agent_metadata_revision: number;
+            /** Sets */
+            sets: components["schemas"]["KnowledgeSetSummary"][];
+        };
+        /** AssetCitation */
+        AssetCitation: {
+            location?: components["schemas"]["SourceLocation"];
+            /**
+             * Source Binding Id
+             * Format: uuid
+             */
+            source_binding_id: string;
+        };
+        /** AssetVersionFullDTO */
+        AssetVersionFullDTO: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["QuestionContent"] | components["schemas"]["NoteContent"];
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version Seq */
+            version_seq?: number | null;
+        };
+        /** AssetVersionStudentDTO */
+        AssetVersionStudentDTO: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["StudentQuestionContent"] | components["schemas"]["NoteContent"];
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version Seq */
+            version_seq?: number | null;
+        };
+        /** ConceptContent */
+        ConceptContent: {
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "concept";
+            /** Prerequisite Ids */
+            prerequisite_ids?: string[];
+            /** Title */
+            title: string;
+        };
+        /** CreateKnowledgeAssetRequest */
+        CreateKnowledgeAssetRequest: {
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["QuestionContent"] | components["schemas"]["NoteContent"];
+            /** Expected Content Revision */
+            expected_content_revision: number;
+        };
+        /** CreateKnowledgeSetRequest */
+        CreateKnowledgeSetRequest: {
+            /** Display Name */
+            display_name: string;
+            /** Group Id */
+            group_id?: string | null;
+        };
+        /** DeleteKnowledgeSetRequest */
+        DeleteKnowledgeSetRequest: {
+            /** Expected Content Revision */
+            expected_content_revision: number;
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+        };
+        /** KnowledgeAssetFullDTO */
+        KnowledgeAssetFullDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            audience: "full";
+            /** Can Edit */
+            can_edit: boolean;
+            /** Created At */
+            created_at?: string | null;
+            current_version: components["schemas"]["AssetVersionFullDTO"];
+            /** Current Version Seq */
+            current_version_seq?: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "concept" | "question" | "note";
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KnowledgeAssetStudentDTO */
+        KnowledgeAssetStudentDTO: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            audience: "student";
+            /**
+             * Can Edit
+             * @default false
+             * @constant
+             */
+            can_edit: false;
+            /** Created At */
+            created_at?: string | null;
+            current_version: components["schemas"]["AssetVersionStudentDTO"];
+            /** Current Version Seq */
+            current_version_seq?: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "concept" | "question" | "note";
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KnowledgeAssetVersionHistoryFull */
+        KnowledgeAssetVersionHistoryFull: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Audience
+             * @constant
+             */
+            audience: "full";
+            /** Versions */
+            versions: components["schemas"]["AssetVersionFullDTO"][];
+        };
+        /** KnowledgeAssetVersionHistoryStudent */
+        KnowledgeAssetVersionHistoryStudent: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Audience
+             * @constant
+             */
+            audience: "student";
+            /** Versions */
+            versions: components["schemas"]["AssetVersionStudentDTO"][];
+        };
+        /**
+         * KnowledgeGenerationIntent
+         * @description Explicit Done intent tied to the exact saved Agent source selection.
+         */
+        KnowledgeGenerationIntent: {
+            /** Source Document Ids */
+            source_document_ids: components["schemas"]["Uuid"][];
+        };
+        /** KnowledgeGenerationReceipt */
+        KnowledgeGenerationReceipt: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+        };
+        /** KnowledgeGenerationStatus */
+        KnowledgeGenerationStatus: {
+            /**
+             * Accepted Item Count
+             * @default 0
+             */
+            accepted_item_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Failed Item Count
+             * @default 0
+             */
+            failed_item_count: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Materialized Item Count
+             * @default 0
+             */
+            materialized_item_count: number;
+            /** Provider Manifest Hash */
+            provider_manifest_hash?: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Safe Error Code */
+            safe_error_code?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KnowledgeGraph */
+        KnowledgeGraph: {
+            /** Content Revision */
+            content_revision?: number | null;
+            /** Edges */
+            edges: components["schemas"]["KnowledgeGraphEdge"][];
+            /** Nodes */
+            nodes: components["schemas"]["KnowledgeGraphNode"][];
+            /**
+             * Set Id
+             * Format: uuid
+             */
+            set_id: string;
+        };
+        /** KnowledgeGraphEdge */
+        KnowledgeGraphEdge: {
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+        };
+        /** KnowledgeGraphNode */
+        KnowledgeGraphNode: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** KnowledgeSetDetail */
+        KnowledgeSetDetail: {
+            /** Asset Count */
+            asset_count: number;
+            /** Authorization Epoch */
+            authorization_epoch?: number | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Content Revision */
+            content_revision?: number | null;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Generated By Agent Id */
+            generated_by_agent_id?: string | null;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision?: number | null;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /** Source Count */
+            source_count: number;
+            /** Sources */
+            sources: components["schemas"]["KnowledgeSetSourceDTO"][];
+            /** Updated At */
+            updated_at?: string | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** KnowledgeSetRevocation */
+        KnowledgeSetRevocation: {
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /** Content Revision */
+            content_revision: number;
+            /**
+             * Deleted
+             * @default true
+             * @constant
+             */
+            deleted: true;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision: number;
+            /**
+             * Revoked At
+             * Format: date-time
+             */
+            revoked_at: string;
+        };
+        /** KnowledgeSetSourceDTO */
+        KnowledgeSetSourceDTO: {
+            /** Authorization Epoch */
+            authorization_epoch?: number | null;
+            /** Available */
+            available: boolean;
+            /** Char Count */
+            char_count?: number | null;
+            /** Content Hash */
+            content_hash?: string | null;
+            /** Document Id */
+            document_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Order Index */
+            order_index: number;
+            /** Source Filename */
+            source_filename: string | null;
+        };
+        /** KnowledgeSetSummary */
+        KnowledgeSetSummary: {
+            /** Asset Count */
+            asset_count: number;
+            /** Authorization Epoch */
+            authorization_epoch?: number | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Content Revision */
+            content_revision?: number | null;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Generated By Agent Id */
+            generated_by_agent_id?: string | null;
+            /** Group Id */
+            group_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Metadata Revision */
+            metadata_revision?: number | null;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "group" | "personal";
+            /** Source Count */
+            source_count: number;
+            /** Updated At */
+            updated_at?: string | null;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+        };
+        /** NoteContent */
+        NoteContent: {
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "note";
+            /** Title */
+            title: string;
+        };
+        /** QuestionContent */
+        QuestionContent: {
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /** Concept Ids */
+            concept_ids?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "question";
+            /** Prompt */
+            prompt: string;
+            /** Reference Answer */
+            reference_answer?: string | null;
+            rubric: components["schemas"]["Rubric"];
+        };
+        /** RemoveKnowledgeSetSourceRequest */
+        RemoveKnowledgeSetSourceRequest: {
+            /** Expected Content Revision */
+            expected_content_revision: number;
+        };
+        /** ReplaceAgentKnowledgeSetsRequest */
+        ReplaceAgentKnowledgeSetsRequest: {
+            /** Expected Agent Metadata Revision */
+            expected_agent_metadata_revision: number;
+            /** Set Ids */
+            set_ids: string[];
+        };
+        /** ReplaceKnowledgeSetSourcesRequest */
+        ReplaceKnowledgeSetSourcesRequest: {
+            /** Expected Content Revision */
+            expected_content_revision: number;
+            /** Source Document Ids */
+            source_document_ids: string[];
+        };
+        /** Rubric */
+        Rubric: {
+            /** Criteria */
+            criteria?: components["schemas"]["RubricCriterion"][];
+            /** Total Points */
+            total_points?: number | null;
+        };
+        /** RubricCriterion */
+        RubricCriterion: {
+            /**
+             * Guidance
+             * @default
+             */
+            guidance: string;
+            /** Label */
+            label: string;
+            /** Points */
+            points: number;
+        };
+        /** SourceLocation */
+        SourceLocation: {
+            /** End Offset */
+            end_offset?: number | null;
+            /** Excerpt Hash */
+            excerpt_hash?: string | null;
+            /** Paragraph Index */
+            paragraph_index?: number | null;
+            /** Section Path */
+            section_path?: string[];
+            /** Start Offset */
+            start_offset?: number | null;
+        };
+        /**
+         * StudentQuestionContent
+         * @description Student question projection intentionally has no Rubric field.
+         */
+        StudentQuestionContent: {
+            /** Citations */
+            citations?: components["schemas"]["AssetCitation"][];
+            /** Concept Ids */
+            concept_ids?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "question";
+            /** Prompt */
+            prompt: string;
+        };
+        /** UpdateKnowledgeAssetRequest */
+        UpdateKnowledgeAssetRequest: {
+            /** Content */
+            content: components["schemas"]["ConceptContent"] | components["schemas"]["QuestionContent"] | components["schemas"]["NoteContent"];
+            /** Expected Asset Version Seq */
+            expected_asset_version_seq: number;
+            /** Expected Content Revision */
+            expected_content_revision: number;
+        };
+        /** UpdateKnowledgeSetRequest */
+        UpdateKnowledgeSetRequest: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+            /**
+             * Visibility
+             * @enum {string|null}
+             */
+            visibility?: "private" | "public" | null;
+        };
+        /** CreateTeamRequest */
+        CreateTeamRequest: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Members */
+            members: components["schemas"]["TeamMemberInput"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids?: string[];
+            /** Group Id */
+            group_id?: string | null;
+        };
+        /** DirectoryMemberDTO */
+        DirectoryMemberDTO: {
+            /** Display Name */
+            display_name: string;
+            /** Avatar Config */
+            avatar_config: {
+                [key: string]: unknown;
+            };
+            /** Position */
+            position: number;
+            /** Is Leader */
+            is_leader: boolean;
+        };
+        /** MayaTeamDirectoryEntry */
+        MayaTeamDirectoryEntry: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Team Version Id
+             * Format: uuid
+             */
+            team_version_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Leader Display Name */
+            leader_display_name: string;
+            /** Members */
+            members: components["schemas"]["DirectoryMemberDTO"][];
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+        };
+        /** SaveTeamVersionRequest */
+        SaveTeamVersionRequest: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Members */
+            members: components["schemas"]["TeamMemberInput"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids?: string[];
+            /** Expected Metadata Revision */
+            expected_metadata_revision: number;
+        };
+        /** SharedKnowledgeSetDTO */
+        SharedKnowledgeSetDTO: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Display Name */
+            display_name: string;
+        };
+        /** TeamDetail */
+        TeamDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Owner User Id
+             * Format: uuid
+             */
+            owner_user_id: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "personal" | "group";
+            /** Group Id */
+            group_id: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Metadata Revision */
+            metadata_revision: number;
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /**
+             * Current Version Id
+             * Format: uuid
+             */
+            current_version_id: string;
+            /** Current Version Seq */
+            current_version_seq: number;
+            /** Member Count */
+            member_count: number;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Members */
+            members: components["schemas"]["TeamMemberDTO"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids: string[];
+            /** Shared Knowledge Sets */
+            shared_knowledge_sets?: components["schemas"]["SharedKnowledgeSetDTO"][];
+            /**
+             * Publication State
+             * @enum {string}
+             */
+            publication_state: "published" | "unpublished";
+        };
+        /** TeamMemberDTO */
+        TeamMemberDTO: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Agent Version Id
+             * Format: uuid
+             */
+            agent_version_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Avatar Config */
+            avatar_config: {
+                [key: string]: unknown;
+            };
+            /** Position */
+            position: number;
+            /** Is Leader */
+            is_leader: boolean;
+        };
+        /** TeamMemberInput */
+        TeamMemberInput: {
+            /**
+             * Agent Version Id
+             * Format: uuid
+             */
+            agent_version_id: string;
+            /**
+             * Is Leader
+             * @default false
+             */
+            is_leader: boolean;
+            /** Position */
+            position: number;
+        };
+        /** TeamSummary */
+        TeamSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Owner User Id
+             * Format: uuid
+             */
+            owner_user_id: string;
+            /**
+             * Ownership Scope
+             * @enum {string}
+             */
+            ownership_scope: "personal" | "group";
+            /** Group Id */
+            group_id: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Metadata Revision */
+            metadata_revision: number;
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /**
+             * Current Version Id
+             * Format: uuid
+             */
+            current_version_id: string;
+            /** Current Version Seq */
+            current_version_seq: number;
+            /** Member Count */
+            member_count: number;
+            /** Can Edit */
+            can_edit: boolean;
+        };
+        /** TeamVersionDTO */
+        TeamVersionDTO: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+            /** Version Seq */
+            version_seq: number;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "private" | "public";
+            /** Authorization Epoch */
+            authorization_epoch: number;
+            /** Members */
+            members: components["schemas"]["TeamMemberDTO"][];
+            /** Shared Knowledge Set Ids */
+            shared_knowledge_set_ids: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** PublishedAgentAuthor */
+        PublishedAgentAuthor: {
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * UpdateCurrentUserRequest
+         * @description Change what is given; an omitted field stays as it is. A null avatar clears it.
+         */
+        UpdateCurrentUserRequest: {
+            /** Avatar */
+            avatar?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+        };
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: {
+            /**
+             * Current Password
+             * Format: password
+             */
+            current_password: string;
+            /**
+             * New Password
+             * Format: password
+             */
+            new_password: string;
+        };
+        /** AgentChatEntry */
+        AgentChatEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+        };
+        /** AssessmentActivityListItem */
+        AssessmentActivityListItem: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Team Name */
+            team_name: string;
+        };
+        /** AssessmentCourseReportReceipt */
+        AssessmentCourseReportReceipt: {
+            report: components["schemas"]["AssessmentCourseReportDTO"];
+        };
+        /** AssessmentLifecycleActionRequest */
+        AssessmentLifecycleActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "pause" | "resume" | "abandon" | "redo";
+            /**
+             * Client Event Id
+             * Format: uuid
+             */
+            client_event_id: string;
+        };
+        /** AssessmentRuntimeResult */
+        AssessmentRuntimeResult: {
+            /** Answers */
+            answers?: components["schemas"]["AssessmentOwnerAnswerDTO"][];
+            context: components["schemas"]["AssessmentRuntimeContext"];
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "recorded" | "transitioned" | "read" | "redirected";
+            /**
+             * Response Key
+             * @enum {string}
+             */
+            response_key: "assessment.started" | "assessment.answer_recorded" | "assessment.answer_recorded_restricted_request" | "assessment.paused" | "assessment.resumed" | "assessment.completed" | "assessment.abandoned" | "assessment.abandoned_and_restarted" | "assessment.progress" | "assessment.answers" | "assessment.results_pending" | "assessment.restart_requires_choice" | "assessment.redirect";
+        };
+        /** BrainformKnowledgeSummary */
+        BrainformKnowledgeSummary: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Can Read
+             * @default true
+             * @constant
+             */
+            can_read: true;
+            /**
+             * Canonical Set Id
+             * Format: uuid
+             */
+            canonical_set_id: string;
+            /** Content Hash */
+            content_hash?: string | null;
+            /** Generation Job Id */
+            generation_job_id?: string | null;
+            /**
+             * Generation State
+             * @enum {string|null}
+             */
+            generation_state?: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted" | null;
+            /** Knowledge Display Name */
+            knowledge_display_name: string;
+            /** Safe Error Code */
+            safe_error_code?: string | null;
+            /** Source Agent Display Name */
+            source_agent_display_name: string;
+            /** Version Seq */
+            version_seq?: number | null;
+        };
+        /** CreateAssessmentReportRequest */
+        CreateAssessmentReportRequest: {
+            /**
+             * Client Event Id
+             * Format: uuid
+             */
+            client_event_id: string;
+        };
+        /** KnowledgeMarkdownDocument */
+        KnowledgeMarkdownDocument: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /**
+             * Audience
+             * @enum {string}
+             */
+            audience: "full" | "student";
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Can Read
+             * @default true
+             * @constant
+             */
+            can_read: true;
+            /**
+             * Canonical Set Id
+             * Format: uuid
+             */
+            canonical_set_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Knowledge Display Name */
+            knowledge_display_name: string;
+            /** Markdown */
+            markdown: string;
+            /** Projection Available */
+            projection_available: boolean;
+            /** Source Agent Display Name */
+            source_agent_display_name: string;
+            /** Version Seq */
+            version_seq: number;
+        };
+        /** MayaTeamChatEntry */
+        MayaTeamChatEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "maya_team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+        };
+        /** MemoryEntryRequest */
+        MemoryEntryRequest: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Source */
+            source: components["schemas"]["MemoryConversationSource"] | components["schemas"]["MemoryAgentSource"] | components["schemas"]["MemoryTeamSource"] | components["schemas"]["MemoryMayaTeamSource"];
+        };
+        /** MemoryEntryResponse */
+        MemoryEntryResponse: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Message */
+            message: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Session */
+            session: components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+        };
+        /** RegenerateKnowledgeRequest */
+        RegenerateKnowledgeRequest: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+        };
+        /** RegenerateKnowledgeResponse */
+        RegenerateKnowledgeResponse: {
+            /**
+             * Action Id
+             * Format: uuid
+             */
+            action_id: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Canonical Set Id
+             * Format: uuid
+             */
+            canonical_set_id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+        };
+        /** RenameKnowledgeDocumentRequest */
+        RenameKnowledgeDocumentRequest: {
+            /** Expected Filename */
+            expected_filename: string;
+            /** Filename */
+            filename: string;
+        };
+        /** SaveKnowledgeMarkdownRequest */
+        SaveKnowledgeMarkdownRequest: {
+            /** Expected Version Seq */
+            expected_version_seq: number;
+            /** Markdown */
+            markdown: string;
+        };
+        /** SavedTeamChatEntry */
+        SavedTeamChatEntry: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+            /** Team Version Id */
+            team_version_id?: string | null;
+        };
+        /** TeamChatSession */
+        TeamChatSession: {
+            /**
+             * Can Send
+             * @default false
+             */
+            can_send: boolean;
+            /**
+             * Chat Visibility
+             * @enum {string}
+             */
+            chat_visibility: "private" | "public";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entry_kind: "maya_team" | "team";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "custom_team" | "published_course_team";
+            /** Pinned At */
+            pinned_at?: string | null;
+            /** Read Only */
+            read_only: boolean;
+            /** Revision */
+            revision: number;
+            team: components["schemas"]["ChatTeam"];
+            /** Title */
+            title?: string | null;
+            /** Turns */
+            turns: components["schemas"]["TeamChatTurn"][];
+        };
+        /** TeamRouting */
+        TeamRouting: {
+            /**
+             * Mode
+             * @default auto
+             * @enum {string}
+             */
+            mode: "auto" | "selected" | "all";
+            /** Participant Ids */
+            participant_ids?: string[];
+        };
+        /**
+         * TeamStandingGrantConfirmationRequestV1
+         * @description CAS values reviewed by the publisher before standing consent.
+         */
+        TeamStandingGrantConfirmationRequestV1: {
+            /** Expected Publication Epoch */
+            expected_publication_epoch: number;
+            /** Expected Resource Hash */
+            expected_resource_hash: string;
+            /** Expected Team Epoch */
+            expected_team_epoch: number;
+            /** Policy Hash */
+            policy_hash: string;
+            /**
+             * Provider Operation
+             * @enum {string}
+             */
+            provider_operation: "llm_agent_chat" | "embedding_query";
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /**
+         * TeamStandingGrantConfirmationV1
+         * @description Safe confirmation receipt for the exact Team resource binding.
+         */
+        TeamStandingGrantConfirmationV1: {
+            /** Confirmed At */
+            confirmed_at: string;
+            /** Knowledge Set Count */
+            knowledge_set_count: number;
+            /** Member Count */
+            member_count: number;
+            /** Policy Hash */
+            policy_hash: string;
+            /** Publication Epoch */
+            publication_epoch: number;
+            /** Resource Hash */
+            resource_hash: string;
+            /** Source Count */
+            source_count: number;
+            /** Standing Grant Id */
+            standing_grant_id: string;
+            /** Team Epoch */
+            team_epoch: number;
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /**
+         * TeamStandingGrantPreviewV1
+         * @description Small reviewable resource summary; never includes Chat text or operations.
+         */
+        TeamStandingGrantPreviewV1: {
+            /** Knowledge Set Count */
+            knowledge_set_count: number;
+            /** Member Count */
+            member_count: number;
+            /** Policy Hash */
+            policy_hash: string;
+            /** Publication Epoch */
+            publication_epoch: number;
+            /** Resource Hash */
+            resource_hash: string;
+            /** Source Count */
+            source_count: number;
+            /** Team Epoch */
+            team_epoch: number;
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /**
+         * TeamStandingGrantRequestV1
+         * @description Publisher-only static Team resource authorization request.
+         */
+        TeamStandingGrantRequestV1: {
+            /** Policy Hash */
+            policy_hash: string;
+            /**
+             * Provider Operation
+             * @enum {string}
+             */
+            provider_operation: "llm_agent_chat" | "embedding_query";
+            /** Team Version Id */
+            team_version_id: string;
+        };
+        /** AssessmentAnswerDTO */
+        AssessmentAnswerDTO: {
+            /** Answer Text */
+            answer_text: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Question Ordinal */
+            question_ordinal: number;
+            /**
+             * Question Version Id
+             * Format: uuid
+             */
+            question_version_id: string;
+        };
+        /** AssessmentCourseReportDTO */
+        AssessmentCourseReportDTO: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            content: components["schemas"]["AssessmentReportContent"];
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Revision Seq */
+            revision_seq: number;
+            /** Source Hash */
+            source_hash: string;
+        };
+        /** AssessmentRuntimeContext */
+        AssessmentRuntimeContext: {
+            attempt: components["schemas"]["AssessmentAttemptSummary"];
+            /**
+             * Canonical Conversation Id
+             * Format: uuid
+             */
+            canonical_conversation_id: string;
+            current_question: components["schemas"]["AssessmentRuntimeQuestion"] | null;
+            progress: components["schemas"]["AssessmentProgressProjection"];
+            /** Redirect To Original Conversation */
+            redirect_to_original_conversation: boolean;
+        };
+        /** ChatTeam */
+        ChatTeam: {
+            /** Available */
+            available: boolean;
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Members */
+            members: components["schemas"]["TeamChatParticipant"][];
+            /** Name */
+            name: string;
+            /**
+             * Version Id
+             * Format: uuid
+             */
+            version_id: string;
+        };
+        /** MemoryAgentSource */
+        MemoryAgentSource: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+        };
+        /** MemoryConversationSource */
+        MemoryConversationSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "conversation";
+        };
+        /** MemoryMayaTeamSource */
+        MemoryMayaTeamSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "maya_team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+        };
+        /** MemoryTeamSource */
+        MemoryTeamSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "team";
+            /**
+             * Team Id
+             * Format: uuid
+             */
+            team_id: string;
+        };
+        /** TeamChatTurn */
+        TeamChatTurn: {
+            assessment_result?: components["schemas"]["AssessmentRuntimeResult"] | null;
+            /** Assistant Text */
+            assistant_text: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Member Results */
+            member_results: components["schemas"]["TeamMemberResult"][];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "real" | "mock";
+            routing: components["schemas"]["TeamRouting"];
+            /** Safe Error Code */
+            safe_error_code: string | null;
+            /** Sources */
+            sources: components["schemas"]["ChatSource"][];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "ready" | "partial" | "failed" | "acceptance_unknown" | "paused";
+            /** User Text */
+            user_text: string;
+        };
+        /** AssessmentAttemptSummary */
+        AssessmentAttemptSummary: {
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Chat Visibility
+             * @enum {string}
+             */
+            chat_visibility: "private" | "public";
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_progress" | "paused" | "completed" | "abandoned";
+        };
+        /**
+         * AssessmentProgressProjection
+         * @description Student-safe progress contains counts and states, never answers or scores.
+         */
+        AssessmentProgressProjection: {
+            /** Answered Count */
+            answered_count: number;
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Current Ordinal */
+            current_ordinal?: number | null;
+            /** Current Question Version Id */
+            current_question_version_id?: string | null;
+            /** Presented Count */
+            presented_count: number;
+            /** Question Count */
+            question_count: number;
+            /** Resolved Count */
+            resolved_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_progress" | "paused" | "completed" | "abandoned";
+        };
+        /** AssessmentReportContent */
+        AssessmentReportContent: {
+            /** Abandoned Count */
+            abandoned_count: number;
+            /** Activity Name */
+            activity_name: string;
+            /** Actors */
+            actors: components["schemas"]["AssessmentActorReport"][];
+            /** Attempt Count */
+            attempt_count: number;
+            /** Completed Count */
+            completed_count: number;
+            /** Course Name */
+            course_name: string;
+            /** Effective Answer Count */
+            effective_answer_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** In Progress Count */
+            in_progress_count: number;
+            /** Paused Count */
+            paused_count: number;
+            /** Raw Answer Count */
+            raw_answer_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Student Count */
+            student_count: number;
+            /** Team Name */
+            team_name: string;
+        };
+        /**
+         * AssessmentRuntimeQuestion
+         * @description The visible question projection intentionally omits Rubric and reference answer.
+         */
+        AssessmentRuntimeQuestion: {
+            /** Ordinal */
+            ordinal: number;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Question Version Id
+             * Format: uuid
+             */
+            question_version_id: string;
+        };
+        /** TeamChatParticipant */
+        TeamChatParticipant: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
+            avatar_config: components["schemas"]["AvatarConfig"];
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Leader */
+            is_leader: boolean;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+        };
+        /** TeamMemberResult */
+        TeamMemberResult: {
+            /** Assistant Text */
+            assistant_text: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Participant Id
+             * Format: uuid
+             */
+            participant_id: string;
+            /** Safe Error Code */
+            safe_error_code: string | null;
+            /** Sources */
+            sources: components["schemas"]["ChatSource"][];
+            /** Speaker Name */
+            speaker_name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "ready" | "failed" | "acceptance_unknown";
+        };
+        /** AssessmentActorReport */
+        AssessmentActorReport: {
+            /** Abandoned Count */
+            abandoned_count: number;
+            /** Attempt Count */
+            attempt_count: number;
+            /** Boundary Summary */
+            boundary_summary?: string | null;
+            /** Completed Count */
+            completed_count: number;
+            /** Effective Answer Count */
+            effective_answer_count: number;
+            /** In Progress Count */
+            in_progress_count: number;
+            /** Learner Ref */
+            learner_ref: string;
+            /** Mastery Evidence */
+            mastery_evidence?: string[];
+            /** Not Yet Verified */
+            not_yet_verified?: string[];
+            /** Paused Count */
+            paused_count: number;
+            /** Raw Answer Count */
+            raw_answer_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Student Name */
+            student_name: string;
+            /** Weak Points */
+            weak_points?: string[];
+        };
+        /** AssessmentOwnerAnswerDTO */
+        AssessmentOwnerAnswerDTO: {
+            /** Answer Text */
+            answer_text: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CardAction */
+        CardAction: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** To */
+            to?: number | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "fold" | "check" | "call" | "raise";
+        };
+        /** CardLegalView */
+        CardLegalView: {
+            /** Can Check */
+            can_check: boolean;
+            /** Can Raise */
+            can_raise: boolean;
+            /** Max Raise To */
+            max_raise_to: number;
+            /** Min Raise To */
+            min_raise_to: number;
+            /** To Call */
+            to_call: number;
+        };
+        /** CardPayoutView */
+        CardPayoutView: {
+            /** Amount */
+            amount: number;
+            /** Hand */
+            hand?: string | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** CardRoomView */
+        CardRoomView: {
+            /** Big Blind */
+            big_blind: number;
+            /** Board */
+            board: components["schemas"]["CardView"][];
+            /** Button */
+            button?: number | null;
+            /** Code */
+            code: string;
+            /** Current Bet */
+            current_bet: number;
+            /** Deadline */
+            deadline?: string | null;
+            /** Hand Number */
+            hand_number: number;
+            legal?: components["schemas"]["CardLegalView"] | null;
+            /** Next Hand At */
+            next_hand_at?: string | null;
+            /**
+             * Now
+             * Format: date-time
+             */
+            now: string;
+            /** Payouts */
+            payouts: components["schemas"]["CardPayoutView"][];
+            /** Pot */
+            pot: number;
+            /** Revision */
+            revision: number;
+            /** Seats */
+            seats: components["schemas"]["CardSeatView"][];
+            /** Showdown */
+            showdown: boolean;
+            /** Small Blind */
+            small_blind: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "waiting" | "playing";
+            /**
+             * Street
+             * @enum {string}
+             */
+            street: "waiting" | "preflop" | "flop" | "turn" | "river" | "complete";
+            /** To Act */
+            to_act?: number | null;
+            /** You */
+            you?: number | null;
+        };
+        /** CardSeatView */
+        CardSeatView: {
+            /** All In */
+            all_in: boolean;
+            /** Avatar */
+            avatar?: string | null;
+            /** Bet */
+            bet: number;
+            /** Folded */
+            folded: boolean;
+            /** Hole */
+            hole: components["schemas"]["CardView"][];
+            /** Hole Count */
+            hole_count: number;
+            /** Host */
+            host: boolean;
+            /** Last Action */
+            last_action?: string | null;
+            /** Leaving */
+            leaving: boolean;
+            /** Name */
+            name: string;
+            /** Sitting Out */
+            sitting_out: boolean;
+            /** Stack */
+            stack: number;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** CardView */
+        CardView: {
+            /** Rank */
+            rank: number;
+            /**
+             * Suit
+             * @enum {string}
+             */
+            suit: "s" | "h" | "d" | "c";
+        };
     };
     responses: {
         /** @description Stable platform error. */
@@ -2959,7 +5802,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"][];
+                    "application/json": (components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"])[];
                 };
             };
             /** @description Unauthorized */
@@ -3019,7 +5862,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"];
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
                 };
             };
             /** @description Unauthorized */
@@ -3077,7 +5920,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"];
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
                 };
             };
             /** @description Unauthorized */
@@ -3122,8 +5965,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "X-CSRF-Token": string;
             };
             path: {
                 conversation_id: string;
@@ -3132,12 +5974,76 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Conversation deleted. */
+            /** @description Successful Response */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateConversation: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateChat"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
             };
             /** @description Unauthorized */
             401: {
@@ -3198,7 +6104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatSession"];
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
                 };
             };
             /** @description Unauthorized */
@@ -3253,6 +6159,7 @@ export interface operations {
             query?: never;
             header: {
                 Accept: string;
+                "Last-Event-ID"?: number;
             };
             path: {
                 conversation_id: string;
@@ -3800,6 +6707,403 @@ export interface operations {
             };
         };
     };
+    createCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRoomView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRoomView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    actInCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRoomView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rebuyInCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRoomView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    joinCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRoomView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    leaveCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startCardRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRoomView"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -3823,6 +7127,15 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description The production gateway rejected an oversized authentication request. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["Error"];
         };
     };
     switchDemoIdentity: {
@@ -3951,8 +7264,17 @@ export interface operations {
                     "application/json": components["schemas"]["AuthSession"];
                 };
             };
+            403: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            /** @description The production gateway rejected an oversized authentication request. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     getCurrentUser: {
@@ -3974,6 +7296,59 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+        };
+    };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated profile and current session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF failure. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This account's name comes from the course's account list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     resetStudentPassword: {
@@ -4237,7 +7612,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current group knowledge library, including PDF/DOCX converted on the Maya server. */
+            /** @description Current group Markdown library. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4251,32 +7626,33 @@ export interface operations {
     };
     uploadKnowledgeDocument: {
         parameters: {
-            query?: never;
+            query?: {
+                course_id?: string | null;
+            };
             header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
             };
             path: {
-                group_id: components["parameters"]["GroupId"];
+                group_id: string | null;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /**
-                     * Format: binary
-                     * @description UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted on the Maya server.
-                     */
-                    file: string;
-                    target_agent_version_id?: components["schemas"]["Uuid"];
                     expected_revision?: number;
+                    /** Format: binary */
+                    file: string;
+                    /** Format: uuid */
+                    target_agent_version_id?: string;
+                    /** @enum {string} */
+                    visibility?: "private" | "public";
                 };
             };
         };
         responses: {
-            /** @description Document stored; a target draft is updated only when explicitly supplied. */
+            /** @description Document stored and indexed. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4285,9 +7661,25 @@ export interface operations {
                     "application/json": components["schemas"]["KnowledgeDocumentMutation"];
                 };
             };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-            /** @description Invalid Markdown, PDF, or DOCX upload. */
+            /** @description Group or draft not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Revision or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Markdown upload. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4321,6 +7713,52 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    updateKnowledgeDocumentVisibility: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeDocumentVisibility"];
+            };
+        };
+        responses: {
+            /** @description Source visibility updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Source authorization revision conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     replaceKnowledgeDocument: {
         parameters: {
             query?: never;
@@ -4337,10 +7775,7 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /**
-                     * Format: binary
-                     * @description UTF-8 Markdown, PDF, or DOCX; PDF/DOCX is converted on the Maya server.
-                     */
+                    /** Format: binary */
                     file: string;
                     expected_content_hash: string;
                     expected_index_revision: number;
@@ -4359,7 +7794,7 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            /** @description Invalid Markdown, PDF, or DOCX replacement. */
+            /** @description Invalid RAG replacement. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4381,7 +7816,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Stored Markdown bytes; PDF/DOCX sources are returned after local conversion. */
+            /** @description Original Markdown bytes. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4478,22 +7913,17 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
             };
             path: {
-                group_id: components["parameters"]["GroupId"];
+                group_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": {
-                    name: string;
-                    /** @default  */
-                    description?: string;
-                };
+                "application/json": components["schemas"]["AgentCreateRequest"];
             };
         };
         responses: {
@@ -4506,7 +7936,24 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDetail"];
                 };
             };
-            404: components["responses"]["Error"];
+            /** @description Group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An Agent with this name already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getAgent: {
@@ -4563,11 +8010,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                "X-CSRF-Token": string;
             };
             path: {
-                agent_id: components["parameters"]["AgentId"];
+                agent_id: string;
             };
             cookie?: never;
         };
@@ -4586,8 +8032,24 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDetail"];
                 };
             };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
+            /** @description Agent not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Metadata revision conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listAgentVersions: {
@@ -4928,11 +8390,12 @@ export interface operations {
                     expected_revision: number;
                     acceptance_run_id?: components["schemas"]["Uuid"] | null;
                     call_no?: number | null;
+                    generation?: components["schemas"]["KnowledgeGenerationIntent"] | null;
                 };
             };
         };
         responses: {
-            /** @description Immutable version and KnowledgeSnapshot published atomically. */
+            /** @description Agent publication and optional durable Knowledge generation intent committed atomically. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5079,6 +8542,37 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             503: components["responses"]["Error"];
+        };
+    };
+    renameVoiceProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                voice_profile_id: components["parameters"]["VoiceProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameVoiceProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Voice filename updated without changing its state or provider mapping. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceProfile"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     createVoicePreview: {
@@ -6454,6 +9948,1871 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseWorkspaceAgents: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCourseWorkspaceAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Private personal Agent draft created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDetail"];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Name or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseWorkspaceDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    uploadCourseWorkspaceDocument: {
+        parameters: {
+            query?: {
+                group_id?: string | null;
+            };
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    expected_revision?: number;
+                    /** Format: binary */
+                    file: string;
+                    /** Format: uuid */
+                    target_agent_version_id?: string;
+                    /** @enum {string} */
+                    visibility?: "private" | "public";
+                };
+            };
+        };
+        responses: {
+            /** @description Document stored and indexed. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentMutation"];
+                };
+            };
+            /** @description Course or draft not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Revision or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAgentKnowledgeSets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeSets"];
+                };
+            };
+            /** @description Agent not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replaceAgentKnowledgeSets: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceAgentKnowledgeSetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentKnowledgeSets"];
+                };
+            };
+            /** @description Agent or Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Agent metadata revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listKnowledgeSets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createKnowledgeSet: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateKnowledgeSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Knowledge Set created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Course or group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeSetAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetFullDTO"] | components["schemas"]["KnowledgeAssetStudentDTO"];
+                };
+            };
+            /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateKnowledgeSetAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetFullDTO"];
+                };
+            };
+            /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Asset or Set revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listKnowledgeSetAssetVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetVersionHistoryFull"] | components["schemas"]["KnowledgeAssetVersionHistoryStudent"];
+                };
+            };
+            /** @description Knowledge Asset not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeGenerationJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeGenerationStatus"];
+                };
+            };
+            /** @description Job not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteKnowledgeSet: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteKnowledgeSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Knowledge Set revoked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetRevocation"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set metadata or content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateKnowledgeSetMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Metadata revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listKnowledgeSetAssets: {
+        parameters: {
+            query?: {
+                kind?: "concept" | "question" | "note" | null;
+            };
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["KnowledgeAssetFullDTO"] | components["schemas"]["KnowledgeAssetStudentDTO"])[];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createKnowledgeSetAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateKnowledgeAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description Asset saved as version 1. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeAssetFullDTO"];
+                };
+            };
+            /** @description Knowledge Set or referenced resource not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeSetGraph: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeGraph"];
+                };
+            };
+            /** @description Knowledge Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replaceKnowledgeSetSources: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceKnowledgeSetSourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Set or source not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeKnowledgeSetSource: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveKnowledgeSetSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeSetDetail"];
+                };
+            };
+            /** @description Set or source binding not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Set content revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teams owned by or visible in the scope. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createTeam: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamRequest"];
+            };
+        };
+        responses: {
+            /** @description Team and immutable version 1 created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Course, Agent version, or Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Team membership or scope. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMayaTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current published Maya Teams. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MayaTeamDirectoryEntry"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Team not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    saveTeamVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveTeamVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable Team version was saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamDetail"];
+                };
+            };
+            /** @description Team, Agent version, or Set not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Team metadata revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid Team membership or scope. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteTeam: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Team removed from lists; existing chats stay read-only. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Team not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listTeamVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamVersionDTO"][];
+                };
+            };
+            /** @description Team not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createMemoryEntryAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryEntryResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    pauseTeamConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resumeTeamConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    stopTeamConversationTurnOutput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listBrainformKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrainformKnowledgeSummary"][];
+                };
+            };
+            /** @description Course not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    renameKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameKnowledgeDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            /** @description Owned document unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Name changed or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKnowledgeMarkdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeMarkdownDocument"];
+                };
+            };
+            /** @description Knowledge document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    saveKnowledgeMarkdown: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveKnowledgeMarkdownRequest"];
+            };
+        };
+        responses: {
+            /** @description Markdown version saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeMarkdownDocument"];
+                };
+            };
+            /** @description Knowledge document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Markdown version is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    regenerateKnowledgeMarkdown: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "X-CSRF-Token": string;
+            };
+            path: {
+                set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateKnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Generation queued or reused. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegenerateKnowledgeResponse"];
+                };
+            };
+            /** @description Knowledge document not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Generation inputs are stale or unavailable. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createAssessmentCourseReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                activity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAssessmentReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentCourseReportReceipt"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    applyAssessmentLifecycleAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssessmentLifecycleActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentRuntimeResult"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAuthorizedAssessmentActivities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentActivityListItem"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    downloadAssessmentCourseReport: {
+        parameters: {
+            query?: {
+                revision_id?: string | null;
+            };
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getChatStandingProviderDisclosure: {
+        parameters: {
+            query: {
+                course_id: string;
+                provider_operation?: "llm_agent_chat" | "embedding_query";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDataCallDisclosureResponseV1"];
+                };
+            };
+            /** @description Authentication is required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A course Teacher is required. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Course or Provider policy was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Provider policy is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    confirmTeamProviderStandingGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamStandingGrantConfirmationRequestV1"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStandingGrantConfirmationV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    previewTeamProviderStandingGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamStandingGrantRequestV1"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamStandingGrantPreviewV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    changeCurrentPassword: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; other sessions revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication or current password failed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF failure. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -21,8 +21,10 @@ import {
   type DemoIdentity,
   type RegisterRequest,
 } from "../lib/api";
+import { resetChatRequestIdentity } from "../lib/chat-request-store";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
+import { endTeacherEnter } from "../lib/teacher-visit";
 import { useSetAcademyMood } from "./academy/mood";
 import { useLocale, useT } from "./locale";
 
@@ -33,6 +35,7 @@ type SessionContextValue = {
   status: SessionStatus;
   session: AuthSession | null;
   user: CurrentUser | null;
+  identityGeneration: number;
   error: unknown;
   refresh: () => Promise<AuthSession | null>;
   login: (username: string, password: string) => Promise<AuthSession>;
@@ -64,6 +67,14 @@ function writeApiCsrfToken(api: PlatformApi, token: string | undefined): void {
   candidate.setCsrfToken?.(token);
 }
 
+function identityKey(session: AuthSession): string {
+  const activeCourseId = session.user.courses[0]?.course_id ?? null;
+  const courses = session.user.courses
+    .map((course) => `${course.course_id}:${course.role}`)
+    .sort();
+  return JSON.stringify([session.user.id, activeCourseId, courses]);
+}
+
 export function SessionProvider({
   children,
   api: providedApi,
@@ -74,10 +85,13 @@ export function SessionProvider({
   const api = useMemo(() => providedApi ?? new PlatformApi(), [providedApi]);
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [identityGeneration, setIdentityGeneration] = useState(0);
   const [error, setError] = useState<unknown>(null);
   const sessionOperationEpoch = useRef(0);
   const sessionMutationTail = useRef<Promise<void>>(Promise.resolve());
   const currentSession = useRef<AuthSession | null>(null);
+  const committedIdentityKey = useRef<string | null>(null);
+  const identityGenerationRef = useRef(0);
   const committedCsrfToken = useRef<string | undefined>(readApiCsrfToken(api));
 
   const enqueueSessionMutation = useCallback(
@@ -112,6 +126,13 @@ export function SessionProvider({
         restoreCommittedCsrf();
         return;
       }
+      const nextIdentityKey = identityKey(next);
+      if (committedIdentityKey.current !== nextIdentityKey) {
+        committedIdentityKey.current = nextIdentityKey;
+        identityGenerationRef.current += 1;
+        resetChatRequestIdentity();
+        setIdentityGeneration(identityGenerationRef.current);
+      }
       committedCsrfToken.current = next.csrf_token;
       writeApiCsrfToken(api, next.csrf_token);
       currentSession.current = next;
@@ -128,6 +149,10 @@ export function SessionProvider({
         restoreCommittedCsrf();
         return;
       }
+      committedIdentityKey.current = null;
+      identityGenerationRef.current += 1;
+      resetChatRequestIdentity();
+      setIdentityGeneration(identityGenerationRef.current);
       committedCsrfToken.current = undefined;
       writeApiCsrfToken(api, undefined);
       currentSession.current = null;
@@ -316,6 +341,7 @@ export function SessionProvider({
       status,
       session,
       user: session?.user ?? null,
+      identityGeneration,
       error,
       refresh,
       login,
@@ -327,6 +353,7 @@ export function SessionProvider({
     [
       api,
       error,
+      identityGeneration,
       login,
       register,
       logout,
@@ -357,10 +384,52 @@ export function RouteGuard({
   role?: "teacher" | "student";
 }) {
   const t = useT();
-  const { status, user } = useSession();
+  const { status, user, refresh } = useSession();
   const pathname = usePathname();
+  const [visitCheck, setVisitCheck] = useState<"idle" | "done">("idle");
 
-  if (status === "loading") {
+  // A teacher who has joined a group may open the student workspace for it.
+  // Explicit teacher access opens the same editing workspace as student membership.
+  // Course role alone would keep every
+  // teacher out of the surface they just gave themselves access to.
+  const teachesCourse = user?.courses?.some(
+    (membership) => membership.role === "teacher",
+  );
+  const sitsInGroup = (user?.groups?.length ?? 0) > 0;
+  const enrolledStudent = user?.courses?.some(
+    (membership) => membership.role === "student",
+  );
+  const hasRole = !role
+    ? true
+    : role === "student"
+      ? enrolledStudent || (teachesCourse && sitsInGroup)
+      : teachesCourse;
+  // The group page is behind this guard, and the shell that would reload the
+  // session only mounts after the guard opens. Refresh here, or a teacher who
+  // just joined still looks group-less and stays on the 403.
+  const awaitingTeacherVisit =
+    status === "authenticated" &&
+    role === "student" &&
+    Boolean(teachesCourse) &&
+    !enrolledStudent &&
+    !sitsInGroup;
+
+  useEffect(() => {
+    if (status === "authenticated" && role === "student") endTeacherEnter();
+  }, [role, status]);
+
+  useEffect(() => {
+    if (!awaitingTeacherVisit) return;
+    let active = true;
+    void refresh().finally(() => {
+      if (active) setVisitCheck("done");
+    });
+    return () => {
+      active = false;
+    };
+  }, [awaitingTeacherVisit, refresh]);
+
+  if (status === "loading" || (awaitingTeacherVisit && visitCheck !== "done")) {
     return (
       <main className="shell">
         <div className="loading-card" role="status">
@@ -387,20 +456,6 @@ export function RouteGuard({
     );
   }
 
-  // A teacher who has joined a group may open the student workspace for it.
-  // Explicit teacher access opens the same editing workspace as student membership.
-  // Course role alone would keep every
-  // teacher out of the surface they just gave themselves access to.
-  const teachesCourse = user?.courses?.some(
-    (membership) => membership.role === "teacher",
-  );
-  const sitsInGroup = (user?.groups?.length ?? 0) > 0;
-  const hasRole = !role
-    ? true
-    : role === "student"
-      ? user?.courses?.some((membership) => membership.role === "student") ||
-        (teachesCourse && sitsInGroup)
-      : teachesCourse;
   if (!hasRole) {
     return (
       <main className="shell">

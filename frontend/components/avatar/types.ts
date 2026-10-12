@@ -91,27 +91,6 @@ export const AVATAR_TEMPLATE_DEFAULT_CONFIGS = {
   },
 } as const satisfies Readonly<Record<string, AvatarConfig>>;
 
-export const CHAT_AVATAR_MODELS = {
-  "wave1-default-head": {
-    assetUrl: "/avatars/female_1.glb",
-    labelKey: "chatAvatarModelClassic",
-  },
-  "maya-warm-scholar": {
-    assetUrl: "/avatars/elder-scholar.glb",
-    labelKey: "chatAvatarModelElderScholar",
-  },
-  "maya-civic-observer": {
-    assetUrl: "/avatars/noble-scholar.glb",
-    labelKey: "chatAvatarModelNobleScholar",
-  },
-} as const;
-
-export type ChatAvatarModelId = keyof typeof CHAT_AVATAR_MODELS;
-
-export function isChatAvatarModelId(value: string): value is ChatAvatarModelId {
-  return Object.hasOwn(CHAT_AVATAR_MODELS, value);
-}
-
 function isAvatarConfigForTemplate(
   value: unknown,
   templateId: string,

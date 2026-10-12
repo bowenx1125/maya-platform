@@ -562,6 +562,26 @@ class SnapshotEmbeddingRuntime:
             cost_cap_cny=self.cost_cap_cny,
         )
 
+        history_reader = getattr(self.control, "operations", None)
+        if callable(history_reader):
+            uncertain = tuple(
+                operation
+                for operation in history_reader(scope_id=scope_id)
+                if operation.build_manifest_hash == build.manifest_hash
+                and operation.state == "acceptance_unknown"
+            )
+            if uncertain:
+                # Explicit continuation reconciles stages and retry authorization;
+                # a fresh run must not use removed budget caps as its retry guard.
+                return _run_result(
+                    status="acceptance_unknown",
+                    build=build,
+                    plan=plan,
+                    operations=uncertain,
+                    outcomes=(),
+                    safe_error_code="acceptance_unknown",
+                )
+
         planned: list[tuple[EmbeddingBatchV1, EmbeddingOperationV1]] = []
         operations: list[EmbeddingOperationV1] = []
         outcomes: list[EmbeddingBatchOutcomeV1] = []
@@ -581,9 +601,8 @@ class SnapshotEmbeddingRuntime:
             planned.append((batch, operation))
             operations.append(operation)
 
-        # Reserve every planned batch before the first provider call.  This
-        # makes a scope-cap failure a zero-network outcome even when a later
-        # batch would otherwise be the first one to exceed the cap.
+        # Record every batch before I/O so a ledger failure cannot leave a
+        # partially sent build without its reservation identities.
         for index, (_, operation) in enumerate(planned):
             try:
                 self.control.reserve(operation)

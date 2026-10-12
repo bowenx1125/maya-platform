@@ -202,7 +202,41 @@ class PlaybackSessionMixin(PlaybackCore):
         turn_id: str,
         action: Literal["start", "resume", "next", "replay"],
         context: AuthContext | None = None,
-    ) -> tuple[PreparedMedia, MediaPreparedResult]:
+    ) -> tuple[PreparedMedia | None, MediaPreparedResult]:
+        prepared, result = await self._media_prepare_locked(
+            db,
+            debate_id,
+            command_id=command_id,
+            expected_control_version=expected_control_version,
+            epoch=epoch,
+            session_hash=session_hash,
+            turn_id=turn_id,
+            action=action,
+            context=context,
+        )
+        if result.text_only:
+            debate = self._get_debate(db, debate_id)
+            state = self._state(db, debate)
+            if state.status == "waiting_next" and state.current_turn_id == turn_id:
+                current = self._current_turn(db, debate, state)
+                successor, unique = self._adjacent_successor(self._turns(db, debate), current)
+                if unique and successor is not None and not self._turn_ready(successor):
+                    await self._enqueue(debate, successor)
+        return prepared, result
+
+    async def _media_prepare_locked(
+        self,
+        db: Any,
+        debate_id: str,
+        *,
+        command_id: str,
+        expected_control_version: int,
+        epoch: str,
+        session_hash: str,
+        turn_id: str,
+        action: Literal["start", "resume", "next", "replay"],
+        context: AuthContext | None = None,
+    ) -> tuple[PreparedMedia | None, MediaPreparedResult]:
         async with self._lock:
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
@@ -214,6 +248,11 @@ class PlaybackSessionMixin(PlaybackCore):
             previous = self._media_command_results.get(command_key)
             if previous is not None:
                 prepared, result = previous
+                if prepared is None:
+                    if state.current_turn_id == turn_id and state.status == "waiting_next":
+                        return prepared, result
+                    self._media_command_results.pop(command_key, None)
+                    raise conflict("invalid_state", "The text item is no longer current.")
                 binding = prepared.binding
                 if (
                     state.status == "ready"
@@ -261,6 +300,17 @@ class PlaybackSessionMixin(PlaybackCore):
                     self._evidence_trace(turn)
                 except EvidenceTraceCorruptError as exc:
                     raise invalid_state("Replay evidence trace is unavailable.") from exc
+            if self._turn_text_only(turn) and action in {"start", "next"}:
+                result = await self._prepare_text_turn(
+                    db,
+                    debate,
+                    turn,
+                    state,
+                    command_id=command_id,
+                    epoch=epoch,
+                )
+                self._media_command_results[command_key] = (None, result)
+                return None, result
             metadata = self._validated_turn_audio(db, debate, turn)
             if (
                 action == "replay"
@@ -412,6 +462,123 @@ class PlaybackSessionMixin(PlaybackCore):
             prepared = PreparedMedia(media_url, binding.expires_at, token, binding)
             self._media_command_results[command_key] = (prepared, result)
             return prepared, result
+
+    async def _prepare_text_turn(
+        self,
+        db: Any,
+        debate: Any,
+        turn: Any,
+        state: Any,
+        *,
+        command_id: str,
+        epoch: str,
+    ) -> MediaPreparedResult:
+        debate_id, turn_id = self._debate_id(debate), str(turn.id)
+        turns = self._turns(db, debate)
+        successor, unique = self._adjacent_successor(turns, turn)
+        if not unique or (
+            successor is None and any(int(item.turn_index) > int(turn.turn_index) for item in turns)
+        ):
+            raise conflict("invalid_state", "The turn plan has a missing or ambiguous successor.")
+        try:
+            evidence = self._evidence_trace_payload(turn)
+        except EvidenceTraceCorruptError as exc:
+            raise invalid_state("Evidence trace is unavailable.") from exc
+        claim = getattr(self.repository, "claim_text_media_playback", None)
+        if callable(claim) and not claim(
+            db,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            expected_control_version=state.control_version,
+            controller_epoch=epoch,
+        ):
+            raise conflict("stale_control_version", "The text playback claim is stale.")
+        if not self.repository.publish_turn(db, turn):
+            raise conflict("invalid_state", "The text turn is not ready to publish.")
+        participants = self._participants(db, debate)
+        events = [
+            self._stage_event(
+                db,
+                debate_id,
+                "playback.started",
+                {
+                    "turn_id": turn_id,
+                    "slot": self._slot(self._participant_for_turn(participants, turn)),
+                    "round_no": self._round(turn),
+                    "speech": str(self._get(turn, "speech", default="")),
+                    "sources": self._sources(turn),
+                    **evidence,
+                    **self._segment_payload(db, turn),
+                    **self._mutual_phase_payload(debate, turn),
+                    "audio_ready": False,
+                    "playback_url": None,
+                    "avatar_states": self._avatar_states(participants, turn),
+                    "cursor_ms": 0,
+                    "playback_rate": state.playback_rate,
+                },
+            )
+        ]
+        self._set_nonplaying(state, "waiting_next" if successor is not None else "completed", 0)
+        state.audio_duration_ms = 0
+        state.pending_action = None
+        state.pending_ticket_hash = None
+        state.pending_media_command_id = None
+        if successor is None:
+            debate.status = "debate_finished"
+            state.controller_epoch = None
+            state.controller_session_hash = None
+            state.controller_connection_id = None
+            self._controller_sessions.pop(debate_id, None)
+            self.repository.save_debate(db, debate)
+        self._save(db, debate, state)
+        events.append(
+            self._stage_event(
+                db,
+                debate_id,
+                "playback.completed",
+                {
+                    "turn_id": turn_id,
+                    "cursor_ms": 0,
+                    "control_version": state.control_version,
+                    "playback_rate": state.playback_rate,
+                },
+            )
+        )
+        next_ready = self._next_turn_ready(db, debate, state) if successor is not None else False
+        if successor is not None:
+            events.append(
+                self._stage_event(
+                    db,
+                    debate_id,
+                    "playback.waiting_next",
+                    {
+                        "mode": "live",
+                        "completed_turn_id": turn_id,
+                        "control_version": state.control_version,
+                        "next_turn_ready": next_ready,
+                    },
+                )
+            )
+            if not next_ready:
+                ensure_job = getattr(self.repository, "ensure_turn_job", None)
+                if callable(ensure_job):
+                    ensure_job(db, debate, successor)
+        self._commit(db)
+        await self._publish_events(events)
+        if successor is None:
+            self._revoke_epoch(epoch, debate_id, "debate_terminal")
+            self.ticket_store.revoke_debate(debate_id)
+        return MediaPreparedResult(
+            message_id=uuid4(),
+            debate_id=UUID(debate_id),
+            occurred_at=datetime.now(UTC),
+            command_id=UUID(command_id),
+            controller_epoch=UUID(epoch),
+            turn_id=UUID(turn_id),
+            text_only=True,
+            media_url=None,
+            expires_at=datetime.now(UTC),
+        )
 
     def _find_ticket(
         self,

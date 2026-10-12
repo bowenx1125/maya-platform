@@ -13,7 +13,11 @@ from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError, validation_failure
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
-from app.modules.voices.schemas import PlaybackResource, VoiceProfileResponse
+from app.modules.voices.schemas import (
+    PlaybackResource,
+    RenameVoiceProfileRequest,
+    VoiceProfileResponse,
+)
 from app.modules.voices.service import (
     confirm_voice_profile,
     create_voice_preview,
@@ -21,6 +25,7 @@ from app.modules.voices.service import (
     enroll_voice,
     list_group_voices,
     media_path_for_preview,
+    rename_voice_profile,
     visible_student_voice,
     voice_profile_dto,
 )
@@ -146,6 +151,25 @@ def get_voice_profile(
     db: Session = Depends(get_db),
 ) -> VoiceProfileResponse:
     return voice_profile_dto(visible_student_voice(db, context, str(voice_profile_id)).profile)
+
+
+@router.patch(
+    "/voice-profiles/{voice_profile_id}",
+    response_model=VoiceProfileResponse,
+    operation_id="renameVoiceProfile",
+    responses={
+        404: {"model": Error, "description": "Voice profile not found."},
+        400: {"model": Error, "description": "Invalid voice filename."},
+    },
+)
+def rename_voice_profile_route(
+    voice_profile_id: UUID,
+    body: RenameVoiceProfileRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> VoiceProfileResponse:
+    return rename_voice_profile(db, context, str(voice_profile_id), body.source_filename)
 
 
 @router.delete(

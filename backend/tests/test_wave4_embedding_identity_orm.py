@@ -15,6 +15,8 @@ from sqlalchemy.exc import IntegrityError
 
 REVISION = "0013_embedding_identity_stage"
 PREVIOUS_REVISION = "0012_persona_activation"
+AUTHORED_CONTENT_REVISION = "0034_authored_content_unbounded"
+AUTHORED_CONTENT_PREVIOUS_REVISION = "0033_budget_accounting_unbounded"
 
 
 def test_orm_identity_is_on_snapshot_and_stage_chunk_id_is_build_opaque() -> None:
@@ -245,6 +247,205 @@ def _columns(path: Path, table: str) -> set[str]:
         return {str(item["name"]) for item in inspect(database.engine).get_columns(table)}
     finally:
         database.dispose()
+
+
+def _table_rows(path: Path, tables: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+    database = Database(_database_url(path))
+    try:
+        with database.engine.connect() as connection:
+            return {
+                table: tuple(
+                    sorted(
+                        repr(tuple(row))
+                        for row in connection.execute(text(f'SELECT * FROM "{table}"'))
+                    )
+                )
+                for table in tables
+            }
+    finally:
+        database.dispose()
+
+
+def _snapshot_schema_objects(path: Path) -> dict[tuple[str, str], str]:
+    database = Database(_database_url(path))
+    try:
+        with database.engine.connect() as connection:
+            return {
+                (str(kind), str(name)): str(sql)
+                for kind, name, sql in connection.execute(
+                    text(
+                        "SELECT type,name,sql FROM sqlite_master "
+                        "WHERE tbl_name='knowledge_snapshots' AND sql IS NOT NULL "
+                        "ORDER BY type,name"
+                    )
+                )
+            }
+    finally:
+        database.dispose()
+
+
+def _snapshot_foreign_keys(path: Path) -> dict[str, tuple[str, ...]]:
+    tables = (
+        "knowledge_snapshots",
+        "snapshot_documents",
+        "knowledge_chunks",
+        "embedding_accepted_stages",
+        "embedding_accepted_vectors",
+        "agent_versions",
+    )
+    database = Database(_database_url(path))
+    try:
+        with database.engine.connect() as connection:
+            return {
+                table: tuple(
+                    sorted(
+                        repr(tuple(row))
+                        for row in connection.exec_driver_sql(f'PRAGMA foreign_key_list("{table}")')
+                    )
+                )
+                for table in tables
+            }
+    finally:
+        database.dispose()
+
+
+def _foreign_key_violations(path: Path) -> tuple[str, ...]:
+    database = Database(_database_url(path))
+    try:
+        with database.engine.connect() as connection:
+            return tuple(
+                sorted(
+                    repr(tuple(row))
+                    for row in connection.exec_driver_sql("PRAGMA foreign_key_check")
+                )
+            )
+    finally:
+        database.dispose()
+
+
+def test_0034_fresh_database_removes_only_snapshot_upper_check(tmp_path: Path) -> None:
+    path = tmp_path / "authored-content-fresh.sqlite3"
+    _upgrade(path, AUTHORED_CONTENT_PREVIOUS_REVISION)
+    _upgrade(path, AUTHORED_CONTENT_REVISION)
+
+    assert _revision(path) == AUTHORED_CONTENT_REVISION
+    sql = _snapshot_schema_objects(path)[("table", "knowledge_snapshots")]
+    assert "total_char_count >= 1" in sql
+    assert "total_char_count <= 100000" not in sql
+    assert _foreign_key_violations(path) == ()
+
+
+def test_0034_populated_rebuild_preserves_rows_children_vectors_indexes_triggers_and_fks(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "authored-content-populated.sqlite3"
+    fixture = _seed_populated_legacy(path)
+    _upgrade(path, AUTHORED_CONTENT_PREVIOUS_REVISION)
+    database = Database(_database_url(path))
+    try:
+        with database.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO embedding_accepted_stages "
+                    "(operation_id,build_id,build_manifest_hash,batch_index,model_key,"
+                    "embedding_provider,embedding_region,dimension,policy_version,response_hash,"
+                    "created_at) VALUES (:operation_id,'build-0034',:hash,0,'mock-sha256-v1',"
+                    "'mock','local',256,'w4-mock-v1',:hash,:now)"
+                ),
+                {**fixture, "hash": "d" * 64, "now": datetime.now(UTC)},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO embedding_accepted_vectors "
+                    "(operation_id,item_index,chunk_id,embedding_blob) "
+                    "VALUES (:operation_id,0,:chunk_id,:blob)"
+                ),
+                {
+                    "operation_id": fixture["operation_id"],
+                    "chunk_id": fixture["chunk_id"],
+                    "blob": b"accepted-vector-0034",
+                },
+            )
+            connection.exec_driver_sql(
+                "CREATE TABLE snapshot_migration_audit (snapshot_id VARCHAR(36) NOT NULL)"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_0034_snapshot_chars ON knowledge_snapshots(total_char_count)"
+            )
+            connection.exec_driver_sql(
+                "CREATE TRIGGER tr_0034_snapshot_update AFTER UPDATE OF total_char_count "
+                "ON knowledge_snapshots BEGIN "
+                "INSERT INTO snapshot_migration_audit(snapshot_id) VALUES (NEW.id); END"
+            )
+    finally:
+        database.dispose()
+
+    preserved_tables = (
+        "knowledge_snapshots",
+        "snapshot_documents",
+        "knowledge_chunks",
+        "embedding_accepted_stages",
+        "embedding_accepted_vectors",
+        "provider_export_manifests",
+        "provider_operations",
+        "agent_versions",
+        "stored_files",
+        "snapshot_migration_audit",
+    )
+    rows_before = _table_rows(path, preserved_tables)
+    schema_before = _snapshot_schema_objects(path)
+    foreign_keys_before = _snapshot_foreign_keys(path)
+
+    _upgrade(path, AUTHORED_CONTENT_REVISION)
+
+    assert _revision(path) == AUTHORED_CONTENT_REVISION
+    rows_after = _table_rows(path, preserved_tables)
+    schema_after = _snapshot_schema_objects(path)
+    foreign_keys_after = _snapshot_foreign_keys(path)
+    before_table_sql = schema_before[("table", "knowledge_snapshots")]
+    expected_table_sql = before_table_sql.replace(
+        "total_char_count >= 1 AND total_char_count <= 100000",
+        "total_char_count >= 1",
+    )
+    assert schema_after[("table", "knowledge_snapshots")] == expected_table_sql
+    assert {
+        key: value
+        for key, value in schema_before.items()
+        if key != ("table", "knowledge_snapshots")
+    } == {
+        key: value for key, value in schema_after.items() if key != ("table", "knowledge_snapshots")
+    }
+    assert rows_after == rows_before
+    assert foreign_keys_after == foreign_keys_before
+    assert _foreign_key_violations(path) == ()
+
+    database = Database(_database_url(path))
+    try:
+        with database.engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE knowledge_snapshots SET total_char_count=100001 WHERE id=:snapshot_id"
+                ),
+                fixture,
+            )
+        with database.engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT snapshot_id FROM snapshot_migration_audit")
+                ).scalar_one()
+                == fixture["snapshot_id"]
+            )
+    finally:
+        database.dispose()
+
+    before_downgrade_rows = _table_rows(path, preserved_tables)
+    before_downgrade_schema = _snapshot_schema_objects(path)
+    with pytest.raises(RuntimeError, match="Cannot restore the 100000 character snapshot ceiling"):
+        _downgrade(path, AUTHORED_CONTENT_PREVIOUS_REVISION)
+    assert _revision(path) == AUTHORED_CONTENT_REVISION
+    assert _table_rows(path, preserved_tables) == before_downgrade_rows
+    assert _snapshot_schema_objects(path) == before_downgrade_schema
+    assert _foreign_key_violations(path) == ()
 
 
 def test_0013_fresh_and_repeat_create_identity_and_stage_tables(tmp_path: Path) -> None:

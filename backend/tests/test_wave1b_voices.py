@@ -19,11 +19,13 @@ from app.core.errors import PlatformError
 from app.core.models import (
     IdempotencyRecord,
     StoredFile,
+    TeacherGroupAccess,
     VoicePreview,
     VoiceProfile,
     VoiceProviderOperation,
 )
 from app.modules.knowledge.files import write_atomic
+from app.modules.voices import preview as voice_preview
 from app.modules.voices import service as voice_service
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
@@ -45,6 +47,7 @@ from app.providers.audio import (
     run_ffmpeg_normalize,
 )
 from app.providers.tts import (
+    MockTTSProvider,
     TTSAudioInvalidError,
     TTSHTTPRejectedError,
     TTSProviderError,
@@ -212,6 +215,7 @@ def test_voice_envelope_rejects_every_tampered_component_and_context_swap() -> N
 
 def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client, database, settings = voice_client
     _user, csrf = login(client, "bowen")
@@ -238,14 +242,41 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
         assert op is not None and op.state == "succeeded"
     assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
 
+    provider = MockTTSProvider()
+    preview_languages: list[str] = []
+    synthesize = provider.synthesize
+
+    def capture_preview(
+        text: str,
+        voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        preview_languages.append(language)
+        return synthesize(text, voice_id, language=language, target_model_key=target_model_key)
+
+    monkeypatch.setattr(provider, "synthesize", capture_preview)
+    monkeypatch.setattr(voice_preview, "tts_provider", lambda _: provider)
     preview = client.post(
         f"/api/v1/voice-profiles/{profile['id']}/preview",
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
     )
     assert preview.status_code == 200, preview.text
+    assert provider.last_text == (
+        "Should we find each other in the next life, let‘s live on a planet of our own.\n"
+        "我会将花种满山谷，为你而歌，老死方休。"
+    )
+    assert preview_languages == ["auto"]
     media = client.get(preview.json()["playback_url"])
     assert media.status_code == 200
-    assert media.headers["cache-control"].startswith("no-store")
+    # API responses use `private, no-store`. The directive may follow another
+    # token, so a prefix check would miss an equivalent no-store policy.
+    cache_directives = {
+        directive.split("=", 1)[0].strip()
+        for directive in media.headers["cache-control"].casefold().split(",")
+    }
+    assert "no-store" in cache_directives
 
     confirmed = client.post(
         f"/api/v1/voice-profiles/{profile['id']}/confirm",
@@ -420,8 +451,8 @@ def test_group_voice_is_owner_private_within_the_same_group(
         headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
         json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
     )
-    assert denied_bind.status_code == 422, denied_bind.text
-    assert denied_bind.json()["code"] == "voice_enrollment_failed"
+    assert denied_bind.status_code == 404, denied_bind.text
+    assert denied_bind.json()["code"] == "not_found"
     csrf = login(client, "bowen")[1]
     bound = client.patch(
         f"/api/v1/agent-versions/{draft['id']}",
@@ -933,7 +964,7 @@ def test_effective_voice_resolver_prefers_ready_custom_and_fails_closed_to_syste
 def test_voice_permissions_are_same_group_students_only(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
-    client, _database, _settings = voice_client
+    client, database, _settings = voice_client
     _user, csrf = login(client, "bowen")
     create = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
@@ -954,13 +985,35 @@ def test_voice_permissions_are_same_group_students_only(
 
     # The teacher is not a group member and receives the same not-found
     # response; the profile is not disclosed through list/detail/delete/media.
-    teacher = login(client, "maya")[1]
+    teacher_user, teacher = login(client, "maya")
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
     assert (
         client.delete(
             f"/api/v1/voice-profiles/{profile_id}",
             headers=_headers(teacher, "voice-teacher-delete"),
+        ).status_code
+        == 404
+    )
+    # Opening the group from Accounts lets the teacher see the library, not
+    # another student's clone.
+    with database.session() as session:
+        session.add(
+            TeacherGroupAccess(
+                group_id=GROUP_A,
+                user_id=teacher_user["user"]["id"],
+                created_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+    heard = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
+    assert heard.status_code == 200
+    assert heard.json() == []
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
+    assert (
+        client.delete(
+            f"/api/v1/voice-profiles/{profile_id}",
+            headers=_headers(teacher, "voice-teacher-delete-after-listen"),
         ).status_code
         == 404
     )
@@ -1427,8 +1480,15 @@ def test_dashscope_tts_still_rejects_a_truncated_wav(monkeypatch: pytest.MonkeyP
         )
 
 
-def test_dashscope_tts_sends_chinese_and_refuses_other_languages(
+@pytest.mark.parametrize(
+    "language,language_type,text",
+    [("zh", "Chinese", "你好。"), ("auto", "Auto", "Hello. 你好。")],
+)
+def test_dashscope_tts_sends_supported_languages_and_refuses_other_languages(
     monkeypatch: pytest.MonkeyPatch,
+    language: str,
+    language_type: str,
+    text: str,
 ) -> None:
     capture = _CaptureDashScopeClient(
         [
@@ -1452,16 +1512,16 @@ def test_dashscope_tts_sends_chinese_and_refuses_other_languages(
 
     config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
     dashscope.DashScopeTTSProvider(config, downloader=_WavDownloader()).synthesize(
-        "你好。",
+        text,
         "opaque-voice",
-        language="zh",
+        language=language,
     )
     body = capture.calls[0][1]["json"]
     assert isinstance(body, dict)
     assert body["input"] == {
-        "text": "你好。",
+        "text": text,
         "voice": "opaque-voice",
-        "language_type": "Chinese",
+        "language_type": language_type,
     }
 
     def unexpected_client() -> _CaptureDashScopeClient:
@@ -1768,6 +1828,22 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             .mappings()
             .all()
         )
+    # Every schema step keeps the row exactly as written. Only the 0060 data
+    # reset, which retires earlier classroom work on purpose, archives it.
+    command.upgrade(migration_config, "0059_chat_titles_pins")
+    with database.engine.connect() as connection:
+        preserved = (
+            connection.execute(
+                text(
+                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
+                    "avatar_config_json, voice_profile_id FROM agents "
+                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
+                )
+            )
+            .mappings()
+            .all()
+        )
+    assert list(before) == list(preserved)
     command.upgrade(migration_config, "head")
     command.upgrade(migration_config, "head")
     with database.engine.connect() as connection:
@@ -1842,7 +1918,9 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             .mappings()
             .all()
         )
-        assert list(before) == list(after)
+        assert [{**dict(row), "status": "archived"} for row in before] == [
+            dict(row) for row in after
+        ]
         assert connection.execute(text("SELECT COUNT(*) FROM voice_profiles")).scalar_one() == 0
     database.dispose()
 
@@ -1863,8 +1941,15 @@ class _FlakyFallbackTTS:
     def __init__(self) -> None:
         self.calls = 0
 
-    def synthesize(self, text: str, external_voice_id: str, *, language: str = "en") -> TTSResult:
-        del text, external_voice_id, language
+    def synthesize(
+        self,
+        text: str,
+        external_voice_id: str,
+        *,
+        language: str = "en",
+        target_model_key: str | None = None,
+    ) -> TTSResult:
+        del text, external_voice_id, language, target_model_key
         self.calls += 1
         if self.calls == 1:
             raise TTSProviderTimeout("transient preview timeout")
@@ -2132,3 +2217,34 @@ def test_ffmpeg_timeout_terminates_and_closes_process_handles(
         run_ffmpeg_normalize(source, target, timeout_seconds=0.01)
     assert process.terminated or process.killed
     assert process.stdin.closed and process.stdout.closed and process.stderr.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename", ["中文录音 2.m4a", "café.wav", "literal Ã©.mp3"])
+@pytest.mark.parametrize("chunk_size", [1, 7, 257])
+async def test_streamed_upload_preserves_browser_utf8_filename(
+    tmp_path: Path, filename: str, chunk_size: int
+) -> None:
+    content = b"unchanged audio bytes"
+    body, boundary = _multipart(filename, content)
+    upload = await stream_voice_upload(
+        _stream_request(body, boundary, chunk_size=chunk_size), tmp_path / "data"
+    )
+    try:
+        assert upload.source_filename == filename
+        assert upload.source_path.read_bytes() == content
+        assert upload.fields["consent_accepted"] == "true"
+    finally:
+        upload.cleanup()
+    assert not upload.request_directory.exists()
+
+
+@pytest.mark.asyncio
+async def test_streamed_upload_preserves_legacy_latin1_filename(tmp_path: Path) -> None:
+    body, boundary = _multipart("café.wav", b"audio bytes")
+    body = body.replace("café.wav".encode(), "café.wav".encode("latin-1"))
+    upload = await stream_voice_upload(_stream_request(body, boundary), tmp_path / "data")
+    try:
+        assert upload.source_filename == "café.wav"
+    finally:
+        upload.cleanup()

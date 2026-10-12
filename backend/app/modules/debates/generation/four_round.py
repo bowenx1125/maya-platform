@@ -170,4 +170,4 @@ def usable_memory(value: object, agent_ids: set[str] | None = None) -> dict[str,
 def system_prompt(round_number: int, language: str) -> str:
     from app.modules.debates.teaching_rules import compile_system_prompt, default_teaching_prompts
 
-    return compile_system_prompt(default_teaching_prompts()[language], round_number, language)
+    return compile_system_prompt(default_teaching_prompts()[language], round_number)

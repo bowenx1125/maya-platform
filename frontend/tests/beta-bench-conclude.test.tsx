@@ -363,7 +363,8 @@ describe("segments_v2 Bench Conclude and Report", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Conclude" }));
     await screen.findByRole("dialog", { name: "Report" });
     expect(screen.getByRole("heading", { name: "Evaluation" })).toBeTruthy();
-    expect(screen.getByText("3 unscored")).toBeTruthy();
+    expect(screen.queryByText(/unscored/i)).toBeNull();
+    expect(screen.getByText("No match +0")).toBeTruthy();
     expect(screen.getByText("Direct evidence +5")).toBeTruthy();
     expect(api.closeInteraction).toHaveBeenCalledTimes(1);
   });

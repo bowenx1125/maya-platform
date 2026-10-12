@@ -22,6 +22,7 @@ from app.core.models import (
     Job,
     KnowledgeChunk,
     KnowledgeDocument,
+    KnowledgeDocumentChunk,
     KnowledgeSnapshot,
     SnapshotDocument,
     StoredFile,
@@ -32,6 +33,7 @@ from app.modules.knowledge.files import (
     content_disposition,
     frozen_download_filename,
 )
+from app.modules.knowledge_sets.models import KnowledgeDocumentVersion
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -46,11 +48,18 @@ def _headers(csrf: str, **extra: str) -> dict[str, str]:
     return {"Origin": "http://testserver", "X-CSRF-Token": csrf, **extra}
 
 
-def _make_agent(client: TestClient, csrf: str, key: str, name: str) -> tuple[str, str]:
+def _make_agent(
+    client: TestClient,
+    csrf: str,
+    key: str,
+    name: str,
+    *,
+    visibility: str = "private",
+) -> tuple[str, str]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": f"create-{key}-123456"}),
-        json={"name": name},
+        json={"name": name, "visibility": visibility},
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -65,6 +74,7 @@ def _upload(
     filename: str,
     content: bytes,
     expected_revision: int,
+    visibility: str = "private",
 ) -> dict[str, Any]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
@@ -72,6 +82,7 @@ def _upload(
         data={
             "target_agent_version_id": version_id,
             "expected_revision": str(expected_revision),
+            "visibility": visibility,
         },
         files={"file": (filename, content, "text/markdown")},
     )
@@ -365,7 +376,7 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
         )
         assert replaced.status_code == 201, replaced.text
         new_id = replaced.json()["id"]
-        assert new_id != old_id
+        assert new_id == old_id
         assert [
             item["id"]
             for item in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents").json()
@@ -374,13 +385,20 @@ def test_replacement_updates_all_current_drafts_including_disabled_relation(
     with database.session() as session:
         old = session.get(KnowledgeDocument, old_id)
         new = session.get(KnowledgeDocument, new_id)
-        assert old is not None and old.workspace_state == "hidden"
-        assert new is not None and new.workspace_state == "active"
+        assert old is not None and old.workspace_state == "active"
+        assert new is old
         relations = session.scalars(select(AgentVersionDocument)).all()
         assert {(row.agent_version_id, row.document_id, row.enabled) for row in relations} == {
-            (version_one, new_id, True),
-            (version_two, new_id, False),
+            (version_one, old_id, True),
+            (version_two, old_id, False),
         }
+        source_versions = session.scalars(
+            select(KnowledgeDocumentVersion)
+            .where(KnowledgeDocumentVersion.document_id == old_id)
+            .order_by(KnowledgeDocumentVersion.version_seq)
+        ).all()
+        assert [row.version_seq for row in source_versions] == [1, 2]
+        assert source_versions[0].content_hash == old_hash
         versions = {
             row.id: row.revision
             for row in session.scalars(
@@ -421,8 +439,9 @@ def test_replacement_without_draft_references_becomes_library_document(app_facto
     with database.session() as session:
         old_row = session.get(KnowledgeDocument, old["id"])
         new_row = session.get(KnowledgeDocument, new_id)
-        assert old_row is not None and old_row.workspace_state == "hidden"
-        assert new_row is not None and new_row.workspace_state == "active"
+        assert old_row is not None and old_row.workspace_state == "active"
+        assert new_row is old_row
+        assert new_row.content_version_seq == 2
         assert settings.resolved_data_root.exists()
 
 
@@ -481,7 +500,13 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
     database: Database,
 ) -> None:
     _student, csrf = login(client, "bowen")
-    agent_id, version_id = _make_agent(client, csrf, "download", "Download Agent")
+    agent_id, version_id = _make_agent(
+        client,
+        csrf,
+        "download",
+        "Download Agent",
+        visibility="public",
+    )
     detail = client.get(f"/api/v1/agents/{agent_id}")
     assert detail.status_code == 200, detail.text
     avatar = detail.json()["versions"][0]["avatar_config"]
@@ -504,6 +529,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
         "same.md",
         b"# First\n\nAlpha",
         1,
+        visibility="public",
     )
     second = _upload(
         client,
@@ -513,6 +539,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
         "same.md",
         b"# Second\n\nBeta",
         2,
+        visibility="public",
     )
     _confirm_persona(client, csrf, version_id, expected_revision=3)
     published = client.post(
@@ -650,9 +677,11 @@ def test_two_database_threads_concurrent_replace_have_one_winner(
             operations = session.scalars(
                 select(FileOperation).where(FileOperation.operation_kind == "document_replace")
             ).all()
-            assert old_row is not None and old_row.workspace_state == "hidden"
+            assert old_row is not None and old_row.workspace_state == "active"
             active = [row for row in documents if row.workspace_state == "active"]
             assert len(active) == 1
+            assert len(documents) == 1
+            assert old_row.content_version_seq == 2
             assert {row.state for row in operations} == {"committed", "recovered"}
             version = session.scalar(
                 select(AgentVersion).where(AgentVersion.id == uploaded["agent_version"]["id"])
@@ -826,7 +855,7 @@ def test_replace_publish_forced_order_has_one_stable_winner(
             ).all()
             assert old_row is not None
             if winner == "replace":
-                assert old_row.workspace_state == "hidden"
+                assert old_row.workspace_state == "active"
                 assert len([row for row in versions if row.state == "published"]) == 0
             else:
                 assert old_row.workspace_state == "active"
@@ -835,7 +864,7 @@ def test_replace_publish_forced_order_has_one_stable_winner(
         _assert_storage_recovered(database, settings.resolved_data_root)
 
 
-def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
+def test_large_replacement_keeps_stable_source_id_and_preserves_file_history(
     app_factory: Any,
 ) -> None:
     app, database, settings = app_factory()
@@ -877,6 +906,7 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
             }
             before_chunks = [
                 (
+                    row.id,
                     row.document_id,
                     row.chunk_index,
                     row.chunk_text,
@@ -885,13 +915,14 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
                     row.embedding_blob,
                 )
                 for row in session.scalars(
-                    select(KnowledgeChunk).where(KnowledgeChunk.document_id == old["id"])
+                    select(KnowledgeDocumentChunk).where(
+                        KnowledgeDocumentChunk.document_id == old["id"]
+                    )
                 ).all()
             ]
-
         oversized = b"# Replacement\n\n" + (b"evidence " * 12_000)
         assert len(oversized.decode("utf-8")) > 100_000
-        rejected = client.post(
+        replaced = client.post(
             f"/api/v1/knowledge-documents/{old['id']}/replace",
             headers=_headers(csrf, **{"Idempotency-Key": "over-limit-replace-123456"}),
             data={
@@ -900,28 +931,41 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
             },
             files={"file": ("oversized.md", oversized, "text/markdown")},
         )
-        assert rejected.status_code == 422, rejected.text
-        assert rejected.json()["code"] == "knowledge_import_too_large"
+        assert replaced.status_code == 201, replaced.text
+        replacement = replaced.json()
+        assert replacement["id"] == old["id"]
+        assert replacement["char_count"] == len(oversized.decode("utf-8"))
 
         with database.session() as session:
             old_row = session.get(KnowledgeDocument, old["id"])
             assert old_row is not None and old_row.workspace_state == "active"
-            assert old_row.content_hash == old["content_hash"]
-            assert old_row.index_revision == old["index_revision"]
+            assert old_row.content_hash != old["content_hash"]
+            assert old_row.index_revision == old["index_revision"] + 1
+            assert old_row.content_version_seq == 2
             assert old_row.stored_file is not None
-            assert old_row.stored_file.id == old_file.id
+            assert old_row.stored_file.id != old_file.id
+            new_row = session.get(KnowledgeDocument, replacement["id"])
+            assert new_row is old_row and new_row.stored_file is not None
+            assert (
+                settings.resolved_data_root / new_row.stored_file.relative_path
+            ).read_bytes() == oversized
             assert [
                 (row.agent_version_id, row.document_id, row.enabled, row.order_index)
                 for row in session.scalars(select(AgentVersionDocument)).all()
             ] == before_relations
-            assert {
+            after_versions = {
                 row.id: (row.revision, row.state, row.knowledge_snapshot_id)
                 for row in session.scalars(
                     select(AgentVersion).where(AgentVersion.id.in_([version_one, version_two]))
                 ).all()
-            } == before_versions
-            assert [
+            }
+            assert after_versions == {
+                version_id: (revision + 1, state, snapshot_id)
+                for version_id, (revision, state, snapshot_id) in before_versions.items()
+            }
+            after_current_chunks = [
                 (
+                    row.id,
                     row.document_id,
                     row.chunk_index,
                     row.chunk_text,
@@ -930,17 +974,21 @@ def test_replacement_over_limit_rolls_back_every_enabled_draft_and_file(
                     row.embedding_blob,
                 )
                 for row in session.scalars(
-                    select(KnowledgeChunk).where(KnowledgeChunk.document_id == old["id"])
-                ).all()
-            ] == before_chunks
-            assert (
-                session.scalars(
-                    select(KnowledgeDocument).where(
-                        KnowledgeDocument.source_filename == "oversized.md"
+                    select(KnowledgeDocumentChunk).where(
+                        KnowledgeDocumentChunk.document_id == old["id"]
                     )
                 ).all()
-                == []
-            )
+            ]
+            assert after_current_chunks != before_chunks
+            assert after_current_chunks
+            source_versions = session.scalars(
+                select(KnowledgeDocumentVersion)
+                .where(KnowledgeDocumentVersion.document_id == old["id"])
+                .order_by(KnowledgeDocumentVersion.version_seq)
+            ).all()
+            assert [row.version_seq for row in source_versions] == [1, 2]
+            assert source_versions[0].stored_file_id == old_file.id
+            assert source_versions[0].file_sha256 == old_file.sha256
         assert (settings.resolved_data_root / old_file.relative_path).read_bytes() == old_bytes
         _assert_storage_recovered(database, settings.resolved_data_root)
 
@@ -1180,7 +1228,9 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
             old_document = session.get(KnowledgeDocument, old_document_id)
             assert draft is not None and draft.revision == 1
             assert new_relation is not None and new_relation.enabled is True
-            assert old_relation is None
-            assert old_document is not None and old_document.workspace_state == "hidden"
+            assert new_document_id == old_document_id
+            assert old_relation is new_relation
+            assert old_document is not None and old_document.workspace_state == "active"
+            assert old_document.content_version_seq == 2
         after = _release_fingerprint(database, settings.resolved_data_root, first_agent)
         assert after == before

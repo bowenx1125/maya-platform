@@ -17,7 +17,7 @@ from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from io import BytesIO, StringIO
 from multiprocessing.process import BaseProcess
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from docx import Document as load_docx
 from docx.table import Table
@@ -25,7 +25,6 @@ from docx.text.paragraph import Paragraph
 from pypdf import PdfReader, apply_configuration
 from pypdf.errors import LimitReachedError
 
-from app.modules.knowledge.markdown import MAX_RAG_CHARS
 from app.modules.knowledge.multipart import MAX_UPLOAD_FILE_BYTES
 
 MAX_PDF_PAGES = 200
@@ -144,7 +143,7 @@ def _ingest_windows_job_limits(cpu_seconds: int, memory_bytes: int) -> tuple[Any
     limits.BasicLimitInformation.ActiveProcessLimit = 1
     limits.BasicLimitInformation.PerProcessUserTimeLimit = cpu_seconds * 10_000_000
     limits.ProcessMemoryLimit = memory_bytes
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
     kernel32.SetInformationJobObject.argtypes = [
         wintypes.HANDLE,
         wintypes.INT,
@@ -160,7 +159,7 @@ def _assign_windows_ingest_worker_job(process: BaseProcess) -> int | None:
         return None
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
     kernel32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
     kernel32.CreateJobObjectW.restype = wintypes.HANDLE
     kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
@@ -171,21 +170,21 @@ def _assign_windows_ingest_worker_job(process: BaseProcess) -> int | None:
     kernel32.CloseHandle.restype = wintypes.BOOL
     job = kernel32.CreateJobObjectW(None, None)
     if not job:
-        raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
+        raise OSError(cast(Any, ctypes).get_last_error(), "CreateJobObjectW failed")
     configured_kernel32, limits = _ingest_windows_job_limits(
         INGEST_WORKER_CPU_SECONDS, INGEST_WORKER_MEMORY_BYTES
     )
     worker_handle = kernel32.OpenProcess(0x0001 | 0x0100, False, process.pid)
     if not worker_handle:
         kernel32.CloseHandle(job)
-        raise OSError(ctypes.get_last_error(), "OpenProcess for PDF worker failed")
+        raise OSError(cast(Any, ctypes).get_last_error(), "OpenProcess for PDF worker failed")
     try:
         configured = configured_kernel32.SetInformationJobObject(
             job, 9, ctypes.byref(limits), ctypes.sizeof(limits)
         )
         assigned = configured and kernel32.AssignProcessToJobObject(job, worker_handle)
         if not assigned:
-            raise OSError(ctypes.get_last_error(), "PDF worker job limits failed")
+            raise OSError(cast(Any, ctypes).get_last_error(), "PDF worker job limits failed")
     except Exception:
         kernel32.CloseHandle(job)
         raise
@@ -203,7 +202,7 @@ def _extend_windows_ingest_worker_job_for_ocr(job_handle: int | None) -> None:
     if not kernel32.SetInformationJobObject(
         job_handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)
     ):
-        raise OSError(ctypes.get_last_error(), "PDF OCR worker limits update failed")
+        raise OSError(cast(Any, ctypes).get_last_error(), "PDF OCR worker limits update failed")
 
 
 def _ingest_worker(
@@ -337,7 +336,7 @@ def _convert_document_isolated(kind: Literal["pdf", "docx"], data: bytes) -> byt
                 process.join()
             process.close()
         if job_handle is not None and os.name == "nt":
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32 = cast(Any, ctypes).WinDLL("kernel32", use_last_error=True)
             kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
             kernel32.CloseHandle(job_handle)
         if receive_connection is not None:
@@ -557,8 +556,6 @@ def _pdf_to_markdown(
                 def count_text(text: Any, *_: Any) -> None:
                     nonlocal total_text_chars
                     total_text_chars += len(text)
-                    if total_text_chars > MAX_RAG_CHARS:
-                        raise KnowledgeImportError("content_too_large")
 
                 forms_on_page = _form_xobjects(page)
 
@@ -617,8 +614,6 @@ def _pdf_to_markdown(
                 for page_index, text in ocr_texts.items():
                     page_texts[page_index] = text
                     total_text_chars += len(text)
-                    if total_text_chars > MAX_RAG_CHARS:
-                        raise KnowledgeImportError("content_too_large")
 
             pages: list[str] = []
             markdown_chars = 0
@@ -626,10 +621,7 @@ def _pdf_to_markdown(
                 if converted_page_text:
                     body = converted_page_text
                     if page_number - 1 in ocr_page_indexes:
-                        body = (
-                            "> OCR-generated text; teacher review required.\n\n"
-                            f"{converted_page_text}"
-                        )
+                        body = f"> OCR-generated text.\n\n{converted_page_text}"
                 elif page_number - 1 in ocr_page_indexes:
                     body = "> No readable text was found on this page after local OCR."
                 else:
@@ -637,8 +629,6 @@ def _pdf_to_markdown(
                 page_markdown = f"## Page {page_number}\n\n{body}"
                 pages.append(page_markdown)
                 markdown_chars += len(page_markdown) + 2
-                if markdown_chars > MAX_RAG_CHARS:
-                    raise KnowledgeImportError("content_too_large")
             if not any(page_texts):
                 raise KnowledgeImportError("pdf_no_text")
     except KnowledgeImportError:
@@ -730,8 +720,6 @@ def _docx_to_markdown(data: bytes) -> str:
             markdown = f"{markdown}\n\n{marker}" if markdown else marker
         if not markdown:
             raise KnowledgeImportError("docx_no_text")
-        if len(markdown) > MAX_RAG_CHARS:
-            raise KnowledgeImportError("content_too_large")
     except KnowledgeImportError:
         raise
     except MemoryError as exc:
@@ -745,11 +733,11 @@ def convert_knowledge_upload(filename: str, data: bytes) -> tuple[str, bytes]:
     """Return a Markdown filename and bytes; source PDFs/DOCX never leave Maya."""
 
     _validate_filename(filename)
-    if not data or len(data) > MAX_UPLOAD_FILE_BYTES:
-        raise KnowledgeImportError("upload_size")
     extension = filename.rsplit(".", 1)[-1].casefold() if "." in filename else ""
     if extension == "md":
         return filename, data
+    if not data or len(data) > MAX_UPLOAD_FILE_BYTES:
+        raise KnowledgeImportError("upload_size")
     if extension == "pdf":
         markdown = _convert_pdf_isolated(data).decode("utf-8")
     elif extension == "docx":
@@ -757,6 +745,4 @@ def convert_knowledge_upload(filename: str, data: bytes) -> tuple[str, bytes]:
         markdown = _convert_docx_isolated(data).decode("utf-8")
     else:
         raise KnowledgeImportError("unsupported_format")
-    if len(markdown) > MAX_RAG_CHARS:
-        raise KnowledgeImportError("content_too_large")
     return _converted_filename(filename), markdown.encode("utf-8")

@@ -237,22 +237,22 @@ def username_exists(db: Session, settings: Settings, username: str) -> bool:
     )
 
 
-def verify_database_password(db: Session, username: str, password: str) -> str | None:
-    """Return the User id for a valid database-catalog credential."""
+def verify_database_password(db: Session, username: str, password: str) -> tuple[bool, str | None]:
+    """Return whether the database owns this name and its id when valid."""
 
     credential = db.scalar(
         select(UserCredential).join(User).where(User.username_key == username_key(username))
     )
     if credential is None:
-        return None
+        return False, None
     try:
         if _hasher().verify(password, credential.password_hash):
-            return credential.user_id
+            return True, credential.user_id
     except Exception:
         # A corrupt stored hash fails closed without surfacing the hash or the
         # backend exception at the API boundary.
-        return None
-    return None
+        return True, None
+    return True, None
 
 
 # A reset password is handed over verbally in class, so it is generated from

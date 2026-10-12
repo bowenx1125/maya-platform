@@ -13,6 +13,7 @@ import {
   RouteGuard,
   useSession,
 } from "../../../../../components/session-provider";
+import { IconClose } from "../../../../../components/quiet-icons";
 import { ReportPanel } from "../../../../../components/report";
 import { AgentScores } from "../../../../../components/wave3/agent-scores";
 import { ErrorNotice, LoadingCard } from "../../../../../components/ui";
@@ -466,18 +467,22 @@ export default function TeacherDebateControlPage() {
           </Link>
           {loading ? <LoadingCard /> : null}
           {!loading && error ? (
-            <ErrorNotice error={error} onRetry={() => void load()} />
+            <ErrorNotice
+              inline
+              notFound="debateNotFound"
+              error={error}
+              onRetry={() => void load()}
+            />
           ) : null}
         </div>
       ) : (
         <>
           {error ? (
-            <div className={styles.floatingNotice}>
-              <ErrorNotice
-                error={error}
-                onRetry={() => void refreshSnapshot()}
-              />
-            </div>
+            <ErrorNotice
+              notFound="debateNotFound"
+              error={error}
+              onRetry={() => void refreshSnapshot()}
+            />
           ) : null}
           <BetaDebateStage
             headerActions={(replayButton) => (
@@ -589,8 +594,13 @@ export default function TeacherDebateControlPage() {
               onClose={() => setReportOpen(false)}
             >
               <form method="dialog" className={styles.reportActions}>
-                <button className="secondary-action" type="submit" autoFocus>
-                  Close
+                <button
+                  className={`secondary-action ${styles.reportClose}`}
+                  aria-label={locale === "zh" ? "关闭" : "Close"}
+                  type="submit"
+                  autoFocus
+                >
+                  <IconClose size={18} />
                 </button>
               </form>
               <AgentScores

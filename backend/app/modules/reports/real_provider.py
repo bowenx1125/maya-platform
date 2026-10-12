@@ -30,7 +30,6 @@ from app.modules.reports.real_schema import (
 from app.modules.reports.schemas import ReportSectionOutput
 from app.providers.llm_adapter import DashScopeLLMConfig
 from app.providers.llm_price_card import (
-    LLM_INPUT_TOKEN_CAP,
     LLM_MODEL_KEY,
     LLM_RESERVED_OUTPUT_TOKEN_CAP,
 )
@@ -46,7 +45,7 @@ REAL_REPORT_MODEL: Final = LLM_MODEL_KEY
 REAL_REPORT_REGION: Final = "cn-beijing"
 REAL_REPORT_SCHEMA_NAME: Final = "maya_real_report_sections_v1"
 REAL_REPORT_OUTPUT_TOKEN_CAP: Final = LLM_RESERVED_OUTPUT_TOKEN_CAP
-_EXPECTED_ENVELOPE_FIELDS: Final = frozenset({"object", "model", "choices", "usage"})
+_EXPECTED_ENVELOPE_FIELDS: Final = frozenset({"choices"})
 _EXPECTED_CHOICE_FIELDS: Final = frozenset({"index", "message", "finish_reason"})
 
 
@@ -149,55 +148,11 @@ def _response_parts(response: object) -> tuple[int, object]:
     return status, payload
 
 
-def _usage(payload: Mapping[str, object]) -> tuple[int, int, int, int]:
-    # Read the counters this function needs and ignore anything else the
-    # supplier reports alongside them. Rejecting an unknown field failed every
-    # genuine response without protecting anything: none of it is echoed, and
-    # the arithmetic and cap checks below are what actually bound the spend.
-    values: list[int] = []
-    for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
-        value = payload.get(field)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise ReportProviderError("report_usage_invalid")
-        values.append(value)
-    details = payload.get("prompt_tokens_details")
-    cached = 0
-    if details is not None:
-        if not isinstance(details, Mapping):
-            raise ReportProviderError("report_usage_shape")
-        cached_value = details.get("cached_tokens")
-        if isinstance(cached_value, bool) or not isinstance(cached_value, int) or cached_value < 0:
-            raise ReportProviderError("report_usage_invalid")
-        cached = cached_value
-    prompt_tokens, completion_tokens, total_tokens = values
-    if (
-        total_tokens != prompt_tokens + completion_tokens
-        or prompt_tokens > LLM_INPUT_TOKEN_CAP
-        or completion_tokens > REAL_REPORT_OUTPUT_TOKEN_CAP
-        or cached > prompt_tokens
-    ):
-        raise ReportProviderError("report_usage_overrun")
-    return prompt_tokens, cached, completion_tokens, total_tokens
-
-
-def _response_sections(
-    payload: object,
-    *,
-    prepared: ReportWireRequest,
-) -> ReportSectionOutput:
-    # Require the fields this parser reads, not an envelope that carries
-    # nothing else. A real DashScope response also returns ``id`` and
-    # ``created``, so demanding exact equality rejected every genuine reply --
-    # the debate adapter, which has worked against this same endpoint all
-    # along, checks presence rather than exact shape. Nothing here echoes the
-    # envelope, so an extra documented field is not a boundary risk; the model
-    # identity, single choice, finish reason and usage caps below are.
+def _response_sections(payload: object) -> ReportSectionOutput:
+    # Provider resource labels are informational, not report content. Request
+    # routing still uses the configured model; validate the consumed payload.
     if not isinstance(payload, Mapping) or _EXPECTED_ENVELOPE_FIELDS - set(payload):
         raise ReportProviderError("report_response_shape")
-    if payload.get("object") != "chat.completion" or payload.get("model") != prepared.body.get(
-        "model"
-    ):
-        raise ReportProviderError("report_response_resource")
     choices = payload.get("choices")
     if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], Mapping):
         raise ReportProviderError("report_choices_shape")
@@ -217,10 +172,6 @@ def _response_sections(
     content = message.get("content")
     if not isinstance(content, str) or not content:
         raise ReportProviderError("report_content_shape")
-    usage_payload = payload.get("usage")
-    if not isinstance(usage_payload, Mapping):
-        raise ReportProviderError("report_usage_shape")
-    _usage(usage_payload)
     try:
         value = json.loads(
             content,
@@ -294,7 +245,7 @@ class RealReportProvider:
         status, payload = _response_parts(response)
         if status != 200:
             raise ReportProviderError("report_http_rejected")
-        return _response_sections(payload, prepared=prepared)
+        return _response_sections(payload)
 
     def execute(
         self, value: ReportRequest | ReportRequestV2 | Mapping[str, object]

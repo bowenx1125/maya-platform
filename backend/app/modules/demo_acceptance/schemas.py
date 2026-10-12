@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.providers.control import DEMO_ACCEPTANCE_MAX_CALLS, DEMO_ACCEPTANCE_PLAN_VERSION
+from app.providers.control import DEMO_ACCEPTANCE_PLAN_VERSION
 
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 AcceptanceRunState = Literal["prepared", "executing", "executed", "verified"]
@@ -34,7 +34,7 @@ class DemoAcceptanceRunBindReportRequest(_ClosedModel):
 
 class DemoAcceptanceCallRequest(_ClosedModel):
     manifest_hash: str = Field(pattern=_SHA256_PATTERN)
-    call_no: int = Field(ge=1, le=DEMO_ACCEPTANCE_MAX_CALLS)
+    call_no: int = Field(ge=1)
 
 
 class DemoAcceptanceRunResponse(_ClosedModel):
@@ -50,7 +50,7 @@ class DemoAcceptanceRunResponse(_ClosedModel):
     report_revision_id: UUID | None = None
     state: AcceptanceRunState
     starting_charged_requests: Literal[0] = 0
-    call_count: int = Field(ge=0, le=DEMO_ACCEPTANCE_MAX_CALLS)
+    call_count: int = Field(ge=0)
     charged_request_count: int = Field(ge=0)
 
 

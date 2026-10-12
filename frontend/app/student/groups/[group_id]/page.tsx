@@ -4,14 +4,21 @@ import { RouteGuard } from "../../../../components/session-provider";
 
 export default async function GroupPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ group_id: string }>;
+  searchParams: Promise<{ mode?: string; team_id?: string }>;
 }) {
   const { group_id: groupId } = await params;
+  const query = await searchParams;
   return (
     <RouteGuard role="student">
       <AppShell role="student">
-        <GroupWorkspace groupId={groupId} />
+        <GroupWorkspace
+          groupId={groupId}
+          initialMode={query.mode}
+          initialTeamId={query.team_id}
+        />
       </AppShell>
     </RouteGuard>
   );

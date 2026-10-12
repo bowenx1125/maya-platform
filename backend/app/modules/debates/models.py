@@ -119,6 +119,8 @@ class Debate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A retired Debate keeps its record but leaves the list, its page and Live.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # The Demo deliberately does not expose hard duration controls.  Keeping
     # nullable compatibility columns makes the frozen rule snapshot explicit.
     total_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -149,7 +151,7 @@ class Debate(Base):
             "uq_debates_one_running_per_course",
             "course_id",
             unique=True,
-            sqlite_where=(status == "running"),
+            sqlite_where=(status == "running") & deleted_at.is_(None),
         ),
     )
 
@@ -162,7 +164,8 @@ class DebateParticipant(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    group_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    # NULL for a teacher's personal Agent, which belongs to no group.
+    group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     agent_id: Mapped[str] = mapped_column(String(36), nullable=False)
     agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
     knowledge_snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False)

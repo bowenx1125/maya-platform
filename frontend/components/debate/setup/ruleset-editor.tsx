@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ReportMarkdown } from "../../report/report-markdown";
-import { IconCheck, IconEdit } from "../../quiet-icons";
+import { IconEdit } from "../../quiet-icons";
 import { SectionCard } from "../../ui";
 import { WorkspaceAction } from "../../workspace-actions";
 import styles from "./ruleset-editor.module.css";
@@ -67,16 +67,20 @@ export function RulesetEditor({
             ))}
           </div>
           {editing ? (
-            <button
-              type="button"
-              className={`${styles.action} ${styles.iconAction}`}
-              disabled={disabled}
-              aria-label="Save"
-              data-ui-guide="debate.rulesetSave"
-              onClick={save}
-            >
-              <IconCheck />
-            </button>
+            <>
+              <WorkspaceAction
+                name="back"
+                disabled={disabled}
+                priority={10}
+                onClick={cancel}
+              />
+              <WorkspaceAction
+                name="done"
+                disabled={disabled}
+                priority={10}
+                onClick={save}
+              />
+            </>
           ) : (
             <button
               type="button"
@@ -97,9 +101,6 @@ export function RulesetEditor({
       }
     >
       <div id="ruleset-content" className={styles.content}>
-        {editing ? (
-          <WorkspaceAction name="back" disabled={disabled} onClick={cancel} />
-        ) : null}
         {editing ? (
           <textarea
             aria-label={language === "zh" ? "中文规则" : "English rules"}

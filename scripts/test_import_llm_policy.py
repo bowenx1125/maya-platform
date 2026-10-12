@@ -126,7 +126,7 @@ def test_reviewed_acknowledgement_is_required_before_creating_db(tmp_path: Path)
     ("field", "value"),
     (
         ("provider", "openai"),
-        ("model", "qwen-max"),
+        ("model", "qwen max"),
         ("region", "us-east-1"),
         ("contract_version", "other"),
         ("endpoint", f"https://{FIXTURE_HOST}/wrong"),

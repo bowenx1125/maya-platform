@@ -71,6 +71,7 @@ from app.providers.control import (
 )
 from app.providers.llm_price_card import LLM_RESERVED_OUTPUT_TOKEN_CAP
 from app.providers.llm_privacy import LLM_ANONYMOUS_BARRAGE_FIELD_CLASS
+from app.providers.standing_consent import standing_consent_enabled
 
 from .models import (
     BarrageInsightAssignment,
@@ -135,11 +136,6 @@ LOGGER = logging.getLogger(__name__)
 
 WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’\-][A-Za-z0-9]+)*")
 REPORT_GENERATE_OPERATION = "report.generate"
-# How many times a teacher may ask for a report on one Debate, and how many
-# provider calls one of those asks may make. The scope budget is sized from
-# these so the buttons the product shows can all actually be pressed.
-REPORT_REGENERATION_CAP = 5
-REPORT_ATTEMPT_CAP = 2
 REPORT_HEADINGS = (
     "# Civilization Mutual Learning Report",
     "## Debate Overview",
@@ -2347,30 +2343,15 @@ def prepare_real_report_operation(
     if policy_row_id is None:
         raise ReportProviderError("report_policy_unavailable")
     # One request funded exactly one report for the whole life of a Debate.
-    # The product offers a repair attempt and a Regenerate button, so the first
-    # failure spent the entire allowance and every later attempt died with
-    # BudgetExceeded -- a control sized below the actions it governs is not a
-    # control, it is a dead end. Fund the attempts the product actually
-    # permits, the way the debate-turn bucket already does.
-    from app.modules.debates.models import AuditLog
-
-    cycles = len(
-        db.scalars(
-            select(AuditLog.id).where(
-                AuditLog.debate_id == context.debate.id,
-                AuditLog.event_type == "debate.rebirth",
-            )
-        ).all()
-    )
-    budget_ceiling = REPORT_REGENERATION_CAP * REPORT_ATTEMPT_CAP * (1 + cycles)
+    # Scope rows retain estimates for accounting; they no longer cap regenerations.
     raise_budget = getattr(runtime.repository, "raise_scope_budget", None)
     ensure_budget = raise_budget or runtime.repository.ensure_scope_budget
     ensure_budget(
         context.debate.id,
         ProviderScopeBudgetV1(
-            max_requests=budget_ceiling,
-            max_total_tokens=manifest.max_total_tokens * budget_ceiling,
-            max_cost_cny=manifest.max_cost_cny * budget_ceiling,
+            max_requests=1,
+            max_total_tokens=manifest.max_total_tokens,
+            max_cost_cny=manifest.max_cost_cny,
             budget_bucket=LLM_MAYA_REPORT_BUCKET,
         ),
     )
@@ -2438,15 +2419,12 @@ def _standing_report_consent(
     """Confirm one report disclosure under the operator's standing consent.
 
     The same owner decision recorded for debate turns, and the same limits: it
-    only applies while DEMO_MODE and DEMO_AUTO_CONFIRM_PROVIDER are both on,
-    every check that guards a hand confirmation still runs, and a refusal still
-    parks the report. It is standing consent, not an absence of consent.
+    only applies under the operator's standing consent, every check that guards
+    a hand confirmation still runs, and a refusal still parks the report. It is
+    standing consent, not an absence of consent.
     """
 
-    settings = get_settings()
-    if not getattr(settings, "demo_mode", False):
-        return False
-    if not getattr(settings, "demo_auto_confirm_provider", False):
+    if not standing_consent_enabled(get_settings()):
         return False
     get_manifest_id = getattr(runtime.repository, "get_export_manifest_id", None)
     get_confirmation = getattr(runtime.repository, "get_export_confirmation", None)

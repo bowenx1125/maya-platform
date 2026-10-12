@@ -11,10 +11,15 @@ from pydantic import BaseModel, Field
 
 class KnowledgeDocument(BaseModel):
     id: UUID
-    group_id: UUID
+    group_id: UUID | None
+    course_id: UUID
+    ownership_scope: Literal["group", "personal"]
+    visibility: Literal["private", "public"]
+    can_manage_visibility: bool = False
     source_filename: str
     source_owner_role: Literal["student", "teacher"]
     char_count: int = Field(ge=1)
+    authorization_epoch: int = Field(ge=0)
     content_hash: str = Field(
         min_length=64,
         max_length=64,
@@ -25,6 +30,11 @@ class KnowledgeDocument(BaseModel):
     workspace_state: Literal["active", "hidden"]
     safe_error_code: str | None = None
     created_at: datetime
+
+
+class UpdateKnowledgeDocumentVisibility(BaseModel):
+    expected_authorization_epoch: int = Field(ge=0)
+    visibility: Literal["private", "public"]
 
 
 class JobStatus(BaseModel):

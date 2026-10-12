@@ -403,7 +403,7 @@ class SqlTurnPreparer:
         db: Session,
         *,
         course_id: str,
-        group_id: str,
+        group_id: str | None,
         participants: tuple[ParticipantContext, ...],
     ) -> tuple[str, ...]:
         """Collect identity tokens from the current course/group graph only."""
@@ -537,19 +537,21 @@ class SqlTurnPreparer:
         )
         version = db.get(AgentVersion, str(participant_row.agent_version_id))
         agent = db.get(Agent, version.agent_id) if version is not None else None
-        group = db.get(Group, agent.group_id) if agent is not None else None
-        if version is None or agent is None or group is None:
+        # A teacher's personal Agent has no group; its course is its own.
+        group = db.get(Group, agent.group_id) if agent is not None and agent.group_id else None
+        if version is None or agent is None or (agent.group_id is not None and group is None):
             raise PlatformError(
                 "provider_preflight_blocked",
                 "The frozen LLM Persona owner is unavailable.",
                 503,
             )
+        owner_group_id = str(group.id) if group is not None else None
         static_options: dict[str, object] = {
             "scope_id": str(debate.id),
             "policy_hash": policy_hash,
             "policy_snapshot_id": str(policy_row_id),
-            "course_id": str(group.course_id),
-            "group_id": str(group.id),
+            "course_id": str(agent.course_id),
+            "group_id": owner_group_id,
             "agent_version_id": str(version.id),
             "repair_policy_hash": getattr(outbound_manifest, "repair_policy_hash", None) or "",
             "outbound_manifest": outbound_manifest,
@@ -558,8 +560,8 @@ class SqlTurnPreparer:
                     (
                         *self._authoritative_identity_tokens(
                             db,
-                            course_id=str(group.course_id),
-                            group_id=str(group.id),
+                            course_id=str(agent.course_id),
+                            group_id=owner_group_id,
                             participants=participants,
                         ),
                         *tuple(getattr(self.llm, "identity_tokens", ())),
@@ -713,8 +715,8 @@ class SqlTurnPreparer:
                     repository.ensure_export_manifest(
                         manifest,
                         policy_snapshot_id=str(policy_row_id),
-                        course_id=str(group.course_id),
-                        group_id=str(group.id),
+                        course_id=str(agent.course_id),
+                        group_id=owner_group_id,
                         agent_version_id=str(version.id),
                         debate_id=str(debate.id),
                         turn_id=str(turn.id),
@@ -739,8 +741,8 @@ class SqlTurnPreparer:
                         db,
                         persisted,
                         policy,
-                        course_id=str(group.course_id),
-                        group_id=str(group.id),
+                        course_id=str(agent.course_id),
+                        group_id=owner_group_id,
                         agent_version_id=str(version.id),
                     )
                 except ProductPublicationError as exc:
@@ -795,8 +797,8 @@ class SqlTurnPreparer:
                 policy_hash=policy_hash,
                 build_manifest_hash=build_manifest_hash,
                 policy_snapshot_id=str(policy_row_id),
-                course_id=str(group.course_id),
-                group_id=str(group.id),
+                course_id=str(agent.course_id),
+                group_id=owner_group_id,
                 agent_version_id=str(version.id),
                 identity_tokens=tuple(static_options["identity_tokens"]),  # type: ignore[arg-type]
                 outbound_manifest=outbound_manifest,
@@ -809,8 +811,8 @@ class SqlTurnPreparer:
                     db,
                     persisted,
                     policy,
-                    course_id=str(group.course_id),
-                    group_id=str(group.id),
+                    course_id=str(agent.course_id),
+                    group_id=owner_group_id,
                     agent_version_id=str(version.id),
                 )
             except ProductPublicationError as exc:
@@ -1593,9 +1595,10 @@ class SqlTurnPreparer:
         # hash is not required and is not what this query discloses.
         agent_md_hash = markdown_hash(version.agent_md)
         agent = db.get(Agent, version.agent_id)
-        group = db.get(Group, agent.group_id) if agent is not None else None
-        if agent is None or group is None:
+        group = db.get(Group, agent.group_id) if agent is not None and agent.group_id else None
+        if agent is None or (agent.group_id is not None and group is None):
             raise ValueError("the frozen query owner is unavailable")
+        query_group_id = group.id if group is not None else None
         subqueries = build_turn_subqueries(context)
         try:
             query_plan = ensure_real_query_export_manifest(
@@ -1603,8 +1606,8 @@ class SqlTurnPreparer:
                 db=db,
                 scope_id=str(debate.id),
                 turn_id=str(turn.id),
-                course_id=group.course_id,
-                group_id=group.id,
+                course_id=agent.course_id,
+                group_id=query_group_id,
                 agent_version_id=version.id,
                 snapshot_id=snapshot.id,
                 identity=identity,
@@ -1652,13 +1655,17 @@ class SqlTurnPreparer:
                 attempt_no = latest.attempt_no + 1
             else:
                 attempt_no = latest.attempt_no
-        query_request_cap = _query_request_cap(
-            self.settings,
-            debate,
-            participant_count=len(participants),
-        )
         try:
             total_tokens = sum(count_tokens(text) for text in query_plan.query_texts)
+            repository.raise_scope_budget(
+                str(debate.id),
+                ProviderScopeBudgetV1(
+                    max_requests=2_147_483_647,
+                    max_total_tokens=9_223_372_036_854_775_807,
+                    max_cost_cny=1.0e18,
+                    budget_bucket=EMBEDDING_QUERY_BUCKET,
+                ),
+            )
             pending_control = SqlAlchemyQueryControlAdapter(
                 db,
                 scope_id=str(debate.id),
@@ -1670,7 +1677,7 @@ class SqlTurnPreparer:
                 query_hashes=query_plan.query_hashes,
                 attempt_no=attempt_no,
                 logical_item_id=logical_item_id,
-                max_requests=query_request_cap,
+                max_requests=2_147_483_647,
                 max_total_tokens=9_223_372_036_854_775_807,
                 max_cost_cny=1.0e18,
                 repository=ProviderRepository(db, require_export_confirmation=False),
@@ -1692,8 +1699,8 @@ class SqlTurnPreparer:
                 db,
                 query_plan.manifest,
                 policy,
-                course_id=group.course_id,
-                group_id=group.id,
+                course_id=agent.course_id,
+                group_id=query_group_id,
                 agent_version_id=version.id,
             )
         except ProductPublicationError as error:
@@ -1735,8 +1742,8 @@ class SqlTurnPreparer:
                     db,
                     query_plan.manifest,
                     policy,
-                    course_id=group.course_id,
-                    group_id=group.id,
+                    course_id=agent.course_id,
+                    group_id=query_group_id,
                     agent_version_id=version.id,
                 )
             except ProductPublicationError as confirmed_error:
@@ -1772,22 +1779,6 @@ class SqlTurnPreparer:
                 "The real query Provider resource changed.",
                 503,
             )
-        try:
-            repository.raise_scope_budget(
-                str(debate.id),
-                ProviderScopeBudgetV1(
-                    max_requests=query_request_cap,
-                    max_total_tokens=9_223_372_036_854_775_807,
-                    max_cost_cny=1.0e18,
-                    budget_bucket=EMBEDDING_QUERY_BUCKET,
-                ),
-            )
-        except Exception as error:
-            raise PlatformError(
-                "provider_preflight_blocked",
-                "The exact real query budget is unavailable.",
-                503,
-            ) from error
         control = SqlAlchemyQueryControlAdapter(
             db,
             scope_id=str(debate.id),
@@ -1800,7 +1791,7 @@ class SqlTurnPreparer:
             attempt_no=attempt_no,
             logical_item_id=logical_item_id,
             confirmation_revision=confirmation.confirmation_revision,
-            max_requests=query_request_cap,
+            max_requests=2_147_483_647,
             max_total_tokens=9_223_372_036_854_775_807,
             max_cost_cny=1.0e18,
         )

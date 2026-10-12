@@ -146,7 +146,6 @@ def test_request_is_exact_two_message_canonical_and_hash_excludes_secret() -> No
         "stream",
         "temperature",
         "top_p",
-        "max_completion_tokens",
         "n",
         "response_format",
     }

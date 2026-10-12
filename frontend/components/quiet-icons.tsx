@@ -1,5 +1,22 @@
 /** Small outline icons for quiet workspace actions. */
 
+export function IconPlay({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m8 4 12 8-12 8Z" />
+    </svg>
+  );
+}
+
 export function IconEdit({ size = 16 }: { size?: number }) {
   return (
     <svg
@@ -15,6 +32,25 @@ export function IconEdit({ size = 16 }: { size?: number }) {
     >
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+export function IconEye({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
     </svg>
   );
 }
@@ -74,6 +110,26 @@ export function IconCheck({ size = 16 }: { size?: number }) {
   );
 }
 
+export function IconUpload({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 16V5" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M5 19h14" />
+    </svg>
+  );
+}
+
 export function IconArrowRight({ size = 16 }: { size?: number }) {
   return (
     <svg
@@ -112,3 +168,31 @@ export function IconRefresh({ size = 16 }: { size?: number }) {
   );
 }
 
+/** Outline when free, filled once pinned. */
+export function IconPin({
+  size = 16,
+  filled = false,
+}: {
+  size?: number;
+  filled?: boolean;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 17v5" />
+      <path
+        fill={filled ? "currentColor" : "none"}
+        d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2v.8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z"
+      />
+    </svg>
+  );
+}

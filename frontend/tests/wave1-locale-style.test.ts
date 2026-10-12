@@ -2,15 +2,35 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { statusLabel, t } from "../lib/i18n";
+import { localizeError, statusLabel, t } from "../lib/i18n";
 
 describe("Wave 1A locale and V2 style boundary", () => {
+  it("shows the actual authentication recovery delay in the existing error text", () => {
+    const error = {
+      code: "auth_rate_limited",
+      status: 429,
+      details: { retry_after_seconds: 37 },
+    };
+    expect(localizeError(error, "zh")).toBe(
+      "登录或注册尝试过于频繁，请在 37 秒后重试。",
+    );
+    expect(localizeError(error, "en")).toContain("37 seconds");
+    const malformed = Object.assign(new Error("Please try again later."), {
+      ...error,
+      details: { retry_after_seconds: "not-a-delay" },
+    });
+    expect(localizeError(malformed, "zh")).toBe("Please try again later.");
+  });
+
   it("keeps English-first copy translatable without changing business state", () => {
     expect(t("publish", "en")).toBe("Publish");
     expect(t("publish", "zh")).toBe("发布");
     expect(statusLabel("stale_revision", "en")).toBe("stale revision");
     expect(statusLabel("stale_revision", "zh")).toBe("stale revision");
     expect(statusLabel("published", "zh")).toBe("已发布");
+    expect(
+      localizeError({ code: "agent_name_conflict", status: 409 }, "zh"),
+    ).toBe("已有同名Agent，请换名字或先删除重复Agent。");
   });
 
   it("keeps workspace system typography scoped and removes visible page-title styles", () => {

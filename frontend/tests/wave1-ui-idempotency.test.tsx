@@ -27,7 +27,6 @@ vi.mock("../components/session-provider", () => ({
 
 import { AgentOverview, AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
-import { KnowledgeLibrary } from "../components/knowledge";
 import { CreateAgentForm } from "../components/student-workspace";
 
 afterEach(() => {
@@ -42,9 +41,13 @@ function createdAgent(): AgentDetail {
   return {
     id: "agent-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
     name: "First Agent",
     description: "",
     metadata_revision: 0,
+    can_edit: true,
     status: "active",
     current_draft_version_id: "version-id",
     current_published_version_id: null,
@@ -56,8 +59,16 @@ function failedDocument(): KnowledgeDocument {
   return {
     id: "document-id",
     group_id: "group-id",
+    course_id: "course-id",
+    ownership_scope: "group",
+    visibility: "public",
+    can_manage_visibility: false,
+    authorization_epoch: 0,
     source_filename: "notes.md",
     source_owner_role: "student",
+    content_hash: "a".repeat(64),
+    created_at: "2026-10-04T00:00:00Z",
+    index_revision: 0,
     char_count: 128,
     workspace_state: "active",
     index_status: "failed",
@@ -103,19 +114,43 @@ describe("Wave 1A UI idempotency wiring", () => {
       if (keys.length < 3) throw new TypeError("connection reset");
       return createdAgent();
     });
-    useSessionMock.mockReturnValue({ api: { createAgent } });
+    useSessionMock.mockReturnValue({
+      api: {
+        createAgent,
+        group: vi.fn().mockResolvedValue({
+          id: "group-id",
+          course_id: "course-id",
+          name: "Group",
+        }),
+        knowledge: vi.fn().mockResolvedValue([]),
+        knowledgeSets: vi.fn().mockResolvedValue([]),
+        avatarTemplates: vi.fn().mockResolvedValue([]),
+        voiceProfiles: vi.fn().mockResolvedValue([]),
+        updateDraft: vi.fn(async () => draftVersion()),
+        publish: vi.fn(async () => draftVersion("published")),
+      },
+      user: { groups: [] },
+    });
 
     render(
       <AppShell role="student">
         <CreateAgentForm groupId="group-id" />
       </AppShell>,
     );
-    const name = screen.getByLabelText("Agent name");
+    const name = await screen.findByLabelText("Name");
     fireEvent.change(name, { target: { value: "First Agent" } });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+      { target: { value: "# First Agent" } },
+    );
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() => expect(done).not.toHaveProperty("disabled", true));
+    fireEvent.click(done);
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole("alert").textContent).toContain("Request failed");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Maya could not be reached. Check your connection and try again.",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(2));
@@ -125,33 +160,9 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(createAgent).toHaveBeenCalledTimes(3));
     expect(keys[2]).not.toBe(keys[1]);
-    expect(router.push).toHaveBeenCalledWith(
-      "/student/agent-versions/version-id/edit",
-    );
-  });
-
-  it("reuses a document reindex key when the first request is ambiguous", async () => {
-    const keys: string[] = [];
-    const document = failedDocument();
-    const knowledge = vi.fn().mockResolvedValue([document]);
-    const reindex = vi.fn(async (...args: unknown[]) => {
-      const options = args[1] as { idempotency?: { key: string } } | undefined;
-      keys.push(options?.idempotency?.key ?? "missing");
-      if (keys.length === 1) throw new TypeError("request timed out");
-      return {};
-    });
-    useSessionMock.mockReturnValue({ api: { knowledge, reindex } });
-
-    render(<KnowledgeLibrary groupId="group-id" />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Reindex" })).toBeTruthy(),
+      expect(router.replace).toHaveBeenCalledWith("/student/groups/group-id"),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Reindex" }));
-
-    await waitFor(() => expect(reindex).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(reindex).toHaveBeenCalledTimes(2));
-    expect(keys[1]).toBe(keys[0]);
   });
 
   it("reuses a publish key when the first request is ambiguous", async () => {
@@ -162,6 +173,17 @@ describe("Wave 1A UI idempotency wiring", () => {
       version: vi.fn().mockResolvedValue(version),
       agent: vi.fn().mockResolvedValue(createdAgent()),
       knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: "agent-id",
+        agent_metadata_revision: 0,
+        sets: [],
+      }),
+      replaceAgentKnowledgeSets: vi.fn(async (_id, body) => ({
+        agent_id: "agent-id",
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      })),
       avatarTemplates: vi.fn().mockResolvedValue([]),
       voiceProfiles: vi.fn().mockResolvedValue([]),
       ragPreview: vi.fn().mockResolvedValue({
@@ -192,7 +214,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     await waitFor(() => {
       expect(api.publish).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+        "Maya could not be reached. Check your connection and try again.",
       );
     });
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -200,11 +222,22 @@ describe("Wave 1A UI idempotency wiring", () => {
     expect(keys[1]).toBe(keys[0]);
   });
 
-  it("links to teacher-only version approvals without consuming a manifest hash", async () => {
+  it("shows provider errors without an extra teacher-approval link", async () => {
     const api = {
       version: vi.fn().mockResolvedValue(draftVersion()),
       agent: vi.fn().mockResolvedValue(createdAgent()),
       knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: "agent-id",
+        agent_metadata_revision: 0,
+        sets: [],
+      }),
+      replaceAgentKnowledgeSets: vi.fn(async (_id, body) => ({
+        agent_id: "agent-id",
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      })),
       avatarTemplates: vi.fn().mockResolvedValue([]),
       voiceProfiles: vi.fn().mockResolvedValue([]),
       ragPreview: vi.fn().mockResolvedValue({
@@ -230,15 +263,16 @@ describe("Wave 1A UI idempotency wiring", () => {
     await screen.findByRole("button", { name: "Done" });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
-    const link = await screen.findByRole("link", {
-      name: "Review",
-    });
-    expect(link.getAttribute("href")).toBe(
-      "/teacher/provider-approvals/agent-versions/version-id",
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Teacher confirmation required.",
     );
-    expect(link.textContent).not.toMatch(
-      /manifest|qwen|workspace|https?:\/\//i,
-    );
+    expect(api.publish).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
+    expect(
+      screen.queryByRole("link", {
+        name: /provider approvals/i,
+      }),
+    ).toBeNull();
   });
 
   it("replays safe delete through the action-specific retry path", async () => {
@@ -269,7 +303,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+        "Maya could not be reached. Check your connection and try again.",
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -310,34 +344,51 @@ describe("Wave 1A UI idempotency wiring", () => {
       return draftVersion();
     });
     const api = {
+      version: vi.fn().mockResolvedValue(version),
       agent: vi.fn().mockResolvedValue(agent),
       versions: vi.fn().mockResolvedValue([version]),
+      knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        document_count: 0,
+        total_char_count: 0,
+        index_status: "ready",
+        combined_markdown: "",
+      }),
+      updateDraft: vi.fn(async () => draftVersion()),
+      publish: vi.fn(async () => draftVersion("published")),
       nextVersion,
     };
-    useSessionMock.mockReturnValue({ api });
+    useSessionMock.mockReturnValue({ api, user: { groups: [] } });
 
     render(
       <AppShell role="student">
-        <AgentOverview agentId="agent-id" />
+        <AgentWorkbench versionId="version-id" publishOnDone />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const editor = await screen.findByRole("textbox", {
+      name: "AGENT.md editor",
+    });
+    expect(nextVersion).not.toHaveBeenCalled();
+    fireEvent.change(editor, { target: { value: "# Updated agent" } });
+    const done = screen.getByRole("button", { name: "Done" });
+    await waitFor(() => expect(done).not.toHaveProperty("disabled", true));
+    fireEvent.click(done);
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
+        "Maya could not be reached. Check your connection and try again.",
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(nextVersion).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
-    expect(router.push).toHaveBeenCalledWith(
-      "/student/agent-versions/version-id/edit",
-    );
   });
 
   it("replays knowledge upload through the action-specific retry path", async () => {
@@ -355,6 +406,17 @@ describe("Wave 1A UI idempotency wiring", () => {
       version: vi.fn().mockResolvedValue(version),
       agent: vi.fn().mockResolvedValue(agent),
       knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      replaceAgentKnowledgeSets: vi.fn(async (_id, body) => ({
+        agent_id: agent.id,
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      })),
       avatarTemplates: vi.fn().mockResolvedValue([]),
       voiceProfiles: vi.fn().mockResolvedValue([]),
       ragPreview: vi.fn().mockResolvedValue({
@@ -372,77 +434,19 @@ describe("Wave 1A UI idempotency wiring", () => {
         <AgentWorkbench versionId="version-id" />
       </AppShell>,
     );
-    await waitFor(() =>
-      expect(screen.getAllByLabelText("Upload")).toHaveLength(2),
-    );
-    const fileInput = screen.getAllByLabelText("Upload")[1];
-    fireEvent.change(fileInput, {
-      target: { files: [new File(["# one"], "one.md")] },
+    // RAG is uploaded inside its Agent; an uncertain upload retries with
+    // the same key rather than adding the file twice.
+    const input = await screen.findByLabelText("Upload RAG");
+    expect(screen.queryByRole("link", { name: "New" })).toBeNull();
+    const file = new File(["# Notes\n\nA source."], "notes.md", {
+      type: "text/markdown",
     });
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(1));
+    expect(uploadKnowledge.mock.calls[0][0]).toBe("group-id");
+    expect(uploadKnowledge.mock.calls[0][1]).toBe("version-id");
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
     await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
-  });
-
-  it("replays hide without asking for confirmation a second time", async () => {
-    const keys: string[] = [];
-    const document = failedDocument();
-    const hidden = { ...document, workspace_state: "hidden" };
-    const knowledge = vi.fn().mockResolvedValue([document]);
-    const hideKnowledge = vi.fn(async (...args: unknown[]) => {
-      const options = args[1] as { idempotency?: { key: string } } | undefined;
-      keys.push(options?.idempotency?.key ?? "missing");
-      if (keys.length === 1) throw new TypeError("connection reset");
-      return hidden;
-    });
-    const api = { knowledge, hideKnowledge };
-    useSessionMock.mockReturnValue({ api });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    render(<KnowledgeLibrary groupId="group-id" />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "connection reset",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(hideKnowledge).toHaveBeenCalledTimes(2));
-    expect(keys[1]).toBe(keys[0]);
-    expect(window.confirm).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not replay reindex after a successful mutation's refresh fails", async () => {
-    const document = failedDocument();
-    const knowledge = vi
-      .fn()
-      .mockResolvedValueOnce([document])
-      .mockRejectedValueOnce(new TypeError("refresh unavailable"))
-      .mockResolvedValueOnce([document]);
-    const reindex = vi.fn().mockResolvedValue({});
-    const api = { knowledge, reindex };
-    useSessionMock.mockReturnValue({ api });
-
-    render(<KnowledgeLibrary groupId="group-id" />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Reindex" })).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Reindex" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "refresh unavailable",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(knowledge).toHaveBeenCalledTimes(3));
-    expect(reindex).toHaveBeenCalledTimes(1);
   });
 });

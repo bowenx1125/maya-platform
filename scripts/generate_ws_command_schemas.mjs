@@ -166,7 +166,8 @@ const resultBranches = [
       command_id: uuid,
       controller_epoch: uuid,
       turn_id: uuid,
-      media_url: privateMediaUrl,
+      text_only: { type: "boolean" },
+      media_url: { anyOf: [privateMediaUrl, { type: "null" }] },
       expires_at: isoTime,
     },
     ["command_id", "controller_epoch", "turn_id", "media_url", "expires_at"],
@@ -207,6 +208,16 @@ const resultBranches = [
     },
     ["controller_epoch", "reason"],
   ),
+];
+
+resultBranches.find(
+  (branch) => branch.properties.message_type.const === "media.prepared",
+).allOf = [
+  {
+    if: { properties: { text_only: { const: true } }, required: ["text_only"] },
+    then: { properties: { media_url: { type: "null" } } },
+    else: { properties: { media_url: privateMediaUrl } },
+  },
 ];
 
 const resultsSchema = {

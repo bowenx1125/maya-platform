@@ -703,7 +703,6 @@ export function BetaDebateStage({
   // stable, so the socket handler below needs no extra dependency.
   const beta = betaLabels ?? defaultBetaStageLabels;
   const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
-  const [barragePaused, setBarragePaused] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const transcriptRef = useRef<HTMLElement>(null);
   const transcriptToggleRef = useRef<HTMLButtonElement>(null);
@@ -1428,6 +1427,15 @@ export function BetaDebateStage({
           settlePendingReplayAcquire();
           return;
         case "media.prepared": {
+          if (message.text_only === true && message.media_url === null) {
+            if (
+              message.controller_epoch !== controllerEpochRef.current ||
+              message.turn_id !== playbackRef.current.current_turn_id
+            )
+              return;
+            setFailure(null);
+            return;
+          }
           if (
             !message.controller_epoch ||
             !message.turn_id ||
@@ -3627,7 +3635,7 @@ export function BetaDebateStage({
             <BarrageLane
               bullets={barrages}
               label={beta.barrageLane}
-              paused={barragePaused}
+              paused={false}
             />
             {joinUrl && joinCodeVisible ? (
               <div
@@ -3641,16 +3649,6 @@ export function BetaDebateStage({
                   {beta.barrageCount(barrages.length)}
                 </span>
               </div>
-            ) : null}
-            {!readOnly && joinUrl ? (
-              <button
-                className={stage3d.barrageToggle}
-                data-paused={barragePaused ? "true" : "false"}
-                onClick={() => setBarragePaused((current) => !current)}
-                type="button"
-              >
-                {barragePaused ? beta.barrageResume : beta.barragePause}
-              </button>
             ) : null}
           </>
         }

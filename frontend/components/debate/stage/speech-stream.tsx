@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   EvidenceTraceInspector,
@@ -9,6 +9,8 @@ import {
   type SegmentRagSource,
 } from "../../evidence";
 import defaultStyles from "./debate-stage.module.css";
+import replyStyles from "./speech-stream.module.css";
+import { useLocale } from "../../locale";
 import type { PlaybackStageLabels } from "./types";
 
 /** One published turn, in the shape the stream needs to render it. */
@@ -121,6 +123,9 @@ function StreamItem({
   animate: boolean;
   revealProgress: number | null;
 }) {
+  const { locale } = useLocale();
+  const replyLabel =
+    locale === "zh" ? "回应课堂留言" : "In reply to a classroom message";
   const segments = turn.segment_turn?.segments ?? [];
   const hasStructuredRag =
     segments.length > 0 || (turn.source_details?.length ?? 0) > 0;
@@ -190,12 +195,18 @@ function StreamItem({
               .slice(0, Math.max(0, visibleSegmentChars - preceding))
               .join("");
             return visible ? (
-              <p
-                className={styles.streamSpeech}
-                key={`${turn.id}-segment-${index}`}
-              >
-                {visible}
-              </p>
+              <Fragment key={`${turn.id}-segment-${index}`}>
+                {segment.reply_to && segment.reply_text ? (
+                  <blockquote
+                    className={replyStyles.replyQuote}
+                    aria-label={replyLabel}
+                  >
+                    <span className={replyStyles.replyLabel}>{replyLabel}</span>
+                    <p>{segment.reply_text}</p>
+                  </blockquote>
+                ) : null}
+                <p className={styles.streamSpeech}>{visible}</p>
+              </Fragment>
             ) : null;
           })}
         </div>

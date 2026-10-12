@@ -8,9 +8,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from app.core.config import Settings
 from app.core.db import Database
-from app.core.models import Agent, AgentVersion, KnowledgeChunk, KnowledgeSnapshot
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeSnapshot,
+)
 from app.main import create_app
 from app.modules.avatars import DEFAULT_AVATAR_CONFIG, default_config_for
 from app.modules.demo_baseline.service import (
@@ -29,6 +36,7 @@ from app.modules.demo_baseline.service import (
 )
 from app.seed import GROUP_DEMO_ID
 from fastapi.testclient import TestClient
+from pwdlib import PasswordHash
 from sqlalchemy import func, select
 
 
@@ -205,18 +213,40 @@ def test_dirty_counts_exclude_only_system_baseline_agent(
             assert dirty_counts(db) == (1, 0, 0)
 
 
-def test_non_test_startup_rebuilds_baseline_in_an_empty_runtime(
+@pytest.mark.parametrize("demo_mode", [True, False])
+def test_non_test_startup_builds_the_philosophers_only_for_the_demo(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    demo_mode: bool,
 ) -> None:
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     monkeypatch.delenv("MAYA_TESTING", raising=False)
+    # Demo sign-in needs an identity catalog; one teacher is enough here.
+    credentials = tmp_path / "demo_users.yaml"
+    credentials.write_text(
+        yaml.safe_dump(
+            {
+                "users": [
+                    {
+                        "user_id": "08b9de2d-bb75-5c71-a64b-231b48f9eb25",
+                        "username": "maya",
+                        "password_hash": PasswordHash.recommended().hash("demo-password"),
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    credentials.chmod(0o600)
     settings = Settings(
         maya_env="development",
         session_secret="s" * 32,
-        demo_mode=False,
+        demo_mode=demo_mode,
+        allow_legacy_demo_users=True,
+        demo_users_file=credentials,
         database_url=f"sqlite:///{tmp_path / 'maya.sqlite3'}",
         data_root=tmp_path,
+        demo_accounts_file=tmp_path / "missing-accounts.private.md",
         llm_provider="mock",
         embedding_provider="mock",
         tts_provider="mock",
@@ -227,5 +257,33 @@ def test_non_test_startup_rebuilds_baseline_in_an_empty_runtime(
     with TestClient(app) as client:
         assert client.get("/health/ready").status_code == 200
         with database.session() as db:
+            # A classroom starts without Laozi, Plato and Socrates.
+            assert baseline_is_usable(db) is demo_mode
+            assert (db.get(Agent, BASELINE_AGENT_ID) is not None) is demo_mode
+
+
+def test_demo_startup_revives_philosophers_a_data_reset_soft_deleted(
+    app_factory: Any,
+) -> None:
+    app, database, settings = _seeded_database(app_factory)
+    with TestClient(app):
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
+        with database.session() as db:
+            for spec in BASELINE_SPECS:
+                agent = db.get(Agent, spec.agent_id)
+                assert agent is not None
+                agent.deleted_at = datetime.now(UTC)
+                agent.status = "archived"
+                document = db.get(KnowledgeDocument, spec.document_id)
+                assert document is not None
+                document.workspace_state = "hidden"
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
             assert baseline_is_usable(db)
-            assert db.get(Agent, BASELINE_AGENT_ID) is not None
+            for spec in BASELINE_SPECS:
+                agent = db.get(Agent, spec.agent_id)
+                assert agent is not None and agent.deleted_at is None
+                assert agent.status == "active"
+                document = db.get(KnowledgeDocument, spec.document_id)
+                assert document is not None and document.workspace_state == "active"

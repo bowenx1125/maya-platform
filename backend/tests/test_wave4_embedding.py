@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Mapping
 from dataclasses import replace
 
 import pytest
+from app.modules.knowledge.markdown import MAX_CHUNK_UTF8_BYTES
 from app.modules.knowledge.providers import (
+    MAX_BATCH_TOKENS,
     REAL_EMBEDDING_DIMENSION,
     REAL_EMBEDDING_MODEL,
     REAL_EMBEDDING_POLICY_VERSION,
@@ -15,6 +18,7 @@ from app.modules.knowledge.providers import (
     EmbeddingBatchV1,
     EmbeddingHTTPRejected,
     EmbeddingModelError,
+    EmbeddingPlanError,
     EmbeddingResponseError,
     EmbeddingShapeError,
     InMemoryEmbeddingLedger,
@@ -166,6 +170,93 @@ def test_long_unbroken_input_is_planned_without_a_per_item_cap() -> None:
     plan = plan_embedding_batches(build)
     assert [item.token_count for batch in plan.batches for item in batch.items] == [8_001]
     assert provider.call_count == 0
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_tokens"),
+    (
+        ("x" * 100_001, 100_001),
+        ("界" * 100_001, 300_003),
+        (("w" * 100 + " ") * 400, 40_400),
+        ("prefix" + (" " * 30_000) + "suffix", 15_012),
+    ),
+    ids=(
+        "unbroken-ascii",
+        "unbroken-chinese",
+        "many-long-space-separated-words",
+        "large-whitespace-gap",
+    ),
+)
+def test_oversized_source_splits_losslessly_into_supplier_safe_chunks(
+    source: str,
+    expected_tokens: int,
+) -> None:
+    build = _build(source)
+    document = build.documents[0]
+    chunks = document.chunks
+
+    assert build.chunking_version == "markdown-heading-paragraph-v2"
+    assert len(chunks) > 1
+    assert document.content_sha256 == hashlib.sha256(source.encode("utf-8")).hexdigest()
+    previous_end = 0
+    reconstructed: list[str] = []
+    for index, chunk in enumerate(chunks):
+        assert chunk.chunk_index == index
+        assert chunk.document_id == document.document_id
+        assert chunk.document_order == document.order_index
+        assert previous_end <= chunk.start_offset
+        whitespace_gap = document.normalized_text[previous_end : chunk.start_offset]
+        assert not whitespace_gap.strip()
+        reconstructed.extend((whitespace_gap, chunk.text))
+        assert chunk.end_offset - chunk.start_offset == len(chunk.text)
+        assert document.normalized_text[chunk.start_offset : chunk.end_offset] == chunk.text
+        assert chunk.text_sha256 == hashlib.sha256(chunk.text.encode("utf-8")).hexdigest()
+        assert len(chunk.text.encode("utf-8")) <= MAX_CHUNK_UTF8_BYTES
+        previous_end = chunk.end_offset
+    trailing_whitespace = document.normalized_text[previous_end:]
+    assert not trailing_whitespace.strip()
+    reconstructed.append(trailing_whitespace)
+    assert "".join(reconstructed) == source
+
+    plan = plan_embedding_batches(build)
+    assert plan.total_tokens == expected_tokens
+    assert plan.chunk_ids == tuple(chunk.chunk_id for chunk in chunks)
+    assert all(len(batch.items) <= 10 for batch in plan.batches)
+    assert all(batch.total_tokens <= MAX_BATCH_TOKENS for batch in plan.batches)
+
+
+def test_planner_refuses_a_single_estimated_item_over_supplier_batch_cap() -> None:
+    build = _build()
+    original_chunk_ids = tuple(chunk.chunk_id for chunk in build.chunks)
+    tokenizer = PinnedTokenizerV1(
+        "oversized-item-test",
+        "b" * 64,
+        lambda _text: MAX_BATCH_TOKENS + 1,
+    )
+    with pytest.raises(EmbeddingPlanError) as caught:
+        plan_embedding_batches(build, tokenizer=tokenizer)
+    assert caught.value.code == "embedding_item_tokens_exceeded"
+    assert tuple(chunk.chunk_id for chunk in build.chunks) == original_chunk_ids
+
+
+def test_adapter_refuses_oversized_batch_before_transport() -> None:
+    batch = plan_embedding_batches(_build(dimension=REAL_EMBEDDING_DIMENSION)).batches[0]
+    oversized_item = replace(batch.items[0], token_count=MAX_BATCH_TOKENS + 1)
+    oversized_batch = replace(
+        batch,
+        items=(oversized_item,),
+        total_tokens=MAX_BATCH_TOKENS + 1,
+    )
+    transport = _FakeTransport({})
+    adapter = DashScopeEmbeddingAdapter(
+        DashScopeEmbeddingConfig(workspace_id="workspace"), transport
+    )
+
+    with pytest.raises(EmbeddingPlanError) as caught:
+        adapter.embed_batch(oversized_batch)
+
+    assert caught.value.code == "embedding_batch_tokens_exceeded"
+    assert transport.calls == []
 
 
 def test_deterministic_greedy_packing_preserves_document_chunk_order() -> None:

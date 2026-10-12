@@ -104,7 +104,11 @@ def settings_view(settings: Settings, row: ProviderPreferences | None) -> Provid
                     if getattr(settings, f"{key}_provider") == "dashscope"
                     else "mock",
                     "switchable": key not in {"tts", "voice"},
-                    "status": "deferred"
+                    "status": (
+                        "unchecked"
+                        if getattr(settings, f"{key}_provider") == "dashscope"
+                        else "deferred"
+                    )
                     if key in {"tts", "voice"}
                     else checks.get(key, {}).get("status", "unchecked"),
                     "checked_at": checks.get(key, {}).get("checked_at"),

@@ -8,6 +8,7 @@ import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
 import { ErrorNotice, SectionCard, StatusBadge } from "../../ui";
+import { IconRefresh } from "../../quiet-icons";
 import styles from "./debate-preview.module.css";
 
 export type DebatePreviewProgress = {
@@ -90,7 +91,6 @@ export function DebatePreview({
     <div className={styles.page} data-testid="debate-preview">
       <div className={styles.header}>
         <div>
-          <div className="eyebrow">Preview</div>
           <h1>{detail.topic}</h1>
         </div>
         <div className={styles.headerActions}>
@@ -225,12 +225,14 @@ function PreviewTurnCard({
           </span>
           {onRetry && !textFallbackReady ? (
             <button
-              className="secondary-action"
+              className={`icon-action ${styles.retryButton}`}
+              aria-label={retrying ? "Retrying…" : "Retry turn"}
+              aria-busy={retrying}
               disabled={retryBusy}
               onClick={() => onRetry(turn.id)}
               type="button"
             >
-              {retrying ? "Retrying…" : "Retry turn"}
+              <IconRefresh />
             </button>
           ) : null}
         </div>
@@ -300,14 +302,12 @@ function deriveProgress(
   const expected = turns.length;
   const prepared = turns.filter(
     (turn) =>
-      turn.generation_status !== "pending" && Boolean(turn.speech.trim()),
+      ["final_ready", "ready", "completed"].includes(turn.generation_status) &&
+      Boolean(turn.speech.trim()),
   ).length;
   return {
     prepared_turns: prepared,
     expected_turns: expected,
-    ready:
-      expected > 0 &&
-      prepared === expected &&
-      turns.every((turn) => turn.audio_ready),
+    ready: expected > 0 && prepared === expected,
   };
 }

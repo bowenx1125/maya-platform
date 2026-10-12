@@ -7,13 +7,16 @@ import { StatusBadge } from "../ui";
 export function DebateStatus({ debate }: { debate: DebateSummary }) {
   const t = useT();
   if (debate.stall && ["draft", "running"].includes(debate.status)) {
+    const reason = t("debateStalledReason")
+      .replace("{round}", String(debate.stall.round_no))
+      .replace("{code}", debate.stall.safe_error_code);
     return (
       <span
         className="status-badge status-bad"
         data-prewarm="stalled"
-        title={t("debateStalledReason")
-          .replace("{round}", String(debate.stall.round_no))
-          .replace("{code}", debate.stall.safe_error_code)}
+        data-ui-guide="debate.stalled"
+        data-ui-guide-text={reason}
+        tabIndex={0}
       >
         <span aria-hidden="true" />
         {t("debateStalled")}

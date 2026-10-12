@@ -17,6 +17,9 @@ from app.modules.auth.service import AuthContext, get_auth_context
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.playback.router import _websocket_origin_allowed, get_playback_service
 from app.modules.debates.playback.service import PlaybackService
+from app.modules.debates.round_count import debate_round_count, uses_segment_protocol
+from app.modules.interactions.models import ClassroomInteractionWindow
+from app.modules.interactions.tokens import issue_token
 
 from .access import course_member
 from .models import LivePresence
@@ -41,7 +44,7 @@ def heartbeat(
     service: PlaybackService = Depends(get_playback_service),
 ) -> LiveSummary | None:
     debate = db.get(Debate, str(debate_id))
-    if debate is None:
+    if debate is None or debate.deleted_at is not None:
         raise not_found()
     course_member(db, context, debate.course_id, teacher=True)
     lease_id = str(payload.lease_id)
@@ -102,7 +105,7 @@ def live_status(
     if presence is None or presence.expires_at.replace(tzinfo=UTC) <= datetime.now(UTC):
         return None
     debate = db.get(Debate, presence.debate_id)
-    if debate is None or debate.status in {"stopped", "failed"}:
+    if debate is None or debate.deleted_at is not None or debate.status in {"stopped", "failed"}:
         return None
     if service._state(db, debate).status == "stopped":
         return None
@@ -113,7 +116,7 @@ def live_snapshot(
     db: Session, service: PlaybackService, debate_id: str, context: AuthContext
 ) -> LiveSnapshot:
     debate = db.get(Debate, debate_id)
-    if debate is None:
+    if debate is None or debate.deleted_at is not None:
         raise not_found()
     course_member(db, context, debate.course_id)
     presence = db.get(LivePresence, debate.course_id)
@@ -149,7 +152,31 @@ def live_snapshot(
         if active
         else []
     )
+    interaction_url = None
+    if (
+        active
+        and state.mode == "live"
+        and debate.final_input_json is None
+        and service.settings is not None
+    ):
+        window = db.scalar(
+            select(ClassroomInteractionWindow).where(
+                ClassroomInteractionWindow.debate_id == debate_id,
+                ClassroomInteractionWindow.course_id == debate.course_id,
+                ClassroomInteractionWindow.status == "open",
+            )
+        )
+        current = db.get(DebateTurn, state.current_turn_id) if state.current_turn_id else None
+        collecting = not uses_segment_protocol(debate) or (
+            debate.status == "running"
+            and current is not None
+            and current.round_no < debate_round_count(debate)
+        )
+        if window is not None and window.token_nonce is not None and collecting:
+            token = issue_token(window.id, bytes(window.token_nonce), service.settings.secret_bytes)
+            interaction_url = f"/classroom/{token}"
     return LiveSnapshot(
+        interaction_url=interaction_url,
         active=active,
         debate_id=UUID(debate_id),
         sequence=debate.last_sequence,

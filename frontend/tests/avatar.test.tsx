@@ -21,6 +21,7 @@ import {
 } from "../components/avatar";
 
 const rendererInstances: Array<{
+  canvas: HTMLCanvasElement;
   dispose: ReturnType<typeof vi.fn>;
   setAsset: ReturnType<typeof vi.fn>;
   finishLoad: () => void;
@@ -29,14 +30,17 @@ const rendererInstances: Array<{
 
 vi.mock("../components/avatar/avatar-renderer", () => ({
   AvatarRenderer: class MockAvatarRenderer {
+    readonly canvas: HTMLCanvasElement;
     readonly dispose = vi.fn();
     readonly setAsset = vi.fn();
 
     constructor(options: {
+      canvas: HTMLCanvasElement;
       assetUrl?: string;
       onReady?: () => void;
       onError?: (error: Error) => void;
     }) {
+      this.canvas = options.canvas;
       this.finishLoad = () => options.onReady?.();
       this.failLoad = (error) => options.onError?.(error);
       rendererInstances.push(this);
@@ -353,5 +357,32 @@ describe("M07 avatar canvas failure and cleanup boundary", () => {
     const instance = rendererInstances[0];
     view.unmount();
     expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the next agent on a live canvas when the model switches", async () => {
+    const view = render(
+      <AvatarCanvas
+        config={config}
+        assetUrl="/avatars/female_1.glb"
+        fallbackLabel="Bowen"
+      />,
+    );
+    await waitFor(() => expect(rendererInstances.length).toBe(1));
+    const first = rendererInstances[0];
+    expect(first.canvas.isConnected).toBe(true);
+
+    view.rerender(
+      <AvatarCanvas
+        config={{ ...config, template_id: "maya-warm-scholar" }}
+        assetUrl="/avatars/elder-scholar.glb"
+        fallbackLabel="Elder"
+      />,
+    );
+    await waitFor(() =>
+      expect(first.setAsset).toHaveBeenCalledWith("/avatars/elder-scholar.glb"),
+    );
+    expect(rendererInstances).toHaveLength(1);
+    expect(first.dispose).not.toHaveBeenCalled();
+    expect(first.canvas.isConnected).toBe(true);
   });
 });

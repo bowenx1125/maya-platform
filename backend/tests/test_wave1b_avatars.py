@@ -134,7 +134,7 @@ def test_student_chat_and_teacher_preview_read_identical_avatar_fields() -> None
         version_seq=2,
         avatar_config_json=raw,
     )
-    agent = Agent(id=version.agent_id, name="Observer", deleted_at=None)
+    agent = Agent(id=version.agent_id, name="Observer", visibility="private", deleted_at=None)
     chat_fields = agent_view(version, agent, str(uuid4())).avatar_config.model_dump()
     teacher_fields = _avatar(raw).model_dump()
     assert chat_fields == teacher_fields == stored

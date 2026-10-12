@@ -10,6 +10,7 @@ monolithic state machine.
 from __future__ import annotations
 
 import io
+import logging
 import wave
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -26,7 +27,6 @@ from app.modules.org.access import WorkspaceMember
 from app.modules.voices.crypto import VoiceEncryptionError
 from app.modules.voices.schemas import PlaybackResource, VoiceProfileResponse
 from app.modules.voices.service import (
-    PREVIEW_TEXT,
     PREVIEW_TTL,
     EffectiveVoice,
     _profile_external_id,
@@ -46,6 +46,23 @@ from app.providers.audio import (
 from app.providers.factory import tts_provider
 from app.providers.tts import TTSProvider, TTSProviderError
 from app.seed import COURSE_ID
+
+LOGGER = logging.getLogger("maya.voices")
+VOICE_PREVIEW_TEXT = (
+    "Should we find each other in the next life, let‘s live on a planet of our own.\n"
+    "我会将花种满山谷，为你而歌，老死方休。"
+)
+_SAFE_PREVIEW_ERRORS = frozenset(
+    {
+        "tts_http_rejected",
+        "tts_response_invalid",
+        "tts_result_url_rejected",
+        "tts_result_dns_failed",
+        "tts_result_download_failed",
+        "tts_audio_invalid",
+        "tts_timeout",
+    }
+)
 
 
 def _configured_fallback(db: Session, settings: Settings) -> VoiceProfile | None:
@@ -124,17 +141,25 @@ def create_voice_preview(
 ) -> PlaybackResource:
     """Generate bounded server-side preview bytes and return an opaque URL."""
 
-    scoped = visible_student_voice(db, context, profile_id)
-    profile = scoped.profile
+    profile = visible_student_voice(db, context, profile_id).profile
     if profile.status not in {"preview_ready", "ready"}:
         raise not_found()
     tts = provider or tts_provider(settings)
     external_id = _tts_external_id(profile, settings)
     try:
-        output = tts.synthesize(PREVIEW_TEXT, external_id, language="en")
+        output = tts.synthesize(
+            VOICE_PREVIEW_TEXT,
+            external_id,
+            language="auto",
+            target_model_key=profile.target_model_key,
+        )
         raw = read_pcm16_wav_bytes(output.audio_bytes)
         validate_technical_audio(raw)
     except (TTSProviderError, AudioValidationError, OSError) as exc:
+        code = getattr(exc, "safe_code", None)
+        if not isinstance(code, str) or code not in _SAFE_PREVIEW_ERRORS:
+            code = "tts_audio_invalid" if isinstance(exc, AudioValidationError) else "tts_failed"
+        LOGGER.warning("Voice preview failed profile_id=%s safe_code=%s", profile.id, code)
         raise PlatformError(
             "provider_unavailable", "The preview could not be generated.", 503
         ) from exc

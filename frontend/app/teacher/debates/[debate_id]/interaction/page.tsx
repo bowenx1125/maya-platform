@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "../../../../../components/app-shell";
-import { WorkspaceAction } from "../../../../../components/workspace-actions";
+import { PageAction } from "../../../../../components/page-action";
 import { TeacherWave3 } from "../../../../../components/wave3";
 import {
   ErrorNotice,
@@ -55,12 +55,17 @@ export default function TeacherDebateInteractionPage() {
       <AppShell role="teacher">
         {loading && !detail ? <LoadingCard /> : null}
         {!loading && error && !detail ? (
-          <ErrorNotice error={error} onRetry={() => void load()} />
+          <ErrorNotice
+            inline
+            notFound="debateNotFound"
+            error={error}
+            onRetry={() => void load()}
+          />
         ) : null}
         {detail && debateId ? (
           <>
             <PageIntro title={t("wave3Title")} />
-            <WorkspaceAction
+            <PageAction
               name="back"
               href={`/teacher/debates/${debateId}/control`}
             />

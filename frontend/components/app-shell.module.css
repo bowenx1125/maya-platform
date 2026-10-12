@@ -32,6 +32,8 @@
 }
 
 .link {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -42,9 +44,19 @@
   font-size: 16px;
   font-weight: 500;
   text-decoration: none;
-  transition:
-    background 160ms ease,
-    color 160ms ease;
+}
+
+.pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb, var(--accent) 17%, transparent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--surface) 66%, var(--accent-soft));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 82%, transparent),
+    0 3px 10px color-mix(in srgb, var(--ink) 8%, transparent);
+  backdrop-filter: blur(12px) saturate(1.12);
 }
 
 .link svg {
@@ -57,6 +69,17 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.link.sidebarAction {
+  color: color-mix(in srgb, var(--accent) 62%, var(--muted));
+  background: color-mix(in srgb, var(--surface) 70%, var(--accent-soft));
+  font-weight: 560;
+}
+
+.link.sidebarAction:hover {
+  color: color-mix(in srgb, var(--accent) 78%, var(--ink));
+  background: color-mix(in srgb, var(--surface) 48%, var(--accent-soft));
 }
 
 .disabled {
@@ -72,18 +95,50 @@
   background: var(--surface-hover);
 }
 
+.link.active:hover {
+  background: transparent;
+}
+
 .link.active {
   color: var(--accent);
-  background: var(--accent-soft);
   font-weight: 600;
 }
 
 .account {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   margin-top: auto;
-  padding: 18px 10px 0;
-  border-top: 1px solid var(--line);
+  padding: 0 10px;
+}
+
+.credit {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0 14px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.creditTitle {
+  color: var(--ink);
+  font-family: var(--display-serif);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.creditMail {
+  color: var(--accent, #76591f);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.creditMail:hover {
+  text-decoration: underline;
 }
 
 .logout {
@@ -106,11 +161,23 @@
   color: var(--ink);
 }
 
+@media (prefers-reduced-transparency: reduce) {
+  .pill {
+    background: var(--accent-soft);
+    backdrop-filter: none;
+  }
+}
+
 .main {
+  position: relative;
   width: min(100%, 1320px);
   min-width: 0;
   margin: 0 auto;
   padding: 48px clamp(24px, 4vw, 64px) 80px;
+}
+
+.main.chatMain {
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
 }
 
 @media (max-width: 900px) {
@@ -120,7 +187,7 @@
   .sidebar {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     height: auto;
     gap: 12px;
     padding: 24px 24px 16px;
@@ -138,10 +205,19 @@
     font-size: 14px;
   }
   .account {
-    align-self: start;
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    align-self: stretch;
     margin: 0;
     padding: 0;
     border: 0;
+  }
+  .credit {
+    min-width: 0;
+    padding: 0 4px 0 8px;
+    border-bottom: 0;
   }
   .logout svg {
     display: none;
@@ -168,11 +244,5 @@
   .link svg {
     width: 17px;
     height: 17px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .link {
-    transition: none;
   }
 }

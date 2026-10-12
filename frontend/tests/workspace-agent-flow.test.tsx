@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -46,6 +47,7 @@ function agent(overrides: Partial<AgentDetail> = {}): AgentDetail {
     name: "Agent",
     description: "Mutable description",
     status: "active",
+    can_edit: true,
     current_published_version_id: "published-id",
     current_draft_version_id: null,
     versions: [],
@@ -61,7 +63,19 @@ const api = {
   group: vi.fn(),
   agents: vi.fn(),
   knowledge: vi.fn(),
+  chatAgents: vi.fn().mockResolvedValue([]),
+  knowledgeSets: vi.fn().mockResolvedValue([]),
+  voiceProfiles: vi.fn(),
   updateAgentMetadata: vi.fn(),
+  version: vi.fn(),
+  ragPreview: vi.fn().mockResolvedValue(null),
+  avatarTemplates: vi.fn().mockResolvedValue([]),
+  agentKnowledgeSets: vi.fn().mockResolvedValue({
+    agent_id: "agent-id",
+    agent_metadata_revision: 0,
+    sets: [],
+  }),
+  workspaceDocuments: vi.fn().mockResolvedValue([]),
 };
 
 describe("Workspace Agent flow", () => {
@@ -72,6 +86,21 @@ describe("Workspace Agent flow", () => {
     api.nextVersion.mockResolvedValue(
       version({ id: "draft-id", state: "draft", version_label: "V1.1" }),
     );
+    api.chatAgents.mockResolvedValue([]);
+    api.knowledgeSets.mockResolvedValue([]);
+    api.voiceProfiles.mockResolvedValue([]);
+    api.version.mockResolvedValue(
+      version({ id: "draft-id", state: "draft", version_label: "V1.1" }),
+    );
+    api.ragPreview.mockResolvedValue(null);
+    api.avatarTemplates.mockResolvedValue([]);
+    api.agentKnowledgeSets.mockResolvedValue({
+      agent_id: "agent-id",
+      agent_metadata_revision: 0,
+      sets: [],
+    });
+    api.workspaceDocuments.mockResolvedValue([]);
+    api.knowledge.mockResolvedValue([]);
   });
   afterEach(() => {
     cleanup();
@@ -83,12 +112,19 @@ describe("Workspace Agent flow", () => {
       version({ id: "old-id", state: "superseded", agent_md: "# Old prompt" }),
       version(),
     ]);
+    api.version.mockResolvedValue(version());
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByText("Current prompt");
+    expect(
+      (
+        (await screen.findByRole("textbox", {
+          name: "AGENT.md editor",
+        })) as HTMLTextAreaElement
+      ).value,
+    ).toBe("# Current prompt");
     expect(screen.queryByText("Old prompt")).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(screen.queryByText("Info")).toBeNull();
@@ -97,29 +133,58 @@ describe("Workspace Agent flow", () => {
     expect(
       (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
     ).toBe("/student/groups/group-id");
-    expect(
-      within(screen.getByRole("main")).queryByRole("link", { name: "Back" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(nav.getByRole("button", { name: "Done" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect(api.nextVersion).not.toHaveBeenCalled();
     expect(api.updateAgentMetadata).not.toHaveBeenCalled();
   });
 
-  it("uses New to create the next version of this Agent", async () => {
+  it("opens a published Agent in the editor and does not save a draft before Done", async () => {
+    api.version.mockResolvedValue(version());
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "New" }));
-    await waitFor(() =>
-      expect(router.push).toHaveBeenCalledWith(
-        "/student/agent-versions/draft-id/edit",
-      ),
+    const nav = within(screen.getByRole("navigation"));
+    expect(
+      (await nav.findByRole("link", { name: "Back" })).getAttribute("href"),
+    ).toBe("/student/groups/group-id");
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
+  });
+
+  it("opens a Teacher Agent with Back and uses sidebar New for the next version", async () => {
+    api.agent.mockResolvedValue(
+      agent({
+        ownership_scope: "personal",
+        group_id: null,
+        current_published_version_id: "published-id",
+        current_draft_version_id: null,
+      }),
     );
-    expect(api.nextVersion).toHaveBeenCalledTimes(1);
-    expect(api.nextVersion).toHaveBeenCalledWith("agent-id", {
-      idempotency: expect.objectContaining({ key: expect.any(String) }),
+    api.versions.mockResolvedValue([version()]);
+    render(
+      <AppShell role="teacher">
+        <TeacherAgentDetail agentId="agent-id" />
+      </AppShell>,
+    );
+
+    const navigation = within(screen.getByRole("navigation"));
+    await waitFor(() => {
+      const backs = navigation.getAllByRole("link", { name: "Back" });
+      expect(backs.map((link) => link.getAttribute("href"))).toContain(
+        "/teacher/studyform",
+      );
     });
+    expect(navigation.queryByRole("button", { name: "New" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
+    expect(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
   });
 
   it("continues an existing next-version draft without making a second one", async () => {
@@ -135,16 +200,14 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    const next = await screen.findByRole("link", { name: "New" });
-    expect(next.getAttribute("href")).toBe(
-      "/student/agent-versions/draft-id/edit",
-    );
-    expect(screen.getByText("Current prompt")).toBeTruthy();
-    expect(screen.queryByText("Unsigned draft")).toBeNull();
+    expect(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
     expect(api.nextVersion).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
   });
 
-  it("opens an initial draft for editing and requires confirmation to delete it", async () => {
+  it("uses page New to edit an initial draft without inline Edit or Delete", async () => {
     api.agent.mockResolvedValue(
       agent({
         current_published_version_id: null,
@@ -154,26 +217,18 @@ describe("Workspace Agent flow", () => {
     api.versions.mockResolvedValue([
       version({ id: "draft-id", state: "draft" }),
     ]);
-    api.deleteAgent.mockResolvedValue(undefined);
-    const confirm = vi
-      .spyOn(window, "confirm")
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
     render(
       <AppShell role="student">
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
     expect(
-      (await screen.findByRole("link", { name: "Edit" })).getAttribute("href"),
-    ).toBe("/student/agent-versions/draft-id/edit");
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
     expect(api.deleteAgent).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(api.deleteAgent).toHaveBeenCalledTimes(1));
-    expect(confirm).toHaveBeenCalledTimes(2);
-    expect(router.replace).toHaveBeenCalledWith("/student/groups/group-id");
   });
 
   it("does not expose deletion for an Agent with a retained published snapshot", async () => {
@@ -196,8 +251,17 @@ describe("Workspace Agent flow", () => {
         <AgentOverview agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByRole("link", { name: "Edit" });
+    expect(
+      await screen.findByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByRole("navigation")).queryByRole("button", {
+        name: "New",
+      }),
+    ).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(api.nextVersion).not.toHaveBeenCalled();
   });
 
   it("opens current Agent inspection from a keyboard-focusable Workspace row", async () => {
@@ -217,7 +281,7 @@ describe("Workspace Agent flow", () => {
     link.focus();
     expect(document.activeElement).toBe(link);
     expect(link.getAttribute("href")).toBe("/student/agents/agent-id");
-    expect(screen.getByText("Agents · 1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeTruthy();
     expect(screen.getByText("V1.0")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Members" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
@@ -228,15 +292,24 @@ describe("Workspace Agent flow", () => {
   });
 
   it("keeps teacher inspection read-only without the removed description", async () => {
+    api.agent.mockResolvedValue(agent({ can_edit: false }));
     render(
       <AppShell role="teacher">
         <TeacherAgentDetail agentId="agent-id" />
       </AppShell>,
     );
-    await screen.findByText("Current prompt");
+    await screen.findByRole("heading", { name: "Current prompt" });
+    expect(screen.getByRole("heading", { name: "Avatar" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Brainform" })).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: "AGENT.md editor" }),
+    ).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
-    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    const nav = within(screen.getByRole("navigation"));
+    expect(nav.queryByRole("button", { name: "New" })).toBeNull();
+    expect(nav.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(nav.getByRole("link", { name: "Back" })).toBeTruthy();
   });
 
   it("deletes a Workspace Agent only after confirmation and retains a blocked row", async () => {
@@ -263,7 +336,7 @@ describe("Workspace Agent flow", () => {
     fireEvent.click(button);
     expect(api.deleteAgent).not.toHaveBeenCalled();
     fireEvent.click(button);
-    await screen.findByRole("alert");
+    await screen.findByText("Used by a Debate");
     expect(screen.getByRole("link", { name: /Agent/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>

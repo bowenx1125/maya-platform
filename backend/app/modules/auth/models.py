@@ -39,14 +39,12 @@ class DemoAccountBinding(Base):
 
 
 class UserCredential(Base):
-    """Database-stored credential for a self-registered account.
+    """Database-stored credential for a registered or updated account.
 
-    The seven fixed Demo identities keep using the read-only
-    ``accounts.private.md`` catalog. This table is the second, writable
-    credential source introduced for student self-registration; a username
-    may exist in exactly one of the two sources. ``username`` is duplicated
-    from :class:`~app.core.models.User` so a login attempt can be resolved
-    without loading the public user row first.
+    This table is checked before the immutable Demo catalog, so it can hold
+    both self-registration credentials and a catalog user's password override.
+    ``username`` is duplicated from :class:`~app.core.models.User` so login can
+    resolve the credential without loading the public user row first.
     """
 
     __tablename__ = "user_credentials"

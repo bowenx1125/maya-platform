@@ -130,7 +130,7 @@ def test_pdf_mixed_content_ocr_targets_only_pages_without_selectable_text(
     assert calls == [(pdf, [1])]
     assert limit_events == ["extended"]
     assert "Selectable page" in markdown
-    assert "> OCR-generated text; teacher review required." in markdown
+    assert "> OCR-generated text." in markdown
     assert "Locally recognized page" in markdown
 
 
@@ -267,19 +267,18 @@ def test_pdf_ocr_page_limit_fails_before_running_ocr(
         knowledge_ingest._pdf_to_markdown(pdf)
 
 
-def test_pdf_ocr_text_keeps_the_extracted_character_limit(
+def test_pdf_ocr_preserves_extracted_text_without_an_authored_character_quota(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(knowledge_ingest, "MAX_RAG_CHARS", 64)
+    recognized_text = "recognized text " * 8000
     monkeypatch.setattr(
         knowledge_ingest,
         "_run_pdf_ocr",
-        lambda _data, _pages: {0: "recognized text " * 8},
+        lambda _data, _pages: {0: recognized_text},
     )
     pdf = _pdf_bytes([None], non_text_content_pages={0})
 
-    with pytest.raises(KnowledgeImportError, match="content_too_large"):
-        knowledge_ingest._pdf_to_markdown(pdf)
+    assert recognized_text.strip() in knowledge_ingest._pdf_to_markdown(pdf)
 
 
 def test_pdf_page_content_stops_when_work_budget_is_exceeded(
@@ -332,15 +331,20 @@ def test_upload_format_and_file_size_are_checked(
 
     monkeypatch.setattr("app.modules.knowledge.ingest.MAX_UPLOAD_FILE_BYTES", 4)
     with pytest.raises(KnowledgeImportError, match="upload_size"):
-        convert_knowledge_upload("notes.md", b"12345")
+        convert_knowledge_upload("notes.pdf", b"12345")
+    assert convert_knowledge_upload("notes.md", b"12345") == ("notes.md", b"12345")
 
 
 @pytest.mark.asyncio
-async def test_multipart_stream_rejects_chunked_body_over_limit(
+async def test_multipart_stream_preserves_markdown_beyond_binary_upload_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(multipart, "MAX_UPLOAD_REQUEST_BYTES", 8)
-    chunks = [b"12345", b"67890"]
+    monkeypatch.setattr(multipart, "MAX_UPLOAD_FILE_BYTES", 8)
+    chunks = [
+        b'--test\r\nContent-Disposition: form-data; name="file"; filename="notes.md"\r\n'
+        b"Content-Type: text/markdown\r\n\r\n",
+        b"1234567890\r\n--test--\r\n",
+    ]
 
     async def receive() -> dict[str, Any]:
         if chunks:
@@ -357,11 +361,13 @@ async def test_multipart_stream_rejects_chunked_body_over_limit(
         },
         receive,
     )
-    with pytest.raises(ValueError, match="too large"):
-        await multipart.parse_upload(request)
+    fields, filename, content = await multipart.parse_upload(request)
+    assert fields == {}
+    assert filename == "notes.md"
+    assert content == b"1234567890"
 
 
-def test_teacher_can_add_courseware_to_group_library_without_binding_it_to_draft(
+def test_teacher_can_add_own_courseware_without_access_to_student_private_library(
     app_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -392,18 +398,15 @@ def test_teacher_can_add_courseware_to_group_library_without_binding_it_to_draft
         student_document_id = student_upload.json()["document"]["id"]
 
         _teacher, teacher_csrf = login(client, "maya")
-        monkeypatch.setattr(
-            knowledge_router,
-            "scoped_group_role",
-            lambda _db, _context, _group_id: "student",
-        )
+        course_id = student_upload.json()["document"]["course_id"]
+        teacher_documents_url = f"/api/v1/courses/{course_id}/workspace-documents"
         headers = {
             "Origin": "http://testserver",
             "X-CSRF-Token": teacher_csrf,
             "Idempotency-Key": "upload-courseware-docx",
         }
         uploaded = client.post(
-            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+            teacher_documents_url,
             headers=headers,
             files={
                 "file": (
@@ -417,18 +420,17 @@ def test_teacher_can_add_courseware_to_group_library_without_binding_it_to_draft
         document = uploaded.json()["document"]
         assert document["source_filename"] == "lesson.docx.md"
         assert document["source_owner_role"] == "teacher"
-        teacher_library = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents")
+        teacher_library = client.get(teacher_documents_url)
         assert teacher_library.status_code == 200
         assert {item["id"] for item in teacher_library.json()} == {
             document["id"],
-            student_document_id,
         }
         downloaded = client.get(f"/api/v1/knowledge-documents/{document['id']}/download")
         assert downloaded.status_code == 200
         assert b"# Knowledge boundaries" in downloaded.content
 
         bound = client.post(
-            f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+            teacher_documents_url,
             headers={**headers, "Idempotency-Key": "teacher-cannot-bind-file"},
             data={"target_agent_version_id": version_id, "expected_revision": "0"},
             files={
@@ -467,7 +469,6 @@ def test_teacher_can_add_courseware_to_group_library_without_binding_it_to_draft
         student_library = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents")
         assert student_library.status_code == 200
         assert {item["id"] for item in student_library.json()} == {
-            document["id"],
             student_document_id,
         }
         with database.session() as session:
@@ -602,8 +603,10 @@ def test_unjoined_teacher_can_read_own_courseware_without_group_access(
 
         _teacher, teacher_csrf = login(client, "maya")
         assert client.get(documents_url).status_code == 404
+        course_id = student_document.json()["document"]["course_id"]
+        teacher_documents_url = f"/api/v1/courses/{course_id}/workspace-documents"
         courseware = client.post(
-            documents_url,
+            teacher_documents_url,
             headers={
                 "Origin": "http://testserver",
                 "X-CSRF-Token": teacher_csrf,
@@ -613,7 +616,8 @@ def test_unjoined_teacher_can_read_own_courseware_without_group_access(
         )
         assert courseware.status_code == 201, courseware.text
 
-        listing = client.get(documents_url)
+        assert client.get(documents_url).status_code == 404
+        listing = client.get(teacher_documents_url)
         assert listing.status_code == 200, listing.text
         assert [item["id"] for item in listing.json()] == [courseware.json()["document"]["id"]]
         assert [item["source_owner_role"] for item in listing.json()] == ["teacher"]
@@ -651,7 +655,7 @@ def test_upload_reports_distinct_format_text_size_and_metadata_errors(
             target_agent_version_id="not-a-uuid",
         )
         assert invalid_metadata.status_code == 422
-        assert invalid_metadata.json()["code"] == "invalid_request"
+        assert invalid_metadata.json()["code"] == "file_operation_failed"
 
         monkeypatch.setattr(knowledge_ingest, "MAX_DOCX_PART_BYTES", 1)
         expanded_docx = upload("lesson.docx", _docx_bytes(), "too-large-docx-key")
@@ -667,7 +671,7 @@ def test_upload_reports_distinct_format_text_size_and_metadata_errors(
         assert processing_failed.json()["code"] == "knowledge_import_processing_failed"
 
         monkeypatch.setattr(multipart, "MAX_UPLOAD_FILE_BYTES", 1)
-        too_large = upload("notes.md", b"# Notes", "too-large-upload-key")
+        too_large = upload("lesson.pdf", b"%PDF-1.7", "too-large-upload-key")
         assert too_large.status_code == 422
         assert too_large.json()["code"] == "knowledge_import_too_large"
 
