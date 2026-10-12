@@ -2288,29 +2288,20 @@ dd {
   background: #8a6a1f;
 }
 
-/* Where an Agent or Team carries its visibility, the version is a pill whose
-   colour says who can use it: green is Public, grey is Private. */
-.agent-pill[data-visibility] {
-  padding: 4px 12px;
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-style: normal;
-  font-weight: 640;
-  text-transform: none;
-}
-
-.agent-pill[data-visibility]::before {
-  display: none;
-}
-
+/* Where an Agent or Team carries its visibility, the diamond says who can
+   use it: solid gold is Public, an open one Private. The word itself is in
+   the tooltip and read out to screen readers. */
 .agent-pill[data-visibility="public"] {
-  background: rgba(45, 138, 104, 0.14);
-  color: var(--green);
+  color: #6b5418;
 }
 
 .agent-pill[data-visibility="private"] {
-  background: #f0edf2;
   color: var(--muted);
+}
+
+.agent-pill[data-visibility="private"]::before {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px rgba(112, 107, 130, 0.75);
 }
 
 .agent-pill-action[data-visibility]:hover,

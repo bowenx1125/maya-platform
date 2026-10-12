@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import styles from "./knowledge/brainform-workspace.module.css";
+import { useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { WorkspaceIcon } from "./workspace-icon";
 
@@ -70,6 +71,12 @@ export function VersionTile({
   onDelete?: () => void;
   deleteLabel: string;
 }) {
+  const t = useT();
+  // The diamond shows who can use it; the word is for the tooltip and for
+  // screen readers.
+  const word = visibility
+    ? t(visibility === "public" ? "publicOption" : "privateOption")
+    : undefined;
   return (
     <li className="agent-tile">
       <Link className="agent-tile-name text-link" href={href}>
@@ -89,7 +96,10 @@ export function VersionTile({
             onDelete();
           }}
         >
-          <span className="agent-pill-label">{label}</span>
+          <span className="agent-pill-label">
+            {label}
+            {word ? <span className="sr-only"> · {word}</span> : null}
+          </span>
           <span className="agent-pill-x" aria-hidden="true">
             <IconClose size={12} />
           </span>
@@ -99,8 +109,10 @@ export function VersionTile({
           className="agent-pill"
           data-pending={pending ? "true" : "false"}
           data-visibility={visibility}
+          title={word}
         >
           {label}
+          {word ? <span className="sr-only"> · {word}</span> : null}
         </span>
       )}
     </li>
