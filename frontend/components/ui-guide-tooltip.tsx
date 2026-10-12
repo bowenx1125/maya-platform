@@ -158,6 +158,21 @@ export function UiGuideTooltip() {
       if (event.key === "Escape" && described) hide();
     };
 
+    // Removing a focused/hovered control need not emit a leave event, while
+    // this root-level tooltip survives navigation to the next workspace.
+    const observer = new MutationObserver(() => {
+      if (
+        (!described || described.isConnected) &&
+        (!descriptionTarget || descriptionTarget.isConnected)
+      )
+        return;
+      hovered = null;
+      focused = null;
+      focusedDescriptionElement = null;
+      hide();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
     document.addEventListener("pointerover", onPointerOver, true);
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("pointerout", onPointerOut, true);
@@ -167,6 +182,7 @@ export function UiGuideTooltip() {
     document.addEventListener("focusout", onFocusOut, true);
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
+      observer.disconnect();
       document.removeEventListener("pointerover", onPointerOver, true);
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerout", onPointerOut, true);

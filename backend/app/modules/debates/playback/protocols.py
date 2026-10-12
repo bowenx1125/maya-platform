@@ -180,6 +180,7 @@ class PlaybackRepository(Protocol):
         attempt: int,
         claim_token: str | None = None,
         debate_status: str = "running",
+        audio_error_code: str | None = None,
     ) -> bool: ...
 
     def publish_turn(self, db: Any, turn: Any) -> bool: ...
@@ -363,6 +364,7 @@ class MemoryPlaybackRepository:
         attempt: int,
         claim_token: str | None = None,
         debate_status: str = "running",
+        audio_error_code: str | None = None,
     ) -> bool:
         del db, generation, claim_token, debate_status
         if turn.generation_status not in {"pending", "running", "final_ready"}:
@@ -385,6 +387,7 @@ class MemoryPlaybackRepository:
         turn.predecessor_turn_ids = prepared.predecessor_turn_ids
         turn.predecessor_hash = prepared.transcript_hash
         turn.evidence_trace = [dict(item) for item in prepared.evidence_trace]
+        turn.failed_code = audio_error_code
         return True
 
     def publish_turn(self, db: Any, turn: MemoryTurn) -> bool:

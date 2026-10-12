@@ -1,5 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LocaleProvider } from "../components/locale";
 import {
@@ -57,12 +63,15 @@ const detail: DebatePreviewSnapshot = {
   ],
 };
 
-function renderPreview(snapshot: DebatePreviewSnapshot) {
+function renderPreview(
+  snapshot: DebatePreviewSnapshot,
+  onRetryTurn: (turnId: string) => void = () => undefined,
+) {
   return render(
     <LocaleProvider initialLocale="en">
       <DebatePreview
         detail={snapshot}
-        onRetryTurn={() => undefined}
+        onRetryTurn={onRetryTurn}
         openClassroomHref="/teacher/debates-beta/debate-a/control"
       />
     </LocaleProvider>,
@@ -70,6 +79,124 @@ function renderPreview(snapshot: DebatePreviewSnapshot) {
 }
 
 describe("teacher debate preview", () => {
+  it.each([
+    "tts_voice_unavailable",
+    "tts_provider_unavailable",
+    "tts_timeout",
+    "tts_http_rejected",
+    "tts_response_invalid",
+    "tts_result_url_rejected",
+    "tts_result_dns_failed",
+    "tts_result_download_failed",
+    "tts_audio_invalid",
+  ])("preserves completed text without offering a retry for %s", (code) => {
+    renderPreview({
+      ...detail,
+      preview_turns: detail.preview_turns!.map((turn) =>
+        turn.id === "turn-a"
+          ? { ...turn, generation_status: "final_ready", safe_error_code: code }
+          : turn,
+      ),
+    });
+
+    const card = within(screen.getByTestId("preview-turn-turn-a"));
+    expect(card.getByText(detail.preview_turns![0].speech)).toBeTruthy();
+    expect(card.getByText("Audio Not Ready")).toBeTruthy();
+    expect(card.getByText("Audio needs attention.")).toBeTruthy();
+    expect(card.queryByRole("button", { name: "Retry turn" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
+  });
+
+  // Unknown acceptance and invalid saved text remain blocked by the backend;
+  // their error display must not imply that a retry can succeed.
+  it.each([
+    ["tts_unreviewed", "Saved speech."],
+    ["acceptance_unknown", "Saved speech."],
+    ["tts_timeout", ""],
+    ["tts_timeout", " \n "],
+  ])(
+    "preserves the failure notice and unready preview: %s / %j",
+    (code, speech) => {
+      renderPreview({
+        ...detail,
+        preview: { prepared_turns: 1, expected_turns: 2, ready: false },
+        preview_turns: detail.preview_turns!.map((turn) =>
+          turn.id === "turn-a"
+            ? {
+                ...turn,
+                generation_status: "final_ready",
+                safe_error_code: code,
+                speech,
+              }
+            : turn,
+        ),
+      });
+
+      const card = within(screen.getByTestId("preview-turn-turn-a"));
+      expect(card.getByText("Audio Not Ready")).toBeTruthy();
+      expect(
+        card.getByText(
+          speech.trim() ? "Audio needs attention." : "Speech needs attention.",
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+    },
+  );
+
+  it.each(["pending", "failed"])(
+    "retries the exact unfinished turn after a known TTS failure: %s",
+    (generationStatus) => {
+      const onRetry = vi.fn();
+      renderPreview(
+        {
+          ...detail,
+          preview: { prepared_turns: 1, expected_turns: 2, ready: false },
+          preview_turns: detail.preview_turns!.map((turn) =>
+            turn.id === "turn-a"
+              ? {
+                  ...turn,
+                  generation_status: generationStatus,
+                  safe_error_code: "tts_timeout",
+                }
+              : turn,
+          ),
+        },
+        onRetry,
+      );
+
+      const card = within(screen.getByTestId("preview-turn-turn-a"));
+      expect(card.getByText("Audio Not Ready")).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+      fireEvent.click(card.getByRole("button", { name: "Retry turn" }));
+      expect(onRetry.mock.calls).toEqual([["turn-a"]]);
+    },
+  );
+
+  it.each(["provider_not_sent", "provider_confirmation_required"])(
+    "retries only the failed turn after completed text: %s",
+    (code) => {
+      const onRetry = vi.fn();
+      renderPreview(
+        {
+          ...detail,
+          preview: { prepared_turns: 1, expected_turns: 2, ready: false },
+          preview_turns: detail.preview_turns!.map((turn) => ({
+            ...turn,
+            generation_status: turn.id === "turn-a" ? "final_ready" : "failed",
+            audio_ready: false,
+            safe_error_code: turn.id === "turn-a" ? "tts_timeout" : code,
+          })),
+        },
+        onRetry,
+      );
+
+      const buttons = screen.getAllByRole("button", { name: "Retry turn" });
+      expect(buttons).toHaveLength(1);
+      fireEvent.click(buttons[0]);
+      expect(onRetry.mock.calls).toEqual([["turn-b"]]);
+    },
+  );
+
   it("keeps saved speech visible when audio failed and exposes exact RAG mapping", () => {
     renderPreview(detail);
 

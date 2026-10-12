@@ -158,7 +158,9 @@ export function TeacherDebateList({
                     <div>
                       <h2>{debate.topic}</h2>
                       <div className={styles.metaRow}>
-                        <span>{copy(t, "debateRounds")}</span>
+                        <span>
+                          {t("debateRounds", { count: debate.round_count })}
+                        </span>
                         <span>
                           {new Date(debate.created_at).toLocaleDateString()}
                         </span>
@@ -180,6 +182,14 @@ export function TeacherDebateList({
                         debateId={debate.id}
                         onDone={() => void load(true)}
                       />
+                    ) : null}
+                    {debate.status === "draft" && debate.preview ? (
+                      <Link
+                        className="secondary-action"
+                        href={`/teacher/debates/${debate.id}/control`}
+                      >
+                        Preview
+                      </Link>
                     ) : null}
                     {!["failed", "stopped"].includes(debate.status) &&
                     (debate.preview?.ready ||

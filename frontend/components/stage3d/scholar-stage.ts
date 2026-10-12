@@ -654,6 +654,14 @@ export class ScholarStage {
 
     this.draco.setDecoderPath(STAGE_DECODER_PATH);
     this.loader.setDRACOLoader(this.draco);
+    this.loader.register((parser) => {
+      // Embedded GLB images belong to img-src; ImageBitmapLoader fetches them
+      // through connect-src, which intentionally excludes blob: in production.
+      parser.textureLoader = new THREE.TextureLoader(parser.options.manager)
+        .setCrossOrigin(parser.options.crossOrigin)
+        .setRequestHeader(parser.options.requestHeader);
+      return { name: "MAYA_stage_image_textures" };
+    });
     window.addEventListener("resize", this.resizeHandler, { passive: true });
     this.canvas.addEventListener("click", this.canvasClickHandler);
     document.addEventListener("mousemove", this.mouseMoveHandler);

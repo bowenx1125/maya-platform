@@ -477,7 +477,7 @@ function deriveClassroomPhase(
   detailStatus: DebateDetail["status"],
   playbackStatus: DebatePlaybackState["status"],
   playbackMode: DebatePlaybackState["mode"],
-  canAdvance: boolean,
+  waitingForTeacher: boolean,
 ): ClassroomPhase {
   if (detailStatus === "draft") return "ready";
   if (detailStatus === "failed") return "failed";
@@ -489,8 +489,8 @@ function deriveClassroomPhase(
   ) {
     return "finished";
   }
-  // Waiting means the teacher can advance, using the button's exact gate.
-  return canAdvance ? "waiting" : "in_progress";
+  // The final public turn waits for End even though Next is unavailable.
+  return waitingForTeacher ? "waiting" : "in_progress";
 }
 
 export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
@@ -1255,44 +1255,63 @@ export function BetaDebateStage({
     ],
   );
 
-  const playbackRefreshInFlight = useRef(false);
+  const playbackRefreshInFlight = useRef<Promise<void> | null>(null);
   const automaticMediaRetry = useRef<string | null>(null);
 
   const recoverPlayback = useCallback(
     async (retryMedia = false) => {
-      if (!refreshSnapshot || playbackRefreshInFlight.current) return;
-      playbackRefreshInFlight.current = true;
+      if (!refreshSnapshot || !mountedRef.current || closingRef.current) return;
+      if (playbackRefreshInFlight.current) {
+        await playbackRefreshInFlight.current;
+        return;
+      }
       const epoch = controllerEpochRef.current;
+      const recovery = (async () => {
+        try {
+          // A preparation event can overtake a read. Re-read once without
+          // accepting an older sequence or issuing another control mutation.
+          for (let attempt = 0; attempt < 2; attempt += 1) {
+            const next = await refreshSnapshot();
+            if (
+              !mountedRef.current ||
+              closingRef.current ||
+              epoch !== controllerEpochRef.current
+            )
+              return;
+            if (
+              next.playback.control_version < controlVersionRef.current ||
+              !syncRefreshedSnapshot(next, sequenceRef.current)
+            )
+              continue;
+            setControlError(null);
+            if (retryMedia) {
+              setMediaRetryNeeded(
+                ["ready", "paused"].includes(next.playback.status),
+              );
+            }
+            // Retry only the saved media handshake, once per turn. Never regenerate
+            // speech or repeat a possibly successful Next mutation automatically.
+            const key = `${next.playback.mode}:${next.playback.current_turn_id}`;
+            if (
+              next.playback.status === "ready" &&
+              automaticMediaRetry.current !== key
+            ) {
+              automaticMediaRetry.current = key;
+              scheduleMediaPrepare();
+            }
+            return;
+          }
+        } catch {
+          if (retryMedia) setMediaRetryNeeded(true);
+        }
+      })();
+      playbackRefreshInFlight.current = recovery;
       try {
-        const next = await refreshSnapshot();
-        if (
-          !mountedRef.current ||
-          closingRef.current ||
-          epoch !== controllerEpochRef.current ||
-          next.playback.control_version < controlVersionRef.current ||
-          !syncRefreshedSnapshot(next, sequenceRef.current)
-        )
-          return;
-        setControlError(null);
-        if (retryMedia) {
-          setMediaRetryNeeded(
-            ["ready", "paused"].includes(next.playback.status),
-          );
-        }
-        // Retry only the saved media handshake, once per turn. Never regenerate
-        // speech or repeat a possibly successful Next mutation automatically.
-        const key = `${next.playback.mode}:${next.playback.current_turn_id}`;
-        if (
-          next.playback.status === "ready" &&
-          automaticMediaRetry.current !== key
-        ) {
-          automaticMediaRetry.current = key;
-          scheduleMediaPrepare();
-        }
-      } catch {
-        if (retryMedia) setMediaRetryNeeded(true);
+        await recovery;
       } finally {
-        playbackRefreshInFlight.current = false;
+        if (playbackRefreshInFlight.current === recovery) {
+          playbackRefreshInFlight.current = null;
+        }
       }
     },
     [refreshSnapshot, scheduleMediaPrepare, syncRefreshedSnapshot],
@@ -2061,6 +2080,29 @@ export function BetaDebateStage({
       setLastSequence(decision.nextSequence);
       const payload = event.payload;
       if (recoverFromStartedTurnMismatch(event)) return;
+      // Text-only publication has no playback.started payload. Recover its
+      // committed public transcript before the old current-item guard runs.
+      if (
+        event.event_type === "playback.waiting_next" &&
+        refreshSnapshot &&
+        playbackRef.current.mode === "live" &&
+        payload.mode !== "replay" &&
+        !TERMINAL_PLAYBACK.includes(playbackRef.current.status) &&
+        !hasStaleControlVersion(event, playbackRef.current.control_version) &&
+        isNonEmptyString(payload.completed_turn_id) &&
+        !publicTurnById(publicTurnsRef.current, payload.completed_turn_id)
+      ) {
+        recoveryFenceRef.current = {
+          active: true,
+          candidate: null,
+          generation: recoveryFenceRef.current.generation + 1,
+          observedSequence: event.sequence,
+          refreshInFlight: false,
+          targetTurnId: payload.completed_turn_id,
+        };
+        refreshRecoverySnapshot();
+        return;
+      }
       if (
         !isCurrentItemEvent(event, playbackRef.current.current_turn_id ?? null)
       ) {
@@ -3091,8 +3133,20 @@ export function BetaDebateStage({
             atFinalBoundary(detailRef.current, current) &&
             !detailRef.current.final_input_frozen
           ) {
+            const finalEpoch = controllerEpochRef.current;
+            const canRefreshFinal = () =>
+              mountedRef.current &&
+              !closingRef.current &&
+              finalEpoch === controllerEpochRef.current &&
+              controlRequestRef.current === requestToken &&
+              playbackGenerationRef.current === requestGeneration;
             await api.freezeFinalInput(debateId, current.control_version);
+            if (!canRefreshFinal()) return;
             await recoverPlayback();
+            // A shared recovery may have started before Final committed.
+            if (canRefreshFinal() && !detailRef.current.final_input_frozen) {
+              await recoverPlayback();
+            }
             return;
           }
           let next: DebatePlaybackState;
@@ -3130,8 +3184,13 @@ export function BetaDebateStage({
             await recoverPlayback();
             return;
           }
-          // Next only authorizes the adjacent server-selected turn.  Its
-          // speech/source/media remain private until playback.started arrives.
+          if (next.mode === "live" && next.status === "waiting_next") {
+            applyPlayback(next);
+            await recoverPlayback();
+            return;
+          }
+          // Audio-backed Next reveals the transcript only after the media
+          // handshake publishes playback.started.
           setVisible(null);
           setAvatars([]);
           setActiveParticipant(null);
@@ -3304,7 +3363,10 @@ export function BetaDebateStage({
 
   const endRunningDebate = useCallback(async () => {
     if (!blockedBy || endRunningBusy) return;
-    if (typeof api.debate !== "function" || typeof api.finishDebate !== "function")
+    if (
+      typeof api.debate !== "function" ||
+      typeof api.finishDebate !== "function"
+    )
       return;
     setEndRunningBusy(true);
     try {
@@ -3459,7 +3521,12 @@ export function BetaDebateStage({
     detailState.status,
     playback.status,
     playback.mode,
-    canAdvance,
+    canAdvance ||
+      (playback.status === "waiting_next" &&
+        busyAction === null &&
+        publicTurns.length === expectedTurnCount(detailState) &&
+        hasCompletePublicPrefix(publicTurns) &&
+        bubbleTurn?.turn_index === expectedTurnCount(detailState) - 1),
   );
   const bubbleText =
     bubbleTurn && bubblePlayback?.turnId === bubbleTurn.id
@@ -3705,7 +3772,6 @@ export function BetaDebateStage({
             )}
           </section>
         ) : null}
-
       </div>
       {blockedBy ? (
         <div

@@ -111,6 +111,14 @@ class PlaybackSessionMixin(PlaybackCore):
             self._controller_sessions[debate_id] = session_hash
             self._save(db, debate, state)
             self._commit(db)
+            current = next(
+                (turn for turn in self._turns(db, debate) if str(turn.id) == state.current_turn_id),
+                None,
+            )
+            if current is not None and self._turn_text_fallback_ready(current):
+                await self._publish_text_current(db, debate, current)
+                debate = self._get_debate(db, debate_id)
+                state = self._state(db, debate)
             result = ControllerAcquiredResult(
                 message_id=uuid4(),
                 debate_id=UUID(debate_id),
@@ -848,6 +856,7 @@ class PlaybackSessionMixin(PlaybackCore):
                     **self._mutual_phase_only(debate, turn),
                     "turn_index": int(self._get(turn, "turn_index", default=0) or 0),
                     "speech": speech,
+                    "audio_ready": self._validated_turn_audio(db, debate, turn) is not None,
                     "retrieval_status": str(
                         self._get(turn, "retrieval_status", default="no_match")
                     ),

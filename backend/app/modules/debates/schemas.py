@@ -195,6 +195,7 @@ class DebateSummary(_ClosedModel):
     id: UUID
     course_id: UUID
     topic: str
+    round_count: int = Field(ge=2, le=5)
     status: Literal[
         "draft",
         "running",
@@ -298,7 +299,6 @@ class DebateDetail(DebateSummary):
     revision: int = Field(ge=0)
     last_sequence: int = Field(ge=0)
     rule_set_id: RuleSetId
-    round_count: int = Field(ge=2, le=5)
     participants: list[DebateParticipant]
     public_turns: list[DebateTurn]
     playback: PlaybackState

@@ -232,8 +232,11 @@ class PlaybackControlMixin(PlaybackCore):
                     != preview_turn_count(debate, len(self._participants(db, debate)))
                     or not preview_turns
                     or any(
-                        not self._turn_ready(row)
-                        or self._validated_turn_audio(db, debate, row) is None
+                        not self._turn_text_fallback_ready(row)
+                        and (
+                            not self._turn_ready(row)
+                            or self._validated_turn_audio(db, debate, row) is None
+                        )
                         for row in preview_turns
                     )
                 ):
@@ -534,7 +537,11 @@ class PlaybackControlMixin(PlaybackCore):
                     item for item in turns if self._round(item) < debate_round_count(debate)
                 ]
                 target = next(
-                    (item for item in preview_turns if not self._turn_ready(item)),
+                    (
+                        item
+                        for item in preview_turns
+                        if not (self._turn_ready(item) or self._turn_text_fallback_ready(item))
+                    ),
                     None,
                 )
                 if target is None or str(self._get(target, "id", default="")) != turn_id:
@@ -1200,6 +1207,9 @@ class PlaybackControlMixin(PlaybackCore):
                         if replay_audio_metadata is not None
                         else None
                     )
+                text_events: list[EventRecord] = []
+                if not is_replay:
+                    claim_kwargs["committed_events"] = text_events
                 claimed = fresh_claim(
                     **claim_kwargs,
                 )
@@ -1231,6 +1241,20 @@ class PlaybackControlMixin(PlaybackCore):
                         "next_not_ready",
                         "The adjacent retained replay turn is not ready for playback.",
                     )
+                if text_events:
+                    await self._publish_events(text_events)
+                    turns = self._turns(db, debate)
+                    current = next(
+                        (item for item in turns if str(item.id) == state.current_turn_id), None
+                    )
+                    if current is not None:
+                        following, unique = self._adjacent_successor(turns, current)
+                        if (
+                            unique
+                            and following is not None
+                            and not self._next_turn_ready(db, debate, state)
+                        ):
+                            await self._enqueue(debate, following)
                 return self._state_dto(state, db, debate)
             if (
                 not is_replay
@@ -1276,6 +1300,9 @@ class PlaybackControlMixin(PlaybackCore):
             self._commit(db)
             self.ticket_store.revoke_item(debate_id, expected_current_turn_id)
             self._clear_media_results(debate_id)
+            if not is_replay and self._turn_text_fallback_ready(successor):
+                await self._publish_text_current(db, debate, successor)
+                state = self._state(db, debate)
             return self._state_dto(state, db, debate)
 
     async def stop(

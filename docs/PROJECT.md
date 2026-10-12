@@ -33,8 +33,13 @@ speeches with each Agent's own evidence. Other Agents' knowledge and Persona
 remain private. Disagreement may remain. Existing records are not silently
 regenerated or deleted.
 
-Preview stores exact text and Mock audio for rounds one to three; round four is
-generated live. Successful prior turns and accepted stages are reused. A
+Preview stores validated text and available audio for rounds one to three;
+round four is generated live. Known speech failures preserve accepted text as
+ready with `audio_ready=false`. Teacher Start/Next can publish that selected
+text atomically and wait for the next teacher action; prewarmed successors and
+unfrozen Conclusion inputs do not become public. Unknown provider acceptance
+and non-speech validation failures still stop preparation. Successful prior
+turns and accepted stages are reused. A
 provider result with unknown acceptance is not automatically resent. Speech
 length guidance is in the System Prompt only; the backend does not truncate,
 pad, repair or reject text by length. Direct support, contextual support and
@@ -204,6 +209,93 @@ the browser check does not establish a full pointer-hover sweep, real touch
 behavior or macOS visual acceptance.
 The read-only chat composer shows and associates its explanation for keyboard
 and screen-reader users.
+
+## Debates and Live local regression — October 12, 2026
+
+Production acceptance found five defects: unavailable speech blocked public
+text, an open offline Live page did not discover a new classroom, End could
+reject a nonterminal playback state, GLTF textures conflicted with the deployed
+CSP, and the list displayed a fixed round count. Local fixes remain on the
+existing branch, unpushed and undeployed. The earlier production FAIL verdict
+is not superseded.
+
+Text publication retains generation, source, predecessor, cancellation and
+control-version fences. Recovery neither simulates audio acknowledgements nor
+sends a new provider request. End accepts the five named live nonterminal states
+while preserving full/partial completion and membership checks. Live discovery
+avoids overlapping reads; 401/403 or permission/session websocket closure clears
+content and stops reconnection. A local TextureLoader override preserves CSP.
+DebateSummary exposes the saved round_count; the frozen OpenAPI, generated
+client, route fixture and digest changed together.
+
+Independent reviews also corrected revoked-access content retention, a ready
+text successor incorrectly announcing waiting_next during current audio,
+last-turn waiting copy, a stale audio-retry button, a Final snapshot race and a
+tooltip whose target had been removed. Final recovery shares pending reads and
+uses bounded fresh reads with version, sequence, controller, request and unmount
+fences; it does not repeat the mutation. Detached tips and ARIA associations clear.
+
+Preview Retry now skips earlier valid completed text-only turns. Those cards
+hide Retry, and stalled drafts with Preview data retain a Preview entry without
+weakening Immerse readiness. An independent barrier test exposed an unowned
+Prewarm cleanup releasing a Retry worker's claim: before text save this made two
+Mock LLM calls for one turn. Cleanup now belongs to the successful claim owner,
+binds token and cancellation generation, waits for provider threads even after
+repeated cancellation, and preserves durable cached text. Accepted operations
+require matching recovery input and stage; unknown acceptance remains terminal.
+Both unchanged independent reproductions passed after repair, including the
+barrier after text save; a final root rerun also passed both.
+
+Cancellation after audio promotion but before the ready commit now removes only
+the owned uncommitted file. Cancellation after a successful commit keeps the
+retained audio. A fake-transport accepted-reply regression resumed without a
+second send; a separate test retained committed audio. Error-site logging strips
+both Windows and POSIX private directory prefixes.
+
+Isolated Chrome acceptance used a production frontend build, the CSP directives
+observed on the public site, two synthetic accounts, Mock providers and injected
+unavailable speech. Earlier checks covered offline discovery, loading retry,
+network recovery, permission refusal/revocation and anonymous route guards.
+A partial two-turn run exposed the concurrency defect above. After repair, two
+fresh full runs recovered Preview from 1/6 to 6/6, preserving the first turn and
+publishing nothing during recovery. Each then clicked one Start, seven Next,
+one Final and one Finish; the public prefix grew 1 through 8. Final became Next
+without refresh or early publication, both refreshed views retained all eight
+texts, full End produced debate_finished/completed, Back returned Live offline,
+and both accounts logged out. Every turn made exactly one Mock LLM generation.
+The last run used the final cancellation cleanup code. No real provider call
+was made. Inspected desktop screenshots showed readable text, correct end-state
+labels and colored character materials. Intentional transcript scrolling is
+visible in the screenshots.
+
+The earlier full run recorded four ERR_NO_BUFFER_SPACE request failures with no
+proven attribution; the final fresh run did not reproduce them. Both had no page
+script exception. Expected auth/demo-endpoint errors, navigation aborts and
+THREE.Clock deprecation warnings remain in the external evidence.
+
+The frontend suite passed 489 tests, with one existing skip across 65 files;
+production build and typecheck passed, and ESLint reported four existing warnings
+with no errors. The final full backend run passed 1,542 tests, failed 21 and
+skipped 21. Twenty failures match unchanged HEAD: 13 Windows private-file ACL
+fixtures, six symlink privilege failures and one POSIX mode assertion. The extra
+failure is the concurrent Knowledge replacement test already named as flaky in
+AGENTS.md. It failed one immediate rerun, then passed all three fixed follow-up
+trials; unchanged HEAD passed its three trials too. These outcomes are retained,
+not converted into an all-green full suite. Existing audio tools were added only
+to the test process PATH; earlier audio-tool failures passed on both sources.
+
+Ruff check/format, mypy, contract, route, boundary and reset checks passed. Full
+workspace Prettier still fails on existing untracked model files and checkout
+line endings; the canonical-LF comparison retains five warnings in unchanged
+files. Fresh reviewers D and E each independently reviewed all 37 source
+changes, ran six backend files (237 passed, 3 skipped) and seven frontend files
+(146 passed), and inspected the recorded screenshots. They then cross-checked
+the release checklist and confirmed it must first form and verify commits from
+the reviewed changes before pushing HEAD. The corrected release instructions
+preserve explicit authorization. They did not rerun browser interactions.
+The latest public root returned 200 and anonymous auth returned 401; browser
+control timed out three times, so no new authenticated acceptance was performed.
+No macOS or deployed-server acceptance of these local fixes has been performed.
 
 ## Remaining scope
 

@@ -43,7 +43,6 @@ from app.modules.debates.playback.audio_regeneration import (
 from app.modules.debates.playback.events import DebateEventHub
 from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
 from app.modules.debates.playback.prewarm import PrewarmScheduler
-from app.modules.debates.playback.recovery import release_stalled_turn_claim
 from app.modules.debates.playback.router import router as debate_playback_router
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlEventStore, SqlPlaybackRepository
@@ -204,21 +203,9 @@ def create_app(
             ]
 
     async def _prewarm_prepare(debate_id: str, turn_id: str) -> None:
-        try:
-            with runtime_database.session() as session:
-                await playback_service.prepare_turn(session, debate_id, turn_id)
-                session.commit()
-        finally:
-            # Warming claims the turn before it generates it. A warm that stops
-            # without finishing -- cancelled at shutdown, abandoned when the
-            # bandwidth moved, or raised -- used to leave that claim behind,
-            # and the claim is what lets anyone prepare the turn. The Debate
-            # then could not be started, showed no ready turn, offered no Next
-            # and no failure to retry. Hand the claim back so the next warm, or
-            # the teacher pressing Start, can take it.
-            with runtime_database.session() as session:
-                release_stalled_turn_claim(session, debate_id, turn_id)
-                session.commit()
+        with runtime_database.session() as session:
+            await playback_service.prepare_turn(session, debate_id, turn_id)
+            session.commit()
 
     prewarm = PrewarmScheduler(plan=_prewarm_plan, prepare=_prewarm_prepare)
     if runtime_settings.is_test:

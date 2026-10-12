@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
@@ -68,6 +74,76 @@ describe("workspace UI guide tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(button.getAttribute("aria-describedby")).toBe(
       "existing-description",
+    );
+  });
+
+  it.each(["focus", "pointer", "touch"])(
+    "clears %s help when navigation removes its target without a leave event",
+    async (input) => {
+      const view = renderGuide();
+      const button = screen.getByRole("button", { name: "Edit" });
+      if (input === "focus") fireEvent.focusIn(button);
+      else if (input === "touch") {
+        fireEvent.pointerUp(button, { pointerType: "touch" });
+      } else {
+        fireEvent.pointerOver(button, { pointerType: "mouse" });
+      }
+      expect(screen.getByRole("tooltip")).toBeTruthy();
+
+      view.rerender(
+        <LocaleProvider initialLocale="en">
+          <UiGuideTooltip />
+          <h1>Classroom stage</h1>
+        </LocaleProvider>,
+      );
+
+      await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+      expect(button.isConnected).toBe(false);
+      expect(button.getAttribute("aria-describedby")).toBe(
+        "existing-description",
+      );
+      fireEvent.pointerMove(document.body, { pointerType: "mouse" });
+      fireEvent.scroll(document);
+      fireEvent.resize(window);
+      expect(screen.queryByRole("tooltip")).toBeNull();
+    },
+  );
+
+  it("clears help when its focused input is removed but the guide label remains", async () => {
+    const view = render(
+      <LocaleProvider initialLocale="en">
+        <UiGuideTooltip />
+        <label data-ui-guide="voice.consent">
+          <input
+            type="checkbox"
+            aria-label="Voice consent"
+            aria-describedby="existing-description"
+          />
+          Voice consent
+        </label>
+      </LocaleProvider>,
+    );
+    const checkbox = screen.getByRole("checkbox", { name: "Voice consent" });
+    const label = checkbox.closest("label");
+    fireEvent.focusIn(checkbox);
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+
+    view.rerender(
+      <LocaleProvider initialLocale="en">
+        <UiGuideTooltip />
+        <label data-ui-guide="voice.consent">Voice consent</label>
+      </LocaleProvider>,
+    );
+
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    expect(label?.isConnected).toBe(true);
+    expect(checkbox.getAttribute("aria-describedby")).toBe(
+      "existing-description",
+    );
+    fireEvent.pointerOver(label!, { pointerType: "mouse" });
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    expect(label?.getAttribute("aria-describedby")).toBe(
+      "maya-ui-guide-tooltip",
     );
   });
 

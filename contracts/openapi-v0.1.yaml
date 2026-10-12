@@ -4338,11 +4338,12 @@ components:
       type: object
     DebateSummary:
       type: object
-      required: [id, course_id, topic, status, created_at]
+      required: [id, course_id, topic, round_count, status, created_at]
       properties:
         id: { $ref: "#/components/schemas/Uuid" }
         course_id: { $ref: "#/components/schemas/Uuid" }
         topic: { type: string }
+        round_count: { type: integer, minimum: 2, maximum: 5 }
         status:
           {
             type: string,
@@ -4414,7 +4415,6 @@ components:
               revision,
               last_sequence,
               rule_set_id,
-              round_count,
               participants,
               public_turns,
               playback,
@@ -4428,7 +4428,6 @@ components:
             last_sequence: { type: integer, minimum: 0 }
             rule_set_id:
               { type: string, const: ordered_multi_expert_mutual_learning_v1 }
-            round_count: { type: integer, minimum: 2, maximum: 5 }
             output_language: { type: string, enum: [en, zh], default: en }
             turn_protocol:
               {
