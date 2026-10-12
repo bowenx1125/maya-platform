@@ -3973,6 +3973,106 @@
         }
       }
     },
+    "/api/v1/courses/{course_id}/voice-profiles": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CourseId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "listPersonalVoiceProfiles",
+        "responses": {
+          "200": {
+            "description": "The teacher's own personal voices; no external IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VoiceProfile"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "enrollPersonalVoice",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "consent_accepted"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "consent_accepted": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "consent_copy_version": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "zh-CN"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Enrollment job accepted; temporary samples will be deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/voice-profiles": {
       "parameters": [
         {
@@ -12805,7 +12905,8 @@
             "type": "string",
             "enum": [
               "system",
-              "group"
+              "group",
+              "personal"
             ]
           },
           "group_id": {
@@ -12842,6 +12943,11 @@
           },
           "created_at": {
             "$ref": "#/components/schemas/IsoTime"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "default": true,
+            "description": "Only the creator may rename, preview, confirm or delete; groupmates may select a ready voice."
           }
         }
       },

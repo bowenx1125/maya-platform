@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, false, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -97,8 +97,9 @@ def _safe_error_code(value: str | None) -> str | None:
     return value if value in SAFE_VOICE_ERRORS else None
 
 
-def voice_profile_dto(profile: VoiceProfile) -> VoiceProfileResponse:
+def voice_profile_dto(profile: VoiceProfile, *, can_manage: bool = True) -> VoiceProfileResponse:
     return VoiceProfileResponse(
+        can_manage=can_manage,
         id=UUID(profile.id),
         scope=profile.scope,  # type: ignore[arg-type]
         group_id=UUID(profile.group_id) if profile.group_id else None,
@@ -134,8 +135,23 @@ def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
     )
 
 
+def _personal_voice_query(context: AuthContext, profile_id: str) -> Any:
+    """A teacher's personal voice is theirs alone; an ownerless one is nobody's."""
+
+    return select(VoiceProfile).where(
+        VoiceProfile.id == profile_id,
+        VoiceProfile.scope == "personal",
+        VoiceProfile.group_id.is_(None),
+        VoiceProfile.consent_actor_user_id == context.user.id,
+    )
+
+
 def visible_student_voice(db: Session, context: AuthContext, profile_id: str) -> ScopedVoice:
+    """The voice its creator may manage: their group clone or their personal voice."""
+
     row = db.execute(_scoped_voice_query(context, profile_id)).first()
+    if row is None:
+        row = db.execute(_personal_voice_query(context, profile_id)).first()
     if row is None:
         raise not_found()
     return ScopedVoice(row[0], "student")
@@ -154,13 +170,31 @@ def rename_voice_profile(
     return voice_profile_dto(profile)
 
 
+def _groupmate_owner_ids(db: Session, group_id: str) -> Any:
+    """Students of this group: whose ready voices a groupmate may choose."""
+
+    return (
+        select(WorkspaceMember.user_id)
+        .join(Group, Group.id == WorkspaceMember.group_id)
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == Group.course_id,
+                CourseMember.user_id == WorkspaceMember.user_id,
+            ),
+        )
+        .where(Group.id == group_id, CourseMember.role == "student")
+    )
+
+
 def list_group_voices(
     db: Session, context: AuthContext, group_id: str
 ) -> list[VoiceProfileResponse]:
-    # Accounts access counts as being in the group, but the list is still only
-    # the voices this person created. Another student's clone stays hidden.
-    authorized = db.scalar(
-        select(WorkspaceMember.user_id)
+    # A student sees their own voices and the ready voices of the group's other
+    # students, which they may choose but not manage. A teacher on an Accounts
+    # visit is not a groupmate and sees only their own (none).
+    authorized = db.execute(
+        select(WorkspaceMember.user_id, CourseMember.role)
         .join(Group, Group.id == WorkspaceMember.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .where(
@@ -168,20 +202,59 @@ def list_group_voices(
             WorkspaceMember.user_id == context.user.id,
             CourseMember.user_id == context.user.id,
         )
-    )
+    ).first()
     if authorized is None:
         raise not_found()
+    shared = (
+        and_(
+            VoiceProfile.status == "ready",
+            VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, group_id)),
+        )
+        if authorized.role == "student"
+        else false()
+    )
     profiles = db.scalars(
         select(VoiceProfile)
         .where(
             VoiceProfile.scope == "group",
             VoiceProfile.group_id == group_id,
             # A missing owner fails closed and is shown to nobody.
+            or_(VoiceProfile.consent_actor_user_id == context.user.id, shared),
+        )
+        .order_by(VoiceProfile.created_at, VoiceProfile.id)
+    ).all()
+    return [
+        voice_profile_dto(profile, can_manage=profile.consent_actor_user_id == context.user.id)
+        for profile in profiles
+    ]
+
+
+def list_personal_voices(
+    db: Session, context: AuthContext, course_id: str
+) -> list[VoiceProfileResponse]:
+    """A teacher's own voices, which only that teacher may choose."""
+
+    _assert_course_teacher(db, context, course_id)
+    profiles = db.scalars(
+        select(VoiceProfile)
+        .where(
+            VoiceProfile.scope == "personal",
+            VoiceProfile.group_id.is_(None),
             VoiceProfile.consent_actor_user_id == context.user.id,
         )
         .order_by(VoiceProfile.created_at, VoiceProfile.id)
     ).all()
     return [voice_profile_dto(profile) for profile in profiles]
+
+
+def _assert_course_teacher(db: Session, context: AuthContext, course_id: str) -> None:
+    role = db.scalar(
+        select(CourseMember.role).where(
+            CourseMember.course_id == course_id, CourseMember.user_id == context.user.id
+        )
+    )
+    if role != "teacher":
+        raise not_found()
 
 
 def baseline_configured_voice_id(settings: Settings, agent_id: str) -> str | None:
@@ -242,6 +315,21 @@ def validate_voice_binding(
 
     if voice_profile_id is None:
         return
+    agent = db.scalar(
+        select(Agent)
+        .join(AgentVersion, AgentVersion.agent_id == Agent.id)
+        .where(AgentVersion.id == version.id)
+    )
+    if agent is not None and agent.group_id is None:
+        # A teacher's personal Agent takes only that teacher's personal voice.
+        if agent.owner_user_id != context.user.id:
+            raise not_found()
+        _assert_course_teacher(db, context, agent.course_id)
+        profile = db.scalar(
+            _personal_voice_query(context, voice_profile_id).where(VoiceProfile.status == "ready")
+        )
+        _require_bindable(profile, settings)
+        return
     target_group = db.scalar(
         select(Agent.group_id)
         .join(AgentVersion, AgentVersion.agent_id == Agent.id)
@@ -262,11 +350,18 @@ def validate_voice_binding(
             VoiceProfile.scope == "group",
             VoiceProfile.group_id == target_group,
             VoiceProfile.status == "ready",
-            # A draft can only bind the caller's own cloned voice; a missing
-            # owner fails closed.
-            VoiceProfile.consent_actor_user_id == context.user.id,
+            # The caller's own clone or a groupmate's; a missing owner fails
+            # closed.
+            or_(
+                VoiceProfile.consent_actor_user_id == context.user.id,
+                VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, target_group)),
+            ),
         )
     )
+    _require_bindable(profile, settings)
+
+
+def _require_bindable(profile: VoiceProfile | None, settings: Settings) -> None:
     if profile is None:
         raise validation_failure(
             "The selected voice profile is not ready for this group.",
@@ -351,12 +446,14 @@ def _create_profile_and_operation(
     idempotency_record_id: str | None,
     operation_type: str,
     claim_token: str | None = None,
+    personal: bool = False,
 ) -> tuple[VoiceProfile, VoiceProviderOperation]:
     timestamp = now_utc()
     profile_id = str(uuid4())
+    owned = group_id is not None or personal
     profile = VoiceProfile(
         id=profile_id,
-        scope="group" if group_id is not None else "system",
+        scope="group" if group_id is not None else "personal" if personal else "system",
         group_id=group_id,
         display_name=display_name,
         status="enrolling",
@@ -369,8 +466,8 @@ def _create_profile_and_operation(
                 "source_filename": source_filename,
                 "source_sha256": source_sha256,
                 "consent_copy_version": consent_copy_version,
-                "consent_actor_user_id": context.user.id if group_id is not None else None,
-                "consent_accepted": group_id is not None,
+                "consent_actor_user_id": context.user.id if owned else None,
+                "consent_accepted": owned,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -378,8 +475,8 @@ def _create_profile_and_operation(
         source_filename=source_filename,
         source_sha256=source_sha256,
         consent_copy_version=consent_copy_version,
-        consent_actor_user_id=context.user.id if group_id is not None else None,
-        consent_accepted_at=timestamp if group_id is not None else None,
+        consent_actor_user_id=context.user.id if owned else None,
+        consent_accepted_at=timestamp if owned else None,
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -612,14 +709,19 @@ def enroll_voice(
     settings: Settings,
     upload: StreamedVoiceUpload,
     *,
-    group_id: str,
+    group_id: str | None,
     consent_accepted: bool,
     consent_copy_version: str | None,
     idempotency_key: str,
     language: str | None = None,
     provider: VoiceCloneProvider | None = None,
+    personal_course_id: str | None = None,
 ) -> VoiceProfileResponse | Any:
-    """Validate, normalize and enroll one temporary upload."""
+    """Validate, normalize and enroll one temporary upload.
+
+    A student enrolls into a group; a teacher, who has no group, enrolls a
+    personal voice under ``personal_course_id``.
+    """
 
     if not consent_accepted:
         upload.cleanup()
@@ -638,7 +740,13 @@ def enroll_voice(
         upload.cleanup()
         raise
     try:
-        _assert_student_group_access(db, context, group_id)
+        if (group_id is None) == (personal_course_id is None):
+            raise not_found()
+        if group_id is not None:
+            _assert_student_group_access(db, context, group_id)
+        else:
+            assert personal_course_id is not None
+            _assert_course_teacher(db, context, personal_course_id)
     except BaseException:
         upload.cleanup()
         raise
@@ -651,7 +759,7 @@ def enroll_voice(
         raise validation_failure("The voice file is not valid.", code="audio_invalid") from exc
     body_hash = _voice_request_hash(
         context,
-        group_id,
+        group_id if group_id is not None else f"personal:{personal_course_id}",
         upload.source_filename,
         upload.sha256,
         copy_version,
@@ -755,6 +863,7 @@ def enroll_voice(
                     idempotency_record_id=record.id,
                     operation_type="enroll",
                     claim_token=record.claim_token,
+                    personal=group_id is None,
                 )
                 db.commit()
         else:
@@ -771,6 +880,7 @@ def enroll_voice(
                 idempotency_record_id=record.id,
                 operation_type="enroll",
                 claim_token=record.claim_token,
+                personal=group_id is None,
             )
             db.commit()
         assert profile is not None and operation is not None

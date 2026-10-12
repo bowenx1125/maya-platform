@@ -33,6 +33,7 @@ type ListedVoice = VoiceProfile;
 
 export function VoiceLibrary({
   groupId,
+  courseId = null,
   membershipGroupIds = [],
   listenOnly = false,
   embedded = false,
@@ -42,6 +43,8 @@ export function VoiceLibrary({
   id,
 }: {
   groupId: string | null;
+  /** A teacher's own personal voices in this course, instead of a group's. */
+  courseId?: string | null;
   /** Groups this person belongs to. Never a course-wide picker. */
   membershipGroupIds?: string[];
   /** Accounts opens a group so a teacher can play its voices. */
@@ -56,8 +59,15 @@ export function VoiceLibrary({
   const { api } = useSession();
   const membershipKey = membershipGroupIds.join("|");
   const scopes = useMemo<string[]>(
-    () => (groupId ? [groupId] : membershipKey ? membershipKey.split("|") : []),
-    [groupId, membershipKey],
+    () =>
+      courseId
+        ? [courseId]
+        : groupId
+          ? [groupId]
+          : membershipKey
+            ? membershipKey.split("|")
+            : [],
+    [courseId, groupId, membershipKey],
   );
   const [profiles, setProfiles] = useState<ListedVoice[]>([]);
   const [scopeStatus, setScopeStatus] = useState<Record<string, ScopeStatus>>(
@@ -106,7 +116,9 @@ export function VoiceLibrary({
             return {
               scopeId,
               status: "ready" as const,
-              profiles: await api.voiceProfiles(scopeId),
+              profiles: courseId
+                ? await api.personalVoiceProfiles(scopeId)
+                : await api.voiceProfiles(scopeId),
               cause: null,
             };
           } catch (cause) {
@@ -140,7 +152,7 @@ export function VoiceLibrary({
       setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
       setLoading(false);
     },
-    [api, scopes],
+    [api, courseId, scopes],
   );
 
   useEffect(() => {
@@ -166,14 +178,17 @@ export function VoiceLibrary({
 
   const enrollmentGroupId = listenOnly
     ? null
-    : groupId &&
-        (scopeStatus[groupId] === "ready" || scopeStatus[groupId] === "error")
-      ? groupId
-      : scopes.length === 1 &&
-          (scopeStatus[scopes[0]] === "ready" ||
-            scopeStatus[scopes[0]] === "error")
-        ? scopes[0]
-        : null;
+    : courseId &&
+        (scopeStatus[courseId] === "ready" || scopeStatus[courseId] === "error")
+      ? courseId
+      : groupId &&
+          (scopeStatus[groupId] === "ready" || scopeStatus[groupId] === "error")
+        ? groupId
+        : scopes.length === 1 &&
+            (scopeStatus[scopes[0]] === "ready" ||
+              scopeStatus[scopes[0]] === "error")
+          ? scopes[0]
+          : null;
   const canEnroll = Boolean(enrollmentGroupId) && !loading && !listenOnly;
 
   async function submitEnrollment() {
@@ -182,9 +197,15 @@ export function VoiceLibrary({
     setError(null);
     setNotice(null);
     try {
-      await api.enrollVoice(enrollmentGroupId, file, CONSENT_COPY_VERSION, {
-        idempotency: idempotency.handleFor("voice-enroll"),
-      });
+      const options = { idempotency: idempotency.handleFor("voice-enroll") };
+      await (courseId
+        ? api.enrollPersonalVoice(courseId, file, CONSENT_COPY_VERSION, options)
+        : api.enrollVoice(
+            enrollmentGroupId,
+            file,
+            CONSENT_COPY_VERSION,
+            options,
+          ));
       idempotency.finish("voice-enroll");
       setFile(null);
       setConsent(false);
@@ -317,8 +338,12 @@ export function VoiceLibrary({
         {profiles.map((profile) => {
           const name = profile.source_filename ?? t("voiceCustom");
           const editing = editingName?.id === profile.id;
+          // A groupmate's voice can be chosen, but only its creator renames,
+          // previews or confirms it.
+          const manageable = profile.can_manage !== false;
           const canPlay =
-            profile.status === "preview_ready" || profile.status === "ready";
+            manageable &&
+            (profile.status === "preview_ready" || profile.status === "ready");
           return (
             <li className="agent-tile" key={profile.id}>
               {editing ? (
@@ -356,7 +381,7 @@ export function VoiceLibrary({
                 >
                   {name}
                 </button>
-              ) : listenOnly ? (
+              ) : listenOnly || !manageable ? (
                 <span className="agent-tile-name">{name}</span>
               ) : (
                 <button
@@ -396,7 +421,9 @@ export function VoiceLibrary({
                   <IconPlay />
                 </button>
               ) : null}
-              {!listenOnly && profile.status === "preview_ready" ? (
+              {!listenOnly &&
+              manageable &&
+              profile.status === "preview_ready" ? (
                 <button
                   className={cards.iconButton}
                   aria-label={t("voiceConfirm")}

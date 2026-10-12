@@ -2601,6 +2601,44 @@ export class PlatformApi {
     });
   }
 
+  async personalVoiceProfiles(courseId: string): Promise<VoiceProfile[]> {
+    return unwrap(
+      await this.client.GET("/courses/{course_id}/voice-profiles", {
+        params: { path: { course_id: courseId } },
+      }),
+    );
+  }
+
+  async enrollPersonalVoice(
+    courseId: string,
+    file: File,
+    consentCopyVersion?: string,
+    options: IdempotentMutationOptions & { language?: "en" | "zh-CN" } = {},
+  ): Promise<VoiceProfile> {
+    return commitMutation(options.idempotency, async (key) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("consent_accepted", "true");
+      if (options.language) form.append("language", options.language);
+      if (consentCopyVersion)
+        form.append("consent_copy_version", consentCopyVersion);
+      const result = await this.client.POST(
+        "/courses/{course_id}/voice-profiles",
+        {
+          params: {
+            path: { course_id: courseId },
+            header: {
+              "Idempotency-Key": key,
+              "X-CSRF-Token": this.csrfToken ?? "",
+            },
+          },
+          body: form as unknown as never,
+        },
+      );
+      return unwrap(result);
+    });
+  }
+
   async voiceProfile(profileId: string): Promise<VoiceProfile> {
     return unwrap(
       await this.client.GET("/voice-profiles/{voice_profile_id}", {

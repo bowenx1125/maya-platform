@@ -23,12 +23,15 @@ VoiceStatus = Literal[
 
 class VoiceProfile(BaseModel):
     id: UUID
-    scope: Literal["system", "group"]
+    scope: Literal["system", "group", "personal"]
     group_id: UUID | None = None
     status: VoiceStatus
     source_filename: str = ""
     safe_error_code: str | None = None
     created_at: datetime
+    # Only the creator may rename, preview, confirm or delete; groupmates may
+    # select a ready voice.
+    can_manage: bool = True
 
 
 class RenameVoiceProfileRequest(BaseModel):

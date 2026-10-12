@@ -103,6 +103,7 @@ function makeApi(enabledDocuments: KnowledgeDocument[] = []) {
     enabled_documents: enabledDocuments,
   } as AgentVersion;
   return {
+    personalVoiceProfiles: vi.fn(async () => []),
     version: vi.fn(async () => currentVersion),
     agent: vi.fn(async () => agent),
     versions: vi.fn(async () => []),

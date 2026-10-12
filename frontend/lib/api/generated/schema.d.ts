@@ -938,6 +938,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/voice-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listPersonalVoiceProfiles"];
+        put?: never;
+        post: operations["enrollPersonalVoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups/{group_id}/voice-profiles": {
         parameters: {
             query?: never;
@@ -3250,13 +3268,18 @@ export interface components {
         VoiceProfile: {
             id: components["schemas"]["Uuid"];
             /** @enum {string} */
-            scope: "system" | "group";
+            scope: "system" | "group" | "personal";
             group_id?: components["schemas"]["Uuid"] | null;
             /** @enum {string} */
             status: "validating" | "enrolling" | "preview_ready" | "ready" | "deleting" | "outcome_unknown" | "failed" | "deleted";
             source_filename?: string;
             safe_error_code?: string | null;
             created_at: components["schemas"]["IsoTime"];
+            /**
+             * @description Only the creator may rename, preview, confirm or delete; groupmates may select a ready voice.
+             * @default true
+             */
+            can_manage: boolean;
         };
         RenameVoiceProfileRequest: {
             /** @description Trimmed display filename; path separators, control characters, dot and double-dot are rejected. */
@@ -8427,6 +8450,70 @@ export interface operations {
                     "application/json": components["schemas"]["AvatarTemplate"][];
                 };
             };
+        };
+    };
+    listPersonalVoiceProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The teacher's own personal voices; no external IDs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceProfile"][];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    enrollPersonalVoice: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                    /** @constant */
+                    consent_accepted: true;
+                    consent_copy_version?: string;
+                    /** @enum {string} */
+                    language?: "en" | "zh-CN";
+                };
+            };
+        };
+        responses: {
+            /** @description Enrollment job accepted; temporary samples will be deleted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoiceProfile"];
+                };
+            };
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     listVoiceProfiles: {

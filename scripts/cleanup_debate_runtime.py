@@ -33,7 +33,7 @@ K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
 K3B1_SCHEMA_HEAD = "0041_team_conversations"
 K3B2_SCHEMA_HEAD = "0042_team_turn_results"
 K4A_SCHEMA_HEAD = "0043_learning_evidence"
-SCHEMA_HEAD = "0061_personal_agent_debaters"
+SCHEMA_HEAD = "0062_teacher_personal_voices"
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
@@ -90,6 +90,7 @@ V14_PRESERVED_BY_HEAD = {
     "0059_chat_titles_pins": (),
     "0060_legacy_data_reset": ("data_reset_rows",),
     "0061_personal_agent_debaters": (),
+    "0062_teacher_personal_voices": (),
 }
 SUPPORTED_SCHEMA_HEADS.update(V14_PRESERVED_BY_HEAD)
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"

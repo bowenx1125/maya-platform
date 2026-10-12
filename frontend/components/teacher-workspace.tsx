@@ -351,7 +351,7 @@ export function TeacherStudyformWorkspace({
           <TeamEntryFlow
             key={scope}
             api={api}
-            courseId={teacherCourseId}
+            courseId={teacherCourseId ?? null}
             agents={chatAgents}
             variant="team"
             standalone
@@ -470,10 +470,7 @@ export function TeacherStudyformWorkspace({
           id="studyform-voices"
           key={`${scope}:voices`}
           groupId={null}
-          membershipGroupIds={(user?.groups ?? []).map(
-            (group) => group.group_id,
-          )}
-          listenOnly
+          courseId={teacherCourseId ?? null}
           embedded
         />
       </ModuleGrid>

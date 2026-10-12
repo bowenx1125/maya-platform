@@ -379,7 +379,9 @@ export function AgentWorkbench({
             api.avatarTemplates(),
             unsavedGroupId
               ? api.voiceProfiles(unsavedGroupId)
-              : Promise.resolve([]),
+              : typeof api.personalVoiceProfiles === "function"
+                ? api.personalVoiceProfiles(courseId).catch(() => [])
+                : Promise.resolve([]),
             api.knowledgeSets(courseId),
           ]);
           if (!isCurrentScope(requestScope)) return;
@@ -464,7 +466,11 @@ export function AgentWorkbench({
           api.avatarTemplates(),
           nextAgent.group_id
             ? api.voiceProfiles(nextAgent.group_id)
-            : Promise.resolve([]),
+            : // Only the owning teacher has personal voices; anyone else
+              // reading this Agent gets none, not an error.
+              typeof api.personalVoiceProfiles === "function"
+              ? api.personalVoiceProfiles(nextAgent.course_id).catch(() => [])
+              : Promise.resolve([]),
           api.knowledgeSets(nextAgent.course_id),
           api.agentKnowledgeSets(nextAgent.id),
         ]);
@@ -1620,6 +1626,7 @@ export function AgentWorkbench({
               ) : null}
               <VoiceLibrary
                 groupId={agent.group_id}
+                courseId={agent.group_id ? null : agent.course_id}
                 membershipGroupIds={
                   agent.group_id
                     ? []

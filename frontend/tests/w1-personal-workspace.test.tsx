@@ -280,106 +280,31 @@ describe("W1 teacher personal workspace", () => {
     );
   });
 
-  it("shows only the voices a teacher created in a group they belong to", async () => {
-    const groupId = "teacher-group";
-    const otherGroupId = "student-group";
+  // Owner decision (2026-10-12): a teacher creates personal voices that only
+  // that teacher may choose; Studyform lists those, never a group's.
+  it("lists and creates a teacher's own personal voices", async () => {
     const api = {
       workspaceAgents: vi.fn().mockResolvedValue([]),
       chatAgents: vi.fn().mockResolvedValue([]),
-      groups: vi.fn().mockResolvedValue([
-        { id: groupId, course_id: courseId, name: "Cultural exchange" },
-        { id: otherGroupId, course_id: courseId, name: "Demo Group" },
-      ]),
-      voiceProfiles: vi.fn().mockResolvedValue([
+      groups: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      personalVoiceProfiles: vi.fn().mockResolvedValue([
         {
           id: "teacher-voice",
-          scope: "group",
-          group_id: groupId,
+          scope: "personal",
+          group_id: null,
           status: "ready",
           source_filename: "teacher-voice.wav",
           created_at: "2026-10-07T00:00:00Z",
+          can_manage: true,
         },
       ]),
       enrollVoice: vi.fn(),
+      enrollPersonalVoice: vi.fn(),
       createVoicePreview: vi.fn(),
     };
     mockedUseSession.mockReturnValue(
-      teacherSession(api, [{ group_id: groupId }]),
-    );
-    render(
-      <LocaleProvider initialLocale="en">
-        <AppShell role="teacher">
-          <TeacherStudyformWorkspace initialGroupId={otherGroupId} />
-        </AppShell>
-      </LocaleProvider>,
-    );
-
-    const heading = await screen.findByRole("heading", { name: "Voices" });
-    const voices = heading.closest("section") as HTMLElement;
-    expect(within(voices).queryByRole("combobox")).toBeNull();
-    expect(await within(voices).findByText("teacher-voice.wav")).toBeTruthy();
-    expect(
-      within(voices).getByRole("button", { name: "Preview" }),
-    ).toBeTruthy();
-    expect(within(voices).queryByRole("button", { name: "New" })).toBeNull();
-    expect(api.voiceProfiles).toHaveBeenCalledTimes(1);
-    expect(api.voiceProfiles).toHaveBeenCalledWith(groupId);
-    expect(api.groups).not.toHaveBeenCalled();
-    expect(api.enrollVoice).not.toHaveBeenCalled();
-    expect(api.createVoicePreview).not.toHaveBeenCalled();
-  });
-
-  it("does not open course groups a teacher has not joined", async () => {
-    const groupId = "student-group";
-    const api = {
-      workspaceAgents: vi.fn().mockResolvedValue([]),
-      chatAgents: vi.fn().mockResolvedValue([]),
-      groups: vi
-        .fn()
-        .mockResolvedValue([
-          { id: groupId, course_id: courseId, name: "Demo Group" },
-        ]),
-      voiceProfiles: vi.fn().mockResolvedValue([]),
-      enrollVoice: vi.fn(),
-      createVoicePreview: vi.fn(),
-    };
-    mockedUseSession.mockReturnValue(teacherSession(api));
-    render(
-      <LocaleProvider initialLocale="en">
-        <AppShell role="teacher">
-          <TeacherStudyformWorkspace initialMode="new" />
-        </AppShell>
-      </LocaleProvider>,
-    );
-
-    const heading = await screen.findByRole("heading", { name: "Voices" });
-    const voices = heading.closest("section") as HTMLElement;
-    expect(within(voices).getByText("No voices yet.")).toBeTruthy();
-    expect(within(voices).queryByRole("combobox")).toBeNull();
-    expect(within(voices).queryByRole("button", { name: "New" })).toBeNull();
-    expect(api.voiceProfiles).not.toHaveBeenCalled();
-    expect(api.groups).not.toHaveBeenCalled();
-    expect(api.enrollVoice).not.toHaveBeenCalled();
-  });
-
-  it("does not treat a Voice profile server error as a confirmed scope denial", async () => {
-    const groupId = "teacher-group";
-    const api = {
-      workspaceAgents: vi.fn().mockResolvedValue([]),
-      chatAgents: vi.fn().mockResolvedValue([]),
-      groups: vi
-        .fn()
-        .mockResolvedValue([
-          { id: groupId, course_id: courseId, name: "Group" },
-        ]),
-      voiceProfiles: vi
-        .fn()
-        .mockRejectedValue(new PlatformApiError(500, "temporary_failure")),
-      enrollVoice: vi.fn(),
-      createVoicePreview: vi.fn(),
-    };
-    mockedUseSession.mockReturnValue(
-      teacherSession(api, [{ group_id: groupId }]),
+      teacherSession(api, [{ group_id: "teacher-group" }]),
     );
     render(
       <LocaleProvider initialLocale="en">
@@ -389,43 +314,36 @@ describe("W1 teacher personal workspace", () => {
       </LocaleProvider>,
     );
 
-    const heading = await screen.findByRole("heading", {
-      name: "Voices",
-    });
+    const heading = await screen.findByRole("heading", { name: "Voices" });
     const voices = heading.closest("section") as HTMLElement;
-    await waitFor(() =>
-      expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
-    );
-    expect(within(voices).queryByRole("button", { name: "New" })).toBeNull();
-    expect(within(voices).getByRole("alert")).toBeTruthy();
+    expect(await within(voices).findByText("teacher-voice.wav")).toBeTruthy();
+    expect(
+      within(voices).getByRole("button", { name: "Preview" }),
+    ).toBeTruthy();
+    expect(api.personalVoiceProfiles).toHaveBeenCalledWith(courseId);
+    expect(api.voiceProfiles).not.toHaveBeenCalled();
+    expect(api.groups).not.toHaveBeenCalled();
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 
-  it("keeps direct Voice New Done disabled when its selected group returns 404", async () => {
-    const groupId = "not-a-member-group";
+  it("shows an error when the personal voice list fails", async () => {
     const api = {
       workspaceAgents: vi.fn().mockResolvedValue([]),
       chatAgents: vi.fn().mockResolvedValue([]),
-      groups: vi
+      groups: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      personalVoiceProfiles: vi
         .fn()
-        .mockResolvedValue([
-          { id: groupId, course_id: courseId, name: "Group" },
-        ]),
-      voiceProfiles: vi
-        .fn()
-        .mockRejectedValue(
-          new PlatformApiError(404, "workspace_member_required"),
-        ),
+        .mockRejectedValue(new PlatformApiError(500, "temporary_failure")),
       enrollVoice: vi.fn(),
+      enrollPersonalVoice: vi.fn(),
       createVoicePreview: vi.fn(),
     };
-    mockedUseSession.mockReturnValue(
-      teacherSession(api, [{ group_id: groupId }]),
-    );
+    mockedUseSession.mockReturnValue(teacherSession(api));
     render(
       <LocaleProvider initialLocale="en">
         <AppShell role="teacher">
-          <TeacherStudyformWorkspace initialMode="new" />
+          <TeacherStudyformWorkspace />
         </AppShell>
       </LocaleProvider>,
     );
@@ -433,22 +351,10 @@ describe("W1 teacher personal workspace", () => {
     const heading = await screen.findByRole("heading", { name: "Voices" });
     const voices = heading.closest("section") as HTMLElement;
     await waitFor(() =>
-      expect(api.voiceProfiles).toHaveBeenCalledWith(groupId),
+      expect(api.personalVoiceProfiles).toHaveBeenCalledWith(courseId),
     );
-    expect(
-      screen.queryByLabelText(
-        "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
-      ),
-    ).toBeNull();
-    expect(within(voices).queryByRole("button", { name: "New" })).toBeNull();
-    expect(within(voices).getByRole("alert")).toBeTruthy();
-    expect(
-      within(screen.getByRole("navigation")).queryByRole("button", {
-        name: "Done",
-      }),
-    ).toBeNull();
-    expect(api.enrollVoice).not.toHaveBeenCalled();
-    expect(within(voices).queryByRole("combobox")).toBeNull();
+    expect(await within(voices).findByRole("alert")).toBeTruthy();
+    expect(api.voiceProfiles).not.toHaveBeenCalled();
   });
 
   // RAG rows carry only the checkbox and file name, like the Knowledge list.

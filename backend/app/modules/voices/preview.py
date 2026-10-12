@@ -97,15 +97,27 @@ def resolve_effective_voice_profile(
     bound_profile_id: str | None,
     group_id: str | None,
     settings: Settings,
+    owner_user_id: str | None = None,
 ) -> EffectiveVoice:
-    """Resolve a ready same-group custom profile, otherwise system fallback."""
+    """Resolve a ready same-group or owner's personal profile, otherwise fallback."""
 
     if bound_profile_id:
+        owned = (
+            and_(
+                VoiceProfile.scope == "group",
+                VoiceProfile.group_id == group_id,
+            )
+            if group_id is not None
+            else and_(
+                VoiceProfile.scope == "personal",
+                VoiceProfile.group_id.is_(None),
+                VoiceProfile.consent_actor_user_id == owner_user_id,
+            )
+        )
         custom = db.scalar(
             select(VoiceProfile).where(
                 VoiceProfile.id == bound_profile_id,
-                VoiceProfile.scope == "group",
-                VoiceProfile.group_id == group_id,
+                owned,
                 VoiceProfile.status == "ready",
             )
         )
@@ -164,7 +176,12 @@ def create_voice_preview(
             "provider_unavailable", "The preview could not be generated.", 503
         ) from exc
     preview_id = str(uuid4())
-    relative_path = f"groups/{profile.group_id}/voices/previews/{preview_id}.wav"
+    owner_dir = (
+        f"groups/{profile.group_id}"
+        if profile.group_id
+        else f"personal/{profile.consent_actor_user_id}"
+    )
+    relative_path = f"{owner_dir}/voices/previews/{preview_id}.wav"
     data_root = settings.resolved_data_root
     try:
         digest, size = write_atomic(data_root, relative_path, raw)
@@ -328,6 +345,12 @@ def media_path_for_preview(
                     VoiceProfile.consent_actor_user_id == context.user.id,
                     scoped_group_member.user_id == context.user.id,
                     scoped_course_member.user_id == context.user.id,
+                ),
+                and_(
+                    VoiceProfile.scope == "personal",
+                    VoiceProfile.group_id.is_(None),
+                    VoicePreview.group_id.is_(None),
+                    VoiceProfile.consent_actor_user_id == context.user.id,
                 ),
             ),
         )

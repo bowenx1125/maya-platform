@@ -84,6 +84,8 @@ const implemented = new Set([
   "listAvatarTemplates",
   "listVoiceProfiles",
   "enrollVoice",
+  "listPersonalVoiceProfiles",
+  "enrollPersonalVoice",
   "getVoiceProfile",
   "renameVoiceProfile",
   "deleteVoiceProfile",

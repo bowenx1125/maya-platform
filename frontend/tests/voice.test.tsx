@@ -36,6 +36,51 @@ afterEach(() => {
 });
 
 describe("M08 voice library", () => {
+  it("lets a groupmate choose a ready voice but not rename or preview it", async () => {
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "peer-voice",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "peer.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: false,
+      },
+    ]);
+    const onSelect = vi.fn();
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" onSelect={onSelect} />
+      </AppShell>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "peer.wav" }));
+    expect(onSelect).toHaveBeenCalledWith("peer-voice");
+    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+  });
+
+  it("shows a groupmate's voice as a plain name outside a picker", async () => {
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "peer-voice",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "peer.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: false,
+      },
+    ]);
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    expect(await screen.findByText("peer.wav")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "peer.wav" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+  });
+
   it("requires consent and a local file before enrollment", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     render(

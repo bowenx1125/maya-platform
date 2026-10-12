@@ -33,6 +33,7 @@ _REVISIONS = (
     ("0058_card_rooms", "0059_chat_titles_pins"),
     ("0059_chat_titles_pins", "0060_legacy_data_reset"),
     ("0060_legacy_data_reset", "0061_personal_agent_debaters"),
+    ("0061_personal_agent_debaters", "0062_teacher_personal_voices"),
 )
 
 

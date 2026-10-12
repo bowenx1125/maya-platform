@@ -413,7 +413,16 @@ def _resolve_agent_version(
         custom = db.get(VoiceProfile, requested_voice_id)
         # A baseline character has no row to edit. An operator may point it at
         # a ready system profile; a student's own binding stays group-scoped.
-        same_group = custom is not None and group is not None and custom.group_id == group.id
+        # A group Agent may use its group's voice; a teacher's personal Agent
+        # only that teacher's personal voice.
+        same_group = custom is not None and (
+            (group is not None and custom.group_id == group.id)
+            or (
+                group is None
+                and custom.scope == "personal"
+                and custom.consent_actor_user_id == agent.owner_user_id
+            )
+        )
         operator_system = (
             custom is not None
             and own_voice_id is None

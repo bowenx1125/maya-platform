@@ -100,7 +100,7 @@ def _reconcile_delete(
         )
     operation.state = "prepared"
     operation.attempt += 1
-    operation.profile_scope = "group"
+    operation.profile_scope = profile.scope
     operation.updated_at = now_utc()
     profile.status = "deleting"
     profile.safe_error_code = None
@@ -123,7 +123,7 @@ def delete_voice_profile(
     profile = scoped.profile
     # A preset is a published supplier name, not an enrolled clone. Students
     # cannot delete it, and this path must not ask the clone API about it.
-    if is_preset_profile(profile) or profile.scope != "group":
+    if is_preset_profile(profile) or profile.scope not in {"group", "personal"}:
         raise not_found()
     body_hash = _delete_operation_hash(context, profile_id)
     try:
@@ -246,7 +246,7 @@ def delete_voice_profile(
             id=str(uuid4()),
             profile_id=profile.id,
             operation_type="delete",
-            profile_scope="group",
+            profile_scope=profile.scope,
             state="prepared",
             attempt=1,
             claim_token=record.claim_token,

@@ -389,7 +389,7 @@ def test_agent_draft_avatar_and_voice_binding_tri_state(
 def test_group_voice_is_owner_private_within_the_same_group(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
-    """A cloned voice is visible and actionable only by its uploading student."""
+    """Only the uploading student manages a cloned voice; peers see it once ready."""
 
     client, database, _settings = voice_client
     _user, csrf = login(client, "bowen")
@@ -408,7 +408,7 @@ def test_group_voice_is_owner_private_within_the_same_group(
     assert preview.status_code == 200, preview.text
     media_url = preview.json()["playback_url"]
 
-    # The second student in the same group cannot even see the voice.
+    # Until it is confirmed ready, the second student cannot even see the voice.
     kaikai_csrf = login(client, "kaikai")[1]
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() == []
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
@@ -2248,3 +2248,78 @@ async def test_streamed_upload_preserves_legacy_latin1_filename(tmp_path: Path) 
         assert upload.source_filename == "café.wav"
     finally:
         upload.cleanup()
+
+
+def test_groupmates_choose_ready_voices_and_teachers_keep_personal_ones(
+    voice_client: tuple[TestClient, Database, Settings],
+) -> None:
+    # Owner decision (2026-10-12): a student's voice may be chosen by its own
+    # group's students; a teacher creates voices only that teacher may choose.
+    client, database, _settings = voice_client
+    csrf = login(client, "bowen")[1]
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "groupmate-voice-enroll-01"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    with database.session() as session:
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None
+        profile.status = "ready"
+
+    kaikai_csrf = login(client, "kaikai")[1]
+    listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
+    shared = next(item for item in listed if item["id"] == profile_id)
+    assert shared["can_manage"] is False
+    own_agent = client.post(
+        f"/api/v1/groups/{GROUP_A}/agents",
+        headers=_headers(kaikai_csrf, "groupmate-voice-agent-01"),
+        json={"name": "Groupmate voice agent", "description": ""},
+    )
+    assert own_agent.status_code == 201, own_agent.text
+    draft = own_agent.json()["versions"][0]
+    bound = client.patch(
+        f"/api/v1/agent-versions/{draft['id']}",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+        json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
+    )
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["effective_voice_profile_id"] == profile_id
+    # Choosing is not managing: the creator alone previews, renames or deletes.
+    assert (
+        client.post(
+            f"/api/v1/voice-profiles/{profile_id}/preview",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.delete(
+            f"/api/v1/voice-profiles/{profile_id}",
+            headers=_headers(kaikai_csrf, "groupmate-voice-delete-01"),
+        ).status_code
+        == 404
+    )
+
+    maya_csrf = login(client, "maya")[1]
+    personal = client.post(
+        f"/api/v1/courses/{COURSE_ID}/voice-profiles",
+        headers=_headers(maya_csrf, "teacher-voice-enroll-01"),
+        data={"consent_accepted": "true"},
+        files={"file": ("teacher.wav", _wav(), "audio/wav")},
+    )
+    assert personal.status_code == 202, personal.text
+    assert personal.json()["scope"] == "personal"
+    assert personal.json()["group_id"] is None
+    personal_id = personal.json()["id"]
+    mine = client.get(f"/api/v1/courses/{COURSE_ID}/voice-profiles").json()
+    assert [item["id"] for item in mine] == [personal_id]
+    # Students have no personal library, and never see the teacher's voice.
+    login(client, "bowen")
+    assert client.get(f"/api/v1/courses/{COURSE_ID}/voice-profiles").status_code == 404
+    assert client.get(f"/api/v1/voice-profiles/{personal_id}").status_code == 404
+    group_listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
+    assert personal_id not in [item["id"] for item in group_listed]

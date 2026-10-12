@@ -24,6 +24,7 @@ from app.modules.voices.service import (
     delete_voice_profile,
     enroll_voice,
     list_group_voices,
+    list_personal_voices,
     media_path_for_preview,
     rename_voice_profile,
     visible_student_voice,
@@ -66,6 +67,55 @@ def _safe_provider_failure(exc: Exception) -> PlatformError:
     )
 
 
+async def _enroll(
+    request: Request,
+    context: AuthContext,
+    db: Session,
+    settings: Settings,
+    idempotency_key: str,
+    *,
+    group_id: str | None,
+    personal_course_id: str | None = None,
+) -> VoiceProfileResponse:
+    upload = None
+    try:
+        try:
+            upload = await stream_voice_upload(request, settings.resolved_data_root)
+        except VoiceUploadTooLarge as exc:
+            raise validation_failure("The voice file is too large.", code="audio_invalid") from exc
+        except (VoiceUploadDisconnected, VoiceUploadError) as exc:
+            raise validation_failure(
+                "The voice file could not be received.", code="audio_invalid"
+            ) from exc
+        fields = upload.fields
+        consent_raw = fields.get("consent_accepted", "").strip().lower()
+        if consent_raw not in {"true", "1", "yes"}:
+            raise validation_failure(
+                "Voice enrollment requires consent.", code="voice_enrollment_failed"
+            )
+        try:
+            result = enroll_voice(
+                db,
+                context,
+                settings,
+                upload,
+                group_id=group_id,
+                personal_course_id=personal_course_id,
+                consent_accepted=True,
+                consent_copy_version=fields.get("consent_copy_version"),
+                language=fields.get("language"),
+                idempotency_key=idempotency_key,
+            )
+        except PlatformError:
+            raise
+        except (RuntimeError, OSError) as exc:
+            raise _safe_provider_failure(exc) from exc
+        return result
+    finally:
+        if upload is not None:
+            upload.cleanup()
+
+
 @router.get(
     "/groups/{group_id}/voice-profiles",
     response_model=list[VoiceProfileResponse],
@@ -101,42 +151,55 @@ async def enroll_voice_route(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> VoiceProfileResponse:
-    upload = None
-    try:
-        try:
-            upload = await stream_voice_upload(request, settings.resolved_data_root)
-        except VoiceUploadTooLarge as exc:
-            raise validation_failure("The voice file is too large.", code="audio_invalid") from exc
-        except (VoiceUploadDisconnected, VoiceUploadError) as exc:
-            raise validation_failure(
-                "The voice file could not be received.", code="audio_invalid"
-            ) from exc
-        fields = upload.fields
-        consent_raw = fields.get("consent_accepted", "").strip().lower()
-        if consent_raw not in {"true", "1", "yes"}:
-            raise validation_failure(
-                "Voice enrollment requires consent.", code="voice_enrollment_failed"
-            )
-        try:
-            result = enroll_voice(
-                db,
-                context,
-                settings,
-                upload,
-                group_id=str(group_id),
-                consent_accepted=True,
-                consent_copy_version=fields.get("consent_copy_version"),
-                language=fields.get("language"),
-                idempotency_key=idempotency_key,
-            )
-        except PlatformError:
-            raise
-        except (RuntimeError, OSError) as exc:
-            raise _safe_provider_failure(exc) from exc
-        return result
-    finally:
-        if upload is not None:
-            upload.cleanup()
+    return await _enroll(request, context, db, settings, idempotency_key, group_id=str(group_id))
+
+
+@router.get(
+    "/courses/{course_id}/voice-profiles",
+    response_model=list[VoiceProfileResponse],
+    operation_id="listPersonalVoiceProfiles",
+    responses={404: {"model": Error, "description": "Course not found."}},
+)
+def list_personal_voice_profiles(
+    course_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[VoiceProfileResponse]:
+    return list_personal_voices(db, context, str(course_id))
+
+
+@router.post(
+    "/courses/{course_id}/voice-profiles",
+    response_model=VoiceProfileResponse,
+    status_code=202,
+    operation_id="enrollPersonalVoice",
+    openapi_extra={"requestBody": _VOICE_ENROLL_BODY},
+    responses={
+        404: {"model": Error, "description": "Course not found."},
+        422: {"model": Error, "description": "Invalid voice input."},
+        503: {"model": Error, "description": "Voice provider unavailable."},
+    },
+)
+async def enroll_personal_voice_route(
+    request: Request,
+    course_id: UUID,
+    idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> VoiceProfileResponse:
+    """A teacher, who has no group, enrolls a voice only they may choose."""
+
+    return await _enroll(
+        request,
+        context,
+        db,
+        settings,
+        idempotency_key,
+        group_id=None,
+        personal_course_id=str(course_id),
+    )
 
 
 @router.get(

@@ -1098,14 +1098,17 @@ class VoiceProfile(Base):
         self.external_id_encrypted = value
 
     __table_args__ = (
-        CheckConstraint("scope IN ('system', 'group')", name="ck_voice_profiles_scope"),
+        CheckConstraint("scope IN ('system', 'group', 'personal')", name="ck_voice_profiles_scope"),
         CheckConstraint(
             "status IN ('validating', 'enrolling', 'preview_ready', 'ready', 'deleting', "
             "'outcome_unknown', 'failed', 'deleted')",
             name="ck_voice_profiles_status",
         ),
         CheckConstraint(
-            "(scope = 'system' AND group_id IS NULL) OR (scope = 'group' AND group_id IS NOT NULL)",
+            # A teacher's personal voice belongs to no group; its owner is the
+            # consent actor, enforced in code because that column is SET NULL.
+            "(scope = 'system' AND group_id IS NULL) OR (scope = 'group' AND group_id IS NOT NULL) "
+            "OR (scope = 'personal' AND group_id IS NULL)",
             name="ck_voice_profiles_scope_group",
         ),
         Index("ix_voice_profiles_group_status", "group_id", "status"),
@@ -1182,7 +1185,7 @@ class VoiceProviderOperation(Base):
             name="ck_voice_provider_operations_type",
         ),
         CheckConstraint(
-            "profile_scope IN ('system', 'group')",
+            "profile_scope IN ('system', 'group', 'personal')",
             name="ck_voice_provider_operations_scope",
         ),
         CheckConstraint(

@@ -1277,6 +1277,7 @@ def version_dto(
         version.voice_profile_id,
         agent.group_id,
         settings or db.info.get("maya_settings") or get_settings(),
+        owner_user_id=agent.owner_user_id,
     )
     persona_spec: PersonaSpecVersion | None = None
     if version.persona_spec_json:
