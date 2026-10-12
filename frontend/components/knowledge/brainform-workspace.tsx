@@ -32,6 +32,7 @@ import {
   KnowledgeMarkdownField,
 } from "./markdown-editor";
 import { runKnowledgeMutation } from "./knowledge-mutation";
+import { republishAgentsUsingDocument } from "./republish";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
@@ -603,6 +604,36 @@ function BrainformWorkspaceBody({
   const operationSequence = useRef(0);
   const fileSelectionSequence = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameDocumentId, setRenameDocumentId] = useState<string | null>(
+    null,
+  );
+  // One click opens the editor, which replaces this list; a double-click
+  // renames in place. The open waits out a double-click before it runs.
+  const titleClickTimer = useRef<number | null>(null);
+  function titleClick(open: () => void) {
+    if (titleClickTimer.current !== null) {
+      window.clearTimeout(titleClickTimer.current);
+    }
+    titleClickTimer.current = window.setTimeout(() => {
+      titleClickTimer.current = null;
+      open();
+    }, 220);
+  }
+  function titleDoubleClick(rename: () => void) {
+    if (titleClickTimer.current !== null) {
+      window.clearTimeout(titleClickTimer.current);
+      titleClickTimer.current = null;
+    }
+    rename();
+  }
+  useEffect(
+    () => () => {
+      if (titleClickTimer.current !== null) {
+        window.clearTimeout(titleClickTimer.current);
+      }
+    },
+    [],
+  );
   const initialKnowledgeOpened = useRef(false);
   const initialJobRead = useRef<string | null>(null);
   const latestGenerationJobs = useRef<{
@@ -885,10 +916,10 @@ function BrainformWorkspaceBody({
   ]);
 
   useEffect(() => {
-    if (!renameSetId) return;
+    if (!renameSetId && !renameDocumentId) return;
     renameInputRef.current?.focus();
     renameInputRef.current?.select();
-  }, [renameSetId]);
+  }, [renameSetId, renameDocumentId]);
 
   useEffect(() => {
     if (initialMode || loading || initialKnowledgeOpened.current) return;
@@ -1301,8 +1332,38 @@ function BrainformWorkspaceBody({
       delete nextFiles[draftKey];
       ragActionFiles.current = nextFiles;
       setRagFiles(nextFiles);
-      setNotice(renameOnly ? t("brainformRagRenamed") : t("brainformRagSaved"));
-      void loadWorkspace();
+      if (renameOnly) {
+        setNotice(t("brainformRagRenamed"));
+        void loadWorkspace();
+        return;
+      }
+      setNotice(t("brainformRagUpdatingAgents"));
+      // The Agents reading this file publish a new version with its new
+      // text; the server then moves their Teams to it.
+      const republished = await republishAgentsUsingDocument(
+        api,
+        chatAgents,
+        next.id,
+      );
+      if (!scopeIsCurrent()) return;
+      setNotice(
+        [
+          t("brainformRagSaved"),
+          republished.updated.length
+            ? t("brainformRagAgentsUpdated", {
+                names: republished.updated.join(", "),
+              })
+            : "",
+          republished.failed.length
+            ? t("brainformRagAgentsNotUpdated", {
+                names: republished.failed.join(", "),
+              })
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      void loadWorkspace(true);
     } catch (cause) {
       if (isConflict(cause)) {
         await loadWorkspace();
@@ -1786,6 +1847,42 @@ function BrainformWorkspaceBody({
     }
   }
 
+  async function saveDocumentName(document: KnowledgeDocument) {
+    const base = renameValue.trim();
+    setRenameDocumentId(null);
+    if (!base || busyKeyRef.current) return;
+    const extension = document.source_filename.match(/\.[^.]+$/)?.[0] ?? "";
+    const filename = base.toLowerCase().endsWith(extension.toLowerCase())
+      ? base
+      : `${base}${extension}`;
+    if (filename === document.source_filename) return;
+    const intent = `brainform-rename:${document.id}:${document.source_filename}:${filename}`;
+    commitBusy(`rename-document:${document.id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const next = await runKnowledgeMutation(
+        mutationStore,
+        intent,
+        (idempotency) =>
+          api.renameKnowledgeDocument(
+            document.id,
+            { expected_filename: document.source_filename, filename },
+            { idempotency },
+          ),
+      );
+      if (!scopeIsCurrent()) return;
+      setRagDocuments((current) =>
+        current.map((row) => (row.id === next.id ? next : row)),
+      );
+      setNotice(t("brainformRagRenamed"));
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
   async function saveSetName(setId: string) {
     const value = renameValue.trim();
     setRenameSetId(null);
@@ -2045,23 +2142,59 @@ function BrainformWorkspaceBody({
                   return (
                     <li className={styles.row} key={document.id}>
                       <div className={styles.rowCopy}>
-                        <button
-                          type="button"
-                          className={styles.titleButton}
-                          onClick={() =>
-                            void (canEdit
-                              ? editRag(document)
-                              : viewRag(document))
-                          }
-                          aria-label={t(
-                            canEdit
-                              ? "brainformEditRagNamed"
-                              : "brainformViewRagNamed",
-                            { name: document.source_filename },
-                          )}
-                        >
-                          {document.source_filename}
-                        </button>
+                        {renameDocumentId === document.id ? (
+                          <input
+                            ref={renameInputRef}
+                            className={styles.inlineNameInput}
+                            aria-label={t("brainformRagName")}
+                            value={renameValue}
+                            onChange={(event) =>
+                              setRenameValue(event.target.value)
+                            }
+                            onBlur={() => void saveDocumentName(document)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                event.currentTarget.blur();
+                              }
+                              if (event.key === "Escape")
+                                setRenameDocumentId(null);
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.titleButton}
+                            onClick={() =>
+                              titleClick(
+                                () =>
+                                  void (canEdit
+                                    ? editRag(document)
+                                    : viewRag(document)),
+                              )
+                            }
+                            onDoubleClick={() =>
+                              titleDoubleClick(() => {
+                                if (!canEdit) return;
+                                setRenameDocumentId(document.id);
+                                setRenameValue(
+                                  document.source_filename.replace(
+                                    /\.[^.]+$/,
+                                    "",
+                                  ),
+                                );
+                              })
+                            }
+                            aria-label={t(
+                              canEdit
+                                ? "brainformEditRagNamed"
+                                : "brainformViewRagNamed",
+                              { name: document.source_filename },
+                            )}
+                          >
+                            {document.source_filename}
+                          </button>
+                        )}
                         {status ? (
                           <span
                             className={styles.rowStatus}
@@ -2227,17 +2360,38 @@ function BrainformWorkspaceBody({
                             }}
                           />
                         ) : (
+                          // Like a RAG row: a click opens the editor, whose
+                          // Done saves a version every user reads; a
+                          // double-click renames.
                           <button
                             type="button"
                             className={styles.titleButton}
-                            disabled={!row.can_edit}
+                            aria-disabled={
+                              isGenerating ||
+                              (!currentDoc && !row.can_edit) ||
+                              undefined
+                            }
                             onClick={() => {
-                              setRenameSetId(row.canonical_set_id);
-                              setRenameValue(row.knowledge_display_name);
+                              if (isGenerating || (!currentDoc && !row.can_edit))
+                                return;
+                              titleClick(
+                                () =>
+                                  void openKnowledge(
+                                    row,
+                                    row.can_edit ? "edit" : "view",
+                                  ),
+                              );
                             }}
+                            onDoubleClick={() =>
+                              titleDoubleClick(() => {
+                                if (!row.can_edit) return;
+                                setRenameSetId(row.canonical_set_id);
+                                setRenameValue(row.knowledge_display_name);
+                              })
+                            }
                             aria-label={
                               row.can_edit
-                                ? t("brainformRenameSetNamed", {
+                                ? t("brainformEditKnowledgeNamed", {
                                     name: row.knowledge_display_name,
                                   })
                                 : row.knowledge_display_name

@@ -357,6 +357,8 @@ const enMessages = {
   brainformViewRag: "View Markdown source",
   brainformViewRagNamed: "View {name}",
   brainformEditRagNamed: "Edit {name}",
+  brainformRagName: "RAG file name",
+  brainformEditKnowledgeNamed: "Edit Knowledge {name}",
   brainformDownloadRagNamed: "Download {name}",
   brainformHideRagNamed: "Hide {name}",
   brainformDeleteKnowledgeNamed: "Delete {name}",
@@ -387,6 +389,9 @@ const enMessages = {
     "Choose a .md, .pdf, or .docx file, or enter non-empty Markdown.",
   brainformChooseGroup: "Choose a Group",
   brainformRagSaved: "Markdown source saved.",
+  brainformRagUpdatingAgents: "Saved. Updating the Agents that use it…",
+  brainformRagAgentsUpdated: "Updated {names} and their Teams.",
+  brainformRagAgentsNotUpdated: "Could not update {names}; open it and press Done.",
   brainformRetrySameSave:
     "The save result is unknown. Retry to check the same save.",
   brainformRagConflictDraftKept:
@@ -1111,6 +1116,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformViewRag: "查看 Markdown 来源",
   brainformViewRagNamed: "查看 {name}",
   brainformEditRagNamed: "编辑 {name}",
+  brainformRagName: "RAG 文件名",
+  brainformEditKnowledgeNamed: "编辑 Knowledge {name}",
   brainformDownloadRagNamed: "下载 {name}",
   brainformHideRagNamed: "隐藏 {name}",
   brainformDeleteKnowledgeNamed: "删除 {name}",
@@ -1140,6 +1147,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "请选择 .md、.pdf 或 .docx 文件，或输入非空 Markdown。",
   brainformChooseGroup: "选择小组",
   brainformRagSaved: "Markdown 来源已保存。",
+  brainformRagUpdatingAgents: "已保存，正在更新使用它的 Agent…",
+  brainformRagAgentsUpdated: "已更新 {names} 及其 Teams。",
+  brainformRagAgentsNotUpdated: "{names} 未能更新，请打开后点 Done。",
   brainformRetrySameSave: "保存结果尚不确定。重试会检查同一次保存。",
   brainformRagConflictDraftKept:
     "来源已在其他位置变化。草稿已保留；重新载入后再保存。",

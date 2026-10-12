@@ -424,6 +424,123 @@ describe("Brainform workspace actions", () => {
     );
   });
 
+  // Owner request (2026-10-13): saving a RAG file updates every Agent that
+  // reads it; the server then moves their Teams to the new version.
+  it("publishes a new version of the Agent that reads a saved RAG file", async () => {
+    state.role = "teacher";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
+    state.api.replaceKnowledgeDocument.mockResolvedValue({
+      ...source,
+      source_filename: "lesson.docx",
+      content_hash: "c".repeat(64),
+      index_revision: 5,
+    });
+    state.api.version = vi.fn().mockResolvedValue({
+      id: "agent-version-1",
+      revision: 3,
+      state: "published",
+      agent_md: "# Socrates",
+      enabled_documents: [source],
+    });
+    state.api.agent = vi.fn().mockResolvedValue({
+      id: "agent-1",
+      can_edit: true,
+      current_draft_version_id: null,
+    });
+    state.api.nextVersion = vi
+      .fn()
+      .mockResolvedValue({ id: "agent-version-2", revision: 0 });
+    state.api.publish = vi.fn().mockResolvedValue({ id: "agent-version-2" });
+    renderWorkspace("teacher");
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
+    );
+    fireEvent.change(await screen.findByLabelText("Import a file"), {
+      target: {
+        files: [binaryUpload("lesson.docx", [80, 75, 3, 4, 0, 255])],
+      },
+    });
+    await screen.findByText(
+      "lesson.docx is selected. It will be imported when you save.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    await waitFor(() =>
+      expect(state.api.publish).toHaveBeenCalledWith("agent-version-2", 0),
+    );
+    expect(state.api.nextVersion).toHaveBeenCalledWith("agent-1");
+    expect(
+      await screen.findByText(
+        "Markdown source saved. Updated Socrates and their Teams.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renames a RAG file in place on a double-click, keeping its extension", async () => {
+    state.role = "teacher";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
+    renderWorkspace("teacher");
+    fireEvent.doubleClick(
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
+    );
+    const name = await screen.findByRole("textbox", { name: "RAG file name" });
+    expect((name as HTMLInputElement).value).toBe("lesson");
+    fireEvent.change(name, { target: { value: "renamed" } });
+    fireEvent.blur(name);
+    await waitFor(() =>
+      expect(state.api.renameKnowledgeDocument).toHaveBeenCalledWith(
+        "document-1",
+        { expected_filename: "lesson.md", filename: "renamed.md" },
+        expect.anything(),
+      ),
+    );
+    // The double-click renamed; it did not also open the editor.
+    expect(state.api.downloadKnowledge).not.toHaveBeenCalled();
+  });
+
+  it("opens the Knowledge editor from its name, as a RAG name does", async () => {
+    state.role = "teacher";
+    state.api.brainformKnowledge.mockResolvedValue([
+      {
+        agent_id: "agent-1",
+        canonical_set_id: "set-1",
+        source_agent_display_name: "Socrates",
+        knowledge_display_name: "Socrates Knowledge",
+        can_read: true,
+        can_edit: true,
+        version_seq: 1,
+        content_hash: "b".repeat(64),
+      },
+    ]);
+    state.api.knowledgeMarkdown.mockResolvedValue({
+      audience: "full",
+      agent_id: "agent-1",
+      canonical_set_id: "set-1",
+      source_agent_display_name: "Socrates",
+      knowledge_display_name: "Socrates Knowledge",
+      version_seq: 1,
+      content_hash: "b".repeat(64),
+      markdown: "# Canonical body",
+      projection_available: true,
+      can_read: true,
+      can_edit: true,
+      created_at: "2026-10-04T00:00:00Z",
+    });
+    renderWorkspace("teacher");
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Edit Knowledge Socrates Knowledge",
+      }),
+    );
+    expect(
+      (
+        (await screen.findByLabelText("Markdown content")) as HTMLTextAreaElement
+      ).value,
+    ).toBe("# Canonical body");
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
   it("keeps an RAG draft after a replacement CAS conflict and refreshes its source row", async () => {
     state.role = "teacher";
     state.userId = "22222222-2222-4222-8222-222222222222";
@@ -759,8 +876,10 @@ describe("Brainform workspace actions", () => {
     renderWorkspace("teacher");
 
     expect(await screen.findByText("Used by: Socrates, Mencius")).toBeTruthy();
+    // Owner decision (2026-10-13): the name opens the editor; a
+    // double-click renames.
     expect(
-      screen.getAllByRole("button", { name: "Rename Shared notes" }),
+      screen.getAllByRole("button", { name: "Edit Knowledge Shared notes" }),
     ).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Open Shared notes" }));
 
@@ -1363,8 +1482,10 @@ describe("Brainform workspace actions", () => {
 
     renderWorkspace("teacher");
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Rename Socrates Knowledge" }),
+    fireEvent.doubleClick(
+      await screen.findByRole("button", {
+        name: "Edit Knowledge Socrates Knowledge",
+      }),
     );
     const title = await screen.findByRole("textbox", {
       name: "Knowledge title",
