@@ -1000,32 +1000,14 @@ def update_agent_metadata(
             )
         if "visibility" in payload.model_fields_set and current.owner_user_id != context.user.id:
             raise not_found()
+        # Like a Team, an Agent is Private or Public from the day it is made:
+        # its RAG and Brainform listing follow that choice and never move.
         if payload.visibility is not None and payload.visibility != current.visibility:
-            if payload.visibility == "public" and not _agent_sources_are_public(db, current):
-                raise validation_failure(
-                    "Private sources must be shared before this Agent can be public.",
-                    code="private_source_for_public_agent",
-                )
-            _require_available_agent_name(
-                db,
-                current.name,
-                group_id=current.group_id,
-                owner_user_id=context.user.id,
-                course_id=current.course_id,
-                visibility=payload.visibility,
-                current=current,
-                recheck_namespace=True,
+            db.rollback()
+            raise conflict(
+                "agent_visibility_locked",
+                "Private or Public is chosen when the Agent is created.",
             )
-            current.visibility = payload.visibility
-            current.authorization_epoch += 1
-            draft = db.scalar(
-                select(AgentVersion).where(
-                    AgentVersion.agent_id == current.id,
-                    AgentVersion.state == "draft",
-                )
-            )
-            if draft is not None and draft.draft_visibility == "public":
-                draft.authorization_epoch = current.authorization_epoch
         description = payload.description
         current.description = description if description and description.strip() else ""
         current.metadata_revision += 1

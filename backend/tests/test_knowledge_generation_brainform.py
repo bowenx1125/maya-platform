@@ -422,7 +422,14 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
         agent.current_published_version_id = version.id
         db.commit()
 
-    _teacher, _teacher_csrf = login(client, "maya")
+    _teacher, teacher_csrf = login(client, "maya")
+    # A Teacher's own Brainform holds no student material ...
+    own_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert own_listing.status_code == 200, own_listing.text
+    assert all(item["canonical_set_id"] != public_set["id"] for item in own_listing.json())
+    # ... and reads the group's public Knowledge during an Accounts visit.
+    joined = client.post(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
+    assert joined.status_code == 200, joined.text
     teacher_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
     assert teacher_listing.status_code == 200, teacher_listing.text
     teacher_row = next(
@@ -850,7 +857,14 @@ def test_brainform_lists_every_readable_agent_set_relationship_without_private_l
             agent.current_published_version_id = version.id
         db.commit()
 
-    _teacher, _teacher_csrf = login(client, "maya")
+    _teacher, teacher_csrf = login(client, "maya")
+    own_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
+    assert own_listing.status_code == 200, own_listing.text
+    assert not {item["canonical_set_id"] for item in own_listing.json()} & {
+        row["id"] for row in sets
+    }
+    joined = client.post(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
+    assert joined.status_code == 200, joined.text
     teacher_listing = client.get(f"/api/v1/courses/{COURSE_ID}/brainform/knowledge")
     assert teacher_listing.status_code == 200, teacher_listing.text
     teacher_pairs = {

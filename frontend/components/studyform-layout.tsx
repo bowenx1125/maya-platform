@@ -107,6 +107,41 @@ export function VersionTile({
   );
 }
 
+/** The same + as ModulePlus, opening a file picker instead of a page. */
+export function ModuleUpload({
+  label,
+  accept,
+  disabled,
+  onFile,
+}: {
+  label: string;
+  accept: string;
+  disabled?: boolean;
+  onFile: (file: File) => void;
+}) {
+  return (
+    <label
+      className={styles.addButton}
+      aria-disabled={disabled || undefined}
+      data-ui-guide="agent.uploadRag"
+    >
+      <WorkspaceIcon name="new" />
+      <input
+        className="sr-only"
+        type="file"
+        accept={accept}
+        aria-label={label}
+        disabled={disabled}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onFile(file);
+          event.currentTarget.value = "";
+        }}
+      />
+    </label>
+  );
+}
+
 export function ModulePlus({
   href,
   label,

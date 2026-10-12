@@ -263,241 +263,31 @@ afterEach(() => {
 });
 
 describe("Brainform workspace actions", () => {
-  it("imports Markdown into a draft and saves its full Unicode text through the existing RAG API", async () => {
+  it("adds no RAG here: RAG is uploaded inside its Agent", async () => {
     state.role = "teacher";
-    renderWithActions();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const markdown = "# 课程\n\n保留原始资料。\n";
-    const file = markdownUpload(
-      "lecture.md",
-      Promise.resolve(new TextEncoder().encode(markdown).buffer),
-    );
-    const input = screen.getByLabelText("Import a file");
-    expect(input.getAttribute("accept")).toContain(".md");
-    expect(input.getAttribute("accept")).toContain(".pdf");
-    expect(input.getAttribute("accept")).toContain(".docx");
-    fireEvent.change(input, { target: { files: [file] } });
-    await waitFor(() => {
-      const content = screen.getByRole("textbox", {
-        name: "Markdown content",
-      }) as HTMLTextAreaElement;
-      expect(content.value).toBe(markdown);
-    });
-    expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(
-        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(state.api.createWorkspaceKnowledge).toHaveBeenCalledTimes(1),
-    );
-    const [courseId, savedFile, options] =
-      state.api.createWorkspaceKnowledge.mock.calls[0];
-    expect(courseId).toBe("course-1");
-    expect(savedFile.name).toBe("lecture.md");
-    expect(options.idempotency).toBeTruthy();
-    const savedText = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.readAsText(savedFile);
-    });
-    expect(savedText).toBe(markdown);
-    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
-  });
+    state.api.workspaceDocuments.mockResolvedValue([source]);
+    const view = renderWithActions();
+    await screen.findAllByText("lesson.md");
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    view.unmount();
 
-  it("creates a Student RAG source through the explicitly joined Group route", async () => {
-    state.role = "student";
-    state.userId = "66666666-6666-4666-8666-666666666666";
-    state.groups = [{ group_id: "group-1" }];
-    const groupDocument = {
-      ...source,
-      id: "group-document-1",
-      group_id: "group-1",
-      ownership_scope: "group",
-      visibility: "public",
-    };
-    state.api.knowledge.mockResolvedValue([]);
-    state.api.createLibraryKnowledge = vi.fn().mockResolvedValue({
-      document: groupDocument,
-      agent_version: null,
-    });
-    renderWorkspace("student");
+    // An old deep link to the removed form opens nothing.
+    render(
+      <LocaleProvider initialLocale="en">
+        <ActionsHost>
+          <BrainformWorkspace role="teacher" initialMode="rag-new" />
+        </ActionsHost>
+      </LocaleProvider>,
+    );
     await waitFor(() =>
-      expect(state.api.knowledge).toHaveBeenCalledWith("group-1"),
+      expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(2),
     );
-    expect(state.api.workspaceDocuments).not.toHaveBeenCalled();
-
-    await waitFor(() =>
-      expect(
-        (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "Markdown content" }),
-      {
-        target: { value: "# Group evidence" },
-      },
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-
-    await waitFor(() =>
-      expect(state.api.createLibraryKnowledge).toHaveBeenCalledTimes(1),
-    );
-    expect(state.api.createLibraryKnowledge).toHaveBeenCalledWith(
-      "group-1",
-      expect.objectContaining({ name: "notes.md" }),
-      expect.objectContaining({ idempotency: expect.any(Object) }),
-    );
-    expect(state.api.workspaceDocuments).not.toHaveBeenCalled();
-  });
-
-  it("keeps PDF bytes intact until the sidebar Done action submits the new RAG file", async () => {
-    state.role = "teacher";
-    renderWithActions({ role: "teacher", initialMode: "rag-new" });
-    const file = new File(
-      [new Uint8Array([0, 1, 2, 127, 128, 255])],
-      "archive.pdf",
-      { type: "application/pdf" },
-    );
-    fireEvent.change(await screen.findByLabelText("Import a file"), {
-      target: { files: [file] },
-    });
+    await screen.findByRole("button", { name: "Back" });
     expect(
-      await screen.findByText(
-        "archive.pdf is selected. It will be imported when you save.",
-      ),
-    ).toBeTruthy();
+      screen.queryByRole("textbox", { name: "Markdown content" }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Import a file")).toBeNull();
     expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
-
-    const done = () => screen.getByRole("button", { name: "Done" });
-    await waitFor(() =>
-      expect((done() as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(done());
-    await waitFor(() =>
-      expect(state.api.createWorkspaceKnowledge).toHaveBeenCalledTimes(1),
-    );
-    const upload = state.api.createWorkspaceKnowledge.mock.calls[0][1] as File;
-    expect(upload.name).toBe("archive.pdf");
-    const savedBytes = await new Promise<Uint8Array>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () =>
-        resolve(new Uint8Array(reader.result as ArrayBuffer));
-      reader.readAsArrayBuffer(upload);
-    });
-    expect([...savedBytes]).toEqual([0, 1, 2, 127, 128, 255]);
-  });
-
-  it("reuses an uncertain binary save key only for the same filename and bytes", async () => {
-    state.role = "teacher";
-    const keys: string[] = [];
-    state.api.createWorkspaceKnowledge = vi.fn(
-      async (
-        _courseId: string,
-        file: File,
-        options: { idempotency: { key: string } },
-      ) => {
-        keys.push(options.idempotency.key);
-        if (keys.length < 4) throw new TypeError("connection reset");
-        return { document: { ...source, source_filename: file.name } };
-      },
-    );
-    renderWithActions({ role: "teacher", initialMode: "rag-new" });
-    const input = await screen.findByLabelText("Import a file");
-    const done = () => screen.getByRole("button", { name: "Done" });
-    const selectAndWait = async (file: File) => {
-      fireEvent.change(input, { target: { files: [file] } });
-      await waitFor(() =>
-        expect((done() as HTMLButtonElement).disabled).toBe(false),
-      );
-    };
-    const saveAndWait = async (callCount: number) => {
-      fireEvent.click(done());
-      await waitFor(() =>
-        expect(state.api.createWorkspaceKnowledge).toHaveBeenCalledTimes(
-          callCount,
-        ),
-      );
-      if (callCount < 4) {
-        await waitFor(() =>
-          expect((done() as HTMLButtonElement).disabled).toBe(false),
-        );
-      }
-    };
-
-    await selectAndWait(binaryUpload("archive.pdf", [1, 2, 3, 4], 456));
-    await saveAndWait(1);
-    await selectAndWait(binaryUpload("archive.pdf", [1, 2, 3, 4]));
-    await saveAndWait(2);
-    expect(keys[1]).toBe(keys[0]);
-
-    await selectAndWait(binaryUpload("archive.pdf", [1, 2, 3, 5]));
-    await saveAndWait(3);
-    expect(keys[2]).not.toBe(keys[1]);
-
-    await selectAndWait(binaryUpload("renamed.pdf", [1, 2, 3, 5]));
-    await saveAndWait(4);
-    expect(keys[3]).not.toBe(keys[2]);
-  });
-
-  it("reuses a create key for the same uncertain save and rotates after draft edits", async () => {
-    state.role = "teacher";
-    state.userId = "11111111-1111-4111-8111-111111111111";
-    const keys: string[] = [];
-    state.api.createWorkspaceKnowledge = vi.fn(
-      async (
-        _courseId: string,
-        file: File,
-        options: { idempotency: { key: string } },
-      ) => {
-        keys.push(options.idempotency.key);
-        if (keys.length < 3) throw new TypeError("connection reset");
-        return { document: { ...source, source_filename: file.name } };
-      },
-    );
-    renderWithActions();
-    await waitFor(() =>
-      expect(
-        (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const content = screen.getByRole("textbox", { name: "Markdown content" });
-    fireEvent.change(content, { target: { value: "# First attempt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(state.api.createWorkspaceKnowledge).toHaveBeenCalledTimes(1),
-    );
-
-    await waitFor(() =>
-      expect(
-        (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(state.api.createWorkspaceKnowledge).toHaveBeenCalledTimes(2),
-    );
-    expect(keys[1]).toBe(keys[0]);
-
-    fireEvent.change(content, { target: { value: "# Changed draft" } });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(state.api.createWorkspaceKnowledge).toHaveBeenCalledTimes(3),
-    );
-    expect(keys[2]).not.toBe(keys[1]);
   });
 
   it("replaces an existing RAG source with an imported DOCX through the server CAS API", async () => {
@@ -722,14 +512,16 @@ describe("Brainform workspace actions", () => {
 
   it("keeps an existing draft when an imported file has invalid UTF-8 or is not Markdown", async () => {
     state.role = "teacher";
+    // Drafts are remembered per account; start from an untouched one.
+    state.userId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
     renderWithActions();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const content = screen.getByRole("textbox", { name: "Markdown content" });
+    const content = await screen.findByRole("textbox", {
+      name: "Markdown content",
+    });
     fireEvent.change(content, { target: { value: "# Keep my draft" } });
     const malformed = markdownUpload(
       "broken.md",
@@ -744,7 +536,7 @@ describe("Brainform workspace actions", () => {
       ).toBe(false),
     );
     expect(screen.getByDisplayValue("# Keep my draft")).toBeTruthy();
-    expect(screen.getByDisplayValue("notes.md")).toBeTruthy();
+    expect(screen.getByDisplayValue("lesson.md")).toBeTruthy();
     const unsupported = markdownUpload(
       "wrong.txt",
       Promise.resolve(new ArrayBuffer(0)),
@@ -753,18 +545,18 @@ describe("Brainform workspace actions", () => {
       target: { files: [unsupported] },
     });
     expect(screen.getByDisplayValue("# Keep my draft")).toBeTruthy();
-    expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
+    expect(state.api.replaceKnowledgeDocument).not.toHaveBeenCalled();
   });
 
   it("does not let a file read from the previous identity overwrite a new actor draft", async () => {
     state.role = "teacher";
+    state.userId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
     const view = renderWithActions();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
-      ).toBe(false),
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    await screen.findByRole("textbox", { name: "Markdown content" });
     let finish!: (bytes: ArrayBuffer) => void;
     const bytes = new Promise<ArrayBuffer>((resolve) => {
       finish = resolve;
@@ -780,15 +572,11 @@ describe("Brainform workspace actions", () => {
         </ActionsHost>
       </LocaleProvider>,
     );
-    await waitFor(() => {
-      expect(
-        (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(false);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
+    );
     fireEvent.change(
-      screen.getByRole("textbox", { name: "Markdown content" }),
+      await screen.findByRole("textbox", { name: "Markdown content" }),
       { target: { value: "# New draft" } },
     );
     finish(new TextEncoder().encode("# Old file").buffer);
@@ -796,9 +584,9 @@ describe("Brainform workspace actions", () => {
     await waitFor(() =>
       expect(screen.getByDisplayValue("# New draft")).toBeTruthy(),
     );
-    expect(screen.getByDisplayValue("notes.md")).toBeTruthy();
+    expect(screen.getByDisplayValue("lesson.md")).toBeTruthy();
     expect(screen.queryByDisplayValue("late.md")).toBeNull();
-    expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
+    expect(state.api.replaceKnowledgeDocument).not.toHaveBeenCalled();
   });
 
   it("navigates to the current role's Agent Chat with a fresh durable Memory intent", async () => {

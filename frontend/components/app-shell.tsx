@@ -200,11 +200,23 @@ export function AppShell({
   const teacherSurface = role === "teacher" || Boolean(isCourseTeacher);
   const home = isStudent && !isCourseTeacher ? "/student" : "/teacher";
   // A teacher inside a student group is a temporary visitor opened from
-  // Accounts; every teacher page ends the visit and removes that access.
+  // Accounts; every teacher page ends the visit and removes that access,
+  // except that group's own Brainform, which the visit reads.
+  const brainformGroupId =
+    teacherSurface && pathname === "/teacher/knowledge"
+      ? new URLSearchParams(locationSearch).get("group_id")
+      : null;
+  const brainformVisit = Boolean(
+    brainformGroupId && membershipGroupIds.includes(brainformGroupId),
+  );
   const visitingGroup =
     teacherSurface &&
-    (pathname.startsWith("/student/groups/") || Boolean(agentRoute));
-  const onTeacherPage = teacherSurface && !pathname.startsWith("/student/");
+    (pathname.startsWith("/student/groups/") ||
+      Boolean(agentRoute) ||
+      brainformVisit);
+  const visitGroupId = routeGroupId ?? brainformGroupId ?? undefined;
+  const onTeacherPage =
+    teacherSurface && !pathname.startsWith("/student/") && !brainformVisit;
   const membershipKey = membershipGroupIds.join("|");
   const visitedGroupIds = useMemo(
     () => (onTeacherPage && membershipKey ? membershipKey.split("|") : []),
@@ -228,8 +240,14 @@ export function AppShell({
       typeof api?.leaveGroupAsTeacher !== "function"
     )
       return;
+    // The query string reaches state a render late, so read the URL itself:
+    // arriving at a visited group's Brainform must not end that visit.
+    const reading =
+      window.location.pathname === "/teacher/knowledge"
+        ? new URLSearchParams(window.location.search).get("group_id")
+        : null;
     const pending = visitedGroupIds.filter(
-      (visited) => !leaving.current.has(visited),
+      (visited) => !leaving.current.has(visited) && visited !== reading,
     );
     if (!pending.length) return;
     for (const visited of pending) leaving.current.add(visited);
@@ -270,7 +288,9 @@ export function AppShell({
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
     {
       href: teacherSurface
-        ? `/teacher/knowledge${teacherLegacyBrainform}`
+        ? visitingGroup && visitGroupId
+          ? `/teacher/knowledge?group_id=${encodeURIComponent(visitGroupId)}`
+          : `/teacher/knowledge${teacherLegacyBrainform}`
         : "/student/knowledge",
       label: "Brainform",
       icon: "brain",

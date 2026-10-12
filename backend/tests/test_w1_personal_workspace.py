@@ -214,110 +214,52 @@ def test_private_group_names_are_owner_scoped_and_public_editor_cannot_probe_the
     assert rename.status_code == 404, rename.text
 
 
-def test_private_history_and_private_derived_clone_stay_owner_only_until_publish(
+def test_agent_visibility_is_chosen_at_creation_and_never_changes(
     client: TestClient,
 ) -> None:
     _owner, owner_csrf = login(client, "bowen")
-    created = client.post(
-        f"/api/v1/groups/{GROUP_ID}/agents",
-        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-o6-private-history-001"}),
-        json={"name": "O6 Hidden History", "visibility": "private"},
-    )
-    assert created.status_code == 201, created.text
-    agent = created.json()
-    agent_id = agent["id"]
-    first_version_id = agent["versions"][0]["id"]
-    secret = "O6_PRIVATE_V1_CANARY"
+    agents: dict[str, tuple[str, str]] = {}
+    for visibility in ("private", "public"):
+        created = client.post(
+            f"/api/v1/groups/{GROUP_ID}/agents",
+            headers=_headers(owner_csrf, **{"Idempotency-Key": f"w1-locked-{visibility}-001"}),
+            json={"name": f"Locked {visibility}", "visibility": visibility},
+        )
+        assert created.status_code == 201, created.text
+        agents[visibility] = (created.json()["id"], created.json()["versions"][0]["id"])
 
-    first_edit = client.patch(
-        f"/api/v1/agent-versions/{first_version_id}",
-        headers=_headers(owner_csrf),
-        json={"expected_revision": 0, "agent_md": f"# O6 Hidden History\n\n{secret}"},
-    )
-    assert first_edit.status_code == 200, first_edit.text
-    first_publish = client.post(
-        f"/api/v1/agent-versions/{first_version_id}/publish",
-        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-o6-private-publish-001"}),
-        json={"expected_revision": 1},
-    )
-    assert first_publish.status_code == 200, first_publish.text
-    assert first_publish.json()["published_visibility"] == "private"
-
-    made_public = client.patch(
-        f"/api/v1/agents/{agent_id}",
-        headers=_headers(owner_csrf),
-        json={"expected_metadata_revision": 0, "visibility": "public"},
-    )
-    assert made_public.status_code == 200, made_public.text
-    clone = client.post(
-        f"/api/v1/agents/{agent_id}/versions",
-        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-o6-private-clone-001"}),
-        json={},
-    )
-    assert clone.status_code == 201, clone.text
-    draft_id = clone.json()["id"]
-    assert secret in clone.json()["agent_md"]
+    for visibility, flipped in (("private", "public"), ("public", "private")):
+        agent_id, _version = agents[visibility]
+        refused = client.patch(
+            f"/api/v1/agents/{agent_id}",
+            headers=_headers(owner_csrf),
+            json={"expected_metadata_revision": 0, "visibility": flipped},
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["code"] == "agent_visibility_locked"
+        # The same choice stays accepted, so a description edit still saves.
+        kept = client.patch(
+            f"/api/v1/agents/{agent_id}",
+            headers=_headers(owner_csrf),
+            json={
+                "expected_metadata_revision": 0,
+                "visibility": visibility,
+                "description": "Still the same choice.",
+            },
+        )
+        assert kept.status_code == 200, kept.text
+        assert kept.json()["visibility"] == visibility
+        assert kept.json()["metadata_revision"] == 1
 
     _teacher, teacher_csrf = login(client, "maya")
-    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
-    assert client.get(f"/api/v1/agents/{agent_id}/versions").status_code == 404
     joined = client.post(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
     assert joined.status_code == 200, joined.text
-
-    teacher_detail = client.get(f"/api/v1/agents/{agent_id}")
-    assert teacher_detail.status_code == 200, teacher_detail.text
-    assert teacher_detail.json()["versions"] == []
-    assert teacher_detail.json()["current_draft_version_id"] is None
-    assert secret not in teacher_detail.text
-    assert client.get(f"/api/v1/agents/{agent_id}/versions").json() == []
-    for version_id in (first_version_id, draft_id):
-        assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
-        assert (
-            client.get(f"/api/v1/agent-versions/{version_id}/agent-md/download").status_code == 404
-        )
-
-    _owner, owner_csrf = login(client, "bowen")
-    owner_history = client.get(f"/api/v1/agents/{agent_id}/versions")
-    assert owner_history.status_code == 200, owner_history.text
-    assert [row["id"] for row in owner_history.json()] == [first_version_id, draft_id]
-    assert secret in owner_history.json()[0]["agent_md"]
-    assert client.get(f"/api/v1/agents/{agent_id}").json()["current_draft_version_id"] == draft_id
-
-    second_edit = client.patch(
-        f"/api/v1/agent-versions/{draft_id}",
-        headers=_headers(owner_csrf),
-        json={
-            "expected_revision": 0,
-            "agent_md": "# O6 Hidden History\n\nOwner-reviewed public V2 content.",
-        },
-    )
-    assert second_edit.status_code == 200, second_edit.text
-    second_publish = client.post(
-        f"/api/v1/agent-versions/{draft_id}/publish",
-        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-o6-public-publish-002"}),
-        json={"expected_revision": 1},
-    )
-    assert second_publish.status_code == 200, second_publish.text
-    assert second_publish.json()["published_visibility"] == "public"
-
-    _teacher, teacher_csrf = login(client, "maya")
-    public_detail = client.get(f"/api/v1/agents/{agent_id}")
-    assert public_detail.status_code == 200, public_detail.text
-    assert [row["id"] for row in public_detail.json()["versions"]] == [draft_id]
-    assert public_detail.json()["current_draft_version_id"] is None
-    assert secret not in public_detail.text
-    public_history = client.get(f"/api/v1/agents/{agent_id}/versions")
-    assert [row["id"] for row in public_history.json()] == [draft_id]
-    assert client.get(f"/api/v1/agent-versions/{first_version_id}").status_code == 404
-
-    left = client.delete(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
-    assert left.status_code == 204
-    unentered_teacher = client.get(f"/api/v1/agents/{agent_id}")
-    assert unentered_teacher.status_code == 200, unentered_teacher.text
-    assert [row["id"] for row in unentered_teacher.json()["versions"]] == [draft_id]
-    assert secret not in unentered_teacher.text
-    assert client.get(f"/api/v1/agents/{agent_id}/versions").json()[0]["id"] == draft_id
-    assert client.get(f"/api/v1/agent-versions/{first_version_id}").status_code == 404
+    private_id, private_version = agents["private"]
+    public_id, public_version = agents["public"]
+    assert client.get(f"/api/v1/agent-versions/{private_version}").status_code == 404
+    assert client.get(f"/api/v1/agent-versions/{public_version}").status_code == 200
+    assert client.get(f"/api/v1/agents/{public_id}").json()["visibility"] == "public"
+    assert client.get(f"/api/v1/agents/{private_id}").status_code == 404
 
 
 def test_owner_history_survives_sharing_an_active_private_source(
@@ -449,79 +391,6 @@ def test_owner_history_survives_sharing_an_active_private_source(
     assert len(retained_chat.json()["turns"]) == 2
 
 
-def test_private_edit_stays_hidden_but_untouched_public_draft_can_return_to_shared(
-    client: TestClient,
-) -> None:
-    _owner, owner_csrf = login(client, "bowen")
-    shared = client.post(
-        f"/api/v1/groups/{GROUP_ID}/agents",
-        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-draft-sharing-public-001"}),
-        json={"name": "Shared Draft Control", "visibility": "public"},
-    )
-    assert shared.status_code == 201, shared.text
-    shared_id = shared.json()["id"]
-    shared_version = shared.json()["versions"][0]["id"]
-
-    _teacher, teacher_csrf = login(client, "maya")
-    joined = client.post(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
-    assert joined.status_code == 200, joined.text
-    assert client.get(f"/api/v1/agent-versions/{shared_version}").status_code == 200
-
-    _owner, owner_csrf = login(client, "bowen")
-    to_private = client.patch(
-        f"/api/v1/agents/{shared_id}",
-        headers=_headers(owner_csrf),
-        json={"expected_metadata_revision": 0, "visibility": "private"},
-    )
-    assert to_private.status_code == 200, to_private.text
-    private_edit = client.patch(
-        f"/api/v1/agent-versions/{shared_version}",
-        headers=_headers(owner_csrf),
-        json={"expected_revision": 0, "agent_md": "# Shared Draft Control\n\nPrivate edit."},
-    )
-    assert private_edit.status_code == 200, private_edit.text
-    back_to_public = client.patch(
-        f"/api/v1/agents/{shared_id}",
-        headers=_headers(owner_csrf),
-        json={"expected_metadata_revision": 1, "visibility": "public"},
-    )
-    assert back_to_public.status_code == 200, back_to_public.text
-    _teacher, teacher_csrf = login(client, "maya")
-    visible = client.get(f"/api/v1/agents/{shared_id}")
-    assert visible.status_code == 200, visible.text
-    assert visible.json()["versions"] == []
-    assert visible.json()["current_draft_version_id"] is None
-    assert client.get(f"/api/v1/agent-versions/{shared_version}").status_code == 404
-
-    _owner, owner_csrf = login(client, "bowen")
-    untouched = client.post(
-        f"/api/v1/groups/{GROUP_ID}/agents",
-        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-draft-sharing-untouched-001"}),
-        json={"name": "Untouched Shared Draft", "visibility": "public"},
-    )
-    assert untouched.status_code == 201, untouched.text
-    untouched_id = untouched.json()["id"]
-    untouched_version = untouched.json()["versions"][0]["id"]
-    to_private = client.patch(
-        f"/api/v1/agents/{untouched_id}",
-        headers=_headers(owner_csrf),
-        json={"expected_metadata_revision": 0, "visibility": "private"},
-    )
-    assert to_private.status_code == 200, to_private.text
-    to_public = client.patch(
-        f"/api/v1/agents/{untouched_id}",
-        headers=_headers(owner_csrf),
-        json={"expected_metadata_revision": 1, "visibility": "public"},
-    )
-    assert to_public.status_code == 200, to_public.text
-    _teacher, teacher_csrf = login(client, "maya")
-    returned = client.get(f"/api/v1/agents/{untouched_id}")
-    assert returned.status_code == 200, returned.text
-    assert [row["id"] for row in returned.json()["versions"]] == [untouched_version]
-    assert returned.json()["current_draft_version_id"] == untouched_version
-    assert client.get(f"/api/v1/agent-versions/{untouched_version}").status_code == 200
-
-
 def test_private_source_makes_public_agent_draft_owner_only_even_after_source_is_shared(
     client: TestClient,
 ) -> None:
@@ -534,20 +403,24 @@ def test_private_source_makes_public_agent_draft_owner_only_even_after_source_is
     assert created.status_code == 201, created.text
     agent_id = created.json()["id"]
     version_id = created.json()["versions"][0]["id"]
+    # Uploading into this public Agent would make the file public, so the
+    # private source arrives as an existing library file the owner attaches.
     uploaded = client.post(
         f"/api/v1/groups/{GROUP_ID}/knowledge-documents",
         headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-private-source-draft-001"}),
-        data={
-            "target_agent_version_id": version_id,
-            "expected_revision": "0",
-            "visibility": "private",
-        },
+        data={"visibility": "private"},
         files={
             "file": ("private-source.md", b"# Source\n\nPRIVATE_SOURCE_CANARY", "text/markdown")
         },
     )
     assert uploaded.status_code == 201, uploaded.text
     document_id = uploaded.json()["document"]["id"]
+    attached = client.put(
+        f"/api/v1/agent-versions/{version_id}/knowledge-documents",
+        headers=_headers(owner_csrf),
+        json={"expected_revision": 0, "document_ids": [document_id]},
+    )
+    assert attached.status_code == 200, attached.text
 
     _teacher, teacher_csrf = login(client, "maya")
     joined = client.post(f"/api/v1/groups/{GROUP_ID}/membership", headers=_headers(teacher_csrf))
@@ -575,6 +448,48 @@ def test_private_source_makes_public_agent_draft_owner_only_even_after_source_is
     assert still_hidden.json()["current_draft_version_id"] is None
     assert "PRIVATE_SOURCE_CANARY" not in still_hidden.text
     assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
+
+
+def test_rag_uploaded_into_an_agent_takes_the_agents_visibility(client: TestClient) -> None:
+    _owner, owner_csrf = login(client, "bowen")
+    for visibility in ("private", "public"):
+        created = client.post(
+            f"/api/v1/groups/{GROUP_ID}/agents",
+            headers=_headers(owner_csrf, **{"Idempotency-Key": f"w1-follow-{visibility}-001"}),
+            json={"name": f"Follows {visibility}", "visibility": visibility},
+        )
+        assert created.status_code == 201, created.text
+        version_id = created.json()["versions"][0]["id"]
+        flipped = "public" if visibility == "private" else "private"
+        refused = client.post(
+            f"/api/v1/groups/{GROUP_ID}/knowledge-documents",
+            headers=_headers(owner_csrf, **{"Idempotency-Key": f"w1-follow-{visibility}-bad"}),
+            data={
+                "target_agent_version_id": version_id,
+                "expected_revision": "0",
+                "visibility": flipped,
+            },
+            files={"file": (f"{visibility}-bad.md", b"# Wrong\n\nMismatch", "text/markdown")},
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["code"] == "document_visibility_follows_agent"
+        uploaded = client.post(
+            f"/api/v1/groups/{GROUP_ID}/knowledge-documents",
+            headers=_headers(owner_csrf, **{"Idempotency-Key": f"w1-follow-{visibility}-ok"}),
+            data={"target_agent_version_id": version_id, "expected_revision": "0"},
+            files={
+                "file": (f"{visibility}.md", f"# {visibility}\n\nFollows".encode(), "text/markdown")
+            },
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        assert uploaded.json()["document"]["visibility"] == visibility
+
+    # Only the public Agent's file reaches a classmate's Brainform.
+    login(client, "kaikai")
+    listed = client.get(f"/api/v1/groups/{GROUP_ID}/knowledge-documents")
+    assert listed.status_code == 200, listed.text
+    names = {row["source_filename"] for row in listed.json()}
+    assert "public.md" in names and "private.md" not in names
 
 
 def _create_public_group_agent(client: TestClient, csrf: str, name: str) -> tuple[str, str]:

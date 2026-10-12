@@ -52,9 +52,7 @@ type BrainformRole = "teacher" | "student";
 type RagDraft = {
   filename: string;
   markdown: string;
-  isNew: boolean;
   documentId?: string;
-  groupId?: string;
   expectedContentHash?: string;
   expectedIndexRevision?: number;
   originalFilename?: string;
@@ -586,7 +584,6 @@ function BrainformWorkspaceBody({
   const ragActionDrafts = useRef(ragDrafts);
   const ragActionFiles = useRef(ragFiles);
   const busyKeyRef = useRef(busyKey);
-  const createRagAction = useRef<(draftKey: string) => void>(() => {});
   const saveRagAction = useRef<(draftKey: string) => void>(() => {});
   function commitBusy(
     next: string | null | ((current: string | null) => string | null),
@@ -598,9 +595,6 @@ function BrainformWorkspaceBody({
   }
   useLayoutEffect(() => {
     ragActionPane.current = pane;
-    createRagAction.current = (draftKey) => {
-      void createRag(draftKey);
-    };
     saveRagAction.current = (draftKey) => {
       void saveRag(draftKey);
     };
@@ -1040,10 +1034,6 @@ function BrainformWorkspaceBody({
   }
 
   function abandonRagDraftMutation(draftKey: string, draft: RagDraft) {
-    if (draft.isNew) {
-      mutationStore.abandon(`brainform-create:${ragDraftScope}:${draftKey}`);
-      return;
-    }
     if (!draft.documentId) return;
     if (
       draft.expectedContentHash &&
@@ -1085,7 +1075,6 @@ function BrainformWorkspaceBody({
       current &&
       (current.filename !== next.filename ||
         current.markdown !== next.markdown ||
-        current.groupId !== next.groupId ||
         !sameRagFile(currentFile, nextFile))
     ) {
       abandonRagDraftMutation(draftKey, current);
@@ -1100,40 +1089,9 @@ function BrainformWorkspaceBody({
     }
   }
 
-  function startNewRag(syncUrl = true) {
-    operationSequence.current += 1;
-    commitBusy((current) => (current?.startsWith("import:") ? null : current));
-    const draftKey = `new:${createUuid()}`;
-    saveRagDrafts({
-      ...ragActionDrafts.current,
-      [draftKey]: {
-        filename: "notes.md",
-        markdown: "",
-        isNew: true,
-        groupId:
-          role === "student"
-            ? initialGroupId &&
-              groups.some((group) => group.id === initialGroupId)
-              ? initialGroupId
-              : groups.length === 1
-                ? groups[0].id
-                : undefined
-            : undefined,
-      },
-    });
-    setPane({ kind: "rag-edit", draftKey });
-    setNotice("");
-    if (syncUrl) syncModeUrl("rag-new");
-  }
-
   async function importRag(draftKey: string, file: File) {
     const draft = ragActionDrafts.current[draftKey];
-    if (
-      !draft ||
-      busyKeyRef.current ||
-      (draft.isNew === false && !draft.canEdit)
-    )
-      return;
+    if (!draft || busyKeyRef.current || !draft.canEdit) return;
     const extension = file.name.split(".").at(-1)?.toLowerCase();
     if (!extension || !["md", "pdf", "docx"].includes(extension)) {
       setNotice(t("brainformMarkdownRequired"));
@@ -1208,9 +1166,7 @@ function BrainformWorkspaceBody({
       const draft: RagDraft = {
         filename: document.source_filename,
         markdown: downloaded.content,
-        isNew: false,
         documentId: document.id,
-        groupId: document.group_id ?? undefined,
         expectedContentHash: document.content_hash,
         expectedIndexRevision: document.index_revision,
         originalFilename: downloaded.filename || document.source_filename,
@@ -1259,69 +1215,11 @@ function BrainformWorkspaceBody({
     }
   }
 
-  async function createRag(draftKey: string) {
-    const draft = ragActionDrafts.current[draftKey];
-    if (!draft || !courseId || busyKeyRef.current) return;
-    const filename = draft.filename.trim();
-    const extension = filename.split(".").at(-1)?.toLowerCase();
-    const stagedFile = ragActionFiles.current[draftKey]?.file;
-    if (
-      !extension ||
-      !["md", "pdf", "docx"].includes(extension) ||
-      (!stagedFile && (extension !== "md" || !draft.markdown.trim()))
-    ) {
-      setNotice(t("brainformMarkdownRequired"));
-      return;
-    }
-    const intent = `brainform-create:${ragDraftScope}:${draftKey}`;
-    commitBusy(draftKey);
-    setLoadError(null);
-    setNotice("");
-    try {
-      const file = stagedFile
-        ? new File([stagedFile], filename, { type: stagedFile.type })
-        : buildMarkdownFile(filename, draft.markdown);
-      const mutation = await runKnowledgeMutation(
-        mutationStore,
-        intent,
-        (idempotency) =>
-          role === "teacher"
-            ? api.createWorkspaceKnowledge(courseId, file, { idempotency })
-            : draft.groupId
-              ? api.createLibraryKnowledge(draft.groupId, file, {
-                  idempotency,
-                })
-              : Promise.reject(new Error(t("brainformChooseGroup"))),
-      );
-      if (!scopeIsCurrent()) return;
-      const nextDrafts = { ...ragActionDrafts.current };
-      delete nextDrafts[draftKey];
-      saveRagDrafts(nextDrafts);
-      const nextFiles = { ...ragActionFiles.current };
-      delete nextFiles[draftKey];
-      ragActionFiles.current = nextFiles;
-      setRagFiles(nextFiles);
-      setRagDocuments((current) => [...current, mutation.document]);
-      setPane(null);
-      syncModeUrl(null);
-      setNotice(t("brainformRagSaved"));
-      void loadWorkspace();
-    } catch (cause) {
-      if (isAmbiguousMutationFailure(cause)) {
-        setNotice(t("brainformRetrySameSave"));
-      }
-      if (scopeIsCurrent()) setLoadError(cause);
-    } finally {
-      if (scopeIsCurrent()) commitBusy(null);
-    }
-  }
-
   async function saveRag(draftKey: string) {
     const draft = ragActionDrafts.current[draftKey];
     const stagedFile = ragActionFiles.current[draftKey]?.file;
     if (
       !draft ||
-      draft.isNew ||
       !draft.documentId ||
       !draft.canEdit ||
       !draft.expectedContentHash ||
@@ -1598,11 +1496,6 @@ function BrainformWorkspaceBody({
     if (handledUrlMode.current === modeKey || loading || !courseId) return;
     const timer = window.setTimeout(() => {
       if (handledUrlMode.current === modeKey) return;
-      if (initialMode === "rag-new") {
-        handledUrlMode.current = modeKey;
-        startNewRag(false);
-        return;
-      }
       if (initialMode === "rag-view" || initialMode === "rag-edit") {
         if (!documentId) {
           handledUrlMode.current = modeKey;
@@ -1944,21 +1837,14 @@ function BrainformWorkspaceBody({
 
   return (
     <main className={styles.page}>
+      {/* RAG is added inside its Agent, so the overview has no New. */}
       {pane || initialMode ? (
         <WorkspaceAction
           name="back"
           onClick={closePane}
           disabled={Boolean(busyKey)}
         />
-      ) : (
-        <WorkspaceAction
-          name="new"
-          onClick={() => startNewRag()}
-          disabled={
-            !courseId || (role === "teacher" && Boolean(initialGroupId))
-          }
-        />
-      )}
+      ) : null}
       {pane?.kind === "knowledge-view" &&
       markdown?.can_edit &&
       markdown.audience === "full" ? (
@@ -1976,16 +1862,9 @@ function BrainformWorkspaceBody({
             if (current?.kind !== "rag-edit") return;
             const draft = ragActionDrafts.current[current.draftKey];
             if (!draft) return;
-            if (draft.isNew) createRagAction.current(current.draftKey);
-            else saveRagAction.current(current.draftKey);
+            saveRagAction.current(current.draftKey);
           }}
-          disabled={
-            Boolean(busyKey) ||
-            (!selectedDraft.isNew && !selectedDraft.canEdit) ||
-            (role === "student" &&
-              selectedDraft.isNew &&
-              !selectedDraft.groupId)
-          }
+          disabled={Boolean(busyKey) || !selectedDraft.canEdit}
         />
       ) : null}
       {pane?.kind === "knowledge-edit" && markdown ? (
@@ -2428,7 +2307,7 @@ function BrainformWorkspaceBody({
 
           {pane.kind === "rag-edit" && selectedDraft ? (
             <div className={styles.editorForm}>
-              {selectedDraft.isNew || selectedDraft.canEdit ? (
+              {selectedDraft.canEdit ? (
                 <label
                   className="secondary-action file-button"
                   aria-busy={busyKey === `import:${pane.draftKey}`}
@@ -2453,18 +2332,16 @@ function BrainformWorkspaceBody({
                 className={styles.field}
                 value={selectedDraft.filename}
                 disabled={busyKey === `import:${pane.draftKey}`}
-                readOnly={!selectedDraft.isNew && !selectedDraft.canEdit}
+                readOnly={!selectedDraft.canEdit}
                 describedBy={
-                  !selectedDraft.isNew && selectedDraft.canEdit
-                    ? "brainform-rag-name-note"
-                    : undefined
+                  selectedDraft.canEdit ? "brainform-rag-name-note" : undefined
                 }
                 onChange={(filename) => {
-                  if (!selectedDraft.isNew && !selectedDraft.canEdit) return;
+                  if (!selectedDraft.canEdit) return;
                   updateRagDraft(pane.draftKey, { ...selectedDraft, filename });
                 }}
               />
-              {!selectedDraft.isNew && selectedDraft.canEdit ? (
+              {selectedDraft.canEdit ? (
                 <small id="brainform-rag-name-note">
                   {t("brainformRagRenameNote")}
                 </small>
@@ -2482,7 +2359,7 @@ function BrainformWorkspaceBody({
                   value={selectedDraft.markdown}
                   disabled={busyKey === `import:${pane.draftKey}`}
                   rows={16}
-                  readOnly={!selectedDraft.isNew && !selectedDraft.canEdit}
+                  readOnly={!selectedDraft.canEdit}
                   onChange={(markdown) =>
                     updateRagDraft(pane.draftKey, {
                       ...selectedDraft,
@@ -2491,37 +2368,6 @@ function BrainformWorkspaceBody({
                   }
                 />
               )}
-              <div className={styles.panelActions}>
-                {selectedDraft.isNew ? (
-                  role === "student" && !selectedDraft.groupId ? (
-                    <label className={styles.coursePicker}>
-                      <span>{t("groupWorkspace")}</span>
-                      <select
-                        value={selectedDraft.groupId ?? ""}
-                        onChange={(event) =>
-                          updateRagDraft(pane.draftKey, {
-                            ...selectedDraft,
-                            groupId: event.target.value || undefined,
-                          })
-                        }
-                      >
-                        <option value="">{t("brainformChooseGroup")}</option>
-                        {groups
-                          .filter((group) =>
-                            (user?.groups ?? []).some(
-                              (membership) => membership.group_id === group.id,
-                            ),
-                          )
-                          .map((group) => (
-                            <option key={group.id} value={group.id}>
-                              {group.name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  ) : null
-                ) : null}
-              </div>
             </div>
           ) : null}
 

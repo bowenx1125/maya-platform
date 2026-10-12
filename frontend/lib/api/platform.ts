@@ -2352,7 +2352,7 @@ export class PlatformApi {
       form.append("file", file);
       form.append("target_agent_version_id", versionId);
       form.append("expected_revision", String(expectedRevision));
-      form.append("visibility", "private");
+      // The server gives the file its Agent's Private or Public.
       const result = await this.client.POST(
         "/courses/{course_id}/workspace-documents",
         {

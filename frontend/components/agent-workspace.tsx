@@ -18,6 +18,7 @@ import {
   type AgentKnowledgeSets,
   type AgentDetail,
   type AgentVersion,
+  type KnowledgeDocumentMutation,
   type AvatarTemplate,
   type KnowledgeDocument,
   type KnowledgeSetSummary,
@@ -37,7 +38,7 @@ import {
 } from "./avatar";
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
-import { ModulePlus } from "./studyform-layout";
+import { ModuleUpload } from "./studyform-layout";
 import { IconClose, IconDownload, IconEye, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import { ReportMarkdown } from "./report/report-markdown";
@@ -304,6 +305,11 @@ export function AgentWorkbench({
     "uploadKnowledge" | "bindKnowledge" | "publish" | null
   >(null);
   const [generationSourcePrompt, setGenerationSourcePrompt] = useState(false);
+  // Files chosen on a published version wait for Done, which makes the next
+  // draft; a published version itself can never take a new file.
+  const [stagedRag, setStagedRag] = useState<
+    { file: File; signature: string }[]
+  >([]);
   const [pendingKnowledgeUpload, setPendingKnowledgeUpload] = useState<{
     file: File;
     signature: string;
@@ -544,7 +550,8 @@ export function AgentWorkbench({
     [...left].sort().every((id, index) => id === [...right].sort()[index]);
   const localDirty = Boolean(
     version &&
-    (agentMd !== (version.agent_md ?? "") ||
+    (stagedRag.length > 0 ||
+      agentMd !== (version.agent_md ?? "") ||
       JSON.stringify(avatarConfig) !== JSON.stringify(version.avatar_config) ||
       voiceProfileId !== (version.voice_profile_id ?? null) ||
       !sameIds(
@@ -763,6 +770,16 @@ export function AgentWorkbench({
     const signature = `${file.name}:${file.size}:${file.lastModified}`;
     if (unsavedCreate && !createdAgentRef.current?.id) {
       setPendingKnowledgeUpload({ file, signature });
+      setError(null);
+      setKnowledgeUploadError(null);
+      return;
+    }
+    if (publishOnDone && currentVersion.state !== "draft") {
+      setStagedRag((current) =>
+        current.some((item) => item.signature === signature)
+          ? current
+          : [...current, { file, signature }],
+      );
       setError(null);
       setKnowledgeUploadError(null);
       return;
@@ -1089,16 +1106,52 @@ export function AgentWorkbench({
       });
       saved = written;
     }
+    const uploadedIds: string[] = [];
+    if (publishOnDone && saved && stagedRag.length > 0) {
+      let draft: AgentVersion = saved;
+      for (const item of stagedRag) {
+        // Keyed by the file, so a retried Done replays the same upload.
+        const intent = `agent-staged-rag:${currentAgent.id}:${item.signature}`;
+        const handle = mutationStore.handleFor(intent);
+        try {
+          const mutation: KnowledgeDocumentMutation = currentAgent.group_id
+            ? await api.uploadKnowledge(
+                currentAgent.group_id,
+                draft.id,
+                item.file,
+                draft.revision,
+                { idempotency: handle },
+              )
+            : await api.uploadWorkspaceKnowledge(
+                currentAgent.course_id,
+                draft.id,
+                item.file,
+                draft.revision,
+                { idempotency: handle },
+              );
+          mutationStore.finish(intent, handle);
+          if (mutation.agent_version) draft = mutation.agent_version;
+          uploadedIds.push(mutation.document.id);
+        } catch (cause) {
+          if (!isCurrentScope(requestScope)) return;
+          if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+          else mutationStore.abandon(intent, handle);
+          setError(cause);
+          return;
+        }
+      }
+      saved = draft;
+    }
     if (publishOnDone && saved) {
       const documentIds = (saved.enabled_documents ?? []).map(
         (document) => document.id,
       );
-      if (!sameIds(selectedDocumentIds, documentIds)) {
-        saved = await api.setDocuments(
-          saved.id,
-          saved.revision,
-          selectedDocumentIds,
-        );
+      const wanted = [
+        ...selectedDocumentIds,
+        ...uploadedIds.filter((id) => !selectedDocumentIds.includes(id)),
+      ];
+      if (!sameIds(wanted, documentIds)) {
+        saved = await api.setDocuments(saved.id, saved.revision, wanted);
       }
       if (
         agentKnowledge &&
@@ -1139,6 +1192,7 @@ export function AgentWorkbench({
       mutationStore.finish(publishIntent, handle);
       if (!isCurrentScope(requestScope)) return;
       setRetryAction(null);
+      setStagedRag([]);
       setVersion(next);
       if (generationFlow) {
         const receipt = next.knowledge_generation;
@@ -1358,13 +1412,13 @@ export function AgentWorkbench({
             title={t("brainform")}
             guide="agent.brainform"
             action={
-              <ModulePlus
-                href={
-                  agent.group_id && agent.ownership_scope !== "personal"
-                    ? `/student/knowledge?group_id=${encodeURIComponent(agent.group_id)}&mode=rag-new`
-                    : "/teacher/knowledge?mode=rag-new"
-                }
-                label={t("newAgent")}
+              // RAG is added only here, inside its Agent, and takes the
+              // Agent's Private or Public.
+              <ModuleUpload
+                label={t("uploadRag")}
+                accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                disabled={saving}
+                onFile={(file) => void uploadKnowledge(file)}
               />
             }
           >
@@ -1413,10 +1467,31 @@ export function AgentWorkbench({
                   }
                 />
               ) : null}
-              {documents.length === 0 ? (
+              {documents.length === 0 && stagedRag.length === 0 ? (
                 <p className="muted-copy">{t("noGroupMarkdown")}</p>
               ) : (
                 <div className="document-list">
+                  {stagedRag.map((item) => (
+                    <div className="document-row" key={item.signature}>
+                      <label className="document-select">
+                        <input
+                          type="checkbox"
+                          checked
+                          disabled={saving}
+                          onChange={() =>
+                            setStagedRag((current) =>
+                              current.filter(
+                                (staged) => staged.signature !== item.signature,
+                              ),
+                            )
+                          }
+                        />
+                        <span className="document-main">
+                          <strong>{item.file.name}</strong>
+                        </span>
+                      </label>
+                    </div>
+                  ))}
                   {documents.map((document) => (
                     <div
                       className={`document-row ${document.workspace_state === "hidden" ? "is-hidden" : ""}`}

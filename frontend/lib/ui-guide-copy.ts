@@ -205,6 +205,10 @@ export const uiGuideCopy = {
     en: "Import Markdown, PDF, or Word files. PDF and Word uploads are converted to Markdown for this library.",
     zh: "导入 Markdown、PDF 或 Word 文件；PDF 和 Word 会转换为 Markdown 后加入此知识库。",
   },
+  "agent.uploadRag": {
+    en: "Upload a Markdown, PDF or Word file as this Agent's RAG. It is Private or Public like the Agent.",
+    zh: "上传 Markdown、PDF 或 Word 文件作为此 Agent 的 RAG，与该 Agent 同为私有或公开。",
+  },
   "agent.uploadMarkdown": {
     en: "Upload a Markdown file for the next Agent draft revision.",
     zh: "上传 Markdown 文件，作为 Agent 的下一版草稿。",

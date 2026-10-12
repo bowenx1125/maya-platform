@@ -16,6 +16,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import (
     Error,
     PlatformError,
+    conflict,
     invalid_state,
     not_found,
     stale_revision,
@@ -311,6 +312,17 @@ async def upload_knowledge_document(
             raise not_found()
     if target_id and scoped is not None and scoped.version.state != "draft":
         raise version_immutable()
+    if target_id and scoped is not None:
+        # RAG uploaded into an Agent takes that Agent's Private or Public, so a
+        # private Agent's material never reaches the group's Brainform and a
+        # public Agent's material is shared with the group it serves.
+        if "visibility" not in fields:
+            visibility = scoped.agent.visibility
+        elif visibility != scoped.agent.visibility:
+            raise conflict(
+                "document_visibility_follows_agent",
+                "RAG added to an Agent has the same Private or Public as the Agent.",
+            )
     if (
         target_id
         and scoped is not None

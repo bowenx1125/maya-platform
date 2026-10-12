@@ -434,12 +434,19 @@ describe("Wave 1A UI idempotency wiring", () => {
         <AgentWorkbench versionId="version-id" />
       </AppShell>,
     );
-    expect(await screen.findByRole("link", { name: "New" })).toHaveProperty(
-      "href",
-      expect.stringContaining(
-        "/student/knowledge?group_id=group-id&mode=rag-new",
-      ),
-    );
-    expect(uploadKnowledge).not.toHaveBeenCalled();
+    // RAG is uploaded inside its Agent; an uncertain upload retries with
+    // the same key rather than adding the file twice.
+    const input = await screen.findByLabelText("Upload RAG");
+    expect(screen.queryByRole("link", { name: "New" })).toBeNull();
+    const file = new File(["# Notes\n\nA source."], "notes.md", {
+      type: "text/markdown",
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(1));
+    expect(uploadKnowledge.mock.calls[0][0]).toBe("group-id");
+    expect(uploadKnowledge.mock.calls[0][1]).toBe("version-id");
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(2));
+    expect(keys[1]).toBe(keys[0]);
   });
 });

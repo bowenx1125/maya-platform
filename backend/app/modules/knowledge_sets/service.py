@@ -881,7 +881,9 @@ def list_brainform_knowledge(
         if set_row is None:
             continue
         role = _set_role(db, context, set_row)
-        if role is None:
+        # A Teacher's own Brainform holds no student material; a group's
+        # public Knowledge is read during an Accounts visit to that group.
+        if role is None or role == "teacher":
             continue
         run = _latest_generation_for_set(db, set_row.id)
         if role == "owner" and run is None and set_row.current_markdown_version_seq == 0:

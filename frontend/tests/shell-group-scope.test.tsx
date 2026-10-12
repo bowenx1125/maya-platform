@@ -82,7 +82,8 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Studyform" }).getAttribute("href"),
     ).toBe("/teacher/studyform");
-    expect(links()).toContain("/teacher/knowledge");
+    // The visit reads this group's Brainform without ending the visit.
+    expect(links()).toContain("/teacher/knowledge?group_id=group-b");
     expect(links()).toContain("/teacher/chat");
     expect(
       screen.getByRole("link", { name: "Accounts" }).getAttribute("href"),
