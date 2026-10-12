@@ -2010,5 +2010,15 @@ class ProviderReservation(Base):
     )
 
 
+class DataResetRow(Base):
+    """A row the ``0060`` data reset retired, kept so a downgrade restores it."""
+
+    __tablename__ = "data_reset_rows"
+
+    table_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    row_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    previous_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
 # Keep a small helper available to fingerprint/serialization code without
 # exposing ORM internals in route modules.

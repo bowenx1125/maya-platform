@@ -119,6 +119,8 @@ class Debate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A retired Debate keeps its record but leaves the list, its page and Live.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # The Demo deliberately does not expose hard duration controls.  Keeping
     # nullable compatibility columns makes the frozen rule snapshot explicit.
     total_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)

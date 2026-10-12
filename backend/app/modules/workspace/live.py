@@ -44,7 +44,7 @@ def heartbeat(
     service: PlaybackService = Depends(get_playback_service),
 ) -> LiveSummary | None:
     debate = db.get(Debate, str(debate_id))
-    if debate is None:
+    if debate is None or debate.deleted_at is not None:
         raise not_found()
     course_member(db, context, debate.course_id, teacher=True)
     lease_id = str(payload.lease_id)
@@ -105,7 +105,7 @@ def live_status(
     if presence is None or presence.expires_at.replace(tzinfo=UTC) <= datetime.now(UTC):
         return None
     debate = db.get(Debate, presence.debate_id)
-    if debate is None or debate.status in {"stopped", "failed"}:
+    if debate is None or debate.deleted_at is not None or debate.status in {"stopped", "failed"}:
         return None
     if service._state(db, debate).status == "stopped":
         return None
@@ -116,7 +116,7 @@ def live_snapshot(
     db: Session, service: PlaybackService, debate_id: str, context: AuthContext
 ) -> LiveSnapshot:
     debate = db.get(Debate, debate_id)
-    if debate is None:
+    if debate is None or debate.deleted_at is not None:
         raise not_found()
     course_member(db, context, debate.course_id)
     presence = db.get(LivePresence, debate.course_id)

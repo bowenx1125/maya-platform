@@ -567,10 +567,24 @@ def _create_baseline(db: Session, data_root: Path, spec: BaselineSpec) -> None:
     return None
 
 
+def _revive_after_reset(db: Session, spec: BaselineSpec) -> None:
+    """Undo a data reset's soft delete; no person can delete these rows."""
+
+    agent = db.get(Agent, spec.agent_id)
+    if agent is not None and (agent.deleted_at is not None or agent.status != "active"):
+        agent.deleted_at = None
+        agent.status = "active"
+    document = db.get(KnowledgeDocument, spec.document_id)
+    if document is not None and document.workspace_state != "active":
+        document.workspace_state = "active"
+    db.flush()
+
+
 def ensure_demo_baseline(db: Session, data_root: Path) -> None:
     """Create or verify every fixed published Mock Agent and usable Snapshot."""
 
     for spec in BASELINE_SPECS:
+        _revive_after_reset(db, spec)
         if _verify_existing_rows(db, data_root, spec):
             _reconcile_default_avatar_config(db, spec)
             continue

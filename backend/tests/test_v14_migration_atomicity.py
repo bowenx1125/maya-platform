@@ -31,6 +31,7 @@ _REVISIONS = (
     ("0056_preset_voice_profiles", "0057_agent_account_memory"),
     ("0057_agent_account_memory", "0058_card_rooms"),
     ("0058_card_rooms", "0059_chat_titles_pins"),
+    ("0059_chat_titles_pins", "0060_legacy_data_reset"),
 )
 
 

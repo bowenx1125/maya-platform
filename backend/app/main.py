@@ -367,7 +367,9 @@ def create_app(
                     "Production requires a separate private Teacher credential catalog or "
                     "an active Teacher account with a database password credential"
                 )
-            if not runtime_settings.is_test:
+            # Laozi, Plato and Socrates are Demo fixtures. A classroom starts
+            # without them, so production never creates or revives them.
+            if not runtime_settings.is_test and runtime_settings.demo_mode:
                 with runtime_database.session() as session:
                     ensure_demo_baseline(session, runtime_settings.resolved_data_root)
                 # A reviewed provider policy is operator evidence, not runtime

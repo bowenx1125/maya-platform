@@ -1205,7 +1205,9 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     require_teacher_course(db, actor_user_id, course_id)
     _find_course(db, course_id)
     rows = db.scalars(
-        select(Debate).where(Debate.course_id == course_id).order_by(Debate.created_at.desc())
+        select(Debate)
+        .where(Debate.course_id == course_id, Debate.deleted_at.is_(None))
+        .order_by(Debate.created_at.desc())
     ).all()
     # One query for every Debate's turns rather than one per row: the list is
     # the screen a teacher watches while a draft warms, and it is polled.
@@ -1296,7 +1298,7 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
 
 def get_debate(db: Session, *, actor_user_id: str, debate_id: str) -> DebateDetail:
     debate = db.get(Debate, debate_id)
-    if debate is None:
+    if debate is None or debate.deleted_at is not None:
         raise not_found()
     require_teacher_course(db, actor_user_id, debate.course_id)
     return _detail(db, debate)

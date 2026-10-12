@@ -124,6 +124,7 @@ def _upsert(
         current = db.get(AgentAccountMemory, memory_id)
         if (
             current is None
+            or current.deleted_at is not None
             or current.owner_user_id != owner_user_id
             or current.agent_id != agent_id
         ):
@@ -136,6 +137,7 @@ def _upsert(
             AgentAccountMemory.owner_user_id == owner_user_id,
             AgentAccountMemory.agent_id == agent_id,
             AgentAccountMemory.body == body,
+            AgentAccountMemory.deleted_at.is_(None),
         )
     )
     if existing is not None:
@@ -161,6 +163,7 @@ def _read_rows(db: Session, owner_user_id: str, agent_id: str) -> list[dict[str,
         .where(
             AgentAccountMemory.owner_user_id == owner_user_id,
             AgentAccountMemory.agent_id == agent_id,
+            AgentAccountMemory.deleted_at.is_(None),
         )
         .order_by(AgentAccountMemory.updated_at.desc(), AgentAccountMemory.id)
         .limit(_MEMORY_LIMIT)
