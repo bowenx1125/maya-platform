@@ -315,7 +315,7 @@ def _resolve_agent_version(
     settings: Settings,
 ) -> tuple[
     Agent,
-    Group,
+    Group | None,
     AgentVersion,
     KnowledgeSnapshot,
     dict[str, Any],
@@ -339,9 +339,11 @@ def _resolve_agent_version(
     # Agent -> Group -> current AgentVersion -> KnowledgeSnapshot chain.  The
     # outer joins let the service preserve stable validation codes for a
     # missing current pointer or snapshot without issuing a second probe.
+    # A teacher's personal Agent has no group, so the group is optional; the
+    # course is then checked on the Agent itself.
     resolved = db.execute(
         select(Agent, Group, AgentVersion, KnowledgeSnapshot)
-        .join(Group, Group.id == Agent.group_id)
+        .outerjoin(Group, Group.id == Agent.group_id)
         .outerjoin(
             AgentVersion,
             and_(
@@ -362,8 +364,13 @@ def _resolve_agent_version(
     if resolved is None:
         raise not_found()
     agent, group, version, snapshot = resolved
-    if group.course_id != course_id:
+    if agent.course_id != course_id or (group is not None and group.course_id != course_id):
         raise not_found()
+    if agent.deleted_at is not None:
+        raise validation_failure(
+            "Archived Agents are not available for new classroom work.",
+            code="agent_archived",
+        )
     if agent.status == "archived":
         raise validation_failure(
             "Archived Agents are not available for new classroom work.",
@@ -406,7 +413,7 @@ def _resolve_agent_version(
         custom = db.get(VoiceProfile, requested_voice_id)
         # A baseline character has no row to edit. An operator may point it at
         # a ready system profile; a student's own binding stays group-scoped.
-        same_group = custom is not None and custom.group_id == group.id
+        same_group = custom is not None and group is not None and custom.group_id == group.id
         operator_system = (
             custom is not None
             and own_voice_id is None
@@ -445,7 +452,7 @@ def _fence_resolved_agent_chain(
     db: Session,
     *,
     agent: Agent,
-    group: Group,
+    group: Group | None,
     version: AgentVersion,
     snapshot: KnowledgeSnapshot,
 ) -> None:
@@ -457,22 +464,24 @@ def _fence_resolved_agent_chain(
     draft/revision atomically.
     """
 
-    group_fence = db.execute(
-        update(Group)
-        .where(Group.id == group.id, Group.course_id == group.course_id)
-        .values(created_at=Group.created_at)
-    )
-    if int(getattr(group_fence, "rowcount", 0)) != 1:
-        raise validation_failure(
-            "The selected Agent group changed before the Debate draft was saved.",
-            code="agent_not_current",
+    if group is not None:
+        group_fence = db.execute(
+            update(Group)
+            .where(Group.id == group.id, Group.course_id == group.course_id)
+            .values(created_at=Group.created_at)
         )
+        if int(getattr(group_fence, "rowcount", 0)) != 1:
+            raise validation_failure(
+                "The selected Agent group changed before the Debate draft was saved.",
+                code="agent_not_current",
+            )
 
     agent_fence = db.execute(
         update(Agent)
         .where(
             Agent.id == agent.id,
-            Agent.group_id == group.id,
+            Agent.group_id.is_(None) if group is None else Agent.group_id == group.id,
+            Agent.deleted_at.is_(None),
             Agent.status == "active",
             Agent.current_published_version_id == version.id,
             Agent.name == agent.name,
@@ -572,7 +581,7 @@ def _participant_row(
         id=str(uuid4()),
         debate_id=debate.id,
         course_id=debate.course_id,
-        group_id=group.id,
+        group_id=group.id if group is not None else None,
         agent_id=agent.id,
         agent_version_id=version.id,
         knowledge_snapshot_id=snapshot.id,

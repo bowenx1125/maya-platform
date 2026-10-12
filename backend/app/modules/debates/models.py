@@ -164,7 +164,8 @@ class DebateParticipant(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    group_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    # NULL for a teacher's personal Agent, which belongs to no group.
+    group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     agent_id: Mapped[str] = mapped_column(String(36), nullable=False)
     agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
     knowledge_snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False)
