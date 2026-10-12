@@ -133,7 +133,7 @@ const source = {
   group_id: null,
   course_id: "course-1",
   ownership_scope: "personal",
-  visibility: "private",
+  visibility: "public",
   can_manage_visibility: true,
   source_filename: "lesson.md",
   char_count: 18,
@@ -288,6 +288,22 @@ describe("Brainform workspace actions", () => {
     ).toBeNull();
     expect(screen.queryByLabelText("Import a file")).toBeNull();
     expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
+  });
+
+  it("keeps a private Agent's RAG out of Brainform", async () => {
+    state.role = "teacher";
+    state.api.workspaceDocuments.mockResolvedValue([
+      source,
+      {
+        ...source,
+        id: "document-private",
+        visibility: "private",
+        source_filename: "test2.md",
+      },
+    ]);
+    renderWorkspace("teacher");
+    await screen.findAllByText("lesson.md");
+    expect(screen.queryByText("test2.md")).toBeNull();
   });
 
   it("replaces an existing RAG source with an imported DOCX through the server CAS API", async () => {

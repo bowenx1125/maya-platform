@@ -760,7 +760,11 @@ function BrainformWorkspaceBody({
           nextTeams,
         ] = await Promise.all([
           api.courses(),
-          loadRagDocuments(courseId),
+          // A private Agent's files live only inside that Agent; Brainform is
+          // the group's shared library of public Agents' RAG.
+          loadRagDocuments(courseId).then((documents) =>
+            documents.filter((document) => document.visibility !== "private"),
+          ),
           api.brainformKnowledge(courseId),
           api.chatAgents(courseId),
           loadGroups(courseId),

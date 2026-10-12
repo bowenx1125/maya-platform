@@ -1231,6 +1231,11 @@ export function AgentWorkbench({
     }
   }
 
+  // Before the first Done there is no Agent to upload into, so the file
+  // waits here; it must still be listed or the author thinks it was dropped.
+  const queuedCreateRag =
+    creating && !agent?.id ? pendingKnowledgeUpload : null;
+
   return (
     <>
       <PageIntro
@@ -1467,10 +1472,27 @@ export function AgentWorkbench({
                   }
                 />
               ) : null}
-              {documents.length === 0 && stagedRag.length === 0 ? (
+              {documents.length === 0 &&
+              stagedRag.length === 0 &&
+              !queuedCreateRag ? (
                 <p className="muted-copy">{t("noGroupMarkdown")}</p>
               ) : (
                 <div className="document-list">
+                  {queuedCreateRag ? (
+                    <div className="document-row">
+                      <label className="document-select">
+                        <input
+                          type="checkbox"
+                          checked
+                          disabled={saving}
+                          onChange={() => setPendingKnowledgeUpload(null)}
+                        />
+                        <span className="document-main">
+                          <strong>{queuedCreateRag.file.name}</strong>
+                        </span>
+                      </label>
+                    </div>
+                  ) : null}
                   {stagedRag.map((item) => (
                     <div className="document-row" key={item.signature}>
                       <label className="document-select">

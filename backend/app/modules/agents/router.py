@@ -206,6 +206,38 @@ def _require_available_agent_name(
         )
 
 
+def _retire_agent_documents(db: Session, agent: Agent) -> None:
+    """Take a deleted Agent's own RAG files out of the library with it.
+
+    Only files its owner uploaded and no other live Agent uses leave; another
+    Agent's binding keeps a shared file listed. This is the same library-only
+    hide as deleting the file itself, so frozen snapshots behind chat history
+    keep their copies.
+    """
+
+    own_version_ids = select(AgentVersion.id).where(AgentVersion.agent_id == agent.id)
+    used_elsewhere = (
+        select(AgentVersionDocument.document_id)
+        .join(AgentVersion, AgentVersion.id == AgentVersionDocument.agent_version_id)
+        .join(Agent, Agent.id == AgentVersion.agent_id)
+        .where(Agent.id != agent.id, Agent.deleted_at.is_(None))
+    )
+    db.execute(
+        update(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.id.in_(
+                select(AgentVersionDocument.document_id).where(
+                    AgentVersionDocument.agent_version_id.in_(own_version_ids)
+                )
+            ),
+            KnowledgeDocument.id.not_in(used_elsewhere),
+            KnowledgeDocument.owner_user_id == agent.owner_user_id,
+            KnowledgeDocument.workspace_state == "active",
+        )
+        .values(workspace_state="hidden", updated_at=_time())
+    )
+
+
 def _sync_markdown_name(
     db: Session,
     agent: Agent,
@@ -1087,6 +1119,7 @@ def delete_agent(
         agent.deleted_at = _time()
         agent.status = "archived"
         agent.updated_at = agent.deleted_at
+        _retire_agent_documents(db, agent)
         db.flush()
         finish_idempotency(db, record, 204, {})
         saga_checkpoint("delete_agent.before_final_commit")

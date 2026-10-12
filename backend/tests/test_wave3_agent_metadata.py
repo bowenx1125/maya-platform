@@ -173,12 +173,13 @@ def _create_agent(
     csrf: str,
     key: str = "wave3-create-agent-001",
     description: str = "",
+    name: str = "Metadata Agent",
 ) -> dict[str, Any]:
     response = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/agents",
         headers=_headers(csrf, **{"Idempotency-Key": key}),
         json={
-            "name": "Metadata Agent",
+            "name": name,
             "description": description,
             "visibility": "public",
         },
@@ -277,18 +278,36 @@ def test_metadata_patch_is_cas_only_and_empty_description_has_no_fallback(
     assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 200
 
 
-def test_delete_eligible_agent_removes_only_agent_draft_state(client: TestClient) -> None:
+def test_delete_agent_takes_its_own_rag_out_of_brainform(client: TestClient) -> None:
+    # Owner decision (2026-10-12): deleting an Agent deletes its RAG with it,
+    # unless another live Agent still uses that file.
     _user, csrf = login(client, "bowen")
     agent = _create_agent(client, csrf, "wave3-delete-agent-001")
+    keeper = _create_agent(client, csrf, "wave3-delete-keeper-001", name="Keeper Agent")
     version_id = agent["versions"][0]["id"]
     upload = client.post(
         f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-delete-upload-001"}),
         data={"target_agent_version_id": version_id, "expected_revision": "0"},
-        files={"file": ("shared.md", b"# Shared\n\nPreserve me", "text/markdown")},
+        files={"file": ("own.md", b"# Own\n\nLeaves with its Agent", "text/markdown")},
     )
     assert upload.status_code == 201, upload.text
-    document_id = upload.json()["document"]["id"]
+    own_id = upload.json()["document"]["id"]
+    shared = client.post(
+        f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "wave3-delete-upload-002"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "1"},
+        files={"file": ("shared.md", b"# Shared\n\nPreserve me", "text/markdown")},
+    )
+    assert shared.status_code == 201, shared.text
+    shared_id = shared.json()["document"]["id"]
+    keeper_version = keeper["versions"][0]["id"]
+    bound = client.put(
+        f"/api/v1/agent-versions/{keeper_version}/knowledge-documents",
+        headers=_headers(csrf),
+        json={"expected_revision": 0, "document_ids": [shared_id]},
+    )
+    assert bound.status_code == 200, bound.text
 
     deleted = client.delete(
         f"/api/v1/agents/{agent['id']}",
@@ -296,7 +315,12 @@ def test_delete_eligible_agent_removes_only_agent_draft_state(client: TestClient
     )
     assert deleted.status_code == 204, deleted.text
     assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 404
-    assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 200
+    listed = {
+        row["id"]
+        for row in client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents").json()
+    }
+    assert own_id not in listed
+    assert shared_id in listed
 
 
 def test_delete_hides_agent_and_preserves_versions_group_files_and_audit(
