@@ -492,6 +492,35 @@ def test_rag_uploaded_into_an_agent_takes_the_agents_visibility(client: TestClie
     assert "public.md" in names and "private.md" not in names
 
 
+def test_a_teachers_public_agent_rag_stays_out_of_student_brainform(client: TestClient) -> None:
+    _teacher, csrf = login(client, "maya")
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/workspace-agents",
+        headers=_headers(csrf, **{"Idempotency-Key": "w1-teacher-public-rag-agent"}),
+        json={"name": "Teacher Public Guide", "visibility": "public"},
+    )
+    assert created.status_code == 201, created.text
+    version_id = created.json()["versions"][0]["id"]
+    uploaded = client.post(
+        f"/api/v1/courses/{COURSE_ID}/workspace-documents",
+        headers=_headers(csrf, **{"Idempotency-Key": "w1-teacher-public-rag-upload"}),
+        data={"target_agent_version_id": version_id, "expected_revision": "0"},
+        files={"file": ("guide.md", b"# Guide\n\nCourse notes", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    document = uploaded.json()["document"]
+    assert document["ownership_scope"] == "personal"
+    assert document["visibility"] == "public"
+    own = client.get(f"/api/v1/courses/{COURSE_ID}/workspace-documents").json()
+    assert [row["id"] for row in own] == [document["id"]]
+
+    # A student meets it only read-only inside that Agent, never in Brainform.
+    login(client, "kaikai")
+    listed = client.get(f"/api/v1/groups/{GROUP_ID}/knowledge-documents")
+    assert listed.status_code == 200, listed.text
+    assert all(row["id"] != document["id"] for row in listed.json())
+
+
 def _create_public_group_agent(client: TestClient, csrf: str, name: str) -> tuple[str, str]:
     key = name.lower().replace(" ", "-")
     created = client.post(
