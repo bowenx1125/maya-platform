@@ -1828,6 +1828,22 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             .mappings()
             .all()
         )
+    # Every schema step keeps the row exactly as written. Only the 0060 data
+    # reset, which retires earlier classroom work on purpose, archives it.
+    command.upgrade(migration_config, "0059_chat_titles_pins")
+    with database.engine.connect() as connection:
+        preserved = (
+            connection.execute(
+                text(
+                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
+                    "avatar_config_json, voice_profile_id FROM agents "
+                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
+                )
+            )
+            .mappings()
+            .all()
+        )
+    assert list(before) == list(preserved)
     command.upgrade(migration_config, "head")
     command.upgrade(migration_config, "head")
     with database.engine.connect() as connection:
@@ -1902,7 +1918,9 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
             .mappings()
             .all()
         )
-        assert list(before) == list(after)
+        assert [{**dict(row), "status": "archived"} for row in before] == [
+            dict(row) for row in after
+        ]
         assert connection.execute(text("SELECT COUNT(*) FROM voice_profiles")).scalar_one() == 0
     database.dispose()
 
