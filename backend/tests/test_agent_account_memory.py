@@ -70,23 +70,25 @@ def test_leader_stores_only_the_named_members_memory_for_this_account(client, da
     leader = next(member for member in session["team"]["members"] if member["is_leader"])
     other = next(member for member in session["team"]["members"] if not member["is_leader"])
     remembered = "我喜欢短回答"
-    message = f"请{other['name']}记住{remembered}"
+    # No fixed word is needed: the model reads that the user wants this kept.
+    message = f"{other['name']}，以后别忘了{remembered}"
 
     with database.session() as db:
         conversation = db.get(Conversation, session["id"])
         assert conversation is not None
         turn = _turn(db, session["id"], message)
         maya = _actor(db, "maya")
-        with pytest.raises(PlatformError) as missing:
+        # A name the user never said cannot become a target.
+        with pytest.raises(PlatformError) as unknown:
             write_agent_memory(
                 db,
                 maya,
                 conversation,
-                WriteAgentMemoryArguments(text=remembered),
+                WriteAgentMemoryArguments(text=remembered, member_names=[leader["name"]]),
                 "call",
                 _identity(session["id"], turn.id, leader["id"]),
             )
-        assert missing.value.code == "agent_memory_needs_target"
+        assert unknown.value.code == "agent_memory_name_unknown"
         saved = write_agent_memory(
             db,
             maya,
@@ -167,7 +169,7 @@ def test_single_agent_memory_rejects_text_that_is_not_in_the_message(
     with database.session() as db:
         conversation = db.get(Conversation, created.json()["id"])
         assert conversation is not None
-        turn = _turn(db, conversation.id, "请记住我喜欢短回答")
+        turn = _turn(db, conversation.id, "记一下，我喜欢短回答")
         version_id = conversation.agent_version_id
         assert version_id is not None
         with pytest.raises(PlatformError) as rejected:
@@ -206,3 +208,35 @@ def test_single_agent_memory_rejects_text_that_is_not_in_the_message(
             )
             == 1
         )
+
+
+def test_a_leader_that_names_nobody_keeps_the_note_itself(client, database) -> None:
+    team, _versions, csrf = _team(client, database)
+    session = _create(client, csrf, {"kind": "team", "team_id": team["id"]})
+    leader = next(member for member in session["team"]["members"] if member["is_leader"])
+    with database.session() as db:
+        conversation = db.get(Conversation, session["id"])
+        assert conversation is not None
+        turn = _turn(db, session["id"], "Keep in mind that I study on weekends.")
+        maya = _actor(db, "maya")
+        saved = write_agent_memory(
+            db,
+            maya,
+            conversation,
+            WriteAgentMemoryArguments(text="I study on weekends"),
+            "call",
+            _identity(session["id"], turn.id, leader["id"]),
+        )
+        leader_participant = db.get(ConversationParticipant, leader["id"])
+        assert leader_participant is not None
+        assert saved["memories"][0]["agent_id"] == leader_participant.agent_id
+        with pytest.raises(PlatformError) as invented:
+            write_agent_memory(
+                db,
+                maya,
+                conversation,
+                WriteAgentMemoryArguments(text="I study every night"),
+                "call",
+                _identity(session["id"], turn.id, leader["id"]),
+            )
+        assert invented.value.code == "agent_memory_span_missing"

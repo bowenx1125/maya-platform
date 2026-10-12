@@ -50,10 +50,6 @@ def _speaking(db: Session, row: Conversation, identity: ToolCallIdentity) -> tup
     return participant.agent_id, participant.display_name, bool(participant.is_leader)
 
 
-def _asks_to_remember(text: str) -> bool:
-    return "记住" in text or "remember" in text.lower()
-
-
 def _current_turn(db: Session, row: Conversation, identity: ToolCallIdentity) -> ConversationTurn:
     turn = db.get(ConversationTurn, identity.turn_id)
     if turn is None or turn.conversation_id != row.id:
@@ -61,18 +57,23 @@ def _current_turn(db: Session, row: Conversation, identity: ToolCallIdentity) ->
     return turn
 
 
-def _span_in_remember_request(
+def _span_in_user_message(
     db: Session, row: Conversation, identity: ToolCallIdentity, span: str, *, allow_earlier: bool
 ) -> str:
-    """Return the current message after checking where the remembered span was said."""
+    """Return the current message after checking where the remembered span was said.
+
+    Whether the user meant "keep this" is the model's reading of their words,
+    however phrased. What the server guarantees is narrower: the note is the
+    user's own words from this chat, never text the model made up.
+    """
 
     current = _current_turn(db, row, identity).user_text
-    if span in current and _asks_to_remember(current):
+    if span in current:
         return current
     if not allow_earlier:
         raise conflict(
             "agent_memory_span_missing",
-            "The memory text must be an exact part of a message that asks to remember.",
+            "The memory text must be an exact part of the user's message.",
         )
     earlier = db.scalars(
         select(ConversationTurn)
@@ -82,11 +83,11 @@ def _span_in_remember_request(
         )
         .order_by(ConversationTurn.position.desc(), ConversationTurn.id.desc())
     ).all()
-    if any(span in turn.user_text and _asks_to_remember(turn.user_text) for turn in earlier):
+    if any(span in turn.user_text for turn in earlier):
         return current
     raise conflict(
         "agent_memory_span_missing",
-        "The memory text must be an exact part of a message that asks to remember.",
+        "The memory text must be an exact part of the user's message.",
     )
 
 
@@ -97,16 +98,6 @@ def _participants(db: Session, row: Conversation) -> list[ConversationParticipan
             .where(ConversationParticipant.conversation_id == row.id)
             .order_by(ConversationParticipant.position, ConversationParticipant.id)
         )
-    )
-
-
-def _leader_addressed(user_text: str, display_name: str) -> bool:
-    lowered = user_text.lower()
-    return (
-        display_name in user_text
-        or "你记住" in user_text
-        or "记住你" in user_text
-        or "remember you" in lowered
     )
 
 
@@ -196,9 +187,9 @@ def write_agent_memory(
     if not span:
         raise conflict(
             "agent_memory_span_missing",
-            "The memory text must be an exact part of a message that asks to remember.",
+            "The memory text must be an exact part of the user's message.",
         )
-    agent_id, display_name, is_leader = _speaking(db, row, identity)
+    agent_id, _display_name, is_leader = _speaking(db, row, identity)
     names = [name.strip() for name in arguments.member_names if name.strip()]
     if names and (row.entry_kind == "agent" or not is_leader):
         raise conflict(
@@ -215,12 +206,12 @@ def write_agent_memory(
         if span not in user_text:
             raise conflict(
                 "agent_memory_span_missing",
-                "The memory text must be an exact part of a message that asks to remember.",
+                "The memory text must be an exact part of the user's message.",
             )
     else:
-        # A named-member reply may only contain the names. The fact stays in the
-        # earlier message of this same chat that asked to remember.
-        user_text = _span_in_remember_request(db, row, identity, span, allow_earlier=bool(names))
+        # A reply that only names members keeps the fact in an earlier message
+        # of this same chat.
+        user_text = _span_in_user_message(db, row, identity, span, allow_earlier=bool(names))
     targets: list[str]
     if names:
         participants = _participants(db, row)
@@ -241,11 +232,6 @@ def write_agent_memory(
                 raise conflict("agent_memory_name_ambiguous", "That member name is not unique.")
             targets.append(matches[0].agent_id)
     else:
-        if is_leader and not _leader_addressed(user_text, display_name):
-            raise conflict(
-                "agent_memory_needs_target",
-                "Ask which member should remember this.",
-            )
         targets = [agent_id]
     saved = [
         _upsert(
@@ -286,11 +272,12 @@ def agent_memory_tools() -> dict[str, ToolSpec]:
             "write_agent_memory",
             "Public",
             (
-                "Store one exact span from a message in this chat that asks to remember. "
+                "Store what the user wants this Agent to keep for later chats, however they say "
+                "it, as one exact span of the user's own words in this chat. "
                 "Pass memory_id only to update that note when the current message restates it. "
-                "In a Team, if the user asked to remember and named no member, do not call this "
-                "yet: ask who should remember. After the user names members, the Leader may pass "
-                "those member_names; the span may be in that earlier remember message. "
+                "In a Team, if it is unclear which member should keep it, do not call this yet: "
+                "ask who. After the user names members, the Leader may pass those member_names; "
+                "the span may be in that earlier message. "
                 "A single-Agent chat and an @ member write only the speaking Agent. "
                 "Never store an assessment answer, score, Rubric, or another account's note. "
                 "Debates do not receive these notes."
