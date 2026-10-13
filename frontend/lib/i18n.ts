@@ -139,6 +139,8 @@ const enMessages = {
   debateReplayAll: "Replay whole debate",
   debatePartial: "The debate stopped early. Published speeches remain below.",
   debateTranscript: "Public Debate",
+  liveInteractionUnavailable:
+    "Interaction is available only while the teacher has opened it and responses are being collected.",
   debateSources: "Sources",
   debateNoSources: "No matched knowledge sources.",
   debateRound: "Round",
@@ -910,6 +912,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateReplayAll: "重播整场",
   debatePartial: "辩论提前结束,已公开的发言仍在下方。",
   debateTranscript: "公开发言",
+  liveInteractionUnavailable: "仅当老师已开启互动且课堂仍在收集回应时可参与。",
   debateSources: "来源",
   debateNoSources: "没有命中的知识来源。",
   debateRound: "轮次",

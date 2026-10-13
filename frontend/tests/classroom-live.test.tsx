@@ -68,10 +68,12 @@ function snapshot(
   sequence = 1,
   speech = "Published classroom speech",
   active = true,
+  interactionUrl: string | null = null,
 ): LiveSnapshot {
   return {
     active,
     debate_id: debateId,
+    interaction_url: interactionUrl,
     sequence,
     server_time: "2026-10-12T00:00:00Z",
     participants: [
@@ -129,9 +131,9 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function livePage() {
+function livePage(locale: "en" | "zh" = "en") {
   return (
-    <LocaleProvider initialLocale="en">
+    <LocaleProvider initialLocale={locale}>
       <ClassroomLive />
     </LocaleProvider>
   );
@@ -187,6 +189,64 @@ describe("ClassroomLive read-only recovery", () => {
     expect(LiveSocket.instances).toHaveLength(1);
     expect(LiveSocket.instances[0].url).toMatch(
       /^ws:\/\/[^/]+\/api\/v1\/live\/debate-a\/events$/,
+    );
+  });
+
+  it("explains unavailable interaction and follows only the server-issued link as it opens and closes", async () => {
+    session.api.liveSnapshot.mockResolvedValueOnce(
+      snapshot("debate-a", 1, "Published classroom speech", true, null),
+    );
+    render(livePage());
+    await settle();
+
+    const unavailable = screen.getByRole("button", { name: "Interact" });
+    expect(unavailable).toHaveProperty("disabled", true);
+    expect(unavailable.getAttribute("aria-describedby")).toBe(
+      "live-interaction-unavailable",
+    );
+    expect(screen.getByRole("status").textContent).toBe(
+      "Interaction is available only while the teacher has opened it and responses are being collected.",
+    );
+
+    act(() =>
+      LiveSocket.instances[0].receive(
+        snapshot(
+          "debate-a",
+          2,
+          "Published classroom speech",
+          true,
+          "/classroom/shared-qr-token",
+        ),
+      ),
+    );
+    const interact = screen.getByRole("link", { name: "Interact" });
+    expect(interact.getAttribute("href")).toBe("/classroom/shared-qr-token");
+    const click = vi.fn((event: MouseEvent) => event.preventDefault());
+    interact.addEventListener("click", click, { once: true });
+    fireEvent.click(interact);
+    expect(click).toHaveBeenCalledOnce();
+    expect(interact.getAttribute("href")).toBe("/classroom/shared-qr-token");
+    expect(screen.queryByRole("status")).toBeNull();
+
+    act(() =>
+      LiveSocket.instances[0].receive(
+        snapshot("debate-a", 3, "Published classroom speech", true, null),
+      ),
+    );
+    expect(screen.queryByRole("link", { name: "Interact" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Interact" }).getAttribute("disabled"),
+    ).not.toBeNull();
+    expect(screen.getByRole("status").textContent).toBe(
+      "Interaction is available only while the teacher has opened it and responses are being collected.",
+    );
+  });
+
+  it("shows the unavailable interaction guidance in Chinese", async () => {
+    render(livePage("zh"));
+    await settle();
+    expect(screen.getByRole("status").textContent).toBe(
+      "仅当老师已开启互动且课堂仍在收集回应时可参与。",
     );
   });
 
