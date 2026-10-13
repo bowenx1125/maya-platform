@@ -1447,6 +1447,8 @@ def settle_member(
             # Student-facing assessment content is the service's typed safe
             # projection. Model prose survives only ahead of a read-only progress
             # reply, which the active protocol limits to non-answer help.
+            from app.modules.learning.attempts import awaits_follow_up_round
+
             from .chat_provider import (
                 assessment_reply_chinese,
                 assessment_safe_reply_text,
@@ -1471,6 +1473,9 @@ def settle_member(
                     follow_up=follow_up,
                     chinese=assessment_reply_chinese(
                         db, row.id, conversation_user_texts(db, row.id)
+                    ),
+                    follow_up_pending=awaits_follow_up_round(
+                        db, str(assessment_result.context.attempt.id)
                     ),
                 )
             )

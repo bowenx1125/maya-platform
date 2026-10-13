@@ -1461,7 +1461,10 @@ def test_presented_question_version_stays_frozen_and_all_raw_answers_are_readabl
         )
         assert downloaded.filename.endswith(".md")
         assert "Raw answer records | 3" in downloaded.content
-        assert "seven" not in downloaded.content
+        # Owner decision (2026-10-13): the teacher's report keeps the raw
+        # answers, every one of them, so a correction shows beside the first.
+        assert "| 1 | Question one | seven |" in downloaded.content
+        assert "two / three" in downloaded.content
         with pytest.raises(PlatformError) as student_denied:
             read_assessment_activity_aggregate(
                 db,
@@ -3290,6 +3293,9 @@ def test_diagnosis_asks_every_question_then_scores_and_summarizes(
             db, teacher, report_id=str(report.id), revision_id=str(report.revision_id)
         ).content
         assert "- Weak points: Q3 topic" in markdown
+        # Owner request (2026-10-13): the report keeps each raw answer.
+        assert "## Raw answers" in markdown
+        assert "| Q1 |" in markdown and "answer to Q1" in markdown
 
         # Owner request (2026-10-13): a teacher asking again for an earlier
         # report gets its real link; the server writes it under the reply.

@@ -18285,6 +18285,7 @@
         "properties": {
           "assessment_stage": {
             "enum": [
+              "preparing",
               "scoring",
               "summarizing",
               "completed",

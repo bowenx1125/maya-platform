@@ -763,10 +763,13 @@ def generate_reply(
             409,
         )
     if assessment_result is not None:
+        from app.modules.learning.attempts import awaits_follow_up_round
+
         reply = assessment_safe_reply_text(
             assessment_result,
             conversation_user_texts(db, row.id),
             chinese=assessment_reply_chinese(db, row.id, conversation_user_texts(db, row.id)),
+            follow_up_pending=awaits_follow_up_round(db, str(assessment_result.context.attempt.id)),
             prose=(
                 reply
                 if assessment_result.disposition == "read"

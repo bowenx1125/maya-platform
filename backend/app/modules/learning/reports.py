@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 from uuid import UUID, uuid4
@@ -606,6 +607,70 @@ def _report_markdown(report: AssessmentCourseReportDTO) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _cell(value: str) -> str:
+    return " ".join(value.split()).replace("|", "\\|") or "—"
+
+
+def _raw_answer_markdown(db: Session, attempts: list[AssessmentAttempt]) -> str:
+    """Each attempt's Questions with the student's own words, points and feedback.
+
+    Owner request (2026-10-13): the report keeps the raw answers, not only the
+    summaries. It reads the same eligible attempts the report counted.
+    """
+
+    from app.modules.knowledge_sets.schemas import QuestionContent
+
+    from .attempts import _attempt_question_rows, _raw_answers
+    from .execution import _assessment_for_attempt
+
+    lines = ["", "## Raw answers"]
+    if not attempts:
+        lines.extend(["", "No attempt yet."])
+    for attempt in sorted(
+        attempts, key=lambda item: (item.actor_user_id, item.started_at, item.id)
+    ):
+        user = db.get(User, attempt.actor_user_id)
+        name = user.display_name if user is not None else "Student"
+        ref = f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}"
+        lines.extend(
+            [
+                "",
+                f"### {name} ({ref}) · {attempt.started_at.isoformat()} · {attempt.status}",
+                "",
+                "| No. | Question | Answer | Points | Feedback |",
+                "| ---: | --- | --- | ---: | --- |",
+            ]
+        )
+        answers: dict[int, list[str]] = defaultdict(list)
+        for answer in _raw_answers(db, attempt):
+            answers[answer.question_ordinal].append(answer.answer_text)
+        scores: dict[int, tuple[float | None, str]] = {}
+        evaluation = _assessment_for_attempt(db, attempt)
+        if evaluation is not None:
+            for item in json.loads(evaluation[1].content_json).get("questions", []):
+                scores[int(item["question_ordinal"])] = (
+                    item.get("points_awarded"),
+                    str(item.get("feedback") or ""),
+                )
+        rows = _attempt_question_rows(db, attempt.id)
+        offset = rows[0].ordinal if rows else 0
+        for row in rows:
+            ordinal = row.ordinal - offset
+            prompt = ""
+            if row.content_json:
+                prompt = QuestionContent.model_validate_json(row.content_json).prompt
+            awarded, feedback = scores.get(ordinal, (None, ""))
+            given = answers.get(ordinal) or (
+                ["(skipped)"] if row.resolution == "skipped" else ["(not answered)"]
+            )
+            lines.append(
+                f"| {ordinal + 1} | {_cell(prompt.splitlines()[0] if prompt else '')} | "
+                f"{_cell(' / '.join(given))} | "
+                f"{'—' if awarded is None else f'{awarded:g}'} | {_cell(feedback)} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
 def download_assessment_course_report(
     db: Session,
     actor: AuthContext,
@@ -636,7 +701,7 @@ def download_assessment_course_report(
     )
     if revision is None or revision.report_id != report.id:
         raise not_found()
-    _attempts, _content, source_hash = _build_snapshot(db, activity)
+    attempts, _content, source_hash = _build_snapshot(db, activity)
     if source_hash != revision.source_hash:
         raise conflict(
             "assessment_report_stale",
@@ -664,7 +729,7 @@ def download_assessment_course_report(
     return AssessmentReportDownload(
         filename=f"assessment-report-{slug}-r{revision.revision_seq}.md",
         content_type="text/markdown; charset=utf-8",
-        content=_report_markdown(content),
+        content=_report_markdown(content) + _raw_answer_markdown(db, attempts),
     )
 
 

@@ -158,7 +158,10 @@ def runtime_registry() -> dict[str, ToolSpec]:
             "assessment_action",
             "Student",
             (
-                "Apply the user's explicit assessment action. Classify the saved current message; "
+                "Apply the user's explicit assessment action. A formal test starts only through "
+                "this Tool (start_request) and the server shows every Question: never write test "
+                "questions yourself or pretend a test has started. "
+                "Classify the saved current message; "
                 "for answers provide only its exact answer span. Never invent an answer. "
                 "Saying the learner does not know or forgot (我不知道, 不知道, 不会, 忘了, "
                 "I don't know) is answer_only with that exact text as the span: it is an answer "

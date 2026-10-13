@@ -7,7 +7,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-
 from agno.models.response import ModelResponse
 from app.core.models import AgentVersion, SessionRecord
 from app.modules.auth.service import get_auth_context
@@ -712,6 +711,22 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     # An open test's turn runs the Leader alone; nothing is delegated to the
     # scorer or summarizer from the student's turn.
     assert wires[evaluator.id] == [] and wires[boundary.id] == []
+    with database.session() as db:
+        from app.modules.workspace.team_conversation import _assessment_stage
+
+        leader_reply = db.scalar(
+            select(TeamTurnResult.assistant_text).where(TeamTurnResult.turn_id == claim.turn_id)
+        )
+        stage = _assessment_stage(db, db.get(Conversation, conversation_id))
+    # Owner decision (2026-10-13): follow-ups come before the test is scored,
+    # so picking them is not announced as scoring and shows no bar.
+    if follow_up:
+        assert "One moment, please." in (leader_reply or "")
+        assert "scoring" not in (leader_reply or "")
+        assert stage == "preparing"
+    else:
+        assert "Saving and scoring now." in (leader_reply or "")
+        assert stage == "scoring"
     from app.modules.learning import finalizer
 
     finalizer.drive_assessment(database.session_factory, settings, conversation_id)

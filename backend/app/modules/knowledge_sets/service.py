@@ -928,9 +928,11 @@ def list_brainform_knowledge(
                 content_hash = markdown_version.content_hash
             elif _student_projection_is_available(db, context, set_row, markdown_version):
                 content_hash = _sha256(markdown_version.student_projection_markdown)
-        consumers: list[tuple[str | None, str]] = [
-            (source_agent.id, source_agent.name) for source_agent in source_agents
-        ] or [(None, label) for label in team_labels] or [(None, set_row.display_name)]
+        consumers: list[tuple[str | None, str]] = (
+            [(source_agent.id, source_agent.name) for source_agent in source_agents]
+            or [(None, label) for label in team_labels]
+            or [(None, set_row.display_name)]
+        )
         for agent_id, label in consumers:
             generation_job_id = None
             run_agent = db.get(Agent, run.agent_id) if run is not None else None

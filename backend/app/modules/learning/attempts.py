@@ -659,6 +659,33 @@ def wrong_answer_follow_ups(
     return [source for target, source in eligible if target[0] in chosen]
 
 
+def awaits_follow_up_round(db: Session, attempt_id: str) -> bool:
+    """Whether scoring this round may still open follow-ups, none asked yet.
+
+    Owner decision (2026-10-13): follow-ups come before the test ends and is
+    scored. The scoring that picks them is not shown as the final scoring.
+    """
+
+    attempt = db.get(AssessmentAttempt, attempt_id)
+    if attempt is None or attempt.status != "in_progress" or attempt.submitted_at is not None:
+        return False
+    sources = {
+        row.id: row
+        for row in db.scalars(
+            select(AssessmentActivityQuestion).where(
+                AssessmentActivityQuestion.activity_id == attempt.activity_id,
+                AssessmentActivityQuestion.selection_revision
+                == attempt.question_selection_revision,
+            )
+        ).all()
+    }
+    follow_ups = {row_id for row_id, row in sources.items() if _is_follow_up_item(db, row)}
+    if not follow_ups:
+        return False
+    asked = {row.activity_question_id for row in _attempt_question_rows(db, attempt.id)}
+    return not asked & follow_ups
+
+
 def knowledge_question_number(db: Session, attempt_question: AssessmentAttemptQuestion) -> int:
     """This Question's number in its Knowledge, counting from 1."""
 

@@ -25,7 +25,10 @@ from app.modules.knowledge.providers import (
     persisted_snapshot_identity,
 )
 from app.modules.knowledge.providers.query_manifest import ensure_real_query_export_manifest
-from app.modules.knowledge_sets.service import runtime_knowledge_projection
+from app.modules.knowledge_sets.service import (
+    _without_question_section,
+    runtime_knowledge_projection,
+)
 from app.providers.control import validate_provider_preflight
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider
@@ -173,6 +176,29 @@ def _team_query_embeddings(
     )
 
 
+def _is_question_asset(asset: dict[str, Any]) -> bool:
+    content = asset.get("content")
+    return isinstance(content, dict) and content.get("kind") == "question"
+
+
+def _team_runs_assessments(db: Session, row: Conversation) -> bool:
+    """Whether this Chat's Team Leader declares an assessment recipe."""
+
+    from app.modules.learning.recipes import declared_recipe
+    from app.modules.teams.models import TeamVersionMember
+
+    if row.team_version_id is None:
+        return False
+    leader = db.scalar(
+        select(TeamVersionMember).where(
+            TeamVersionMember.team_version_id == row.team_version_id,
+            TeamVersionMember.is_leader.is_(True),
+        )
+    )
+    version = db.get(AgentVersion, leader.agent_version_id) if leader is not None else None
+    return version is not None and declared_recipe(version.agent_md) is not None
+
+
 def load_member_context(
     db: Session,
     row: Conversation,
@@ -201,6 +227,11 @@ def load_member_context(
     )
     knowledge_sets: list[dict[str, Any]] = []
     assets: list[dict[str, Any]] = []
+    # Bug (2026-10-13): with the question bank in its context, a Leader asked
+    # for a formal test wrote the questions out itself, so nothing was saved,
+    # and the teacher's rule that practice never shows test items broke. In a
+    # Team that runs assessments, the server alone shows its Questions.
+    hide_questions = _team_runs_assessments(db, row)
     for set_id in set_ids:
         projection = runtime_knowledge_projection(
             db,
@@ -209,12 +240,17 @@ def load_member_context(
             execution_owner_user_id=selection.owner_user_id,
         )
         set_assets = list(projection.assets)
+        markdown = projection.canonical_markdown
+        if hide_questions:
+            set_assets = [asset for asset in set_assets if not _is_question_asset(asset)]
+            if markdown is not None:
+                markdown = _without_question_section(markdown) or None
         assets.extend(set_assets)
-        if projection.canonical_markdown is not None or set_assets:
+        if markdown is not None or set_assets:
             knowledge_sets.append(
                 {
                     "canonical_set_id": set_id,
-                    "markdown": projection.canonical_markdown,
+                    "markdown": markdown,
                     "assets": set_assets,
                 }
             )

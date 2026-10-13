@@ -114,7 +114,7 @@ Total: 0 points
 """
 
 
-@pytest.mark.parametrize("scenario", ["read_twice", "read_twice_then_start", "cut_off"])
+@pytest.mark.parametrize("scenario", ["read_twice", "read_twice_then_start", "cut_off", "practice"])
 # Bug (2026-10-13): "Take the test" was answered "Can't." because the Leader
 # read its session twice with the same successful result. A repeated success
 # is not a refusal: the next step goes without that Tool.
@@ -250,11 +250,14 @@ def test_a_repeated_successful_read_does_not_refuse_the_test(
     script = (
         [("cut", "**第 6 题**\n\n1 = 非常不同意　5 =")]
         if scenario == "cut_off"
+        else [("text", "Let's practise.")]
+        if scenario == "practice"
         else [("tool", "read_session", {}), ("tool", "read_session", {})]
         + ([("tool", "assessment_action", start)] if scenario == "read_twice_then_start" else [])
         + [("text", "Let's begin.")]
     )
     calls: dict[str, int] = defaultdict(int)
+    prompts: list[str] = []
 
     class Response:
         status_code = 200
@@ -278,6 +281,7 @@ def test_a_repeated_successful_read_does_not_refuse_the_test(
         choice: Any,
         **kwargs: Any,
     ) -> Any:
+        prompts.append("\n".join(str(message.content or "") for message in messages))
         ordinal = calls[request.result_id]
         calls[request.result_id] += 1
         if request.participant_id != leader.id:
@@ -308,6 +312,14 @@ def test_a_repeated_successful_read_does_not_refuse_the_test(
     with database.session() as db:
         turn = db.get(ConversationTurn, claim.turn_id)
         results = db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id)).all()
+        if scenario == "practice":
+            # Bug (2026-10-13): with the question bank in its prompt, the
+            # Leader faked a formal test and showed Question 1 twice. In a
+            # Team that runs assessments only the server shows Questions.
+            assert prompts
+            assert all("Testing views by questioning" not in prompt for prompt in prompts)
+            assert all("Socrates said" not in prompt for prompt in prompts)
+            return
         if scenario == "cut_off":
             # Bug (2026-10-13): a cut reply showed half a question. It now
             # fails visibly, so the student sends again.

@@ -375,7 +375,7 @@ def frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSelection
 
 def _assessment_stage(
     db: Session, row: Conversation
-) -> Literal["scoring", "summarizing", "completed"] | None:
+) -> Literal["preparing", "scoring", "summarizing", "completed"] | None:
     from app.modules.learning.finalizer import _next_purpose
     from app.modules.learning.models import AssessmentAttempt
 
@@ -393,7 +393,11 @@ def _assessment_stage(
     if attempt.status == "in_progress":
         purpose = _next_purpose(db, attempt)
         if purpose == "assessment_evaluate":
-            return "scoring"
+            from app.modules.learning.attempts import awaits_follow_up_round
+
+            # The scoring that picks follow-ups keeps the Chat checking but
+            # shows no bar: the test is not over yet.
+            return "preparing" if awaits_follow_up_round(db, attempt.id) else "scoring"
         return "summarizing" if purpose == "boundary_summarize" else None
     if attempt.status != "completed" or attempt.completed_at is None:
         return None

@@ -127,7 +127,7 @@ class TeamChatSession(ClosedModel):
     pinned_at: datetime | None = None
     # Where the server is in finishing the latest formal attempt, for the
     # progress bar under the newest message; null when nothing is finishing.
-    assessment_stage: Literal["scoring", "summarizing", "completed"] | None = None
+    assessment_stage: Literal["preparing", "scoring", "summarizing", "completed"] | None = None
 
 
 ConversationSession = Annotated[ChatSession | TeamChatSession, Field(discriminator="entry_kind")]

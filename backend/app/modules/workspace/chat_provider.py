@@ -892,9 +892,7 @@ def sentence_chinese(text: str) -> bool | None:
         return True
     if len(_CJK.findall(text)) >= 2:
         return True
-    words = [
-        word for word in _LATIN_WORD.findall(text) if not _OPTION_LETTER.fullmatch(word)
-    ]
+    words = [word for word in _LATIN_WORD.findall(text) if not _OPTION_LETTER.fullmatch(word)]
     if not _CJK.search(text) and len(words) >= 2:
         return False
     return None
@@ -966,6 +964,7 @@ def assessment_safe_reply_text(
     prose: str | None = None,
     follow_up: bool = False,
     chinese: bool | None = None,
+    follow_up_pending: bool = False,
 ) -> str:
     """Render the server's student-safe assessment projection.
 
@@ -1057,8 +1056,11 @@ def assessment_safe_reply_text(
         lines.append(prose.strip())
     lines.append(labels[result.response_key])
     if grading and result.response_key != "assessment.results_pending":
+        # Follow-ups still to come: this is not the final scoring yet.
         lines.append(
-            "本轮题目已全部作答，正在保存并评分，请稍候。"
+            ("请稍候。" if chinese else "One moment, please.")
+            if follow_up_pending
+            else "本轮题目已全部作答，正在保存并评分，请稍候。"
             if chinese
             else "Every question this round is answered. Saving and scoring now."
         )

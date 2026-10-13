@@ -426,6 +426,7 @@ function AgentChatScope({
   // So does a turn still running after the student left and came back,
   // which no stream on this page is following.
   const finishingTeamId =
+    selectedTeam?.assessment_stage === "preparing" ||
     selectedTeam?.assessment_stage === "scoring" ||
     selectedTeam?.assessment_stage === "summarizing" ||
     (!teamBusy && selectedTeam?.turns.at(-1)?.state === "pending")
@@ -2297,6 +2298,7 @@ function AgentChatScope({
   // sending only for now; it is not a reason the Chat cannot continue.
   const teamWorking =
     selectedTeam?.turns.at(-1)?.state === "pending" ||
+    selectedTeam?.assessment_stage === "preparing" ||
     selectedTeam?.assessment_stage === "scoring" ||
     selectedTeam?.assessment_stage === "summarizing";
   // Why this Chat cannot continue, shown once under its latest message.
@@ -2628,7 +2630,16 @@ function AgentChatScope({
                           {turn.user_text}
                         </div>
                       ) : null}
-                      {turn.state === "pending" ? (
+                      {/* Bug (2026-10-13): the last fetch could catch a
+                          finished reply before its turn was closed; polling
+                          then stopped and "Loading…" stayed under it. */}
+                      {turn.state === "pending" &&
+                      (turn.member_results.length === 0 ||
+                        turn.member_results.some(
+                          (item) =>
+                            item.state === "pending" ||
+                            item.state === "running",
+                        )) ? (
                         <p className={styles.pending} role="status">
                           <span className="spinner" aria-hidden="true" />
                           {t("loading")}
@@ -2758,7 +2769,10 @@ function AgentChatScope({
                       {teamErrorText(teamError)}
                     </Notice>
                   ) : null}
-                  {selectedTeam?.assessment_stage ? (
+                  {/* "preparing" picks the follow-ups: the test is not over,
+                      so no scoring bar shows yet. */}
+                  {selectedTeam?.assessment_stage &&
+                  selectedTeam.assessment_stage !== "preparing" ? (
                     <AssessmentProgress stage={selectedTeam.assessment_stage} />
                   ) : null}
                   <div ref={endRef} />

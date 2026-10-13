@@ -5100,7 +5100,7 @@ export interface components {
              * Assessment Stage
              * @enum {string|null}
              */
-            assessment_stage?: "scoring" | "summarizing" | "completed" | null;
+            assessment_stage?: "preparing" | "scoring" | "summarizing" | "completed" | null;
             /**
              * Can Send
              * @default false

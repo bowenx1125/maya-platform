@@ -1877,8 +1877,9 @@ def student_result_lines(db: Session, attempt_id: str, chinese: bool) -> list[st
     for item in sorted(content.questions, key=lambda entry: entry.question_ordinal):
         number = item.question_ordinal + 1
         label = f"第 {number} 题" if chinese else f"Question {number}"
-        if item.points_awarded is not None:
-            total = totals.get(item.question_ordinal)
+        total = totals.get(item.question_ordinal)
+        # A survey or follow-up item is worth nothing: "0/0" says nothing.
+        if item.points_awarded is not None and total != 0:
             score = f"{item.points_awarded:g}" + (f"/{total:g}" if total is not None else "")
             label += f"：{score} 分" if chinese else f": {score} points"
         lines.append(f"{label}\n{item.feedback}")
