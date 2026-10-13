@@ -669,6 +669,8 @@ const enMessages = {
   editMember: "Edit",
   displayNameLabel: "Display name",
   groupNameLabel: "Group",
+  groupMoveConfirm:
+    "Move from {from} to {to}? Your Agents, Teams, RAG and voices stay in {from}, and you will no longer see them.",
   removeAccount: "Remove",
   reactivateAccount: "Restore",
   removeConfirm:
@@ -1406,6 +1408,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   editMember: "编辑",
   displayNameLabel: "姓名",
   groupNameLabel: "小组",
+  groupMoveConfirm:
+    "确定从「{from}」换到「{to}」？你的 Agent、Team、RAG 和声音会留在「{from}」，换组后你将看不到它们。",
   removeAccount: "移除",
   reactivateAccount: "恢复",
   removeConfirm:

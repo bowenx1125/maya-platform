@@ -158,7 +158,13 @@ describe("teacher account management", () => {
     const account = (await screen.findByText("new-student")).closest(
       ".account-row",
     ) as HTMLElement;
-    expect(within(account).getByText("Team Aurora")).toBeTruthy();
+    // The group is the heading the row sits under, not repeated on the row.
+    expect(
+      (account.closest(".roster-section") as HTMLElement).querySelector(
+        ".roster-section-title",
+      )?.textContent,
+    ).toBe("Team Aurora3");
+    expect(within(account).queryByText("Team Aurora")).toBeNull();
     // Active is the normal state and is not labelled; only removed is.
     expect(within(account).queryByText(/^active$/i)).toBeNull();
     expect(screen.getByText("student-bowen-1")).toBeTruthy();
@@ -263,7 +269,11 @@ describe("teacher account management", () => {
 
     const members = await screen.findByRole("region", { name: /Members/ });
     // Three current members are counted; the removed one is not among them.
-    expect(within(members).getByText("3")).toBeTruthy();
+    expect(
+      within(members)
+        .getAllByText("3")
+        .some((count) => !count.closest(".roster-section-title")),
+    ).toBe(true);
     const fold = container.querySelector("details.roster-removed");
     expect(fold?.querySelector("summary")?.textContent).toBe("Removed · 1");
     expect(within(fold as HTMLElement).getByText("old-student")).toBeTruthy();
@@ -279,6 +289,56 @@ describe("teacher account management", () => {
         { status: "active" },
       ),
     );
+  });
+
+  it("lists members group by group, with no group last", async () => {
+    const api = apiForTeacher();
+    api.courseRoster.mockResolvedValue({
+      course_id: courseId,
+      entries: [
+        entry({
+          user_id: "a",
+          username: "zed",
+          display_name: "Zed",
+          groups: [],
+        }),
+        entry({
+          user_id: "b",
+          username: "yan",
+          display_name: "Yan",
+          groups: [{ id: "g10", name: "Group 10" }],
+        }),
+        entry({
+          user_id: "c",
+          username: "ada",
+          display_name: "Ada",
+          groups: [{ id: "g2", name: "Group 2" }],
+        }),
+        entry({
+          user_id: "d",
+          username: "bea",
+          display_name: "Bea",
+          groups: [{ id: "g2", name: "Group 2" }],
+        }),
+      ],
+    } as CourseRoster);
+    const { container } = mount(api, "en");
+    await screen.findByText("zed");
+
+    const sections = [...container.querySelectorAll(".roster-section")].map(
+      (section) => ({
+        title: section.querySelector(".roster-section-title")?.textContent,
+        people: [...section.querySelectorAll(".roster-headline strong")].map(
+          (name) => name.textContent,
+        ),
+      }),
+    );
+    // Group 2 before Group 10, names sorted inside, the ungrouped last.
+    expect(sections).toEqual([
+      { title: "Group 22", people: ["Ada", "Bea"] },
+      { title: "Group 101", people: ["Yan"] },
+      { title: "No group1", people: ["Zed"] },
+    ]);
   });
 
   it("shows an issued password once", async () => {

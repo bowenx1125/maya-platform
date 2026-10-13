@@ -12,9 +12,21 @@ const session = vi.hoisted(() => ({
   api: {
     updateCurrentUser: vi.fn(),
     changePassword: vi.fn(),
+    registrationOptions: vi.fn(),
+    group: vi.fn(),
   },
   refresh: vi.fn(async () => undefined),
-  user: { id: "me", display_name: "Kaikai", avatar: null as string | null },
+  user: {
+    id: "me",
+    display_name: "Kaikai",
+    avatar: null as string | null,
+  } as {
+    id: string;
+    display_name: string;
+    avatar: string | null;
+    courses?: { course_id: string; role: string }[];
+    groups?: { group_id: string; role: string }[];
+  },
 }));
 
 vi.mock("../components/session-provider", () => ({
@@ -91,6 +103,73 @@ describe("profile name", () => {
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(session.refresh).toHaveBeenCalled();
+  });
+});
+
+describe("profile group", () => {
+  const student = {
+    id: "me",
+    display_name: "Kaikai",
+    avatar: null,
+    courses: [{ course_id: "course", role: "student" }],
+    groups: [{ group_id: "aurora-id", role: "member" }],
+  };
+
+  it("offers a student the course's groups and warns before moving", async () => {
+    session.user = student;
+    session.api.registrationOptions.mockResolvedValue({
+      course_id: "course",
+      course_name: "Cultural exchange",
+      groups: [
+        { name: "Aurora", member_count: 2 },
+        { name: "Borealis", member_count: 1 },
+      ],
+    });
+    session.api.group.mockResolvedValue({ id: "aurora-id", name: "Aurora" });
+    session.api.updateCurrentUser.mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onSaved = vi.fn();
+    inEnglish(<AccountSettings onSaved={onSaved} />);
+
+    const picker = (await screen.findByLabelText("Group")) as HTMLSelectElement;
+    await waitFor(() => expect(picker.value).toBe("Aurora"));
+    expect([...picker.options].map((option) => option.value)).toEqual([
+      "Aurora",
+      "Borealis",
+    ]);
+    expect(screen.getAllByRole("button", { name: "Save" })).toHaveLength(1);
+
+    fireEvent.change(picker, { target: { value: "Borealis" } });
+    const save = screen.getAllByRole("button", { name: "Save" })[0];
+    // Declining the warning keeps the student where they are.
+    fireEvent.click(save);
+    expect(confirm.mock.calls[0][0]).toContain("stay in Aurora");
+    expect(session.api.updateCurrentUser).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(session.api.updateCurrentUser).toHaveBeenCalledWith({
+        group_name: "Borealis",
+      }),
+    );
+    expect(await screen.findByRole("status")).toBeTruthy();
+    expect(session.refresh).toHaveBeenCalled();
+    // The home reloads from the new session; its own reload still points at
+    // the group this student just left.
+    expect(onSaved).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("gives a teacher no group picker", async () => {
+    session.user = {
+      ...student,
+      courses: [{ course_id: "course", role: "teacher" }],
+    };
+    inEnglish(<AccountSettings />);
+    await screen.findByLabelText("Display name");
+    expect(screen.queryByLabelText("Group")).toBeNull();
+    expect(session.api.registrationOptions).not.toHaveBeenCalled();
   });
 });
 

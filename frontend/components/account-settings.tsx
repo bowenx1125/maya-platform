@@ -33,11 +33,54 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [busy, setBusy] = useState<"avatar" | "name" | "password" | null>(null);
+  const [busy, setBusy] = useState<
+    "avatar" | "name" | "group" | "password" | null
+  >(null);
   const [error, setError] = useState<unknown>(null);
-  const [saved, setSaved] = useState<"avatar" | "name" | "password" | null>(
-    null,
-  );
+  const [saved, setSaved] = useState<
+    "avatar" | "name" | "group" | "password" | null
+  >(null);
+  // A student may move to another group the course already has. Teachers
+  // visit groups from Accounts instead, so they get no picker.
+  const studentCourseIds = (user?.courses ?? [])
+    .filter((membership) => membership.role === "student")
+    .map((membership) => membership.course_id)
+    .join(",");
+  const currentGroupId = user?.groups?.[0]?.group_id;
+  const [groupNames, setGroupNames] = useState<string[]>([]);
+  const [currentGroup, setCurrentGroup] = useState("");
+  const [groupChoice, setGroupChoice] = useState("");
+  useEffect(() => {
+    if (!studentCourseIds || !currentGroupId) return;
+    let active = true;
+    void Promise.all([api.registrationOptions(), api.group(currentGroupId)])
+      .then(([options, group]) => {
+        if (!active) return;
+        // The choices are the course's existing groups; the picker never
+        // offers to start a new one.
+        const names = studentCourseIds.split(",").includes(options.course_id)
+          ? options.groups
+              .map((choice) => choice.name)
+              .sort((left, right) =>
+                left.localeCompare(right, undefined, {
+                  numeric: true,
+                  sensitivity: "base",
+                }),
+              )
+          : [];
+        setGroupNames(names.includes(group.name) ? names : []);
+        setCurrentGroup(group.name);
+        setGroupChoice(group.name);
+      })
+      .catch(() => {
+        if (active) setGroupNames([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, currentGroupId, studentCourseIds]);
+  const groupChanged = groupChoice !== "" && groupChoice !== currentGroup;
+
   // The server collapses runs of spaces the same way, so a name that only
   // differs by spacing is not offered as a change.
   const typedName = name.split(/\s+/).filter(Boolean).join(" ");
@@ -90,6 +133,37 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
       onSaved?.();
       setName(typedName);
       setSaved("name");
+    } catch (cause) {
+      if (mounted.current) setError(cause);
+    } finally {
+      if (mounted.current) setBusy(null);
+    }
+  }
+
+  async function saveGroup(event: FormEvent) {
+    event.preventDefault();
+    if (busy !== null || !groupChanged) return;
+    // Work stays in the group it was made in, so say so before it goes out
+    // of reach.
+    if (
+      !window.confirm(
+        t("groupMoveConfirm", { from: currentGroup, to: groupChoice }),
+      )
+    )
+      return;
+    setBusy("group");
+    setSaved(null);
+    setError(null);
+    try {
+      await api.updateCurrentUser({ group_name: groupChoice });
+      if (!mounted.current) return;
+      // The new membership changes the session's groups, and the home
+      // reloads its group from that. onSaved is not called: it still holds
+      // the old group, which this account can no longer open.
+      await refresh();
+      if (!mounted.current) return;
+      setCurrentGroup(groupChoice);
+      setSaved("group");
     } catch (cause) {
       if (mounted.current) setError(cause);
     } finally {
@@ -178,6 +252,43 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
               </span>
             ) : null}
           </form>
+          {groupNames.length > 1 ? (
+            <form
+              className="profile-name"
+              onSubmit={(event) => void saveGroup(event)}
+            >
+              <label>
+                <span>{t("groupNameLabel")}</span>
+                <select
+                  value={groupChoice}
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    setGroupChoice(event.target.value);
+                    if (saved === "group") setSaved(null);
+                  }}
+                >
+                  {groupNames.map((choice) => (
+                    <option key={choice} value={choice}>
+                      {choice}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {groupChanged ? (
+                <button
+                  className="primary-action"
+                  type="submit"
+                  disabled={busy !== null}
+                >
+                  {t("save")}
+                </button>
+              ) : saved === "group" ? (
+                <span className="profile-saved" role="status">
+                  {t("saved")}
+                </span>
+              ) : null}
+            </form>
+          ) : null}
           <fieldset className="avatar-picker" disabled={busy !== null}>
             <legend className="sr-only">{t("userAvatar")}</legend>
             {USER_AVATAR_CHOICES.map((choice, index) => (
