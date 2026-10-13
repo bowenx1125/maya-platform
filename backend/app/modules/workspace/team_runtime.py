@@ -1460,13 +1460,16 @@ def settle_member(
                     chinese = assessment_reply_chinese(
                         db, row.id, conversation_user_texts(db, row.id)
                     )
+                    # Opening follow-ups is not a verdict the student sees:
+                    # only the follow-up is shown, once.
+                    follow_up_lines = _opened_follow_up_lines(db, row, chinese)
                     reply = MemberReply(
                         "\n\n".join(
-                            [
+                            follow_up_lines
+                            or [
                                 "本轮回答已评估。"
                                 if chinese
-                                else "This round's answers have been reviewed.",
-                                *_opened_follow_up_lines(db, row, chinese),
+                                else "This round's answers have been reviewed."
                             ]
                         )
                     )

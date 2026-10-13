@@ -67,12 +67,26 @@ def test_reply_language_follows_the_latest_sentence_not_option_letters() -> None
 def test_progress_reply_keeps_member_help_then_restates_the_current_question() -> None:
     text = assessment_safe_reply_text(
         _result("assessment.progress", "read"),
-        ["hello", "How should I format my answer?"],
-        prose="One or two sentences is enough.",
+        ["hello", "How many questions are left?"],
+        prose="Two more to go.",
     )
     assert text == (
-        "One or two sentences is enough.\n\nProgress:\n\n"
+        "Two more to go.\n\nProgress:\n\n"
         "Resolved 1/3; answered 1, skipped 0.\n\nQuestion 2: What is aporia?"
+    )
+
+
+# Owner decision (2026-10-13): a reply that is not this Question's answer is
+# named as such, with the format to use, not answered with a progress count.
+def test_off_topic_reply_says_it_was_not_recorded_and_how_to_answer() -> None:
+    text = assessment_safe_reply_text(
+        _result("assessment.progress", "read"),
+        ["hello", "How should I format my answer?"],
+        prose="Anything goes.",
+    )
+    assert text == (
+        "That reply was not recorded as an answer to this question. "
+        "Write your own answer to this question.\n\nQuestion 2: What is aporia?"
     )
 
 
@@ -81,7 +95,7 @@ def test_restricted_request_is_refused_and_ordinary_redirect_continues() -> None
     assert refused.startswith("测试进行中，不能提供答案、提示或评判。")
     assert refused.endswith("第 2 题：What is aporia?")
     resumed = assessment_safe_reply_text(_result("assessment.redirect", "redirected"), ["hi"])
-    assert resumed.startswith("Let's continue the test.")
+    assert resumed.startswith("That reply was not recorded as an answer to this question.")
     moved = assessment_safe_reply_text(
         _result("assessment.redirect", "redirected", redirect=True), ["hi"]
     )

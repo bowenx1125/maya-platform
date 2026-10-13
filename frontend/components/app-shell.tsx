@@ -486,9 +486,9 @@ export function AppShell({
               <span className={styles.creditTitle}>Meet Problems?</span>
               <a
                 className={styles.creditMail}
-                href="mailto:bowenx1135@gmail.com"
+                href="mailto:t330034059@mail.bnbu.edu.cn"
               >
-                Send to bowenx1135@gmail.com
+                Send to t330034059@mail.bnbu.edu.cn
               </a>
             </p>
             <button

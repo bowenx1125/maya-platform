@@ -1753,16 +1753,9 @@ def apply_current_attempt_lifecycle_action(
     )
 
 
-# A whole message that can only be an answer: option letters ("b", "A C",
-# "选C", "I pick B") or a number (a Likert point, a student ID).
-_BARE_ANSWER = re.compile(
-    r"^(?:(?:我|i)\s*)?(?:选择?|选的是|choose|pick|answer)?\s*"
-    r"(?:[A-Fa-f](?:\s*[,，、/和 ]\s*[A-Fa-f])*|\d{1,20})\s*[。.!！]?$",
-    re.IGNORECASE,
-)
-# Lifecycle requests stay the model's call; anything else said about a bare
-# answer was a misreading.
-_ANSWER_OVERRIDABLE = frozenset(
+# Lifecycle requests (skip, pause, end, abandon, redo) stay the model's call.
+_ANSWER_CLASSES = frozenset({"answer_only", "answer_with_restricted_request"})
+_RECLASSIFIABLE = frozenset(
     {
         "start_request",
         "resume_request",
@@ -1770,57 +1763,30 @@ _ANSWER_OVERRIDABLE = frozenset(
         "answers_request",
         "restricted_request",
         "off_topic",
-        # Already an answer, but its span must be the student's own text.
-        "answer_only",
-        "answer_with_restricted_request",
     }
 )
 
 
-# Bug (2026-10-13): on an open question ("你认为'知道'意味着什么？") the Leader
-# called the student's own view off_topic again and again. On a question
-# with no options or number scale, a statement that asks for nothing is the
-# answer. A question back, or a request for help or the answer, is not.
-_STATEMENT_OVERRIDABLE = frozenset({"off_topic", "start_request", "resume_request"})
-_OPTION_LINE = re.compile(r"^\s*[-*]?\s*[A-F][.、．]\s", re.MULTILINE)
-_SCALE = re.compile(r"\b1\s*=")
-_ASKS = re.compile(
-    r"[?？]|答案|提示|为什么|怎么|什么意思|是什么|能不能|可以吗|帮我|不懂|没懂|"
-    r"跳过|暂停|结束|放弃|继续|没有记录|没记录|"
-    r"\b(?:why|how|what|hint|answer|help|skip|pause|stop|continue)\b",
-    re.IGNORECASE,
-)
-
-
-def _is_free_text_question(prompt: str) -> bool:
-    return not _OPTION_LINE.search(prompt) and not _SCALE.search(prompt)
-
-
-def _is_statement(text: str) -> bool:
-    return 2 <= len(text) <= 2000 and not _ASKS.search(text)
-
-
-def _bare_answer_action(
+def _fit_answer_action(
     db: Session,
     actor: AuthContext,
     conversation_id: str,
     user_text: str,
     action: AssessmentStudentAction,
 ) -> AssessmentStudentAction:
-    """Record a bare answer to the open Question whatever the model called it.
+    """Hold the model's classification to the open Question's answer format.
 
-    Bug (2026-10-13): late in a long test the Leader called answers such as
-    "3" or "b" something else, so they were not saved and the same Question
-    came back again and again.
+    Owner decision (2026-10-13), after answers were lost or let through:
+    - a choice Question takes only its own option letters, a scale Question
+      only a number in its range; anything else is not recorded, and the
+      student is told the format;
+    - a fill-in or open Question takes the student's own words; a request or
+      a question back is not an answer;
+    - an answer is always saved in the student's own text, never the model's
+      copy of it (a copy that did not match was dropped as "我们继续测试").
     """
 
-    if action.classification not in _ANSWER_OVERRIDABLE:
-        return action
-    text = user_text.strip()
-    if action.classification == "answer_only" and action.answer_span == text:
-        return action
-    bare = _BARE_ANSWER.fullmatch(text) is not None
-    if not bare and action.classification not in _STATEMENT_OVERRIDABLE:
+    if action.classification not in _ANSWER_CLASSES | _RECLASSIFIABLE:
         return action
     context = get_assessment_runtime_context(db, actor, conversation_id)
     if (
@@ -1829,11 +1795,22 @@ def _bare_answer_action(
         or context.current_question is None
     ):
         return action
-    if not bare and not (
-        _is_free_text_question(context.current_question.prompt) and _is_statement(text)
-    ):
+    from .answer_format import answer_format, fits, is_statement
+
+    text = user_text.strip()
+    form = answer_format(context.current_question.prompt)
+    if action.classification in _ANSWER_CLASSES:
+        if form.kind != "free" and not fits(form, text):
+            return AssessmentStudentAction(classification="off_topic")
+        span = action.answer_span or ""
+        if not span.strip() or span not in user_text:
+            return action.model_copy(update={"answer_span": text})
         return action
-    return AssessmentStudentAction(classification="answer_only", answer_span=text)
+    # The model called it something else: record it only when it can only be
+    # an answer, and asks for nothing.
+    if fits(form, text) and is_statement(text):
+        return AssessmentStudentAction(classification="answer_only", answer_span=text)
+    return action
 
 
 def apply_assessment_action(
@@ -1909,7 +1886,7 @@ def apply_assessment_action(
     activity = ensure_assessment_activity(db, actor, conversation.id)
     if activity is None:
         return None
-    action = _bare_answer_action(db, actor, conversation.id, turn.user_text, action)
+    action = _fit_answer_action(db, actor, conversation.id, turn.user_text, action)
 
     version_id: UUID | None = None
     if action.classification in {

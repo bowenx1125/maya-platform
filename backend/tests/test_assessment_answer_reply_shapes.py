@@ -96,6 +96,7 @@ MESSAGES = {
     "bare_letter_with_a_wrong_span": "B",
     "bare_number_called_start": "3",
     "statement_on_open_question": "知道意味着用在行动上",
+    "answer_with_a_paraphrased_span": "知道意味着用在行动上",
     "question_back_stays_unrecorded": "我回答了 为什么没有记录",
 }
 
@@ -145,6 +146,21 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
     # Bug (2026-10-13): an open question's answer called off_topic repeatedly.
     "statement_on_open_question": (
         [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
+        1,
+        "ready",
+        None,
+    ),
+    # The model's copy of a free answer did not match the message; the
+    # student's own words are saved, not "我们继续测试".
+    "answer_with_a_paraphrased_span": (
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "answer_span": "知道就是行动"},
+            ),
+            ("text", ""),
+        ],
         1,
         "ready",
         None,

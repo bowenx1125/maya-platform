@@ -1051,10 +1051,36 @@ def assessment_safe_reply_text(
         and progress.question_count > 0
         and progress.resolved_count >= progress.question_count
     )
+    question = context.current_question
+    latest = user_texts[-1].strip() if user_texts else ""
+    from app.modules.learning.answer_format import answer_format, asks_progress, format_hint
+
+    # Owner decision (2026-10-13): a reply that is not this Question's answer
+    # is named as such, with the format to use, instead of "我们继续测试" or a
+    # progress count the student did not ask for.
+    not_recorded = (
+        question is not None
+        and not grading
+        and not context.redirect_to_original_conversation
+        and (
+            (result.response_key == "assessment.progress" and not asks_progress(latest))
+            or (result.response_key == "assessment.redirect" and result.disposition != "read")
+        )
+    )
     lines = []
-    if prose and prose.strip() and not grading:
-        lines.append(prose.strip())
-    lines.append(labels[result.response_key])
+    if not_recorded and question is not None:
+        lines.append(
+            (
+                "这条回复不是本题的答案，没有记录。"
+                if chinese
+                else "That reply was not recorded as an answer to this question. "
+            )
+            + format_hint(answer_format(question.prompt), chinese)
+        )
+    else:
+        if prose and prose.strip() and not grading:
+            lines.append(prose.strip())
+        lines.append(labels[result.response_key])
     if grading and result.response_key != "assessment.results_pending":
         # Follow-ups still to come: this is not the final scoring yet.
         lines.append(
@@ -1064,7 +1090,7 @@ def assessment_safe_reply_text(
             if chinese
             else "Every question this round is answered. Saving and scoring now."
         )
-    if result.response_key in {"assessment.progress", "assessment.answers"}:
+    if result.response_key in {"assessment.progress", "assessment.answers"} and not not_recorded:
         if chinese:
             lines.append(
                 f"已完成 {progress.resolved_count}/{progress.question_count} 题；"
@@ -1082,7 +1108,6 @@ def assessment_safe_reply_text(
                 if chinese
                 else f"Your answer: {answer.answer_text}"
             )
-    question = context.current_question
     if question is not None:
         if follow_up:
             lines.append("下面是追问。" if chinese else "Next, a follow-up question.")
