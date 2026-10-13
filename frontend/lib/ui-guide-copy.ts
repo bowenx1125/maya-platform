@@ -61,6 +61,14 @@ export const uiGuideCopy = {
     en: "Choose knowledge files this Agent can use as evidence.",
     zh: "选择此 Agent 可用于回答的证据文件。",
   },
+  "chat.teamMembers": {
+    en: "Choose at least two available Agents and set exactly one Leader.",
+    zh: "至少选择两个可用 Agent，并指定唯一组长。",
+  },
+  "chat.teamSharedKnowledge": {
+    en: "Only selected Knowledge Sets will be shared with this Team.",
+    zh: "只有选中的知识集会在此 Team 内共享。",
+  },
   "agent.brainform": {
     en: "Choose RAG source files and existing Knowledge that this Agent can use.",
     zh: "选择此 Agent 可使用的 RAG 来源和现有 Knowledge。",

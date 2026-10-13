@@ -295,8 +295,8 @@ export function VoiceLibrary({
       {error ? (
         <ErrorNotice inline error={error} onRetry={() => void load()} />
       ) : null}
+      {/* The file picker names itself; a "Sample" caption only added a line. */}
       <label className={styles.field}>
-        <span>{t("voiceSampleLabel")}</span>
         <input
           className={styles.fileInput}
           type="file"

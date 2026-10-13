@@ -28,7 +28,7 @@ import { useLocale, useT } from "../locale";
 import { PageAction } from "../page-action";
 import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
-import { Notice } from "../ui";
+import { Notice, SectionCard } from "../ui";
 import styles from "../agent-chat.module.css";
 
 type KnowledgeSetChoice = { id: string; name: string };
@@ -587,7 +587,14 @@ export function TeamEntryFlow({
   const title = variant === "maya" ? t("mayaTeams") : t("chatTargetTeams");
 
   return (
-    <section className={styles.entryFlow} aria-label={title}>
+    <section
+      className={
+        !loading && apiForTeams && (editing || formOpen)
+          ? `${styles.entryFlow} ${styles.entryFlowForm}`
+          : styles.entryFlow
+      }
+      aria-label={title}
+    >
       <div className={styles.entrySection}>
         {loading ? <p role="status">{t("loading")}</p> : null}
         {loadError && loadError !== dismissedError ? (
@@ -661,64 +668,74 @@ export function TeamEntryFlow({
             }
             onSubmit={(event) => void saveTeam(event)}
           >
-            <label>
-              {t("teamName")}
-              <input
-                value={form.name}
-                maxLength={120}
-                disabled={readOnly || saving || mutationUnknown}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))
-                }
-                required
-              />
-            </label>
-            {!editing ? (
-              <div className="agent-identity">
-                <div
-                  className="visibility-toggle"
-                  role="group"
-                  aria-label={t("agentVisibility")}
-                >
-                  {(["private", "public"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      aria-pressed={form.visibility === option}
-                      disabled={saving || mutationUnknown}
-                      onClick={() =>
-                        setForm((current) =>
-                          withTeamVisibility(current, option, agents),
-                        )
-                      }
+            {/* Owner request (2026-10-13): the same cards, rows and width as
+                Agents New, centred on the page. */}
+            <SectionCard title={t("teamIdentity")}>
+              <div className="stack-form wide-form quiet-create">
+                <label>
+                  <span>{t("teamName")}</span>
+                  <input
+                    aria-label={t("teamName")}
+                    value={form.name}
+                    maxLength={120}
+                    disabled={readOnly || saving || mutationUnknown}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                {!editing ? (
+                  <div className="agent-identity">
+                    <div
+                      className="visibility-toggle"
+                      role="group"
+                      aria-label={t("agentVisibility")}
                     >
-                      {t(
-                        option === "private" ? "privateOption" : "publicOption",
-                      )}
-                    </button>
-                  ))}
-                </div>
+                      {(["private", "public"] as const).map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          aria-pressed={form.visibility === option}
+                          disabled={saving || mutationUnknown}
+                          onClick={() =>
+                            setForm((current) =>
+                              withTeamVisibility(current, option, agents),
+                            )
+                          }
+                        >
+                          {t(
+                            option === "private"
+                              ? "privateOption"
+                              : "publicOption",
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            <fieldset>
-              <legend
-                data-ui-guide="chat.teamMembers"
-                data-ui-guide-text={t("teamMembersHelp")}
-                tabIndex={0}
+            </SectionCard>
+            <SectionCard
+              title={t("teamMembers")}
+              guide="chat.teamMembers"
+              guideText={t("teamMembersHelp")}
+            >
+              <div
+                className="document-list"
+                role="group"
+                aria-label={t("teamMembers")}
               >
-                {t("teamMembers")}
-              </legend>
-              <div className={styles.entryMemberList}>
                 {memberChoices.map((agent) => {
                   const checked = form.memberVersionIds.includes(
                     agent.versionId,
                   );
                   return (
-                    <div className={styles.entryMember} key={agent.versionId}>
-                      <label className={styles.entryChoice}>
+                    <div className="document-row" key={agent.versionId}>
+                      <label className="document-select">
                         <input
                           type="checkbox"
                           checked={checked}
@@ -730,67 +747,84 @@ export function TeamEntryFlow({
                           }
                           onChange={() => toggleMember(agent.versionId)}
                         />
-                        <span>
-                          {agent.name}
-                          {agent.versionLabel ? ` · ${agent.versionLabel}` : ""}
+                        <span className="document-main">
+                          <strong>
+                            {agent.name}
+                            {agent.versionLabel
+                              ? ` · ${agent.versionLabel}`
+                              : ""}
+                          </strong>
                         </span>
                       </label>
-                      <label className={styles.entryChoice}>
-                        <input
-                          type="radio"
-                          name={`${formId}-leader`}
-                          aria-label={t("teamSetLeader", {
-                            name: agent.name,
-                          })}
-                          checked={form.leaderVersionId === agent.versionId}
-                          disabled={
-                            readOnly || !checked || saving || mutationUnknown
-                          }
-                          onChange={() =>
-                            setForm((current) => ({
-                              ...current,
-                              leaderVersionId: agent.versionId,
-                            }))
-                          }
-                        />
-                        <span>{t("leader")}</span>
-                      </label>
+                      <div className="row-actions">
+                        <label className={styles.entryChoice}>
+                          <input
+                            type="radio"
+                            name={`${formId}-leader`}
+                            aria-label={t("teamSetLeader", {
+                              name: agent.name,
+                            })}
+                            checked={form.leaderVersionId === agent.versionId}
+                            disabled={
+                              readOnly || !checked || saving || mutationUnknown
+                            }
+                            onChange={() =>
+                              setForm((current) => ({
+                                ...current,
+                                leaderVersionId: agent.versionId,
+                              }))
+                            }
+                          />
+                          <span>{t("leader")}</span>
+                        </label>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            </fieldset>
-            <fieldset>
-              <legend
-                data-ui-guide="chat.teamSharedKnowledge"
-                data-ui-guide-text={t("teamSharedKnowledgeHelp")}
-                tabIndex={0}
-              >
-                {t("teamSharedKnowledge")}
-              </legend>
+            </SectionCard>
+            <SectionCard
+              title={t("teamSharedKnowledge")}
+              guide="chat.teamSharedKnowledge"
+              guideText={t("teamSharedKnowledgeHelp")}
+            >
               {knowledgeChoices.length ? (
-                knowledgeChoices.map((set) => (
-                  <label className={styles.entryChoice} key={set.id}>
-                    <input
-                      type="checkbox"
-                      checked={form.sharedSetIds.includes(set.id)}
-                      disabled={readOnly || saving || mutationUnknown}
-                      onChange={() =>
-                        setForm((current) => ({
-                          ...current,
-                          sharedSetIds: current.sharedSetIds.includes(set.id)
-                            ? current.sharedSetIds.filter((id) => id !== set.id)
-                            : [...current.sharedSetIds, set.id],
-                        }))
-                      }
-                    />
-                    <span>{set.name}</span>
-                  </label>
-                ))
+                <div
+                  className="document-list"
+                  role="group"
+                  aria-label={t("teamSharedKnowledge")}
+                >
+                  {knowledgeChoices.map((set) => (
+                    <div className="document-row" key={set.id}>
+                      <label className="document-select">
+                        <input
+                          type="checkbox"
+                          checked={form.sharedSetIds.includes(set.id)}
+                          disabled={readOnly || saving || mutationUnknown}
+                          onChange={() =>
+                            setForm((current) => ({
+                              ...current,
+                              sharedSetIds: current.sharedSetIds.includes(
+                                set.id,
+                              )
+                                ? current.sharedSetIds.filter(
+                                    (id) => id !== set.id,
+                                  )
+                                : [...current.sharedSetIds, set.id],
+                            }))
+                          }
+                        />
+                        <span className="document-main">
+                          <strong>{set.name}</strong>
+                        </span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <p>{t("teamNoSharedKnowledge")}</p>
+                <p className="muted-copy">{t("teamNoSharedKnowledge")}</p>
               )}
-            </fieldset>
+            </SectionCard>
             {error && error !== dismissedError ? (
               <Notice
                 inline

@@ -32,10 +32,23 @@
   font-size: 1.15rem;
   font-weight: 600;
 }
+/* Like Studyform's empty Agents and Teams: a dashed box, here the size of
+   one history entry, in the first row under History. */
 .historyEmpty {
-  margin: 4px 4px 0;
-  color: var(--muted);
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed #d9d0e2;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted, #706b82);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-align: center;
 }
 .history {
   display: grid;
@@ -583,15 +596,23 @@
   display: grid;
   gap: 20px;
   /* A fixed track, not shrink-to-fit: otherwise the validation hint sets the
-     card's width and choosing a Leader (which clears it) narrows the card. */
+     card's width and choosing a Leader (which clears it) narrows the card.
+     As wide as Agents New, so both pages' edges line up (2026-10-13). */
   width: 100%;
-  max-width: 980px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: clamp(16px, 3vw, 32px);
   border: 1px solid var(--line, #e4e1d9);
   border-radius: 16px;
   background: var(--panel, #fdfaf3);
   box-shadow: none;
+}
+/* The form's own cards carry the frame, as on Agents New; no card around
+   cards, so both pages' edges line up. */
+.entryFlowForm {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 .teamForm h3 {
   margin: 0;
@@ -629,10 +650,11 @@
   gap: 2px;
   min-width: 0;
 }
+/* As wide as Agents New: its cards fill the centred page. */
 .teamForm {
   display: grid;
-  gap: 16px;
-  max-width: 720px;
+  gap: 0;
+  width: 100%;
 }
 .teamForm :global(input:focus-visible),
 .teamForm :global(button:focus-visible) {

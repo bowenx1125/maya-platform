@@ -636,7 +636,6 @@ const enMessages = {
   avatarStateNodYes: "Nod",
   voiceCreateTitle: "New",
   voiceNone: "No voices yet.",
-  voiceSampleLabel: "Sample",
   voiceSampleFile:
     "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
   voiceConsent:
@@ -721,6 +720,7 @@ const enMessages = {
   chatCreateTeam: "Create Team",
   chatEditTeam: "Edit Team",
   teamName: "Name",
+  teamIdentity: "Team",
   teamNameRequired: "Enter a Team name.",
   teamMembers: "Members",
   teamMembersHelp:
@@ -1369,7 +1369,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   avatarStateNodYes: "点头",
   voiceCreateTitle: "新建",
   voiceNone: "还没有音色。",
-  voiceSampleLabel: "样本",
   voiceSampleFile:
     "请上传一段 10–15 秒的朗读音频（念一段话，支持 16 位 WAV、MP3 或 M4A，文件不超过 10 MB）。",
   voiceConsent: "我确认这是我的声音，并授权本课程创建可复用的音色档案。",
@@ -1450,6 +1449,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   chatCreateTeam: "创建 Team",
   chatEditTeam: "编辑 Team",
   teamName: "名称",
+  teamIdentity: "Team",
   teamNameRequired: "请输入 Team 名称。",
   teamMembers: "成员",
   teamMembersHelp: "至少选择两个可用 Agent，并指定唯一组长。",

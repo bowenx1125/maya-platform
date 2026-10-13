@@ -1403,6 +1403,23 @@ def _grant_id_for_member(
     return grant.id if grant is not None else None
 
 
+def _member_unavailable(team: Team, member: TeamVersionMember, reason: str) -> PlatformError:
+    """Log which member check refused a Team, then refuse it as not found.
+
+    Bug (2026-10-13): a student's Team could neither chat nor save while all
+    its members looked present, and nothing said which check failed.
+    """
+
+    LOGGER.warning(
+        "Team member unavailable team_id=%s agent_id=%s agent_version_id=%s reason=%s",
+        team.id,
+        member.agent_id,
+        member.agent_version_id,
+        reason,
+    )
+    return not_found()
+
+
 def _validate_member_current(
     db: Session,
     *,
@@ -1425,11 +1442,11 @@ def _validate_member_current(
         or agent_version.state not in {"published", "superseded"}
         or agent.authorization_epoch != agent_version.authorization_epoch
     ):
-        raise not_found()
+        raise _member_unavailable(team, member, "agent_or_version_unavailable")
     try:
         source_fences = json.loads(member.raw_source_fences_json)
     except (TypeError, ValueError):
-        raise not_found() from None
+        raise _member_unavailable(team, member, "source_fences_unparseable") from None
     if not isinstance(source_fences, list) or not _raw_source_fences_current(
         db,
         resource_owner_id,
@@ -1437,20 +1454,20 @@ def _validate_member_current(
         agent_version_id=member.agent_version_id,
         course_id=team.course_id,
     ):
-        raise not_found()
+        raise _member_unavailable(team, member, "rag_source_changed_or_hidden")
     if publication is not None:
         grant_id = _grant_id_for_member(db, publication, team, version, member)
         if grant_id is None:
-            raise not_found()
+            raise _member_unavailable(team, member, "publication_grant_missing")
         owner_role = _agent_workspace_role(db, team.owner_user_id, agent)
         if owner_role is None or not can_read_version(
             db, agent_version, agent, owner_role, context=team.owner_user_id
         ):
-            raise not_found()
+            raise _member_unavailable(team, member, "owner_cannot_read_version")
     else:
         role = _agent_workspace_role(db, actor, agent)
         if role is None or not can_read_version(db, agent_version, agent, role, context=actor):
-            raise not_found()
+            raise _member_unavailable(team, member, "actor_cannot_read_version")
     for snapshot in _own_knowledge_set_snapshots(member):
         set_id = snapshot.get("id")
         row = db.get(KnowledgeSet, str(set_id)) if set_id else None
@@ -1460,7 +1477,7 @@ def _validate_member_current(
             or row.authorization_epoch != snapshot.get("authorization_epoch")
             or not _knowledge_set_currently_readable(db, resource_owner_id, row)
         ):
-            raise not_found()
+            raise _member_unavailable(team, member, "knowledge_set_changed")
 
 
 def _validate_shared_sets_current(
