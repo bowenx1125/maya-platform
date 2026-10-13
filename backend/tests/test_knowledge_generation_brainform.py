@@ -440,6 +440,22 @@ def test_student_private_knowledge_is_full_but_manual_public_markdown_fails_clos
     )
     assert teacher_row["can_edit"] is False
     assert teacher_row["generation_job_id"] is None
+    # Visiting teachers read the full bank read-only; they must not get the
+    # empty student projection that hid Download content during Accounts visits.
+    teacher_markdown = client.get(f"/api/v1/knowledge-sets/{public_set['id']}/markdown")
+    assert teacher_markdown.status_code == 200, teacher_markdown.text
+    assert teacher_markdown.json()["audience"] == "full"
+    assert teacher_markdown.json()["can_edit"] is False
+    assert "REFERENCE_ANSWER_SECRET" in teacher_markdown.json()["markdown"]
+    refused = _save(
+        client,
+        teacher_csrf,
+        public_set["id"],
+        "# Taken over\n",
+        expected_version_seq=teacher_markdown.json()["version_seq"],
+        key=f"visit-edit-{uuid4()}",
+    )
+    assert refused.status_code in {403, 404}, refused.text
 
     peer, _peer_csrf = login(client, "kaikai")
     assert peer

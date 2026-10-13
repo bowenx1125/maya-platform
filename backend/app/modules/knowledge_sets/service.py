@@ -34,6 +34,7 @@ from app.modules.knowledge.services import (
     can_read_source,
     course_member_role,
     document_file_content,
+    observes_group,
     observes_private_agent,
     scoped_group_role_for_user,
     visible_agent,
@@ -250,7 +251,8 @@ def _clean_display_name(value: str) -> str:
 def _set_role_for_user(db: Session, user_id: str, row: KnowledgeSet) -> SetRole | None:
     if row.deleted_at is not None:
         return None
-    if course_member_role(db, user_id, row.course_id) is None:
+    viewer = course_member_role(db, user_id, row.course_id)
+    if viewer is None:
         return None
     if row.ownership_scope == "personal":
         return "owner" if row.owner_user_id == user_id else None
@@ -259,11 +261,20 @@ def _set_role_for_user(db: Session, user_id: str, row: KnowledgeSet) -> SetRole 
     group_role = scoped_group_role_for_user(db, user_id, row.group_id)
     if group_role is None:
         return None
-    if row.owner_user_id == user_id and group_role == "student":
-        return "owner"
+    if row.owner_user_id == user_id:
+        # Group Sets: the publisher is owner. Course teachers who entered the
+        # group still report scoped_group_role student; ownership wins for their
+        # own Sets only.
+        if viewer == "teacher" or group_role == "student":
+            return "owner"
+        return None
     if row.visibility != "public":
         return None
-    # A course Teacher is read-only; a group member sees a student projection.
+    # Course teachers stay read-only with the full bank. Group students get the
+    # student projection. Do not demote an entered teacher to student—that
+    # emptied Brainform downloads during an Accounts visit.
+    if viewer == "teacher":
+        return "teacher"
     return cast(SetRole, group_role)
 
 
@@ -901,9 +912,13 @@ def list_brainform_knowledge(
         if set_row is None:
             continue
         role = _set_role(db, context, set_row)
-        # A Teacher's own Brainform holds no student material; a group's
-        # public Knowledge is read during an Accounts visit to that group.
-        if role is None or role == "teacher":
+        # A Teacher's own Brainform holds no student material. A group's public
+        # Knowledge is listed only during an Accounts visit to that group.
+        if role is None:
+            continue
+        if role == "teacher" and (
+            set_row.group_id is None or not observes_group(db, context.user.id, set_row.group_id)
+        ):
             continue
         run = _latest_generation_for_set(db, set_row.id)
         if role == "owner" and run is None and set_row.current_markdown_version_seq == 0:

@@ -18,8 +18,13 @@ A Teacher Agent Chat may use the maintainer-registered
 `generate_agent_knowledge` Tool for its current published Agent and enabled RAG.
 The Tool derives actor, course, Agent/version, source IDs and target from the
 authenticated invocation; the model cannot supply another identity or arbitrary
-target. It reuses the same generation service, stable Set and durable worker.
-It is not a separate Agent compiler, content reviewer or Toolkit binding flow.
+target. Each enabled RAG must still be `workspace_state=active` with a readable
+file; a published binding that outlived a Brainform hide fails closed as
+`knowledge_generation_sources_unavailable` (not a bare `not_found`), and the
+Tool description tells the model to ask the teacher to re-select active RAG and
+publish again. It reuses the same generation service, stable Set and durable
+worker. It is not a separate Agent compiler, content reviewer or Toolkit binding
+flow.
 
 Teacher save, explicit regeneration or an authorized generation Tool action
 expresses the exact intent. No separate “provider confirmation required / Open

@@ -758,7 +758,7 @@ def test_teacher_tool_is_not_exposed_to_students_or_cross_actor_or_revoked_sourc
         assert document is not None and row is not None and actor is not None
         document.workspace_state = "hidden"
         db.flush()
-        with pytest.raises(PlatformError):
+        with pytest.raises(PlatformError) as hidden_source:
             generate_agent_knowledge(
                 db,
                 actor,
@@ -767,6 +767,7 @@ def test_teacher_tool_is_not_exposed_to_students_or_cross_actor_or_revoked_sourc
                 str(uuid4()),
                 ToolCallIdentity(conversation_id, str(uuid4()), version_id, str(uuid4()), "call"),
             )
+        assert hidden_source.value.code == "knowledge_generation_sources_unavailable"
         db.rollback()
     with database.session() as db:
         assert (

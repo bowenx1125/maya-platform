@@ -364,14 +364,23 @@ def _selected_documents(
         )
     for document in documents:
         stored = db.get(StoredFile, document.stored_file_id)
+        if document.course_id != agent.course_id:
+            raise not_found()
+        # Enabled bindings can outlive a Brainform hide/delete. Check that before
+        # the active-only read ACL, so the Teacher Tool can name the real fault
+        # instead of a bare not_found.
         if (
-            document.course_id != agent.course_id
-            or document.workspace_state != "active"
+            document.workspace_state != "active"
             or stored is None
             or stored.state != "active"
             or len(stored.sha256) != 64
-            or not can_read_source(db, context, document)
         ):
+            raise conflict(
+                "knowledge_generation_sources_unavailable",
+                "This Agent's selected RAG is no longer available. Choose active "
+                "Brainform RAG on the Agent and publish again before generating Knowledge.",
+            )
+        if not can_read_source(db, context, document):
             raise not_found()
     return documents
 

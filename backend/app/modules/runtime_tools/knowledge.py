@@ -303,11 +303,15 @@ def knowledge_tools() -> dict[str, ToolSpec]:
         GENERATE_AGENT_KNOWLEDGE_TOOL: ToolSpec(
             GENERATE_AGENT_KNOWLEDGE_TOOL,
             "Teacher",
-            "Generate or refresh the canonical Knowledge for this current published Agent from its "
-            "currently selected RAG sources. Call only when the teacher asks for this action. "
+            "Generate or refresh the canonical Knowledge for this current published Agent from "
+            "its currently selected RAG sources. Call only when the teacher asks for this action. "
             "The current Agent, source selection and canonical Set are derived from this chat; "
-            "do not provide another Agent, Set or source. Repeated requests reuse an active or "
-            "completed run for the same saved inputs.",
+            "do not provide another Agent, Set or source. Each selected RAG must still be "
+            "active in the teacher's Brainform library; if generation returns "
+            "knowledge_generation_sources_unavailable or "
+            "knowledge_generation_sources_missing, tell the teacher to choose active RAG on "
+            "the Agent and publish again, and do not claim success. Repeated requests reuse "
+            "an active or completed run for the same saved inputs.",
             GenerateAgentKnowledgeArguments,
             authorize_generate_agent_knowledge,
             generate_agent_knowledge,
