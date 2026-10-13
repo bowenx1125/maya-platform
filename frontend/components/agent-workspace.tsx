@@ -230,6 +230,25 @@ function libraryDocuments(
   );
 }
 
+// A withdrawn library file may still sit on a published version's enabled set.
+// Selection and Done only keep active ids; hidden rows stay visible and disabled.
+function mergeBoundDocuments(
+  library: KnowledgeDocument[],
+  bound: KnowledgeDocument[],
+): KnowledgeDocument[] {
+  const byId = new Map(library.map((document) => [document.id, document]));
+  for (const document of bound) {
+    if (!byId.has(document.id)) byId.set(document.id, document);
+  }
+  return [...byId.values()];
+}
+
+function activeDocumentIds(documents: KnowledgeDocument[]): string[] {
+  return documents
+    .filter((document) => document.workspace_state === "active")
+    .map((document) => document.id);
+}
+
 function librarySetIds(
   rows: { canonical_set_id: string }[] | null,
 ): Set<string> | null {
@@ -530,9 +549,11 @@ export function AgentWorkbench({
           const offered = libraryDocuments(nextDocuments, [
             ...offeredDocumentIds.current,
           ]);
-          offered.forEach((document) =>
-            offeredDocumentIds.current.add(document.id),
-          );
+          offered.forEach((document) => {
+            if (document.workspace_state === "active") {
+              offeredDocumentIds.current.add(document.id);
+            }
+          });
           setDocuments(offered);
           setKnowledgeSets(
             libraryKnowledgeSets(nextKnowledgeSets, nextLibrarySetIds, []),
@@ -584,15 +605,19 @@ export function AgentWorkbench({
         setVersion(nextVersion);
         setAgent(nextAgent);
         if (!keepLocal) offeredDocumentIds.current = new Set();
-        const offered = libraryDocuments(nextDocuments, [
-          ...(nextVersion.enabled_documents ?? []).map(
-            (document) => document.id,
-          ),
-          ...offeredDocumentIds.current,
-        ]);
-        offered.forEach((document) =>
-          offeredDocumentIds.current.add(document.id),
+        const enabledDocuments = nextVersion.enabled_documents ?? [];
+        const offered = libraryDocuments(
+          mergeBoundDocuments(nextDocuments, enabledDocuments),
+          [
+            ...enabledDocuments.map((document) => document.id),
+            ...offeredDocumentIds.current,
+          ],
         );
+        offered.forEach((document) => {
+          if (document.workspace_state === "active") {
+            offeredDocumentIds.current.add(document.id);
+          }
+        });
         setDocuments(offered);
         const boundSetIds = nextAgentKnowledge.sets.map((set) => set.id);
         setKnowledgeSets(
@@ -615,11 +640,7 @@ export function AgentWorkbench({
           setAgentMd(nextVersion.agent_md ?? "");
           setAvatarConfig(nextVersion.avatar_config);
           setVoiceProfileId(nextVersion.voice_profile_id ?? null);
-          setSelectedDocumentIds(
-            (nextVersion.enabled_documents ?? []).map(
-              (document) => document.id,
-            ),
-          );
+          setSelectedDocumentIds(activeDocumentIds(enabledDocuments));
           setSelectedKnowledgeSetIds(
             nextAgentKnowledge.sets.map((set) => set.id),
           );
@@ -661,7 +682,7 @@ export function AgentWorkbench({
       voiceProfileId !== (version.voice_profile_id ?? null) ||
       !sameIds(
         selectedDocumentIds,
-        (version.enabled_documents ?? []).map((document) => document.id),
+        activeDocumentIds(version.enabled_documents ?? []),
       ) ||
       (agentKnowledge !== null &&
         !sameIds(
@@ -771,6 +792,8 @@ export function AgentWorkbench({
   }
 
   async function toggleDocument(documentId: string, enabled: boolean) {
+    const target = documents.find((document) => document.id === documentId);
+    if (target?.workspace_state === "hidden") return;
     if (publishOnDone) {
       setSelectedDocumentIds((current) =>
         enabled
@@ -800,9 +823,7 @@ export function AgentWorkbench({
       );
       if (!isCurrentScope(requestScope)) return;
       setVersion(next);
-      setSelectedDocumentIds(
-        (next.enabled_documents ?? []).map((document) => document.id),
-      );
+      setSelectedDocumentIds(activeDocumentIds(next.enabled_documents ?? []));
       setNotice("evidenceUpdatedNotice");
       const nextPreview = await api.ragPreview(currentVersion.id);
       if (isCurrentScope(requestScope)) setPreview(nextPreview);
@@ -1061,9 +1082,7 @@ export function AgentWorkbench({
         return null;
       }
     }
-    const enabledIds = (saved.enabled_documents ?? []).map(
-      (document) => document.id,
-    );
+    const enabledIds = activeDocumentIds(saved.enabled_documents ?? []);
     if (!sameIds(selectedDocumentIds, enabledIds)) {
       try {
         saved = await api.setDocuments(
@@ -1286,9 +1305,7 @@ export function AgentWorkbench({
       saved = draft;
     }
     if (publishOnDone && saved) {
-      const documentIds = (saved.enabled_documents ?? []).map(
-        (document) => document.id,
-      );
+      const documentIds = activeDocumentIds(saved.enabled_documents ?? []);
       const wanted = [
         ...selectedDocumentIds,
         ...uploadedIds.filter((id) => !selectedDocumentIds.includes(id)),

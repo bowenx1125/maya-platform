@@ -513,37 +513,30 @@ function PublishedAgentTile({
   return (
     <div className="agent-tile" data-agent-row={item.agent.id}>
       <Link
-        className="agent-tile-body"
+        className="agent-tile-name text-link"
         href={`/teacher/agents/${item.agent.id}`}
-        aria-label={item.agent.name}
       >
-        <span className="agent-tile-name">{item.agent.name}</span>
-        {groupName ? (
-          <span className="agent-tile-group">{groupName}</span>
-        ) : null}
-        {item.author ? (
-          <span className="agent-tile-author">
-            <UserAvatar
-              avatar={item.author.avatar}
-              name={item.author.display_name}
-              userId={item.author.user_id}
-              size="sm"
-            />
-            <span>{item.author.display_name}</span>
-          </span>
-        ) : null}
+        {item.agent.name}
       </Link>
+      {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
+      {item.author ? (
+        <span className="agent-tile-author">
+          <UserAvatar
+            avatar={item.author.avatar}
+            name={item.author.display_name}
+            userId={item.author.user_id}
+            size="sm"
+          />
+          <span>{item.author.display_name}</span>
+        </span>
+      ) : null}
       <button
         type="button"
         className="agent-pill agent-pill-action"
         data-pending={hasUnpublishedWork ? "true" : "false"}
         disabled={deleting}
         aria-label={t("deleteAgent")}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onDelete();
-        }}
+        onClick={onDelete}
       >
         <span className="agent-pill-label">{version.version_label}</span>
         <span className="agent-pill-x" aria-hidden="true">

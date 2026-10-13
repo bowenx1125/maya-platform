@@ -513,6 +513,8 @@ const enMessages = {
     "Private or Public is chosen when the Agent is created and does not change.",
   errorRagFollowsAgent:
     "RAG added to an Agent is Private or Public like the Agent.",
+  errorTeamMemberSourceUnavailable:
+    "This Agent's RAG was removed from the library. Open the Agent, choose active RAG, and publish again before adding it to a Team.",
   errorCsrfFailed: "This form has expired. Please try again.",
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
@@ -1263,6 +1265,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorNetwork: "无法连接 Maya。请检查网络后重试。",
   errorAgentVisibilityLocked: "Agent 的私有或公开在创建时选定，之后不能更改。",
   errorRagFollowsAgent: "添加到 Agent 的 RAG 与该 Agent 同为私有或公开。",
+  errorTeamMemberSourceUnavailable:
+    "该 Agent 的 RAG 已从资料库移除。请打开 Agent，选择有效的 RAG 并重新发布后再加入 Team。",
   errorCsrfFailed: "此表单已过期，请重试。",
   errorInvalidState: "当前状态不支持该操作。",
   errorVersionImmutable: "已发布版本不可变更。",
@@ -1666,6 +1670,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   agent_archived: "errorAgentArchived",
   agent_visibility_locked: "errorAgentVisibilityLocked",
   document_visibility_follows_agent: "errorRagFollowsAgent",
+  team_member_source_unavailable: "errorTeamMemberSourceUnavailable",
   cross_group_reference: "errorCrossGroupReference",
   agent_md_missing: "blockAgentMdMissing",
   rag_missing: "blockRagMissing",
