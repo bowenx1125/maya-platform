@@ -15,7 +15,7 @@ import {
   PageIntro,
   StatusBadge,
 } from "../ui";
-import { IconCheck, IconPlay } from "../quiet-icons";
+import { IconCheck, IconPlay, IconUpload } from "../quiet-icons";
 import { ModuleCard, ModulePlus, ModuleTiles } from "../studyform-layout";
 import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
@@ -309,18 +309,28 @@ export function VoiceLibrary({
       {error ? (
         <ErrorNotice inline error={error} onRetry={() => void load()} />
       ) : null}
-      {/* The file picker names itself; a "Sample" caption only added a line. */}
-      <label className={styles.field}>
-        <input
-          className={styles.fileInput}
-          type="file"
-          disabled={controlsDisabled}
-          accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+      <div className={styles.uploadRow}>
+        <label
+          className={styles.uploadButton}
           data-ui-guide="voice.uploadSample"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          aria-label={t("voiceSampleFile")}
-        />
-      </label>
+          aria-busy={controlsDisabled || undefined}
+        >
+          <IconUpload />
+          <input
+            className="sr-only"
+            type="file"
+            disabled={controlsDisabled}
+            accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            aria-label={t("voiceSampleFile")}
+          />
+        </label>
+        {file ? (
+          <span className={styles.selectedFile} aria-live="polite">
+            {file.name}
+          </span>
+        ) : null}
+      </div>
       <label className={styles.consent}>
         <input
           type="checkbox"

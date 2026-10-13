@@ -232,6 +232,39 @@
   min-width: 0;
 }
 
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.failedBadge {
+  flex: 0 0 auto;
+  cursor: help;
+}
+
+.rowHit {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowHit:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
 .titleButton,
 .staticTitle {
   width: fit-content;
@@ -319,6 +352,7 @@
 
 .iconButton:focus-visible,
 .titleButton:focus-visible,
+.rowHit:focus-visible,
 .inlineNameInput:focus-visible,
 .field input:focus-visible,
 .field textarea:focus-visible,

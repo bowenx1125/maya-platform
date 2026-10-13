@@ -653,8 +653,11 @@
 /* As wide as Agents New: its cards fill the centred page. */
 .teamForm {
   display: grid;
-  gap: 0;
+  gap: 18px;
   width: 100%;
+}
+.teamForm :global(.section-card) {
+  margin-bottom: 0;
 }
 .teamForm :global(input:focus-visible),
 .teamForm :global(button:focus-visible) {

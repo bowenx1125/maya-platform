@@ -38,13 +38,7 @@ import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { ReportMarkdown } from "../report/report-markdown";
-import {
-  IconArrowRight,
-  IconClose,
-  IconDownload,
-  IconEye,
-  IconRefresh,
-} from "../quiet-icons";
+import { IconClose, IconDownload, IconRefresh } from "../quiet-icons";
 
 import styles from "./brainform-workspace.module.css";
 
@@ -83,10 +77,6 @@ type Pane =
   | { kind: "knowledge-edit"; documentId: string }
   | { kind: "knowledge-new" };
 
-type PendingGeneration = {
-  documentId: string;
-  actionId: string;
-};
 type PendingRagAction = { kind: "hide" | "reindex"; documentId: string };
 
 type KnowledgeGraphEdge = { from: string; to: string };
@@ -376,10 +366,19 @@ function indexStatusText(
   ) {
     return t("brainformRagIndexing");
   }
-  if (document.index_status === "failed") {
-    return t("brainformRagIndexFailed");
-  }
   return "";
+}
+
+function ragIndexFailureReason(
+  document: KnowledgeDocument,
+  t: ReturnType<typeof useT>,
+) {
+  if (document.safe_error_code) {
+    return t("brainformRagIndexFailedReason", {
+      reason: document.safe_error_code.replaceAll("_", " "),
+    });
+  }
+  return t("brainformRagIndexFailed");
 }
 
 export function BrainformWorkspace({
@@ -567,6 +566,7 @@ function BrainformWorkspaceBody({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<KnowledgeMarkdown | null>(null);
   const [markdownDraft, setMarkdownDraft] = useState("");
+  const [knowledgeNameDraft, setKnowledgeNameDraft] = useState("");
   const [knowledgeDrafts, setKnowledgeDrafts] = useState<
     Record<string, KnowledgeDraft>
   >(() => getKnowledgeDrafts(identityScope));
@@ -576,8 +576,6 @@ function BrainformWorkspaceBody({
   const [generationStatuses, setGenerationStatuses] = useState<
     Record<string, KnowledgeGenerationStatus>
   >({});
-  const [generationRetry, setGenerationRetry] =
-    useState<PendingGeneration | null>(null);
   const [renameSetId, setRenameSetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const currentScope = useRef(identityScope);
@@ -604,9 +602,7 @@ function BrainformWorkspaceBody({
   const operationSequence = useRef(0);
   const fileSelectionSequence = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const [renameDocumentId, setRenameDocumentId] = useState<string | null>(
-    null,
-  );
+  const [renameDocumentId, setRenameDocumentId] = useState<string | null>(null);
   // New opens this draft; a picked Markdown file fills it, Done saves it.
   const [newKnowledge, setNewKnowledge] = useState({ name: "", markdown: "" });
   // One click opens the editor, which replaces this list; a double-click
@@ -1599,8 +1595,28 @@ function BrainformWorkspaceBody({
       setKnowledgeDrafts(nextDrafts);
     }
     setMarkdownDraft(draft.markdown);
+    setKnowledgeNameDraft(current.knowledge_display_name);
     setPane({ kind: "knowledge-edit", documentId: setId });
     if (syncUrl) syncModeUrl("knowledge-edit", setId);
+  }
+
+  async function downloadKnowledgeSet(row: BrainformKnowledge) {
+    if ((row.version_seq ?? 0) <= 0 || busyKey) return;
+    commitBusy(`download-knowledge:${row.canonical_set_id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const next = await api.knowledgeMarkdown(row.canonical_set_id);
+      if (!scopeIsCurrent()) return;
+      downloadKnowledgeMarkdown(
+        next.markdown,
+        `${next.knowledge_display_name || row.knowledge_display_name}.md`,
+      );
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
   }
 
   async function openKnowledge(
@@ -1659,6 +1675,7 @@ function BrainformWorkspaceBody({
           setKnowledgeDrafts(nextDrafts);
           setMarkdown(emptyMarkdown);
           setMarkdownDraft(emptyDraft.markdown);
+          setKnowledgeNameDraft(row.knowledge_display_name);
           setPane({
             kind: "knowledge-edit",
             documentId: row.canonical_set_id,
@@ -1744,28 +1761,67 @@ function BrainformWorkspaceBody({
   async function saveKnowledge() {
     if (!markdown?.can_edit || busyKey) return;
     const setId = markdown.canonical_set_id;
+    const nextName = knowledgeNameDraft.trim();
+    if (!nextName) {
+      setNotice(t("brainformSetNameUnavailable"));
+      return;
+    }
     const draft = knowledgeDrafts[setId] ?? {
       markdown: markdownDraft,
       expectedVersionSeq: markdown.version_seq,
     };
-    const intent = `brainform-markdown:${setId}:${draft.expectedVersionSeq}`;
-    const handle = mutationStore.handleFor(intent);
+    const nameChanged = nextName !== markdown.knowledge_display_name;
+    const contentChanged = markdownDraft !== markdown.markdown;
+    if (!nameChanged && !contentChanged) {
+      setPane({ kind: "knowledge-view", documentId: setId });
+      syncModeUrl("knowledge-view", setId);
+      return;
+    }
+    const nameIntent = `brainform-set-name:${setId}:${nextName}`;
+    const contentIntent = `brainform-markdown:${setId}:${draft.expectedVersionSeq}`;
+    const nameHandle = nameChanged ? mutationStore.handleFor(nameIntent) : null;
+    const contentHandle =
+      contentChanged || markdown.version_seq === 0
+        ? mutationStore.handleFor(contentIntent)
+        : null;
     commitBusy(`knowledge-save:${setId}`);
     setLoadError(null);
     setNotice("");
     try {
-      const next = await api.saveKnowledgeMarkdown(
-        setId,
-        {
-          expected_version_seq: draft.expectedVersionSeq,
-          markdown: markdownDraft,
-        },
-        { idempotency: handle },
-      );
-      mutationStore.finish(intent, handle);
+      let displayName = markdown.knowledge_display_name;
+      if (nameChanged && nameHandle) {
+        const detail = await api.knowledgeSet(setId);
+        if (!scopeIsCurrent()) return;
+        if (detail.metadata_revision == null)
+          throw new Error(t("brainformSetNameUnavailable"));
+        const renamed = await api.updateKnowledgeSet(
+          setId,
+          {
+            expected_metadata_revision: detail.metadata_revision,
+            display_name: nextName,
+          },
+          { idempotency: nameHandle },
+        );
+        mutationStore.finish(nameIntent, nameHandle);
+        displayName = renamed.display_name;
+      }
+      let next = { ...markdown, knowledge_display_name: displayName };
+      if (contentHandle) {
+        next = await api.saveKnowledgeMarkdown(
+          setId,
+          {
+            expected_version_seq: draft.expectedVersionSeq,
+            markdown: markdownDraft,
+          },
+          { idempotency: contentHandle },
+        );
+        mutationStore.finish(contentIntent, contentHandle);
+        next = { ...next, knowledge_display_name: displayName };
+      }
       if (!scopeIsCurrent()) return;
       setMarkdown(next);
       setMarkdownDraft(next.markdown);
+      setKnowledgeNameDraft(displayName);
       const nextDrafts = {
         ...knowledgeDrafts,
         [setId]: {
@@ -1782,7 +1838,7 @@ function BrainformWorkspaceBody({
                 ...row,
                 version_seq: next.version_seq,
                 content_hash: next.content_hash,
-                knowledge_display_name: next.knowledge_display_name,
+                knowledge_display_name: displayName,
               }
             : row,
         ),
@@ -1792,82 +1848,23 @@ function BrainformWorkspaceBody({
       setNotice(t("brainformKnowledgeSaved"));
     } catch (cause) {
       if (isConflict(cause)) {
-        mutationStore.abandon(intent, handle);
+        if (nameHandle) mutationStore.abandon(nameIntent, nameHandle);
+        if (contentHandle) mutationStore.abandon(contentIntent, contentHandle);
         setNotice(t("brainformKnowledgeConflictDraftKept"));
         try {
           const latest = await api.knowledgeMarkdown(setId);
-          if (scopeIsCurrent()) setMarkdown(latest);
+          if (scopeIsCurrent()) {
+            setMarkdown(latest);
+            setKnowledgeNameDraft(latest.knowledge_display_name);
+          }
         } catch {
           // The user's draft remains in the editor and the inline conflict is enough.
         }
       } else if (isAmbiguousMutationFailure(cause)) {
         setNotice(t("brainformRetrySameSave"));
       } else {
-        mutationStore.abandon(intent, handle);
-      }
-      if (scopeIsCurrent()) setLoadError(cause);
-    } finally {
-      if (scopeIsCurrent()) commitBusy(null);
-    }
-  }
-
-  async function regenerateKnowledge(row: BrainformKnowledge, retry = false) {
-    if (!row.can_edit || busyKey) return;
-    const pending =
-      retry && generationRetry?.documentId === row.canonical_set_id
-        ? generationRetry
-        : { documentId: row.canonical_set_id, actionId: createUuid() };
-    const intent = `brainform-regenerate:${pending.documentId}:${pending.actionId}`;
-    const handle = mutationStore.handleFor(intent);
-    commitBusy(`regenerate:${pending.documentId}`);
-    setLoadError(null);
-    setNotice("");
-    try {
-      const regeneration = await api.regenerateKnowledgeMarkdown(
-        pending.documentId,
-        pending.actionId,
-        { idempotency: handle },
-      );
-      mutationStore.finish(intent, handle);
-      if (!scopeIsCurrent()) return;
-      if (role === "teacher") {
-        const latest = latestGenerationJobs.current;
-        latestGenerationJobs.current = {
-          scope: identityScope,
-          jobs: {
-            ...(latest?.scope === identityScope ? latest.jobs : {}),
-            [pending.documentId]: regeneration.job_id,
-          },
-        };
-        const nextJobs = {
-          ...getGenerationJobs(identityScope),
-          [pending.documentId]: regeneration.job_id,
-        };
-        rememberGenerationJobs(identityScope, nextJobs);
-        setGenerationJobs(nextJobs);
-        setGenerationStatuses((current) => {
-          const next = { ...current };
-          delete next[pending.documentId];
-          return next;
-        });
-      }
-      setGenerationRetry(null);
-      setKnowledgeRows((current) =>
-        current.map((item) =>
-          item.canonical_set_id === pending.documentId
-            ? { ...item, generation_state: "pending", safe_error_code: null }
-            : item,
-        ),
-      );
-      setNotice(t("brainformGenerating"));
-      void loadWorkspace();
-    } catch (cause) {
-      if (isAmbiguousMutationFailure(cause)) {
-        setGenerationRetry(pending);
-        setNotice(t("brainformRetrySameGeneration"));
-      } else {
-        mutationStore.abandon(intent, handle);
-        setGenerationRetry(null);
+        if (nameHandle) mutationStore.abandon(nameIntent, nameHandle);
+        if (contentHandle) mutationStore.abandon(contentIntent, contentHandle);
       }
       if (scopeIsCurrent()) setLoadError(cause);
     } finally {
@@ -2189,91 +2186,86 @@ function BrainformWorkspaceBody({
                 {ragDocuments.map((document) => {
                   const canEdit = document.can_manage_visibility;
                   const status = indexStatusText(document, t);
+                  const failed = document.index_status === "failed";
                   return (
                     <li className={styles.row} key={document.id}>
                       <div className={styles.rowCopy}>
-                        {renameDocumentId === document.id ? (
-                          <input
-                            ref={renameInputRef}
-                            className={styles.inlineNameInput}
-                            aria-label={t("brainformRagName")}
-                            value={renameValue}
-                            onChange={(event) =>
-                              setRenameValue(event.target.value)
-                            }
-                            onBlur={() => void saveDocumentName(document)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                event.currentTarget.blur();
+                        <div className={styles.titleRow}>
+                          {renameDocumentId === document.id ? (
+                            <input
+                              ref={renameInputRef}
+                              className={styles.inlineNameInput}
+                              aria-label={t("brainformRagName")}
+                              value={renameValue}
+                              onChange={(event) =>
+                                setRenameValue(event.target.value)
                               }
-                              if (event.key === "Escape")
-                                setRenameDocumentId(null);
-                            }}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            className={styles.titleButton}
-                            onClick={() =>
-                              titleClick(
-                                () =>
-                                  void (canEdit
-                                    ? editRag(document)
-                                    : viewRag(document)),
-                              )
-                            }
-                            onDoubleClick={() =>
-                              titleDoubleClick(() => {
-                                if (!canEdit) return;
-                                setRenameDocumentId(document.id);
-                                setRenameValue(
-                                  document.source_filename.replace(
-                                    /\.[^.]+$/,
-                                    "",
-                                  ),
-                                );
-                              })
-                            }
-                            aria-label={t(
-                              canEdit
-                                ? "brainformEditRagNamed"
-                                : "brainformViewRagNamed",
-                              { name: document.source_filename },
-                            )}
-                          >
-                            {document.source_filename}
-                          </button>
-                        )}
+                              onBlur={() => void saveDocumentName(document)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  event.currentTarget.blur();
+                                }
+                                if (event.key === "Escape")
+                                  setRenameDocumentId(null);
+                              }}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.titleButton}
+                              onClick={() =>
+                                titleClick(
+                                  () =>
+                                    void (canEdit
+                                      ? editRag(document)
+                                      : viewRag(document)),
+                                )
+                              }
+                              onDoubleClick={() =>
+                                titleDoubleClick(() => {
+                                  if (!canEdit) return;
+                                  setRenameDocumentId(document.id);
+                                  setRenameValue(
+                                    document.source_filename.replace(
+                                      /\.[^.]+$/,
+                                      "",
+                                    ),
+                                  );
+                                })
+                              }
+                              aria-label={t(
+                                canEdit
+                                  ? "brainformEditRagNamed"
+                                  : "brainformViewRagNamed",
+                                { name: document.source_filename },
+                              )}
+                            >
+                              {document.source_filename}
+                            </button>
+                          )}
+                          {failed ? (
+                            <span
+                              className={`status-badge status-bad ${styles.failedBadge}`}
+                              data-ui-guide="knowledge.indexFailed"
+                              data-ui-guide-text={ragIndexFailureReason(
+                                document,
+                                t,
+                              )}
+                              tabIndex={0}
+                            >
+                              <span aria-hidden="true" />
+                              failed
+                            </span>
+                          ) : null}
+                        </div>
                         {status ? (
-                          <span
-                            className={styles.rowStatus}
-                            role={
-                              document.index_status === "failed"
-                                ? "alert"
-                                : "status"
-                            }
-                          >
+                          <span className={styles.rowStatus} role="status">
                             {status}
                           </span>
                         ) : null}
                       </div>
                       <div className={styles.actions}>
-                        {canEdit ? (
-                          <button
-                            type="button"
-                            className={styles.iconButton}
-                            aria-label={t("brainformViewRagNamed", {
-                              name: document.source_filename,
-                            })}
-                            data-ui-guide="knowledge.view"
-                            data-ui-guide-text={t("brainformViewRag")}
-                            disabled={busyKey === `view:${document.id}`}
-                            onClick={() => void viewRag(document)}
-                          >
-                            <IconEye />
-                          </button>
-                        ) : null}
                         <button
                           type="button"
                           className={styles.iconButton}
@@ -2300,7 +2292,7 @@ function BrainformWorkspaceBody({
                             <IconClose />
                           </button>
                         ) : null}
-                        {canEdit && document.index_status === "failed" ? (
+                        {canEdit && failed ? (
                           <button
                             type="button"
                             className={styles.iconButton}
@@ -2357,7 +2349,6 @@ function BrainformWorkspaceBody({
               <ul className={styles.list}>
                 {displayedKnowledgeRows.map((row) => {
                   const currentDoc = (row.version_seq ?? 0) > 0;
-                  const canGenerate = row.can_edit;
                   const isGenerating = isGenerationActive(row.generation_state);
                   const jobStatus = generationStatuses[row.canonical_set_id];
                   const generationErrorCode =
@@ -2401,7 +2392,10 @@ function BrainformWorkspaceBody({
                               undefined
                             }
                             onClick={() => {
-                              if (isGenerating || (!currentDoc && !row.can_edit))
+                              if (
+                                isGenerating ||
+                                (!currentDoc && !row.can_edit)
+                              )
                                 return;
                               titleClick(
                                 () =>
@@ -2452,36 +2446,6 @@ function BrainformWorkspaceBody({
                         ) : null}
                       </div>
                       <div className={styles.actions}>
-                        {canGenerate && !isGenerating ? (
-                          <button
-                            type="button"
-                            className={styles.iconButton}
-                            aria-label={t("brainformRegenerateNamed", {
-                              name: row.knowledge_display_name,
-                            })}
-                            data-ui-guide="knowledge.regenerate"
-                            data-ui-guide-text={t("brainformRegenerate")}
-                            disabled={
-                              busyKey === `regenerate:${row.canonical_set_id}`
-                            }
-                            onClick={() => void regenerateKnowledge(row)}
-                          >
-                            <IconRefresh />
-                          </button>
-                        ) : null}
-                        {generationRetry?.documentId ===
-                        row.canonical_set_id ? (
-                          <button
-                            className={styles.textAction}
-                            type="button"
-                            onClick={() => void regenerateKnowledge(row, true)}
-                            disabled={
-                              busyKey === `regenerate:${row.canonical_set_id}`
-                            }
-                          >
-                            {t("retry")}
-                          </button>
-                        ) : null}
                         {isGenerating ? (
                           <button
                             type="button"
@@ -2494,26 +2458,22 @@ function BrainformWorkspaceBody({
                           >
                             <span className="spinner" aria-hidden="true" />
                           </button>
-                        ) : currentDoc || row.can_edit ? (
+                        ) : null}
+                        {currentDoc && !isGenerating ? (
                           <button
                             type="button"
                             className={styles.iconButton}
-                            aria-label={t("brainformOpenKnowledgeNamed", {
+                            aria-label={t("brainformDownloadKnowledgeNamed", {
                               name: row.knowledge_display_name,
                             })}
-                            data-ui-guide="knowledge.view"
-                            data-ui-guide-text={t("brainformViewKnowledge")}
+                            data-ui-guide="knowledge.download"
                             disabled={
-                              busyKey === `knowledge:${row.canonical_set_id}`
+                              busyKey ===
+                              `download-knowledge:${row.canonical_set_id}`
                             }
-                            onClick={() =>
-                              void openKnowledge(
-                                row,
-                                currentDoc ? "view" : "edit",
-                              )
-                            }
+                            onClick={() => void downloadKnowledgeSet(row)}
                           >
-                            <IconArrowRight />
+                            <IconDownload />
                           </button>
                         ) : null}
                         {row.can_edit && !isGenerating ? (
@@ -2566,27 +2526,22 @@ function BrainformWorkspaceBody({
                     className={styles.row}
                     key={`${item.source.kind}:${item.name}:${item.detail}`}
                   >
-                    <div className={styles.rowCopy}>
+                    <button
+                      type="button"
+                      className={styles.rowHit}
+                      aria-label={t("brainformMemoryOpenNamed", {
+                        name: item.name,
+                      })}
+                      data-ui-guide="brainform.memory"
+                      data-ui-guide-text={t("brainformMemoryOpen")}
+                      onClick={() => router.push(memoryHref(item.source))}
+                    >
                       <span className={styles.staticTitle}>{item.name}</span>
                       <span className={styles.rowMeta}>
                         {t(item.label)}
                         {item.detail ? ` · ${item.detail}` : ""}
                       </span>
-                    </div>
-                    <div className={styles.actions}>
-                      <button
-                        type="button"
-                        className={styles.iconButton}
-                        aria-label={t("brainformMemoryOpenNamed", {
-                          name: item.name,
-                        })}
-                        data-ui-guide="brainform.memory"
-                        data-ui-guide-text={t("brainformMemoryOpen")}
-                        onClick={() => router.push(memoryHref(item.source))}
-                      >
-                        <IconArrowRight />
-                      </button>
-                    </div>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -2640,29 +2595,24 @@ function BrainformWorkspaceBody({
                   }}
                 />
               </label>
-              <label className={styles.field}>
-                <span>{t("brainformSetName")}</span>
-                <input
-                  value={newKnowledge.name}
-                  disabled={busyKey === "knowledge-new"}
-                  onChange={(event) => {
-                    const name = event.target.value;
-                    setNewKnowledge((current) => ({ ...current, name }));
-                  }}
-                />
-              </label>
-              <label className={styles.field}>
-                <span>{t("knowledgeContent")}</span>
-                <textarea
-                  value={newKnowledge.markdown}
-                  rows={18}
-                  readOnly={busyKey === "knowledge-new"}
-                  onChange={(event) => {
-                    const markdown = event.target.value;
-                    setNewKnowledge((current) => ({ ...current, markdown }));
-                  }}
-                />
-              </label>
+              <KnowledgeFilenameField
+                className={styles.field}
+                value={newKnowledge.name}
+                disabled={busyKey === "knowledge-new"}
+                onChange={(name) =>
+                  setNewKnowledge((current) => ({ ...current, name }))
+                }
+              />
+              <KnowledgeMarkdownField
+                className={styles.field}
+                value={newKnowledge.markdown}
+                disabled={busyKey === "knowledge-new"}
+                readOnly={busyKey === "knowledge-new"}
+                rows={18}
+                onChange={(markdown) =>
+                  setNewKnowledge((current) => ({ ...current, markdown }))
+                }
+              />
             </div>
           ) : null}
 
@@ -2694,19 +2644,11 @@ function BrainformWorkspaceBody({
                 value={selectedDraft.filename}
                 disabled={busyKey === `import:${pane.draftKey}`}
                 readOnly={!selectedDraft.canEdit}
-                describedBy={
-                  selectedDraft.canEdit ? "brainform-rag-name-note" : undefined
-                }
                 onChange={(filename) => {
                   if (!selectedDraft.canEdit) return;
                   updateRagDraft(pane.draftKey, { ...selectedDraft, filename });
                 }}
               />
-              {selectedDraft.canEdit ? (
-                <small id="brainform-rag-name-note">
-                  {t("brainformRagRenameNote")}
-                </small>
-              ) : null}
               {selectedRagFile ? (
                 <p className={styles.empty} role="status">
                   {t("brainformRagFileStaged", {
@@ -2744,50 +2686,32 @@ function BrainformWorkspaceBody({
                   {t("brainformKnowledgeFirstVersionEmpty")}
                 </p>
               ) : null}
-              <section
-                className={styles.usageSection}
-                aria-labelledby="brainform-knowledge-users-heading"
-              >
-                <h3 id="brainform-knowledge-users-heading">
-                  {t("brainformAgentsUsingKnowledge")}
-                </h3>
-                {knowledgeRows.some(
-                  (row) => row.canonical_set_id === markdown.canonical_set_id,
-                ) ? (
-                  <ul>
-                    {[
-                      ...new Set(
-                        knowledgeRows
-                          .filter(
-                            (row) =>
-                              row.canonical_set_id ===
-                              markdown.canonical_set_id,
-                          )
-                          .map((row) => row.source_agent_display_name),
-                      ),
-                    ].map((name) => (
-                      <li key={name}>{name}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={styles.empty}>
-                    {t("brainformNoKnowledgeUsers")}
-                  </p>
-                )}
-              </section>
               {pane.kind === "knowledge-edit" ? (
-                <label className={styles.field}>
-                  <span>{t("knowledgeContent")}</span>
-                  <textarea
+                <div className={styles.editorForm}>
+                  <KnowledgeFilenameField
+                    className={styles.field}
+                    value={knowledgeNameDraft}
+                    disabled={
+                      busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                    }
+                    readOnly={
+                      !markdown.can_edit || markdown.audience !== "full"
+                    }
+                    onChange={setKnowledgeNameDraft}
+                  />
+                  <KnowledgeMarkdownField
+                    className={styles.field}
                     value={markdownDraft}
-                    rows={18}
+                    disabled={
+                      busyKey === `knowledge-save:${markdown.canonical_set_id}`
+                    }
                     readOnly={
                       !markdown.can_edit ||
                       markdown.audience !== "full" ||
                       busyKey === `knowledge-save:${markdown.canonical_set_id}`
                     }
-                    onChange={(event) => {
-                      const value = event.target.value;
+                    rows={18}
+                    onChange={(value) => {
                       const current = knowledgeDrafts[
                         markdown.canonical_set_id
                       ] ?? {
@@ -2811,7 +2735,7 @@ function BrainformWorkspaceBody({
                       setKnowledgeDrafts(nextDrafts);
                     }}
                   />
-                </label>
+                </div>
               ) : markdown.projection_available ? (
                 <KnowledgeMarkdownView
                   markdown={markdown.markdown}

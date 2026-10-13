@@ -41,6 +41,10 @@ export const uiGuideCopy = {
     en: "Rebuild the search index for this source.",
     zh: "为此知识源重新建立检索索引。",
   },
+  "knowledge.indexFailed": {
+    en: "Markdown indexing failed. The source is retained.",
+    zh: "Markdown 索引失败；来源文件仍保留。",
+  },
   "knowledge.hide": {
     en: "Hide this source from the active Brainform library. Existing snapshots stay available.",
     zh: "从当前 Brainform 资源列表隐藏此来源；已有快照仍可使用。",
