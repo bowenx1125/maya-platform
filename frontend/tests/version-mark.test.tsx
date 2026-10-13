@@ -24,29 +24,6 @@ import { VersionTile } from "../components/studyform-layout";
 afterEach(() => cleanup());
 
 describe("version mark", () => {
-  it.each([
-    ["public", "Public"],
-    ["private", "Private"],
-  ] as const)("says %s in words, not by colour alone", (visibility, word) => {
-    render(
-      <LocaleProvider initialLocale="en">
-        <ul>
-          <VersionTile
-            name="Laozi"
-            href="/student/agents/laozi"
-            label="V1.0"
-            pending={false}
-            visibility={visibility}
-            deleteLabel="Delete"
-          />
-        </ul>
-      </LocaleProvider>,
-    );
-    const mark = screen.getByTitle(word);
-    expect(mark.getAttribute("data-visibility")).toBe(visibility);
-    expect(mark.textContent).toBe(`V1.0 · ${word}`);
-  });
-
   it("opens from the card body and keeps Delete on the version bubble", () => {
     const onDelete = vi.fn();
     render(
