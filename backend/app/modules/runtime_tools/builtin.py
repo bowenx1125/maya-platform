@@ -187,6 +187,10 @@ def runtime_registry() -> dict[str, ToolSpec]:
             AssessmentActionArguments,
             authorize_own_conversation,
             assessment_action,
+            # Owner report (2026-10-13): answers felt slow. The server writes
+            # the student-facing line from this result, so the model's closing
+            # call only added a second wait to every answer.
+            stop_after_tool_call=True,
         ),
         "read_session": ToolSpec(
             "read_session",

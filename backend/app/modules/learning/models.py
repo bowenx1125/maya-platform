@@ -568,6 +568,8 @@ class AssessmentAttempt(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     abandoned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     abandonment_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # The student's name when the attempt began, beside the account id.
+    actor_display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Set when the learner ends early; no further follow-up round may be added.
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -1462,7 +1462,7 @@ def test_cleanup_accepts_current_0054_schema_head(migrated_database):
     database_path, data_root = migrated_database
     with sqlite3.connect(database_path) as connection:
         version = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-    assert version == ("0062_teacher_personal_voices",)
+    assert version == ("0063_attempt_actor_name",)
     assert cleanup.SCHEMA_HEAD == version[0]
     assert version[0] in cleanup.SUPPORTED_SCHEMA_HEADS
 

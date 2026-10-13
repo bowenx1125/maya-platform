@@ -1127,7 +1127,7 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
         assert old_turn is not None and old_turn.state == "paused"
         assert abandoned_turn is not None and abandoned_turn.state == "paused"
         assert resumed_session["turns"][-1]["id"] == resume_id
-        assert calls_by_turn[resume_id] == 2
+        assert calls_by_turn[resume_id] == 1  # one model call per answer turn (2026-10-13)
         assert calls_by_turn[resumed_source_id] == 0
         assert calls_by_turn[old_query_id] == 0
 
@@ -1167,8 +1167,8 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
         assert attempt is not None and attempt.status == "in_progress"
         assert old_turn is not None and old_turn.state == "ready"
         assert recovered_session["turns"][-1]["id"] == resume_id
-        assert calls_by_turn[resume_id] == 2
-        assert calls_by_turn[resumed_source_id] == 2
+        assert calls_by_turn[resume_id] == 1
+        assert calls_by_turn[resumed_source_id] == 1
         assert calls_by_turn[old_query_id] == 0
         assert all(
             b"Internal only" not in wire and b"Internal answer" not in wire

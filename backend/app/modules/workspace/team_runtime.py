@@ -1352,6 +1352,42 @@ def _finish_run(db: Session, row: Conversation, turn: ConversationTurn) -> None:
         turn.state, turn.safe_error_code = "failed", "team_failed"
     row.active_request_id = None
     _append_event(db, turn, "turn_done")
+    _log_turn_timing(db, turn)
+
+
+def _log_turn_timing(db: Session, turn: ConversationTurn) -> None:
+    """Where a turn's time went, without its content.
+
+    Owner report (2026-10-13): replies felt slower, but the logs only timed
+    the model calls. This adds the wait before the first call and the total.
+    """
+
+    def utc(value: datetime) -> datetime:
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    calls = db.execute(
+        select(TeamProviderCall.created_at, TeamProviderCall.accepted_at)
+        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
+        .where(TeamTurnResult.turn_id == turn.id)
+    ).all()
+    started = utc(turn.created_at)
+    finished = datetime.now(UTC)
+    first_call = min((utc(created) for created, _accepted in calls), default=None)
+    model_seconds = sum(
+        (utc(accepted) - utc(created)).total_seconds()
+        for created, accepted in calls
+        if accepted is not None
+    )
+    LOGGER.info(
+        "Team turn done turn_id=%s state=%s total=%.1fs before_first_model_call=%s "
+        "model_calls=%d model_time=%.1fs",
+        turn.id,
+        turn.state,
+        (finished - started).total_seconds(),
+        f"{(first_call - started).total_seconds():.1f}s" if first_call else "-",
+        len(calls),
+        model_seconds,
+    )
 
 
 def _spoken_refusal(code: str, user_text: str) -> str | None:

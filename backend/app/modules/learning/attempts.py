@@ -406,7 +406,9 @@ def get_assessment_runtime_context(
         team_id=activity.team_id,
         recipe_id=activity.recipe_id,
     )
-    if attempt is None:
+    # A test unfinished in another Chat is not this Chat's test: here the
+    # student starts afresh instead of being sent back.
+    if attempt is None or attempt.source_conversation_id != conversation.id:
         return None
     return _context(db, attempt, conversation.id)
 
@@ -1006,8 +1008,12 @@ def start_or_resume_attempt(
         team_id=activity.team_id,
         recipe_id=activity.recipe_id,
     )
-    if active is not None:
+    if active is not None and active.source_conversation_id == conversation.id:
         return _context(db, active, conversation.id)
+    if active is not None:
+        # Owner decision (2026-10-13): a new Chat is a new test. The unfinished
+        # one in the earlier Chat is given up, not reopened here.
+        _restart_in_new_chat(db, active, conversation.id)
     refresh_assessment_activity_questions(db, actor, conversation.id, activity)
     if not db.scalars(
         select(AssessmentActivityQuestion.id).where(
@@ -1038,6 +1044,7 @@ def start_or_resume_attempt(
         completed_at=None,
         abandoned_at=None,
         abandonment_reason=None,
+        actor_display_name=actor.user.display_name,
     )
     request_hash = _hash(
         _canonical(
@@ -1763,6 +1770,9 @@ _ANSWER_OVERRIDABLE = frozenset(
         "answers_request",
         "restricted_request",
         "off_topic",
+        # Already an answer, but its span must be the student's own text.
+        "answer_only",
+        "answer_with_restricted_request",
     }
 )
 
@@ -1785,6 +1795,8 @@ def _bare_answer_action(
         return action
     text = user_text.strip()
     if not _BARE_ANSWER.fullmatch(text):
+        return action
+    if action.classification == "answer_only" and action.answer_span == text:
         return action
     context = get_assessment_runtime_context(db, actor, conversation_id)
     if (
@@ -2328,6 +2340,10 @@ def apply_assessment_decision(
         team_id=activity.team_id,
         recipe_id=activity.recipe_id,
     )
+    if attempt is not None and attempt.source_conversation_id != conversation.id:
+        # The unfinished test in another Chat is not this Chat's; starting
+        # here gives it up (see start_or_resume_attempt).
+        attempt = None
     if attempt is None:
         if decision.classification == "start_request":
             if decision.answer_span is not None or decision.question_version_id is not None:
@@ -2614,6 +2630,36 @@ def apply_assessment_decision(
         context=next_context,
         answers=answers,
     )
+
+
+def _restart_in_new_chat(db: Session, attempt: AssessmentAttempt, new_conversation_id: str) -> None:
+    """Give up an unfinished attempt because its student began again elsewhere."""
+
+    timestamp = _now()
+    attempt.status = "abandoned"
+    attempt.abandoned_at = timestamp
+    attempt.abandonment_reason = "user_redo"
+    attempt.updated_at = timestamp
+    attempt.revision += 1
+    db.add(
+        _event(
+            attempt=attempt,
+            actor_user_id=attempt.actor_user_id,
+            client_event_id=str(uuid4()),
+            event_kind="restart",
+            classification=None,
+            request_hash=_hash(
+                _canonical(
+                    {
+                        "attempt_id": attempt.id,
+                        "new_conversation_id": new_conversation_id,
+                        "reason": "restarted_in_new_chat",
+                    }
+                )
+            ),
+        )
+    )
+    db.flush()
 
 
 def withdraw_conversation_attempts(db: Session, conversation_id: str) -> int:

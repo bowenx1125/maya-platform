@@ -91,7 +91,11 @@ def _text(content: str | None) -> bytes:
 
 
 ANSWER_ACTION = {"classification": "answer_only", "answer_span": ANSWER}
-MESSAGES = {"bare_letter_called_off_topic": "b", "bare_number_called_start": "3"}
+MESSAGES = {
+    "bare_letter_called_off_topic": "b",
+    "bare_letter_with_a_wrong_span": "B",
+    "bare_number_called_start": "3",
+}
 
 # scenario -> (scripted Leader replies, saved answers, Leader result state, code)
 SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
@@ -123,6 +127,15 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
     # something else, and the same Question kept coming back.
     "bare_letter_called_off_topic": (
         [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
+        1,
+        "ready",
+        None,
+    ),
+    "bare_letter_with_a_wrong_span": (
+        [
+            ("tool", "assessment_action", {"classification": "answer_only", "answer_span": "B."}),
+            ("text", ""),
+        ],
         1,
         "ready",
         None,

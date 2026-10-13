@@ -1190,6 +1190,32 @@ describe("Chatform", () => {
     ).toBeTruthy();
   });
 
+  // Bug (2026-10-13): while the server picked the follow-ups the student
+  // could type, and the answer landed before the follow-up appeared.
+  it("keeps the message box closed while follow-ups are prepared, with no bar", async () => {
+    const preparing = {
+      ...teamSession,
+      assessment_stage: "preparing",
+      turns: [
+        {
+          id: "last-answer",
+          user_text: "a",
+          state: "ready",
+          member_results: [],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([preparing]);
+    state.api.conversationSession.mockResolvedValue(preparing);
+    renderChats();
+    fireEvent.click(await screen.findByRole("button", { name: "a" }));
+    const box = (await screen.findByRole("textbox", {
+      name: "Message",
+    })) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.disabled).toBe(true));
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
   it("opens a Team Chat at its newest message", async () => {
     const scrolled = vi.fn();
     Element.prototype.scrollIntoView = scrolled;

@@ -789,14 +789,22 @@ def test_private_attempt_reentry_from_public_entry_keeps_original_visibility(
             actor_user_id=STUDENT_ID,
             visibility="public",
         )
-        reentry = get_assessment_runtime_context(db, actor, public_id)
-        assert reentry is not None
-        assert reentry.redirect_to_original_conversation is True
-        assert reentry.canonical_conversation_id == UUID(private_id)
-        assert reentry.attempt.id == original.attempt.id
-        assert reentry.attempt.chat_visibility == "private"
-        resumed = start_or_resume_attempt(db, actor, public_id, client_event_id=uuid4())
-        assert resumed is not None and resumed.attempt.id == original.attempt.id
+        # Owner decision (2026-10-13): a new Chat is a new test. It is not
+        # sent back to the unfinished one; starting gives that one up.
+        assert get_assessment_runtime_context(db, actor, public_id) is None
+        fresh = start_or_resume_attempt(db, actor, public_id, client_event_id=uuid4())
+        assert fresh is not None and fresh.attempt.id != original.attempt.id
+        assert fresh.canonical_conversation_id == UUID(public_id)
+        assert fresh.redirect_to_original_conversation is False
+        old = db.get(AssessmentAttempt, str(original.attempt.id))
+        assert old is not None
+        assert (old.status, old.abandonment_reason) == ("abandoned", "user_redo")
+        new = db.get(AssessmentAttempt, str(fresh.attempt.id))
+        assert new is not None and new.source_conversation_id == public_id
+        # The database keeps who answered, not only the account id.
+        assert new.actor_display_name == actor.user.display_name
+        # The earlier Chat no longer holds a running test.
+        assert get_assessment_runtime_context(db, actor, private_id) is None
         assert db.get(Conversation, private_id).chat_visibility == "private"
         assert db.get(Conversation, public_id).chat_visibility == "public"
 

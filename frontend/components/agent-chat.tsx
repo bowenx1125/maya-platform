@@ -1483,10 +1483,18 @@ function AgentChatScope({
     event?.preventDefault();
     const session = preset?.session ?? selectedTeam;
     const message = preset?.message ?? teamDraft.trim();
+    // Bug (2026-10-13): while the server picked the follow-ups the student
+    // could already type, and the answer landed before the follow-up showed.
+    const serverWorking =
+      !preset &&
+      (session?.assessment_stage === "preparing" ||
+        session?.assessment_stage === "scoring" ||
+        session?.assessment_stage === "summarizing");
     if (
       !session ||
       !message ||
       teamBusy ||
+      serverWorking ||
       session.read_only ||
       !session.can_send ||
       !isChatRequestScopeActive(scopeKey)
@@ -2841,7 +2849,7 @@ function AgentChatScope({
                         ? teamBusy ||
                           !selectedTeam.can_send ||
                           selectedTeam.read_only ||
-                          selectedTeam.turns.at(-1)?.state === "pending"
+                          teamWorking
                         : busy || !agentCanSend
                     }
                     onChange={(event) => {
@@ -2910,7 +2918,7 @@ function AgentChatScope({
                         (selectedTeam
                           ? !selectedTeam.can_send ||
                             selectedTeam.read_only ||
-                            selectedTeam.turns.at(-1)?.state === "pending"
+                            teamWorking
                           : !agentCanSend ||
                             !versionId ||
                             Boolean(
