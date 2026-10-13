@@ -47,19 +47,7 @@ export function ChatTargetPicker({
         >
           <span className="agent-tile-name">{name}</span>
           {label ? (
-            <span
-              className="agent-pill"
-              data-visibility={visibility}
-              title={
-                visibility
-                  ? t(
-                      visibility === "public"
-                        ? "publicOption"
-                        : "privateOption",
-                    )
-                  : undefined
-              }
-            >
+            <span className="agent-pill" data-visibility={visibility}>
               {label}
             </span>
           ) : null}
