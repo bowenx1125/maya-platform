@@ -35,7 +35,8 @@ function documentIds(version: AgentVersion): string[] {
 
 function sameIds(left: string[], right: string[]): boolean {
   return (
-    left.length === right.length && left.every((id, index) => id === right[index])
+    left.length === right.length &&
+    left.every((id, index) => id === right[index])
   );
 }
 

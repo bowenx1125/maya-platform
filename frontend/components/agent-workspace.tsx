@@ -1457,7 +1457,7 @@ export function AgentWorkbench({
             />
           ) : null}
           {unsavedCreate ? (
-            <SectionCard title={t("agentIdentity")}>
+            <SectionCard title={t("agentName")}>
               <form
                 id="create-agent-form"
                 className="stack-form wide-form quiet-create"
@@ -1467,7 +1467,6 @@ export function AgentWorkbench({
                 }}
               >
                 <label>
-                  <span>{t("agentName")}</span>
                   <input
                     aria-label={t("agentName")}
                     value={draftName}

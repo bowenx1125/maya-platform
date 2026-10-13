@@ -1,14 +1,21 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    ...props
   }: {
     children: React.ReactNode;
     href: string;
-  }) => <a href={href}>{children}</a>,
+    className?: string;
+    "aria-label"?: string;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 
 import { LocaleProvider } from "../components/locale";
@@ -38,5 +45,29 @@ describe("version mark", () => {
     const mark = screen.getByTitle(word);
     expect(mark.getAttribute("data-visibility")).toBe(visibility);
     expect(mark.textContent).toBe(`V1.0 · ${word}`);
+  });
+
+  it("opens from the card body and keeps Delete on the version bubble", () => {
+    const onDelete = vi.fn();
+    render(
+      <LocaleProvider initialLocale="en">
+        <ul>
+          <VersionTile
+            name="Laozi"
+            href="/student/agents/laozi"
+            label="V1.0"
+            pending={false}
+            visibility="private"
+            deleteLabel="Delete Laozi"
+            onDelete={onDelete}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+    const open = screen.getByRole("link", { name: "Laozi" });
+    expect(open.getAttribute("href")).toBe("/student/agents/laozi");
+    expect(open.className).toContain("agent-tile-body");
+    fireEvent.click(screen.getByRole("button", { name: "Delete Laozi" }));
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 });

@@ -77,10 +77,12 @@ export function VersionTile({
   const word = visibility
     ? t(visibility === "public" ? "publicOption" : "privateOption")
     : undefined;
+  // The whole card opens the row, like Brainform RAG/Knowledge; only the
+  // version bubble (which becomes Delete) stays outside that hit target.
   return (
     <li className="agent-tile">
-      <Link className="agent-tile-name text-link" href={href}>
-        {name}
+      <Link className="agent-tile-body" href={href} aria-label={name}>
+        <span className="agent-tile-name">{name}</span>
       </Link>
       {onDelete ? (
         <button

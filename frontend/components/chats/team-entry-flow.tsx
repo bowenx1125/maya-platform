@@ -700,10 +700,9 @@ export function TeamEntryFlow({
                 {topFormError}
               </Notice>
             ) : null}
-            <SectionCard title={t("teamIdentity")}>
+            <SectionCard title={t("teamName")}>
               <div className="stack-form wide-form quiet-create">
                 <label>
-                  <span>{t("teamName")}</span>
                   <input
                     aria-label={t("teamName")}
                     value={form.name}
