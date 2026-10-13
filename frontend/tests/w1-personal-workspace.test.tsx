@@ -322,8 +322,12 @@ describe("W1 teacher personal workspace", () => {
     expect(
       await screen.findByRole("checkbox", { name: "shared-notes.md" }),
     ).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Live Knowledge" })).toBeTruthy();
-    expect(screen.queryByRole("checkbox", { name: "private-notes.md" })).toBeNull();
+    expect(
+      screen.getByRole("checkbox", { name: "Live Knowledge" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("checkbox", { name: "private-notes.md" }),
+    ).toBeNull();
     expect(
       screen.queryByRole("checkbox", { name: "Deleted Agent Knowledge" }),
     ).toBeNull();
