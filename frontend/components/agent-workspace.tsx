@@ -1980,10 +1980,7 @@ export function AgentReadOnly({
   }
 
   const documents = version.enabled_documents ?? [];
-  const checkRoot =
-    typeof document === "undefined"
-      ? null
-      : (document.getElementById("workspace-content") ?? document.body);
+  const checkRoot = typeof document === "undefined" ? null : document.body;
 
   return (
     <>
@@ -2149,11 +2146,13 @@ export function AgentReadOnly({
       </div>
       {check && checkRoot
         ? createPortal(
-            <div className="knowledge-check">
+            <div className="knowledge-check" onClick={() => setCheck(null)}>
               <div
                 className="knowledge-check-card"
                 role="dialog"
+                aria-modal="true"
                 aria-label={check.title}
+                onClick={(event) => event.stopPropagation()}
               >
                 <button
                   ref={closeRef}
