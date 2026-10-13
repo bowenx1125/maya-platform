@@ -501,7 +501,11 @@ describe("Studyform Teams", () => {
       "/teacher/chat?mode=team-edit&team_id=team-1",
       { scroll: false },
     );
+    // Like Agent Done: unchanged edits keep Done off so a no-op save cannot
+    // mint the next Team version.
+    expect(sidebarButton("Done").disabled).toBe(true);
     fireEvent.change(name, { target: { value: "Reasoning circle v2" } });
+    expect(sidebarButton("Done").disabled).toBe(false);
     fireEvent.click(sidebarButton("Done"));
 
     await screen.findByText("Team saved. You can now start a Team Chat.");
@@ -545,7 +549,9 @@ describe("Studyform Teams", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Reasoning circle" }),
     );
-    await screen.findByLabelText("Name");
+    const name = await screen.findByLabelText("Name");
+    expect(sidebarButton("Done").disabled).toBe(true);
+    fireEvent.change(name, { target: { value: "Reasoning circle updated" } });
     fireEvent.click(sidebarButton("Done"));
 
     await screen.findByText("Team saved. You can now start a Team Chat.");
