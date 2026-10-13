@@ -288,6 +288,37 @@
 }
 
 /* Removed accounts fold away under the members, one click from Restore. */
+/* Accounts lists members group by group. Each group is named the way the
+   folded Removed heading is, quietly, with its head count beside it. */
+.surface :global(.roster-sections) {
+  display: grid;
+  gap: 16px;
+}
+
+.surface :global(.roster-section) {
+  display: grid;
+  gap: 8px;
+}
+
+.surface :global(.roster-section-title) {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--muted, #62626a);
+  font-family: var(--display-serif);
+  font-size: 0.95rem;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.surface :global(.roster-section-title) > small {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-style: normal;
+}
+
 .surface :global(.roster-removed) {
   margin-top: 14px;
 }

@@ -11,11 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, unprocessable
-from app.core.models import User
+from app.core.identity import group_name_key
+from app.core.models import CourseMember, Group, User
 from app.modules.auth.credentials import verify_password
 from app.modules.auth.models import DemoAccountBinding, UserCredential
 from app.modules.auth.registration import DISPLAY_NAME_MAX, validate_password
 from app.modules.auth.service import revoke_user_sessions
+from app.modules.org.roster import move_to_group
 
 AVATAR_CHOICES = (
     "scholar-arch:violet",
@@ -58,6 +60,45 @@ def update_display_name(db: Session, user: User, raw: str) -> None:
             f"A name needs 1 to {DISPLAY_NAME_MAX} characters.",
         )
     user.display_name = value
+
+
+def change_group(db: Session, user: User, raw: str) -> None:
+    """Move a student into another of their course's existing groups.
+
+    Only the membership moves. Agents, Teams, RAG and voices belong to the
+    group they were made in and stay there, as they do when a teacher moves
+    the student from Accounts.
+    """
+
+    managed = db.scalar(
+        select(DemoAccountBinding.user_id).where(
+            DemoAccountBinding.user_id == user.id, DemoAccountBinding.active.is_(True)
+        )
+    )
+    if managed is not None:
+        raise conflict(
+            "group_managed",
+            "This account's group comes from the course's account list; ask your teacher.",
+        )
+    course_ids = db.scalars(
+        select(CourseMember.course_id).where(
+            CourseMember.user_id == user.id, CourseMember.role == "student"
+        )
+    ).all()
+    if not course_ids:
+        raise conflict("group_change_forbidden", "Only students choose their own group.")
+    try:
+        key = group_name_key(raw)
+    except ValueError:
+        raise unprocessable("group_not_found", "Choose one of the course's groups.") from None
+    groups = db.scalars(
+        select(Group).where(Group.course_id.in_(course_ids), Group.name_key == key)
+    ).all()
+    # Students pick from the groups that exist; a new name never creates one.
+    if len(groups) != 1:
+        raise unprocessable("group_not_found", "Choose one of the course's groups.")
+    group = groups[0]
+    move_to_group(db, group.course_id, user, group.name)
 
 
 def _password_matches(hash_value: str, password: str) -> bool:

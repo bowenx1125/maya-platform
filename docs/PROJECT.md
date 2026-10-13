@@ -186,42 +186,24 @@ Final full gates, browser, real Team/report, GitHub and rollout remained incompl
 
 ## Current delivery closure — October7
 
-Closure requires the warm-paper UI, independent exact-source checks, real four-Agent
-workflow, GitHub integration and scoped Docker/manual verification. Public launch
-needs actual DNS/TLS/off-host evidence; local Demo health is insufficient.
+Closure needs warm-paper UI, exact-source checks, four-Agent workflow, GitHub and
+scoped Docker/manual verification; public launch needs DNS/TLS/off-host evidence.
+Teacher `generate_agent_knowledge` uses accepted receipts and wakes after commit;
+first published Agent generation needs no prior Set. Knowledge keeps RAG editor,
+pending-save lock and draft fence. Production profile rejects Demo/quick-login/
+auto-confirm, exact public HTTPS origin, strong Teacher credentials, dedicated
+mounts; auth abuse bounds only. C1 Mock: 60 regs, parallel send/replay, SSE; 0
+Provider calls. Backup113435Z offline 0053→0054 kept all Provider records; no new
+charge. Colleague: pose `e9b000a` one canvas; preset voice `b8f65e7`=`0056`; Chat
+text-only; TTS bar `054f420` not taken.
 
-Teacher `generate_agent_knowledge` uses accepted generation/Tool receipts and wakes
-after commit. First ordinary published Agent generation needs no prior Set. Independent
-review closed retry/revocation defects; local Tool and generation gates passed.
-Source ACL, publication, exact manifests, deduplication, billing and unknown no-resend
-remain; not deployed.
+October 9: Debates on Brainform/Chatform/Studyform. Private `read_memory` can pause
+`team_no_progress`; Tool ACL by role; publisher edits Agent.md/Brainform/Avatar/Voice.
+Card room `0058`; production `1f34fea` (schema `0057`).
 
-Knowledge retains the RAG editor, pending-save lock and draft fence.
-
-Separate production profile rejects Demo/quick-login/auto-confirm, validates exact
-public HTTPS origin, hides Demo identity routes, requires independent strong Teacher
-credentials and dedicated production data/config mounts, and bounds auth abuse only.
-Open-course enrollment/classroom password policy is unchanged. New auth rules never
-limit Chat, Tool, authored content or Provider use. Independent C1 review passed41
-backend+4locale checks and found two required fixes: active auth-limit bucket eviction
-and Caddy overriding stricter classroom no-referrer. Original author is fixing these;
-no public deployment or live configuration change has occurred.
-
-Backup113435Z (SQLite,250files,238receipts, config) restored offline 0053→0054 with
-readiness/integrity/FK passing; all457 Provider records kept; 1 incomplete Debate call
-became unknown without sending; original3unknown stay unretried; no new charge.
-
-C1 isolated Mock: 60 registrations, parallel sends/replay, SSE reconnect and restart;
-integrity/FK passed, 0 Provider calls; no class-size claim.
-
-Teacher statistics/report download in a fresh browser run is still open.
-Colleague line `15f5450`: pose
-`e9b000a` keeps one canvas; preset voice `b8f65e7` is `0056` and Chat stays
-text-only; TTS bar `054f420` and the revert were not taken.
-
-October 9: Debates card on Brainform/Chatform/Studyform. Local RAG/Keynotes Demo: Private `read_memory` can pause `team_no_progress`; unseeable→看不到。, missing fn→做不到。 Published recipe opens with Leader; no @ = Leader only. Knowledge update drops unfinished attempts. Team dispatch before `BEGIN IMMEDIATE`. Tool ACL by role; Agent/Team visibility by publisher scope. Publisher edits Agent.md/Brainform/Avatar/Voice; others read-only. Teams list on Studyform; visibility fixed at create. Memory opens a chat; notes are account+Agent. Card room `0058`; student rename/tour. Production then `1f34fea` (schema `0057`, backup20261011T045859Z ok).
-
-October 11: PR #50 (`f6b1338`) merged onto `762a810` as `556fdc5`. Reports count old Private formal attempts. Formal answers survive a textless Leader reply or flat Tool arguments. Version pills: green Public, gray Private. RAG rows show only a checkbox and name. Done keeps the Chat it created. Double-click or F2 renames a history Chat; a pin keeps it on top (`0059`). RAG is uploaded only in its Agent and takes that Agent's Private or Public, fixed at creation; Accounts visits put teachers in the group, reading Private. `0060` soft-retires all prior Agents, Chats, RAG, Teams, Knowledge, Debates, attempts and notes (downgrade restores); only the Demo keeps Laozi, Plato and Socrates. The model judges when to keep an Agent note; it must quote the user.
+October 11: PR #50 → `556fdc5`. Version pills green Public / gray Private. Chat pin
+`0059`. RAG fixed Private/Public at creation; Accounts visits read Private. `0060`
+soft-retires prior work (Demo keeps Laozi/Plato/Socrates). Agent notes must quote user.
 
 October 12: From 4d0c981; mock Demo, 0 Provider calls. Debates 404: setup required a group that teacher Studyform Agents lack; 0061 makes debate_participants.group_id nullable (FK-checked rebuild); setup and generation use the Agent's course. Lost assessment answers: the Leader replied in prose (assessment_action_required); the first assessment model call now forces its action tool (not revoked-source). User decision: every Public Team, Maya Teams included, takes only Public Agents (team_member_private); Private Teams mix both. Deleted Agents take their unshared RAG; Brainform lists no Private RAG; removed accounts leave member lists. zh round caps 50/50/50/100. DOCX/PDF ingest tests fail locally on main too.
 0062 adds teacher personal voices (personal scope, owner-only); students choose groupmates' ready voices but manage only their own; a missing voice never blocks publishing or Debates. 我不知道/忘了 is a scored answer, not a skip.
@@ -231,4 +213,4 @@ October 13: Brainform: New adds .md Knowledge; click edits, double-click renames
 
 PR #52 (entaiaki): Debate text playback and Live recovery restored, Studyform Avatar fixed; `0064` frees the running slot from archived Debates. Its own production acceptance failed (Start 0/9, End failed). Live Interact explains the server gate when unavailable (UI 26/26; mock mobile click cycle PASS; production visual click unverified).
 
-UI polish: Team cards match Agents; Voices/Knowledge/RAG Import use upload-symbol bars (Voices full width). Agents create Done stays clickable with top name/AGENT.md or server errors like Teams. RAG/Knowledge Done only when dirty (RAG: filename/content/staged file; Knowledge: filename/content/overwrite import); save returns to the three-column list, no success tip. List: Download (+ Delete), Reindex on failed RAG; Memory is the whole row; no Agents-using block. Studyform Agents/Teams name links restored to the prior text-link look (whole-card hit reverted); version pills are green Public / grey Private. Chats pick tiles unchanged. Agent/Team first card title is Name (not Agent/Team) with the input under the rule; embedded Agent Voices uses SectionCard titles like Avatar/AGENT.md and Team. Agent editor drops withdrawn (hidden) RAG from the selectable set so Done can bind active files again; Team create returns `team_member_source_unavailable` / `agent_archived` instead of a generic not-found when a member’s RAG left the library or the Agent was archived; Chat/Team pickers mark such Agents unavailable. Agent Brainform knowledge-check dialog close (X) is fixed (viewport-fixed overlay, absolute close, backdrop dismiss). Teacher course Brainform still holds no student material; Accounts enter joins the group so the teacher reads that group’s public RAG/Knowledge like a peer (publisher-only edit unchanged). Team edit Done stays off until the form changes, like Agent Done, so an unchanged save cannot mint the next version; create Done stays clickable for validation. Card room on phones: the home hides the scholars under 880px, so on a touch screen turning the phone sideways, upright and sideways again within 6 s on the home opens the room. A Training hand fits 844x390. A teacher who entered a group from Accounts sees, below its Agents/Teams/Voices, Members (each one's Agents and Teams), Test results (score, every answer with points and feedback, the teacher's course report) and Recent activity: `GET /groups/{id}/overview`, 404 unless entered. Production deploy 2026-10-13T155549Z: built `7a99dfa`, backup `maya-20261013T155549Z.sqlite3` (integrity ok), schema `0064_active_debate_slot`, `https://app.mayaform.net/` 200; pruned Docker build cache (~5GB) and kept 2 backups.
+UI polish: Team cards match Agents; Voices/Knowledge/RAG Import use upload-symbol bars (Voices full width). Agents create Done stays clickable with top name/AGENT.md or server errors like Teams. RAG/Knowledge Done only when dirty (RAG: filename/content/staged file; Knowledge: filename/content/overwrite import); save returns to the three-column list, no success tip. List: Download (+ Delete), Reindex on failed RAG; Memory is the whole row; no Agents-using block. Studyform Agents/Teams name links restored to the prior text-link look (whole-card hit reverted); version pills are green Public / grey Private. Chats pick tiles unchanged. Agent/Team first card title is Name (not Agent/Team) with the input under the rule; embedded Agent Voices uses SectionCard titles like Avatar/AGENT.md and Team. Agent editor drops withdrawn (hidden) RAG from the selectable set so Done can bind active files again; Team create returns `team_member_source_unavailable` / `agent_archived` instead of a generic not-found when a member’s RAG left the library or the Agent was archived; Chat/Team pickers mark such Agents unavailable. Agent Brainform knowledge-check dialog close (X) is fixed (viewport-fixed overlay, absolute close, backdrop dismiss). Teacher course Brainform still holds no student material; Accounts enter joins the group so the teacher reads that group’s public RAG/Knowledge like a peer (publisher-only edit unchanged). Team edit Done stays off until the form changes, like Agent Done, so an unchanged save cannot mint the next version; create Done stays clickable for validation. Card room on phones: under 880px, touch sideways→upright→sideways within 6 s on home opens the room (Training hand fits 844x390). A teacher who entered a group from Accounts sees Members, Test results and Recent activity: `GET /groups/{id}/overview`, 404 unless entered. Accounts lists members by group (natural name order, ungrouped last). A student moves to another existing group from Profile (`PATCH /auth/me` `group_name`, never creates one); their work stays in the old group, which they then cannot open. Catalog accounts keep their listed group. Production deploy 2026-10-13T155549Z: built `7a99dfa`, backup `maya-20261013T155549Z.sqlite3` (integrity ok), schema `0064_active_debate_slot`, `https://app.mayaform.net/` 200; pruned Docker build cache (~5GB) and kept 2 backups.

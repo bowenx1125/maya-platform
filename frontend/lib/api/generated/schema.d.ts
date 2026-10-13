@@ -4878,13 +4878,15 @@ export interface components {
         };
         /**
          * UpdateCurrentUserRequest
-         * @description Change what is given; an omitted field stays as it is. A null avatar clears it.
+         * @description Change what is given; an omitted field stays as it is. A null avatar clears it. A group_name moves a student into another existing group of their course, leaving their work where it was made.
          */
         UpdateCurrentUserRequest: {
             /** Avatar */
             avatar?: string | null;
             /** Display Name */
             display_name?: string | null;
+            /** Group Name */
+            group_name?: string | null;
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -7439,7 +7441,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description This account's name comes from the course's account list. */
+            /** @description This account's name or group comes from the course's account list, or it is not a student's. */
             409: {
                 headers: {
                     [name: string]: unknown;

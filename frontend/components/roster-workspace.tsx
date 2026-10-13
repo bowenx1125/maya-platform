@@ -174,7 +174,34 @@ export function RosterWorkspace() {
   const current = entries.filter((entry) => entry.status !== "inactive");
   const removed = entries.filter((entry) => entry.status === "inactive");
 
-  function memberRow(entry: RosterEntry) {
+  // Members are listed group by group, groups by name and people by name
+  // inside each; anyone without a group comes last.
+  const byName = (left: string, right: string) =>
+    left.localeCompare(right, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  const sections = new Map<string, RosterEntry[]>();
+  for (const entry of current) {
+    const [first] = (entry.groups ?? [])
+      .map((group) => group.name)
+      .sort(byName);
+    const key = first ?? "";
+    sections.set(key, [...(sections.get(key) ?? []), entry]);
+  }
+  const memberSections = [...sections.entries()]
+    .sort(([left], [right]) =>
+      left === "" ? 1 : right === "" ? -1 : byName(left, right),
+    )
+    .map(([key, members]) => ({
+      key,
+      name: key || t("rosterNoGroup"),
+      members: [...members].sort((left, right) =>
+        byName(left.display_name, right.display_name),
+      ),
+    }));
+
+  function memberRow(entry: RosterEntry, inSection = false) {
     const pending = busy === entry.user_id;
     if (editing === entry.user_id) {
       return (
@@ -255,7 +282,11 @@ export function RosterWorkspace() {
                 <small className="roster-status">{t("statusInactive")}</small>
               )}
             </span>
-            <span className="group-label">{groupSummary(entry)}</span>
+            {/* Under a group's heading the group goes without saying; a
+                second group, or a removed account, still names them. */}
+            {inSection && (entry.groups?.length ?? 0) <= 1 ? null : (
+              <span className="group-label">{groupSummary(entry)}</span>
+            )}
             {issued && issued.user_id === entry.user_id ? (
               <small role="status">
                 {t("resetPasswordIssued", {
@@ -334,8 +365,18 @@ export function RosterWorkspace() {
         >
           {current.length || removed.length ? (
             <>
-              <div className="compact-list">
-                {current.map(memberRow)}
+              <div className="roster-sections">
+                {memberSections.map((section) => (
+                  <section className="roster-section" key={section.key}>
+                    <h3 className="roster-section-title">
+                      {section.name}
+                      <small>{section.members.length}</small>
+                    </h3>
+                    <div className="compact-list">
+                      {section.members.map((entry) => memberRow(entry, true))}
+                    </div>
+                  </section>
+                ))}
                 <datalist id="roster-group-names">
                   {groupNames.map((name) => (
                     <option key={name} value={name} />
@@ -347,7 +388,9 @@ export function RosterWorkspace() {
                   <summary>
                     {t("removedMembers")} · {removed.length}
                   </summary>
-                  <div className="compact-list">{removed.map(memberRow)}</div>
+                  <div className="compact-list">
+                    {removed.map((entry) => memberRow(entry))}
+                  </div>
                 </details>
               ) : null}
             </>
@@ -362,25 +405,27 @@ export function RosterWorkspace() {
         >
           {groups.length ? (
             <ModuleList>
-              {groups.map((group) => (
-                <ModuleRow
-                  id={`roster-group-${group.id}`}
-                  key={group.id}
-                  title={group.name}
-                  action={
-                    <button
-                      className={cards.iconButton}
-                      type="button"
-                      disabled={busy === group.id}
-                      aria-label={t("enter")}
-                      data-ui-guide="roster.openGroup"
-                      onClick={() => void enterGroup(group)}
-                    >
-                      <IconArrowRight />
-                    </button>
-                  }
-                />
-              ))}
+              {[...groups]
+                .sort((left, right) => byName(left.name, right.name))
+                .map((group) => (
+                  <ModuleRow
+                    id={`roster-group-${group.id}`}
+                    key={group.id}
+                    title={group.name}
+                    action={
+                      <button
+                        className={cards.iconButton}
+                        type="button"
+                        disabled={busy === group.id}
+                        aria-label={t("enter")}
+                        data-ui-guide="roster.openGroup"
+                        onClick={() => void enterGroup(group)}
+                      >
+                        <IconArrowRight />
+                      </button>
+                    }
+                  />
+                ))}
             </ModuleList>
           ) : undefined}
         </ModuleCard>

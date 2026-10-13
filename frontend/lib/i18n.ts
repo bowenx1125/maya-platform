@@ -697,6 +697,8 @@ const enMessages = {
   overviewRagAdded: "added the RAG {title}",
   overviewVoiceAdded: "added the voice {title}",
   overviewTestCompleted: "finished the {title} test",
+  groupMoveConfirm:
+    "Move from {from} to {to}? Your Agents, Teams, RAG and voices stay in {from}, and you will no longer see them.",
   removeAccount: "Remove",
   reactivateAccount: "Restore",
   removeConfirm:
@@ -1462,6 +1464,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   overviewRagAdded: "上传了资料「{title}」",
   overviewVoiceAdded: "添加了声音「{title}」",
   overviewTestCompleted: "完成了「{title}」的测试",
+  groupMoveConfirm:
+    "确定从「{from}」换到「{to}」？你的 Agent、Team、RAG 和声音会留在「{from}」，换组后你将看不到它们。",
   removeAccount: "移除",
   reactivateAccount: "恢复",
   removeConfirm:
