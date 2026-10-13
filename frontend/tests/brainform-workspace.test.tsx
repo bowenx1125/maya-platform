@@ -515,11 +515,12 @@ describe("Brainform workspace actions", () => {
       expect(state.api.publish).toHaveBeenCalledWith("agent-version-2", 0),
     );
     expect(state.api.nextVersion).toHaveBeenCalledWith("agent-1");
-    expect(
-      await screen.findByText(
-        "Markdown source saved. Updated Socrates and their Teams.",
-      ),
-    ).toBeTruthy();
+    // Save returns to the three-column list; other Done surfaces show no success tip.
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull(),
+    );
+    expect(screen.queryByText(/Markdown source saved/i)).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit lesson.md" })).toBeTruthy();
   });
 
   it("renames a RAG file in place on a double-click, keeping its extension", async () => {
@@ -1127,7 +1128,7 @@ describe("Brainform workspace actions", () => {
     );
   });
 
-  it("keeps the canonical editor read-only while its publish is pending, then shows the published view", async () => {
+  it("keeps the canonical editor read-only while its publish is pending, then returns to the list", async () => {
     state.role = "teacher";
     state.userId = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
     const row = {
@@ -1176,11 +1177,15 @@ describe("Brainform workspace actions", () => {
     await act(async () =>
       finishSave({ ...markdown, version_seq: 5, markdown: "# Sent body" }),
     );
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull(),
+    );
     expect(
-      await screen.findByText("Knowledge published as a new version."),
+      screen.queryByText("Knowledge published as a new version."),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Edit Knowledge Socrates Knowledge" }),
     ).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Sent body" })).toBeTruthy();
   });
 
   it("unlocks the canonical editor after an uncertain save and preserves its draft for retry", async () => {
@@ -1465,8 +1470,10 @@ describe("Brainform workspace actions", () => {
     await waitFor(() =>
       expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-2"),
     );
-    await screen.findByRole("button", { name: "Back" });
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    // Done already closes the editor; the list shows the newer Job's status.
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull(),
+    );
     expect(
       await screen.findByText("Generation did not complete."),
     ).toBeTruthy();

@@ -233,7 +233,9 @@ function libraryDocuments(
 function librarySetIds(
   rows: { canonical_set_id: string }[] | null,
 ): Set<string> | null {
-  return rows === null ? null : new Set(rows.map((row) => row.canonical_set_id));
+  return rows === null
+    ? null
+    : new Set(rows.map((row) => row.canonical_set_id));
 }
 
 function libraryKnowledgeSets(
@@ -247,12 +249,17 @@ function libraryKnowledgeSets(
 }
 
 function brainformSetIds(
-  api: { brainformKnowledge?: (courseId: string) => Promise<{ canonical_set_id: string }[]> },
+  api: {
+    brainformKnowledge?: (
+      courseId: string,
+    ) => Promise<{ canonical_set_id: string }[]>;
+  },
   courseId: string,
 ): Promise<Set<string> | null> {
   // Without Brainform's list the editor keeps every readable set rather than
   // hiding real ones.
-  if (typeof api.brainformKnowledge !== "function") return Promise.resolve(null);
+  if (typeof api.brainformKnowledge !== "function")
+    return Promise.resolve(null);
   return api
     .brainformKnowledge(courseId)
     .then(librarySetIds)
@@ -349,6 +356,8 @@ export function AgentWorkbench({
   const publishing = publishingRequest?.scope === workbenchScope;
   const editingLocked = saving || publishing;
   const [error, setError] = useState<unknown>(null);
+  // Shown only after Done on create; empty name / AGENT.md stay quiet until then.
+  const [submitHint, setSubmitHint] = useState("");
   const [knowledgeUploadError, setKnowledgeUploadError] =
     useState<unknown>(null);
   const [knowledgePreviewRefreshFailed, setKnowledgePreviewRefreshFailed] =
@@ -576,7 +585,9 @@ export function AgentWorkbench({
         setAgent(nextAgent);
         if (!keepLocal) offeredDocumentIds.current = new Set();
         const offered = libraryDocuments(nextDocuments, [
-          ...(nextVersion.enabled_documents ?? []).map((document) => document.id),
+          ...(nextVersion.enabled_documents ?? []).map(
+            (document) => document.id,
+          ),
           ...offeredDocumentIds.current,
         ]);
         offered.forEach((document) =>
@@ -1107,6 +1118,19 @@ export function AgentWorkbench({
   async function publish(retry = false) {
     const requestScope = workbenchScope;
     if (publishLock.current?.scope === requestScope) return;
+    if (unsavedCreate) {
+      const validation = !draftName.trim()
+        ? t("agentNameRequired")
+        : !agentMd.trim()
+          ? t("agentMdRequired")
+          : "";
+      if (validation) {
+        setSubmitHint(validation);
+        setError(null);
+        return;
+      }
+      setSubmitHint("");
+    }
     const request = { scope: requestScope };
     publishLock.current = request;
     setPublishingRequest(request);
@@ -1136,7 +1160,6 @@ export function AgentWorkbench({
     }
     setGenerationSourcePrompt(false);
     if (unsavedCreate) {
-      if (!draftName.trim() || !agentMd.trim()) return;
       const savingRequest = beginSaving();
       setError(null);
       setNotice(null);
@@ -1371,7 +1394,10 @@ export function AgentWorkbench({
         <Notice tone="info">{t("aiKnowledgeFlowIntro")}</Notice>
       ) : null}
       {conflict ? <DraftConflictNotice /> : null}
-      {error && !conflict && error !== knowledgeUploadError ? (
+      {error &&
+      !conflict &&
+      error !== knowledgeUploadError &&
+      !unsavedCreate ? (
         <>
           <ErrorNotice
             error={error}
@@ -1409,6 +1435,27 @@ export function AgentWorkbench({
       ) : null}
       <div className="agent-entry">
         <div className="workbench-main">
+          {unsavedCreate && submitHint ? (
+            <Notice inline tone="error" onClose={() => setSubmitHint("")}>
+              {submitHint}
+            </Notice>
+          ) : null}
+          {unsavedCreate &&
+          error &&
+          !conflict &&
+          error !== knowledgeUploadError ? (
+            <ErrorNotice
+              inline
+              error={error}
+              onRetry={
+                retryAction === "publish"
+                  ? () => {
+                      void publish(true);
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
           {unsavedCreate ? (
             <SectionCard title={t("agentIdentity")}>
               <form
@@ -1427,10 +1474,10 @@ export function AgentWorkbench({
                     disabled={editingLocked}
                     maxLength={120}
                     onChange={(event) => {
+                      setSubmitHint("");
                       unsavedCreate.onIdentityEdit?.();
                       setDraftName(event.target.value);
                     }}
-                    required
                   />
                 </label>
                 <div className="agent-identity">
@@ -1522,6 +1569,7 @@ export function AgentWorkbench({
               value={agentMd}
               disabled={editingLocked}
               onChange={(event) => {
+                setSubmitHint("");
                 abandonUploadIntent();
                 abandonPublishIntent();
                 setAgentMd(event.target.value);
@@ -1814,9 +1862,6 @@ export function AgentWorkbench({
           name="done"
           disabled={
             editingLocked ||
-            (Boolean(unsavedCreate) &&
-              (!draftName.trim() || !agentMd.trim()) &&
-              retryAction !== "publish") ||
             (publishOnDone &&
               !unsavedCreate &&
               !generationFlow &&

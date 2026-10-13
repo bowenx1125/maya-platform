@@ -38,7 +38,12 @@ import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { ReportMarkdown } from "../report/report-markdown";
-import { IconClose, IconDownload, IconRefresh } from "../quiet-icons";
+import {
+  IconClose,
+  IconDownload,
+  IconRefresh,
+  IconUpload,
+} from "../quiet-icons";
 
 import styles from "./brainform-workspace.module.css";
 
@@ -1276,10 +1281,7 @@ function BrainformWorkspaceBody({
       setNotice(t("brainformMarkdownRequired"));
       return;
     }
-    if (!filenameChanged && !contentChanged && !stagedFile) {
-      setNotice(t("brainformRagSaved"));
-      return;
-    }
+    if (!filenameChanged && !contentChanged && !stagedFile) return;
     const renameOnly = filenameChanged && !contentChanged && !stagedFile;
     const intent = renameOnly
       ? `brainform-rename:${draft.documentId}:${draft.originalFilename}:${filename}`
@@ -1330,37 +1332,13 @@ function BrainformWorkspaceBody({
       delete nextFiles[draftKey];
       ragActionFiles.current = nextFiles;
       setRagFiles(nextFiles);
-      if (renameOnly) {
-        setNotice(t("brainformRagRenamed"));
-        void loadWorkspace();
-        return;
+      if (!renameOnly) {
+        // The Agents reading this file publish a new version with its new
+        // text; the server then moves their Teams to it.
+        await republishAgentsUsingDocument(api, chatAgents, next.id);
+        if (!scopeIsCurrent()) return;
       }
-      setNotice(t("brainformRagUpdatingAgents"));
-      // The Agents reading this file publish a new version with its new
-      // text; the server then moves their Teams to it.
-      const republished = await republishAgentsUsingDocument(
-        api,
-        chatAgents,
-        next.id,
-      );
-      if (!scopeIsCurrent()) return;
-      setNotice(
-        [
-          t("brainformRagSaved"),
-          republished.updated.length
-            ? t("brainformRagAgentsUpdated", {
-                names: republished.updated.join(", "),
-              })
-            : "",
-          republished.failed.length
-            ? t("brainformRagAgentsNotUpdated", {
-                names: republished.failed.join(", "),
-              })
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" "),
-      );
+      closePane();
       void loadWorkspace(true);
     } catch (cause) {
       if (isConflict(cause)) {
@@ -1461,6 +1439,45 @@ function BrainformWorkspaceBody({
       name: current.name.trim() ? current.name : fileName,
       markdown: content,
     }));
+  }
+
+  async function importKnowledgeEdit(file: File) {
+    if (!markdown?.can_edit || markdown.audience !== "full") return;
+    if (!/\.md$/i.test(file.name)) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    let content: string;
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+    } catch {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    if (!content.trim()) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    const setId = markdown.canonical_set_id;
+    const current = knowledgeDrafts[setId] ?? {
+      markdown: markdown.markdown,
+      expectedVersionSeq: markdown.version_seq,
+    };
+    if (content !== markdownDraft) {
+      mutationStore.abandon(
+        `brainform-markdown:${setId}:${current.expectedVersionSeq}`,
+      );
+    }
+    setNotice("");
+    setMarkdownDraft(content);
+    const nextDrafts = {
+      ...knowledgeDrafts,
+      [setId]: { ...current, markdown: content },
+    };
+    rememberKnowledgeDrafts(identityScope, nextDrafts);
+    setKnowledgeDrafts(nextDrafts);
   }
 
   async function saveNewKnowledge() {
@@ -1772,11 +1789,7 @@ function BrainformWorkspaceBody({
     };
     const nameChanged = nextName !== markdown.knowledge_display_name;
     const contentChanged = markdownDraft !== markdown.markdown;
-    if (!nameChanged && !contentChanged) {
-      setPane({ kind: "knowledge-view", documentId: setId });
-      syncModeUrl("knowledge-view", setId);
-      return;
-    }
+    if (!nameChanged && !contentChanged) return;
     const nameIntent = `brainform-set-name:${setId}:${nextName}`;
     const contentIntent = `brainform-markdown:${setId}:${draft.expectedVersionSeq}`;
     const nameHandle = nameChanged ? mutationStore.handleFor(nameIntent) : null;
@@ -1843,9 +1856,8 @@ function BrainformWorkspaceBody({
             : row,
         ),
       );
-      setPane({ kind: "knowledge-view", documentId: setId });
-      syncModeUrl("knowledge-view", setId);
-      setNotice(t("brainformKnowledgeSaved"));
+      closePane();
+      void loadWorkspace(true);
     } catch (cause) {
       if (isConflict(cause)) {
         if (nameHandle) mutationStore.abandon(nameIntent, nameHandle);
@@ -1958,6 +1970,20 @@ function BrainformWorkspaceBody({
     pane?.kind === "rag-edit" ? ragDrafts[pane.draftKey] : null;
   const selectedRagFile =
     pane?.kind === "rag-edit" ? (ragFiles[pane.draftKey]?.file ?? null) : null;
+  const ragDirty = Boolean(
+    selectedDraft?.canEdit &&
+    (selectedDraft.filename.trim() !==
+      (selectedDraft.originalFilename ?? selectedDraft.filename) ||
+      selectedDraft.markdown !== selectedDraft.originalMarkdown ||
+      Boolean(selectedRagFile)),
+  );
+  const knowledgeDirty = Boolean(
+    pane?.kind === "knowledge-edit" &&
+    markdown?.can_edit &&
+    markdown.audience === "full" &&
+    (knowledgeNameDraft.trim() !== markdown.knowledge_display_name ||
+      markdownDraft !== markdown.markdown),
+  );
   const accessibleAgents = useMemo(() => {
     const agentIds = new Set(
       knowledgeRows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
@@ -2107,7 +2133,7 @@ function BrainformWorkspaceBody({
             if (!draft) return;
             saveRagAction.current(current.draftKey);
           }}
-          disabled={Boolean(busyKey) || !selectedDraft.canEdit}
+          disabled={Boolean(busyKey) || !selectedDraft.canEdit || !ragDirty}
         />
       ) : null}
       {pane?.kind === "knowledge-edit" && markdown ? (
@@ -2117,7 +2143,8 @@ function BrainformWorkspaceBody({
           disabled={
             Boolean(busyKey) ||
             !markdown.can_edit ||
-            markdown.audience !== "full"
+            markdown.audience !== "full" ||
+            !knowledgeDirty
           }
         />
       ) : null}
@@ -2579,11 +2606,12 @@ function BrainformWorkspaceBody({
           {pane.kind === "knowledge-new" ? (
             <div className={styles.editorForm}>
               <label
-                className="secondary-action file-button"
+                className={styles.importButton}
                 aria-busy={busyKey === "knowledge-new"}
               >
-                {t("knowledgeImportAction")}
+                <IconUpload />
                 <input
+                  className="sr-only"
                   type="file"
                   aria-label={t("brainformUploadKnowledgeFile")}
                   accept=".md,text/markdown"
@@ -2620,13 +2648,12 @@ function BrainformWorkspaceBody({
             <div className={styles.editorForm}>
               {selectedDraft.canEdit ? (
                 <label
-                  className="secondary-action file-button"
+                  className={styles.importButton}
                   aria-busy={busyKey === `import:${pane.draftKey}`}
                 >
-                  {busyKey === `import:${pane.draftKey}`
-                    ? t("working")
-                    : t("knowledgeImportAction")}
+                  <IconUpload />
                   <input
+                    className="sr-only"
                     type="file"
                     aria-label={t("knowledgeImportFile")}
                     accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -2688,6 +2715,29 @@ function BrainformWorkspaceBody({
               ) : null}
               {pane.kind === "knowledge-edit" ? (
                 <div className={styles.editorForm}>
+                  {markdown.can_edit && markdown.audience === "full" ? (
+                    <label
+                      className={styles.importButton}
+                      aria-busy={
+                        busyKey ===
+                        `knowledge-save:${markdown.canonical_set_id}`
+                      }
+                    >
+                      <IconUpload />
+                      <input
+                        className="sr-only"
+                        type="file"
+                        aria-label={t("brainformUploadKnowledgeFile")}
+                        accept=".md,text/markdown"
+                        disabled={Boolean(busyKey)}
+                        onChange={(event) => {
+                          const file = event.currentTarget.files?.[0];
+                          event.currentTarget.value = "";
+                          if (file) void importKnowledgeEdit(file);
+                        }}
+                      />
+                    </label>
+                  ) : null}
                   <KnowledgeFilenameField
                     className={styles.field}
                     value={knowledgeNameDraft}

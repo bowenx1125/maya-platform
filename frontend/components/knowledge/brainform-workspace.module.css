@@ -460,6 +460,34 @@
   min-width: 0;
 }
 
+/* Same upload symbol bar as Voices: ink icon on a warm paper strip. */
+.importButton {
+  display: inline-grid;
+  width: 100%;
+  min-height: 44px;
+  place-items: center;
+  border: 1px solid #d8cfbd;
+  border-radius: 10px;
+  background: #fffdf8;
+  color: var(--ink, #292820);
+  cursor: pointer;
+}
+
+.importButton:hover {
+  border-color: #d8cfbd;
+  background: #f5eddc;
+}
+
+.importButton:focus-within {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
+.importButton:has(input:disabled) {
+  color: #8b887f;
+  cursor: not-allowed;
+}
+
 .field {
   gap: 6px;
   color: var(--ink, #292820);
