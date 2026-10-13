@@ -28,6 +28,7 @@ const implemented = new Set([
   "getCourse",
   "listCourseGroups",
   "getGroup",
+  "getGroupOverview",
   "getCourseRoster",
   "updateCourseMember",
   "joinGroupAsTeacher",
@@ -234,6 +235,7 @@ for (const [path, pathItem] of Object.entries(source.paths ?? {})) {
         getCourse: ["422"],
         listCourseGroups: ["422"],
         getGroup: ["422"],
+        getGroupOverview: ["422"],
       }[operation.operationId] ?? [];
     for (const status of allowedExtras)
       selected[method].responses[status] = {

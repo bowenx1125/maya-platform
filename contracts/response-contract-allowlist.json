@@ -49,6 +49,11 @@
       "422": {
         "reason": "FastAPI UUID path-validation response; not a replacement for frozen 404."
       }
+    },
+    "getGroupOverview": {
+      "422": {
+        "reason": "FastAPI UUID path-validation response; not a replacement for frozen 404."
+      }
     }
   }
 }

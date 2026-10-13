@@ -3317,6 +3317,21 @@ def test_diagnosis_asks_every_question_then_scores_and_summarizes(
         table = render_answer_sheet(sheet)
         assert "| 1 | Q1 | answer to Q1 |" in table
 
+        # Owner request (2026-10-13): a teacher who enters a group sees its
+        # members' results there, each with the teacher's report for the test.
+        from app.modules.learning.reports import read_group_results
+
+        [result] = read_group_results(
+            db, teacher, course_id=COURSE_ID, user_ids={str(actor.user.id)}
+        )
+        assert result["attempt_id"] == str(started.attempt.id)
+        assert (result["status"], result["points_awarded"]) == ("completed", 4)
+        assert [question["number"] for question in result["questions"]] == [1, 2, 3, 4]
+        assert result["report_download_path"] == (
+            f"/api/v1/learning/reports/{report.id}/download?revision_id={report.revision_id}"
+        )
+        assert read_group_results(db, teacher, course_id=COURSE_ID, user_ids=set()) == []
+
         # Bug (2026-10-13): when the Team moved to a new version (its Agents
         # were republished), the old version's results vanished from the
         # teacher's reads. A retained version stays readable.

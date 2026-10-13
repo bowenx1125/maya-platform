@@ -11,6 +11,9 @@ export type Course = components["schemas"]["Course"];
 export type CourseDetail = components["schemas"]["CourseDetail"];
 export type Group = components["schemas"]["Group"];
 export type GroupDetail = components["schemas"]["GroupDetail"];
+export type GroupOverview = components["schemas"]["GroupOverview"];
+export type OverviewResult = components["schemas"]["OverviewResult"];
+export type OverviewEvent = components["schemas"]["OverviewEvent"];
 export type CourseRoster = components["schemas"]["CourseRoster"];
 export type RosterEntry = components["schemas"]["RosterEntry"];
 export type UpdateCourseMemberRequest =
@@ -1581,6 +1584,15 @@ export class PlatformApi {
   async group(groupId: string): Promise<GroupDetail> {
     return unwrap(
       await this.client.GET("/groups/{group_id}", {
+        params: { path: { group_id: groupId } },
+      }),
+    );
+  }
+
+  /** Members, test results and recent work, for a teacher who entered. */
+  async groupOverview(groupId: string): Promise<GroupOverview> {
+    return unwrap(
+      await this.client.GET("/groups/{group_id}/overview", {
         params: { path: { group_id: groupId } },
       }),
     );
