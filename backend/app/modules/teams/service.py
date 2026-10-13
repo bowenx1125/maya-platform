@@ -174,6 +174,21 @@ def _validate_members(
             )
         ).first()
         if row is None:
+            retired = db.execute(
+                select(AgentVersion, Agent)
+                .join(Agent, Agent.id == AgentVersion.agent_id)
+                .where(
+                    AgentVersion.id == str(member.agent_version_id),
+                    Agent.course_id == course_id,
+                )
+            ).first()
+            if retired is not None and (
+                retired[1].deleted_at is not None or retired[1].status != "active"
+            ):
+                raise unprocessable(
+                    "agent_archived",
+                    "Archived Agents are not available for new classroom work.",
+                )
             raise not_found("An Agent version is not available in this course.")
         version, agent = row
         if version.state not in {"published", "superseded"}:
@@ -206,7 +221,10 @@ def _validate_members(
             agent_version_id=version.id,
             course_id=course_id,
         ):
-            raise not_found("An Agent source is not currently available to the Team owner.")
+            raise unprocessable(
+                "team_member_source_unavailable",
+                "An Agent source is not currently available to the Team owner.",
+            )
         _metadata_revision, own_sets = knowledge_set_service.get_agent_knowledge_sets(
             db, actor, agent.id
         )
@@ -363,7 +381,10 @@ def _capture_raw_source_fences(
                 "source",
             )
         ):
-            raise not_found("An Agent source is not currently available to the Team owner.")
+            raise unprocessable(
+                "team_member_source_unavailable",
+                "An Agent source is not currently available to the Team owner.",
+            )
 
         source_versions = db.execute(
             select(KnowledgeDocumentVersion, StoredFile)
@@ -386,7 +407,10 @@ def _capture_raw_source_fences(
                 or version_file.sha256 != version_row.file_sha256
                 for version_row, version_file in source_versions
             ):
-                raise not_found("An Agent source is not currently available to the Team owner.")
+                raise unprocessable(
+                    "team_member_source_unavailable",
+                    "An Agent source is not currently available to the Team owner.",
+                )
             version_row, _version_file = source_versions[0]
             source_version_id = version_row.id
             source_content_hash = version_row.content_hash

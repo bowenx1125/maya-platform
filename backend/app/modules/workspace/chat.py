@@ -1017,6 +1017,23 @@ def _version_chat_available(
     )
 
 
+def _version_sources_usable(db: Session, version: AgentVersion) -> bool:
+    """False when a published Agent still points at a withdrawn library file.
+
+    The Chat/Team picker still lists the Agent, but marks it unavailable until
+    its owner republishes with active RAG.
+    """
+
+    if version.knowledge_snapshot_id is None:
+        return True
+    rows = db.execute(
+        select(KnowledgeDocument.workspace_state)
+        .join(SnapshotDocument, SnapshotDocument.document_id == KnowledgeDocument.id)
+        .where(SnapshotDocument.snapshot_id == version.knowledge_snapshot_id)
+    ).all()
+    return all(workspace_state == "active" for (workspace_state,) in rows)
+
+
 def session_view(
     db: Session, conversation: Conversation, context: AuthContext, settings: Settings | None = None
 ) -> ConversationSession:
@@ -1141,7 +1158,7 @@ def list_agents(
             version,
             agent,
             str(course_id),
-            available=_version_chat_available(db, context, version, agent),
+            available=_version_sources_usable(db, version),
         )
         for version, agent in rows
         if _version_chat_available(db, context, version, agent)

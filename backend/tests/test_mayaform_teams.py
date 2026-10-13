@@ -707,7 +707,8 @@ def test_selected_team_target_does_not_depend_on_an_unselected_revoked_member(
                 require_publication=True,
                 target_binding_ids={revoked_id},
             )
-        assert revoked_target.value.status_code == 404
+        assert revoked_target.value.status_code == 422
+        assert revoked_target.value.code == "team_member_source_unavailable"
 
 
 def test_maya_team_grant_rechecks_frozen_raw_source_epoch(
@@ -842,7 +843,8 @@ def test_maya_team_grant_rechecks_frozen_raw_source_epoch(
     with database.session() as db:
         with pytest.raises(PlatformError) as revoked_source:
             assert_current_chat_targets(db, BOWEN_ID, selection, {selected_id})
-        assert revoked_source.value.status_code == 404
+        assert revoked_source.value.status_code == 422
+        assert revoked_source.value.code == "team_member_source_unavailable"
 
 
 def test_maya_team_grant_rechecks_shared_set_authorization_epoch(
@@ -1020,12 +1022,12 @@ def test_0040_downgrade_refuses_to_discard_team_history(tmp_path: Path) -> None:
     [
         ("content_only", 201),
         ("legacy_content_only", 201),
-        ("authorization_epoch_changed", 404),
-        ("source_withdrawn", 404),
-        ("source_course_mismatch", 404),
+        ("authorization_epoch_changed", 422),
+        ("source_withdrawn", 422),
+        ("source_course_mismatch", 422),
         ("wrong_snapshot", 404),
-        ("frozen_file_deleted", 404),
-        ("frozen_file_rebound", 404),
+        ("frozen_file_deleted", 422),
+        ("frozen_file_rebound", 422),
     ],
 )
 def test_team_creation_preserves_owned_published_snapshot_after_source_content_revision(
@@ -1172,6 +1174,8 @@ def test_team_creation_preserves_owned_published_snapshot_after_source_content_r
         },
     )
     assert response.status_code == expected_status, response.text
+    if expected_status == 422:
+        assert response.json()["code"] == "team_member_source_unavailable"
     if expected_status == 201:
         assert len(response.json()["members"]) == 4
         from app.modules.teams.models import Team, TeamVersion
