@@ -95,6 +95,8 @@ MESSAGES = {
     "bare_letter_called_off_topic": "b",
     "bare_letter_with_a_wrong_span": "B",
     "bare_number_called_start": "3",
+    "statement_on_open_question": "知道意味着用在行动上",
+    "question_back_stays_unrecorded": "我回答了 为什么没有记录",
 }
 
 # scenario -> (scripted Leader replies, saved answers, Leader result state, code)
@@ -137,6 +139,20 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
             ("text", ""),
         ],
         1,
+        "ready",
+        None,
+    ),
+    # Bug (2026-10-13): an open question's answer called off_topic repeatedly.
+    "statement_on_open_question": (
+        [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
+        1,
+        "ready",
+        None,
+    ),
+    # A question back is not an answer.
+    "question_back_stays_unrecorded": (
+        [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
+        0,
         "ready",
         None,
     ),
@@ -341,9 +357,11 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
         assert [(result.state, result.safe_error_code) for result in results] == [
             (expected_state, expected_code)
         ]
-        if scenario in MESSAGES:
+        if scenario in MESSAGES and expected_answers:
             [saved] = read_attempt_answers(db, actor, conversation_id)
             assert saved.answer_text == MESSAGES[scenario]
+        elif scenario in MESSAGES:
+            pass
         elif expected_state == "ready":
             assert results[0].assistant_text.startswith("已记录你的回答。")
             assert turn.state == "ready"

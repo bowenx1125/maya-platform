@@ -1777,6 +1777,29 @@ _ANSWER_OVERRIDABLE = frozenset(
 )
 
 
+# Bug (2026-10-13): on an open question ("你认为'知道'意味着什么？") the Leader
+# called the student's own view off_topic again and again. On a question
+# with no options or number scale, a statement that asks for nothing is the
+# answer. A question back, or a request for help or the answer, is not.
+_STATEMENT_OVERRIDABLE = frozenset({"off_topic", "start_request", "resume_request"})
+_OPTION_LINE = re.compile(r"^\s*[-*]?\s*[A-F][.、．]\s", re.MULTILINE)
+_SCALE = re.compile(r"\b1\s*=")
+_ASKS = re.compile(
+    r"[?？]|答案|提示|为什么|怎么|什么意思|是什么|能不能|可以吗|帮我|不懂|没懂|"
+    r"跳过|暂停|结束|放弃|继续|没有记录|没记录|"
+    r"\b(?:why|how|what|hint|answer|help|skip|pause|stop|continue)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_free_text_question(prompt: str) -> bool:
+    return not _OPTION_LINE.search(prompt) and not _SCALE.search(prompt)
+
+
+def _is_statement(text: str) -> bool:
+    return 2 <= len(text) <= 2000 and not _ASKS.search(text)
+
+
 def _bare_answer_action(
     db: Session,
     actor: AuthContext,
@@ -1794,15 +1817,20 @@ def _bare_answer_action(
     if action.classification not in _ANSWER_OVERRIDABLE:
         return action
     text = user_text.strip()
-    if not _BARE_ANSWER.fullmatch(text):
-        return action
     if action.classification == "answer_only" and action.answer_span == text:
+        return action
+    bare = _BARE_ANSWER.fullmatch(text) is not None
+    if not bare and action.classification not in _STATEMENT_OVERRIDABLE:
         return action
     context = get_assessment_runtime_context(db, actor, conversation_id)
     if (
         context is None
         or context.attempt.status != "in_progress"
         or context.current_question is None
+    ):
+        return action
+    if not bare and not (
+        _is_free_text_question(context.current_question.prompt) and _is_statement(text)
     ):
         return action
     return AssessmentStudentAction(classification="answer_only", answer_span=text)
