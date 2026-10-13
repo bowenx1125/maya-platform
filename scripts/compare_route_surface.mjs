@@ -26,6 +26,7 @@ const implementedOperationIds = new Set([
   "getCourse",
   "listCourseGroups",
   "getGroup",
+  "getGroupOverview",
   "listGroupAgents",
   "createAgent",
   "listCourseWorkspaceAgents",

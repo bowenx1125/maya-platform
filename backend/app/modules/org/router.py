@@ -24,12 +24,15 @@ from app.modules.auth.dependencies import (
     require_authenticated_mutation,
 )
 from app.modules.auth.service import AuthContext
+from app.modules.knowledge.services import observes_group
+from app.modules.org.overview import group_overview
 from app.modules.org.roster import RosterRow, course_roster, update_member
 from app.modules.org.schemas import Course as CourseDTO
 from app.modules.org.schemas import (
     CourseDetail,
     CourseRoster,
     GroupDetail,
+    GroupOverview,
     GroupRef,
     Member,
     RosterEntry,
@@ -220,6 +223,32 @@ def get_group(
     group, _scope = _visible_group(db, context, str(group_id))
     dto = _group_dto(group)
     return GroupDetail(**dto.model_dump(), members=_members_for_group(db, group.id))
+
+
+@router.get(
+    "/groups/{group_id}/overview",
+    response_model=GroupOverview,
+    operation_id="getGroupOverview",
+    responses={
+        200: {"model": GroupOverview, "description": "Members, test results and recent work."},
+        404: {"model": Error, "description": "Group not found or not entered by this teacher."},
+    },
+)
+def get_group_overview(
+    group_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> GroupOverview:
+    """What a group is doing, for a course teacher who has entered it.
+
+    Entering from Accounts is what lets a teacher read the group's private
+    work, so this read asks for the same visit.
+    """
+
+    group = db.get(Group, str(group_id))
+    if group is None or not observes_group(db, context.user.id, group.id):
+        raise not_found()
+    return group_overview(db, context, group)
 
 
 def _teacher_group(db: Session, context: AuthContext, group_id: str) -> Group:

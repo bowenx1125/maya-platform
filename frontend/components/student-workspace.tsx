@@ -17,6 +17,7 @@ import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
+import { GroupOverview } from "./group-overview";
 import { HomeGuide } from "./home-guide";
 import { OnboardingTour } from "./onboarding-tour";
 import { useLocale, useT } from "./locale";
@@ -569,6 +570,9 @@ function GroupWorkspaceSession({
           initialCreate={teacherIdentity ? false : initialVoiceCreate}
         />
       </ModuleGrid>
+      {/* A visiting teacher also sees who is in the group, how their tests
+          went and what happened lately. */}
+      {teacherIdentity ? <GroupOverview groupId={groupId} /> : null}
     </>
   );
 }

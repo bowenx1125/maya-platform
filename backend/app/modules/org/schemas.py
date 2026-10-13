@@ -8,6 +8,8 @@ edit would survive the next restart.
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -79,3 +81,72 @@ class UpdateCourseMemberRequest(BaseModel):
     display_name: str | None = None
     group_name: str | None = None
     status: str | None = None
+
+
+class OverviewWork(BaseModel):
+    id: UUID
+    name: str
+    visibility: str
+
+
+class OverviewMember(BaseModel):
+    """One student of the group and the work they made in it."""
+
+    user_id: UUID
+    display_name: str
+    avatar: str | None = None
+    agents: list[OverviewWork] = Field(default_factory=list)
+    teams: list[OverviewWork] = Field(default_factory=list)
+    rag_count: int = 0
+    voice_count: int = 0
+
+
+class OverviewQuestion(BaseModel):
+    number: int
+    prompt: str
+    answers: list[str] = Field(default_factory=list)
+    skipped: bool = False
+    points_awarded: float | None = None
+    points_total: float | None = None
+    feedback: str = ""
+
+
+class OverviewResult(BaseModel):
+    """One formal test attempt by a group member, with its answer sheet."""
+
+    attempt_id: UUID
+    user_id: UUID
+    student_name: str
+    test_name: str
+    team_name: str
+    status: Literal["in_progress", "paused", "completed"]
+    started_at: datetime
+    ended_at: datetime | None = None
+    points_awarded: float | None = None
+    points_total: float | None = None
+    questions: list[OverviewQuestion] = Field(default_factory=list)
+    report_download_path: str | None = None
+
+
+class OverviewEvent(BaseModel):
+    kind: Literal[
+        "agent_created",
+        "agent_published",
+        "team_created",
+        "rag_added",
+        "voice_added",
+        "test_completed",
+    ]
+    at: datetime
+    user_id: UUID
+    display_name: str
+    title: str
+
+
+class GroupOverview(BaseModel):
+    """What a group is doing, for a course teacher who has entered it."""
+
+    group_id: UUID
+    members: list[OverviewMember] = Field(default_factory=list)
+    results: list[OverviewResult] = Field(default_factory=list)
+    activity: list[OverviewEvent] = Field(default_factory=list)

@@ -733,6 +733,81 @@ def read_student_answers(
     return sheets
 
 
+def read_group_results(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+    user_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Each formal attempt by these students, newest first, with its sheet.
+
+    The same activities, eligibility and answer sheets the teacher's tools
+    read, narrowed to one group's members. Abandoned attempts are left out,
+    and each carries the teacher's latest course report for its test.
+    """
+
+    results: list[dict[str, Any]] = []
+    for item in list_authorized_assessment_activities(db, actor, course_id=course_id):
+        activity = _validated_activity(db, actor, course_id=course_id, activity_id=str(item.id))
+        report_path = _latest_report_path(db, actor, activity_id=activity.id)
+        for attempt in _eligible_attempts(db, activity):
+            if attempt.actor_user_id not in user_ids or attempt.status == "abandoned":
+                continue
+            sheet = attempt_answer_sheet(db, attempt)
+            awarded = [
+                question["points_awarded"]
+                for question in sheet["questions"]
+                if question["points_awarded"] is not None
+            ]
+            totals = [
+                question["points_total"]
+                for question in sheet["questions"]
+                if question["points_total"] is not None
+            ]
+            results.append(
+                {
+                    "attempt_id": attempt.id,
+                    "user_id": attempt.actor_user_id,
+                    "student_name": sheet["student_name"],
+                    "test_name": item.name,
+                    "team_name": item.team_name,
+                    "status": attempt.status,
+                    "started_at": attempt.started_at,
+                    "ended_at": attempt.completed_at,
+                    "points_awarded": sum(awarded) if awarded else None,
+                    "points_total": sum(totals) if totals else None,
+                    "questions": sheet["questions"],
+                    "report_download_path": report_path,
+                }
+            )
+    results.sort(key=lambda row: row["started_at"], reverse=True)
+    return results
+
+
+def _latest_report_path(db: Session, actor: AuthContext, *, activity_id: str) -> str | None:
+    report = db.scalar(
+        select(AssessmentCourseReport)
+        .where(
+            AssessmentCourseReport.activity_id == activity_id,
+            AssessmentCourseReport.owner_user_id == actor.user.id,
+        )
+        .order_by(AssessmentCourseReport.updated_at.desc(), AssessmentCourseReport.id)
+        .limit(1)
+    )
+    if report is None:
+        return None
+    revision = db.scalar(
+        select(AssessmentCourseReportRevision).where(
+            AssessmentCourseReportRevision.report_id == report.id,
+            AssessmentCourseReportRevision.revision_seq == report.current_revision_seq,
+        )
+    )
+    if revision is None:
+        return None
+    return f"/api/v1/learning/reports/{report.id}/download?revision_id={revision.id}"
+
+
 def _raw_answer_markdown(db: Session, attempts: list[AssessmentAttempt]) -> str:
     """Each attempt's raw answers for the downloaded report.
 

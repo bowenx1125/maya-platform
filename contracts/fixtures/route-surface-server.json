@@ -2607,6 +2607,45 @@
         }
       }
     },
+    "/api/v1/groups/{group_id}/overview": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/GroupId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "getGroupOverview",
+        "description": "Members, formal test results and recent work of a group, for a course teacher who has entered it from Accounts. Private work is included, read-only, as on the visit itself.",
+        "responses": {
+          "200": {
+            "description": "Members, test results and recent work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupOverview"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "description": "FastAPI request validation response (explicitly allow-listed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/membership": {
       "parameters": [
         {
@@ -11644,6 +11683,257 @@
             }
           }
         ]
+      },
+      "OverviewWork": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "visibility"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        }
+      },
+      "OverviewMember": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverviewWork"
+            }
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverviewWork"
+            }
+          },
+          "rag_count": {
+            "type": "integer"
+          },
+          "voice_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "OverviewQuestion": {
+        "type": "object",
+        "required": [
+          "number",
+          "prompt"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "type": "boolean"
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "points_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feedback": {
+            "type": "string"
+          }
+        }
+      },
+      "OverviewResult": {
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "user_id",
+          "student_name",
+          "test_name",
+          "team_name",
+          "status",
+          "started_at"
+        ],
+        "properties": {
+          "attempt_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "student_name": {
+            "type": "string"
+          },
+          "test_name": {
+            "type": "string"
+          },
+          "team_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "paused",
+              "completed"
+            ]
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/IsoTime"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IsoTime"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "points_awarded": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "points_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverviewQuestion"
+            }
+          },
+          "report_download_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "OverviewEvent": {
+        "type": "object",
+        "required": [
+          "kind",
+          "at",
+          "user_id",
+          "display_name",
+          "title"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent_created",
+              "agent_published",
+              "team_created",
+              "rag_added",
+              "voice_added",
+              "test_completed"
+            ]
+          },
+          "at": {
+            "$ref": "#/components/schemas/IsoTime"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "GroupOverview": {
+        "type": "object",
+        "required": [
+          "group_id"
+        ],
+        "properties": {
+          "group_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverviewMember"
+            }
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverviewResult"
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverviewEvent"
+            }
+          }
+        }
       },
       "Member": {
         "properties": {

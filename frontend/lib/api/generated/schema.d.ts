@@ -558,6 +558,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/groups/{group_id}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        /** @description Members, formal test results and recent work of a group, for a course teacher who has entered it from Accounts. Private work is included, read-only, as on the visit itself. */
+        get: operations["getGroupOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups/{group_id}/membership": {
         parameters: {
             query?: never;
@@ -2832,6 +2851,58 @@ export interface components {
         };
         GroupDetail: components["schemas"]["Group"] & {
             members?: components["schemas"]["Member"][];
+        };
+        OverviewWork: {
+            id: components["schemas"]["Uuid"];
+            name: string;
+            visibility: string;
+        };
+        OverviewMember: {
+            user_id: components["schemas"]["Uuid"];
+            display_name: string;
+            avatar?: string | null;
+            agents?: components["schemas"]["OverviewWork"][];
+            teams?: components["schemas"]["OverviewWork"][];
+            rag_count?: number;
+            voice_count?: number;
+        };
+        OverviewQuestion: {
+            number: number;
+            prompt: string;
+            answers?: string[];
+            skipped?: boolean;
+            points_awarded?: number | null;
+            points_total?: number | null;
+            feedback?: string;
+        };
+        OverviewResult: {
+            attempt_id: components["schemas"]["Uuid"];
+            user_id: components["schemas"]["Uuid"];
+            student_name: string;
+            test_name: string;
+            team_name: string;
+            /** @enum {string} */
+            status: "in_progress" | "paused" | "completed";
+            started_at: components["schemas"]["IsoTime"];
+            ended_at?: components["schemas"]["IsoTime"] | null;
+            points_awarded?: number | null;
+            points_total?: number | null;
+            questions?: components["schemas"]["OverviewQuestion"][];
+            report_download_path?: string | null;
+        };
+        OverviewEvent: {
+            /** @enum {string} */
+            kind: "agent_created" | "agent_published" | "team_created" | "rag_added" | "voice_added" | "test_completed";
+            at: components["schemas"]["IsoTime"];
+            user_id: components["schemas"]["Uuid"];
+            display_name: string;
+            title: string;
+        };
+        GroupOverview: {
+            group_id: components["schemas"]["Uuid"];
+            members?: components["schemas"]["OverviewMember"][];
+            results?: components["schemas"]["OverviewResult"][];
+            activity?: components["schemas"]["OverviewEvent"][];
         };
         /** Member */
         Member: {
@@ -7572,6 +7643,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GroupDetail"];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    getGroupOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: components["parameters"]["GroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Members, test results and recent work. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupOverview"];
                 };
             };
             404: components["responses"]["Error"];
