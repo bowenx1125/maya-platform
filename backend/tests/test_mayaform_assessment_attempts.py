@@ -3297,6 +3297,36 @@ def test_diagnosis_asks_every_question_then_scores_and_summarizes(
         assert "## Raw answers" in markdown
         assert "| Q1 |" in markdown and "answer to Q1" in markdown
 
+        # Bug (2026-10-13): when the Team moved to a new version (its Agents
+        # were republished), the old version's results vanished from the
+        # teacher's reads. A retained version stays readable.
+        from app.modules.learning.reports import (
+            list_authorized_assessment_activities,
+            read_assessment_activity_aggregate,
+        )
+        from app.modules.teams.models import CourseTeamPublication, Team
+
+        publication = db.get(CourseTeamPublication, activity.publication_id)
+        team = db.get(Team, activity.team_id)
+        assert publication is not None and team is not None
+        publication.state = "retained"
+        team.current_version_seq += 1
+        team.authorization_epoch += 1
+        evaluator_version = db.get(AgentVersion, activity.evaluator_agent_version_id)
+        assert evaluator_version is not None
+        evaluator_version.state = "superseded"
+        db.flush()
+        listed = list_authorized_assessment_activities(db, teacher, course_id=COURSE_ID)
+        assert str(activity.id) in {str(item.id) for item in listed}
+        aggregate = read_assessment_activity_aggregate(
+            db, teacher, course_id=COURSE_ID, activity_id=activity.id
+        )
+        assert aggregate.completed_count == 1
+        publication.state = "revoked"
+        db.flush()
+        listed = list_authorized_assessment_activities(db, teacher, course_id=COURSE_ID)
+        assert str(activity.id) not in {str(item.id) for item in listed}
+
         # Owner request (2026-10-13): a teacher asking again for an earlier
         # report gets its real link; the server writes it under the reply.
         from types import SimpleNamespace

@@ -75,18 +75,19 @@ def _validated_activity(
             CourseTeamPublication.course_id == course_id,
             CourseTeamPublication.team_id == activity.team_id,
             CourseTeamPublication.team_version_id == activity.team_version_id,
-            CourseTeamPublication.state == "published",
+            # Bug (2026-10-13): a Team's new version (an Agent republished, a
+            # RAG edit, a Team edit) retains its old publication, and its
+            # students' results vanished from every teacher read. A retained
+            # version's results stay readable; only a revoked one is gone.
+            CourseTeamPublication.state.in_(("published", "retained")),
             CourseTeamPublication.publisher_user_id == activity.publisher_user_id,
-            CourseTeamPublication.authorization_epoch == Team.authorization_epoch,
             Team.id == activity.team_id,
             Team.course_id == course_id,
             Team.owner_user_id == activity.publisher_user_id,
             Team.ownership_scope == "personal",
             Team.visibility == "public",
             Team.deleted_at.is_(None),
-            Team.current_version_seq == TeamVersion.version_seq,
             TeamVersion.id == activity.team_version_id,
-            TeamVersion.authorization_epoch == Team.authorization_epoch,
         )
     ).first() or (None, None, None)
     if publication is None or team is None or version is None:
@@ -121,7 +122,8 @@ def _validated_activity(
             or bound_member.team_version_id != activity.team_version_id
             or bound_member.agent_version_id != version_id
             or bound_version is None
-            or bound_version.state != "published"
+            # Republishing the Agent supersedes the version this test used.
+            or bound_version.state not in {"published", "superseded"}
             or declared_assessment_role(bound_version.agent_md) != role
         ):
             raise not_found()
@@ -162,7 +164,9 @@ def list_authorized_assessment_activities(
             output.append(
                 AssessmentActivityListItem(
                     id=UUID(activity.id),
-                    name="Diagnostic assessment",
+                    # One Team has an activity per version; the label tells
+                    # them apart (Teams count from V1.0).
+                    name=f"Diagnostic assessment · V1.{max(0, team_version.version_seq - 1)}",
                     team_name=team_version.display_name,
                     created_at=activity.created_at,
                 )
