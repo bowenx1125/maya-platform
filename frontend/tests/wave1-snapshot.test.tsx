@@ -131,7 +131,14 @@ describe("student and teacher snapshot selection", () => {
     expect(within(dialog).getByRole("heading", { name: "one" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "two" })).toBeNull();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    // The close control must stay above Markdown (absolute, not float/sticky).
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close.className).toContain("knowledge-check-close");
+    fireEvent.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View One.md" }));
+    await screen.findByRole("dialog", { name: "One.md" });
+    fireEvent.click(document.querySelector(".knowledge-check") as Element);
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Download Two.md" }));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
