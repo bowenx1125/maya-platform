@@ -72,6 +72,23 @@ const EMPTY_FORM: FormState = {
   sharedSetIds: [],
 };
 
+function sameIds(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    [...left].sort().every((id, index) => id === [...right].sort()[index])
+  );
+}
+
+function sameTeamForm(left: FormState, right: FormState) {
+  return (
+    left.name === right.name &&
+    left.visibility === right.visibility &&
+    left.leaderVersionId === right.leaderVersionId &&
+    sameIds(left.memberVersionIds, right.memberVersionIds) &&
+    sameIds(left.sharedSetIds, right.sharedSetIds)
+  );
+}
+
 // A public Team's roster is visible to others, so it may hold only public
 // Agents; switching to Public drops any private member already chosen.
 function withTeamVisibility(
@@ -153,6 +170,9 @@ export function TeamEntryFlow({
   const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [knowledgeSets, setKnowledgeSets] = useState<KnowledgeSetChoice[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  // Snapshot of the form as loaded for edit; Done stays off until it differs,
+  // matching Agent publishOnDone. Create keeps Done clickable for validation.
+  const [baselineForm, setBaselineForm] = useState<FormState | null>(null);
   const [editing, setEditing] = useState<TeamDetailDto | null>(null);
   const [formRoute, setFormRoute] = useState({
     scopeKey: actionScope,
@@ -190,6 +210,7 @@ export function TeamEntryFlow({
     if (!keepLoadedEdit) {
       setEditing(null);
       setForm(EMPTY_FORM);
+      setBaselineForm(null);
     }
     setLoadError(null);
     setError(null);
@@ -380,6 +401,7 @@ export function TeamEntryFlow({
     setEditing(null);
     setFormOpen(false);
     setForm(EMPTY_FORM);
+    setBaselineForm(null);
     setLoadError(null);
     setError(null);
     setSaved(false);
@@ -413,13 +435,15 @@ export function TeamEntryFlow({
         .sort((left, right) => left.position - right.position)
         .map(currentVersion);
       const leader = detail.members.find((member) => member.is_leader);
-      setForm({
+      const nextForm: FormState = {
         name: detail.display_name,
         visibility: detail.visibility,
         memberVersionIds: memberIds,
         leaderVersionId: leader ? currentVersion(leader) : "",
         sharedSetIds: detail.shared_knowledge_set_ids,
-      });
+      };
+      setForm(nextForm);
+      setBaselineForm(nextForm);
       setFormOpen(true);
       setSaved(false);
       syncManageRoute("team-edit", teamId);
@@ -548,6 +572,7 @@ export function TeamEntryFlow({
     setError(null);
     setEditing(null);
     setForm(EMPTY_FORM);
+    setBaselineForm(null);
     if (!standalone) {
       onSaved?.(savedTeam);
       return;
@@ -560,6 +585,11 @@ export function TeamEntryFlow({
   }
 
   const readOnly = Boolean(editing && !editing.can_edit);
+  const teamDirty =
+    !editing ||
+    baselineForm === null ||
+    !sameTeamForm(form, baselineForm) ||
+    mutationUnknown;
   const memberChoices =
     readOnly && editing
       ? [...editing.members]
@@ -860,7 +890,11 @@ export function TeamEntryFlow({
               )}
             </SectionCard>
             {readOnly ? null : (
-              <PageAction name="done" form={formId} disabled={saving} />
+              <PageAction
+                name="done"
+                form={formId}
+                disabled={saving || (Boolean(editing) && !teamDirty)}
+              />
             )}
           </form>
         ) : null}
