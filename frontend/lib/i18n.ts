@@ -139,6 +139,8 @@ const enMessages = {
   debateReplayAll: "Replay whole debate",
   debatePartial: "The debate stopped early. Published speeches remain below.",
   debateTranscript: "Public Debate",
+  liveInteractionUnavailable:
+    "Interaction is available only while the teacher has opened it and responses are being collected.",
   debateSources: "Sources",
   debateNoSources: "No matched knowledge sources.",
   debateRound: "Round",
@@ -318,7 +320,7 @@ const enMessages = {
   knowledgeEditLede:
     "Editing creates a new immutable source and updates current drafts that reference the old source.",
   knowledgeFilename: "Filename",
-  knowledgeContent: "Markdown content",
+  knowledgeContent: "Content",
   knowledgeHidden: "The source is hidden from the active Brainform library.",
   brainformUnavailable: "Brainform is not available for this course.",
   brainformRagIntro: "Markdown sources used for retrieval.",
@@ -383,13 +385,17 @@ const enMessages = {
     "This Knowledge projection is not available to this account.",
   brainformRagIndexing: "Markdown indexing is still running.",
   brainformRagIndexFailed: "Markdown indexing failed. The source is retained.",
+  brainformRagIndexFailedReason:
+    "Markdown indexing failed ({reason}). The source is retained.",
+  brainformDownloadKnowledgeNamed: "Download {name}",
   brainformMarkdownRequired:
     "Choose a .md, .pdf, or .docx file, or enter non-empty Markdown.",
   brainformChooseGroup: "Choose a Group",
   brainformRagSaved: "Markdown source saved.",
   brainformRagUpdatingAgents: "Saved. Updating the Agents that use it…",
   brainformRagAgentsUpdated: "Updated {names} and their Teams.",
-  brainformRagAgentsNotUpdated: "Could not update {names}; open it and press Done.",
+  brainformRagAgentsNotUpdated:
+    "Could not update {names}; open it and press Done.",
   brainformRetrySameSave:
     "The save result is unknown. Retry to check the same save.",
   brainformRagConflictDraftKept:
@@ -910,6 +916,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateReplayAll: "重播整场",
   debatePartial: "辩论提前结束,已公开的发言仍在下方。",
   debateTranscript: "公开发言",
+  liveInteractionUnavailable: "仅当老师已开启互动且课堂仍在收集回应时可参与。",
   debateSources: "来源",
   debateNoSources: "没有命中的知识来源。",
   debateRound: "轮次",
@@ -1082,7 +1089,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   hide: "隐藏",
   knowledgeEditLede: "编辑会创建新的不可变来源，并更新引用旧来源的当前草稿。",
   knowledgeFilename: "文件名",
-  knowledgeContent: "Markdown 内容",
+  knowledgeContent: "内容",
   knowledgeHidden: "此来源已从当前 Brainform 资源列表隐藏。",
   brainformUnavailable: "此课程当前无法使用 Brainform。",
   brainformRagIntro: "用于检索的 Markdown 来源。",
@@ -1141,6 +1148,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformProjectionUnavailable: "此账号无法查看该 Knowledge 投影。",
   brainformRagIndexing: "Markdown 索引仍在处理中。",
   brainformRagIndexFailed: "Markdown 索引失败。来源文件仍已保留。",
+  brainformRagIndexFailedReason:
+    "Markdown 索引失败（{reason}）。来源文件仍已保留。",
+  brainformDownloadKnowledgeNamed: "下载 {name}",
   brainformMarkdownRequired:
     "请选择 .md、.pdf 或 .docx 文件，或输入非空 Markdown。",
   brainformChooseGroup: "选择小组",

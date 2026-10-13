@@ -5,7 +5,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
@@ -161,14 +160,11 @@ function renderWorkspace(role = state.role) {
 }
 
 async function openKnowledgeEditor(name: string) {
-  fireEvent.click(await screen.findByRole("button", { name: `Open ${name}` }));
-  await screen.findByRole("region", { name: "Agents using this Knowledge" });
-  expect(
-    screen.queryByRole("textbox", { name: "Markdown content" }),
-  ).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "New" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: `Edit Knowledge ${name}` }),
+  );
   return (await screen.findByRole("textbox", {
-    name: "Markdown content",
+    name: "Content",
   })) as HTMLTextAreaElement;
 }
 
@@ -292,9 +288,7 @@ describe("Brainform workspace actions", () => {
       expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(2),
     );
     await screen.findByRole("button", { name: "Back" });
-    expect(
-      screen.queryByRole("textbox", { name: "Markdown content" }),
-    ).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
     expect(screen.queryByLabelText("Import a file")).toBeNull();
     expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
   });
@@ -369,11 +363,11 @@ describe("Brainform workspace actions", () => {
     );
     await waitFor(() =>
       expect(
-        (screen.getByLabelText("Knowledge title") as HTMLInputElement).value,
+        (screen.getByLabelText("Filename") as HTMLInputElement).value,
       ).toBe("Form A"),
     );
     expect(
-      (screen.getByLabelText("Markdown content") as HTMLTextAreaElement).value,
+      (screen.getByLabelText("Content") as HTMLTextAreaElement).value,
     ).toBe(markdown);
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
@@ -409,7 +403,7 @@ describe("Brainform workspace actions", () => {
     state.api.createKnowledgeSet = vi.fn();
     renderWorkspace("teacher");
     fireEvent.click(await screen.findByRole("button", { name: "New" }));
-    fireEvent.change(screen.getByLabelText("Knowledge title"), {
+    fireEvent.change(screen.getByLabelText("Filename"), {
       target: { value: "Draft" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
@@ -586,9 +580,7 @@ describe("Brainform workspace actions", () => {
       }),
     );
     expect(
-      (
-        (await screen.findByLabelText("Markdown content")) as HTMLTextAreaElement
-      ).value,
+      ((await screen.findByLabelText("Content")) as HTMLTextAreaElement).value,
     ).toBe("# Canonical body");
     expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
   });
@@ -605,7 +597,7 @@ describe("Brainform workspace actions", () => {
       (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
     const content = await screen.findByRole("textbox", {
-      name: "Markdown content",
+      name: "Content",
     });
     fireEvent.change(content, { target: { value: "# My pending edit" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -780,7 +772,7 @@ describe("Brainform workspace actions", () => {
       (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
     const content = await screen.findByRole("textbox", {
-      name: "Markdown content",
+      name: "Content",
     });
     fireEvent.change(content, { target: { value: "# Keep my draft" } });
     const malformed = markdownUpload(
@@ -816,7 +808,7 @@ describe("Brainform workspace actions", () => {
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
-    await screen.findByRole("textbox", { name: "Markdown content" });
+    await screen.findByRole("textbox", { name: "Content" });
     let finish!: (bytes: ArrayBuffer) => void;
     const bytes = new Promise<ArrayBuffer>((resolve) => {
       finish = resolve;
@@ -835,10 +827,9 @@ describe("Brainform workspace actions", () => {
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
     );
-    fireEvent.change(
-      await screen.findByRole("textbox", { name: "Markdown content" }),
-      { target: { value: "# New draft" } },
-    );
+    fireEvent.change(await screen.findByRole("textbox", { name: "Content" }), {
+      target: { value: "# New draft" },
+    });
     finish(new TextEncoder().encode("# Old file").buffer);
     await bytes;
     await waitFor(() =>
@@ -897,7 +888,7 @@ describe("Brainform workspace actions", () => {
     expect(state.api.replaceKnowledgeDocument).not.toHaveBeenCalled();
   });
 
-  it("groups canonical Knowledge once and lists its readable Agent users in the independent detail view", async () => {
+  it("groups canonical Knowledge once and opens the shared asset without listing Agents", async () => {
     state.role = "teacher";
     state.api.brainformKnowledge.mockResolvedValue([
       {
@@ -928,23 +919,29 @@ describe("Brainform workspace actions", () => {
     renderWorkspace("teacher");
 
     // Owner decision (2026-10-13): rows show no "Used by" line; the name opens
-    // the editor and a double-click renames.
+    // the editor and a double-click renames. Detail no longer lists Agents.
     await screen.findByRole("button", { name: "Edit Knowledge Shared notes" });
     expect(screen.queryByText(/Used by/)).toBeNull();
     expect(
       screen.getAllByRole("button", { name: "Edit Knowledge Shared notes" }),
     ).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Open Shared notes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit Knowledge Shared notes" }),
+    );
 
-    const usage = await screen.findByRole("region", {
-      name: "Agents using this Knowledge",
-    });
-    expect(within(usage).getByText("Socrates")).toBeTruthy();
-    expect(within(usage).getByText("Mencius")).toBeTruthy();
+    expect(
+      await screen.findByRole("textbox", { name: "Filename" }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByRole("textbox", { name: "Content" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "Agents using this Knowledge" }),
+    ).toBeNull();
     expect(state.api.knowledgeMarkdown).toHaveBeenCalledWith("set-1");
   });
 
-  it("shows a running Knowledge by name with a busy enter button until it completes", async () => {
+  it("shows a running Knowledge by name with a busy spinner until it completes", async () => {
     state.role = "teacher";
     const running = {
       agent_id: "agent-1",
@@ -976,11 +973,11 @@ describe("Brainform workspace actions", () => {
     expect((busy as HTMLButtonElement).disabled).toBe(true);
     expect(busy.getAttribute("aria-busy")).toBe("true");
     expect(
-      screen.queryByRole("button", { name: "Open Question bank" }),
+      screen.queryByRole("button", { name: "Download Question bank" }),
     ).toBeNull();
 
     expect(
-      await screen.findByRole("button", { name: "Open Question bank" }),
+      await screen.findByRole("button", { name: "Download Question bank" }),
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: "Generating Question bank" }),
@@ -1023,14 +1020,16 @@ describe("Brainform workspace actions", () => {
     });
     renderWorkspace("teacher");
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open Empty Knowledge" }),
+      await screen.findByRole("button", {
+        name: "Edit Knowledge Empty Knowledge",
+      }),
     );
     expect(
       await screen.findByText(
         "No Knowledge version is published yet. This is an empty Markdown draft.",
       ),
     ).toBeTruthy();
-    const editor = screen.getByRole("textbox", { name: "Markdown content" });
+    const editor = await screen.findByRole("textbox", { name: "Content" });
     expect((editor as HTMLTextAreaElement).value).toBe("");
     fireEvent.change(editor, { target: { value: "# Teacher draft" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -1180,9 +1179,7 @@ describe("Brainform workspace actions", () => {
     expect(
       await screen.findByText("Knowledge published as a new version."),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("textbox", { name: "Markdown content" }),
-    ).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Sent body" })).toBeTruthy();
   });
 
@@ -1457,7 +1454,7 @@ describe("Brainform workspace actions", () => {
     });
     fireEvent.click(editButtons[0]);
     const editor = await screen.findByRole("textbox", {
-      name: "Markdown content",
+      name: "Content",
     });
     fireEvent.change(editor, { target: { value: "# Updated lesson\n" } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));

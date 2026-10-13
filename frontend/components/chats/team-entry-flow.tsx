@@ -170,6 +170,8 @@ export function TeamEntryFlow({
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [error, setError] = useState<unknown>(null);
+  // Shown only after Done; empty-name and member rules stay quiet until then.
+  const [submitHint, setSubmitHint] = useState("");
   // Closing a notice hides that one failure; the next one shows again.
   const [dismissedError, setDismissedError] = useState<unknown>(null);
   const requestSeq = useRef(0);
@@ -191,6 +193,7 @@ export function TeamEntryFlow({
     }
     setLoadError(null);
     setError(null);
+    setSubmitHint("");
   }
   const loading =
     listLoading ||
@@ -455,6 +458,20 @@ export function TeamEntryFlow({
   async function saveTeam(event: FormEvent) {
     event.preventDefault();
     if (!apiForTeams || saving || readOnly) return;
+    const validation = !form.name.trim()
+      ? t("teamNameRequired")
+      : form.memberVersionIds.length < 2
+        ? t("teamNeedsTwoMembers")
+        : !form.leaderVersionId
+          ? t("teamChooseLeader")
+          : "";
+    if (validation) {
+      setSubmitHint(validation);
+      setError(null);
+      setDismissedError(null);
+      return;
+    }
+    setSubmitHint("");
     const intentScope = actionScopeRef.current;
     const sequence = ++saveSequence.current;
     const isCurrentIntent = () =>
@@ -485,6 +502,7 @@ export function TeamEntryFlow({
     pendingMutation.current = pending;
     setSaving(true);
     setError(null);
+    setDismissedError(null);
     setSaved(false);
     let savedTeam: TeamDetailDto;
     try {
@@ -575,16 +593,16 @@ export function TeamEntryFlow({
         name: namedSets.get(id) ?? id,
       }))
     : visibleKnowledgeSets;
-  const formErrors = readOnly
-    ? ""
-    : !form.name.trim()
-      ? t("teamNameRequired")
-      : form.memberVersionIds.length < 2
-        ? t("teamNeedsTwoMembers")
-        : !form.leaderVersionId
-          ? t("teamChooseLeader")
-          : "";
   const title = variant === "maya" ? t("mayaTeams") : t("chatTargetTeams");
+  const topFormError =
+    submitHint ||
+    (error && error !== dismissedError
+      ? mutationUnknown
+        ? t("teamSaveUnknown")
+        : error instanceof PlatformApiError
+          ? localizeError(error, locale, "teamSaveFailed")
+          : t("teamSaveFailed")
+      : "");
 
   return (
     <section
@@ -670,6 +688,18 @@ export function TeamEntryFlow({
           >
             {/* Owner request (2026-10-13): the same cards, rows and width as
                 Agents New, centred on the page. */}
+            {topFormError ? (
+              <Notice
+                inline
+                tone="error"
+                onClose={() => {
+                  setSubmitHint("");
+                  if (error) setDismissedError(error);
+                }}
+              >
+                {topFormError}
+              </Notice>
+            ) : null}
             <SectionCard title={t("teamIdentity")}>
               <div className="stack-form wide-form quiet-create">
                 <label>
@@ -679,13 +709,13 @@ export function TeamEntryFlow({
                     value={form.name}
                     maxLength={120}
                     disabled={readOnly || saving || mutationUnknown}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setSubmitHint("");
                       setForm((current) => ({
                         ...current,
                         name: event.target.value,
-                      }))
-                    }
-                    required
+                      }));
+                    }}
                   />
                 </label>
                 {!editing ? (
@@ -701,11 +731,12 @@ export function TeamEntryFlow({
                           type="button"
                           aria-pressed={form.visibility === option}
                           disabled={saving || mutationUnknown}
-                          onClick={() =>
+                          onClick={() => {
+                            setSubmitHint("");
                             setForm((current) =>
                               withTeamVisibility(current, option, agents),
-                            )
-                          }
+                            );
+                          }}
                         >
                           {t(
                             option === "private"
@@ -745,7 +776,10 @@ export function TeamEntryFlow({
                             saving ||
                             mutationUnknown
                           }
-                          onChange={() => toggleMember(agent.versionId)}
+                          onChange={() => {
+                            setSubmitHint("");
+                            toggleMember(agent.versionId);
+                          }}
                         />
                         <span className="document-main">
                           <strong>
@@ -768,12 +802,13 @@ export function TeamEntryFlow({
                             disabled={
                               readOnly || !checked || saving || mutationUnknown
                             }
-                            onChange={() =>
+                            onChange={() => {
+                              setSubmitHint("");
                               setForm((current) => ({
                                 ...current,
                                 leaderVersionId: agent.versionId,
-                              }))
-                            }
+                              }));
+                            }}
                           />
                           <span>{t("leader")}</span>
                         </label>
@@ -825,32 +860,9 @@ export function TeamEntryFlow({
                 <p className="muted-copy">{t("teamNoSharedKnowledge")}</p>
               )}
             </SectionCard>
-            {error && error !== dismissedError ? (
-              <Notice
-                inline
-                tone="error"
-                onClose={() => setDismissedError(error)}
-              >
-                {mutationUnknown
-                  ? t("teamSaveUnknown")
-                  : // The server names why a save failed, such as a member
-                    // Agent its publisher deleted; a dropped connection
-                    // has no reason to show beyond the generic one.
-                    error instanceof PlatformApiError
-                    ? localizeError(error, locale, "teamSaveFailed")
-                    : t("teamSaveFailed")}
-              </Notice>
-            ) : null}
             {readOnly ? null : (
-              <PageAction
-                name="done"
-                form={formId}
-                disabled={saving || (!mutationUnknown && Boolean(formErrors))}
-              />
+              <PageAction name="done" form={formId} disabled={saving} />
             )}
-            {formErrors ? (
-              <p className={styles.entryHint}>{formErrors}</p>
-            ) : null}
           </form>
         ) : null}
         {formOpen ? (

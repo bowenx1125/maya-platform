@@ -54,7 +54,7 @@ describe("shared Knowledge Markdown fields and file helpers", () => {
 
     const filename = screen.getByPlaceholderText("evidence.md");
     fireEvent.change(filename, { target: { value: "renamed.md" } });
-    const markdown = screen.getByRole("textbox", { name: "Markdown content" });
+    const markdown = screen.getByRole("textbox", { name: "Content" });
     fireEvent.change(markdown, { target: { value: "# Updated lesson" } });
 
     expect(onFilenameChange).toHaveBeenCalledWith("renamed.md");

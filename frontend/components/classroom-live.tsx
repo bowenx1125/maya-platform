@@ -283,9 +283,23 @@ function ClassroomLiveSession({
                 Interact
               </Link>
             ) : (
-              <button className="primary-action" type="button" disabled>
-                Interact
-              </button>
+              <>
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled
+                  aria-describedby="live-interaction-unavailable"
+                >
+                  Interact
+                </button>
+                <p
+                  className={styles.interactionHint}
+                  id="live-interaction-unavailable"
+                  role="status"
+                >
+                  {t("liveInteractionUnavailable")}
+                </p>
+              </>
             )}
           </div>
           <section className={styles.transcript}>
