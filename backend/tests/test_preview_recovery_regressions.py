@@ -1,8 +1,10 @@
 """Exercise publication and visible Preview failures through the SQL product path."""
 
 import asyncio
+import hashlib
 import json
 from dataclasses import replace
+from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
 from uuid import uuid4
@@ -11,6 +13,7 @@ import pytest
 from app.core.errors import PlatformError
 from app.core.models import KnowledgeChunk, SnapshotDocument
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
+from app.modules.debates.playback._preparation import _raise_site
 from app.modules.debates.playback.generation_adapter import (
     SqlSnapshotRetriever,
     SqlTurnPreparer,
@@ -21,8 +24,9 @@ from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.task_manager import TaskManager
 from app.modules.debates.setup.segment_projection import segment_projection
 from app.modules.debates.topic_language import model_topic, validate_topic
-from app.providers.llm import MockLLMProvider
-from app.providers.tts import MockTTSProvider
+from app.providers.llm import LLMUsageV1, MockLLMProvider
+from app.providers.llm_segments import SegmentAcceptedCandidateV2, SegmentLLMAdapter
+from app.providers.tts import TTS_UNAVAILABLE_CODES, MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
@@ -71,6 +75,199 @@ async def test_cancelled_preparation_waits_for_thread_to_release_session(monkeyp
         release.set()
         if not task.done():
             await asyncio.gather(task, return_exceptions=True)
+
+
+def test_claim_cleanup_logs_only_server_pointer_and_error_type(caplog):
+    def fail_cleanup(*_args, **_kwargs):
+        raise ValueError("private provider reply and SQL parameter")
+
+    db = SimpleNamespace(rollback=lambda: None)
+    service = PlaybackService(repository=SimpleNamespace(reset_prewarm_turn=fail_cleanup))
+    service._release_claim(
+        db,
+        SimpleNamespace(id="debate-server-id"),
+        SimpleNamespace(id="turn-server-id"),
+        "owner-token",
+        cancellation_generation=0,
+    )
+    assert "turn_id=turn-server-id error_type=ValueError" in caplog.text
+    assert "private provider reply" not in caplog.text
+    assert "owner-token" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "filename", [r"C:\secret-fixture-directory\worker.py", "/secret-fixture-directory/worker.py"]
+)
+def test_preparation_error_site_omits_private_paths(filename):
+    try:
+        exec(compile("raise ValueError('private response')", filename, "exec"))
+    except ValueError as exc:
+        site = _raise_site(exc)
+    assert "worker.py:1:<module>" in site
+    assert "secret-fixture-directory" not in site
+    assert "private response" not in site
+    assert "C:" not in site
+    assert "/" not in site and "\\" not in site
+
+
+@pytest.mark.asyncio
+async def test_cancelled_draft_resumes_accepted_reply_without_another_send(
+    app_factory, monkeypatch
+):
+    _, database, settings, debate_id, turn_id = _seed_running_product_debate(app_factory)
+    adapter = _FakeDashScopeAdapter()
+    _install_fake_dashscope_product_path(database, settings, adapter)
+    _patch_local_confirmation(monkeypatch)
+    sends = 0
+
+    def send_segments(_self, request):
+        nonlocal sends
+        sends += 1
+        output = {
+            "question": None,
+            "discussion_memory": None,
+            "segments": [
+                {
+                    "text": "A stored paragraph grounded in the frozen snapshot.",
+                    "source_ids": ["S1"],
+                    "reply_to": None,
+                    "support_mode": "direct",
+                }
+            ],
+        }
+        canonical = json.dumps(output, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return SegmentAcceptedCandidateV2(
+            request=request,
+            http_status=200,
+            finish_reason="stop",
+            usage=LLMUsageV1(1, 0, 1, 2),
+            output_json=canonical,
+            output_hash=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+            provider_output=output,
+        )
+
+    monkeypatch.setattr(SegmentLLMAdapter, "send_accepted", send_segments)
+    tasks = TaskManager()
+    tts = MockTTSProvider()
+    service = _product_service(
+        database,
+        settings,
+        preparer=SqlTurnPreparer(settings=settings, llm=adapter),
+        tts_provider=tts,
+        tasks=tasks,
+    )
+    mark_ready = service.repository.mark_turn_ready
+
+    def cancel_before_ready(*_args, **_kwargs):
+        raise asyncio.CancelledError
+
+    def snapshot():
+        with database.session() as db:
+            saved = db.execute(
+                text(
+                    "SELECT speech,structured_json,transcript_hash,predecessor_turn_ids_json,"
+                    "cutoff_turn_index,retrieval_receipts_json,evidence_trace_json "
+                    "FROM debate_turns WHERE id=:id"
+                ),
+                {"id": turn_id},
+            ).one()
+            state = db.execute(
+                text(
+                    "SELECT t.generation_status,j.state,j.claim_token,p.state "
+                    "FROM debate_turns AS t JOIN jobs AS j ON j.turn_id=t.id "
+                    "JOIN provider_operations AS p ON p.logical_item_id=t.id WHERE t.id=:id"
+                ),
+                {"id": turn_id},
+            ).one()
+            return tuple(saved), tuple(state)
+
+    try:
+        with database.session() as db:
+            debate = db.get(Debate, debate_id)
+            debate.status = "draft"
+            rule = json.loads(debate.rule_snapshot_json)
+            rule["turn_protocol"] = "segments_v2"
+            debate.rule_snapshot_json = json.dumps(rule)
+            turn = db.get(DebateTurn, turn_id)
+            turn.generation_status, turn.speech, turn.structured_json = "pending", None, None
+            turn.retrieval_receipts_json = "[]"
+        monkeypatch.setattr(service.repository, "mark_turn_ready", cancel_before_ready)
+        with database.session() as db:
+            with pytest.raises(asyncio.CancelledError):
+                await service.prepare_turn(db, debate_id, turn_id)
+        saved, state = snapshot()
+        assert state == ("pending", "pending", None, "accepted")
+        assert saved[0] == "A stored paragraph grounded in the frozen snapshot."
+        assert saved[2] and json.loads(saved[5])
+        assert sends == 1
+        audio_path = Path(settings.resolved_data_root) / service.audio_store.relative_path(
+            COURSE_ID, debate_id, turn_id
+        )
+        assert not audio_path.exists()
+        monkeypatch.setattr(service.repository, "mark_turn_ready", mark_ready)
+        with database.session() as db:
+            await service.prepare_turn(db, debate_id, turn_id)
+        resumed_saved, state = snapshot()
+        assert state[:2] == ("final_ready", "completed")
+        assert state[3] == "succeeded"
+        assert resumed_saved == saved
+        assert sends == 1 and tts.synthesize_calls == 2
+        assert audio_path.is_file()
+    finally:
+        await tasks.close()
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_after_ready_commit_retains_audio(app_factory, monkeypatch):
+    _, database, settings, debate_id, turn_id = _seed_running_product_debate(app_factory)
+    tasks = TaskManager()
+    tts = MockTTSProvider()
+    service = _product_service(
+        database,
+        settings,
+        preparer=SqlTurnPreparer(settings=settings, llm=MockLLMProvider()),
+        tts_provider=tts,
+        tasks=tasks,
+    )
+
+    publish_events = service._publish_events
+
+    async def cancel_publication(events):
+        with database.session() as db:
+            ready = db.get(DebateTurn, turn_id).generation_status == "final_ready"
+        if ready:
+            raise asyncio.CancelledError
+        await publish_events(events)
+
+    monkeypatch.setattr(service, "_publish_events", cancel_publication)
+    try:
+        with database.session() as db:
+            debate = db.get(Debate, debate_id)
+            rule = json.loads(debate.rule_snapshot_json)
+            rule["turn_protocol"] = "segments_v2"
+            debate.rule_snapshot_json = json.dumps(rule)
+        with database.session() as db:
+            with pytest.raises(asyncio.CancelledError):
+                await service.prepare_turn(db, debate_id, turn_id)
+        with database.session() as db:
+            turn = db.get(DebateTurn, turn_id)
+            assert turn.generation_status == "final_ready"
+            assert turn.audio_file_id
+            assert (
+                db.execute(
+                    text("SELECT state FROM jobs WHERE turn_id=:id"), {"id": turn_id}
+                ).scalar_one()
+                == "completed"
+            )
+        audio_path = Path(settings.resolved_data_root) / service.audio_store.relative_path(
+            COURSE_ID, debate_id, turn_id
+        )
+        assert audio_path.is_file() and audio_path.stat().st_size > 0
+        assert tts.synthesize_calls == 1
+    finally:
+        await tasks.close()
+        database.dispose()
 
 
 def test_saved_paragraph_text_is_reused_without_embedding_or_llm(app_factory, monkeypatch):
@@ -402,7 +599,10 @@ async def test_public_segment_snapshot_accepts_actual_audio_readiness(app_factor
         database.dispose()
 
 
-def test_completed_preview_text_counts_as_ready_without_audio_and_is_not_rewarmed(app_factory):
+@pytest.mark.parametrize("audio_error_code", sorted(TTS_UNAVAILABLE_CODES))
+def test_completed_preview_text_counts_as_ready_without_audio_and_is_not_rewarmed(
+    app_factory, audio_error_code
+):
     app, database, _settings = app_factory()
     try:
         with TestClient(app) as client:
@@ -449,7 +649,8 @@ def test_completed_preview_text_counts_as_ready_without_audio_and_is_not_rewarme
                     turn.grounding_mode = "general_reasoning"
                     turn.word_count = len(turn.speech.split())
                     turn.audio_file_id = None
-                    turn.safe_error_code = "tts_failed"
+                    turn.audio_duration_ms = None
+                    turn.safe_error_code = audio_error_code
             detail_response = client.get(f"/api/v1/debates/{debate_id}")
             assert detail_response.status_code == 200, detail_response.text
             detail = detail_response.json()
@@ -459,7 +660,9 @@ def test_completed_preview_text_counts_as_ready_without_audio_and_is_not_rewarme
                 "ready": True,
             }
             assert all(not turn["audio_ready"] for turn in detail["preview_turns"])
-            assert all(turn["safe_error_code"] == "tts_failed" for turn in detail["preview_turns"])
+            assert all(
+                turn["safe_error_code"] == audio_error_code for turn in detail["preview_turns"]
+            )
             listing = client.get(f"/api/v1/courses/{COURSE_ID}/debates")
             assert listing.status_code == 200, listing.text
             summary = next(item for item in listing.json() if item["id"] == debate_id)

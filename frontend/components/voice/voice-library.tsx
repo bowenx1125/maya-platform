@@ -39,7 +39,9 @@ export function VoiceLibrary({
   embedded = false,
   initialCreate = false,
   selectedId = null,
+  disabled = false,
   onSelect,
+  onProfilesChange,
   id,
 }: {
   groupId: string | null;
@@ -52,7 +54,9 @@ export function VoiceLibrary({
   embedded?: boolean;
   initialCreate?: boolean;
   selectedId?: string | null;
+  disabled?: boolean;
   onSelect?: (profileId: string) => void;
+  onProfilesChange?: (profiles: VoiceProfile[]) => void;
   id?: string;
 }) {
   const t = useT();
@@ -78,6 +82,7 @@ export function VoiceLibrary({
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
+  const controlsDisabled = busy || disabled;
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const [preview, setPreview] = useState<Record<string, PreviewState>>({});
@@ -99,6 +104,7 @@ export function VoiceLibrary({
       const sequence = ++loadSequence.current;
       if (scopes.length === 0) {
         setProfiles([]);
+        onProfilesChange?.([]);
         setScopeStatus({});
         setError(null);
         setLoading(false);
@@ -135,11 +141,11 @@ export function VoiceLibrary({
         }),
       );
       if (sequence !== loadSequence.current) return;
-      setProfiles(
-        results.flatMap((result) =>
-          result.status === "denied" ? [] : result.profiles,
-        ),
+      const nextProfiles = results.flatMap((result) =>
+        result.status === "denied" ? [] : result.profiles,
       );
+      setProfiles(nextProfiles);
+      onProfilesChange?.(nextProfiles);
       setScopeStatus(
         Object.fromEntries(
           results.map((result) => [result.scopeId, result.status]),
@@ -152,7 +158,7 @@ export function VoiceLibrary({
       setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
       setLoading(false);
     },
-    [api, courseId, scopes],
+    [api, courseId, onProfilesChange, scopes],
   );
 
   useEffect(() => {
@@ -189,7 +195,8 @@ export function VoiceLibrary({
               scopeStatus[scopes[0]] === "error")
           ? scopes[0]
           : null;
-  const canEnroll = Boolean(enrollmentGroupId) && !loading && !listenOnly;
+  const canEnroll =
+    Boolean(enrollmentGroupId) && !loading && !listenOnly && !controlsDisabled;
 
   async function submitEnrollment() {
     if (!canEnroll || !enrollmentGroupId || !file || !consent) return;
@@ -226,7 +233,12 @@ export function VoiceLibrary({
   }
 
   async function saveName(profile: ListedVoice, restoreFocus = false) {
-    if (activeName.current !== profile.id || !editingName || savingName.current)
+    if (
+      controlsDisabled ||
+      activeName.current !== profile.id ||
+      !editingName ||
+      savingName.current
+    )
       return;
     const value = editingName.value.trim();
     if (value === (profile.source_filename ?? "")) {
@@ -253,6 +265,7 @@ export function VoiceLibrary({
   }
 
   async function makePreview(profileId: string) {
+    if (controlsDisabled) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -273,6 +286,7 @@ export function VoiceLibrary({
   }
 
   async function confirm(profileId: string) {
+    if (controlsDisabled) return;
     setBusy(true);
     setError(null);
     try {
@@ -300,6 +314,7 @@ export function VoiceLibrary({
         <input
           className={styles.fileInput}
           type="file"
+          disabled={controlsDisabled}
           accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
           data-ui-guide="voice.uploadSample"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
@@ -309,6 +324,7 @@ export function VoiceLibrary({
       <label className={styles.consent}>
         <input
           type="checkbox"
+          disabled={controlsDisabled}
           aria-label={t("voiceConsent")}
           checked={consent}
           onChange={(event) => setConsent(event.target.checked)}
@@ -317,7 +333,7 @@ export function VoiceLibrary({
       </label>
       <PageAction
         name="back"
-        disabled={busy}
+        disabled={controlsDisabled}
         onClick={() => {
           setCreating(false);
           setFile(null);
@@ -326,7 +342,7 @@ export function VoiceLibrary({
       />
       <PageAction
         name="done"
-        disabled={!file || !consent || busy || !canEnroll}
+        disabled={!file || !consent || controlsDisabled || !canEnroll}
         onClick={() => void submitEnrollment()}
       />
     </div>
@@ -351,7 +367,7 @@ export function VoiceLibrary({
                   className={styles.nameInput}
                   aria-label={t("voiceName")}
                   value={editingName.value}
-                  readOnly={busy}
+                  readOnly={controlsDisabled}
                   ref={focusNameInput}
                   onChange={(event) =>
                     setEditingName({
@@ -376,7 +392,7 @@ export function VoiceLibrary({
                   className="agent-tile-name"
                   type="button"
                   aria-pressed={selectedId === profile.id}
-                  disabled={busy || profile.status !== "ready"}
+                  disabled={controlsDisabled || profile.status !== "ready"}
                   onClick={() => onSelect(profile.id)}
                 >
                   {name}
@@ -387,7 +403,7 @@ export function VoiceLibrary({
                 <button
                   className="agent-tile-name"
                   type="button"
-                  disabled={busy || profile.status === "deleted"}
+                  disabled={controlsDisabled || profile.status === "deleted"}
                   ref={(button) => {
                     if (button && focusName.current === profile.id) {
                       button.focus();
@@ -415,7 +431,7 @@ export function VoiceLibrary({
                   aria-label={t("voicePreview")}
                   data-ui-guide="voice.preview"
                   type="button"
-                  disabled={busy}
+                  disabled={controlsDisabled}
                   onClick={() => void makePreview(profile.id)}
                 >
                   <IconPlay />
@@ -429,7 +445,7 @@ export function VoiceLibrary({
                   aria-label={t("voiceConfirm")}
                   data-ui-guide="voice.confirm"
                   type="button"
-                  disabled={busy || !preview[profile.id]}
+                  disabled={controlsDisabled || !preview[profile.id]}
                   onClick={() => void confirm(profile.id)}
                 >
                   <IconCheck />
@@ -477,7 +493,7 @@ export function VoiceLibrary({
           creating || listenOnly ? null : (
             <ModulePlus
               label={t("voiceCreateTitle")}
-              disabled={busy || !canEnroll}
+              disabled={controlsDisabled || !canEnroll}
               onClick={() => setCreating(true)}
             />
           )

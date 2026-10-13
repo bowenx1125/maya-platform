@@ -28,7 +28,7 @@ from app.modules.debates.generation.evidence_trace import public_evidence_trace
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.round_phase import phase_for_round
 from app.modules.debates.round_count import debate_teaching_protocol, uses_segment_protocol
-from app.providers.tts import MockTTSProvider, TTSProvider
+from app.providers.tts import TTS_UNAVAILABLE_CODES, MockTTSProvider, TTSProvider
 
 from .audio import AudioMetadata, AudioStore, MediaTicketBinding, MediaTicketStore
 from .events import DebateEventHub, EventRecord, validate_event_payload
@@ -390,6 +390,9 @@ class PlaybackCore:
                 None,
             )
             await self.enqueue_frozen_final(db, debate_id)
+            if turn is not None and self._turn_text_fallback_ready(turn):
+                await self._publish_text_current(db, debate, turn)
+                continue
             if turn is None or self._turn_ready(turn):
                 # A ready turn needs no work; prepare_turn announces it when
                 # the classroom reconnects.
@@ -739,6 +742,91 @@ class PlaybackCore:
         return generation in {"ready", "final_ready", "completed"} and (
             audio is not None or PlaybackCore._turn_text_only(turn)
         )
+
+    @staticmethod
+    def _turn_text_fallback_ready(turn: Any) -> bool:
+        get = PlaybackCore._get
+        return (
+            get(turn, "generation_status", default="") == "final_ready"
+            and get(turn, "safe_error_code", "failed_code") in TTS_UNAVAILABLE_CODES
+            and isinstance(get(turn, "speech"), str)
+            and bool(get(turn, "speech").strip())
+            and get(turn, "audio_file_id") is None
+            and get(turn, "audio_relative_path") is None
+            and get(turn, "audio_duration_ms") is None
+        )
+
+    async def _publish_text_current(self, db: Any, debate: Any, turn: Any) -> bool:
+        """Complete an authorized current item without impersonating audio playback."""
+
+        debate_id, turn_id = str(debate.id), str(turn.id)
+        state = self._state(db, debate)
+        if (
+            self._get(debate, "status") != "running"
+            or state.mode != "live"
+            or state.status not in {"preparing", "ready"}
+            or state.current_turn_id != turn_id
+            or self._turn_public(turn)
+            or not self._turn_text_fallback_ready(turn)
+        ):
+            return False
+        claim = getattr(self.repository, "claim_text_playback", None)
+        if callable(claim):
+            version = state.control_version
+            generation = int(self._get(debate, "cancellation_generation", default=0) or 0)
+            self._rollback(db)
+            event = claim(
+                debate_id=debate_id,
+                expected_control_version=version,
+                turn_id=turn_id,
+                expected_generation=generation,
+            )
+            self._rollback(db)
+            if event is None:
+                return False
+            debate = self._get_debate(db, debate_id)
+            state = self._state(db, debate)
+        else:
+            turns = self._turns(db, debate)
+            arguments = {
+                "rule_set_id": str(self._get(debate, "rule_set_id", default="")),
+                "teaching_protocol": debate_teaching_protocol(debate),
+            }
+            if not self._turn_fence_ready(turns, turn, **arguments) or (
+                not self._has_public_predecessor_prefix(turns, turn, **arguments)
+            ):
+                return False
+            if not self.repository.publish_turn(db, turn):
+                return False
+            self._set_nonplaying(state, "waiting_next", 0)
+            state.control_version += 1
+            state.pending_action = None
+            state.pending_ticket_hash = None
+            state.pending_media_command_id = None
+            state.audio_duration_ms = 0
+            self._save(db, debate, state)
+            event = self._stage_event(
+                db,
+                debate_id,
+                "playback.waiting_next",
+                {
+                    "mode": "live",
+                    "completed_turn_id": turn_id,
+                    "control_version": state.control_version,
+                    "next_turn_ready": self._next_turn_ready(db, debate, state),
+                },
+            )
+            self._commit(db)
+        self.ticket_store.revoke_item(debate_id, turn_id)
+        self._clear_media_results(debate_id)
+        await self._publish_event(event)
+        turns = self._turns(db, debate)
+        current = next((item for item in turns if str(item.id) == turn_id), None)
+        if current is not None:
+            successor, unique = self._adjacent_successor(turns, current)
+            if unique and successor is not None and not self._next_turn_ready(db, debate, state):
+                await self._enqueue(debate, successor)
+        return True
 
     @staticmethod
     def _evidence_trace(turn: Any) -> list[dict[str, Any]]:
@@ -1128,7 +1216,9 @@ class PlaybackCore:
             return False
         rule_set_id = str(self._get(debate, "rule_set_id", default=""))
         teaching_protocol = debate_teaching_protocol(debate)
-        if not self._turn_ready(successor) or not self._turn_fence_ready(
+        if not (
+            self._turn_ready(successor) or self._turn_text_fallback_ready(successor)
+        ) or not self._turn_fence_ready(
             turns, successor, rule_set_id=rule_set_id, teaching_protocol=teaching_protocol
         ):
             return False
@@ -1137,7 +1227,8 @@ class PlaybackCore:
         ):
             return False
         if (
-            not self._turn_text_only(successor)
+            not self._turn_text_fallback_ready(successor)
+            and not self._turn_text_only(successor)
             and self._validated_turn_audio(db, debate, successor) is None
         ):
             return False
@@ -1659,7 +1750,12 @@ class PlaybackCore:
         if current is None:
             return
         successor, unique = self._adjacent_successor(turns, current)
-        if successor is None or not unique or self._turn_ready(successor):
+        if (
+            successor is None
+            or not unique
+            or self._turn_ready(successor)
+            or self._turn_text_fallback_ready(successor)
+        ):
             return
         if self._get(successor, "generation_status") != "pending" or self._get(
             successor, "safe_error_code"

@@ -38,7 +38,7 @@ def _rows(database: Database, query: str) -> list[tuple[Any, ...]]:
 def test_reset_retires_every_old_resource_and_downgrade_puts_them_back(
     app_factory: Any,
 ) -> None:
-    assert ALEMBIC_HEAD == "0063_attempt_actor_name"
+    assert ALEMBIC_HEAD == "0064_active_debate_slot"
     app, database, _settings = app_factory()
     # Built by Alembic, as a deployment is, so the reset can be stepped over.
     database.upgrade_schema()

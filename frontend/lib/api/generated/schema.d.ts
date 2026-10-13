@@ -3481,6 +3481,7 @@ export interface components {
             id: components["schemas"]["Uuid"];
             course_id: components["schemas"]["Uuid"];
             topic: string;
+            round_count: number;
             /** @enum {string} */
             status: "draft" | "running" | "debate_finished" | "completed" | "failed" | "stopped";
             created_at: components["schemas"]["IsoTime"];
@@ -3525,7 +3526,6 @@ export interface components {
             last_sequence: number;
             /** @constant */
             rule_set_id: "ordered_multi_expert_mutual_learning_v1";
-            round_count: number;
             /**
              * @default en
              * @enum {string}

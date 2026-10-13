@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VoiceLibrary } from "../components/voice/voice-library";
 import { AppShell } from "../components/app-shell";
-import { PlatformApi } from "../lib/api/platform";
+import { PlatformApi, PlatformApiError } from "../lib/api/platform";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({}),
@@ -346,5 +346,71 @@ describe("voice rename API", () => {
     );
     expect(request.headers.get("X-CSRF-Token")).toBe("test-csrf");
     expect(await request.json()).toEqual({ source_filename: "我的声音" });
+  });
+});
+
+describe("Voice catalog failure boundaries", () => {
+  it.each([503, 403, 404, 0])(
+    "shows a local error rather than an empty library for status %s",
+    async (status) => {
+      api.voiceProfiles.mockRejectedValue(
+        status
+          ? new PlatformApiError(status, "Unavailable")
+          : new Error("Unclassified network failure"),
+      );
+      const onSelect = vi.fn();
+      render(
+        <VoiceLibrary
+          groupId="group-a"
+          selectedId={profile.id}
+          onSelect={onSelect}
+        />,
+      );
+      expect(await screen.findByRole("alert")).toBeTruthy();
+      expect(screen.queryByText("No voices yet.")).toBeNull();
+      expect(screen.queryByRole("button", { name: "sample.wav" })).toBeNull();
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(api.enrollVoice).not.toHaveBeenCalled();
+      if (status === 403 || status === 404) {
+        expect(
+          (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
+            .disabled,
+        ).toBe(true);
+      }
+    },
+  );
+
+  it("locks all voice mutations when the parent is saving", async () => {
+    api.voiceProfiles.mockResolvedValue([profile]);
+    const onSelect = vi.fn();
+    const view = render(
+      <VoiceLibrary
+        groupId="group-a"
+        disabled
+        selectedId={profile.id}
+        onSelect={onSelect}
+      />,
+    );
+    const choice = await screen.findByRole("button", { name: "sample.wav" });
+    expect((choice as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "New" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(choice);
+    expect(onSelect).not.toHaveBeenCalled();
+    view.rerender(
+      <VoiceLibrary
+        groupId="group-a"
+        selectedId={profile.id}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "sample.wav" }));
+    expect(onSelect).toHaveBeenCalledWith(profile.id);
   });
 });

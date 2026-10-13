@@ -206,7 +206,7 @@ button:disabled {
   font-weight: 500;
 }
 
-input:not([type="checkbox"]):not([type="radio"]),
+input:not([type="checkbox"]):not([type="radio"]):not(:where(.sr-only)),
 textarea,
 select {
   width: 100%;

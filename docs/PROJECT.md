@@ -115,10 +115,8 @@ W1, W2, K1, K2 and K3-A are not being reimplemented.
 
 ## MayaForm recovery — current October7
 
-Branch feat/mayaform-v14; committed K2b2 a975e38, K3-A83de097/evidence1b1bfca retained.
-K3-B1/B2,0041–0053 and learning/Tools checkpoint f59df82, later fixes e40d2a1,
-0eafea9/30db274; implementation baseline36f10cb for ongoing UI/backend work. Foreign
-Debate/Voice/UI edits protected.
+Branch feat/mayaform-v14 retained K2b2, K3-A and learning/Tools checkpoints; their
+exact refs remain in Git history. Foreign Debate/Voice/UI work stays protected.
 
 Resume v2 preserves Brainform RAG/Knowledge/Memory, canonical Markdown and versions;
 bound RAG/manual regenerate may replace manual head only on valid newer success,
@@ -180,34 +178,25 @@ makes the Leader say the database changed and to answer again, and deletes that
 unfinished assessment. Completed attempts stay. Teacher report reads stored answers
 and statistics for that student, Maya Team name and time, not the raw chat.
 
-Teacher explicit save/generate/regenerate must authorize exact Knowledge generation
-without additional provider confirmation page. Current ACL/policy/manifest/accounting/
-idempotency/unknown protections remain; backend implementation in progress, not yet
-deployed. Canonical Single/Team runtime passed frozen Sol review44checks. Generation
-49focused and independent Sol34checks passed, including real fresh-action race/no
-duplicate run/charge. UI core Sol72checks passed, including pending-edit target switch;
-Full UI r5:573pass/1skip, types/lint/format/build passed; A–K found Voices/help gaps.
-Attempt27focused/longRAG1/migration3 passed; internal0054 pointer handles empty selections.
-The newer backend freeze passed78focused and independent61checks (42 original+19
-independent), including20different users/cookies/DB sessions, races, late-grant fences,
-rollback and0054preservation. Deployed DB remains0053. These are not classroom load tests.
-Final full gates, browser, real Team/report, GitHub and Docker rollout remain incomplete.
+Teacher save/generate/regenerate authorizes exact Knowledge generation without a second
+confirmation page; ACL, policy, manifest, accounting, idempotency and unknown protections
+remain. Local runtime/generation/UI/attempt checks passed; they were not classroom load tests.
+UI A–K found Voices/help gaps. Deployed DB at that review remained 0053.
+Final full gates, browser, real Team/report, GitHub and rollout remained incomplete.
 
 ## Current delivery closure — October7
 
-Acceptance is now a launchable website with the existing warm-paper UI, independent
-review, exact-version gates, real four-Agent workflow, GitHub integration and final
-scoped Docker/manual verification. Public DNS/TLS/off-host operation needs its own
-actual evidence; local Demo health is not public launch acceptance.
+Closure requires the warm-paper UI, independent exact-source checks, real four-Agent
+workflow, GitHub integration and scoped Docker/manual verification. Public launch
+needs actual DNS/TLS/off-host evidence; local Demo health is insufficient.
 
-Teacher `generate_agent_knowledge` now uses actual generation services/accepted Tool
-receipts and wakes after commit. First ordinary published Agent generation works
-without a prior Set. Independent Sol found and closed selected-source retry/revoked
-receipt replay defects. Final39-file Tool freeze passed140focused; independent
-30Tool+47generation+2additional executions passed. Source ACL, current publication,
-exact manifest, idempotency, actual billing and unknown no-resend remain. Not deployed.
+Teacher `generate_agent_knowledge` uses accepted generation/Tool receipts and wakes
+after commit. First ordinary published Agent generation needs no prior Set. Independent
+review closed retry/revocation defects; local Tool and generation gates passed.
+Source ACL, publication, exact manifests, deduplication, billing and unknown no-resend
+remain; not deployed.
 
-The Knowledge editor keeps the shared RAG editor, pending-save lock and draft fence.
+Knowledge retains the RAG editor, pending-save lock and draft fence.
 
 Separate production profile rejects Demo/quick-login/auto-confirm, validates exact
 public HTTPS origin, hides Demo identity routes, requires independent strong Teacher
@@ -222,8 +211,8 @@ Backup113435Z (SQLite,250files,238receipts, config) restored offline 0053→0054
 readiness/integrity/FK passing; all457 Provider records kept; 1 incomplete Debate call
 became unknown without sending; original3unknown stay unretried; no new charge.
 
-C1 isolated HTTPS/SQLite mock test: 60 registrations/parallel sends/replays, SSE
-reconnect, restart; integrity/FK pass, 0 Provider calls. Not a class-size claim.
+C1 isolated Mock: 60 registrations, parallel sends/replay, SSE reconnect and restart;
+integrity/FK passed, 0 Provider calls; no class-size claim.
 
 Teacher statistics/report download in a fresh browser run is still open.
 Colleague line `15f5450`: pose
@@ -239,3 +228,5 @@ October 12: From 4d0c981; mock Demo, 0 Provider calls. Debates 404: setup requir
 After the last answer the server runs scorer then summarizer as the student's live sign-in; assessment_stage drives progress; results show points, feedback, summary. Teachers read raw test messages (Private too); the server adds report links. A test asks every Knowledge Question (no sampling). The Leader sets reply_language. Publishing an Agent moves its Teams along. Open tests run the Leader alone; attempts stay apart.
 
 October 13: Brainform: New adds .md Knowledge; click edits, double-click renames. Saved RAG republishes its Agents; Teams follow. Agent editors offer only Brainform's library. Rubric "Follow-up for Question N; at most K" items follow wrong answers; scoring reruns. Cut replies fail visibly. Test Teams hide Questions from Agents; follow-up picking shows no bar; reports list answers; old Team versions' results stay readable. Bare letters/numbers always answer; answer sheets are server-written. Answers take one call; a new Chat starts a new test; 0063 stores names. Answers must fit the Question's form; others are named unrecorded. Teams New matches Agents New; refused Team members log why. The latest sentence sets the language. Leaders carry report links.
+
+PR #52 (entaiaki): Debate text playback and Live recovery restored, Studyform Avatar fixed; `0064` frees the running slot from archived Debates. Its own production acceptance failed (Start 0/9, End failed).

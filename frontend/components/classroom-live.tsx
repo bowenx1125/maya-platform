@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import type { LiveSnapshot } from "../lib/api";
+import {
+  PlatformApiError,
+  type LiveSnapshot,
+  type PlatformApi,
+} from "../lib/api";
 import type { AvatarState } from "./avatar";
 import { useT } from "./locale";
 import { ReportMarkdown } from "./report/report-markdown";
@@ -15,10 +19,26 @@ import styles from "./classroom-live.module.css";
 
 export function ClassroomLive() {
   const { api, user } = useSession();
-  const t = useT();
   const courseId = user?.courses[0]?.course_id;
+  return (
+    <ClassroomLiveSession
+      key={`${user?.id ?? ""}:${courseId ?? ""}`}
+      api={api}
+      courseId={courseId}
+    />
+  );
+}
+
+function ClassroomLiveSession({
+  api,
+  courseId,
+}: {
+  api: PlatformApi;
+  courseId?: string;
+}) {
+  const t = useT();
   const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(courseId));
   const [error, setError] = useState<unknown>(null);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [audible, setAudible] = useState(false);
@@ -26,58 +46,143 @@ export function ClassroomLive() {
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!courseId) return;
     let active = true;
     let socket: WebSocket | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let checking = false;
+    let denied = false;
+    let debateId: string | undefined;
     let sequence = -1;
     const audio = audioRef.current;
-    const receive = (next: LiveSnapshot) => {
-      if (!active || next.sequence < sequence) return;
-      sequence = next.sequence;
-      setSnapshot(next);
+    const closeSocket = () => {
+      const previous = socket;
+      socket = undefined;
+      if (!previous) return;
+      previous.onmessage = null;
+      previous.onclose = null;
+      previous.close();
     };
-    void api
-      .classroomLive(courseId)
-      .then(async (live) => {
-        if (!live || !active) return;
-        receive(await api.liveSnapshot(live.debate_id));
-        if (!active) return;
+    const receive = (next: LiveSnapshot, expectedId: string) => {
+      if (!active || denied || debateId !== expectedId) return;
+      if (
+        next.debate_id !== expectedId ||
+        !Number.isSafeInteger(next.sequence) ||
+        next.sequence < 0 ||
+        !Array.isArray(next.turns) ||
+        !Array.isArray(next.participants)
+      )
+        throw new Error("Invalid Live snapshot");
+      if (next.sequence < sequence) return;
+      sequence = next.sequence;
+      const current = next.turns.find(
+        (turn) => turn.id === next.playback?.current_turn_id,
+      );
+      if (!next.active || !current?.audio_url) setAudioBlocked(false);
+      setSnapshot(next);
+      setError(null);
+      if (!next.active) closeSocket();
+    };
+    const schedule = () => {
+      clearTimeout(timer);
+      if (active && !denied) timer = setTimeout(() => void check(), 5000);
+    };
+    const denyAccess = (cause: PlatformApiError) => {
+      denied = true;
+      clearTimeout(timer);
+      closeSocket();
+      audio?.pause();
+      audio?.removeAttribute("src");
+      setSnapshot(null);
+      setAudioBlocked(false);
+      setAudible(false);
+      setLoading(false);
+      setError(cause);
+    };
+    const check = async () => {
+      if (!active || denied || !courseId || checking) return;
+      checking = true;
+      clearTimeout(timer);
+      try {
+        const live = await api.classroomLive(courseId);
+        if (!active || denied) return;
+        const nextId = live?.debate_id;
+        if (nextId !== debateId) {
+          closeSocket();
+          debateId = nextId;
+          sequence = -1;
+          setSnapshot(null);
+          setAudioBlocked(false);
+          setAudible(false);
+          audio?.pause();
+          audio?.removeAttribute("src");
+        }
+        setError(null);
+        if (!nextId || socket) return;
+        const next = await api.liveSnapshot(nextId);
+        if (!active || denied || debateId !== nextId) return;
+        receive(next, nextId);
+        if (!next.active) return;
         const url = new URL(
-          `/api/v1/live/${live.debate_id}/events`,
+          `/api/v1/live/${nextId}/events`,
           window.location.href,
         );
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-        socket = new WebSocket(url.href);
-        socket.onmessage = (event) => {
+        const connection = new WebSocket(url.href);
+        socket = connection;
+        connection.onmessage = (event) => {
+          if (!active || socket !== connection) return;
           try {
-            const next = JSON.parse(event.data) as LiveSnapshot;
-            if (
-              next.debate_id !== live.debate_id ||
-              !Array.isArray(next.turns) ||
-              !Array.isArray(next.participants)
-            )
-              throw new Error("Invalid Live snapshot");
-            receive(next);
-          } catch {
-            socket?.close();
+            receive(JSON.parse(event.data) as LiveSnapshot, nextId);
+          } catch (cause) {
+            setError(cause);
+            closeSocket();
+            audio?.pause();
+            schedule();
           }
         };
-        socket.onclose = (event) => {
-          if (!active) return;
-          audioRef.current?.pause();
+        connection.onclose = (event) => {
+          if (!active || socket !== connection) return;
+          if (event.code === 4401 || event.code === 4403) {
+            denyAccess(
+              new PlatformApiError(event.code - 4000, "Live access denied."),
+            );
+            return;
+          }
+          closeSocket();
+          audio?.pause();
           if (event.code !== 1000)
             setError(new Error("Live disconnected. Reopen Live to connect."));
+          schedule();
         };
-      })
-      .catch((cause) => {
-        if (active) setError(cause);
-      })
-      .finally(() => {
+      } catch (cause) {
+        if (!active || denied) return;
+        if (
+          cause instanceof PlatformApiError &&
+          (cause.status === 401 || cause.status === 403)
+        ) {
+          denyAccess(cause);
+        } else setError(cause);
+      } finally {
+        checking = false;
         if (active) setLoading(false);
-      });
+        schedule();
+      }
+    };
+    const refresh = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+
+    void check();
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
-      socket?.close();
+      clearTimeout(timer);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      closeSocket();
       audio?.pause();
     };
   }, [api, courseId]);
@@ -113,13 +218,21 @@ export function ClassroomLive() {
     };
     if (audio.readyState > 0) seek();
     else audio.addEventListener("loadedmetadata", seek, { once: true });
+    let active = true;
     if (playback.status === "playing") {
       void audio
         .play()
-        .then(() => setAudioBlocked(false))
-        .catch(() => setAudioBlocked(true));
+        .then(() => {
+          if (active) setAudioBlocked(false);
+        })
+        .catch(() => {
+          if (active) setAudioBlocked(true);
+        });
     } else audio.pause();
-    return () => audio.removeEventListener("loadedmetadata", seek);
+    return () => {
+      active = false;
+      audio.removeEventListener("loadedmetadata", seek);
+    };
   }, [snapshot, current]);
 
   useEffect(() => {
@@ -178,7 +291,10 @@ export function ClassroomLive() {
           <section className={styles.transcript}>
             <header>
               <h2>{t("debateTranscript")}</h2>
-              {audioBlocked ? (
+              {audioBlocked &&
+              current &&
+              current.audio_url ===
+                `/api/v1/live/${snapshot.debate_id}/audio/${current.id}` ? (
                 <button
                   className="secondary-action"
                   onClick={() => {

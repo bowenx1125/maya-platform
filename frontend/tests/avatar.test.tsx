@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -208,6 +209,157 @@ describe("M07 avatar editor boundary", () => {
     );
     expect(rendererInstances).toHaveLength(1);
     expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it.each(["ready", "failed"] as const)(
+    "resets a %s preview while its replacement asset loads",
+    async (previousStatus) => {
+      const onLoad = vi.fn();
+      const onError = vi.fn();
+      const view = render(
+        <AvatarCanvas
+          config={config}
+          assetUrl="/avatars/female_1.glb"
+          fallbackLabel="Kaikai"
+          onLoad={onLoad}
+          onError={onError}
+        />,
+      );
+      await waitFor(() => expect(rendererInstances).toHaveLength(1));
+      const renderer = rendererInstances[0];
+      act(() => {
+        if (previousStatus === "ready") renderer.finishLoad();
+        else renderer.failLoad(new Error("first asset failed"));
+      });
+      const preview = screen.getByRole("img", { name: /Kaikai/ });
+      expect(preview.getAttribute("data-avatar-status")).toBe(previousStatus);
+
+      view.rerender(
+        <AvatarCanvas
+          config={config}
+          assetUrl="/avatars/elder-scholar.glb"
+          fallbackLabel="Kaikai"
+          onLoad={onLoad}
+          onError={onError}
+        />,
+      );
+
+      expect(preview.getAttribute("data-avatar-status")).toBe("loading");
+      expect(preview.querySelector("canvas")?.hidden).toBe(true);
+      expect(screen.queryByText("Kaikai · static preview")).toBeNull();
+      expect(renderer.setAsset).toHaveBeenCalledWith(
+        "/avatars/elder-scholar.glb",
+      );
+      expect(rendererInstances).toHaveLength(1);
+      expect(renderer.dispose).not.toHaveBeenCalled();
+      act(() => renderer.finishLoad());
+      expect(preview.getAttribute("data-avatar-status")).toBe("ready");
+      expect(preview.querySelector("canvas")?.hidden).toBe(false);
+      expect(onLoad).toHaveBeenCalledTimes(previousStatus === "ready" ? 2 : 1);
+      expect(onError).toHaveBeenCalledTimes(
+        previousStatus === "failed" ? 1 : 0,
+      );
+    },
+  );
+
+  it("reloads the preview when a missing asset becomes available again", async () => {
+    const view = render(<AvatarCanvas config={config} />);
+    await waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const oldRenderer = rendererInstances[0];
+    act(() => oldRenderer.finishLoad());
+    view.rerender(<AvatarCanvas config={config} assetUrl="" />);
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "failed",
+    );
+    expect(oldRenderer.dispose).toHaveBeenCalledTimes(1);
+    view.rerender(<AvatarCanvas config={config} />);
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "loading",
+    );
+    await waitFor(() => expect(rendererInstances).toHaveLength(2));
+    act(() => rendererInstances[1].finishLoad());
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "ready",
+    );
+  });
+
+  it("resets a loaded preview when its framing changes", async () => {
+    const view = render(<AvatarCanvas config={config} framing="head" />);
+    await waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const oldRenderer = rendererInstances[0];
+    act(() => oldRenderer.finishLoad());
+    view.rerender(<AvatarCanvas config={config} framing="full-body" />);
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "loading",
+    );
+    await waitFor(() => expect(rendererInstances).toHaveLength(2));
+    expect(oldRenderer.dispose).toHaveBeenCalledTimes(1);
+    act(() => rendererInstances[1].finishLoad());
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "ready",
+    );
+  });
+
+  it("keeps a loaded asset ready when only its appearance changes", async () => {
+    const view = render(<AvatarCanvas config={config} />);
+    await waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const renderer = rendererInstances[0];
+    act(() => renderer.finishLoad());
+    view.rerender(
+      <AvatarCanvas config={{ ...config, material_theme: "warm_sand" }} />,
+    );
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "ready",
+    );
+    expect(rendererInstances).toHaveLength(1);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it("ignores callbacks from a disposed renderer while its replacement loads", async () => {
+    const onLoad = vi.fn();
+    const onError = vi.fn();
+    const view = render(
+      <AvatarCanvas
+        config={config}
+        framing="head"
+        onLoad={onLoad}
+        onError={onError}
+      />,
+    );
+    await waitFor(() => expect(rendererInstances).toHaveLength(1));
+    const oldRenderer = rendererInstances[0];
+    view.rerender(
+      <AvatarCanvas
+        config={config}
+        framing="full-body"
+        onLoad={onLoad}
+        onError={onError}
+      />,
+    );
+    await waitFor(() => expect(rendererInstances).toHaveLength(2));
+    const currentRenderer = rendererInstances[1];
+    expect(oldRenderer.dispose).toHaveBeenCalledTimes(1);
+    act(() => {
+      oldRenderer.finishLoad();
+      oldRenderer.failLoad(new Error("late disposed error"));
+    });
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "loading",
+    );
+    expect(onLoad).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    act(() => currentRenderer.finishLoad());
+    expect(screen.getByRole("img").getAttribute("data-avatar-status")).toBe(
+      "ready",
+    );
+    expect(onLoad).toHaveBeenCalledTimes(1);
+    view.unmount();
+    act(() => {
+      currentRenderer.finishLoad();
+      currentRenderer.failLoad(new Error("late unmounted error"));
+    });
+    expect(onLoad).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("shows the fallback when a replacement asset fails to load", async () => {

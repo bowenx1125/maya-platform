@@ -48,7 +48,7 @@ async def test_missing_voice_completes_draft_text_without_audio_or_repeat_genera
             assert turn.generation_status == "final_ready"
             assert turn.speech and turn.speech.strip()
             assert turn.audio_file_id is None
-            assert turn.audio_duration_ms == 0
+            assert turn.audio_duration_ms is None
             assert turn.safe_error_code == "tts_voice_unavailable"
             saved_speech = turn.speech
         monkeypatch.setattr(service, "_call_preparer", forbidden_audio)

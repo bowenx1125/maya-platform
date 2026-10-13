@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -649,8 +650,9 @@ def test_system_brief_states_phase_language_rag_and_injection_boundary() -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("interrupted_before_ready", [False, True])
 async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
-    app_factory: Any, monkeypatch: pytest.MonkeyPatch
+    app_factory: Any, monkeypatch: pytest.MonkeyPatch, interrupted_before_ready: bool
 ) -> None:
     """Exercise the SQL stage/recovery/TTS boundary with a local fake adapter."""
 
@@ -702,13 +704,33 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
 
     monkeypatch.setattr(SegmentLLMAdapter, "send_accepted", send_segments)
     first_tasks = TaskManager()
+    restart_tasks = TaskManager()
+    first_tts = _FailingTTS()
     first_service = _product_service(
         database,
         settings,
         preparer=SqlTurnPreparer(settings=settings, llm=adapter),
-        tts_provider=_FailingTTS(),
+        tts_provider=first_tts,
         tasks=first_tasks,
     )
+    if interrupted_before_ready:
+
+        def interrupt_before_ready(*_args: Any, **_kwargs: Any) -> bool:
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(first_service.repository, "mark_turn_ready", interrupt_before_ready)
+
+    def saved_text(connection: Any) -> tuple[Any, ...]:
+        saved = connection.execute(
+            text(
+                "SELECT speech,structured_json,retrieval_receipts_json,evidence_trace_json,"
+                "transcript_hash,predecessor_turn_ids_json,cutoff_turn_index "
+                "FROM debate_turns WHERE id=:turn_id"
+            ),
+            {"turn_id": turn_id},
+        ).one()
+        return (saved[0], *(json.loads(value) for value in saved[1:4]), *saved[4:])
+
     try:
         with database.session() as db:
             debate = db.get(Debate, debate_id)
@@ -722,8 +744,13 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
             turn.structured_json = None
             turn.retrieval_receipts_json = "[]"
         with database.session() as db:
-            await first_service.prepare_turn(db, debate_id, turn_id)
+            if interrupted_before_ready:
+                with pytest.raises(asyncio.CancelledError):
+                    await first_service.prepare_turn(db, debate_id, turn_id)
+            else:
+                await first_service.prepare_turn(db, debate_id, turn_id)
         assert calls == 1
+        assert first_tts.synthesize_calls == 1
         with database.engine.connect() as connection:
             staged = connection.execute(
                 text(
@@ -735,11 +762,22 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
                 ),
                 {"turn_id": turn_id},
             ).one()
-            assert staged == ("accepted", "pending", "segment_recovery_input_v2")
+            expected_state = (
+                ("accepted", "running")
+                if interrupted_before_ready
+                else (
+                    "succeeded",
+                    "final_ready",
+                )
+            )
+            assert staged == (*expected_state, "segment_recovery_input_v2")
+            original_text = saved_text(connection)
+            assert original_text[0] == "A stored paragraph grounded in the frozen snapshot."
+            assert original_text[2]
+            assert original_text[4]
         await first_tasks.close()
 
         restart_tts = MockTTSProvider()
-        restart_tasks = TaskManager()
         restarted = _product_service(
             database,
             settings,
@@ -751,15 +789,7 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
             await restarted.recover_startup(db)
         await restart_tasks.wait_debate(debate_id)
         assert calls == 1
-        assert restart_tts.synthesize_calls == 0
-        with database.session() as db:
-            repository = restarted.repository
-            debate = repository.get_debate(db, debate_id)
-            turn = next(item for item in repository.turns(db, debate) if item.id == turn_id)
-            assert repository.authorize_pending_tts_retry(db, debate, turn, code="tts_timeout")
-            await restarted.prepare_turn(db, debate_id, turn_id)
-        assert calls == 1
-        assert restart_tts.synthesize_calls == 1
+        assert restart_tts.synthesize_calls == int(interrupted_before_ready)
         with database.engine.connect() as connection:
             final = connection.execute(
                 text(
@@ -775,8 +805,16 @@ async def test_sql_segment_acceptance_recovery_reuses_one_provider_call(
             structured = json.loads(final[3])
             assert structured["schema_version"] == "segment_turn_v2"
             assert "key_claims" not in structured
+            assert saved_text(connection) == original_text
+        with database.session() as db:
+            await restarted.prepare_turn(db, debate_id, turn_id)
+        assert calls == 1
+        assert restart_tts.synthesize_calls == int(interrupted_before_ready)
+        with database.engine.connect() as connection:
+            assert saved_text(connection) == original_text
     finally:
         await first_tasks.close()
+        await restart_tasks.close()
         database.dispose()
 
 

@@ -325,6 +325,10 @@ export function AgentWorkbench({
   >(null);
   const [, setPreview] = useState<RagPreview | null>(null);
   const [avatarTemplates, setAvatarTemplates] = useState<AvatarTemplate[]>([]);
+  const [avatarTemplatesError, setAvatarTemplatesError] =
+    useState<unknown>(null);
+  const [avatarTemplatesLoading, setAvatarTemplatesLoading] = useState(false);
+  const avatarLoadSequence = useRef(0);
   const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
@@ -335,7 +339,15 @@ export function AgentWorkbench({
   );
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingRequest, setSavingRequest] = useState<{ scope: string } | null>(
+    null,
+  );
+  const [publishingRequest, setPublishingRequest] = useState<{
+    scope: string;
+  } | null>(null);
+  const saving = savingRequest?.scope === workbenchScope;
+  const publishing = publishingRequest?.scope === workbenchScope;
+  const editingLocked = saving || publishing;
   const [error, setError] = useState<unknown>(null);
   const [knowledgeUploadError, setKnowledgeUploadError] =
     useState<unknown>(null);
@@ -365,10 +377,22 @@ export function AgentWorkbench({
   const publishIntent = `${workbenchScope}:publish-agent-version:${versionKey}`;
   const createdAgentRef = useRef<AgentDetail | null>(null);
   const persistedVersionRef = useRef<AgentVersion | null>(null);
-  const publishLock = useRef(false);
+  const publishLock = useRef<{ scope: string } | null>(null);
   const unsavedGroupId = unsavedCreate?.groupId ?? null;
   const unsavedCourseId = unsavedCreate?.courseId ?? null;
   const creating = unsavedCreate !== undefined;
+
+  function beginSaving() {
+    const request = { scope: workbenchScope };
+    setSavingRequest(request);
+    return request;
+  }
+
+  function finishSaving(request: { scope: string }) {
+    if (workbenchMounted.current) {
+      setSavingRequest((current) => (current === request ? null : current));
+    }
+  }
 
   async function refreshKnowledgePreview() {
     const requestScope = workbenchScope;
@@ -398,6 +422,38 @@ export function AgentWorkbench({
     setRetryAction((current) => (current === "publish" ? null : current));
   }
 
+  const loadAvatarTemplates = useCallback(async () => {
+    const requestScope = workbenchScope;
+    const sequence = ++avatarLoadSequence.current;
+    setAvatarTemplatesLoading(true);
+    setAvatarTemplatesError(null);
+    try {
+      const templates = await api.avatarTemplates();
+      if (
+        !isCurrentScope(requestScope) ||
+        sequence !== avatarLoadSequence.current
+      )
+        return null;
+      setAvatarTemplates(templates);
+      return templates;
+    } catch (cause) {
+      if (
+        isCurrentScope(requestScope) &&
+        sequence === avatarLoadSequence.current
+      ) {
+        setAvatarTemplatesError(cause);
+      }
+      return null;
+    } finally {
+      if (
+        isCurrentScope(requestScope) &&
+        sequence === avatarLoadSequence.current
+      ) {
+        setAvatarTemplatesLoading(false);
+      }
+    }
+  }, [api, workbenchScope]);
+
   const load = useCallback(
     async (keepLocal = false) => {
       const requestScope = workbenchScope;
@@ -415,25 +471,19 @@ export function AgentWorkbench({
           const [
             nextDocuments,
             nextAvatarTemplates,
-            nextVoiceProfiles,
             nextKnowledgeSets,
             nextLibrarySetIds,
           ] = await Promise.all([
             unsavedGroupId
               ? api.knowledge(unsavedGroupId)
               : api.workspaceDocuments(courseId),
-            api.avatarTemplates(),
-            unsavedGroupId
-              ? api.voiceProfiles(unsavedGroupId)
-              : typeof api.personalVoiceProfiles === "function"
-                ? api.personalVoiceProfiles(courseId).catch(() => [])
-                : Promise.resolve([]),
+            loadAvatarTemplates(),
             api.knowledgeSets(courseId),
             brainformSetIds(api, courseId),
           ]);
           if (!isCurrentScope(requestScope)) return;
           const baselineAvatar =
-            nextAvatarTemplates
+            (nextAvatarTemplates ?? [])
               .map((template) => avatarDefaultConfigForTemplate(template))
               .find((config): config is AvatarConfig => config !== null) ??
             ({
@@ -485,8 +535,6 @@ export function AgentWorkbench({
           });
           setPreview(null);
           setKnowledgePreviewRefreshFailed(false);
-          setAvatarTemplates(nextAvatarTemplates);
-          setVoiceProfiles(nextVoiceProfiles);
           if (!keepLocal) {
             setAgentMd("");
             setAvatarConfig(baselineAvatar);
@@ -503,11 +551,10 @@ export function AgentWorkbench({
         if (!isCurrentScope(requestScope)) return;
         const nextAgent = await api.agent(nextVersion.agent_id);
         if (!isCurrentScope(requestScope)) return;
+        void loadAvatarTemplates();
         const [
           nextDocuments,
           nextPreview,
-          nextAvatarTemplates,
-          nextVoiceProfiles,
           nextKnowledgeSets,
           nextAgentKnowledge,
           nextLibrarySetIds,
@@ -520,14 +567,6 @@ export function AgentWorkbench({
           nextVersion.state === "draft"
             ? api.ragPreview(versionId)
             : Promise.resolve(null),
-          api.avatarTemplates(),
-          nextAgent.group_id
-            ? api.voiceProfiles(nextAgent.group_id)
-            : // Only the owning teacher has personal voices; anyone else
-              // reading this Agent gets none, not an error.
-              typeof api.personalVoiceProfiles === "function"
-              ? api.personalVoiceProfiles(nextAgent.course_id).catch(() => [])
-              : Promise.resolve([]),
           api.knowledgeSets(nextAgent.course_id),
           api.agentKnowledgeSets(nextAgent.id),
           brainformSetIds(api, nextAgent.course_id),
@@ -561,8 +600,6 @@ export function AgentWorkbench({
         setAgentKnowledge(nextAgentKnowledge);
         setPreview(nextPreview);
         setKnowledgePreviewRefreshFailed(false);
-        setAvatarTemplates(nextAvatarTemplates);
-        setVoiceProfiles(nextVoiceProfiles);
         if (!keepLocal) {
           setAgentMd(nextVersion.agent_md ?? "");
           setAvatarConfig(nextVersion.avatar_config);
@@ -584,7 +621,15 @@ export function AgentWorkbench({
         if (isCurrentScope(requestScope)) setLoading(false);
       }
     },
-    [api, creating, unsavedCourseId, unsavedGroupId, versionId, workbenchScope],
+    [
+      api,
+      creating,
+      loadAvatarTemplates,
+      unsavedCourseId,
+      unsavedGroupId,
+      versionId,
+      workbenchScope,
+    ],
   );
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -592,33 +637,6 @@ export function AgentWorkbench({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
-
-  const voiceGroupId = agent?.group_id;
-  useEffect(() => {
-    if (!voiceGroupId) return;
-    const groupId = voiceGroupId;
-    let active = true;
-    let refreshing = false;
-    async function refreshVoices() {
-      if (document.visibilityState === "hidden" || refreshing) return;
-      refreshing = true;
-      try {
-        const next = await api.voiceProfiles(groupId);
-        if (active) setVoiceProfiles(next);
-      } catch (cause) {
-        if (active) setError(cause);
-      } finally {
-        refreshing = false;
-      }
-    }
-    window.addEventListener("focus", refreshVoices);
-    document.addEventListener("visibilitychange", refreshVoices);
-    return () => {
-      active = false;
-      window.removeEventListener("focus", refreshVoices);
-      document.removeEventListener("visibilitychange", refreshVoices);
-    };
-  }, [api, voiceGroupId]);
 
   const enabledCount = selectedDocumentIds.length;
   const sameIds = (left: string[], right: string[]) =>
@@ -673,7 +691,7 @@ export function AgentWorkbench({
     const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
-    setSaving(true);
+    const savingRequest = beginSaving();
     setError(null);
     setNotice(null);
     setConflict(false);
@@ -702,7 +720,7 @@ export function AgentWorkbench({
         setError(cause);
       }
     } finally {
-      if (isCurrentScope(requestScope)) setSaving(false);
+      finishSaving(savingRequest);
     }
   }
 
@@ -714,7 +732,7 @@ export function AgentWorkbench({
     const requestScope = workbenchScope;
     abandonUploadIntent();
     abandonPublishIntent();
-    setSaving(true);
+    const savingRequest = beginSaving();
     setError(null);
     setNotice(null);
     setConflict(false);
@@ -737,7 +755,7 @@ export function AgentWorkbench({
         setError(cause);
       }
     } finally {
-      if (isCurrentScope(requestScope)) setSaving(false);
+      finishSaving(savingRequest);
     }
   }
 
@@ -759,7 +777,7 @@ export function AgentWorkbench({
       ? [...selectedDocumentIds, documentId]
       : selectedDocumentIds.filter((id) => id !== documentId);
     setSelectedDocumentIds(nextIds);
-    setSaving(true);
+    const savingRequest = beginSaving();
     setError(null);
     setNotice(null);
     setConflict(false);
@@ -786,7 +804,7 @@ export function AgentWorkbench({
         setError(cause);
       }
     } finally {
-      if (isCurrentScope(requestScope)) setSaving(false);
+      finishSaving(savingRequest);
     }
   }
 
@@ -865,7 +883,7 @@ export function AgentWorkbench({
     }
     abandonPublishIntent();
     setPendingKnowledgeUpload({ file, signature });
-    setSaving(true);
+    const savingRequest = beginSaving();
     setError(null);
     setKnowledgeUploadError(null);
     setKnowledgePreviewRefreshFailed(false);
@@ -931,7 +949,7 @@ export function AgentWorkbench({
       setError(cause);
       setKnowledgeUploadError(cause);
     } finally {
-      if (isCurrentScope(requestScope)) setSaving(false);
+      finishSaving(savingRequest);
     }
   }
 
@@ -1088,6 +1106,29 @@ export function AgentWorkbench({
 
   async function publish(retry = false) {
     const requestScope = workbenchScope;
+    if (publishLock.current?.scope === requestScope) return;
+    const request = { scope: requestScope };
+    publishLock.current = request;
+    setPublishingRequest(request);
+    try {
+      await publishCurrent(retry);
+    } catch (cause) {
+      if (!isCurrentScope(requestScope)) return;
+      if (isConflict(cause)) setConflict(true);
+      if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
+      setError(cause);
+    } finally {
+      if (publishLock.current === request) publishLock.current = null;
+      if (workbenchMounted.current) {
+        setPublishingRequest((current) =>
+          current === request ? null : current,
+        );
+      }
+    }
+  }
+
+  async function publishCurrent(retry: boolean) {
+    const requestScope = workbenchScope;
     if (generationFlow && selectedDocumentIds.length === 0) {
       setGenerationSourcePrompt(true);
       setError(null);
@@ -1095,10 +1136,8 @@ export function AgentWorkbench({
     }
     setGenerationSourcePrompt(false);
     if (unsavedCreate) {
-      if (publishLock.current) return;
       if (!draftName.trim() || !agentMd.trim()) return;
-      publishLock.current = true;
-      setSaving(true);
+      const savingRequest = beginSaving();
       setError(null);
       setNotice(null);
       try {
@@ -1141,8 +1180,7 @@ export function AgentWorkbench({
         }
         setError(cause);
       } finally {
-        publishLock.current = false;
-        if (isCurrentScope(requestScope)) setSaving(false);
+        finishSaving(savingRequest);
       }
       return;
     }
@@ -1158,7 +1196,9 @@ export function AgentWorkbench({
       try {
         saved = await api.nextVersion(currentAgent.id, { idempotency: handle });
         mutationStore.finish(intent, handle);
+        if (!isCurrentScope(requestScope)) return;
       } catch (cause) {
+        if (!isCurrentScope(requestScope)) return;
         if (isAmbiguousMutationFailure(cause)) {
           setError(cause);
           setRetryAction("publish");
@@ -1166,6 +1206,7 @@ export function AgentWorkbench({
         }
         mutationStore.abandon(intent, handle);
         const versions = await api.versions(currentAgent.id);
+        if (!isCurrentScope(requestScope)) return;
         const existing = versions.find((item) => item.state === "draft");
         if (!existing) {
           setError(cause);
@@ -1182,6 +1223,7 @@ export function AgentWorkbench({
           ? { voice_profile_id: voiceProfileId }
           : {}),
       });
+      if (!isCurrentScope(requestScope)) return;
       saved = written;
     }
     const uploadedIds: string[] = [];
@@ -1256,7 +1298,7 @@ export function AgentWorkbench({
     )
       return;
     if (!retry) abandonUploadIntent();
-    setSaving(true);
+    const savingRequest = beginSaving();
     setError(null);
     setNotice(null);
     const handle = mutationStore.handleFor(publishIntent);
@@ -1305,7 +1347,7 @@ export function AgentWorkbench({
       }
       setError(cause);
     } finally {
-      if (isCurrentScope(requestScope)) setSaving(false);
+      finishSaving(savingRequest);
     }
   }
 
@@ -1382,7 +1424,7 @@ export function AgentWorkbench({
                   <input
                     aria-label={t("agentName")}
                     value={draftName}
-                    disabled={saving}
+                    disabled={editingLocked}
                     maxLength={120}
                     onChange={(event) => {
                       unsavedCreate.onIdentityEdit?.();
@@ -1403,7 +1445,7 @@ export function AgentWorkbench({
                         key={option}
                         type="button"
                         aria-pressed={draftVisibility === option}
-                        disabled={saving}
+                        disabled={editingLocked}
                         onClick={() => {
                           unsavedCreate.onIdentityEdit?.();
                           setDraftVisibility(option);
@@ -1429,7 +1471,7 @@ export function AgentWorkbench({
                 <button
                   className="text-link"
                   type="button"
-                  disabled={saving}
+                  disabled={editingLocked}
                   onClick={() => {
                     abandonUploadIntent();
                     abandonPublishIntent();
@@ -1446,7 +1488,7 @@ export function AgentWorkbench({
                 <button
                   className="icon-action"
                   type="button"
-                  disabled={saving || !agentMd}
+                  disabled={editingLocked || !agentMd}
                   aria-label={`${t("download")} AGENT.md`}
                   data-ui-guide="agent.download"
                   onClick={() => downloadText(agentMd, "AGENT.md")}
@@ -1463,7 +1505,7 @@ export function AgentWorkbench({
                     type="file"
                     accept=".md,text/markdown"
                     aria-label={t("uploadMd")}
-                    disabled={saving}
+                    disabled={editingLocked}
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) void uploadAgentMd(file);
@@ -1478,7 +1520,7 @@ export function AgentWorkbench({
               className="markdown-editor"
               aria-label={`${t("agentMd")} ${t("editor")}`}
               value={agentMd}
-              disabled={saving}
+              disabled={editingLocked}
               onChange={(event) => {
                 abandonUploadIntent();
                 abandonPublishIntent();
@@ -1500,7 +1542,7 @@ export function AgentWorkbench({
               <ModuleUpload
                 label={t("uploadRag")}
                 accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                disabled={saving}
+                disabled={editingLocked}
                 onFile={(file) => void uploadKnowledge(file)}
               />
             }
@@ -1542,7 +1584,7 @@ export function AgentWorkbench({
                     <button
                       className="inline-button"
                       type="button"
-                      disabled={saving || knowledgePreviewRefreshing}
+                      disabled={editingLocked || knowledgePreviewRefreshing}
                       onClick={() => void refreshKnowledgePreview()}
                     >
                       {t("retry")}
@@ -1562,7 +1604,7 @@ export function AgentWorkbench({
                         <input
                           type="checkbox"
                           checked
-                          disabled={saving}
+                          disabled={editingLocked}
                           onChange={() => setPendingKnowledgeUpload(null)}
                         />
                         <span className="document-main">
@@ -1577,7 +1619,7 @@ export function AgentWorkbench({
                         <input
                           type="checkbox"
                           checked
-                          disabled={saving}
+                          disabled={editingLocked}
                           onChange={() =>
                             setStagedRag((current) =>
                               current.filter(
@@ -1602,7 +1644,7 @@ export function AgentWorkbench({
                           type="checkbox"
                           checked={selectedDocumentIds.includes(document.id)}
                           disabled={
-                            saving ||
+                            editingLocked ||
                             knowledgePreviewRefreshing ||
                             document.workspace_state === "hidden"
                           }
@@ -1647,7 +1689,9 @@ export function AgentWorkbench({
                           type="checkbox"
                           checked={selectedKnowledgeSetIds.includes(set.id)}
                           disabled={
-                            saving || knowledgeBindingSaving || !set.can_edit
+                            editingLocked ||
+                            knowledgeBindingSaving ||
+                            !set.can_edit
                           }
                           onChange={(event) => {
                             const nextIds = event.target.checked
@@ -1671,26 +1715,39 @@ export function AgentWorkbench({
           <div className="agent-editor-media">
             {avatarConfig ? (
               <SectionCard title={t("avatarDesign")}>
+                {avatarTemplatesError ? (
+                  <ErrorNotice
+                    inline
+                    error={avatarTemplatesError}
+                    onRetry={() => void loadAvatarTemplates()}
+                  />
+                ) : null}
+                {avatarTemplatesLoading ? <LoadingCard /> : null}
                 <AvatarEditor
                   templates={avatarTemplates}
                   value={avatarConfig}
                   onChange={setAvatarConfig}
                   fallbackLabel={agent.name}
-                  disabled={saving}
+                  disabled={
+                    editingLocked ||
+                    avatarTemplatesLoading ||
+                    Boolean(avatarTemplatesError)
+                  }
                 />
               </SectionCard>
             ) : null}
             <div>
               {voiceProfileId &&
-              !voiceProfiles.some(
-                (profile) =>
-                  profile.id === voiceProfileId && profile.status === "ready",
-              ) ? (
+              (!agent.group_id ||
+                !voiceProfiles.some(
+                  (profile) =>
+                    profile.id === voiceProfileId && profile.status === "ready",
+                )) ? (
                 <button
                   className="text-link"
                   type="button"
                   aria-pressed="true"
-                  disabled={saving}
+                  disabled={editingLocked}
                   onClick={() => setVoiceProfileId(null)}
                 >
                   {t("currentVoiceBinding")}
@@ -1706,6 +1763,10 @@ export function AgentWorkbench({
                 }
                 embedded
                 selectedId={voiceProfileId}
+                disabled={editingLocked}
+                onProfilesChange={setVoiceProfiles}
+                // A teacher's personal Agent picks from that teacher's own
+                // voices, as on main (owner decision 2026-10-12).
                 onSelect={(profileId) =>
                   setVoiceProfileId((current) =>
                     current === profileId ? null : profileId,
@@ -1720,7 +1781,7 @@ export function AgentWorkbench({
         <PageAction
           name="back"
           href={backHref ?? `/student/agents/${agent.id}`}
-          disabled={saving}
+          disabled={editingLocked}
           onClick={(event) => {
             if (localDirty && !window.confirm(t("discardDraftConfirm"))) {
               event.preventDefault();
@@ -1752,7 +1813,7 @@ export function AgentWorkbench({
         <PageAction
           name="done"
           disabled={
-            saving ||
+            editingLocked ||
             (Boolean(unsavedCreate) &&
               (!draftName.trim() || !agentMd.trim()) &&
               retryAction !== "publish") ||

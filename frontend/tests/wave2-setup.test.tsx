@@ -16,6 +16,7 @@ import type {
 } from "../lib/api";
 import { validateDebateTopic } from "../lib/debate-topic";
 import { localizeError } from "../lib/i18n";
+import { LocaleProvider } from "../components/locale";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -155,6 +156,7 @@ describe("Wave 2 teacher debate setup", () => {
         topic:
           "Should the United States ban TikTok's recommendation algorithm?",
         status: "draft",
+        round_count: 4,
         created_at: "2026-08-27T00:00:00Z",
       } as DebateSummary,
     ];
@@ -169,14 +171,51 @@ describe("Wave 2 teacher debate setup", () => {
     expect(link.getAttribute("href")).toBe(
       "/teacher/debates/debate-one/control",
     );
-    expect(screen.getByText("2 Rounds")).toBeTruthy();
+    expect(screen.getByText("4 Rounds")).toBeTruthy();
   });
 
+  it.each(["en", "zh"] as const)(
+    "renders each saved round count in %s, including historical debates",
+    async (locale) => {
+      useSessionMock.mockReturnValue(teacherSession());
+      const rows: DebateSummary[] = [2, 3, 4, 5].map((roundCount) => ({
+        id: `rounds-${roundCount}`,
+        course_id: courseId,
+        topic: `Saved ${roundCount} round lesson`,
+        status: "draft",
+        round_count: roundCount,
+        created_at: "2026-09-08T00:00:00Z",
+        audio_restore_needed: false,
+        prepared_turns: 0,
+        expected_turns: roundCount * 2,
+        preview: null,
+        stall: null,
+      }));
+      render(
+        <LocaleProvider initialLocale={locale}>
+          <TeacherDebateList
+            controller={{ load: vi.fn().mockResolvedValue(rows) }}
+          />
+        </LocaleProvider>,
+      );
+      await screen.findByRole("heading", { name: "Saved 4 round lesson" });
+      for (const roundCount of [2, 3, 4, 5]) {
+        expect(
+          screen.getByText(
+            locale === "zh" ? `${roundCount} 轮` : `${roundCount} Rounds`,
+          ),
+        ).toBeTruthy();
+      }
+    },
+  );
+
   it.each([
+    ["draft", null, false],
     ["draft", false, false],
     ["draft", true, true],
     ["running", false, true],
     ["completed", false, true],
+    ["debate_finished", false, true],
     ["failed", true, false],
     ["stopped", true, false],
   ] as const)(
@@ -192,8 +231,16 @@ describe("Wave 2 teacher debate setup", () => {
                 course_id: courseId,
                 topic: "Stage entry",
                 status,
+                round_count: 4,
                 created_at: "2026-09-08T00:00:00Z",
-                preview: { ready },
+                preview:
+                  ready === null
+                    ? null
+                    : {
+                        ready,
+                        prepared_turns: ready ? 6 : 1,
+                        expected_turns: 6,
+                      },
                 audio_restore_needed: false,
               },
             ]),
@@ -201,6 +248,13 @@ describe("Wave 2 teacher debate setup", () => {
         />,
       );
       await screen.findByRole("heading", { name: /Stage entry/ });
+      if (status === "draft" && ready !== null) {
+        expect(
+          screen.getByRole("link", { name: "Preview" }).getAttribute("href"),
+        ).toBe("/teacher/debates/stage-entry/control");
+      } else {
+        expect(screen.queryByRole("link", { name: "Preview" })).toBeNull();
+      }
       if (enabled) {
         const entry = screen.getByRole("link", { name: "Immerse" });
         expect(entry.getAttribute("href")).toBe(
@@ -227,6 +281,43 @@ describe("Wave 2 teacher debate setup", () => {
       }
     },
   );
+
+  it("keeps Preview accessible for a stalled draft while Immerse stays disabled", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const stalled: DebateSummary = {
+      id: "stalled-preview",
+      course_id: courseId,
+      topic: "A stalled preview",
+      status: "draft",
+      round_count: 4,
+      created_at: "2026-09-08T00:00:00Z",
+      audio_restore_needed: false,
+      prepared_turns: 1,
+      expected_turns: 6,
+      preview: { prepared_turns: 1, expected_turns: 6, ready: false },
+      stall: {
+        turn_id: "failed-turn",
+        round_no: 1,
+        safe_error_code: "provider_not_sent",
+      },
+    };
+    render(
+      <TeacherDebateList
+        controller={{ load: vi.fn().mockResolvedValue([stalled]) }}
+      />,
+    );
+
+    await screen.findByRole("heading", { name: "A stalled preview" });
+    expect(screen.getByText("Stalled")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Preview" }).getAttribute("href"),
+    ).toBe("/teacher/debates/stalled-preview/control");
+    expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Immerse" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
 
   it("uses separate Topic and Background cards with bidirectional height synchronization", async () => {
     let resized: ResizeObserverCallback | undefined;
@@ -634,6 +725,7 @@ it("updates debate progress in place without opening the debate", async () => {
       course_id: courseId,
       topic: "A live preview",
       status: "draft",
+      round_count: 4,
       created_at: "2026-09-08T00:00:00Z",
       prepared_turns: 1,
       expected_turns: 6,
@@ -667,6 +759,7 @@ it("removes bulk Refresh and never retries stalled records when reading the list
     course_id: courseId,
     topic: "Needs recovery",
     status: "draft",
+    round_count: 4,
     created_at: "2026-09-08",
     prepared_turns: 0,
     expected_turns: 12,

@@ -29,6 +29,7 @@ from app.modules.reports.service import get_current_report
 from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login
 from tests.test_wave2_playback import (
@@ -278,11 +279,20 @@ async def test_sql_pause_survives_restart_and_continue_revalidates_audio(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "playback_status", ["preparing", "ready", "playing", "paused", "waiting_next"]
+)
 async def test_sql_full_finish_is_normal_and_retains_generated_turn(
     app_factory: Any,
+    playback_status: str,
 ) -> None:
     database, settings, debate_id, turn_id = _seed_one_turn(app_factory)
     _set_live_waiting(database, debate_id, turn_id)
+    with database.session() as db:
+        db.execute(
+            text("UPDATE playback_states SET status=:status WHERE debate_id=:debate_id"),
+            {"status": playback_status, "debate_id": debate_id},
+        )
     context = SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID))
     tasks = TaskManager()
     service = PlaybackService(
@@ -301,8 +311,11 @@ async def test_sql_full_finish_is_normal_and_retains_generated_turn(
                 context=context,
             )
         assert finished.status == "completed"
+        assert finished.control_version == 8
+        assert finished.current_turn_id is None
         with database.session() as db:
             assert db.get(Debate, debate_id).status == "debate_finished"
+            assert db.get(Debate, debate_id).cancellation_generation == 0
             assert db.get(DebateTurn, turn_id) is not None
     finally:
         await tasks.close()
@@ -352,44 +365,131 @@ def test_sql_pause_and_finish_race_has_one_fresh_writer_winner(app_factory: Any)
         database.dispose()
 
 
-def test_sql_finish_claim_requires_live_waiting_gate(app_factory: Any) -> None:
+@pytest.mark.parametrize(
+    "rejection",
+    [
+        "completed",
+        "stopped",
+        "replay",
+        "not_running",
+        "stale_version",
+        "stale_turn",
+        "missing_teacher",
+        "student",
+        "non_member",
+    ],
+)
+def test_sql_finish_claim_requires_known_live_state_and_fresh_teacher(
+    app_factory: Any, rejection: str
+) -> None:
     database, _settings, debate_id, turn_id = _seed_one_turn(app_factory)
     _set_live_playing(database, debate_id, turn_id)
     repository = SqlPlaybackRepository(session_factory=database.session_factory)
     try:
+        teacher_id: str | None = TEACHER_ID
+        with database.session() as db:
+            if rejection in {"completed", "stopped"}:
+                db.execute(
+                    text("UPDATE playback_states SET status=:status WHERE debate_id=:debate_id"),
+                    {"status": rejection, "debate_id": debate_id},
+                )
+            elif rejection == "replay":
+                db.execute(
+                    text("UPDATE playback_states SET mode='replay' WHERE debate_id=:debate_id"),
+                    {"debate_id": debate_id},
+                )
+            elif rejection == "not_running":
+                db.execute(
+                    text("UPDATE debates SET status='draft' WHERE id=:debate_id"),
+                    {"debate_id": debate_id},
+                )
+            elif rejection == "student":
+                teacher_id = db.scalar(
+                    text(
+                        "SELECT user_id FROM course_members "
+                        "WHERE course_id=:course_id AND role='student' LIMIT 1"
+                    ),
+                    {"course_id": COURSE_ID},
+                )
+                assert teacher_id is not None
+            elif rejection == "missing_teacher":
+                teacher_id = None
+            elif rejection == "non_member":
+                teacher_id = str(uuid4())
+            before = db.execute(
+                text(
+                    "SELECT d.status,d.cancellation_generation,ps.status,ps.mode,"
+                    "ps.control_version,ps.current_turn_id FROM debates d "
+                    "JOIN playback_states ps ON ps.debate_id=d.id WHERE d.id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            ).one()
+        # Early End is legal from every named nonterminal live state. The
+        # former waiting-only check incorrectly rejected that existing rule.
         assert (
             repository.claim_finish_playback(
                 debate_id=debate_id,
-                expected_control_version=7,
-                expected_current_turn_id=turn_id,
-                teacher_user_id=TEACHER_ID,
+                expected_control_version=6 if rejection == "stale_version" else 7,
+                expected_current_turn_id=str(uuid4()) if rejection == "stale_turn" else turn_id,
+                teacher_user_id=teacher_id,
             )
             is None
         )
         with database.session() as db:
             row = db.execute(
                 text(
-                    "SELECT d.status,ps.status,ps.mode,ps.control_version "
-                    "FROM debates d JOIN playback_states ps ON ps.debate_id=d.id "
-                    "WHERE d.id=:debate_id"
+                    "SELECT d.status,d.cancellation_generation,ps.status,ps.mode,"
+                    "ps.control_version,ps.current_turn_id FROM debates d "
+                    "JOIN playback_states ps ON ps.debate_id=d.id WHERE d.id=:debate_id"
                 ),
                 {"debate_id": debate_id},
             ).one()
-        assert row == ("running", "playing", "live", 7)
+        assert row == before
+    finally:
+        database.dispose()
+
+
+def test_sql_playback_rejects_unknown_finish_state(app_factory: Any) -> None:
+    database, _settings, debate_id, turn_id = _seed_one_turn(app_factory)
+    _set_live_playing(database, debate_id, turn_id)
+    try:
+        with pytest.raises(IntegrityError, match="ck_playback_states_status"):
+            with database.session() as db:
+                db.execute(
+                    text("UPDATE playback_states SET status='unknown' WHERE debate_id=:debate_id"),
+                    {"debate_id": debate_id},
+                )
+        with database.session() as db:
+            assert db.execute(
+                text(
+                    "SELECT status,control_version FROM playback_states WHERE debate_id=:debate_id"
+                ),
+                {"debate_id": debate_id},
+            ).one() == ("playing", 7)
     finally:
         database.dispose()
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "playback_status", ["preparing", "ready", "playing", "paused", "waiting_next"]
+)
+@pytest.mark.parametrize("job_state", ["pending", "running"])
 async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surface(
     app_factory: Any,
+    playback_status: str,
+    job_state: str,
 ) -> None:
     database, settings, debate_id, first_turn_id = _seed_one_turn(app_factory)
     successor_id = _add_live_successor(database, debate_id, first_turn_id)
     with database.session() as db:
         db.execute(
-            text("UPDATE jobs SET state='pending' WHERE turn_id=:turn_id"),
-            {"turn_id": successor_id},
+            text("UPDATE playback_states SET status=:status WHERE debate_id=:debate_id"),
+            {"status": playback_status, "debate_id": debate_id},
+        )
+        db.execute(
+            text("UPDATE jobs SET state=:state WHERE turn_id=:turn_id"),
+            {"state": job_state, "turn_id": successor_id},
         )
     context = SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID))
     tasks = TaskManager()
@@ -409,10 +509,16 @@ async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surf
                 context=context,
             )
         assert partial.status == "stopped"
+        assert partial.control_version == 9
+        assert partial.current_turn_id is None
         with database.session() as db:
             debate = db.get(Debate, debate_id)
             assert debate is not None and debate.status == "debate_finished"
+            assert debate.cancellation_generation == 1
             assert db.scalar(select(Job.state).where(Job.turn_id == successor_id)) == "interrupted"
+            assert db.scalar(select(Job.safe_error_code).where(Job.turn_id == successor_id)) == (
+                "debate_finished_partial"
+            )
             assert (
                 len(
                     list(
@@ -444,6 +550,63 @@ async def test_sql_partial_finish_retains_turns_and_blocks_every_downstream_surf
                     context=context,
                 )
             assert replay_denied.value.code == "invalid_state"
+    finally:
+        await tasks.close()
+        database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sql_preparing_finish_without_current_turn_revokes_pending_control(
+    app_factory: Any,
+) -> None:
+    database, settings, debate_id, first_turn_id = _seed_one_turn(app_factory)
+    _add_live_successor(database, debate_id, first_turn_id)
+    with database.session() as db:
+        db.execute(
+            text(
+                "UPDATE playback_states SET status='preparing', current_turn_id=NULL, "
+                "controller_epoch=:epoch, controller_owner_connection='pending-owner', "
+                "pending_action='start', pending_ticket_hash='pending-ticket', "
+                "pending_media_command_id=:command_id WHERE debate_id=:debate_id"
+            ),
+            {"debate_id": debate_id, "epoch": str(uuid4()), "command_id": str(uuid4())},
+        )
+        db.execute(
+            text(
+                "UPDATE debate_turns SET publication_status='unpublished', public_at=NULL "
+                "WHERE debate_id=:debate_id"
+            ),
+            {"debate_id": debate_id},
+        )
+    tasks = TaskManager()
+    service = PlaybackService(
+        SqlPlaybackRepository(session_factory=database.session_factory),
+        task_manager=tasks,
+        session_factory=database.session_factory,
+        settings=settings,
+    )
+    try:
+        with database.session() as db:
+            result = await service.finish(
+                db,
+                debate_id,
+                expected_control_version=8,
+                context=SimpleNamespace(user=SimpleNamespace(id=TEACHER_ID)),
+            )
+        assert result.status == "stopped"
+        assert result.control_version == 9
+        with database.session() as db:
+            state = db.scalar(
+                select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)
+            )
+            assert state is not None
+            assert state.current_turn_id is None
+            assert state.controller_epoch is None
+            assert state.controller_owner_connection is None
+            assert state.pending_action is None
+            assert state.pending_ticket_hash is None
+            assert state.pending_media_command_id is None
+            assert db.get(Debate, debate_id).cancellation_generation == 1
     finally:
         await tasks.close()
         database.dispose()

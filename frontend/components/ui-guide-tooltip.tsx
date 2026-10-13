@@ -71,6 +71,7 @@ export function UiGuideTooltip() {
       touchPinned = false;
       hovered = null;
       focused = null;
+      focusedDescriptionElement = null;
       setActive(null);
     };
 
@@ -209,7 +210,11 @@ export function UiGuideTooltip() {
     };
     const observer = new MutationObserver(() => {
       if (!described) return;
-      if (!described.isConnected || described.dataset.uiGuide !== currentKey) {
+      if (
+        !described.isConnected ||
+        (descriptionTarget && !descriptionTarget.isConnected) ||
+        described.dataset.uiGuide !== currentKey
+      ) {
         hide();
         return;
       }
@@ -245,6 +250,7 @@ export function UiGuideTooltip() {
     window.addEventListener("blur", hide);
     window.addEventListener("resize", hide);
     return () => {
+      observer.disconnect();
       document.removeEventListener("pointerover", onPointerOver, true);
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerout", onPointerOut, true);
@@ -259,7 +265,6 @@ export function UiGuideTooltip() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("blur", hide);
       window.removeEventListener("resize", hide);
-      observer.disconnect();
       hide();
     };
   }, [pathname]);

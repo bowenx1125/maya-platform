@@ -74,6 +74,7 @@ from app.modules.debates.setup.rules import (
 from app.modules.debates.teaching_rules import freeze_teaching_rules
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
 from app.modules.interactions.service import create_closed_window
+from app.providers.tts import TTS_UNAVAILABLE_CODES
 
 
 def utc_now() -> datetime:
@@ -212,7 +213,12 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
         return False
     if successor.generation_status not in {"final_ready", "ready", "completed"}:
         return False
-    if not successor.audio_file_id:
+    from app.modules.debates.playback._core import PlaybackCore
+
+    text_fallback = PlaybackCore._turn_text_fallback_ready(
+        successor
+    ) or PlaybackCore._turn_text_only(successor)
+    if not successor.audio_file_id and not text_fallback:
         return False
     if successor.transcript_hash is None:
         return False
@@ -234,6 +240,8 @@ def _next_turn_ready(db: Session, debate_id: str, playback: Any) -> bool:
         return False
     if any(row.publication_status != "public" for row in visible_predecessors):
         return False
+    if text_fallback:
+        return True
     return (
         db.scalar(
             select(StoredFile.id).where(
@@ -835,6 +843,21 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                     DebateTurn.debate_id == debate.id,
                     DebateTurn.round_no < _round_count_from_snapshot(debate),
                     DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
+                    or_(
+                        DebateTurn.audio_file_id.is_not(None),
+                        and_(
+                            DebateTurn.audio_file_id.is_(None),
+                            or_(
+                                DebateTurn.audio_duration_ms.is_(None),
+                                and_(
+                                    DebateTurn.audio_duration_ms == 0,
+                                    DebateTurn.safe_error_code == "tts_voice_unavailable",
+                                ),
+                            ),
+                            DebateTurn.safe_error_code.in_(TTS_UNAVAILABLE_CODES),
+                            func.trim(DebateTurn.speech) != "",
+                        ),
+                    ),
                 )
             )
             or 0
@@ -1075,6 +1098,7 @@ def debate_summary(
             "id": _as_uuid(debate.id),
             "course_id": _as_uuid(debate.course_id),
             "topic": debate.topic,
+            "round_count": _round_count_from_snapshot(debate),
             "status": debate.status,
             "created_at": debate.created_at,
             "prepared_turns": prepared_turns,
@@ -1238,11 +1262,24 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     stall_by_debate: dict[str, DebateStall] = {}
     if rows:
         ids = [row.id for row in rows]
-        for debate_id, round_no, audio_ready, ready in db.execute(
+        text_fallback = and_(
+            DebateTurn.audio_file_id.is_(None),
+            or_(
+                DebateTurn.audio_duration_ms.is_(None),
+                and_(
+                    DebateTurn.audio_duration_ms == 0,
+                    DebateTurn.safe_error_code == "tts_voice_unavailable",
+                ),
+            ),
+            DebateTurn.safe_error_code.in_(TTS_UNAVAILABLE_CODES),
+            func.trim(DebateTurn.speech) != "",
+        )
+        for debate_id, round_no, audio_ready, text_ready, ready in db.execute(
             select(
                 DebateTurn.debate_id,
                 DebateTurn.round_no,
                 DebateTurn.audio_file_id.is_not(None),
+                text_fallback,
                 func.count(),
             )
             .where(
@@ -1250,14 +1287,17 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                 DebateTurn.generation_status.in_(("final_ready", "ready", "completed")),
             )
             .group_by(
-                DebateTurn.debate_id, DebateTurn.round_no, DebateTurn.audio_file_id.is_not(None)
+                DebateTurn.debate_id,
+                DebateTurn.round_no,
+                DebateTurn.audio_file_id.is_not(None),
+                text_fallback,
             )
         ):
             key = str(debate_id)
             if not audio_ready:
                 audio_missing.add(key)
             ready_by_debate[key] = ready_by_debate.get(key, 0) + int(ready)
-            if int(round_no) < rounds_by_debate[key]:
+            if int(round_no) < rounds_by_debate[key] and (audio_ready or text_ready):
                 preview_by_debate[key] = preview_by_debate.get(key, 0) + int(ready)
         for debate_id, count in db.execute(
             select(DebateParticipant.debate_id, func.count())

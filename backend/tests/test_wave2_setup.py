@@ -331,6 +331,7 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     created = response.json()
     debate_id = created["id"]
     assert created["revision"] == 0
+    assert created["round_count"] == 4
     assert created["rule_set_id"] == "ordered_multi_expert_mutual_learning_v1"
     with database.session() as db:
         persisted = db.get(Debate, debate_id)
@@ -369,8 +370,10 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     listed = client.get(f"/api/v1/courses/{COURSE_ID}/debates")
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [debate_id]
+    assert listed.json()[0]["round_count"] == created["round_count"]
     fetched = client.get(f"/api/v1/debates/{debate_id}")
     assert fetched.status_code == 200
+    assert fetched.json()["round_count"] == created["round_count"]
     assert fetched.json()["participants"][0]["agent_name"] == "Bowen"
 
     update_body = {
@@ -394,6 +397,39 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     stale = client.patch(f"/api/v1/debates/{debate_id}", headers=headers(csrf), json=update_body)
     assert stale.status_code == 409
     assert stale.json()["code"] == "stale_revision"
+
+
+@pytest.mark.parametrize("round_count", [2, 3, 4, 5])
+def test_list_preserves_saved_round_count(
+    debate_app: tuple[FastAPI, Database, TestClient], round_count: int
+) -> None:
+    _app, database, client = debate_app
+    debate_id = _insert_debate_row(database)
+    with database.session() as db:
+        debate = db.get(Debate, debate_id)
+        assert debate is not None
+        debate.rule_snapshot_json = json.dumps({"round_count": round_count})
+    login(client)
+
+    response = client.get(f"/api/v1/courses/{COURSE_ID}/debates")
+
+    assert response.status_code == 200, response.text
+    assert response.json()[0]["round_count"] == round_count
+
+
+@pytest.mark.parametrize("round_count", [None, "4", True, 1, 6])
+def test_summary_rejects_invalid_saved_round_count(
+    debate_app: tuple[FastAPI, Database, TestClient], round_count: object
+) -> None:
+    _app, database, _client = debate_app
+    debate_id = _insert_debate_row(database)
+    with database.session() as db:
+        debate = db.get(Debate, debate_id)
+        assert debate is not None
+        debate.rule_snapshot_json = json.dumps({"round_count": round_count})
+        with pytest.raises(PlatformError) as failure:
+            setup_service.debate_summary(debate)
+        assert failure.value.code == "invalid_state"
 
 
 def test_embedding_only_slice_keeps_mock_voice_fallback(

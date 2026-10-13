@@ -151,7 +151,7 @@ class Debate(Base):
             "uq_debates_one_running_per_course",
             "course_id",
             unique=True,
-            sqlite_where=(status == "running"),
+            sqlite_where=(status == "running") & deleted_at.is_(None),
         ),
     )
 

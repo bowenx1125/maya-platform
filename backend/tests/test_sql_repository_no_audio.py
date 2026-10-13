@@ -180,7 +180,7 @@ def test_text_playback_claim_keeps_controller_and_completed_job_fences(segment_r
                 {"id": ids["debate"]},
             )
         repository = SqlPlaybackRepository(session_factory=database.session_factory)
-        claimed = repository.claim_text_playback(
+        claimed = repository.claim_text_media_playback(
             db,
             debate_id=ids["debate"],
             turn_id=ids["turn"],

@@ -168,6 +168,21 @@ function PreviewTurnCard({
   const failed =
     turn.generation_status === "failed" || Boolean(turn.safe_error_code);
   const savedSpeech = Boolean(turn.speech.trim());
+  const textFallbackReady =
+    turn.generation_status === "final_ready" &&
+    turn.audio_ready === false &&
+    savedSpeech &&
+    [
+      "tts_voice_unavailable",
+      "tts_provider_unavailable",
+      "tts_timeout",
+      "tts_http_rejected",
+      "tts_response_invalid",
+      "tts_result_url_rejected",
+      "tts_result_dns_failed",
+      "tts_result_download_failed",
+      "tts_audio_invalid",
+    ].includes(turn.safe_error_code ?? "");
   return (
     <article
       className={styles.turnCard}
@@ -208,7 +223,7 @@ function PreviewTurnCard({
           <span>
             {savedSpeech ? "Audio needs attention." : "Speech needs attention."}
           </span>
-          {onRetry ? (
+          {onRetry && !textFallbackReady ? (
             <button
               className={`icon-action ${styles.retryButton}`}
               aria-label={retrying ? "Retrying…" : "Retry turn"}

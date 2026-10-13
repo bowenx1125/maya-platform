@@ -10,6 +10,20 @@ import wave
 from dataclasses import dataclass
 from typing import Protocol
 
+TTS_UNAVAILABLE_CODES = frozenset(
+    {
+        "tts_voice_unavailable",
+        "tts_provider_unavailable",
+        "tts_timeout",
+        "tts_http_rejected",
+        "tts_response_invalid",
+        "tts_result_url_rejected",
+        "tts_result_dns_failed",
+        "tts_result_download_failed",
+        "tts_audio_invalid",
+    }
+)
+
 
 class TTSProviderError(RuntimeError):
     """A TTS adapter failure carrying a bounded internal classification."""
@@ -27,6 +41,18 @@ class TTSProviderTimeout(TTSProviderError):
     """A TTS request exceeded its bounded deadline."""
 
     safe_code = "tts_timeout"
+
+
+class TTSVoiceUnavailableError(TTSProviderError):
+    """No authorized ready voice is available for the accepted text."""
+
+    safe_code = "tts_voice_unavailable"
+
+
+class TTSProviderUnavailableError(TTSProviderError):
+    """The selected speech provider is blocked before any outbound request."""
+
+    safe_code = "tts_provider_unavailable"
 
 
 class TTSHTTPRejectedError(TTSProviderError):

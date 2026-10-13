@@ -80,4 +80,19 @@ describe("Wave 1A locale and V2 style boundary", () => {
       /\.section-card-header h2\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
     );
   });
+  it("keeps hidden upload controls out of full-width input styling", () => {
+    const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+    const selector = css
+      .match(/^input:not\([^\n]+/m)?.[0]
+      .trim()
+      .replace(/,$/, "");
+    expect(selector).toBeDefined();
+    expect(selector).toContain(":not(:where(.sr-only))");
+    const upload = document.createElement("input");
+    upload.type = "file";
+    upload.className = "sr-only";
+    expect(upload.matches(selector!)).toBe(false);
+    const visible = document.createElement("input");
+    expect(visible.matches(selector!)).toBe(true);
+  });
 });
