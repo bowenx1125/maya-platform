@@ -241,10 +241,12 @@ Frontend 764 PASS/1 upstream SKIP; type/lint/build and 11 contract gates PASS.
 Linux: 2,245 collected; stale 6% status, no final result. hn01 access unavailable;
 no other host ran it. Boundary (990 files) and LF checks PASS.
 
-Isolated UI: Avatar/Voice, text-only Debate Start/Next, Live refresh/offline/session expiry,
-Final 8/8, End/logout PASS. D06: turn 0 unchanged; turns 0–5 delegated once, 1–5 generated
-once, attempt=1, provider operations=0. Double-click/in-flight refresh untested.
+Isolated UI PASS: Avatar/Voice, text-only Start/Next, Live refresh/offline/expiry, Final 8/8,
+End/logout. D06: turn 0 unchanged; turns 0–5 delegated once, 1–5 generated once, attempt 1,
+0 provider operations. Double-click/in-flight refresh untested.
 
-Production FAIL (Start 0/9; End failed); test classes stopped, not deployed. Five accounts
-logged in/out; charges unverified. Report, checklists and 55 screenshots packaged.
-20:00 deadline missed. No push, production SSH, rebuild or history change.
+Production FAIL: Start 0/9, End failed; stopped, not deployed. Five accounts; charges unknown.
+Report/checklists/55 screenshots saved; missed 20:00. No production change.
+
+Oct 13: Interact explains the server gate; UI 26/26; mock mobile click cycle PASS; production
+visual click unverified.
