@@ -91,6 +91,7 @@ def _text(content: str | None) -> bytes:
 
 
 ANSWER_ACTION = {"classification": "answer_only", "answer_span": ANSWER}
+MESSAGES = {"bare_letter_called_off_topic": "b", "bare_number_called_start": "3"}
 
 # scenario -> (scripted Leader replies, saved answers, Leader result state, code)
 SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
@@ -114,6 +115,20 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
     ),
     "flat_arguments": (
         [("flat", "assessment_action", ANSWER_ACTION), ("text", "已记录。")],
+        1,
+        "ready",
+        None,
+    ),
+    # Bug (2026-10-13): late in a long test the Leader called a bare answer
+    # something else, and the same Question kept coming back.
+    "bare_letter_called_off_topic": (
+        [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
+        1,
+        "ready",
+        None,
+    ),
+    "bare_number_called_start": (
+        [("tool", "assessment_action", {"classification": "start_request"}), ("text", "")],
         1,
         "ready",
         None,
@@ -247,7 +262,7 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
             actor_id=actor.user.id,
             request_id=str(uuid4()),
             expected_revision=conversation.revision,
-            message=ANSWER,
+            message=MESSAGES.get(scenario, ANSWER),
             routing=TeamRouting(mode="auto"),
             actor_context=actor,
         )
@@ -313,7 +328,10 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
         assert [(result.state, result.safe_error_code) for result in results] == [
             (expected_state, expected_code)
         ]
-        if expected_state == "ready":
+        if scenario in MESSAGES:
+            [saved] = read_attempt_answers(db, actor, conversation_id)
+            assert saved.answer_text == MESSAGES[scenario]
+        elif expected_state == "ready":
             assert results[0].assistant_text.startswith("已记录你的回答。")
             assert turn.state == "ready"
 

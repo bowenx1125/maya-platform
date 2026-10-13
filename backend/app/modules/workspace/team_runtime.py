@@ -1547,6 +1547,12 @@ def settle_member(
                         result,
                         whole_turn=participant is not None and participant.is_leader,
                     ),
+                    *_answer_sheet_tables(
+                        db,
+                        turn,
+                        result,
+                        whole_turn=participant is not None and participant.is_leader,
+                    ),
                 ]
             )
             result.sources_json = _canonical(
@@ -1580,6 +1586,58 @@ def report_paths(raw_receipts: Iterable[str]) -> list[str]:
             ):
                 links.append(path)
     return links
+
+
+def _answer_sheet_tables(
+    db: Session,
+    turn: ConversationTurn,
+    result: TeamTurnResult,
+    *,
+    whole_turn: bool = False,
+) -> list[str]:
+    """The answer sheets this reply read, written by the server.
+
+    Bug (2026-10-13): retyping a student's answers, the model took an older
+    attempt for the newest and invented its date. The exact sheets go under
+    the reply instead; the Tool tells the model not to retype them.
+    """
+
+    from app.modules.learning.reports import render_answer_sheet
+
+    query = (
+        select(RuntimeToolReceipt.result_json)
+        .join(
+            TeamProviderCall,
+            TeamProviderCall.operation_id == RuntimeToolReceipt.model_operation_id,
+        )
+        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
+        .where(
+            RuntimeToolReceipt.turn_id == turn.id,
+            RuntimeToolReceipt.tool_name == "read_student_answers",
+            TeamTurnResult.turn_id == turn.id,
+        )
+        .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
+    )
+    if not whole_turn:
+        query = query.where(TeamProviderCall.result_id == result.id)
+    tables: list[str] = []
+    seen: set[str] = set()
+    for raw in db.scalars(query):
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            continue
+        value = payload.get("result")
+        sheets = value.get("attempts") if isinstance(value, dict) else None
+        for sheet in sheets if isinstance(sheets, list) else []:
+            attempt_id = sheet.get("attempt_id") if isinstance(sheet, dict) else None
+            if not isinstance(attempt_id, str) or attempt_id in seen:
+                continue
+            seen.add(attempt_id)
+            tables.append(render_answer_sheet(sheet))
+    return tables
 
 
 def _report_download_links(

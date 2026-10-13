@@ -3297,6 +3297,18 @@ def test_diagnosis_asks_every_question_then_scores_and_summarizes(
         assert "## Raw answers" in markdown
         assert "| Q1 |" in markdown and "answer to Q1" in markdown
 
+        # Bug (2026-10-13): retyping answers, the teacher's Agent reported an
+        # older attempt. The server hands over the exact sheet, newest first.
+        from app.modules.learning.reports import read_student_answers, render_answer_sheet
+
+        [sheet] = read_student_answers(db, teacher, course_id=COURSE_ID, activity_id=activity.id)
+        assert sheet["attempt_id"] == str(started.attempt.id)
+        assert [question["answers"] for question in sheet["questions"]] == [
+            [f"answer to Q{index}"] for index in range(1, 5)
+        ]
+        table = render_answer_sheet(sheet)
+        assert "| 1 | Q1 | answer to Q1 |" in table
+
         # Bug (2026-10-13): when the Team moved to a new version (its Agents
         # were republished), the old version's results vanished from the
         # teacher's reads. A retained version stays readable.

@@ -20,6 +20,7 @@ from app.modules.learning.reports import (
     list_authorized_assessment_activities,
     read_assessment_activity_aggregate,
     read_attempt_transcripts,
+    read_student_answers,
 )
 from app.modules.workspace.models import Conversation
 
@@ -143,6 +144,27 @@ def create_report(
     }
 
 
+def read_answers(
+    db: Session,
+    actor: AuthContext,
+    row: Conversation,
+    payload: BaseModel,
+    _event_id: str,
+    _identity: ToolCallIdentity,
+) -> dict[str, Any]:
+    arguments = TranscriptArguments.model_validate(payload)
+    return {
+        "attempts": read_student_answers(
+            db,
+            actor,
+            course_id=row.course_id,
+            activity_id=str(arguments.activity_id),
+            learner_ref=arguments.learner_ref,
+            include_abandoned=arguments.include_abandoned,
+        )
+    }
+
+
 def report_download_path(report_id: str, revision_id: str) -> str:
     return f"/api/v1/learning/reports/{report_id}/download?revision_id={revision_id}"
 
@@ -227,6 +249,20 @@ def teacher_tools() -> dict[str, ToolSpec]:
             authorize_transcripts,
             read_transcripts,
             replay_read=read_transcripts,
+        ),
+        "read_student_answers": ToolSpec(
+            "read_student_answers",
+            "Teacher",
+            "Read each formal attempt's answer sheet in an activity, newest first: every "
+            "Question with the student's exact answers, points and feedback, and when the "
+            "attempt started and ended. Use learner_ref from the statistics for one student. "
+            "Use it whenever the teacher asks what a student answered. Do not retype the "
+            "answers or dates in your reply: the server writes the exact sheets under it. "
+            "Name which attempt you mean by its start time.",
+            TranscriptArguments,
+            authorize_transcripts,
+            read_answers,
+            replay_read=read_answers,
         ),
         "create_course_report": ToolSpec(
             "create_course_report",

@@ -1746,6 +1746,56 @@ def apply_current_attempt_lifecycle_action(
     )
 
 
+# A whole message that can only be an answer: option letters ("b", "A C",
+# "选C", "I pick B") or a number (a Likert point, a student ID).
+_BARE_ANSWER = re.compile(
+    r"^(?:(?:我|i)\s*)?(?:选择?|选的是|choose|pick|answer)?\s*"
+    r"(?:[A-Fa-f](?:\s*[,，、/和 ]\s*[A-Fa-f])*|\d{1,20})\s*[。.!！]?$",
+    re.IGNORECASE,
+)
+# Lifecycle requests stay the model's call; anything else said about a bare
+# answer was a misreading.
+_ANSWER_OVERRIDABLE = frozenset(
+    {
+        "start_request",
+        "resume_request",
+        "progress_request",
+        "answers_request",
+        "restricted_request",
+        "off_topic",
+    }
+)
+
+
+def _bare_answer_action(
+    db: Session,
+    actor: AuthContext,
+    conversation_id: str,
+    user_text: str,
+    action: AssessmentStudentAction,
+) -> AssessmentStudentAction:
+    """Record a bare answer to the open Question whatever the model called it.
+
+    Bug (2026-10-13): late in a long test the Leader called answers such as
+    "3" or "b" something else, so they were not saved and the same Question
+    came back again and again.
+    """
+
+    if action.classification not in _ANSWER_OVERRIDABLE:
+        return action
+    text = user_text.strip()
+    if not _BARE_ANSWER.fullmatch(text):
+        return action
+    context = get_assessment_runtime_context(db, actor, conversation_id)
+    if (
+        context is None
+        or context.attempt.status != "in_progress"
+        or context.current_question is None
+    ):
+        return action
+    return AssessmentStudentAction(classification="answer_only", answer_span=text)
+
+
 def apply_assessment_action(
     db: Session,
     actor: AuthContext,
@@ -1819,6 +1869,7 @@ def apply_assessment_action(
     activity = ensure_assessment_activity(db, actor, conversation.id)
     if activity is None:
         return None
+    action = _bare_answer_action(db, actor, conversation.id, turn.user_text, action)
 
     version_id: UUID | None = None
     if action.classification in {

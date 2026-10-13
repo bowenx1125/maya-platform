@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
@@ -615,17 +616,129 @@ def _cell(value: str) -> str:
     return " ".join(value.split()).replace("|", "\\|") or "—"
 
 
-def _raw_answer_markdown(db: Session, attempts: list[AssessmentAttempt]) -> str:
-    """Each attempt's Questions with the student's own words, points and feedback.
-
-    Owner request (2026-10-13): the report keeps the raw answers, not only the
-    summaries. It reads the same eligible attempts the report counted.
-    """
+def attempt_answer_sheet(db: Session, attempt: AssessmentAttempt) -> dict[str, Any]:
+    """One attempt's Questions with the student's own words, points and feedback."""
 
     from app.modules.knowledge_sets.schemas import QuestionContent
 
     from .attempts import _attempt_question_rows, _raw_answers
     from .execution import _assessment_for_attempt
+
+    user = db.get(User, attempt.actor_user_id)
+    answers: dict[int, list[str]] = defaultdict(list)
+    for answer in _raw_answers(db, attempt):
+        answers[answer.question_ordinal].append(answer.answer_text)
+    scores: dict[int, tuple[float | None, str]] = {}
+    evaluation = _assessment_for_attempt(db, attempt)
+    if evaluation is not None:
+        for item in json.loads(evaluation[1].content_json).get("questions", []):
+            scores[int(item["question_ordinal"])] = (
+                item.get("points_awarded"),
+                str(item.get("feedback") or ""),
+            )
+    rows = _attempt_question_rows(db, attempt.id)
+    offset = rows[0].ordinal if rows else 0
+    questions: list[dict[str, Any]] = []
+    for row in rows:
+        ordinal = row.ordinal - offset
+        content = (
+            QuestionContent.model_validate_json(row.content_json) if row.content_json else None
+        )
+        awarded, feedback = scores.get(ordinal, (None, ""))
+        total = None
+        if content is not None:
+            total = content.rubric.total_points
+            if total is None and content.rubric.criteria:
+                total = sum(criterion.points for criterion in content.rubric.criteria)
+        questions.append(
+            {
+                "number": ordinal + 1,
+                "prompt": content.prompt.splitlines()[0] if content else "",
+                "answers": answers.get(ordinal, []),
+                "skipped": row.resolution == "skipped",
+                "points_awarded": awarded,
+                "points_total": total,
+                "feedback": feedback,
+            }
+        )
+    ended_at = attempt.completed_at or attempt.abandoned_at
+    return {
+        "attempt_id": attempt.id,
+        "student_name": user.display_name if user is not None else "Student",
+        "learner_ref": f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}",
+        "status": attempt.status,
+        "started_at": attempt.started_at.isoformat(),
+        "ended_at": ended_at.isoformat() if ended_at is not None else None,
+        "questions": questions,
+    }
+
+
+def render_answer_sheet(sheet: dict[str, Any]) -> str:
+    """The answer sheet as a Markdown table, written by the server."""
+
+    started = str(sheet.get("started_at") or "")[:16].replace("T", " ")
+    lines = [
+        f"**{sheet.get('student_name')} ({sheet.get('learner_ref')}) · "
+        f"{started} · {sheet.get('status')}**",
+        "",
+        "| No. | Question | Answer | Points | Feedback |",
+        "| ---: | --- | --- | ---: | --- |",
+    ]
+    for question in sheet.get("questions") or []:
+        given = question.get("answers") or (
+            ["(skipped)"] if question.get("skipped") else ["(not answered)"]
+        )
+        awarded = question.get("points_awarded")
+        total = question.get("points_total")
+        points = (
+            "—"
+            if awarded is None or total == 0
+            else f"{awarded:g}" + (f"/{total:g}" if total is not None else "")
+        )
+        lines.append(
+            f"| {question.get('number')} | {_cell(str(question.get('prompt') or ''))} | "
+            f"{_cell(' / '.join(str(item) for item in given))} | {points} | "
+            f"{_cell(str(question.get('feedback') or ''))} |"
+        )
+    return "\n".join(lines)
+
+
+def read_student_answers(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+    activity_id: str,
+    learner_ref: str | None = None,
+    include_abandoned: bool = False,
+) -> list[dict[str, Any]]:
+    """Each formal attempt's answer sheet, newest first.
+
+    Bug (2026-10-13): retyping answers from raw transcripts, the teacher's
+    Agent took an older attempt for the newest and invented a date. The
+    server now hands over the exact sheet and writes it under the reply.
+    """
+
+    activity = _validated_activity(db, actor, course_id=course_id, activity_id=activity_id)
+    sheets: list[dict[str, Any]] = []
+    for attempt in sorted(
+        _eligible_attempts(db, activity), key=lambda row: row.started_at, reverse=True
+    ):
+        ref = f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}"
+        if learner_ref is not None and learner_ref != ref:
+            continue
+        if attempt.status == "abandoned" and not include_abandoned:
+            continue
+        sheets.append(attempt_answer_sheet(db, attempt))
+    return sheets
+
+
+def _raw_answer_markdown(db: Session, attempts: list[AssessmentAttempt]) -> str:
+    """Each attempt's raw answers for the downloaded report.
+
+    Owner request (2026-10-13): the report keeps the raw answers, not only the
+    summaries. It reads the same eligible attempts the report counted.
+    """
 
     lines = ["", "## Raw answers"]
     if not attempts:
@@ -633,45 +746,7 @@ def _raw_answer_markdown(db: Session, attempts: list[AssessmentAttempt]) -> str:
     for attempt in sorted(
         attempts, key=lambda item: (item.actor_user_id, item.started_at, item.id)
     ):
-        user = db.get(User, attempt.actor_user_id)
-        name = user.display_name if user is not None else "Student"
-        ref = f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}"
-        lines.extend(
-            [
-                "",
-                f"### {name} ({ref}) · {attempt.started_at.isoformat()} · {attempt.status}",
-                "",
-                "| No. | Question | Answer | Points | Feedback |",
-                "| ---: | --- | --- | ---: | --- |",
-            ]
-        )
-        answers: dict[int, list[str]] = defaultdict(list)
-        for answer in _raw_answers(db, attempt):
-            answers[answer.question_ordinal].append(answer.answer_text)
-        scores: dict[int, tuple[float | None, str]] = {}
-        evaluation = _assessment_for_attempt(db, attempt)
-        if evaluation is not None:
-            for item in json.loads(evaluation[1].content_json).get("questions", []):
-                scores[int(item["question_ordinal"])] = (
-                    item.get("points_awarded"),
-                    str(item.get("feedback") or ""),
-                )
-        rows = _attempt_question_rows(db, attempt.id)
-        offset = rows[0].ordinal if rows else 0
-        for row in rows:
-            ordinal = row.ordinal - offset
-            prompt = ""
-            if row.content_json:
-                prompt = QuestionContent.model_validate_json(row.content_json).prompt
-            awarded, feedback = scores.get(ordinal, (None, ""))
-            given = answers.get(ordinal) or (
-                ["(skipped)"] if row.resolution == "skipped" else ["(not answered)"]
-            )
-            lines.append(
-                f"| {ordinal + 1} | {_cell(prompt.splitlines()[0] if prompt else '')} | "
-                f"{_cell(' / '.join(given))} | "
-                f"{'—' if awarded is None else f'{awarded:g}'} | {_cell(feedback)} |"
-            )
+        lines.extend(["", render_answer_sheet(attempt_answer_sheet(db, attempt))])
     return "\n".join(lines) + "\n"
 
 
