@@ -20,6 +20,9 @@ type Room = Awaited<ReturnType<typeof loadRoom>>["CardRoom"];
 
 /** The home's four scholars, left to right, clicked in turn. */
 export const SEQUENCE = ["scroll", "wreath", "tablet", "wave"];
+/** On a phone: sideways, upright, sideways again, all within this time. */
+export const TURN_SEQUENCE = [true, false, true];
+const TURN_WINDOW_MS = 6000;
 /** Seat-fillers when the group is too small for a game. */
 const SCHOLARS = ["Laozi", "Plato", "Socrates", "Confucius", "Hypatia"];
 const LEAVE_MS = 280;
@@ -76,6 +79,38 @@ export function SecretDoor() {
     };
     document.addEventListener("click", listen);
     return () => document.removeEventListener("click", listen);
+  }, [reduced]);
+
+  // A phone's home has no room for the scholars, so there the way in is a
+  // turn of the phone instead: sideways, upright and sideways again, quickly
+  // enough not to happen by chance. The table itself is wide, so the player
+  // arrives holding the phone the way it fits.
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const landscape = window.matchMedia("(orientation: landscape)");
+    const touch = window.matchMedia("(pointer: coarse)");
+    let turns: { landscape: boolean; at: number }[] = [];
+    const listen = () => {
+      if (!touch.matches || !document.querySelector(".home-hero")) {
+        turns = [];
+        return;
+      }
+      const now = Date.now();
+      turns = [...turns, { landscape: landscape.matches, at: now }]
+        .filter((turn) => now - turn.at <= TURN_WINDOW_MS)
+        .slice(-TURN_SEQUENCE.length);
+      if (turns.length === 1 && turns[0].landscape) void loadRoom();
+      const done =
+        turns.length === TURN_SEQUENCE.length &&
+        turns.every((turn, index) => turn.landscape === TURN_SEQUENCE[index]);
+      if (!done) return;
+      turns = [];
+      setPhase((current) =>
+        current === "closed" ? (reduced ? "open" : "entering") : current,
+      );
+    };
+    landscape.addEventListener("change", listen);
+    return () => landscape.removeEventListener("change", listen);
   }, [reduced]);
 
   useEffect(() => {

@@ -31,10 +31,40 @@ import { CardTable } from "../components/card-table/card-table";
 import { JestersTable } from "../components/card-table/jesters-table";
 import { SEQUENCE, SecretDoor } from "../components/card-table/secret-door";
 
+const realMatchMedia = window.matchMedia;
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  window.matchMedia = realMatchMedia;
 });
+
+/** A touch screen whose orientation the test turns. */
+function phone() {
+  const listeners = new Set<() => void>();
+  let landscape = false;
+  window.matchMedia = ((query: string) => ({
+    media: query,
+    get matches() {
+      if (query.includes("orientation: landscape")) return landscape;
+      return query.includes("pointer: coarse");
+    },
+    addEventListener: (_type: string, listener: () => void) => {
+      if (query.includes("orientation")) listeners.add(listener);
+    },
+    removeEventListener: (_type: string, listener: () => void) => {
+      listeners.delete(listener);
+    },
+    addListener: () => undefined,
+    removeListener: () => undefined,
+  })) as unknown as typeof window.matchMedia;
+  return {
+    turn(sideways: boolean) {
+      landscape = sideways;
+      act(() => listeners.forEach((listener) => listener()));
+    },
+  };
+}
 
 /** The home's hero with its four scholars, as the door listens for them. */
 function Hero() {
@@ -84,6 +114,47 @@ describe("the card room", () => {
     );
     for (const id of [...SEQUENCE].reverse())
       fireEvent.click(screen.getByTestId(id));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens on a phone turned sideways, upright and sideways again", async () => {
+    const device = phone();
+    render(
+      <>
+        <Hero />
+        <SecretDoor />
+      </>,
+    );
+    device.turn(true);
+    device.turn(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    device.turn(true);
+    expect(
+      await screen.findByRole("dialog", { name: "Card room" }),
+    ).toBeTruthy();
+  });
+
+  it("stays shut when the phone turns slowly or away from the home", () => {
+    vi.useFakeTimers();
+    const device = phone();
+    const { rerender } = render(
+      <>
+        <Hero />
+        <SecretDoor />
+      </>,
+    );
+    device.turn(true);
+    act(() => vi.advanceTimersByTime(7000));
+    device.turn(false);
+    device.turn(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Off the home, the same quick turns are only a phone being turned.
+    rerender(<SecretDoor />);
+    device.turn(false);
+    device.turn(true);
+    device.turn(false);
+    device.turn(true);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
