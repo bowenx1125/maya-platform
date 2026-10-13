@@ -13,6 +13,7 @@ import {
   LoadingCard,
   Notice,
   PageIntro,
+  SectionCard,
   StatusBadge,
 } from "../ui";
 import { IconCheck, IconPlay, IconUpload } from "../quiet-icons";
@@ -487,6 +488,15 @@ export function VoiceLibrary({
     </>
   ) : undefined;
 
+  const createAction =
+    creating || listenOnly ? null : (
+      <ModulePlus
+        label={t("voiceCreateTitle")}
+        disabled={controlsDisabled || !canEnroll}
+        onClick={() => setCreating(true)}
+      />
+    );
+
   return (
     <div className={styles.voicePanel} id={id}>
       {embedded ? null : <PageIntro title={t("voices")} />}
@@ -495,22 +505,21 @@ export function VoiceLibrary({
           {t(notice)}
         </Notice>
       ) : null}
-      <ModuleCard
-        title={t("voices")}
-        labelledBy={id ? `${id}-title` : "voices-title"}
-        empty={body ? undefined : t("voiceNone")}
-        action={
-          creating || listenOnly ? null : (
-            <ModulePlus
-              label={t("voiceCreateTitle")}
-              disabled={controlsDisabled || !canEnroll}
-              onClick={() => setCreating(true)}
-            />
-          )
-        }
-      >
-        {body}
-      </ModuleCard>
+      {embedded ? (
+        // Match Agent Avatar / AGENT.md and Team SectionCard title metrics.
+        <SectionCard title={t("voices")} action={createAction}>
+          {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
+        </SectionCard>
+      ) : (
+        <ModuleCard
+          title={t("voices")}
+          labelledBy={id ? `${id}-title` : "voices-title"}
+          empty={body ? undefined : t("voiceNone")}
+          action={createAction}
+        >
+          {body}
+        </ModuleCard>
+      )}
     </div>
   );
 }
