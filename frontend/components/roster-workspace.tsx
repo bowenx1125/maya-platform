@@ -66,6 +66,9 @@ export function RosterWorkspace() {
       if (gate) setLoading(true);
       setError(null);
       try {
+        // Arriving here ends any group visit; list members once that leave
+        // is done, or the caller still shows inside the group they just left.
+        await teacherLeavesSettled();
         const [roster, courseGroups] = await Promise.all([
           api.courseRoster(courseId),
           api.groups(courseId),
@@ -128,7 +131,7 @@ export function RosterWorkspace() {
   );
 
   const enterGroup = useCallback(
-    async (group: Group, joined: boolean) => {
+    async (group: Group) => {
       setBusy(group.id);
       setError(null);
       beginTeacherEnter();
@@ -138,10 +141,10 @@ export function RosterWorkspace() {
         // this click just created.
         await teacherLeavesSettled();
         // Joining is what opens the group's workspace, so the two are one
-        // action rather than a state to set and then act on.
-        if (!joined) {
-          await api.joinGroupAsTeacher(group.id);
-        }
+        // action rather than a state to set and then act on. Join even when
+        // this roster lists the caller in the group: it may have loaded
+        // before that leave finished. Joining is idempotent.
+        await api.joinGroupAsTeacher(group.id);
         // Refresh after the student route is current. Refreshing while this
         // Accounts page is still open makes the shell treat the visit as over
         // and delete it before the group can load.
@@ -157,8 +160,6 @@ export function RosterWorkspace() {
 
   if (loading) return <LoadingCard />;
 
-  const self = entries.find((entry) => entry.user_id === user?.id);
-  const ownGroupIds = new Set(self?.groups?.map((group) => group.id) ?? []);
   const groupNames = Array.from(
     new Set(groups.map((group) => group.name)),
   ).sort();
@@ -361,28 +362,25 @@ export function RosterWorkspace() {
         >
           {groups.length ? (
             <ModuleList>
-              {groups.map((group) => {
-                const joined = ownGroupIds.has(group.id);
-                return (
-                  <ModuleRow
-                    id={`roster-group-${group.id}`}
-                    key={group.id}
-                    title={group.name}
-                    action={
-                      <button
-                        className={cards.iconButton}
-                        type="button"
-                        disabled={busy === group.id}
-                        aria-label={t("enter")}
-                        data-ui-guide="roster.openGroup"
-                        onClick={() => void enterGroup(group, joined)}
-                      >
-                        <IconArrowRight />
-                      </button>
-                    }
-                  />
-                );
-              })}
+              {groups.map((group) => (
+                <ModuleRow
+                  id={`roster-group-${group.id}`}
+                  key={group.id}
+                  title={group.name}
+                  action={
+                    <button
+                      className={cards.iconButton}
+                      type="button"
+                      disabled={busy === group.id}
+                      aria-label={t("enter")}
+                      data-ui-guide="roster.openGroup"
+                      onClick={() => void enterGroup(group)}
+                    >
+                      <IconArrowRight />
+                    </button>
+                  }
+                />
+              ))}
             </ModuleList>
           ) : undefined}
         </ModuleCard>

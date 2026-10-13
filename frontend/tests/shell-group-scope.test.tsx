@@ -79,12 +79,12 @@ describe("group navigation scope", () => {
     expect(
       screen.getByRole("link", { name: "Mayaform" }).getAttribute("href"),
     ).toBe("/teacher");
+    // Studyform, Brainform and Chatform stay in the visited group.
     expect(
       screen.getByRole("link", { name: "Studyform" }).getAttribute("href"),
-    ).toBe("/teacher/studyform");
-    // The visit reads this group's Brainform without ending the visit.
+    ).toBe("/student/groups/group-b");
     expect(links()).toContain("/teacher/knowledge?group_id=group-b");
-    expect(links()).toContain("/teacher/chat");
+    expect(links()).toContain("/teacher/chat?group_id=group-b");
     expect(
       screen.getByRole("link", { name: "Accounts" }).getAttribute("href"),
     ).toBe("/teacher/roster");

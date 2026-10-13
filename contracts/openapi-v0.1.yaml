@@ -4817,6 +4817,16 @@ paths:
           type: string
           format: uuid
           title: Course Id
+      - name: group_id
+        in: query
+        required: false
+        description: One group's Teams. A teacher who has entered the group also sees its private Teams, read-only.
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Group Id
       responses:
         '200':
           description: Teams owned by or visible in the scope.

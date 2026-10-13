@@ -26,7 +26,7 @@ from app.modules.teams.schemas import (
     TeamSummary,
     TeamVersionDTO,
 )
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, Header, Query, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -166,10 +166,13 @@ def delete_team(
 )
 def list_course_teams(
     course_id: UUID,
+    group_id: UUID | None = Query(default=None),
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[TeamSummary]:
-    return service.list_course_teams(db, context, str(course_id))
+    return service.list_course_teams(
+        db, context, str(course_id), str(group_id) if group_id is not None else None
+    )
 
 
 @router.get(

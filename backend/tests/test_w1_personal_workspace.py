@@ -178,7 +178,10 @@ def test_private_group_names_are_owner_scoped_and_public_editor_cannot_probe_the
         ).status_code
         == 200
     )
-    assert client.get(f"/api/v1/agents/{private_id}").status_code == 404
+    # A teacher who has entered the group reads its private work, read-only.
+    observed = client.get(f"/api/v1/agents/{private_id}")
+    assert observed.status_code == 200, observed.text
+    assert observed.json()["can_edit"] is False
     teacher_public = client.post(
         f"/api/v1/groups/{GROUP_ID}/agents",
         headers=_headers(teacher_csrf, **{"Idempotency-Key": "w1-private-name-teacher-001"}),
@@ -256,10 +259,20 @@ def test_agent_visibility_is_chosen_at_creation_and_never_changes(
     assert joined.status_code == 200, joined.text
     private_id, private_version = agents["private"]
     public_id, public_version = agents["public"]
-    assert client.get(f"/api/v1/agent-versions/{private_version}").status_code == 404
+    # The entered teacher reads both, and can change neither's visibility.
+    assert client.get(f"/api/v1/agent-versions/{private_version}").status_code == 200
     assert client.get(f"/api/v1/agent-versions/{public_version}").status_code == 200
     assert client.get(f"/api/v1/agents/{public_id}").json()["visibility"] == "public"
-    assert client.get(f"/api/v1/agents/{private_id}").status_code == 404
+    observed = client.get(f"/api/v1/agents/{private_id}")
+    assert observed.status_code == 200, observed.text
+    assert observed.json()["visibility"] == "private"
+    assert observed.json()["can_edit"] is False
+    flipped = client.patch(
+        f"/api/v1/agents/{private_id}",
+        headers=_headers(teacher_csrf),
+        json={"expected_metadata_revision": 1, "visibility": "public"},
+    )
+    assert flipped.status_code in {403, 404}, flipped.text
 
 
 def test_owner_history_survives_sharing_an_active_private_source(

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   isAmbiguousMutationFailure,
@@ -296,6 +296,14 @@ function GroupWorkspaceSession({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [retryDelete, setRetryDelete] = useState<string | null>(null);
   const mutations = useIdempotencyStore();
+  const teacherCourseKey = (user?.courses ?? [])
+    .filter((membership) => membership.role === "teacher")
+    .map((membership) => membership.course_id)
+    .join(",");
+  const teacherCourseIds = useMemo(
+    () => (teacherCourseKey ? teacherCourseKey.split(",") : []),
+    [teacherCourseKey],
+  );
   const teacherIdentity = Boolean(
     group &&
     user?.courses.some(
@@ -313,7 +321,14 @@ function GroupWorkspaceSession({
       const [nextAgents, nextTeams, nextChatAgents] = await Promise.all([
         api.agents(groupId, true),
         typeof api.teams === "function"
-          ? api.teams(nextGroup.course_id)
+          ? // A teacher looking round the group asks for this group's Teams,
+            // its members' private ones included.
+            api.teams(
+              nextGroup.course_id,
+              teacherCourseIds.includes(nextGroup.course_id)
+                ? groupId
+                : undefined,
+            )
           : Promise.resolve([]),
         typeof api.chatAgents === "function"
           ? api.chatAgents(nextGroup.course_id)
@@ -331,6 +346,7 @@ function GroupWorkspaceSession({
       setCourseAgents(
         nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
       );
+
       setTeams(Array.isArray(nextTeams) ? nextTeams : []);
       setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
       setItems(
@@ -344,7 +360,7 @@ function GroupWorkspaceSession({
     } finally {
       setLoading(false);
     }
-  }, [api, groupId]);
+  }, [api, groupId, teacherCourseIds]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
@@ -413,9 +429,14 @@ function GroupWorkspaceSession({
       />
     );
 
+  // A teacher looking round the group opens its Teams read-only; only the
+  // group's students start new ones.
+  // The course's shared Agents sit beside the group's own for its students;
+  // a teacher looking round the group sees the group's work alone.
+  const sharedAgents = teacherIdentity ? [] : courseAgents;
   const teamForm =
-    !teacherIdentity &&
-    (initialMode === "team-new" || initialMode === "team-edit");
+    initialMode === "team-edit" ||
+    (!teacherIdentity && initialMode === "team-new");
   if (teamForm)
     return (
       <>
@@ -453,7 +474,7 @@ function GroupWorkspaceSession({
           title={t("agents")}
           labelledBy="studyform-agents"
           empty={
-            items.length || courseAgents.length ? undefined : t("noAgents")
+            items.length || sharedAgents.length ? undefined : t("noAgents")
           }
           action={
             teacherIdentity ? null : (
@@ -476,7 +497,7 @@ function GroupWorkspaceSession({
                   canDelete={!teacherIdentity}
                 />
               ))}
-              {courseAgents.map((item) => (
+              {sharedAgents.map((item) => (
                 <VersionTile
                   key={item.agent.id}
                   name={item.agent.name}
@@ -488,9 +509,9 @@ function GroupWorkspaceSession({
                 />
               ))}
             </ModuleTiles>
-          ) : courseAgents.length ? (
+          ) : sharedAgents.length ? (
             <ModuleTiles>
-              {courseAgents.map((item) => (
+              {sharedAgents.map((item) => (
                 <VersionTile
                   key={item.agent.id}
                   name={item.agent.name}
@@ -504,41 +525,41 @@ function GroupWorkspaceSession({
             </ModuleTiles>
           ) : undefined}
         </ModuleCard>
-        {teacherIdentity ? null : (
-          <ModuleCard
-            title={t("chatTargetTeams")}
-            labelledBy="studyform-teams"
-            empty={teams.length ? undefined : t("teamNoneYet")}
-            action={
+        <ModuleCard
+          title={t("chatTargetTeams")}
+          labelledBy="studyform-teams"
+          empty={teams.length ? undefined : t("teamNoneYet")}
+          action={
+            teacherIdentity ? null : (
               <ModulePlus
                 href={`/student/groups/${groupId}?mode=team-new`}
                 label={t("newAgent")}
               />
-            }
-          >
-            {teams.length ? (
-              <ModuleTiles>
-                {teams.map((team) => (
-                  <VersionTile
-                    key={team.id}
-                    name={team.display_name}
-                    href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
-                    label={teamVersionLabel(team.current_version_seq)}
-                    pending={false}
-                    visibility={team.visibility}
-                    deleting={deleting !== null}
-                    deleteLabel={t("deleteAgent")}
-                    onDelete={
-                      team.can_edit
-                        ? () => void deleteOwnedTeam(team.id)
-                        : undefined
-                    }
-                  />
-                ))}
-              </ModuleTiles>
-            ) : undefined}
-          </ModuleCard>
-        )}
+            )
+          }
+        >
+          {teams.length ? (
+            <ModuleTiles>
+              {teams.map((team) => (
+                <VersionTile
+                  key={team.id}
+                  name={team.display_name}
+                  href={`/student/groups/${groupId}?mode=team-edit&team_id=${encodeURIComponent(team.id)}`}
+                  label={teamVersionLabel(team.current_version_seq)}
+                  pending={false}
+                  visibility={team.visibility}
+                  deleting={deleting !== null}
+                  deleteLabel={t("deleteAgent")}
+                  onDelete={
+                    team.can_edit
+                      ? () => void deleteOwnedTeam(team.id)
+                      : undefined
+                  }
+                />
+              ))}
+            </ModuleTiles>
+          ) : undefined}
+        </ModuleCard>
         <VoiceLibrary
           id="studyform-voices"
           key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}

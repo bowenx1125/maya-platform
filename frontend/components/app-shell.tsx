@@ -200,23 +200,26 @@ export function AppShell({
   const teacherSurface = role === "teacher" || Boolean(isCourseTeacher);
   const home = isStudent && !isCourseTeacher ? "/student" : "/teacher";
   // A teacher inside a student group is a temporary visitor opened from
-  // Accounts; every teacher page ends the visit and removes that access,
-  // except that group's own Brainform, which the visit reads.
-  const brainformGroupId =
-    teacherSurface && pathname === "/teacher/knowledge"
+  // Accounts. While visiting, Studyform, Brainform and Chatform stay in that
+  // group, as they do for its members; every other teacher page ends the
+  // visit and removes that access.
+  const visitPageGroupId =
+    teacherSurface &&
+    (pathname === "/teacher/knowledge" || pathname === "/teacher/chat")
       ? new URLSearchParams(locationSearch).get("group_id")
       : null;
-  const brainformVisit = Boolean(
-    brainformGroupId && membershipGroupIds.includes(brainformGroupId),
+  const visitPage = Boolean(
+    visitPageGroupId && membershipGroupIds.includes(visitPageGroupId),
   );
   const visitingGroup =
     teacherSurface &&
     (pathname.startsWith("/student/groups/") ||
       Boolean(agentRoute) ||
-      brainformVisit);
-  const visitGroupId = routeGroupId ?? brainformGroupId ?? undefined;
+      visitPage);
+  const visitGroupId =
+    routeGroupId ?? (visitPage ? visitPageGroupId : groupId) ?? undefined;
   const onTeacherPage =
-    teacherSurface && !pathname.startsWith("/student/") && !brainformVisit;
+    teacherSurface && !pathname.startsWith("/student/") && !visitPage;
   const membershipKey = membershipGroupIds.join("|");
   const visitedGroupIds = useMemo(
     () => (onTeacherPage && membershipKey ? membershipKey.split("|") : []),
@@ -241,9 +244,11 @@ export function AppShell({
     )
       return;
     // The query string reaches state a render late, so read the URL itself:
-    // arriving at a visited group's Brainform must not end that visit.
+    // arriving at a visited group's Brainform or Chatform must not end that
+    // visit.
     const reading =
-      window.location.pathname === "/teacher/knowledge"
+      window.location.pathname === "/teacher/knowledge" ||
+      window.location.pathname === "/teacher/chat"
         ? new URLSearchParams(window.location.search).get("group_id")
         : null;
     const pending = visitedGroupIds.filter(
@@ -273,11 +278,17 @@ export function AppShell({
   }, [actionRegistry, visitingGroup]);
   const teacherLegacyBrainform =
     teacherSurface && pathname === "/student/knowledge" ? locationSearch : "";
-  const studyformHref = teacherSurface
-    ? `/teacher/studyform${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
-    : groupId
-      ? `/student/groups/${groupId}`
-      : "/student#student-groups";
+  const visit =
+    visitingGroup && visitGroupId
+      ? encodeURIComponent(visitGroupId)
+      : undefined;
+  const studyformHref = visit
+    ? `/student/groups/${visit}`
+    : teacherSurface
+      ? `/teacher/studyform${routeGroupId && !visitingGroup ? `?group_id=${encodeURIComponent(routeGroupId)}` : ""}`
+      : groupId
+        ? `/student/groups/${groupId}`
+        : "/student#student-groups";
   const links: {
     href: string;
     label: string;
@@ -287,16 +298,20 @@ export function AppShell({
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
     {
-      href: teacherSurface
-        ? visitingGroup && visitGroupId
-          ? `/teacher/knowledge?group_id=${encodeURIComponent(visitGroupId)}`
-          : `/teacher/knowledge${teacherLegacyBrainform}`
-        : "/student/knowledge",
+      href: visit
+        ? `/teacher/knowledge?group_id=${visit}`
+        : teacherSurface
+          ? `/teacher/knowledge${teacherLegacyBrainform}`
+          : "/student/knowledge",
       label: "Brainform",
       icon: "brain",
     },
     {
-      href: teacherSurface ? "/teacher/chat" : "/student/chat",
+      href: visit
+        ? `/teacher/chat?group_id=${visit}`
+        : teacherSurface
+          ? "/teacher/chat"
+          : "/student/chat",
       label: "Chatform",
       icon: "chat",
     },
@@ -327,7 +342,9 @@ export function AppShell({
   ];
 
   const activePath = visitingGroup
-    ? "/teacher/roster"
+    ? visitPage
+      ? pathname
+      : studyformHref.split("?", 1)[0]
     : isStudent && groupId && agentRoute
       ? `/student/groups/${groupId}`
       : teacherSurface && pathname === "/student/knowledge"

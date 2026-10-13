@@ -306,17 +306,19 @@ describe("teacher account management", () => {
     );
   });
 
-  it("opens a group it is already inside without rejoining", async () => {
+  it("joins again a group the roster still lists it in", async () => {
     const api = apiForTeacher();
     mount(api, "en");
 
+    // The roster can load before the previous visit's leave finishes, so the
+    // listing is not trusted: joining is idempotent and always comes first.
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Enter" }))[0],
     );
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(`/student/groups/${groupId}`),
     );
-    expect(api.joinGroupAsTeacher).not.toHaveBeenCalled();
+    expect(api.joinGroupAsTeacher).toHaveBeenCalledWith(groupId);
     expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
   });
 

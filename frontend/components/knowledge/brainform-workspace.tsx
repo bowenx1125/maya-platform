@@ -2053,6 +2053,9 @@ function BrainformWorkspaceBody({
           ? source.id
           : source.team_id;
     params.set("memory_source_id", sourceId);
+    // A teacher visiting the group keeps the visit open in Chatform.
+    if (role === "teacher" && initialGroupId)
+      params.set("group_id", initialGroupId);
     return `/${role}/chat?${params.toString()}`;
   }
 

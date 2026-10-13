@@ -1049,8 +1049,12 @@ export class PlatformApi {
     return this.getJson("conversations");
   }
 
-  teams(courseId: string): Promise<TeamSummaryDto[]> {
-    return this.getJson(`courses/${encodeURIComponent(courseId)}/teams`);
+  /** The course's Teams, or with `groupId` one group's (an entered teacher's view). */
+  teams(courseId: string, groupId?: string): Promise<TeamSummaryDto[]> {
+    const scope = groupId ? `?group_id=${encodeURIComponent(groupId)}` : "";
+    return this.getJson(
+      `courses/${encodeURIComponent(courseId)}/teams${scope}`,
+    );
   }
 
   mayaTeams(courseId: string): Promise<MayaTeamDirectoryDto[]> {

@@ -175,6 +175,51 @@ def scoped_group_role(db: Session, context: AuthContext, group_id: str) -> str |
     return scoped_group_role_for_user(db, context.user.id, group_id)
 
 
+def observes_group(db: Session, user_id: str, group_id: str | None) -> bool:
+    """Whether a course teacher has entered this group to look round it.
+
+    Entering is the membership row the roster's Enter creates for the visit.
+    An observer may read all of the group's work, private included, but only
+    read it: the read routes below are the only places that grant the
+    ``observer`` role, so it never edits, publishes, chats with or reuses a
+    student's private work.
+    """
+
+    if group_id is None:
+        return False
+    return (
+        db.scalar(
+            select(WorkspaceMember.user_id)
+            .join(Group, Group.id == WorkspaceMember.group_id)
+            .join(
+                CourseMember,
+                and_(
+                    CourseMember.course_id == Group.course_id,
+                    CourseMember.user_id == WorkspaceMember.user_id,
+                ),
+            )
+            .where(
+                WorkspaceMember.group_id == group_id,
+                WorkspaceMember.user_id == user_id,
+                CourseMember.role == "teacher",
+            )
+        )
+        is not None
+    )
+
+
+def observes_private_agent(db: Session, context: AuthContext, agent: Agent) -> bool:
+    """A private group Agent the caller does not own, in a group they observe."""
+
+    return (
+        agent.deleted_at is None
+        and agent.ownership_scope == "group"
+        and agent.visibility != "public"
+        and agent.owner_user_id != context.user.id
+        and observes_group(db, context.user.id, agent.group_id)
+    )
+
+
 def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) -> str:
     """Require the student side of a group's workspace.
 
@@ -310,6 +355,8 @@ def can_read_version(
 ) -> bool:
     """Single version-visibility rule shared by summaries, history and routes."""
 
+    if role == "observer":
+        return True
     if role == "owner":
         return context is None or version_sources_are_readable(
             db,
@@ -521,6 +568,28 @@ def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAge
     raise not_found()
 
 
+def readable_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
+    """``visible_agent`` for the read routes, plus an observing teacher."""
+
+    agent = db.get(Agent, agent_id)
+    if agent is not None and observes_private_agent(db, context, agent):
+        return ScopedAgent(agent, "observer")
+    return visible_agent(db, context, agent_id)
+
+
+def readable_version(db: Session, context: AuthContext, version_id: str) -> ScopedVersion:
+    """``visible_version`` for the read routes, plus an observing teacher."""
+
+    row = db.execute(
+        select(AgentVersion, Agent)
+        .join(Agent, Agent.id == AgentVersion.agent_id)
+        .where(AgentVersion.id == version_id)
+    ).first()
+    if row is not None and observes_private_agent(db, context, row[1]):
+        return ScopedVersion(row[0], row[1], "observer")
+    return visible_version(db, context, version_id)
+
+
 def visible_version(db: Session, context: AuthContext, version_id: str) -> ScopedVersion:
     row = db.execute(
         select(AgentVersion, Agent)
@@ -546,6 +615,10 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     if row is None:
         raise not_found()
     snapshot, version, agent = row
+    if observes_private_agent(db, context, agent):
+        if version.state not in {"published", "superseded"}:
+            raise not_found()
+        return ScopedSnapshot(snapshot, version, agent, "observer")
     role = _agent_workspace_role(db, context, agent)
     if role != "owner" and not can_read_version(db, version, agent, role, context=context):
         raise not_found()
@@ -592,6 +665,13 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
 
 def visible_student_document(db: Session, context: AuthContext, document_id: str) -> ScopedDocument:
     document = db.get(KnowledgeDocument, document_id)
+    if (
+        document is not None
+        and document.workspace_state == "active"
+        and document.owner_user_id != context.user.id
+        and observes_group(db, context.user.id, document.group_id)
+    ):
+        return ScopedDocument(document, "observer")
     if document is None or not can_read_source(db, context, document):
         raise not_found()
     if document.owner_user_id == context.user.id:
@@ -1364,7 +1444,7 @@ def agent_summary(
     )
     if (
         draft is not None
-        and role != "owner"
+        and role not in {"owner", "observer"}
         and not can_read_version(db, draft, agent, role, context=context)
     ):
         draft = None
@@ -1409,7 +1489,7 @@ def agent_detail(
         **agent_summary(
             db,
             agent,
-            include_draft=role in {"owner", "student"},
+            include_draft=role in {"owner", "student", "observer"},
             role=role,
             context=context,
         ).model_dump(),
@@ -1418,7 +1498,7 @@ def agent_detail(
                 db,
                 version,
                 agent,
-                include_private_sources=role == "owner",
+                include_private_sources=role in {"owner", "observer"},
             )
             for version in versions
         ],

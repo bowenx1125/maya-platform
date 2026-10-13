@@ -34,6 +34,7 @@ from app.modules.knowledge.services import (
     can_read_source,
     course_member_role,
     document_file_content,
+    observes_private_agent,
     scoped_group_role_for_user,
     visible_agent,
 )
@@ -3070,7 +3071,15 @@ def _agent_for_binding(db: Session, context: AuthContext, agent_id: str, *, edit
 def get_agent_knowledge_sets(
     db: Session, context: AuthContext, agent_id: str
 ) -> tuple[int, list[KnowledgeSetSummary]]:
-    agent = _agent_for_binding(db, context, agent_id, edit=False)
+    # A teacher looking round the group sees which Knowledge a private Agent
+    # draws on, by name and read-only.
+    observed = db.get(Agent, agent_id)
+    observing = observed is not None and observes_private_agent(db, context, observed)
+    agent = (
+        cast(Agent, observed)
+        if observing
+        else _agent_for_binding(db, context, agent_id, edit=False)
+    )
     rows = db.scalars(
         select(AgentKnowledgeSet)
         .where(AgentKnowledgeSet.agent_id == agent_id)
@@ -3080,6 +3089,10 @@ def get_agent_knowledge_sets(
     for binding in rows:
         row = db.get(KnowledgeSet, binding.knowledge_set_id)
         if row is None or row.course_id != agent.course_id:
+            continue
+        if observing:
+            if row.group_id is None or row.group_id == agent.group_id:
+                sets.append(_summary(db, context, row, can_edit=False))
             continue
         role = _set_role(db, context, row)
         if role is None or not _set_sources_readable(db, context, row, role):

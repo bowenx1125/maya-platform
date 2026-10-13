@@ -317,16 +317,19 @@ describe("student shell navigation", () => {
     const home = nav.getByRole("link", { name: "Mayaform" });
     expect(home.getAttribute("href")).toBe("/teacher");
     expect(home.getAttribute("aria-current")).toBeNull();
-    // The visit reads the group's own Brainform; Studyform ends it.
+    // Inside the visit the sidebar is the group's, as its members see it.
+    const studyform = nav.getByRole("link", { name: "Studyform" });
+    expect(studyform.getAttribute("href")).toBe("/student/groups/group-b");
+    expect(studyform.getAttribute("aria-current")).toBe("page");
     expect(
       nav.getByRole("link", { name: "Brainform" }).getAttribute("href"),
     ).toBe("/teacher/knowledge?group_id=group-b");
     expect(
-      nav.getByRole("link", { name: "Studyform" }).getAttribute("href"),
-    ).toBe("/teacher/studyform");
+      nav.getByRole("link", { name: "Chatform" }).getAttribute("href"),
+    ).toBe("/teacher/chat?group_id=group-b");
     expect(
       nav.getByRole("link", { name: "Accounts" }).getAttribute("aria-current"),
-    ).toBe("page");
+    ).toBeNull();
     expect(nav.getByRole("link", { name: "Back" }).getAttribute("href")).toBe(
       "/teacher/roster",
     );
@@ -334,30 +337,70 @@ describe("student shell navigation", () => {
     expect(leaveGroupAsTeacher).not.toHaveBeenCalled();
   });
 
-  it("keeps the visit while the teacher reads that group's Brainform", async () => {
+  it.each([
+    ["Brainform", "/teacher/knowledge"],
+    ["Chatform", "/teacher/chat"],
+  ])(
+    "keeps the visit while the teacher is in that group's %s",
+    async (label, path) => {
+      session.user = courseTeacherInTwoGroups;
+      const leaveGroupAsTeacher = vi.fn(async () => undefined);
+      session.api = { leaveGroupAsTeacher };
+      window.history.replaceState(null, "", `${path}?group_id=group-b`);
+      try {
+        renderTeacherShell(path);
+        const nav = within(screen.getByRole("navigation"));
+        await waitFor(() =>
+          expect(
+            nav.getByRole("link", { name: "Back" }).getAttribute("href"),
+          ).toBe("/teacher/roster"),
+        );
+        expect(
+          nav.getByRole("link", { name: label }).getAttribute("aria-current"),
+        ).toBe("page");
+        expect(
+          nav.getByRole("link", { name: "Studyform" }).getAttribute("href"),
+        ).toBe("/student/groups/group-b");
+        await waitFor(() =>
+          expect(leaveGroupAsTeacher).toHaveBeenCalledWith("group-a"),
+        );
+        expect(leaveGroupAsTeacher).not.toHaveBeenCalledWith("group-b");
+      } finally {
+        window.history.replaceState(null, "", "/");
+      }
+    },
+  );
+
+  it("keeps a visiting teacher's sidebar in the group on its Agent pages", () => {
+    session.user = {
+      display_name: "Maya",
+      courses: [{ course_id: "course", role: "teacher" }],
+      groups: [{ group_id: "group-b", role: "admin" }],
+    };
+    const leaveGroupAsTeacher = vi.fn(async () => undefined);
+    session.api = { leaveGroupAsTeacher, agent: vi.fn(), version: vi.fn() };
+    renderStudentShell("/student/agents/agent-b");
+    const nav = within(screen.getByRole("navigation"));
+    const studyform = nav.getByRole("link", { name: "Studyform" });
+    expect(studyform.getAttribute("href")).toBe("/student/groups/group-b");
+    expect(studyform.getAttribute("aria-current")).toBe("page");
+    expect(
+      nav.getByRole("link", { name: "Brainform" }).getAttribute("href"),
+    ).toBe("/teacher/knowledge?group_id=group-b");
+    expect(leaveGroupAsTeacher).not.toHaveBeenCalled();
+  });
+
+  it("ends the visit on the teacher's own Chatform", async () => {
     session.user = courseTeacherInTwoGroups;
     const leaveGroupAsTeacher = vi.fn(async () => undefined);
     session.api = { leaveGroupAsTeacher };
-    window.history.replaceState(
-      null,
-      "",
-      "/teacher/knowledge?group_id=group-b",
-    );
-    try {
-      renderTeacherShell("/teacher/knowledge");
-      const nav = within(screen.getByRole("navigation"));
-      await waitFor(() =>
-        expect(
-          nav.getByRole("link", { name: "Back" }).getAttribute("href"),
-        ).toBe("/teacher/roster"),
-      );
-      await waitFor(() =>
-        expect(leaveGroupAsTeacher).toHaveBeenCalledWith("group-a"),
-      );
-      expect(leaveGroupAsTeacher).not.toHaveBeenCalledWith("group-b");
-    } finally {
-      window.history.replaceState(null, "", "/");
-    }
+    renderTeacherShell("/teacher/chat");
+    await waitFor(() => expect(leaveGroupAsTeacher).toHaveBeenCalledTimes(2));
+    expect(
+      within(screen.getByRole("navigation"))
+        .getByRole("link", { name: "Chatform" })
+        .getAttribute("href"),
+    ).toBe("/teacher/chat");
   });
 
   it("removes every temporary group visit once the teacher is back on a teacher page", async () => {

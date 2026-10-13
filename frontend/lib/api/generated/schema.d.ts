@@ -10837,7 +10837,10 @@ export interface operations {
     };
     listCourseTeams: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description One group's Teams. A teacher who has entered the group also sees its private Teams, read-only. */
+                group_id?: string | null;
+            };
             header?: never;
             path: {
                 course_id: string;
