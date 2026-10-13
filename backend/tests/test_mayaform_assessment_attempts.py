@@ -114,12 +114,12 @@ def attempt_env(app_bundle: Any, client: TestClient) -> tuple[Any, Any, Any, Tes
     return app, database, settings, client
 
 
-def _question_content(prompt: str, reference_answer: str) -> str:
+def _question_content(prompt: str, reference_answer: str, label: str = "Reasoning") -> str:
     return QuestionContent(
         kind="question",
         prompt=prompt,
         reference_answer=reference_answer,
-        rubric={"criteria": [{"label": "Reasoning", "guidance": "Internal only", "points": 2}]},
+        rubric={"criteria": [{"label": label, "guidance": "Internal only", "points": 2}]},
     ).model_dump_json()
 
 
@@ -489,8 +489,9 @@ def _create_question(
     prompt: str,
     reference_answer: str,
     now: datetime,
+    label: str = "Reasoning",
 ) -> None:
-    content_json = _question_content(prompt, reference_answer)
+    content_json = _question_content(prompt, reference_answer, label)
     db.add(
         KnowledgeAsset(
             id=asset_id,
@@ -557,6 +558,7 @@ def _create_formal_conversation(
     actor_user_id: str = STUDENT_ID,
     visibility: str = "public",
     prompts: tuple[str, ...] = ("Question one", "Question two"),
+    labels: dict[str, str] | None = None,
 ) -> tuple[str, str, str, str, str, list[tuple[str, str]]]:
     conversation_id, team_id, team_version_id = _team_conversation(
         db,
@@ -672,6 +674,7 @@ def _create_formal_conversation(
             prompt=prompt,
             reference_answer=f"Internal answer {ordinal + 1}",
             now=now,
+            label=(labels or {}).get(prompt, "Reasoning"),
         )
         questions.append((asset_id, version_id))
     db.flush()
@@ -3287,6 +3290,247 @@ def test_diagnosis_asks_every_question_then_scores_and_summarizes(
             db, teacher, report_id=str(report.id), revision_id=str(report.revision_id)
         ).content
         assert "- Weak points: Q3 topic" in markdown
+
+        # Owner request (2026-10-13): a teacher asking again for an earlier
+        # report gets its real link; the server writes it under the reply.
+        from types import SimpleNamespace
+
+        from app.modules.runtime_tools.teacher import list_reports
+        from app.modules.workspace.team_runtime import report_paths
+
+        listed = list_reports(
+            db,
+            teacher,
+            SimpleNamespace(course_id=COURSE_ID),  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            "list",
+            None,  # type: ignore[arg-type]
+        )
+        path = f"/api/v1/learning/reports/{report.id}/download?revision_id={report.revision_id}"
+        assert [item["download_path"] for item in listed["reports"]] == [path]
+        assert report_paths(
+            [
+                json.dumps({"ok": True, "result": {"download_path": path}}),
+                json.dumps({"ok": True, "result": listed}),
+                json.dumps({"ok": False, "result": {"download_path": "/api/v1/x"}}),
+            ]
+        ) == [path]
+
+
+# Owner decision (2026-10-13): after the questions, follow up only on the ones
+# answered wrongly, at most as many as the Knowledge allows, then score again.
+def test_follow_ups_ask_only_about_wrong_answers_before_the_final_score(
+    attempt_env: Any,
+    app_bundle: Any,
+) -> None:
+    _app, database, settings, client = attempt_env
+    _template_database, _repository, template_operation_id = _dispatch(client, app_bundle)
+    token, _csrf = _login(client, "bowen")
+    with database.session() as db:
+        template_stage_id = db.scalar(
+            select(TeamProviderCall.id).where(
+                TeamProviderCall.operation_id == template_operation_id
+            )
+        )
+        assert template_stage_id is not None
+        conversation_id, *_rest = _create_formal_conversation(
+            db,
+            prompts=("Q1", "Q2", "Q3", "Why Q1?", "Why Q2?", "Why Q3?"),
+            labels={
+                "Why Q1?": "Follow-up for Question 1; at most 2",
+                "Why Q2?": "追问第 2 题；最多 2 道",
+                "Why Q3?": "Follow-up for Question 3",
+            },
+        )
+        actor = _context(db, settings, token)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None and started.progress.question_count == 3
+        activity = db.get(AssessmentActivity, str(started.attempt.activity_id))
+        assert activity is not None
+        evaluator_id = _participant_for_member(
+            db, conversation_id, activity.evaluator_team_member_id
+        )
+        for prompt in ("Q1", "Q2", "Q3"):
+            shown = get_assessment_runtime_context(db, actor, conversation_id)
+            assert shown is not None and shown.current_question is not None
+            assert shown.current_question.prompt == prompt
+            _answer_current(db, actor, conversation_id, f"answer to {prompt}")
+
+        evaluation = _begin_pending_executor_turn(
+            db, conversation_id=conversation_id, participant_id=evaluator_id, position=0
+        )
+        context = get_assessment_executor_context(
+            db,
+            actor,
+            conversation_id,
+            turn_id=evaluation[0],
+            participant_id=evaluator_id,
+            result_id=evaluation[1],
+            purpose="assessment_evaluate",
+        )
+        assert context is not None
+        # Follow-up items are never offered as new topics.
+        assert json.loads(context.task_payload_json)["follow_up_candidates"] == []
+        identity = _accepted_tool_identity(
+            db,
+            template_stage_id=template_stage_id,
+            conversation_id=conversation_id,
+            participant_id=evaluator_id,
+            position=0,
+            tool_name="edit_assessment",
+            execution=evaluation,
+        )
+        # Q1 and Q3 are wrong, Q2 is right: Q1 and Q3 get follow-ups, capped at 2.
+        assert write_formal_assessment(
+            db,
+            actor,
+            identity,
+            {
+                "overall_feedback": "Reviewed.",
+                "questions": [
+                    {"question_ordinal": 0, "feedback": "Recorded.", "points_awarded": 0},
+                    {"question_ordinal": 1, "feedback": "Recorded.", "points_awarded": 2},
+                    {"question_ordinal": 2, "feedback": "Recorded.", "points_awarded": 1},
+                ],
+            },
+        ) == {"saved": True}
+        _finish_executor_turn(db, evaluation)
+
+        asked = []
+        for _ in range(2):
+            shown = get_assessment_runtime_context(db, actor, conversation_id)
+            assert shown is not None and shown.current_question is not None
+            asked.append(shown.current_question.prompt)
+            _answer_current(db, actor, conversation_id, "Because of the handout.")
+        assert asked == ["Why Q1?", "Why Q3?"]
+        shown = get_assessment_runtime_context(db, actor, conversation_id)
+        assert shown is not None and shown.current_question is None
+
+        second = _begin_pending_executor_turn(
+            db, conversation_id=conversation_id, participant_id=evaluator_id, position=1
+        )
+        context = get_assessment_executor_context(
+            db,
+            actor,
+            conversation_id,
+            turn_id=second[0],
+            participant_id=evaluator_id,
+            result_id=second[1],
+            purpose="assessment_evaluate",
+        )
+        assert context is not None
+        assert [item["prompt"] for item in json.loads(context.task_payload_json)["questions"]] == [
+            "Q1",
+            "Q2",
+            "Q3",
+            "Why Q1?",
+            "Why Q3?",
+        ]
+        identity = _accepted_tool_identity(
+            db,
+            template_stage_id=template_stage_id,
+            conversation_id=conversation_id,
+            participant_id=evaluator_id,
+            position=1,
+            tool_name="edit_assessment",
+            execution=second,
+        )
+        assert write_formal_assessment(
+            db,
+            actor,
+            identity,
+            {
+                "overall_feedback": "Reviewed.",
+                "questions": [
+                    {"question_ordinal": ordinal, "feedback": "Recorded.", "points_awarded": 0}
+                    for ordinal in range(5)
+                ],
+            },
+        ) == {"saved": True}
+        # Only one follow-up round runs.
+        shown = get_assessment_runtime_context(db, actor, conversation_id)
+        assert shown is not None and shown.current_question is None
+        assert shown.progress.question_count == 5
+
+
+# Owner rule (2026-10-13, teacher file 07): follow up on exactly one Question,
+# the first wrong one in the Knowledge's priority order, asking its reason and
+# confidence; when every answer is right, the marked Question is asked.
+@pytest.mark.parametrize(
+    ("points", "expected"),
+    [
+        ((0, 2, 0), ["Why Q3?", "How sure Q3?"]),
+        ((0, 2, 2), ["Why Q1?", "How sure Q1?"]),
+        ((2, 2, 2), ["Why Q3?", "How sure Q3?"]),
+    ],
+)
+def test_one_follow_up_in_priority_order_with_its_confidence_step(
+    attempt_env: Any,
+    app_bundle: Any,
+    points: tuple[int, int, int],
+    expected: list[str],
+) -> None:
+    _app, database, settings, client = attempt_env
+    _template_database, _repository, template_operation_id = _dispatch(client, app_bundle)
+    token, _csrf = _login(client, "bowen")
+    with database.session() as db:
+        template_stage_id = db.scalar(
+            select(TeamProviderCall.id).where(
+                TeamProviderCall.operation_id == template_operation_id
+            )
+        )
+        assert template_stage_id is not None
+        q3 = "Follow-up for Question 3; at most 1; also when all correct"
+        q1 = "追问第 1 题；最多 1 道"
+        conversation_id, *_rest = _create_formal_conversation(
+            db,
+            prompts=("Q1", "Q2", "Q3", "Why Q3?", "How sure Q3?", "Why Q1?", "How sure Q1?"),
+            labels={"Why Q3?": q3, "How sure Q3?": q3, "Why Q1?": q1, "How sure Q1?": q1},
+        )
+        actor = _context(db, settings, token)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None and started.progress.question_count == 3
+        activity = db.get(AssessmentActivity, str(started.attempt.activity_id))
+        assert activity is not None
+        evaluator_id = _participant_for_member(
+            db, conversation_id, activity.evaluator_team_member_id
+        )
+        for _ in range(3):
+            _answer_current(db, actor, conversation_id, "B")
+        evaluation = _begin_pending_executor_turn(
+            db, conversation_id=conversation_id, participant_id=evaluator_id, position=0
+        )
+        identity = _accepted_tool_identity(
+            db,
+            template_stage_id=template_stage_id,
+            conversation_id=conversation_id,
+            participant_id=evaluator_id,
+            position=0,
+            tool_name="edit_assessment",
+            execution=evaluation,
+        )
+        assert write_formal_assessment(
+            db,
+            actor,
+            identity,
+            {
+                "overall_feedback": "Recorded.",
+                "questions": [
+                    {"question_ordinal": index, "feedback": "Recorded.", "points_awarded": value}
+                    for index, value in enumerate(points)
+                ],
+            },
+        ) == {"saved": True}
+        _finish_executor_turn(db, evaluation)
+        asked = []
+        while True:
+            shown = get_assessment_runtime_context(db, actor, conversation_id)
+            assert shown is not None
+            if shown.current_question is None:
+                break
+            asked.append(shown.current_question.prompt)
+            _answer_current(db, actor, conversation_id, "4")
+        assert asked == expected
 
 
 def test_ending_early_submits_answered_work_and_closes_follow_ups(

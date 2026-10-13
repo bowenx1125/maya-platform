@@ -280,6 +280,55 @@ describe("W1 teacher personal workspace", () => {
     );
   });
 
+  // Bug (2026-10-13): a new Agent's Brainform listed another Agent's private
+  // file and the Knowledge of a deleted Agent, which Brainform itself hides.
+  it("offers a new Agent only the library Brainform lists", async () => {
+    const knowledgeSet = (id: string, name: string) => ({
+      id,
+      display_name: name,
+      can_edit: true,
+    });
+    const api = {
+      createWorkspaceAgent: vi.fn().mockResolvedValue(personalAgent()),
+      workspaceDocuments: vi.fn().mockResolvedValue([
+        privateDocument(),
+        {
+          ...privateDocument(),
+          id: "shared-source",
+          visibility: "public",
+          source_filename: "shared-notes.md",
+        },
+      ]),
+      knowledgeSets: vi
+        .fn()
+        .mockResolvedValue([
+          knowledgeSet("live-set", "Live Knowledge"),
+          knowledgeSet("orphan-set", "Deleted Agent Knowledge"),
+        ]),
+      brainformKnowledge: vi
+        .fn()
+        .mockResolvedValue([{ canonical_set_id: "live-set" }]),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherPersonalAgentCreate />
+        </AppShell>
+      </LocaleProvider>,
+    );
+
+    expect(
+      await screen.findByRole("checkbox", { name: "shared-notes.md" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Live Knowledge" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "private-notes.md" })).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", { name: "Deleted Agent Knowledge" }),
+    ).toBeNull();
+  });
+
   // Owner decision (2026-10-12): a teacher creates personal voices that only
   // that teacher may choose; Studyform lists those, never a group's.
   it("lists and creates a teacher's own personal voices", async () => {

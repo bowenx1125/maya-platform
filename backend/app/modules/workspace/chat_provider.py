@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -862,20 +863,57 @@ def conversation_user_texts(db: Session, conversation_id: str) -> list[str]:
     )
 
 
-def prefers_chinese(user_texts: list[str]) -> bool:
-    """Follow the language the learner has used across the Chat, not one message."""
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+_LATIN_WORD = re.compile(r"[A-Za-z]+")
+_OPTION_LETTER = re.compile(r"[A-Fa-f]")
+_ASKS_ENGLISH = re.compile(
+    r"(用|说|讲|换成|改用|改成|切换到?)\s*英文|英文(回答|回复|交流|说)"
+    r"|\b(in|speak|use|switch to|reply in|answer in)\s+english\b",
+    re.IGNORECASE,
+)
+_ASKS_CHINESE = re.compile(
+    r"(用|说|讲|换成|改用|改成|切换到?)\s*中文|中文(回答|回复|交流|说)"
+    r"|\b(in|speak|use|switch to|reply in|answer in)\s+chinese\b",
+    re.IGNORECASE,
+)
 
-    votes = [
-        any("\u4e00" <= char <= "\u9fff" for char in text)
-        for text in user_texts
-        if any(char.isalpha() for char in text)
-    ]
-    if not votes:
+
+def sentence_chinese(text: str) -> bool | None:
+    """The language of one message, or None when it is not a sentence.
+
+    Owner decision (2026-10-13): only a sentence changes the reply language.
+    An option letter ("B", "A C"), a number, an ID or a single word such as
+    "skip" says nothing about it. A request for a language wins.
+    """
+
+    if _ASKS_ENGLISH.search(text):
         return False
-    chinese_count = sum(votes)
-    if chinese_count * 2 == len(votes):
-        return votes[0]
-    return chinese_count * 2 > len(votes)
+    if _ASKS_CHINESE.search(text):
+        return True
+    if len(_CJK.findall(text)) >= 2:
+        return True
+    words = [
+        word for word in _LATIN_WORD.findall(text) if not _OPTION_LETTER.fullmatch(word)
+    ]
+    if not _CJK.search(text) and len(words) >= 2:
+        return False
+    return None
+
+
+def latest_sentence_chinese(user_texts: list[str]) -> bool | None:
+    """The language of the learner's latest sentence, if they wrote one."""
+
+    for text in reversed(user_texts):
+        language = sentence_chinese(text)
+        if language is not None:
+            return language
+    return None
+
+
+def prefers_chinese(user_texts: list[str]) -> bool:
+    """Follow the learner's latest sentence; English before any sentence."""
+
+    return bool(latest_sentence_chinese(user_texts))
 
 
 def reply_language_from_projection(value: dict[str, Any]) -> tuple[dict[str, Any], bool | None]:
@@ -887,11 +925,16 @@ def reply_language_from_projection(value: dict[str, Any]) -> tuple[dict[str, Any
 
 
 def assessment_reply_chinese(db: Session, conversation_id: str, user_texts: list[str]) -> bool:
-    """The Leader decides the language of server sentences; history is the fallback.
+    """The language of server sentences: the learner's latest sentence decides.
 
-    A student who writes in Chinese but asks for English answers must get
-    English progress and Question lines too.
+    A bare option letter is not a sentence, so answering "B" keeps the current
+    language. A student who asks for English gets English progress lines.
+    Before any sentence, the Leader's latest choice applies.
     """
+
+    latest = latest_sentence_chinese(user_texts)
+    if latest is not None:
+        return latest
 
     from app.modules.runtime_tools.models import RuntimeToolReceipt
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
@@ -484,6 +485,48 @@ def _add_attempt_questions(
         )
 
 
+# Owner decision (2026-10-13): after the questions, the test follows up on the
+# ones answered wrongly, asking for the student's reasoning. The teacher writes
+# each follow-up in the Knowledge and marks it in its hidden Rubric with a
+# criterion label such as "Follow-up for Question 3; at most 1; also when all
+# correct" (or "追问第 3 题；最多 1 道；全对时也问"):
+# - "at most" caps how many Questions one test follows up on; every item for
+#   a chosen Question is asked, so a reason and a confidence step go together;
+# - the order of the items in the Knowledge is the priority order;
+# - "also when all correct" items are asked when nothing was answered wrongly.
+_FOLLOW_UP_LABEL = re.compile(
+    r"^\s*(?:follow[- ]?up\s+(?:for|on)\s+(?:question\s*|q)?(?P<en>\d+)"
+    r"(?:\s*[;；,，]\s*at\s+most\s+(?P<en_limit>\d+))?"
+    r"(?P<en_all>\s*[;；,，]\s*also\s+when\s+all\s+(?:are\s+)?correct)?"
+    r"|追问\s*第?\s*(?P<zh>\d+)\s*题"
+    r"(?:\s*[;；,，]\s*最多\s*(?P<zh_limit>\d+)\s*道?)?"
+    r"(?P<zh_all>\s*[;；,，]\s*全对时也问)?)\s*[.。]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def follow_up_target(content: QuestionContent) -> tuple[int, int | None, bool] | None:
+    """The Question this item follows up on, its cap and its all-correct mark."""
+
+    for criterion in content.rubric.criteria:
+        match = _FOLLOW_UP_LABEL.match(criterion.label)
+        if match is None:
+            continue
+        number = match.group("en") or match.group("zh")
+        limit = match.group("en_limit") or match.group("zh_limit")
+        when_all_correct = bool(match.group("en_all") or match.group("zh_all"))
+        return int(number), int(limit) if limit else None, when_all_correct
+    return None
+
+
+def _is_follow_up_item(db: Session, row: AssessmentActivityQuestion) -> bool:
+    try:
+        _version, content = _verify_question_source(db, row, require_current=False)
+    except PlatformError:
+        return False
+    return follow_up_target(content) is not None
+
+
 def _copy_activity_questions(
     db: Session,
     activity: AssessmentActivity,
@@ -502,8 +545,10 @@ def _copy_activity_questions(
     )
     # Owner decision (2026-10-12): the test asks every Question in the Knowledge.
     # How many there are, and of what kind, is the question-writing Agent's
-    # choice, not a server count.
-    _add_attempt_questions(db, attempt, source_rows)
+    # choice, not a server count. Follow-up items wait for a wrong answer.
+    _add_attempt_questions(
+        db, attempt, [row for row in source_rows if not _is_follow_up_item(db, row)]
+    )
 
 
 def follow_up_candidates(
@@ -544,8 +589,89 @@ def unasked_questions(
             _version, content = _verify_question_source(db, row, require_current=False)
         except PlatformError:
             continue
+        if follow_up_target(content) is not None:
+            # Asked only after a wrong answer, never chosen as a new topic.
+            continue
         candidates.append((row, content))
     return candidates
+
+
+def wrong_answer_follow_ups(
+    db: Session,
+    attempt: AssessmentAttempt,
+    scored: dict[int, tuple[float | None, float | None]],
+) -> list[AssessmentActivityQuestion]:
+    """Follow-up items for the Questions this evaluation scored below full marks.
+
+    ``scored`` maps each asked Question's number in the Knowledge (from 1) to
+    its awarded and maximum points. A skipped Question has no reasoning to ask
+    about. Only one follow-up round runs, and none after the student ends
+    early.
+    """
+
+    if attempt.status != "in_progress" or attempt.submitted_at is not None:
+        return []
+    asked_rows = _attempt_question_rows(db, attempt.id)
+    sources = {
+        row.id: row
+        for row in db.scalars(
+            select(AssessmentActivityQuestion).where(
+                AssessmentActivityQuestion.activity_id == attempt.activity_id,
+                AssessmentActivityQuestion.selection_revision
+                == attempt.question_selection_revision,
+            )
+        ).all()
+    }
+    if any(
+        (source := sources.get(row.activity_question_id)) is not None
+        and _is_follow_up_item(db, source)
+        for row in asked_rows
+    ):
+        return []
+    items: list[tuple[tuple[int, int | None, bool], AssessmentActivityQuestion]] = []
+    for source in sorted(sources.values(), key=lambda item: item.ordinal):
+        if not source.required:
+            continue
+        try:
+            _version, content = _verify_question_source(db, source, require_current=False)
+        except PlatformError:
+            continue
+        target = follow_up_target(content)
+        if target is not None:
+            items.append((target, source))
+    if not items:
+        return []
+
+    def wrong(number: int) -> bool:
+        awarded, maximum = scored.get(number, (None, None))
+        return awarded is not None and maximum is not None and maximum > 0 and awarded < maximum
+
+    eligible = [(target, source) for target, source in items if wrong(target[0])]
+    if not eligible and not any(wrong(number) for number in scored):
+        eligible = [(target, source) for target, source in items if target[2]]
+    limits = [target[1] for target, _source in items if target[1] is not None]
+    chosen: list[int] = []
+    for target, _source in eligible:
+        if target[0] not in chosen:
+            chosen.append(target[0])
+    if limits:
+        chosen = chosen[: min(limits)]
+    return [source for target, source in eligible if target[0] in chosen]
+
+
+def knowledge_question_number(db: Session, attempt_question: AssessmentAttemptQuestion) -> int:
+    """This Question's number in its Knowledge, counting from 1."""
+
+    source = db.get(AssessmentActivityQuestion, attempt_question.activity_question_id)
+    if source is None:
+        return 0
+    first = db.scalar(
+        select(func.min(AssessmentActivityQuestion.ordinal)).where(
+            AssessmentActivityQuestion.activity_id == source.activity_id,
+            AssessmentActivityQuestion.selection_revision == source.selection_revision,
+        )
+    )
+    return source.ordinal - int(first or 0) + 1
 
 
 def validated_follow_ups(

@@ -200,6 +200,7 @@
   list-style: none;
 }
 
+/* Selected or hovered, a row lifts like an Agent or Team tile. */
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -208,11 +209,21 @@
   gap: 10px;
   min-width: 0;
   padding: 8px 4px 8px 10px;
-  border-bottom: 1px solid #eee9df;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition:
+    translate 320ms var(--ease-spring),
+    box-shadow 240ms ease,
+    border-color 200ms ease,
+    background-color 200ms ease;
 }
 
-.row:last-child {
-  border-bottom: 0;
+.row:hover,
+.row:focus-within {
+  border-color: #dccfb6;
+  background: #fdfaf3;
+  box-shadow: var(--lift);
+  translate: 0 -2px;
 }
 
 .rowCopy {
@@ -241,10 +252,8 @@
   text-decoration: none;
 }
 
-.titleButton:hover:not(:disabled) {
-  color: #69522b;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.titleButton[aria-disabled="true"] {
+  cursor: default;
 }
 
 .titleButton:disabled {

@@ -743,6 +743,25 @@ def _visible_source_agents(db: Session, context: AuthContext, set_row: Knowledge
     return visible
 
 
+def _owned_upload(db: Session, role: SetRole | None, set_row: KnowledgeSet) -> bool:
+    """Whether this is Knowledge its owner wrote or uploaded on its own.
+
+    Such a set has no Agent or Team yet, so Brainform lists it under its own
+    name until a Team or Agent uses it. A set that was ever bound to an Agent
+    or generated from one is not: when that Agent is deleted, its Knowledge
+    leaves the library with it.
+    """
+
+    if role != "owner":
+        return False
+    bound = db.scalar(
+        select(AgentKnowledgeSet.agent_id)
+        .where(AgentKnowledgeSet.knowledge_set_id == set_row.id)
+        .limit(1)
+    )
+    return bound is None and _latest_generation_for_set(db, set_row.id) is None
+
+
 def _visible_source_agent(db: Session, context: AuthContext, set_row: KnowledgeSet) -> Agent:
     agents = _visible_source_agents(db, context, set_row)
     if agents:
@@ -894,7 +913,7 @@ def list_brainform_knowledge(
             continue
         source_agents = _visible_source_agents(db, context, set_row)
         team_labels = [] if source_agents else _visible_team_knowledge_labels(db, context, set_row)
-        if not source_agents and not team_labels:
+        if not source_agents and not team_labels and not _owned_upload(db, role, set_row):
             continue
         generation_state = run.state if run is not None else None
         safe_error_code = run.safe_error_code if run is not None and summary.can_edit else None
@@ -912,7 +931,7 @@ def list_brainform_knowledge(
                 content_hash = _sha256(markdown_version.student_projection_markdown)
         consumers: list[tuple[str | None, str]] = [
             (source_agent.id, source_agent.name) for source_agent in source_agents
-        ] or [(None, label) for label in team_labels]
+        ] or [(None, label) for label in team_labels] or [(None, set_row.display_name)]
         for agent_id, label in consumers:
             generation_job_id = None
             run_agent = db.get(Agent, run.agent_id) if run is not None else None
@@ -991,10 +1010,10 @@ def get_brainform_markdown(
         if error.status_code != 404:
             raise
         labels = _visible_team_knowledge_labels(db, context, access.knowledge_set)
-        if not labels:
+        if not labels and not _owned_upload(db, access.role, access.knowledge_set):
             raise not_found() from error
         consumer_agent_id = None
-        consumer_label = labels[0]
+        consumer_label = labels[0] if labels else access.knowledge_set.display_name
     if access.role == "teacher" and not _markdown_sources_readable_to_teacher(
         db,
         context,

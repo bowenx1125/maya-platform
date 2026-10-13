@@ -1128,6 +1128,8 @@ describe("Chatform", () => {
       async (_id: string, body: { request_id: string; message: string }) => ({
         ...teamSession,
         assessment_stage: "scoring",
+        // The server's scoring turn runs, so sending is closed for now.
+        can_send: false,
         turns: [
           {
             id: body.request_id,
@@ -1144,6 +1146,11 @@ describe("Chatform", () => {
       name: "Test progress",
     });
     expect(bar.getAttribute("aria-valuenow")).toBe("40");
+    expect(
+      screen.queryByText(
+        "Team Chat sending is unavailable in the current runtime.",
+      ),
+    ).toBeNull();
   });
 
   it("shows the formal test progress and checks until scoring finishes", async () => {

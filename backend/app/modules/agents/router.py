@@ -1766,6 +1766,10 @@ def publish_agent_version(
         saga_checkpoint("publish.after_final_db_prepare")
         db.commit()
         saga_checkpoint("publish.after_final_commit")
+        # Teams holding this Agent follow its new version on their own.
+        from app.modules.teams.service import follow_published_agent
+
+        follow_published_agent(db, agent.id)
         if generation is not None and not settings.is_test:
             task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
             if task_manager is not None:

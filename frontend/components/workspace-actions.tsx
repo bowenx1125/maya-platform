@@ -14,6 +14,8 @@ export type WorkspaceActionOptions = {
   form?: string;
   onClick?: MouseEventHandler<HTMLAnchorElement | HTMLButtonElement>;
   disabled?: boolean;
+  /** Work this action started is still running: the button shows a spinner. */
+  busy?: boolean;
   priority?: number;
 };
 export type WorkspaceActions = Partial<
@@ -39,6 +41,7 @@ export function WorkspaceAction({
   form,
   onClick,
   disabled,
+  busy,
   priority = 0,
 }: WorkspaceActionOptions & { name: WorkspaceActionName }) {
   const registry = useContext(WorkspaceActionsContext);
@@ -49,9 +52,9 @@ export function WorkspaceAction({
     return registry?.register(
       name,
       owner,
-      { href, form, onClick, disabled },
+      { href, form, onClick, disabled: disabled || busy, busy },
       priority,
     );
-  }, [registry, owner, name, href, form, onClick, disabled, priority]);
+  }, [registry, owner, name, href, form, onClick, disabled, busy, priority]);
   return null;
 }

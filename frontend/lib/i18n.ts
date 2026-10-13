@@ -332,7 +332,6 @@ const enMessages = {
     "Hide {filename} from Brainform? Published Agent snapshots and retained Knowledge versions remain available.",
   brainformRagFileStaged:
     "{filename} is selected. It will be imported when you save.",
-  brainformRagUsedByAgents: "Used by: {names}",
   brainformAgentsUsingKnowledge: "Agents using this Knowledge",
   brainformKnowledgeFirstVersionEmpty:
     "No Knowledge version is published yet. This is an empty Markdown draft.",
@@ -357,12 +356,16 @@ const enMessages = {
   brainformViewRag: "View Markdown source",
   brainformViewRagNamed: "View {name}",
   brainformEditRagNamed: "Edit {name}",
+  brainformRagName: "RAG file name",
+  brainformEditKnowledgeNamed: "Edit Knowledge {name}",
   brainformDownloadRagNamed: "Download {name}",
   brainformHideRagNamed: "Hide {name}",
   brainformDeleteKnowledgeNamed: "Delete {name}",
   brainformDeleteKnowledgeConfirm:
     "Delete the Knowledge {name}? Agents and Teams that use it stop seeing it.",
   brainformKnowledgeDeleted: "Knowledge deleted.",
+  brainformNewKnowledge: "New Knowledge",
+  brainformUploadKnowledgeFile: "Upload a Markdown file as Knowledge",
   brainformReindexRagNamed: "Reindex {name}",
   brainformViewKnowledge: "View Knowledge",
   brainformOpenKnowledgeNamed: "Open {name}",
@@ -384,6 +387,9 @@ const enMessages = {
     "Choose a .md, .pdf, or .docx file, or enter non-empty Markdown.",
   brainformChooseGroup: "Choose a Group",
   brainformRagSaved: "Markdown source saved.",
+  brainformRagUpdatingAgents: "Saved. Updating the Agents that use it…",
+  brainformRagAgentsUpdated: "Updated {names} and their Teams.",
+  brainformRagAgentsNotUpdated: "Could not update {names}; open it and press Done.",
   brainformRetrySameSave:
     "The save result is unknown. Retry to check the same save.",
   brainformRagConflictDraftKept:
@@ -740,6 +746,8 @@ const enMessages = {
     "Team Chat sending is unavailable in the current runtime.",
   teamRequestFailure: "The Team Chat request could not be completed.",
   teamMemberFailure: "This Team member could not reply.",
+  teamReplyCutOff:
+    "The reply was cut off before it finished, so nothing was saved. Please send your message again.",
   teamProviderConfirmationStudent:
     "A Team member could not reply because the current Team data-use authorization needs Teacher confirmation. Ask a Teacher to review and confirm it, then explicitly send a new message.",
   teamProviderConfirmationTeacher:
@@ -1086,7 +1094,6 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformRagHideConfirm:
     "从 Brainform 隐藏 {filename}？已发布的 Agent 快照和保留的 Knowledge 版本仍然可用。",
   brainformRagFileStaged: "已选择 {filename}。保存时才会导入。",
-  brainformRagUsedByAgents: "正在使用：{names}",
   brainformAgentsUsingKnowledge: "正在使用此 Knowledge 的 Agents",
   brainformKnowledgeFirstVersionEmpty:
     "当前还没有 Knowledge 版本。这是空白 Markdown 草稿。",
@@ -1108,12 +1115,16 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformViewRag: "查看 Markdown 来源",
   brainformViewRagNamed: "查看 {name}",
   brainformEditRagNamed: "编辑 {name}",
+  brainformRagName: "RAG 文件名",
+  brainformEditKnowledgeNamed: "编辑 Knowledge {name}",
   brainformDownloadRagNamed: "下载 {name}",
   brainformHideRagNamed: "隐藏 {name}",
   brainformDeleteKnowledgeNamed: "删除 {name}",
   brainformDeleteKnowledgeConfirm:
     "删除 Knowledge「{name}」？使用它的 Agent 和 Team 将不再读取它。",
   brainformKnowledgeDeleted: "Knowledge 已删除。",
+  brainformNewKnowledge: "新建 Knowledge",
+  brainformUploadKnowledgeFile: "上传 Markdown 文件作为 Knowledge",
   brainformReindexRagNamed: "重新索引 {name}",
   brainformViewKnowledge: "查看 Knowledge",
   brainformOpenKnowledgeNamed: "进入 {name}",
@@ -1134,6 +1145,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "请选择 .md、.pdf 或 .docx 文件，或输入非空 Markdown。",
   brainformChooseGroup: "选择小组",
   brainformRagSaved: "Markdown 来源已保存。",
+  brainformRagUpdatingAgents: "已保存，正在更新使用它的 Agent…",
+  brainformRagAgentsUpdated: "已更新 {names} 及其 Teams。",
+  brainformRagAgentsNotUpdated: "{names} 未能更新，请打开后点 Done。",
   brainformRetrySameSave: "保存结果尚不确定。重试会检查同一次保存。",
   brainformRagConflictDraftKept:
     "来源已在其他位置变化。草稿已保留；重新载入后再保存。",
@@ -1456,6 +1470,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
   teamRequestFailure: "Team 聊天请求无法完成。",
   teamMemberFailure: "这位 Team 成员未能回复。",
+  teamReplyCutOff: "回复没有写完就被截断了，这次没有保存。请再发一次。",
   teamProviderConfirmationStudent:
     "Team 成员的回复需要教师确认当前 Team 数据调用授权。请教师先核对并确认该授权，然后显式发送一条新消息。",
   teamProviderConfirmationTeacher:

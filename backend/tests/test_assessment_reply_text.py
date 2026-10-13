@@ -4,7 +4,11 @@ from typing import Any
 from uuid import uuid4
 
 from app.modules.learning.schemas import AssessmentRuntimeResult
-from app.modules.workspace.chat_provider import assessment_safe_reply_text, prefers_chinese
+from app.modules.workspace.chat_provider import (
+    assessment_safe_reply_text,
+    latest_sentence_chinese,
+    prefers_chinese,
+)
 
 
 def _result(response_key: str, disposition: str, **context: Any) -> AssessmentRuntimeResult:
@@ -43,11 +47,21 @@ def _result(response_key: str, disposition: str, **context: Any) -> AssessmentRu
     )
 
 
-def test_reply_language_follows_the_conversation_not_one_command() -> None:
-    assert prefers_chinese(["hello", "开始测试"]) is False
-    assert prefers_chinese(["你好", "start test"]) is True
-    assert prefers_chinese(["hello", "开始测试", "答案是苏格拉底"]) is True
-    assert prefers_chinese(["?", "👍"]) is False
+# Owner decision (2026-10-13): the learner's latest sentence decides the reply
+# language; an option letter, a number or a single word is not a sentence.
+def test_reply_language_follows_the_latest_sentence_not_option_letters() -> None:
+    assert prefers_chinese(["hello there", "开始测试"]) is True
+    assert prefers_chinese(["你好", "start the test"]) is False
+    # Answering a Chinese form with letters keeps the language of the last
+    # sentence; only a sentence switches it.
+    assert prefers_chinese(["I will answer in English", "B", "A C", "4"]) is False
+    assert prefers_chinese(["我开始做题", "B", "D", "skip"]) is True
+    assert prefers_chinese(["我开始做题", "B", "I choose C because of Zhu Xi"]) is False
+    # A request for a language wins over the language it is written in.
+    assert prefers_chinese(["请用英文回答"]) is False
+    assert prefers_chinese(["Please reply in Chinese"]) is True
+    assert prefers_chinese(["?", "👍", "B"]) is False
+    assert latest_sentence_chinese(["B", "2023001", "ok"]) is None
 
 
 def test_progress_reply_keeps_member_help_then_restates_the_current_question() -> None:

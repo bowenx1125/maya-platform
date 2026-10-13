@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -1232,8 +1232,9 @@ def _member_system(
 
         return ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
     message = (
-        "Reply in the language the user has been writing in across this conversation, unless "
-        "they ask you to translate or switch. "
+        "Reply in the language of the user's latest sentence, unless they ask you to "
+        "translate or switch. A reply that is only an option letter, a number or an ID is "
+        "not a sentence: keep the language you were using. "
         "Every Chat is seen only by its owner; there are no Public Chats. A formal test's "
         "answers and test messages are saved for the course teacher. "
         "Preserve the full conversation context. "
@@ -1533,7 +1534,15 @@ def settle_member(
             assert reply is not None
             result.state = "ready"
             result.assistant_text = "\n\n".join(
-                [reply.text, *_report_download_links(db, turn, result)]
+                [
+                    reply.text,
+                    *_report_download_links(
+                        db,
+                        turn,
+                        result,
+                        whole_turn=participant is not None and participant.is_leader,
+                    ),
+                ]
             )
             result.sources_json = _canonical(
                 [source.model_dump(mode="json") for source in reply.sources]
@@ -1544,43 +1553,62 @@ def settle_member(
     return True
 
 
+def report_paths(raw_receipts: Iterable[str]) -> list[str]:
+    """Download paths in saved report Tool results, in order and once each."""
+
+    links: list[str] = []
+    for raw in raw_receipts:
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            continue
+        value = payload.get("result")
+        items = value.get("reports") if isinstance(value, dict) else None
+        for item in items if isinstance(items, list) else [value]:
+            path = item.get("download_path") if isinstance(item, dict) else None
+            if (
+                isinstance(path, str)
+                and path.startswith("/api/v1/learning/reports/")
+                and path not in links
+            ):
+                links.append(path)
+    return links
+
+
 def _report_download_links(
-    db: Session, turn: ConversationTurn, result: TeamTurnResult
+    db: Session,
+    turn: ConversationTurn,
+    result: TeamTurnResult,
+    *,
+    whole_turn: bool = False,
 ) -> list[str]:
     """Links to reports this reply saved, written by the server.
 
     A model copying a download path invents tokens and breaks the link, so the
-    tool tells it not to write one and the real path is appended here.
+    tool tells it not to write one and the real path is appended here. The
+    Leader's reply, the one the teacher reads, carries every report made in
+    its turn, including one a member such as the Summarizer created.
     """
 
-    links: list[str] = []
-    for raw in db.scalars(
+    query = (
         select(RuntimeToolReceipt.result_json)
         .join(
             TeamProviderCall,
             TeamProviderCall.operation_id == RuntimeToolReceipt.model_operation_id,
         )
+        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
         .where(
             RuntimeToolReceipt.turn_id == turn.id,
-            RuntimeToolReceipt.tool_name == "create_course_report",
-            TeamProviderCall.result_id == result.id,
+            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+            TeamTurnResult.turn_id == turn.id,
         )
         .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
-    ):
-        try:
-            payload = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            continue
-        value = payload.get("result") if isinstance(payload, dict) else None
-        path = value.get("download_path") if isinstance(value, dict) else None
-        if (
-            isinstance(payload, dict)
-            and payload.get("ok") is True
-            and isinstance(path, str)
-            and path.startswith("/api/v1/learning/reports/")
-            and path not in links
-        ):
-            links.append(path)
+    )
+    if not whole_turn:
+        query = query.where(TeamProviderCall.result_id == result.id)
+    links = report_paths(db.scalars(query))
     return [f"[下载报告 / Download report]({path})" for path in links]
 
 
@@ -2249,6 +2277,19 @@ def _recheck_assessment_executor_context(
             "The authorized assessment task is unavailable.",
             409,
         )
+    # Once this executor's write is saved, its task is done: its closing call
+    # only ends the turn. Saving scores may already have opened follow-up
+    # Questions, so the task as first handed out no longer exists.
+    saved_turn = db.get(ConversationTurn, request.turn_id)
+    saved_result = db.get(TeamTurnResult, request.result_id)
+    if (
+        saved_turn is not None
+        and saved_result is not None
+        and _assessment_executor_write_saved(
+            db, saved_turn, saved_result, request.assessment_purpose
+        )
+    ):
+        return
     from app.modules.learning.execution import get_assessment_executor_context
 
     context = get_assessment_executor_context(
@@ -2345,7 +2386,10 @@ def pause_team_for_no_progress(factory: SessionFactory, claim: TeamClaim) -> Non
 
 
 def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: str) -> None:
-    from .chat_team_provider import has_repeated_no_progress_tool_cycle
+    from .chat_team_provider import (
+        has_repeated_no_progress_tool_cycle,
+        without_repeated_successful_tool,
+    )
     from .chat_team_sdk import MemberSpec, TeamDispatchError, run_selected_agent
 
     request: MemberRequest | None = None
@@ -2379,6 +2423,7 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
             run_context: Any,
         ) -> ModelResponse:
             nonlocal no_progress_resume_remaining
+            tools = without_repeated_successful_tool(messages, tools)
             repeated_cycle = has_repeated_no_progress_tool_cycle(list(messages), tools)
             allow_cycle = repeated_cycle and no_progress_resume_remaining
             if allow_cycle:
@@ -2427,6 +2472,9 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
                 claim.token,
                 result_id,
                 reply=MemberReply(output.content, request.sources),
+                # A server-run scorer or summarizer settles as that executor;
+                # without it a saved evaluation read as a missing action.
+                assessment_purpose=request.assessment_purpose,
                 actor_context=claim.actor_context,
                 assessment_revoked_scope=request.assessment_revoked_scope,
             )
@@ -2455,7 +2503,11 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
     from app.modules.learning.attempts import has_open_question
 
     from .chat_team_context import load_member_context
-    from .chat_team_provider import has_repeated_no_progress_tool_cycle, stalled_refusal_code
+    from .chat_team_provider import (
+        has_repeated_no_progress_tool_cycle,
+        stalled_refusal_code,
+        without_repeated_successful_tool,
+    )
     from .chat_team_sdk import MemberSpec, TeamDispatchError, run_coordinate_team
 
     leader_result = result_ids(factory, claim.turn_id)[0]
@@ -2506,6 +2558,12 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     )
                 )
             tool_context = (row.id, turn.id)
+        if leader.assessment_active:
+            # During an open test the Leader records answers alone. Scoring and
+            # the summary run as the server's own executor turns; a member
+            # called into the student's turn is not authorized there and only
+            # fails ("Your answer was not recorded") or hangs the turn.
+            specs = [spec for spec in specs if spec.is_leader]
         leader = replace(
             leader,
             coordinate_members=tuple(spec.participant_id for spec in specs if not spec.is_leader),
@@ -2634,10 +2692,11 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     member_messages.insert(
                         0, Message(role="system", content=request.system_message)
                     )
-                repeated_cycle = has_repeated_no_progress_tool_cycle(member_messages, tools)
+                call_tools = without_repeated_successful_tool(member_messages, tools)
+                repeated_cycle = has_repeated_no_progress_tool_cycle(member_messages, call_tools)
                 allow_cycle = repeated_cycle and no_progress_resume_remaining
                 if not allow_cycle:
-                    refusal = stalled_refusal_code(member_messages, tools)
+                    refusal = stalled_refusal_code(member_messages, call_tools)
                     if refusal is not None:
                         raise TeamDispatchError(refusal)
                     if repeated_cycle:
@@ -2651,7 +2710,7 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                         request,
                         member_id,
                         member_messages,
-                        tools,
+                        call_tools,
                         choice,
                         call_cursors,
                         selected_binding_ids,
@@ -2659,7 +2718,7 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                         allow_no_progress_once=allow_cycle,
                     )
                 else:
-                    response = invoke_mock_team_model(request, member_messages, tools)
+                    response = invoke_mock_team_model(request, member_messages, call_tools)
                 if member_id != leader.participant_id and not response.tool_calls:
                     if not isinstance(response.content, str):
                         raise TeamDispatchError("team_response_invalid")

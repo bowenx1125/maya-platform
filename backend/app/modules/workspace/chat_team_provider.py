@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
+import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -51,6 +54,7 @@ from .team_runtime import MemberRequest
 CONTROL_UNBOUNDED_REQUESTS = 2_147_483_647
 CONTROL_UNBOUNDED_TOKENS = 9_223_372_036_854_775_807
 CONTROL_UNBOUNDED_COST_CNY = 1.0e18
+LOGGER = logging.getLogger("maya.workspace")
 TEAM_PER_CALL_MAX_TOKENS = LLM_INPUT_TOKEN_CAP + LLM_RESERVED_OUTPUT_TOKEN_CAP
 
 
@@ -94,6 +98,9 @@ def team_request_bytes(
         "messages": [_wire_message(message) for message in messages],
         "stream": False,
         "enable_thinking": False,
+        # The output the budget reserves per call. Without it the provider's
+        # own default applies, and replies came back cut mid-sentence.
+        "max_tokens": LLM_RESERVED_OUTPUT_TOKEN_CAP,
     }
     if tools is not None:
         body["tools"] = tools
@@ -184,6 +191,51 @@ def _payload_denies_visibility(payload: object) -> bool:
     return False
 
 
+def _tool_result_payload(result: str) -> object:
+    """A Tool result as the model saw it: JSON, or the SDK's printed dict."""
+
+    try:
+        return json.loads(result)
+    except ValueError:
+        pass
+    try:
+        return ast.literal_eval(result)
+    except (ValueError, SyntaxError, MemoryError, RecursionError):
+        return None
+
+
+def without_repeated_successful_tool(
+    messages: Sequence[Message], tools: list[dict[str, Any]] | None
+) -> list[dict[str, Any]] | None:
+    """Drop a Tool the model just called twice, alike and successfully.
+
+    Bug (2026-10-13): a Leader that read its session twice before starting a
+    test was answered "Can't." although nothing failed. A repeated success is
+    not a refusal: the model already has that result, so its next step goes
+    without that Tool and must act or reply. A repeated failure still gets
+    the spoken refusal below.
+    """
+
+    completed = _completed_tool_calls(list(messages), tools)
+    if len(completed) < 2 or completed[-1] != completed[-2]:
+        return tools
+    name, _arguments, result = completed[-1]
+    if name == "delegate_task_to_member":
+        return tools
+    payload = _tool_result_payload(result)
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        return tools
+    return [
+        tool
+        for tool in tools or []
+        if not (
+            isinstance(tool, dict)
+            and isinstance(tool.get("function"), dict)
+            and tool["function"].get("name") == name
+        )
+    ]
+
+
 def stalled_refusal_code(messages: list[Message], tools: list[dict[str, Any]] | None) -> str | None:
     """Spoken refusal for a repeated non-delegation tool. Delegation still pauses."""
     completed = _completed_tool_calls(messages, tools)
@@ -218,6 +270,20 @@ def _raw_response_text(response: object) -> str:
         return canonical_json_bytes(json_method()).decode("utf-8")
     except Exception:
         raise TeamDispatchError("team_response_invalid") from None
+
+
+def _finish_and_usage(response_json: str) -> tuple[str | None, dict[str, Any]]:
+    try:
+        payload = json.loads(response_json)
+        choice = payload["choices"][0]
+        reason = choice.get("finish_reason")
+        usage = payload.get("usage")
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return None, {}
+    return (
+        reason if isinstance(reason, str) else None,
+        usage if isinstance(usage, dict) else {},
+    )
 
 
 def _model_response(response_json: str) -> ModelResponse:
@@ -682,6 +748,23 @@ def dispatch_team_model(
     except TeamDispatchError:
         repository.mark_failed(operation.id, safe_error_code="team_response_invalid")
         raise
+    finish_reason, usage = _finish_and_usage(response_json)
+    # Bug (2026-10-13): replies and Tool arguments arrived cut off and nothing
+    # said why. The reason and token counts are logged for every call; the
+    # content never is.
+    LOGGER.info(
+        "Team model call result_id=%s ordinal=%s finish=%s prompt_tokens=%s completion_tokens=%s",
+        request.result_id,
+        ordinal,
+        finish_reason,
+        usage.get("prompt_tokens"),
+        usage.get("completion_tokens"),
+    )
+    if finish_reason == "length":
+        # A cut reply would show half a question or lose a half-written
+        # answer; it fails visibly instead, so the student can send again.
+        repository.mark_failed(operation.id, safe_error_code="team_response_truncated")
+        raise TeamDispatchError("team_response_truncated")
     try:
         repository.stage_team_accepted(operation.id, response_json=response_json)
         result = _model_response(response_json)

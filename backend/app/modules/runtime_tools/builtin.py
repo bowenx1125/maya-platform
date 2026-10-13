@@ -176,8 +176,9 @@ def runtime_registry() -> dict[str, ToolSpec]:
                 "restricted_request for answers, hints or judgments, and off_topic for anything "
                 "else, including how to format an answer. "
                 "Only a configured assessment recipe is affected. Return the server's safe result. "
-                "Set reply_language to the language the student wants replies in: the language "
-                'they write in, unless they asked for another ("answer in English" is en). '
+                "Set reply_language to the language of the student's latest sentence, unless "
+                'they asked for another ("answer in English" is en). An answer that is only an '
+                "option letter or a number is not a sentence: keep the current language. "
                 "The server writes its progress and Question lines in that language."
             ),
             AssessmentActionArguments,

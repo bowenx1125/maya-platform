@@ -32,6 +32,7 @@ import {
   KnowledgeMarkdownField,
 } from "./markdown-editor";
 import { runKnowledgeMutation } from "./knowledge-mutation";
+import { republishAgentsUsingDocument } from "./republish";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
@@ -64,7 +65,6 @@ type StagedRagFile = { file: File; fingerprint: string };
 
 type KnowledgeDraft = { markdown: string; expectedVersionSeq: number };
 type BrainformKnowledgeAssetRow = BrainformKnowledge & {
-  used_by_agents: string[];
   agent_ids: string[];
 };
 
@@ -80,7 +80,8 @@ type Pane =
   | { kind: "rag-edit"; draftKey: string }
   | { kind: "rag-view"; documentId: string; markdown: string; filename: string }
   | { kind: "knowledge-view"; documentId: string }
-  | { kind: "knowledge-edit"; documentId: string };
+  | { kind: "knowledge-edit"; documentId: string }
+  | { kind: "knowledge-new" };
 
 type PendingGeneration = {
   documentId: string;
@@ -603,6 +604,38 @@ function BrainformWorkspaceBody({
   const operationSequence = useRef(0);
   const fileSelectionSequence = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameDocumentId, setRenameDocumentId] = useState<string | null>(
+    null,
+  );
+  // New opens this draft; a picked Markdown file fills it, Done saves it.
+  const [newKnowledge, setNewKnowledge] = useState({ name: "", markdown: "" });
+  // One click opens the editor, which replaces this list; a double-click
+  // renames in place. The open waits out a double-click before it runs.
+  const titleClickTimer = useRef<number | null>(null);
+  function titleClick(open: () => void) {
+    if (titleClickTimer.current !== null) {
+      window.clearTimeout(titleClickTimer.current);
+    }
+    titleClickTimer.current = window.setTimeout(() => {
+      titleClickTimer.current = null;
+      open();
+    }, 220);
+  }
+  function titleDoubleClick(rename: () => void) {
+    if (titleClickTimer.current !== null) {
+      window.clearTimeout(titleClickTimer.current);
+      titleClickTimer.current = null;
+    }
+    rename();
+  }
+  useEffect(
+    () => () => {
+      if (titleClickTimer.current !== null) {
+        window.clearTimeout(titleClickTimer.current);
+      }
+    },
+    [],
+  );
   const initialKnowledgeOpened = useRef(false);
   const initialJobRead = useRef<string | null>(null);
   const latestGenerationJobs = useRef<{
@@ -885,10 +918,10 @@ function BrainformWorkspaceBody({
   ]);
 
   useEffect(() => {
-    if (!renameSetId) return;
+    if (!renameSetId && !renameDocumentId) return;
     renameInputRef.current?.focus();
     renameInputRef.current?.select();
-  }, [renameSetId]);
+  }, [renameSetId, renameDocumentId]);
 
   useEffect(() => {
     if (initialMode || loading || initialKnowledgeOpened.current) return;
@@ -1301,8 +1334,38 @@ function BrainformWorkspaceBody({
       delete nextFiles[draftKey];
       ragActionFiles.current = nextFiles;
       setRagFiles(nextFiles);
-      setNotice(renameOnly ? t("brainformRagRenamed") : t("brainformRagSaved"));
-      void loadWorkspace();
+      if (renameOnly) {
+        setNotice(t("brainformRagRenamed"));
+        void loadWorkspace();
+        return;
+      }
+      setNotice(t("brainformRagUpdatingAgents"));
+      // The Agents reading this file publish a new version with its new
+      // text; the server then moves their Teams to it.
+      const republished = await republishAgentsUsingDocument(
+        api,
+        chatAgents,
+        next.id,
+      );
+      if (!scopeIsCurrent()) return;
+      setNotice(
+        [
+          t("brainformRagSaved"),
+          republished.updated.length
+            ? t("brainformRagAgentsUpdated", {
+                names: republished.updated.join(", "),
+              })
+            : "",
+          republished.failed.length
+            ? t("brainformRagAgentsNotUpdated", {
+                names: republished.failed.join(", "),
+              })
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      void loadWorkspace(true);
     } catch (cause) {
       if (isConflict(cause)) {
         await loadWorkspace();
@@ -1363,6 +1426,90 @@ function BrainformWorkspaceBody({
         setNotice(t("brainformRetrySameSave"));
       }
       if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
+  function beginNewKnowledge() {
+    setNewKnowledge({ name: "", markdown: "" });
+    setPane({ kind: "knowledge-new" });
+    setNotice("");
+    setLoadError(null);
+  }
+
+  // A picked Markdown file fills the new Knowledge, named after the file
+  // unless a name was typed. Its question sections are recognised on save
+  // the same way as an edit in Brainform.
+  async function importNewKnowledge(file: File) {
+    if (!/\.md$/i.test(file.name)) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    let content: string;
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+    } catch {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    if (!content.trim()) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    const fileName = file.name.replace(/\.md$/i, "").trim() || file.name;
+    setNotice("");
+    setNewKnowledge((current) => ({
+      name: current.name.trim() ? current.name : fileName,
+      markdown: content,
+    }));
+  }
+
+  async function saveNewKnowledge() {
+    const name = newKnowledge.name.trim();
+    const content = newKnowledge.markdown;
+    if (busyKeyRef.current || !courseId || !name || !content.trim()) return;
+    // Done returns to the list at once; New shows the work until it lands.
+    commitBusy("knowledge-new");
+    setPane(null);
+    setLoadError(null);
+    setNotice("");
+    try {
+      // Keyed by the exact draft, so a retried Done after a lost reply
+      // replays the same create instead of making a second Knowledge.
+      const draftKey = `${courseId}:${name}:${await fingerprintRagFile(
+        new File([content], "knowledge.md"),
+      )}`;
+      const created = await runKnowledgeMutation(
+        mutationStore,
+        `knowledge-new:${draftKey}`,
+        (idempotency) =>
+          api.createKnowledgeSet(
+            courseId,
+            { display_name: name },
+            { idempotency },
+          ),
+      );
+      await runKnowledgeMutation(
+        mutationStore,
+        `knowledge-new-save:${created.id}`,
+        (idempotency) =>
+          api.saveKnowledgeMarkdown(
+            created.id,
+            { expected_version_seq: 0, markdown: content },
+            { idempotency },
+          ),
+      );
+      if (!scopeIsCurrent()) return;
+      setNewKnowledge({ name: "", markdown: "" });
+      await loadWorkspace(true);
+    } catch (cause) {
+      if (!scopeIsCurrent()) return;
+      // The draft is kept: reopen it beside the error so Done can retry.
+      setPane({ kind: "knowledge-new" });
+      setLoadError(cause);
     } finally {
       if (scopeIsCurrent()) commitBusy(null);
     }
@@ -1728,6 +1875,42 @@ function BrainformWorkspaceBody({
     }
   }
 
+  async function saveDocumentName(document: KnowledgeDocument) {
+    const base = renameValue.trim();
+    setRenameDocumentId(null);
+    if (!base || busyKeyRef.current) return;
+    const extension = document.source_filename.match(/\.[^.]+$/)?.[0] ?? "";
+    const filename = base.toLowerCase().endsWith(extension.toLowerCase())
+      ? base
+      : `${base}${extension}`;
+    if (filename === document.source_filename) return;
+    const intent = `brainform-rename:${document.id}:${document.source_filename}:${filename}`;
+    commitBusy(`rename-document:${document.id}`);
+    setLoadError(null);
+    setNotice("");
+    try {
+      const next = await runKnowledgeMutation(
+        mutationStore,
+        intent,
+        (idempotency) =>
+          api.renameKnowledgeDocument(
+            document.id,
+            { expected_filename: document.source_filename, filename },
+            { idempotency },
+          ),
+      );
+      if (!scopeIsCurrent()) return;
+      setRagDocuments((current) =>
+        current.map((row) => (row.id === next.id ? next : row)),
+      );
+      setNotice(t("brainformRagRenamed"));
+    } catch (cause) {
+      if (scopeIsCurrent()) setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
   async function saveSetName(setId: string) {
     const value = renameValue.trim();
     setRenameSetId(null);
@@ -1820,9 +2003,6 @@ function BrainformWorkspaceBody({
             version_seq:
               rows.find((row) => row.version_seq != null)?.version_seq ??
               representative.version_seq,
-            used_by_agents: [
-              ...new Set(rows.map((row) => row.source_agent_display_name)),
-            ],
             agent_ids: [
               ...new Set(
                 rows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
@@ -1878,7 +2058,29 @@ function BrainformWorkspaceBody({
 
   return (
     <main className={styles.page}>
-      {/* RAG is added inside its Agent, so the overview has no New. */}
+      {/* RAG is added inside its Agent; the overview's New adds Knowledge. */}
+      {!pane &&
+      !initialMode &&
+      courseId &&
+      !(role === "teacher" && initialGroupId) ? (
+        <WorkspaceAction
+          name="new"
+          onClick={beginNewKnowledge}
+          disabled={Boolean(busyKey)}
+          busy={busyKey === "knowledge-new"}
+        />
+      ) : null}
+      {pane?.kind === "knowledge-new" ? (
+        <WorkspaceAction
+          name="done"
+          onClick={() => void saveNewKnowledge()}
+          disabled={
+            Boolean(busyKey) ||
+            !newKnowledge.name.trim() ||
+            !newKnowledge.markdown.trim()
+          }
+        />
+      ) : null}
       {pane || initialMode ? (
         <WorkspaceAction
           name="back"
@@ -1987,23 +2189,59 @@ function BrainformWorkspaceBody({
                   return (
                     <li className={styles.row} key={document.id}>
                       <div className={styles.rowCopy}>
-                        <button
-                          type="button"
-                          className={styles.titleButton}
-                          onClick={() =>
-                            void (canEdit
-                              ? editRag(document)
-                              : viewRag(document))
-                          }
-                          aria-label={t(
-                            canEdit
-                              ? "brainformEditRagNamed"
-                              : "brainformViewRagNamed",
-                            { name: document.source_filename },
-                          )}
-                        >
-                          {document.source_filename}
-                        </button>
+                        {renameDocumentId === document.id ? (
+                          <input
+                            ref={renameInputRef}
+                            className={styles.inlineNameInput}
+                            aria-label={t("brainformRagName")}
+                            value={renameValue}
+                            onChange={(event) =>
+                              setRenameValue(event.target.value)
+                            }
+                            onBlur={() => void saveDocumentName(document)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                event.currentTarget.blur();
+                              }
+                              if (event.key === "Escape")
+                                setRenameDocumentId(null);
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.titleButton}
+                            onClick={() =>
+                              titleClick(
+                                () =>
+                                  void (canEdit
+                                    ? editRag(document)
+                                    : viewRag(document)),
+                              )
+                            }
+                            onDoubleClick={() =>
+                              titleDoubleClick(() => {
+                                if (!canEdit) return;
+                                setRenameDocumentId(document.id);
+                                setRenameValue(
+                                  document.source_filename.replace(
+                                    /\.[^.]+$/,
+                                    "",
+                                  ),
+                                );
+                              })
+                            }
+                            aria-label={t(
+                              canEdit
+                                ? "brainformEditRagNamed"
+                                : "brainformViewRagNamed",
+                              { name: document.source_filename },
+                            )}
+                          >
+                            {document.source_filename}
+                          </button>
+                        )}
                         {status ? (
                           <span
                             className={styles.rowStatus}
@@ -2148,17 +2386,38 @@ function BrainformWorkspaceBody({
                             }}
                           />
                         ) : (
+                          // Like a RAG row: a click opens the editor, whose
+                          // Done saves a version every user reads; a
+                          // double-click renames.
                           <button
                             type="button"
                             className={styles.titleButton}
-                            disabled={!row.can_edit}
+                            aria-disabled={
+                              isGenerating ||
+                              (!currentDoc && !row.can_edit) ||
+                              undefined
+                            }
                             onClick={() => {
-                              setRenameSetId(row.canonical_set_id);
-                              setRenameValue(row.knowledge_display_name);
+                              if (isGenerating || (!currentDoc && !row.can_edit))
+                                return;
+                              titleClick(
+                                () =>
+                                  void openKnowledge(
+                                    row,
+                                    row.can_edit ? "edit" : "view",
+                                  ),
+                              );
                             }}
+                            onDoubleClick={() =>
+                              titleDoubleClick(() => {
+                                if (!row.can_edit) return;
+                                setRenameSetId(row.canonical_set_id);
+                                setRenameValue(row.knowledge_display_name);
+                              })
+                            }
                             aria-label={
                               row.can_edit
-                                ? t("brainformRenameSetNamed", {
+                                ? t("brainformEditKnowledgeNamed", {
                                     name: row.knowledge_display_name,
                                   })
                                 : row.knowledge_display_name
@@ -2167,11 +2426,6 @@ function BrainformWorkspaceBody({
                             {row.knowledge_display_name}
                           </button>
                         )}
-                        <span className={styles.rowMeta}>
-                          {t("brainformRagUsedByAgents", {
-                            names: row.used_by_agents.join(", "),
-                          })}
-                        </span>
                         {!isGenerating &&
                         row.generation_state &&
                         row.generation_state !== "completed" ? (
@@ -2357,10 +2611,57 @@ function BrainformWorkspaceBody({
                   ? (selectedDraft?.filename ?? t("loading"))
                   : pane.kind === "rag-view"
                     ? pane.filename
-                    : (markdown?.knowledge_display_name ?? t("loading"))}
+                    : pane.kind === "knowledge-new"
+                      ? newKnowledge.name.trim() || t("brainformNewKnowledge")
+                      : (markdown?.knowledge_display_name ?? t("loading"))}
               </h2>
             </div>
           </div>
+
+          {pane.kind === "knowledge-new" ? (
+            <div className={styles.editorForm}>
+              <label
+                className="secondary-action file-button"
+                aria-busy={busyKey === "knowledge-new"}
+              >
+                {t("knowledgeImportAction")}
+                <input
+                  type="file"
+                  aria-label={t("brainformUploadKnowledgeFile")}
+                  accept=".md,text/markdown"
+                  disabled={Boolean(busyKey)}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (file) void importNewKnowledge(file);
+                  }}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>{t("brainformSetName")}</span>
+                <input
+                  value={newKnowledge.name}
+                  disabled={busyKey === "knowledge-new"}
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    setNewKnowledge((current) => ({ ...current, name }));
+                  }}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>{t("knowledgeContent")}</span>
+                <textarea
+                  value={newKnowledge.markdown}
+                  rows={18}
+                  readOnly={busyKey === "knowledge-new"}
+                  onChange={(event) => {
+                    const markdown = event.target.value;
+                    setNewKnowledge((current) => ({ ...current, markdown }));
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
 
           {pane.kind === "rag-edit" && selectedDraft ? (
             <div className={styles.editorForm}>

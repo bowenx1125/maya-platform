@@ -76,6 +76,7 @@ def test_actual_registry_mounts_learning_tools_and_serializes_formal_reads(
             "read_course_statistics",
             "read_student_test_transcripts",
             "create_course_report",
+            "list_course_reports",
         }
         assert teacher_only <= registry.keys()
         # A student never gets the teacher's reads, including test transcripts.
