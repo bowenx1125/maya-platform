@@ -47,7 +47,7 @@ describe("version mark", () => {
     expect(mark.textContent).toBe(`V1.0 · ${word}`);
   });
 
-  it("opens from the card body and keeps Delete on the version bubble", () => {
+  it("opens from the name link and keeps Delete on the version bubble", () => {
     const onDelete = vi.fn();
     render(
       <LocaleProvider initialLocale="en">
@@ -66,7 +66,8 @@ describe("version mark", () => {
     );
     const open = screen.getByRole("link", { name: "Laozi" });
     expect(open.getAttribute("href")).toBe("/student/agents/laozi");
-    expect(open.className).toContain("agent-tile-body");
+    expect(open.className).toContain("agent-tile-name");
+    expect(open.className).toContain("text-link");
     fireEvent.click(screen.getByRole("button", { name: "Delete Laozi" }));
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
