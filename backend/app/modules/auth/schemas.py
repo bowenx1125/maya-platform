@@ -72,6 +72,7 @@ class UpdateCurrentUserRequest(BaseModel):
 
     avatar: str | None = Field(default=None, max_length=64)
     display_name: str | None = Field(default=None, max_length=200)
+    group_name: str | None = Field(default=None, max_length=200)
 
 
 class PasswordChangeRequest(BaseModel):

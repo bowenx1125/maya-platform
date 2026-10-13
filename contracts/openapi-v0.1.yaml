@@ -1404,7 +1404,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: This account's name comes from the course's account list.
+          description: This account's name or group comes from the course's account list, or it is not a student's.
       security:
       - sessionCookie: []
       summary: Update Current User
@@ -11444,7 +11444,10 @@ components:
       title: PublishedAgentAuthor
       type: object
     UpdateCurrentUserRequest:
-      description: Change what is given; an omitted field stays as it is. A null avatar clears it.
+      description: >-
+        Change what is given; an omitted field stays as it is. A null avatar clears it. A group_name
+        moves a student into another existing group of their course, leaving their work where it was
+        made.
       properties:
         avatar:
           maxLength: 64
@@ -11455,6 +11458,12 @@ components:
         display_name:
           maxLength: 200
           title: Display Name
+          type:
+          - string
+          - 'null'
+        group_name:
+          maxLength: 200
+          title: Group Name
           type:
           - string
           - 'null'

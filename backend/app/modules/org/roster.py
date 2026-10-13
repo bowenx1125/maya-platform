@@ -163,7 +163,7 @@ def _roster_row(db: Session, course_id: str, user_id: str) -> RosterRow:
     )
 
 
-def _move_to_group(db: Session, course_id: str, user: User, group_name: str) -> None:
+def move_to_group(db: Session, course_id: str, user: User, group_name: str) -> None:
     """Make ``group_name`` the member's only group in this course.
 
     The name is the address, exactly as it is during registration: the first
@@ -234,7 +234,7 @@ def update_member(
             # is revoked.
             revoke_user_sessions(db, row.user.id, datetime.now(UTC))
     if group_name is not None:
-        _move_to_group(db, course_id, row.user, normalize_group_name(group_name))
+        move_to_group(db, course_id, row.user, normalize_group_name(group_name))
 
     db.flush()
     return _roster_row(db, course_id, user_id)
