@@ -689,7 +689,7 @@ def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
                 question_guide="Leader",
                 scorer="Evaluator",
                 summarizer="Boundary",
-                student_round_order=("Evaluator", "Leader", "Boundary"),
+                student_round_order=("Evaluator", "Leader"),
             )
         )
         db.commit()

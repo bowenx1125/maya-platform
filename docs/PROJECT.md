@@ -253,21 +253,23 @@ in-flight run. Teacher ChatSession carries `knowledge_generation` for an under-
 message progress bar; Agent Chat appends real report download links after Tool
 receipts. Integrates PR #71 Voices hover tip.
 
-Formal assessment micro-rounds require the Guide `# Team Ruleset` →
-`## Formal assessment` fields `answer_recorder`, `question_guide`, `scorer`,
-`summarizer`, and `student_round_order`, each matching one roster display name.
-Otherwise start returns `assessment_ruleset_incomplete` and inserts no attempt.
+Formal assessment micro-rounds require Guide `# Team Ruleset` →
+`## Formal assessment`: `answer_recorder`, `question_guide`, `scorer`,
+`summarizer`, and `student_round_order`, each one roster display name.
+`student_round_order` is exactly the scorer and question_guide, and that order
+speaks on a student message (usual `Scorer, Guide`). Any other set returns
+`assessment_ruleset_incomplete` and inserts no attempt. `answer_recorder` must
+be that same scorer: the write Tool, `已记录你的回答。` (receipt only), and
+`做题者放弃作答，已保存记录已删除。`. Opening is Guide-only: `收到，第一题是…`.
+The Guide calls no write Tool. The Tool runs before the Guide line is chosen,
+so Guide-first still records first, then shows the Guide ahead of the fact.
+All answered: Guide `答题全部结束`, Summarizer `正在总结答案`, progress bar
+under that message. Abandon uses the same order, then Guide
+`已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false.
 `MAYA-ASSESSMENT-ROLE` does not choose speakers. `assessment_active` is a ledger
-flag, not a Tool. Opening is only the Guide: `收到，第一题是…`. Each student
-message is Scorer (a write Tool; the server says `已记录你的回答。` only with a
-receipt) then Guide, who calls no write Tool. When every question is answered
-the Guide says `答题全部结束` and the Summarizer says `正在总结答案`, with the
-progress bar under that message. Abandon: Scorer `做题者放弃作答，已保存记录已删除。`,
-then Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false.
-Ordinary chat still has every member reply by relevance; optional `## Informal`
-overrides that in the prompt. Precedence is ACL, then the assessment ledger,
-then the Ruleset. The server alone appends report links. `student_round_order`
-is required and does not reorder speakers. Recipe selection and the later
-`edit_assessment` / `update_learning_boundary` executor turns remain.
+flag, not a Tool. Ordinary chat replies by relevance; optional `## Informal`
+overrides that prompt. Precedence is ACL, ledger, then Ruleset. The server
+alone appends report links. Later `edit_assessment` /
+`update_learning_boundary` turns stay on that scorer and the summarizer.
 
 Built `2c62871` (PR #72: Knowledge partial promote + Chat progress + Team `# Team Ruleset` defaults + fused PR #71 Voices hover tip). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200. Cleanup: removed `/tmp/maya-*` probes, orphan backup `-shm`/`-wal`/`.bak`, and ~23GB Docker build cache (disk 60%→23%).

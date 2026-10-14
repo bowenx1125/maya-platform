@@ -158,7 +158,7 @@ def test_a_repeated_successful_read_does_not_refuse_the_test(
                     question_guide="Bowen",
                     scorer="Jade",
                     summarizer="Kaikai",
-                    student_round_order=("Bowen", "Jade", "Kaikai"),
+                    student_round_order=("Jade", "Bowen"),
                 ),
             ]
         with database.session() as db:

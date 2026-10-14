@@ -127,7 +127,10 @@ def resolve_formal_assessment(
     Returns None when `# Team Ruleset` has no `## Formal assessment` subsection.
     A present subsection that does not name each field to exactly one roster
     display name raises `assessment_ruleset_incomplete` and must not start an
-    attempt. `student_round_order` is a comma-separated list of those names.
+    attempt. `student_round_order` is exactly the scorer and question_guide, in
+    the order they speak on a student message. `answer_recorder` must be that
+    same scorer: the write Tool, `已记录你的回答。`, and the abandon recorder
+    line are one slot, so the protocol does not split them.
     """
 
     ruleset = extract_team_ruleset(agent_md)
@@ -157,12 +160,20 @@ def resolve_formal_assessment(
         or len(order_names) != len(set(order_names))
     ):
         _incomplete()
+    recorder_id = _unique_member(by_name, found["answer_recorder"])
+    guide_id = _unique_member(by_name, found["question_guide"])
+    scorer_id = _unique_member(by_name, found["scorer"])
+    order_ids = tuple(_unique_member(by_name, name) for name in order_names)
+    # The student-turn write and the fact sentence are the scorer's spoken slot.
+    # A different recorder would need a third speaker the script does not have.
+    if recorder_id != scorer_id or len(order_ids) != 2 or set(order_ids) != {scorer_id, guide_id}:
+        _incomplete()
     return FormalRoles(
-        answer_recorder_id=_unique_member(by_name, found["answer_recorder"]),
-        question_guide_id=_unique_member(by_name, found["question_guide"]),
-        scorer_id=_unique_member(by_name, found["scorer"]),
+        answer_recorder_id=recorder_id,
+        question_guide_id=guide_id,
+        scorer_id=scorer_id,
         summarizer_id=_unique_member(by_name, found["summarizer"]),
-        student_round_order_ids=tuple(_unique_member(by_name, name) for name in order_names),
+        student_round_order_ids=order_ids,
     )
 
 

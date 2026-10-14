@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -21,6 +22,7 @@ from app.modules.provider_disclosure.team_standing import (
 )
 from app.modules.runtime_tools.builtin import runtime_registry
 from app.modules.runtime_tools.models import RuntimeToolReceipt
+from app.modules.teams.models import TeamVersionMember
 from app.modules.workspace import team_runtime as runtime
 from app.modules.workspace.chat_team_provider import (
     dispatch_team_model as real_dispatch_team_model,
@@ -34,7 +36,7 @@ from app.modules.workspace.formal_assessment import (
     formal_ruleset_markdown,
     resolve_formal_assessment,
 )
-from app.modules.workspace.models import Conversation, TeamTurnResult
+from app.modules.workspace.models import Conversation, ConversationParticipant, TeamTurnResult
 from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
@@ -61,25 +63,41 @@ def test_formal_section_must_name_the_roster_uniquely() -> None:
         question_guide="Bowen",
         scorer="Jade",
         summarizer="Kaikai",
-        student_round_order=("Bowen", "Jade", "Kaikai"),
+        student_round_order=("Jade", "Bowen"),
     )
     resolved = resolve_formal_assessment(complete, roster)
     assert resolved is not None
     assert resolved.scorer_id == "scorer"
+    assert resolved.answer_recorder_id == "scorer"
     assert resolved.question_guide_id == "guide"
+    assert resolved.student_round_order_ids == ("scorer", "guide")
+    guide_first = formal_ruleset_markdown(
+        answer_recorder="Jade",
+        question_guide="Bowen",
+        scorer="Jade",
+        summarizer="Kaikai",
+        student_round_order=("Bowen", "Jade"),
+    )
+    reversed_roles = resolve_formal_assessment(guide_first, roster)
+    assert reversed_roles is not None
+    assert reversed_roles.student_round_order_ids == ("guide", "scorer")
     assert resolve_formal_assessment("# Persona\n\nHello.", roster) is None
     outside = (
         "# Team Ruleset\n\nBe brief.\n\n# Notes\n\n## Formal assessment\n"
         "answer_recorder: Jade\nquestion_guide: Bowen\nscorer: Jade\n"
-        "summarizer: Kaikai\nstudent_round_order: Bowen, Jade, Kaikai\n"
+        "summarizer: Kaikai\nstudent_round_order: Jade, Bowen\n"
     )
     assert resolve_formal_assessment(outside, roster) is None
     for broken in (
         complete.replace("summarizer: Kaikai\n", ""),
+        complete.replace("student_round_order: Jade, Bowen", "student_round_order: Bowen, Bowen"),
+        complete.replace("student_round_order: Jade, Bowen", "student_round_order: Jade"),
         complete.replace(
-            "student_round_order: Bowen, Jade, Kaikai", "student_round_order: Bowen, Bowen"
+            "student_round_order: Jade, Bowen", "student_round_order: Bowen, Jade, Kaikai"
         ),
+        complete.replace("student_round_order: Jade, Bowen", "student_round_order: Jade, Kaikai"),
         complete.replace("scorer: Jade", "scorer: Nobody"),
+        complete.replace("answer_recorder: Jade", "answer_recorder: Bowen"),
     ):
         with pytest.raises(PlatformError) as caught:
             resolve_formal_assessment(broken, roster)
@@ -487,3 +505,133 @@ def test_abandon_clears_the_ledger_after_the_scripted_lines(
         reply=runtime.MemberReply("可以聊聊。"),
         actor_context=actor,
     )
+
+
+def _guide_version(db: Any, conversation_id: str) -> AgentVersion:
+    conversation = db.get(Conversation, conversation_id)
+    assert conversation is not None
+    guide = db.scalar(
+        select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == conversation_id,
+            ConversationParticipant.is_leader.is_(True),
+        )
+    )
+    assert guide is not None
+    version = db.get(AgentVersion, guide.agent_version_id)
+    assert version is not None
+    return version
+
+
+def test_mismatched_student_round_order_creates_no_attempt(
+    client: TestClient, database: Any, app_bundle: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        version = _guide_version(db, conversation_id)
+        version.agent_md = re.sub(
+            r"(?m)^student_round_order:.*$",
+            "student_round_order: Jade, Kaikai",
+            version.agent_md,
+            count=1,
+        )
+        db.commit()
+        before = db.scalar(select(func.count()).select_from(AssessmentAttempt))
+        actor = _service_actor(db, settings, STUDENT_ID)
+        with pytest.raises(PlatformError) as caught:
+            start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert caught.value.code == "assessment_ruleset_incomplete"
+        db.rollback()
+    with database.session() as db:
+        assert db.scalar(select(func.count()).select_from(AssessmentAttempt)) == before
+
+
+def test_guide_then_scorer_order_speaks_the_guide_first(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题", "乙题")
+        )
+        version = _guide_version(db, conversation_id)
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None and conversation.team_version_id is not None
+        members = db.scalars(
+            select(TeamVersionMember).where(
+                TeamVersionMember.team_version_id == conversation.team_version_id
+            )
+        ).all()
+        by_name = {member.display_name: member.id for member in members}
+        current = resolve_formal_assessment(
+            version.agent_md, [(member.id, member.display_name) for member in members]
+        )
+        assert current is not None
+        guide_name = next(
+            name for name, member_id in by_name.items() if member_id == current.question_guide_id
+        )
+        scorer_name = next(
+            name for name, member_id in by_name.items() if member_id == current.scorer_id
+        )
+        version.agent_md = re.sub(
+            r"(?m)^student_round_order:.*$",
+            f"student_round_order: {guide_name}, {scorer_name}",
+            version.agent_md,
+            count=1,
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        assert (
+            start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4()) is not None
+        )
+        db.commit()
+    settings, policy = _dashscope(app_bundle, database, "formal-guide-first")
+    _grant(database, conversation_id, policy)
+    opening = _run(database, settings, actor, conversation_id, "开始", monkeypatch, [])
+    assert _texts(database, opening) == ["收到，第一题是甲题"]
+    answer = "甲题的回答"
+    turn_id = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        answer,
+        monkeypatch,
+        [("tool", "assessment_action", {"classification": "answer_only", "answer_span": answer})],
+    )
+    with database.session() as db:
+        speakers = db.execute(
+            select(ConversationParticipant.team_member_id, TeamTurnResult.assistant_text)
+            .join(
+                TeamTurnResult,
+                TeamTurnResult.participant_id == ConversationParticipant.id,
+            )
+            .where(TeamTurnResult.turn_id == turn_id)
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+        version = _guide_version(db, conversation_id)
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None and conversation.team_version_id is not None
+        members = db.scalars(
+            select(TeamVersionMember).where(
+                TeamVersionMember.team_version_id == conversation.team_version_id
+            )
+        ).all()
+        roles = resolve_formal_assessment(
+            version.agent_md, [(member.id, member.display_name) for member in members]
+        )
+    assert roles is not None
+    assert roles.answer_recorder_id == roles.scorer_id
+    assert [member_id for member_id, _text in speakers] == [
+        roles.question_guide_id,
+        roles.answer_recorder_id,
+    ]
+    assert "乙题" in (speakers[0][1] or "")
+    assert speakers[1][1] == RECORDED_FACT
+    assert "已记录" not in (speakers[0][1] or "")

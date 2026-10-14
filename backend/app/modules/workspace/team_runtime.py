@@ -569,22 +569,19 @@ def _formal_slot(
             "assessment.abandoned_and_restarted",
         }:
             return None
-        if participant.team_member_id == roles.scorer_id and result.ordinal == 0:
+        if participant.team_member_id == roles.answer_recorder_id:
             return "scorer"
         if participant.team_member_id == roles.question_guide_id:
             return "question_guide"
         return None
-    same_person = (
-        participant.team_member_id == roles.question_guide_id
-        and participant.team_member_id == roles.scorer_id
-    )
-    if same_person:
-        attempt = _active_attempt(db, row)
-        presented = attempt is not None and _attempt_question_presented(db, attempt.id)
-        if not presented:
+    presented = attempt is not None and _attempt_question_presented(db, attempt.id)
+    if not presented:
+        if participant.team_member_id == roles.question_guide_id:
             return "question_guide"
-        return "scorer" if result.ordinal == 0 else "question_guide"
-    if participant.team_member_id == roles.scorer_id:
+        return None
+    # Recording duties follow answer_recorder. Spoken order follows
+    # student_round_order; this slot only names the script for that member.
+    if participant.team_member_id == roles.answer_recorder_id:
         return "scorer"
     if participant.team_member_id == roles.question_guide_id:
         return "question_guide"
@@ -596,10 +593,12 @@ def _formal_slot(
 def _formal_micro_round_participants(
     db: Session, row: Conversation, actor_context: AuthContext | None
 ) -> list[ConversationParticipant] | None:
-    """Speakers for one active formal turn: opening Guide, or Scorer then Guide.
+    """Speakers for one active formal turn.
 
-    None leaves ordinary routing in place. A live attempt with an incomplete
-    Formal section fails closed and does not add another attempt.
+    Opening is the Guide alone. A student message follows
+    ``student_round_order`` (the scorer and the Guide, either order). None
+    leaves ordinary routing in place. A live attempt with an incomplete Formal
+    section fails closed and does not add another attempt.
     """
 
     if actor_context is None or actor_context.user.id != row.user_id:
@@ -622,8 +621,15 @@ def _formal_micro_round_participants(
     )
     by_member = {participant.team_member_id: participant for participant in participants}
     guide = by_member.get(roles.question_guide_id)
-    scorer = by_member.get(roles.scorer_id)
-    if guide is None or scorer is None:
+    recorder = by_member.get(roles.answer_recorder_id)
+    ordered: list[ConversationParticipant] = []
+    for member_id in roles.student_round_order_ids:
+        participant = by_member.get(member_id)
+        if participant is None:
+            ordered = []
+            break
+        ordered.append(participant)
+    if guide is None or recorder is None or not ordered:
         raise conflict(
             "assessment_ruleset_incomplete",
             "Formal assessment needs a complete # Team Ruleset section naming the roster.",
@@ -633,7 +639,7 @@ def _formal_micro_round_participants(
             _present_current_question(db, actor_context, row.id)
         else:
             return [guide]
-    return [scorer, guide]
+    return ordered
 
 
 def claim_team_turn(
@@ -1802,7 +1808,7 @@ def _guide_micro_script(
                     )
                     .where(
                         TeamTurnResult.turn_id == turn.id,
-                        ConversationParticipant.team_member_id == roles.scorer_id,
+                        ConversationParticipant.team_member_id == roles.answer_recorder_id,
                     )
                 )
                 is not None
@@ -2586,6 +2592,45 @@ def result_ids(factory: SessionFactory, turn_id: str) -> list[str]:
         )
 
 
+def _formal_run_order(factory: SessionFactory, turn_id: str) -> list[str]:
+    """Run the answer recorder before any earlier speaker on this turn.
+
+    Stored ordinals stay in ``student_round_order``. The Guide's next line is
+    chosen from the write-tool receipt, so that call has to finish first when
+    the Ruleset lists the Guide ahead of the recorder. An opening turn has no
+    recorder result and stays Guide-only.
+    """
+
+    ids = result_ids(factory, turn_id)
+    if len(ids) < 2:
+        return ids
+    with factory() as db:
+        turn = db.get(ConversationTurn, turn_id)
+        row = db.get(Conversation, turn.conversation_id) if turn is not None else None
+        if row is None:
+            return ids
+        try:
+            roles = _formal_roles_for_conversation(db, row)
+        except PlatformError:
+            return ids
+        if roles is None:
+            return ids
+        recorder_result_id: str | None = None
+        for result_id in ids:
+            result = db.get(TeamTurnResult, result_id)
+            participant = (
+                db.get(ConversationParticipant, result.participant_id)
+                if result is not None
+                else None
+            )
+            if participant is not None and participant.team_member_id == roles.answer_recorder_id:
+                recorder_result_id = result_id
+                break
+        if recorder_result_id is None or ids[0] == recorder_result_id:
+            return ids
+        return [recorder_result_id, *[item for item in ids if item != recorder_result_id]]
+
+
 def execute_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
     if not claim.created:
         return
@@ -2598,14 +2643,14 @@ def execute_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
             execute_coordinate_turn(factory, claim)
             return
         if turn.mode == "real":
-            for result_id in result_ids(factory, claim.turn_id):
+            for result_id in _formal_run_order(factory, claim.turn_id):
                 with factory() as result_db:
                     result = result_db.get(TeamTurnResult, result_id)
                     should_run = result is not None and result.state in {"pending", "running"}
                 if should_run:
                     execute_real_member(factory, claim, result_id)
             return
-    for result_id in result_ids(factory, claim.turn_id):
+    for result_id in _formal_run_order(factory, claim.turn_id):
         execute_member(
             factory, claim.turn_id, claim.token, result_id, actor_context=claim.actor_context
         )
@@ -3207,7 +3252,7 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
             tool_context = (row.id, turn.id)
         if leader.assessment_active:
             # Auto routing still starts at the leader. A live formal attempt
-            # does not use this path: the ledger selects Scorer then Guide.
+            # does not use this path: the ledger selects the formal micro-round.
             specs = [spec for spec in specs if spec.is_leader]
         leader = replace(
             leader,

@@ -214,7 +214,7 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
                     question_guide="Bowen",
                     scorer="Jade",
                     summarizer="Kaikai",
-                    student_round_order=("Bowen", "Jade", "Kaikai"),
+                    student_round_order=("Jade", "Bowen"),
                 ),
             ]
         with database.session() as db:

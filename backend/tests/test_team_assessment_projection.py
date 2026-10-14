@@ -398,7 +398,7 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
                         question_guide="Bowen",
                         scorer="Jade",
                         summarizer="Kaikai",
-                        student_round_order=names,
+                        student_round_order=("Jade", "Bowen"),
                     ),
                 )
             )

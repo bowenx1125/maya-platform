@@ -615,7 +615,7 @@ def _create_formal_conversation(
             question_guide=leader_name,
             scorer=scorer_name,
             summarizer=summarizer_name,
-            student_round_order=tuple(member.display_name for member in ordered),
+            student_round_order=(scorer_name, leader_name),
         )
     )
     for member in members:
