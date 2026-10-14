@@ -88,15 +88,16 @@ describe("Wave 1A locale and V2 style boundary", () => {
       ),
       "utf8",
     );
-    // Must beat workspace-theme `.surface .section-card-header` (0,2,0) under
-    // `.surface` — a bare `.section .section-card-header` alone is not enough.
+    // workspace-theme `.surface` is a CSS Module local (hashed in DOM), so a
+    // global surface prefix never matches. Assert !important so this rule
+    // beats theme regardless of equal specificity / load order.
+    expect(css).not.toMatch(/:global\(\.surface\)\s*\.section/);
     const rule = css.match(
-      /:global\(\.surface\)\s*\.section\s*:global\(\.section-card-header\)\s*,[\s\S]*?\.section\s*:global\(\.section-card-header\)\s*\{[^}]*\}/,
+      /\.section\s*:global\(\.section-card-header\)\s*\{[^}]*\}/,
     )?.[0];
     expect(rule).toBeDefined();
-    expect(rule).toMatch(/:global\(\.surface\)\s*\.section\s*:global\(\.section-card-header\)/);
     expect(rule).not.toMatch(/border-bottom:\s*1px\s+solid/);
-    expect(rule).toMatch(/border-bottom:\s*0/);
+    expect(rule).toMatch(/border-bottom:\s*0\s*!important/);
   });
   it("keeps hidden upload controls out of full-width input styling", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
