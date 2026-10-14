@@ -245,25 +245,30 @@ afe3daa checks: frontend809/1skip and static/build/163-route checks passed;
 Windows backend2220/21skip/54fail/1error. Public read-only API31/31; candidate
 undeployed, charged calls0. Active Voice/Rebirth/Live/Safari still unaccepted.
 
-## October14 independent revalidation
+## October14 independent revalidation and release
 
-entaiaki advanced ba7358f -> origin/main 7e36ba0 after a recoverable tracked-work
-stash. Kept latest main UI/API and production records; resolved Avatar assertions
-without dropping explicit-selection or no-auto-binding coverage. Before integration:
-backend focused 58/58; expanded 299 pass/14 existing skip/3 Windows symlink-privilege
-failures. Integrated frontend: 92 files, 816 pass/1 existing skip; types, lint
-(4 existing warnings), production build passed. Integrated Ruff check/format
-(471 files) and mypy (259 files) passed; full backend (6 workers): 2250 pass/21 skip/31 fail plus 1 teardown error.
-All 31 fail identically on isolated 7e36ba0: 23 ACL, 6 symlink, 1 POSIX mode,
-1 Windows asyncio case and its teardown; new failing nodes0.
-Input-frozen teacher controls no longer offer Interact (10 tests passed). Frozen
-OpenAPI/route gates passed after restoring checkout LF bytes; Node24.14.0 Latin
-gate passed. Tracked-only boundary probe passed; Windows permission probe remains
-blocked. Two-account public read-only API baseline: Guyue9/9, Maya8/8; both Live
-empty, teacher Debates empty, teacher Voices2. No content or provider calls.
-Production tree is 7e36ba0, backend/frontend healthy and HTTPS200. Voice config
-and media tools are present; no fallback configured. Voice changes fix recovery
-and diagnostics, not proof of supplier availability. Windows browser automation
-stopped on unreliable URL identification; no fresh public visual acceptance.
-Changed-file formatting passed; whole tracked-tree Prettier retains 25 unchanged
-main formatting failures. Candidate not yet deployed.
+Integrated entaiaki ba7358f -> origin/main 7e36ba0 after a recoverable stash;
+kept latest main UI/API and both Avatar binding assertions. Fix6f89c7e spans
+23 files: Voice action recovery/expiry/diagnostics, text-only Rebirth and GET
+recovery, Immerse title/layers, empty-header rule, and frozen-input Interact.
+Frontend:92 files,816 pass/1 existing skip; types/lint(4 existing warnings)/build
+passed. Backend:2250 pass/21 skip/31 fail plus1 teardown error in241s. All31
+fail identically on isolated unmodified7e36ba0 with source-origin assertions:
+23 Windows ACL,6 symlink,1 POSIX mode,1 asyncio case and its teardown; new
+failing nodes0. Focused58/58, Ruff check/format(471 files),mypy(259 files) passed.
+Frozen OpenAPI,generated contracts/WS,response/negative tests,document authority,
+164-route comparison and reviewed Node24.14.0 Latin gates passed. Changed-file
+formatting and tracked-only boundary probe passed. Full tracked-tree Prettier
+retains25 unchanged main formatting failures; Unix-mode boundary probe fails
+on Windows. Full Linux/Safari and visual acceptance remain open.
+
+Published GitHub main first, then bare repo and ff-only server pull. Built
+c2292aa68ee1fd8cb3387afefde70a5541278861; SQLite backup API produced
+maya-20261014T050750Z.sqlite3 under production backups, integrity ok. Rebuild
+completed; backend/frontend healthy, gateway running, internal ready200, schema
+0064_active_debate_slot matches ALEMBIC_HEAD, public HTTPS200. Post-release
+read-only API:Guyue9/9,Maya8/8. Both Live empty; teacher Debates0,Voices2.
+Voice config/media tools present, no configured fallback. No new provider
+calls or content mutations. Voice recovery fixes do not prove supplier health.
+Windows browser automation stopped on unreliable URL identification: actual
+Voice upload/preview, Rebirth, active Live and visual clicks remain unaccepted.
