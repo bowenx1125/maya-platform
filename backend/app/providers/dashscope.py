@@ -25,11 +25,13 @@ from app.providers.tts import (
     TTSHTTPRejectedError,
     TTSProviderError,
     TTSProviderTimeout,
+    TTSProviderUnavailableError,
     TTSResponseInvalidError,
     TTSResult,
     TTSResultDNSFailedError,
     TTSResultDownloadError,
     TTSResultURLRejectedError,
+    TTSVoiceUnavailableError,
 )
 from app.providers.voice import (
     VoiceEnrollmentResult,
@@ -41,8 +43,69 @@ from app.providers.voice import (
 DEFAULT_TARGET_MODEL_KEY = "qwen3-tts-vc-2026-01-22"
 # Supplier preset names such as "Eldric Sage" are accepted by this flash
 # snapshot. The 2025-09-18 flash snapshot is not on the list: it rejects them.
+# Explicit rollback only: keep calling this dated snapshot when an operator
+# pins it. New work uses FLASH_TTS_MODEL_KEY under the trial switch.
 PRESET_TTS_MODEL_KEY = "qwen3-tts-flash-2025-11-27"
-ALLOWED_TTS_TARGET_MODELS = frozenset({DEFAULT_TARGET_MODEL_KEY, PRESET_TTS_MODEL_KEY})
+# Current system-voice alias documented by Model Studio for cn-beijing.
+FLASH_TTS_MODEL_KEY = "qwen3-tts-flash"
+ALLOWED_TTS_TARGET_MODELS = frozenset(
+    {DEFAULT_TARGET_MODEL_KEY, PRESET_TTS_MODEL_KEY, FLASH_TTS_MODEL_KEY}
+)
+# Official published system voices for qwen3-tts-flash (Model Studio list).
+# Clone / enrollment ids are never on this list; the flash path refuses them.
+FLASH_SYSTEM_VOICES = frozenset(
+    {
+        "Aiden",
+        "Alek",
+        "Andre",
+        "Arthur",
+        "Bella",
+        "Bellona",
+        "Bodega",
+        "Bunny",
+        "Chelsie",
+        "Cherry",
+        "Dolce",
+        "Dylan",
+        "Eldric Sage",
+        "Elias",
+        "Emilien",
+        "Eric",
+        "Ethan",
+        "Jada",
+        "Jennifer",
+        "Kai",
+        "Katerina",
+        "Kiki",
+        "Lenn",
+        "Li",
+        "Maia",
+        "Marcus",
+        "Mia",
+        "Mochi",
+        "Momo",
+        "Moon",
+        "Neil",
+        "Nini",
+        "Nofish",
+        "Ono Anna",
+        "Peter",
+        "Pip",
+        "Radio Gol",
+        "Rocky",
+        "Roy",
+        "Ryan",
+        "Seren",
+        "Serena",
+        "Sohee",
+        "Sonrisa",
+        "Stella",
+        "Sunny",
+        "Vincent",
+        "Vivian",
+    }
+)
+TTS_FLASH_MAX_CHARS = 600
 VOICE_ENROLLMENT_MODEL = "qwen-voice-enrollment"
 APPROVED_RESULT_HOST_SUFFIXES = (
     "dashscope.aliyuncs.com",
@@ -102,15 +165,23 @@ def _json(response: httpx.Response) -> dict[str, Any]:
     return value
 
 
-def tts_model_for_call(configured: str, requested: str | None) -> str:
+def tts_model_for_call(
+    configured: str,
+    requested: str | None,
+    *,
+    flash_enabled: bool = False,
+) -> str:
     """Return the model for one TTS request, or refuse before any network I/O.
 
     ``None`` keeps the adapter default, which is the clone model. A profile
-    may name either allowlisted model. Anything else is not guessed into a
-    request.
+    may name an allowlisted model. ``qwen3-tts-flash`` is selectable only
+    when the trial switch is on; the dated snapshot stays an explicit
+    rollback. Anything else is not guessed into a request.
     """
 
     model = configured if requested is None else requested
+    if model == FLASH_TTS_MODEL_KEY and not flash_enabled:
+        raise TTSProviderError("unsupported tts model", safe_code="tts_response_invalid")
     if model not in ALLOWED_TTS_TARGET_MODELS:
         raise TTSProviderError("unsupported tts model", safe_code="tts_response_invalid")
     return model
@@ -157,6 +228,10 @@ class DashScopeVoiceCloneProvider:
         language: str = "en",
         transcript: str | None = None,
     ) -> VoiceEnrollmentResult:
+        # The flash system-voice branch never re-registers clones against the
+        # alias model. Enrollment stays on the clone target only.
+        if target_model_key == FLASH_TTS_MODEL_KEY:
+            raise VoiceProviderError("flash model does not support enrollment")
         payload: dict[str, Any] = {
             "model": VOICE_ENROLLMENT_MODEL,
             "input": {
@@ -581,11 +656,18 @@ class DashScopeTTSProvider:
     key = "dashscope"
 
     def __init__(
-        self, config: DashScopeConfig, downloader: SupplierAudioDownloader | None = None
+        self,
+        config: DashScopeConfig,
+        downloader: SupplierAudioDownloader | None = None,
+        *,
+        flash_enabled: bool = False,
+        trial_budget: object | None = None,
     ) -> None:
         self.config = config
         self.target_model_key = config.target_model_key
         self.downloader = downloader or SupplierAudioDownloader()
+        self.flash_enabled = flash_enabled
+        self.trial_budget = trial_budget
 
     def synthesize(
         self,
@@ -598,7 +680,23 @@ class DashScopeTTSProvider:
         language_type = _TTS_LANGUAGE_TYPES.get(language)
         if language_type is None:
             raise TTSProviderError("unsupported language")
-        model = tts_model_for_call(self.target_model_key, target_model_key)
+        model = tts_model_for_call(
+            self.target_model_key,
+            target_model_key,
+            flash_enabled=self.flash_enabled,
+        )
+        if model == FLASH_TTS_MODEL_KEY:
+            # Zero outbound for illegal voice / oversize / exhausted trial.
+            if external_voice_id not in FLASH_SYSTEM_VOICES:
+                raise TTSVoiceUnavailableError("tts voice unavailable")
+            if len(text) > TTS_FLASH_MAX_CHARS:
+                raise TTSProviderError(
+                    "tts text too long", safe_code="tts_response_invalid"
+                )
+            budget = self.trial_budget
+            if budget is None or not hasattr(budget, "preclaim"):
+                raise TTSProviderUnavailableError("tts trial budget unavailable")
+            budget.preclaim(len(text))
         payload = {
             "model": model,
             "input": {
