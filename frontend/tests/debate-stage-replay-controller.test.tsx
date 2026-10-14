@@ -1105,3 +1105,104 @@ it("normal readiness polling does not briefly enable media retry before playback
   expect(api.advanceDebatePlayback).not.toHaveBeenCalled();
   expect(api.retryDebatePreparation).not.toHaveBeenCalled();
 });
+
+describe("beta barrage history hydration", () => {
+  function hydrateEvent(sequence: number): Record<string, unknown> {
+    return {
+      event_id: "81000000-0000-4000-8000-000000000003",
+      event_type: "interaction.barrage_created",
+      event_version: 1,
+      debate_id: debateId,
+      sequence,
+      occurred_at: "2026-09-07T00:00:05Z",
+      payload: {
+        message_id: "b3000000-0000-4000-8000-000000000003",
+        nickname: "Jade",
+        raw_text: "live after hydrate",
+        sequence: 3,
+      },
+    };
+  }
+
+  it("hydrates the lane from the teacherInteraction snapshot and keeps live events flowing", async () => {
+    const initial = detail();
+    const socket = new ReplaySocket();
+    render(
+      <BetaDebateStage
+        api={apiFor(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+        joinUrl="https://example.test/classroom/test"
+        joinCodeVisible
+        interactionBarrages={[
+          {
+            id: "b1000000-0000-4000-8000-000000000001",
+            nickname: "Ana",
+            raw_text: "history one",
+          },
+          {
+            id: "b2000000-0000-4000-8000-000000000002",
+            nickname: "Bo",
+            raw_text: "history two",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/2 messages/)).toBeTruthy();
+    expect(screen.getByLabelText("Classroom messages")).toBeTruthy();
+
+    await waitFor(() => expect(socket.hasListeners("message")).toBe(true));
+    act(() => socket.emitOpen());
+    act(() => socket.emitMessage(acquired()));
+    act(() => socket.emitMessage(hydrateEvent(initial.last_sequence + 1)));
+    await waitFor(() => expect(screen.getByText(/3 messages/)).toBeTruthy());
+  });
+
+  it("does not duplicate shared ids when history arrives after a live event", async () => {
+    const initial = detail();
+    const socket = new ReplaySocket();
+    const shared = {
+      id: "b3000000-0000-4000-8000-000000000003",
+      nickname: "Jade",
+      raw_text: "live after hydrate",
+    };
+    const view = render(
+      <BetaDebateStage
+        api={apiFor(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+        joinUrl="https://example.test/classroom/test"
+        joinCodeVisible
+      />,
+    );
+
+    await waitFor(() => expect(socket.hasListeners("message")).toBe(true));
+    act(() => socket.emitOpen());
+    act(() => socket.emitMessage(acquired()));
+    act(() => socket.emitMessage(hydrateEvent(initial.last_sequence + 1)));
+    await waitFor(() => expect(screen.getByText(/1 message/)).toBeTruthy());
+
+    view.rerender(
+      <BetaDebateStage
+        api={apiFor(initial)}
+        debateId={debateId}
+        detail={initial}
+        socketFactory={() => socket}
+        joinUrl="https://example.test/classroom/test"
+        joinCodeVisible
+        interactionBarrages={[
+          shared,
+          {
+            id: "b4000000-0000-4000-8000-000000000004",
+            nickname: "Kai",
+            raw_text: "later history",
+          },
+        ]}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText(/2 messages/)).toBeTruthy());
+  });
+});

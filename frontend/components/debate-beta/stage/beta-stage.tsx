@@ -501,6 +501,12 @@ export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
   joinCodeVisible?: boolean;
   /** Ask the page to re-read the interaction so the join URL arrives. */
   onInteractionOpened?: () => void;
+  /** Historical barrages from teacherInteraction snapshot; hydrate lane on reload. */
+  interactionBarrages?: ReadonlyArray<{
+    id: string;
+    nickname: string;
+    raw_text: string;
+  }> | null;
   /** Beta-only copy, kept out of the shared label table. */
   betaLabels?: BetaStageLabels;
 };
@@ -555,6 +561,7 @@ export function BetaDebateStage({
   joinUrl,
   joinCodeVisible = true,
   onInteractionOpened,
+  interactionBarrages,
   betaLabels,
 }: BetaStageProps) {
   const labels = useMemo(
@@ -703,6 +710,22 @@ export function BetaDebateStage({
   // stable, so the socket handler below needs no extra dependency.
   const beta = betaLabels ?? defaultBetaStageLabels;
   const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
+  // Snapshot is history of record: reload starts empty even when classroom already
+  // sent messages. Merge by id so a live event before/after the read never duplicates.
+  useEffect(() => {
+    if (!interactionBarrages?.length) return;
+    setBarrages((current) => {
+      const known = new Set(current.map((item) => item.id));
+      const missing = interactionBarrages
+        .filter((item) => !known.has(item.id))
+        .map((item) => ({
+          id: item.id,
+          nickname: item.nickname,
+          text: item.raw_text,
+        }));
+      return missing.length ? [...current, ...missing] : current;
+    });
+  }, [interactionBarrages]);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const transcriptRef = useRef<HTMLElement>(null);
   const transcriptToggleRef = useRef<HTMLButtonElement>(null);
