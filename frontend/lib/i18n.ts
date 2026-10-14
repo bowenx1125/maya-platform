@@ -558,6 +558,8 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorVoiceProviderUnavailable:
+    "Voice provider is temporarily unavailable. Use the platform fallback voice; this is not a successful custom voice.",
   errorChatAcceptanceUnknown:
     "This request's outcome is unknown. Maya will not resend it automatically. The message remains in this conversation; you can continue with a new message.",
   errorChatTransportUncertain:
@@ -1338,6 +1340,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
+  errorVoiceProviderUnavailable:
+    "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
   errorChatAcceptanceUnknown:
     "这次请求的结果尚不确定。Maya 不会自动重发。消息会保留在当前对话中，你可以继续发送新消息。",
   errorChatTransportUncertain:
@@ -1768,6 +1772,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  voice_provider_unavailable: "errorVoiceProviderUnavailable",
   chat_acceptance_unknown: "errorChatAcceptanceUnknown",
   memory_entry_invalid: "brainformMemoryInvalid",
   assessment_control_failed: "assessmentControlFailed",

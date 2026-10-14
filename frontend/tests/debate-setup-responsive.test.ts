@@ -59,4 +59,38 @@ describe("Debates list narrow-screen layout", () => {
       /hidden|clip/,
     );
   });
+
+  it("lets long debate titles wrap inside the topic column without clipping", () => {
+    document.head.append(style);
+    const rules = Array.from(style.sheet!.cssRules);
+    const title = rules.find(
+      (rule) => (rule as CSSStyleRule).selectorText === ".debateCard h2",
+    ) as CSSStyleRule;
+    const topic = rules.find(
+      (rule) =>
+        (rule as CSSStyleRule).selectorText === ".debateCard > div:first-child",
+    ) as CSSStyleRule;
+    expect(title.style.getPropertyValue("min-width")).toBe("0px");
+    expect(title.style.getPropertyValue("overflow-wrap")).toBe("anywhere");
+    expect(title.style.getPropertyValue("max-width")).toBe("100%");
+    expect(topic.style.getPropertyValue("min-width")).toBe("0px");
+  });
+
+  it("keeps a single action separator and no extra horizontal rules on rows", () => {
+    const { actions, mobileRule } = layoutRules();
+    expect(actions.getPropertyValue("border-left")).toBe(
+      "1px solid var(--line, #dedee3)",
+    );
+    document.head.append(style);
+    const rules = Array.from(style.sheet!.cssRules);
+    const rowCard = rules.find(
+      (rule) =>
+        (rule as CSSStyleRule).selectorText === ".debateRow > .debateCard",
+    ) as CSSStyleRule;
+    expect(rowCard.style.getPropertyValue("border-top-width") || "0px").toMatch(/^0/);
+    expect(rowCard.style.getPropertyValue("border") || "0px").toMatch(/^0/);
+    const mobileActions = mobileRule(".debateActions");
+    expect(mobileActions.getPropertyValue("border-left")).toBe("0px");
+    expect(mobileActions.getPropertyValue("border-top")).toBe("0px");
+  });
 });

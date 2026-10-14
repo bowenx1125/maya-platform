@@ -419,4 +419,53 @@ describe("Voice recovery", () => {
       [unfinished.id, "My voice"],
     ]);
   });
+
+  it("shows readable fallback guidance when the voice provider is unavailable", async () => {
+    api.createVoicePreview.mockRejectedValueOnce(
+      new PlatformApiError(503, "Unavailable", {
+        code: "provider_unavailable",
+      }),
+    );
+    render(<VoiceLibrary groupId="group-a" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/platform fallback voice/i);
+    expect(alert.textContent).toMatch(/not a successful custom voice/i);
+    expect(screen.queryByText(/Voice profile created/i)).toBeNull();
+  });
+
+  it("clears the enroll error after a successful Retry", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice
+      .mockRejectedValueOnce(
+        new PlatformApiError(503, "Unavailable", {
+          code: "provider_unavailable",
+        }),
+      )
+      .mockResolvedValueOnce(unfinished);
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    const newButton = await screen.findByRole("button", { name: "New" });
+    await waitFor(() => expect(newButton).toHaveProperty("disabled", false));
+    fireEvent.click(newButton);
+    const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
+      type: "audio/wav",
+    });
+    fireEvent.change(screen.getByLabelText(/10–15-second/), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /platform fallback voice/i,
+    );
+    api.voiceProfiles.mockResolvedValue([unfinished]);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(api.enrollVoice).toHaveBeenCalledTimes(2);
+  });
 });
