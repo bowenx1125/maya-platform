@@ -268,3 +268,5 @@ A Guide/Leader Agent.md `# Team Ruleset` section is the only override channel
 defaults. Bare Chatform sends use routing `all`; Guide card sorts last in the UI.
 Formal assessment executor machinery remains; product role copy is not hardcoded
 in the opening beyond pointing at `# Team Ruleset`.
+
+Built `2c62871` (PR #72: Knowledge partial promote + Chat progress + Team `# Team Ruleset` defaults + fused PR #71 Voices hover tip). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200. Cleanup: removed `/tmp/maya-*` probes, orphan backup `-shm`/`-wal`/`.bak`, and ~23GB Docker build cache (disk 60%→23%).
