@@ -400,6 +400,22 @@ describe("Voice recovery", () => {
     },
   );
 
+  it("keeps rename 5xx as a generic error, not provider-unavailable copy", async () => {
+    api.renameVoiceProfile.mockRejectedValueOnce(
+      new PlatformApiError(503, "Unavailable", {
+        code: "provider_unavailable",
+      }),
+    );
+    render(<VoiceLibrary groupId="group-a" />);
+    fireEvent.click(await screen.findByRole("button", { name: "sample.wav" }));
+    const name = screen.getByRole("textbox", { name: "Voice name" });
+    fireEvent.change(name, { target: { value: "My voice" } });
+    fireEvent.blur(name);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).not.toMatch(/platform fallback voice/i);
+    expect(alert.textContent).not.toMatch(/not a successful custom voice/i);
+  });
+
   it("retries a failed rename with the edited name", async () => {
     api.renameVoiceProfile
       .mockRejectedValueOnce(new TypeError("Network interrupted"))

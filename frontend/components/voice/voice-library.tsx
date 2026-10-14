@@ -47,8 +47,8 @@ type VoiceFailure = { cause: unknown; retry: RetryAction };
 
 
 function voiceAwareCause(cause: unknown): unknown {
-  // Supplier outages must steer the teacher to the platform fallback voice.
-  // Never present an unavailable custom-voice attempt as a successful enroll.
+  // Only for enroll/preview: supplier outages steer to the platform fallback voice.
+  // Do not remap rename/load/confirm — a 5xx there is not "provider unavailable".
   if (!(cause instanceof PlatformApiError)) return cause;
   const providerDown =
     cause.code === "provider_unavailable" ||
@@ -197,7 +197,7 @@ export function VoiceLibrary({
       setFailure((current) => {
         if (current && current.retry.kind !== "load") return current;
         return cause
-          ? { cause: voiceAwareCause(cause), retry: { kind: "load" } }
+          ? { cause, retry: { kind: "load" } }
           : null;
       });
       setLoading(false);
@@ -356,7 +356,7 @@ export function VoiceLibrary({
       closeNameEditor(profile.id, restoreFocus);
     } catch (cause) {
       setFailure({
-        cause: voiceAwareCause(cause),
+        cause,
         retry: { kind: "rename", profile, name, restoreFocus },
       });
     } finally {
@@ -441,12 +441,12 @@ export function VoiceLibrary({
           }
         } catch (lookupFailure) {
           setFailure({
-            cause: voiceAwareCause(lookupFailure),
+            cause: lookupFailure,
             retry: { kind: "confirm", profileId },
           });
         }
       } else {
-        setFailure({ cause: voiceAwareCause(cause), retry: { kind: "confirm", profileId } });
+        setFailure({ cause, retry: { kind: "confirm", profileId } });
       }
     } finally {
       setBusy(false);
