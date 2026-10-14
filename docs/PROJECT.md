@@ -238,12 +238,10 @@ Brainform reads. Latest recorded production deploy 2026-10-14T040843Z: built
 
 ## October13 Debate and Voice acceptance repair
 
-entaiaki: eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f. Repairs:
-text-only Rebirth/GET recovery, Voice retry/expiry/confirm fencing, safe diagnostics,
-Immerse title/mobile layers, empty-header rule, personal Voice422. Historical
-afe3daa checks: frontend809/1skip and static/build/163-route checks passed;
-Windows backend2220/21skip/54fail/1error. Public read-only API31/31; candidate
-undeployed, charged calls0. Active Voice/Rebirth/Live/Safari still unaccepted.
+entaiaki inputs: eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f.
+The prior candidate was undeployed; frontend809/1skip and public read-only API31/31
+passed, but Windows backend and active Voice/Rebirth/Live/Safari remained open.
+No new provider calls. October14 evidence below supersedes those partial checks.
 
 ## October14 independent revalidation and release
 
