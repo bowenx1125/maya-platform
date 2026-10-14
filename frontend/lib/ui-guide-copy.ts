@@ -230,8 +230,8 @@ export const uiGuideCopy = {
     zh: "添加 Markdown、PDF 或 Word 文件作为 Agent 证据；PDF 和 Word 会转换为 Markdown。",
   },
   "voice.uploadSample": {
-    en: "Choose the audio sample for this voice profile.",
-    zh: "选择此语音配置要使用的音频样本。",
+    en: "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).",
+    zh: "请上传 10–20 秒的朗读音频（念一段话；16 位 WAV / MP3 / M4A；不超过 10 MB）。",
   },
 } as const satisfies Record<string, Record<Locale, string>>;
 

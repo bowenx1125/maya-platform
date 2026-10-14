@@ -506,6 +506,7 @@ export function VoiceLibrary({
             aria-label={t("voiceSampleFile")}
           />
         </label>
+        <p className={styles.uploadHint}>{t("voiceSampleFile")}</p>
         {file ? (
           <span className={styles.selectedFile} aria-live="polite">
             {file.name}

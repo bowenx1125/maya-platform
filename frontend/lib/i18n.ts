@@ -655,7 +655,7 @@ const enMessages = {
   voiceCreateTitle: "New",
   voiceNone: "No voices yet.",
   voiceSampleFile:
-    "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
+    "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).",
   voiceConsent:
     "I confirm this is my voice and authorize this course to create a reusable profile.",
   voiceProfileCreatedNotice: "Created",
@@ -1435,7 +1435,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voiceCreateTitle: "新建",
   voiceNone: "还没有音色。",
   voiceSampleFile:
-    "请上传一段 10–15 秒的朗读音频（念一段话，支持 16 位 WAV、MP3 或 M4A，文件不超过 10 MB）。",
+    "请上传 10–20 秒的朗读音频（念一段话；16 位 WAV / MP3 / M4A；不超过 10 MB）。",
   voiceConsent: "我确认这是我的声音，并授权本课程创建可复用的音色档案。",
   voiceProfileCreatedNotice: "已创建",
   voiceCustom: "自定义音色",

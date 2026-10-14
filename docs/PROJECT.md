@@ -249,3 +249,5 @@ typecheck/lint (4 existing warnings), ruff/mypy, boundary. Production:
 backup `maya-20261014T111701Z.sqlite3` integrity ok; healthy/ready200/
 schema0064/public200. Courser Knowledge Set still soft-deleted until next
 authorized generate; revive code present in image.
+Voices New upload shows the sample rules next to the button (10–20 s, 16-bit
+WAV/MP3/M4A, max 10 MB), matching server normalization bounds.

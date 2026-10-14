@@ -113,9 +113,10 @@ describe("M08 voice library", () => {
     expect(done.disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 
-    const input = screen.getByLabelText(
-      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
-    ) as HTMLInputElement;
+    const sampleHint =
+      "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
+    expect(screen.getByText(sampleHint)).toBeTruthy();
+    const input = screen.getByLabelText(sampleHint) as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
       type: "audio/wav",
     });
@@ -125,11 +126,8 @@ describe("M08 voice library", () => {
     await waitFor(() => expect(done.disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
-    expect(
-      screen.queryByLabelText(
-        "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
-      ),
-    ).toBeNull();
+    expect(screen.queryByLabelText(sampleHint)).toBeNull();
+    expect(screen.queryByText(sampleHint)).toBeNull();
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
@@ -163,9 +161,10 @@ describe("M08 voice library", () => {
       ).toBe(false),
     );
     fireEvent.click(screen.getByRole("button", { name: "New" }));
-    const input = screen.getByLabelText(
-      "Please upload a 10–15-second audio clip of yourself reading a short passage (16-bit WAV, MP3 or M4A; max 10 MB).",
-    ) as HTMLInputElement;
+    const sampleHint =
+      "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
+    expect(screen.getByText(sampleHint)).toBeTruthy();
+    const input = screen.getByLabelText(sampleHint) as HTMLInputElement;
     fireEvent.change(input, {
       target: {
         files: [
