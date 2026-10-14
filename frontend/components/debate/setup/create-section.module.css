@@ -1,3 +1,4 @@
+:global(.surface) .section :global(.section-card-header),
 .section :global(.section-card-header) {
   margin-bottom: 0;
   min-height: 0;
