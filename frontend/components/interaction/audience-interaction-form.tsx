@@ -37,6 +37,12 @@ function newSubmissionId(): string {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
+function collectionFinalized(cause: unknown): boolean {
+  return (
+    cause instanceof PlatformApiError && cause.code === "interaction_finalized"
+  );
+}
+
 const browserAudienceApi: AudienceInteractionApi = {
   getForm: (accessToken) =>
     requestBrowser(
@@ -124,6 +130,19 @@ export function AudienceInteractionForm({
     turn_id?: string;
     client_submission_id: string;
   } | null>(null);
+  // Conclude finalizes the window. Treating that as a disconnect would leave
+  // Vote and Send enabled for another rejected attempt.
+  const [submissionsClosed, setSubmissionsClosed] = useState(false);
+  const submissionsClosedRef = useRef(false);
+
+  function lockFinalizedCollection() {
+    submissionsClosedRef.current = true;
+    setSubmissionsClosed(true);
+    setSyncFailed(false);
+    setForm((current) =>
+      current ? { ...current, barrage_open: false } : current,
+    );
+  }
 
   useEffect(() => {
     let active = true;
@@ -152,12 +171,19 @@ export function AudienceInteractionForm({
     async function refreshTurn() {
       try {
         const next = await api.getForm(accessToken);
-        if (active) {
+        // A stale open form must not undo Conclude. A finalized window cannot
+        // reopen, so the lock stays until this page is left.
+        if (active && !submissionsClosedRef.current) {
           setForm(next);
           setSyncFailed(false);
         }
-      } catch {
-        if (active) setSyncFailed(true);
+      } catch (cause: unknown) {
+        if (!active) return;
+        if (collectionFinalized(cause)) {
+          lockFinalizedCollection();
+          return;
+        }
+        if (!submissionsClosedRef.current) setSyncFailed(true);
       } finally {
         if (active) timer = setTimeout(() => void refreshTurn(), 2000);
       }
@@ -191,7 +217,13 @@ export function AudienceInteractionForm({
   const canInteract = nickname.trim().length > 0;
   const turnBound = Boolean(form.current_turn_id);
   async function submitVote() {
-    if (!canInteract || !selectedParticipant || voteState !== "idle") return;
+    if (
+      !canInteract ||
+      !selectedParticipant ||
+      voteState !== "idle" ||
+      submissionsClosedRef.current
+    )
+      return;
     setVoteState("busy");
     setVoteError(null);
     try {
@@ -205,6 +237,7 @@ export function AudienceInteractionForm({
     } catch (cause) {
       setVoteState("idle");
       setVoteError(cause);
+      if (collectionFinalized(cause)) lockFinalizedCollection();
     }
   }
 
@@ -214,6 +247,7 @@ export function AudienceInteractionForm({
       !barrageText.trim() ||
       barrageState === "busy" ||
       syncFailed ||
+      submissionsClosedRef.current ||
       form?.barrage_open === false
     )
       return;
@@ -252,6 +286,8 @@ export function AudienceInteractionForm({
         setForm((current) =>
           current ? { ...current, barrage_open: false } : current,
         );
+      } else if (collectionFinalized(cause)) {
+        lockFinalizedCollection();
       }
     }
   }
@@ -337,6 +373,7 @@ export function AudienceInteractionForm({
                 rows={5}
                 disabled={
                   !canInteract ||
+                  submissionsClosed ||
                   form.barrage_open === false ||
                   barrageState === "busy"
                 }
@@ -353,6 +390,7 @@ export function AudienceInteractionForm({
                   disabled={
                     !canInteract ||
                     syncFailed ||
+                    submissionsClosed ||
                     !barrageText.trim() ||
                     form.barrage_open === false ||
                     barrageState === "busy"
@@ -406,6 +444,7 @@ export function AudienceInteractionForm({
                       }
                       disabled={
                         !canInteract ||
+                        submissionsClosed ||
                         voteState !== "idle" ||
                         votePayload !== null
                       }
@@ -419,7 +458,9 @@ export function AudienceInteractionForm({
               <button
                 className={styles.secondaryButton}
                 type="submit"
-                disabled={!canInteract || voteState !== "idle"}
+                disabled={
+                  !canInteract || submissionsClosed || voteState !== "idle"
+                }
               >
                 {voteState === "busy"
                   ? t("audienceSubmitting")

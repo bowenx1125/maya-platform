@@ -346,6 +346,22 @@ describe("M13 anonymous audience form", () => {
     });
     expect(screen.getByText("Collection closed")).toBeTruthy();
     expect(screen.queryByText(/Connection interrupted/)).toBeNull();
+    const send = screen.getByRole("button", {
+      name: "Send",
+    }) as HTMLButtonElement;
+    const vote = screen.getByRole("button", {
+      name: /^Vote$/,
+    }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(vote.disabled).toBe(false);
+    fireEvent.change(screen.getByRole("textbox", { name: "Barrage" }), {
+      target: { value: "Too late" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Barrage" }));
+    expect(api.submitBarrage).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+    fireEvent.click(vote);
+    await waitFor(() => expect(api.submitVote).toHaveBeenCalledTimes(1));
   });
 
   it("does not reveal vote or barrage sections before a nickname is entered", async () => {
@@ -455,6 +471,122 @@ describe("M13 anonymous audience form", () => {
     expect(firstPayload?.client_submission_id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+  });
+
+  it("locks vote and barrage after Conclude rejects a submit", async () => {
+    const api = audienceApi();
+    const ended = new PlatformApiError(
+      410,
+      "Classroom interaction collection has ended.",
+      { code: "interaction_finalized" },
+    );
+    vi.mocked(api.submitVote).mockRejectedValue(ended);
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Learner" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Barrage" }), {
+      target: { value: "Still open" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Vote$/ }));
+    await screen.findByText("Collection closed");
+    const send = screen.getByRole("button", {
+      name: "Send",
+    }) as HTMLButtonElement;
+    const vote = screen.getByRole("button", {
+      name: /^Vote$/,
+    }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(vote.disabled).toBe(true);
+    expect(screen.queryByText(/Connection interrupted/)).toBeNull();
+    fireEvent.click(vote);
+    fireEvent.submit(screen.getByRole("form", { name: "Barrage" }));
+    expect(api.submitVote).toHaveBeenCalledTimes(1);
+    expect(api.submitBarrage).not.toHaveBeenCalled();
+  });
+
+  it("locks both submits when a refresh reports the window finalized", async () => {
+    const api = audienceApi();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", {
+      name: "Should classrooms use anonymous questions?",
+    });
+    vi.useFakeTimers();
+    cleanup();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Learner" },
+    });
+    vi.mocked(api.getForm).mockRejectedValue(
+      new PlatformApiError(410, "Classroom interaction collection has ended.", {
+        code: "interaction_finalized",
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByText("Collection closed")).toBeTruthy();
+    expect(screen.queryByText(/Connection interrupted/)).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Send" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /^Vote$/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.submit(screen.getByRole("form", { name: "Barrage" }));
+    fireEvent.submit(screen.getByRole("form", { name: "Vote" }));
+    expect(api.submitBarrage).not.toHaveBeenCalled();
+    expect(api.submitVote).not.toHaveBeenCalled();
+  });
+
+  it("keeps Vote and Send locked when a stale open poll follows Conclude", async () => {
+    const api = audienceApi();
+    const open = await api.getForm("token");
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", { name: open.topic });
+    vi.useFakeTimers();
+    cleanup();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Learner" },
+    });
+    vi.mocked(api.getForm).mockRejectedValueOnce(
+      new PlatformApiError(410, "Classroom interaction collection has ended.", {
+        code: "interaction_finalized",
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByText("Collection closed")).toBeTruthy();
+    vi.mocked(api.getForm).mockResolvedValue({ ...open, barrage_open: true });
+    const pollsBefore = vi.mocked(api.getForm).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(vi.mocked(api.getForm).mock.calls.length).toBeGreaterThan(
+      pollsBefore,
+    );
+    expect(screen.getByText("Collection closed")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Send" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /^Vote$/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.submit(screen.getByRole("form", { name: "Barrage" }));
+    fireEvent.submit(screen.getByRole("form", { name: "Vote" }));
+    expect(api.submitBarrage).not.toHaveBeenCalled();
+    expect(api.submitVote).not.toHaveBeenCalled();
   });
 
   it("renders one locale at a time for teacher interaction controls", () => {

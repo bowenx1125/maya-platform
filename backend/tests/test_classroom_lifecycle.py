@@ -15,7 +15,12 @@ from app.modules.debates.models import (
 )
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.setup.rules import canonical_rule_snapshot_json
-from app.modules.interactions.models import ClassroomInteractionWindow
+from app.modules.interactions.models import (
+    BarrageMessage,
+    ClassroomInteractionWindow,
+    Vote,
+)
+from app.modules.interactions.tokens import issue_token
 from app.modules.reports.models import (
     BarrageInsightSnapshot,
     CivilizationReport,
@@ -29,7 +34,7 @@ from sqlalchemy import delete, select, text
 from tests.conftest import login
 from tests.test_text_playback_fallback import _wait
 from tests.test_wave2_playback import _headers
-from tests.test_wave3_interactions import COURSE_ID, _seed_finished_debate
+from tests.test_wave3_interactions import COURSE_ID, TEACHER_ID, _seed_finished_debate
 
 
 def _saved_classroom(database, settings):
@@ -434,6 +439,156 @@ def test_rebirth_clears_report_and_unbinds_acceptance_run_without_new_provider_c
                     )
                     == preview_turn_ids_before
                 )
+    finally:
+        database.dispose()
+
+
+def test_rebirth_returns_ready_and_rejects_leftover_collection(app_factory):
+    app, database, settings = app_factory()
+    try:
+        with TestClient(app) as client:
+            debate_id = _saved_classroom(database, settings)
+            _, csrf = login(client)
+            now = datetime.now(UTC)
+            with database.session() as db:
+                window = db.scalar(
+                    select(ClassroomInteractionWindow).where(
+                        ClassroomInteractionWindow.debate_id == debate_id
+                    )
+                )
+                participant = db.scalar(
+                    select(DebateParticipant)
+                    .where(DebateParticipant.debate_id == debate_id)
+                    .order_by(DebateParticipant.order_index)
+                )
+                preview_turn = db.scalar(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
+                    .order_by(DebateTurn.turn_index)
+                )
+                assert window is not None
+                assert participant is not None
+                assert preview_turn is not None
+                preview_ids = list(
+                    db.scalars(
+                        select(DebateTurn.id)
+                        .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+                preview_speech = preview_turn.speech
+                participant_id = participant.id
+                window.status = "open"
+                window.token_nonce = b"r" * 32
+                window.opened_by = TEACHER_ID
+                window.opened_at = now
+                token = issue_token(window.id, bytes(window.token_nonce), settings.secret_bytes)
+                old_window_id = window.id
+                db.add(
+                    BarrageMessage(
+                        id=str(uuid4()),
+                        window_id=window.id,
+                        debate_id=debate_id,
+                        turn_id=preview_turn.id,
+                        nickname="Visitor",
+                        raw_text="A saved classroom question.",
+                        client_submission_id=str(uuid4()),
+                        sequence=1,
+                        submitted_at=now,
+                    )
+                )
+                db.add(
+                    Vote(
+                        id=str(uuid4()),
+                        window_id=window.id,
+                        debate_id=debate_id,
+                        participant_id=participant.id,
+                        client_submission_id=str(uuid4()),
+                        submitted_at=now,
+                    )
+                )
+            result = client.post(
+                f"/api/v1/debates/{debate_id}/rebirth",
+                json=_body(client, debate_id),
+                headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+            )
+            assert result.status_code == 200, result.text
+            detail = client.get(f"/api/v1/debates/{debate_id}")
+            assert detail.status_code == 200, detail.text
+            body = detail.json()
+            assert body["status"] == "draft"
+            assert body["preview"]["ready"] is True
+            assert body["playback"]["status"] == "preparing"
+            assert body["final_input_frozen"] is False
+            assert body["public_turns"] == []
+            rows = client.get(f"/api/v1/courses/{COURSE_ID}/debates").json()
+            summary = next(row for row in rows if row["id"] == debate_id)
+            assert summary["status"] == "draft"
+            assert summary["preview"]["ready"] is True
+            assert summary["preview"]["prepared_turns"] == summary["preview"]["expected_turns"]
+            with database.session() as db:
+                debate = db.get(Debate, debate_id)
+                assert debate is not None
+                assert debate.final_input_json is None
+                assert debate.started_at is None
+                assert debate.finished_at is None
+                preview = list(
+                    db.scalars(
+                        select(DebateTurn)
+                        .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+                assert [turn.id for turn in preview] == preview_ids
+                assert preview[0].speech == preview_speech
+                assert all(turn.generation_status == "final_ready" for turn in preview)
+                assert all(turn.publication_status == "unpublished" for turn in preview)
+                finals = list(
+                    db.scalars(
+                        select(DebateTurn).where(
+                            DebateTurn.debate_id == debate_id, DebateTurn.round_no == 4
+                        )
+                    )
+                )
+                assert finals
+                assert all(turn.generation_status == "pending" for turn in finals)
+                assert all(turn.publication_status == "unpublished" for turn in finals)
+                assert all(not turn.speech for turn in finals)
+                assert (
+                    db.scalar(
+                        select(BarrageMessage.id).where(BarrageMessage.debate_id == debate_id)
+                    )
+                    is None
+                )
+                assert db.scalar(select(Vote.id).where(Vote.debate_id == debate_id)) is None
+                windows = list(
+                    db.scalars(
+                        select(ClassroomInteractionWindow).where(
+                            ClassroomInteractionWindow.debate_id == debate_id
+                        )
+                    )
+                )
+                assert len(windows) == 1
+                assert windows[0].id != old_window_id
+                assert windows[0].status == "closed"
+                assert windows[0].token_nonce is None
+            late_barrage = client.post(
+                f"/api/v1/classroom-interactions/{token}/barrages",
+                json={
+                    "nickname": "Visitor",
+                    "raw_text": "After rebirth",
+                    "client_submission_id": str(uuid4()),
+                },
+            )
+            late_vote = client.post(
+                f"/api/v1/classroom-interactions/{token}/votes",
+                json={
+                    "participant_id": participant_id,
+                    "client_submission_id": str(uuid4()),
+                },
+            )
+            assert late_barrage.status_code == 404, late_barrage.text
+            assert late_vote.status_code == 404, late_vote.text
     finally:
         database.dispose()
 

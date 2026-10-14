@@ -255,26 +255,14 @@ healthy/ready200/schema0064/public200. Read-only API Guyue9/9,Maya8/8;
 both Live empty, teacher Debates0,Voices2. Voice tools present, fallback absent.
 Browser control stopped on unreliable URL identification; active Live and
 Rebirth clicks remain unaccepted, regardless of API/mock results.
+Voice: enrollment200 then synthesis404; preview_ready is not audio. PR #65
+built1eb55d0 (backup20261014T080910Z ok). Notice118434 retired both pinned
+speech models on October10; migration stays paused and old voice IDs stay.
+Nonvoice recheck and PR #66 (f3e2dbf, backup maya-20261014T085227Z-nonvoice
+ok, schema0064, public200) do not sign Rebirth, Interact, or visual clicks.
 
-User-assisted Voice: enrollment200 at07:37:54Z, synthesis404 at07:38:00Z;
-preview_ready is not audio acceptance. PR #65 corrects the synthesis transport
-and validated workspace header, retaining one dispatch and strict audio/SSRF checks.
-PR #65 built1eb55d0 after backup20261014T080910Z integrityok; active work0,
-healthy/ready/public200,schema0064 and source matched.
-Post-release user preview still FAIL:4 requests at08:13:49-52Z returned404;
-duplicate log handlers are not extra calls. No assistant provider calls; user-call billing unverified. Official notice118434 retires both pinned speech
-models onOctober10; catalog queries agree. A contract/provider migration and
-new voice enrollment are required; old voice IDs must not be relabelled.
-User paused speech migration to finish Rebirth/Interact/Avatar/UI; existing voices
-are preserved.
-Nonvoice recheck:Rebirth24/24 with a new Report-reset fixture; Live26/26 UI+2/2
-API; Avatar12/12 API. Active classroom browser clicks remain unaccepted.
-
-Stage-name fix:bounded long names, separated coincident labels, narrow-padding
-guard and wrapping speech. Independent review11/11; frontend822 pass/1 skip,
-types/lint/build passed; no real browser/phone visual acceptance.
-
-PR #66 merged; GitHub main -> bare repo -> ff-only pull. Builtf3e2dbfa53d1419218cd3da32659ec1f44e44c9e;
-SQLite backup API:maya-20261014T085227Z-nonvoice.sqlite3 integrityok; active work0.
-Healthy, ready/public200, schema0064_active_debate_slot=ALEMBIC_HEAD; running
-source, compiled CSS and build SHA match. No additional provider calls.
+Coding-A Maya-T2-20261014: Rebirth already returns draft with preview ready
+(list Ready), keeps rounds1–3, and resets the final round, danmaku, report,
+and interaction window to closed. Final freeze rejects new barrages; Conclude
+(`interaction_finalized`) now locks Vote and Send in the open audience form.
+Human clicks remain unsigned. Debates list title and rules stay with coding-B.
