@@ -45,7 +45,6 @@ type RetryAction =
 
 type VoiceFailure = { cause: unknown; retry: RetryAction };
 
-
 function voiceAwareCause(cause: unknown): unknown {
   // Only for enroll/preview: supplier outages steer to the platform fallback voice.
   // Do not remap rename/load/confirm — a 5xx there is not "provider unavailable".
@@ -196,9 +195,7 @@ export function VoiceLibrary({
       const cause = failure?.cause ?? (!ready && denial ? denial.cause : null);
       setFailure((current) => {
         if (current && current.retry.kind !== "load") return current;
-        return cause
-          ? { cause, retry: { kind: "load" } }
-          : null;
+        return cause ? { cause, retry: { kind: "load" } } : null;
       });
       setLoading(false);
     },
@@ -309,7 +306,10 @@ export function VoiceLibrary({
       setNotice("voiceProfileCreatedNotice");
       await load();
     } catch (cause) {
-      setFailure({ cause: voiceAwareCause(cause), retry: { kind: "enroll", file: upload } });
+      setFailure({
+        cause: voiceAwareCause(cause),
+        retry: { kind: "enroll", file: upload },
+      });
     } finally {
       setBusy(false);
     }
@@ -390,7 +390,10 @@ export function VoiceLibrary({
           : current,
       );
     } catch (cause) {
-      setFailure({ cause: voiceAwareCause(cause), retry: { kind: "preview", profileId } });
+      setFailure({
+        cause: voiceAwareCause(cause),
+        retry: { kind: "preview", profileId },
+      });
     } finally {
       setBusy(false);
     }
