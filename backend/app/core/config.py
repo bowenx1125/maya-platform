@@ -121,6 +121,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="DEBATES_BETA_LIVE_INTERACTION",
     )
+    # Trial switch for the qwen3-tts-flash system-voice alias. Off by default:
+    # with it off the dated snapshot and clone models behave exactly as today.
+    # Enabling it never rewrites production env by itself; an operator must
+    # set TTS_QWEN3_FLASH_ENABLED=true deliberately.
+    tts_qwen3_flash_enabled: bool = Field(
+        default=False,
+        validation_alias="TTS_QWEN3_FLASH_ENABLED",
+    )
 
     # These server-only operational values are also part of C02/C08. They are
     # intentionally not exposed in browser-facing DTOs. ``DATABASE_URL`` is
@@ -227,6 +235,12 @@ class Settings(BaseSettings):
     @classmethod
     def empty_demo_quick_login_is_false(cls, value: object) -> object:
         # Compose forwards an empty value when DEMO_QUICK_LOGIN is unset.
+        return False if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("tts_qwen3_flash_enabled", mode="before")
+    @classmethod
+    def empty_tts_qwen3_flash_enabled_is_false(cls, value: object) -> object:
+        # Compose forwards an empty value when TTS_QWEN3_FLASH_ENABLED is unset.
         return False if isinstance(value, str) and not value.strip() else value
 
     @field_validator("allow_legacy_demo_users", mode="before")
