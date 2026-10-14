@@ -554,8 +554,13 @@ def test_rebirth_returns_ready_and_rejects_leftover_collection(app_factory):
                 assert all(turn.generation_status == "pending" for turn in finals)
                 assert all(turn.publication_status == "unpublished" for turn in finals)
                 assert all(not turn.speech for turn in finals)
-                assert db.scalar(select(BarrageMessage.id)) is None
-                assert db.scalar(select(Vote.id)) is None
+                assert (
+                    db.scalar(
+                        select(BarrageMessage.id).where(BarrageMessage.debate_id == debate_id)
+                    )
+                    is None
+                )
+                assert db.scalar(select(Vote.id).where(Vote.debate_id == debate_id)) is None
                 windows = list(
                     db.scalars(
                         select(ClassroomInteractionWindow).where(

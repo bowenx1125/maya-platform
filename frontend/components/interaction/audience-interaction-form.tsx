@@ -180,12 +180,7 @@ export function AudienceInteractionForm({
       } catch (cause: unknown) {
         if (!active) return;
         if (collectionFinalized(cause)) {
-          submissionsClosedRef.current = true;
-          setSubmissionsClosed(true);
-          setSyncFailed(false);
-          setForm((current) =>
-            current ? { ...current, barrage_open: false } : current,
-          );
+          lockFinalizedCollection();
           return;
         }
         if (!submissionsClosedRef.current) setSyncFailed(true);
@@ -226,7 +221,7 @@ export function AudienceInteractionForm({
       !canInteract ||
       !selectedParticipant ||
       voteState !== "idle" ||
-      submissionsClosed
+      submissionsClosedRef.current
     )
       return;
     setVoteState("busy");
@@ -252,7 +247,7 @@ export function AudienceInteractionForm({
       !barrageText.trim() ||
       barrageState === "busy" ||
       syncFailed ||
-      submissionsClosed ||
+      submissionsClosedRef.current ||
       form?.barrage_open === false
     )
       return;

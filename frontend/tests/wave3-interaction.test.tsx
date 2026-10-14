@@ -545,6 +545,50 @@ describe("M13 anonymous audience form", () => {
     expect(api.submitVote).not.toHaveBeenCalled();
   });
 
+  it("keeps Vote and Send locked when a stale open poll follows Conclude", async () => {
+    const api = audienceApi();
+    const open = await api.getForm("token");
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await screen.findByRole("heading", { name: open.topic });
+    vi.useFakeTimers();
+    cleanup();
+    render(<AudienceInteractionForm accessToken="token" api={api} />);
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Learner" },
+    });
+    vi.mocked(api.getForm).mockRejectedValueOnce(
+      new PlatformApiError(410, "Classroom interaction collection has ended.", {
+        code: "interaction_finalized",
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(screen.getByText("Collection closed")).toBeTruthy();
+    vi.mocked(api.getForm).mockResolvedValue({ ...open, barrage_open: true });
+    const pollsBefore = vi.mocked(api.getForm).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(vi.mocked(api.getForm).mock.calls.length).toBeGreaterThan(
+      pollsBefore,
+    );
+    expect(screen.getByText("Collection closed")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Send" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: /^Vote$/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.submit(screen.getByRole("form", { name: "Barrage" }));
+    fireEvent.submit(screen.getByRole("form", { name: "Vote" }));
+    expect(api.submitBarrage).not.toHaveBeenCalled();
+    expect(api.submitVote).not.toHaveBeenCalled();
+  });
+
   it("renders one locale at a time for teacher interaction controls", () => {
     render(
       <LocaleProvider initialLocale="en">
