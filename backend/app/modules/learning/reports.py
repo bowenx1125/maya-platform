@@ -30,7 +30,7 @@ from .models import (
     AssessmentCourseReportRevision,
     LearningRecord,
 )
-from .recipes import declared_assessment_role, declared_recipe
+from .recipes import declared_recipe
 from .schemas import (
     AssessmentActivityListItem,
     AssessmentActorReport,
@@ -108,6 +108,20 @@ def _validated_activity(
     recipe_version = db.get(AgentVersion, activity.recipe_version_id)
     if recipe_version is None or declared_recipe(recipe_version.agent_md) != activity.recipe_id:
         raise not_found()
+    from app.modules.workspace.formal_assessment import resolve_formal_assessment
+
+    roster = db.scalars(
+        select(TeamVersionMember).where(
+            TeamVersionMember.team_version_id == activity.team_version_id
+        )
+    ).all()
+    try:
+        roles = resolve_formal_assessment(
+            recipe_version.agent_md,
+            [(item.id, item.display_name) for item in roster],
+        )
+    except PlatformError:
+        roles = None
     for role, member_id, version_id in (
         ("evaluator", activity.evaluator_team_member_id, activity.evaluator_agent_version_id),
         (
@@ -118,6 +132,9 @@ def _validated_activity(
     ):
         bound_member = db.get(TeamVersionMember, member_id)
         bound_version = db.get(AgentVersion, version_id)
+        expected_member_id = None
+        if roles is not None:
+            expected_member_id = roles.scorer_id if role == "evaluator" else roles.summarizer_id
         if (
             bound_member is None
             or bound_member.team_version_id != activity.team_version_id
@@ -125,7 +142,7 @@ def _validated_activity(
             or bound_version is None
             # Republishing the Agent supersedes the version this test used.
             or bound_version.state not in {"published", "superseded"}
-            or declared_assessment_role(bound_version.agent_md) != role
+            or expected_member_id != member_id
         ):
             raise not_found()
     return activity

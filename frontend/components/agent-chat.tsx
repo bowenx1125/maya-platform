@@ -286,11 +286,27 @@ function KnowledgeGenerationProgress({
   );
 }
 
+function isFormalMicroRoundText(text: string | null | undefined): boolean {
+  const value = text ?? "";
+  return (
+    value.includes("收到，第一题是") ||
+    value.includes("已记录你的回答。") ||
+    value.includes("答题全部结束") ||
+    value.includes("正在总结答案") ||
+    value.includes("做题者放弃作答") ||
+    value.includes("已放弃作答")
+  );
+}
+
 function sortTeamMemberResults(
   results: TeamMemberResult[],
   members: TeamChatSession["team"]["members"],
 ): TeamMemberResult[] {
-  // Guide (Leader) stays last so Courser/member Loading cards appear first.
+  // A formal micro-round is already in speaker order. Other turns keep the
+  // Guide last so member Loading cards appear first.
+  if (results.some((result) => isFormalMicroRoundText(result.assistant_text))) {
+    return [...results].sort((left, right) => left.ordinal - right.ordinal);
+  }
   const leaderIds = new Set(
     members.filter((member) => member.is_leader).map((member) => member.id),
   );
@@ -2799,7 +2815,24 @@ function AgentChatScope({
                           const participant = selectedTeam.team.members.find(
                             (member) => member.id === result.participant_id,
                           );
+                          const summarizerTurnId = [...selectedTeam.turns]
+                            .reverse()
+                            .find((item) =>
+                              item.member_results.some((card) =>
+                                (card.assistant_text ?? "").includes(
+                                  "正在总结答案",
+                                ),
+                              ),
+                            )?.id;
+                          const formalSummarizerCard =
+                            Boolean(summarizerTurnId) &&
+                            turn.id === summarizerTurnId &&
+                            (result.assistant_text ?? "").includes(
+                              "正在总结答案",
+                            ) &&
+                            selectedTeam.assessment_stage !== "preparing";
                           const isSummarizerTurn =
+                            !summarizerTurnId &&
                             !participant?.is_leader &&
                             !turn.user_text &&
                             (selectedTeam.assessment_stage === "summarizing" ||
@@ -2841,15 +2874,17 @@ function AgentChatScope({
                                   )}
                                 </p>
                               )}
-                              {/* Formal progress hangs under Summarizer (or the
-                                  active executor card while scoring). */}
-                              {isSummarizerTurn &&
+                              {/* Formal progress hangs under the Summarizer line.
+                                  Until that card exists, the executor card or
+                                  the fallback below carries it. */}
+                              {(formalSummarizerCard ||
+                                (isSummarizerTurn &&
+                                  turn.id ===
+                                    selectedTeam.turns[
+                                      selectedTeam.turns.length - 1
+                                    ]?.id)) &&
                               selectedTeam.assessment_stage &&
-                              selectedTeam.assessment_stage !== "preparing" &&
-                              turn.id ===
-                                selectedTeam.turns[
-                                  selectedTeam.turns.length - 1
-                                ]?.id ? (
+                              selectedTeam.assessment_stage !== "preparing" ? (
                                 <AssessmentProgress
                                   stage={selectedTeam.assessment_stage}
                                 />
@@ -2912,9 +2947,14 @@ function AgentChatScope({
                       {teamErrorText(teamError)}
                     </Notice>
                   ) : null}
-                  {/* Scoring with no executor card yet still needs a bar. */}
+                  {/* Scoring with no summarizer or executor card yet still needs a bar. */}
                   {selectedTeam?.assessment_stage &&
                   selectedTeam.assessment_stage !== "preparing" &&
+                  !selectedTeam.turns.some((turn) =>
+                    turn.member_results.some((result) =>
+                      (result.assistant_text ?? "").includes("正在总结答案"),
+                    ),
+                  ) &&
                   !selectedTeam.turns.some(
                     (turn) =>
                       !turn.user_text &&

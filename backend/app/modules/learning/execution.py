@@ -12,7 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import conflict, idempotency_conflict, not_found, stale_revision
+from app.core.errors import PlatformError, conflict, idempotency_conflict, not_found, stale_revision
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -61,7 +61,6 @@ from .models import (
     LearningRecord,
 )
 from .recipes import (
-    declared_assessment_role,
     declared_recipe,
     ensure_assessment_activity,
     question_sources_readable,
@@ -202,13 +201,36 @@ def _activity_executor(
     if purpose == "assessment_evaluate":
         member_id = activity.evaluator_team_member_id
         agent_version_id = activity.evaluator_agent_version_id
-        expected_role = "evaluator"
     else:
         member_id = activity.boundary_team_member_id
         agent_version_id = activity.boundary_agent_version_id
-        expected_role = "boundary_summarizer"
     member = db.get(TeamVersionMember, member_id)
     version = db.get(AgentVersion, agent_version_id)
+    leader_version = db.get(AgentVersion, activity.recipe_version_id)
+    roster = db.scalars(
+        select(TeamVersionMember).where(
+            TeamVersionMember.team_version_id == activity.team_version_id
+        )
+    ).all()
+    from app.modules.workspace.formal_assessment import resolve_formal_assessment
+
+    # The published Guide names the scorer and summarizer. Member role tags do not.
+    try:
+        roles = (
+            resolve_formal_assessment(
+                leader_version.agent_md,
+                [(item.id, item.display_name) for item in roster],
+            )
+            if leader_version is not None
+            else None
+        )
+    except PlatformError:
+        roles = None
+    expected_member_id = None
+    if roles is not None:
+        expected_member_id = (
+            roles.scorer_id if purpose == "assessment_evaluate" else roles.summarizer_id
+        )
     if (
         member is None
         or member.team_version_id != activity.team_version_id
@@ -216,7 +238,7 @@ def _activity_executor(
         or version is None
         or version.agent_id != member.agent_id
         or version.state != "published"
-        or declared_assessment_role(version.agent_md) != expected_role
+        or expected_member_id != member_id
     ):
         raise conflict("assessment_executor_revoked", "This assessment executor is unavailable.")
     return member_id, agent_version_id

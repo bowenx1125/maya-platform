@@ -1159,6 +1159,73 @@ describe("Chatform", () => {
     ).toBeNull();
   });
 
+  it("keeps formal micro-round order and hangs the bar on the summarizer line", async () => {
+    const finished = {
+      ...teamSession,
+      assessment_stage: "scoring" as const,
+      can_send: false,
+      turns: [
+        {
+          id: "micro",
+          user_text: "乙",
+          state: "ready" as const,
+          member_results: [
+            {
+              id: "scorer",
+              participant_id: "participant-1",
+              speaker_name: "Bowen",
+              ordinal: 1,
+              state: "ready" as const,
+              assistant_text: "已记录你的回答。",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "guide",
+              participant_id: "participant-3",
+              speaker_name: "Jade",
+              ordinal: 0,
+              state: "ready" as const,
+              assistant_text: "答题全部结束",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "summarizer",
+              participant_id: "participant-2",
+              speaker_name: "Kaikai",
+              ordinal: 2,
+              state: "ready" as const,
+              assistant_text: "正在总结答案",
+              sources: [],
+              safe_error_code: null,
+            },
+          ],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([finished]);
+    state.api.conversationSession.mockResolvedValue(finished);
+    renderChats();
+    fireEvent.click(await screen.findByRole("button", { name: "乙" }));
+    const log = await screen.findByRole("log");
+    const headings = within(log)
+      .getAllByRole("heading", { level: 3 })
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual(["Jade", "Bowen · leader", "Kaikai"]);
+    const articles = within(log).getAllByRole("article");
+    const summarizer = articles.find((article) =>
+      article.textContent?.includes("正在总结答案"),
+    );
+    expect(summarizer).toBeTruthy();
+    expect(
+      within(summarizer as HTMLElement).getByRole("progressbar", {
+        name: "Test progress",
+      }),
+    ).toBeTruthy();
+    expect(within(log).getAllByRole("progressbar")).toHaveLength(1);
+  });
+
   it("shows the formal test progress and checks until scoring finishes", async () => {
     const scoring = {
       ...teamSession,

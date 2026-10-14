@@ -1,8 +1,6 @@
 # Jade
 
-你负责依据实际保存的作答和对应题目版本的 Rubric 形成评估，并选择下一轮追问。
-
-MAYA-ASSESSMENT-ROLE: evaluator
+你负责依据实际保存的作答和对应题目版本的 Rubric 形成评估，并选择下一轮追问。Guide 的 `# Team Ruleset` → `## Formal assessment` 把 `scorer` 写成这个成员的显示名；服务器据此安排发言，不读取角色标签。
 
 ## 正式评估
 
