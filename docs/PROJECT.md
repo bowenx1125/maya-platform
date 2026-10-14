@@ -237,41 +237,15 @@ Integration refs: entaiaki eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba735
 
 ## October14 independent revalidation and release
 
-Integrated entaiaki ba7358f -> origin/main 7e36ba0 after a recoverable stash;
-kept main UI/API and both Avatar assertions. Fix6f89c7e covers Voice recovery,
-text-only Rebirth/GET recovery, Immerse title/layers, empty-header rule and
-frozen-input Interact. Rebirth preserves rounds1-3 without a provider call.
+Earlier Oct14 line: `6f89c7e` Voice/Rebirth recovery; `1eb55d0`/`#65` speech
+routing; `#66` nonvoice; Coding-A Rebirth/Conclude locks. Deterministic shards
+matched baseline Windows/symlink noise; visual/Interact clicks remain open.
+Speech models stay paused after Notice118434.
 
-On1eb55d0, frontend92 files:816 pass/1 skip; types/lint(4 existing warnings)/build
-passed. Backend2308 unique cases in4 disjoint shards:2256 pass/21 skip/31 fail;
-1 additional teardown event belongs to a failed node. All31 match isolated
-unmodified7e36ba0:23 Windows ACL,6 symlink,1 POSIX mode,1 asyncio case; new failures0.
-Ruff check/format471 files,mypy259 files,OpenAPI/generated contracts/WS,
-response/negative/document tests,164-route comparison,Redocly,reset safety and
-Node24.14.0 Latin checks passed. Changed files format clean;25 unchanged tracked
-Prettier failures and Windows Unix-mode boundary/probe failures remain.
-Full Linux/Safari and real visual acceptance remain open.
-
-Prior buildc2292aa: backup maya-20261014T050750Z.sqlite3 integrityok;
-healthy/ready200/schema0064/public200. Read-only API Guyue9/9,Maya8/8;
-both Live empty, teacher Debates0,Voices2. Voice tools present, fallback absent.
-Browser control stopped on unreliable URL identification; active Live and
-Rebirth clicks remain unaccepted, regardless of API/mock results.
-Voice: enrollment200 then synthesis404; preview_ready is not audio. PR #65
-built1eb55d0 (backup20261014T080910Z ok). Notice118434 retired both pinned
-speech models on October10; migration stays paused and old voice IDs stay.
-Nonvoice recheck and PR #66 (f3e2dbf, backup maya-20261014T085227Z-nonvoice
-ok, schema0064, public200) do not sign Rebirth, Interact, or visual clicks.
-
-Coding-A Maya-T2-20261014: Rebirth already returns draft with preview ready
-(list Ready), keeps rounds1–3, and resets the final round, danmaku, report,
-and interaction window to closed. Final freeze rejects new barrages; Conclude
-(`interaction_finalized`) now locks Vote and Send in the open audience form.
-Human clicks remain unsigned. Debates list title and rules stay with coding-B.
-
-Integration (pre-deploy): PR #69 `a9339f8` (voiceAwareCause enroll/preview only)
-plus soft-deleted Set revive `2385347` and Prettier `35ef6af` on
-`cursor/integrate-pr69-revive-874e`. Left conflicting #38–#41 out. Local:
-runtime-tool knowledge 8/8, knowledge generation suites 39/39, frontend
-831 pass/1 skip, typecheck/lint (4 existing warnings), ruff/mypy on touched
-files, boundary probe.
+Built `f007a11` (PR #69 `a9339f8` voiceAwareCause enroll/preview only + soft-
+deleted Set revive `2385347` + Prettier `35ef6af`). Left #38–#41 out. Local:
+runtime-tool knowledge 8/8, knowledge gen 39/39, frontend 831/1 skip,
+typecheck/lint (4 existing warnings), ruff/mypy, boundary. Production:
+backup `maya-20261014T111701Z.sqlite3` integrity ok; healthy/ready200/
+schema0064/public200. Courser Knowledge Set still soft-deleted until next
+authorized generate; revive code present in image.
