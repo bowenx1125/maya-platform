@@ -1,4 +1,12 @@
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AvatarState, AvatarConfig } from "../components/avatar";
@@ -273,5 +281,193 @@ describe("ScholarScene asynchronous initialization", () => {
     });
     expect(stage.scenePacks).toEqual(["procedural"]);
     expect(window.location.search).toContain("scene=procedural");
+  });
+});
+
+describe("ScholarScene long names", () => {
+  it("bounds neighbouring names without dropping the complete DOM text", async () => {
+    const names = [
+      "VeryLongName".repeat(12),
+      "知识边界研究者".repeat(12),
+      "RightEdgeName".repeat(12),
+    ];
+    const view = renderScene(
+      names.map((name, index) => character(String(index), "A", name)),
+      {},
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    Object.defineProperty(
+      view.container.querySelector("canvas"),
+      "clientWidth",
+      { value: 390 },
+    );
+    act(() => {
+      stageMock.instances[0].options.onReady?.();
+      stageMock.instances[0].options.onAnchors?.([
+        { id: "0", x: 24, y: 150, visible: true },
+        { id: "1", x: 104, y: 150, visible: true },
+        { id: "2", x: 370, y: 150, visible: true },
+      ]);
+    });
+    const labels = names.map((name) => view.getByText(name).parentElement!);
+    expect(labels.map((label) => label.style.maxWidth)).toEqual([
+      "52px",
+      "160px",
+      "141px",
+    ]);
+    expect(labels[0].style.getPropertyValue("--name-plate-left")).toBe("-16px");
+    expect(labels[0].style.getPropertyValue("--name-plate-right")).toBe("36px");
+    expect(labels[2].style.getPropertyValue("--name-plate-right")).toBe("12px");
+    labels.forEach((label, index) => {
+      expect(label.textContent).toBe(names[index]);
+      expect(label.title).toBe(names[index]);
+    });
+  });
+
+  it("does not shorten names for an anchor on a separate vertical row", async () => {
+    const view = renderScene(
+      [character("a", "A", "Upper"), character("b", "B", "Lower")],
+      {},
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    Object.defineProperty(
+      view.container.querySelector("canvas"),
+      "clientWidth",
+      { value: 390 },
+    );
+    act(() => {
+      stageMock.instances[0].options.onReady?.();
+      stageMock.instances[0].options.onAnchors?.([
+        { id: "a", x: 100, y: 100, visible: true },
+        { id: "b", x: 110, y: 200, visible: true },
+      ]);
+    });
+    expect(view.getByText("Upper").parentElement!.style.maxWidth).toBe("160px");
+    expect(view.getByText("Lower").parentElement!.style.maxWidth).toBe("160px");
+  });
+
+  it("stably separates coincident names without reordering ordinary anchors", async () => {
+    const view = renderScene(
+      [
+        character("a", "A", "First full name"),
+        character("b", "B", "Second full name"),
+        character("c", "C", "Separate name"),
+      ],
+      {},
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    Object.defineProperty(
+      view.container.querySelector("canvas"),
+      "clientWidth",
+      { value: 390 },
+    );
+    const anchors = [
+      { id: "b", x: 100, y: 150, visible: true },
+      { id: "a", x: 100, y: 150, visible: true },
+      { id: "c", x: 300, y: 150, visible: true },
+    ];
+    act(() => {
+      stageMock.instances[0].options.onReady?.();
+      stageMock.instances[0].options.onAnchors?.(anchors);
+    });
+    const tops = () =>
+      ["First full name", "Second full name", "Separate name"].map(
+        (name) => view.getByText(name).parentElement!.style.top,
+      );
+    expect(tops()).toEqual(["150px", "198px", "150px"]);
+    act(() =>
+      stageMock.instances[0].options.onAnchors?.([...anchors].reverse()),
+    );
+    expect(tops()).toEqual(["150px", "198px", "150px"]);
+  });
+
+  it("gives a cramped middle name its own row instead of a zero-width box", async () => {
+    const view = renderScene(
+      [
+        character("a", "A", "Left"),
+        character("b", "B", "Middle"),
+        character("c", "C", "Right"),
+      ],
+      {},
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    Object.defineProperty(
+      view.container.querySelector("canvas"),
+      "clientWidth",
+      { value: 390 },
+    );
+    act(() => {
+      stageMock.instances[0].options.onReady?.();
+      stageMock.instances[0].options.onAnchors?.([
+        { id: "a", x: 100, y: 150, visible: true },
+        { id: "b", x: 110, y: 150, visible: true },
+        { id: "c", x: 120, y: 150, visible: true },
+      ]);
+    });
+    const labels = ["Left", "Middle", "Right"].map(
+      (name) => view.getByText(name).parentElement!,
+    );
+    expect(labels.map((label) => label.style.top)).toEqual([
+      "150px",
+      "198px",
+      "246px",
+    ]);
+    expect(labels.map((label) => label.style.maxWidth)).toEqual([
+      "160px",
+      "160px",
+      "160px",
+    ]);
+  });
+
+  it("bounds padding and preserves an unmeasurable name without drawing a box", async () => {
+    const view = renderScene(
+      [character("a", "A", "Complete accessible name")],
+      {},
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    const canvas = view.container.querySelector("canvas")!;
+    Object.defineProperty(canvas, "clientWidth", {
+      configurable: true,
+      value: 30,
+    });
+    const anchors = [{ id: "a", x: 15, y: 150, visible: true }];
+    act(() => {
+      stageMock.instances[0].options.onReady?.();
+      stageMock.instances[0].options.onAnchors?.(anchors);
+    });
+    const label = view.getByText("Complete accessible name").parentElement!;
+    expect(label.style.maxWidth).toBe("14px");
+    expect(label.style.getPropertyValue("--name-plate-width")).toBe("14px");
+    const css = readFileSync(
+      resolve(process.cwd(), "components/stage3d/stage3d.module.css"),
+      "utf8",
+    );
+    const compactCss = css.replace(/\s+/g, "");
+    for (const padding of [14, 8]) {
+      expect(compactCss).toContain(
+        `padding-inline:min(${padding}px,max(0px,calc((var(--name-plate-width)-2px)/4)));`,
+      );
+    }
+    Object.defineProperty(canvas, "clientWidth", {
+      configurable: true,
+      value: 16,
+    });
+    act(() => stageMock.instances[0].options.onAnchors?.([...anchors]));
+    expect(view.getByText("Complete accessible name").className).toBe(
+      "sr-only",
+    );
+  });
+
+  it("keeps name clamping on mobile and lets speech and speaker names wrap", () => {
+    const css = readFileSync(
+      resolve(process.cwd(), "components/stage3d/stage3d.module.css"),
+      "utf8",
+    );
+    expect(css.match(/var\(--name-plate-left\)/g)).toHaveLength(2);
+    expect(css.match(/var\(--name-plate-right\)/g)).toHaveLength(2);
+    expect(css).toMatch(
+      /\.namePlateText\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;/,
+    );
+    expect(css).toMatch(/\.bubble\s*\{[^}]*overflow-wrap:\s*anywhere;/);
   });
 });

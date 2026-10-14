@@ -226,10 +226,8 @@ group and becomes inaccessible; catalog accounts keep catalog membership.
 On phones below 880px, sideways/upright/sideways within 6 seconds on Home opens
 the card room; training fits 844x390. Hidden published RAG fails Knowledge
 generation as knowledge_generation_sources_unavailable; reselect and publish.
-PRs #56/#58/#59/#60 integrated; PR #64 fixes Knowledge generation and Accounts
-Brainform reads. Latest recorded production deploy 2026-10-14T040843Z: built
-38eb07a, backup maya-20261014T040843Z.sqlite3 (integrity ok), schema
-0064_active_debate_slot, HTTPS 200 and healthy containers; retained two backups.
+PRs #56/#58/#59/#60 integrated; PR #64 fixes Knowledge and Accounts Brainform.
+Prior build38eb07a: backup20261014T040843Z/schema0064/HTTPS200, healthy.
 
 Integration refs: entaiaki eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f.
 
@@ -244,7 +242,6 @@ On1eb55d0, frontend92 files:816 pass/1 skip; types/lint(4 existing warnings)/bui
 passed. Backend2308 unique cases in4 disjoint shards:2256 pass/21 skip/31 fail;
 1 additional teardown event belongs to a failed node. All31 match isolated
 unmodified7e36ba0:23 Windows ACL,6 symlink,1 POSIX mode,1 asyncio case; new failures0.
-The earlier serial run timed out at900s and is not counted as complete.
 Ruff check/format471 files,mypy259 files,OpenAPI/generated contracts/WS,
 response/negative/document tests,164-route comparison,Redocly,reset safety and
 Node24.14.0 Latin checks passed. Changed files format clean;25 unchanged tracked
@@ -264,11 +261,14 @@ GitHub main -> bare repo -> ff-only pull; built1eb55d0dcd4c4de2a159a5f3f9a46791b
 SQLite backup API:maya-20261014T080910Z-tts.sqlite3 integrityok; active work0;
 healthy/ready/public200,schema0064/ALEMBIC_HEAD and source hash match.
 Post-release user preview still FAIL:4 requests at08:13:49-52Z returned404;
-duplicate log handlers are not extra calls. No assistant provider calls;
-user-call billing unverified. Official notice118434 retires both pinned speech
+duplicate log handlers are not extra calls. No assistant provider calls; user-call billing unverified. Official notice118434 retires both pinned speech
 models onOctober10; catalog queries agree. A contract/provider migration and
 new voice enrollment are required; old voice IDs must not be relabelled.
 User paused speech migration to finish Rebirth/Interact/Avatar/UI; existing voices
 are preserved.
 Nonvoice recheck:Rebirth24/24 with a new Report-reset fixture; Live26/26 UI+2/2
 API; Avatar12/12 API. Active classroom browser clicks remain unaccepted.
+
+Stage-name fix:bounded long names, separated coincident labels, narrow-padding
+guard and wrapping speech. Independent review11/11; frontend822 pass/1 skip,
+types/lint/build passed; no real browser/phone visual acceptance.

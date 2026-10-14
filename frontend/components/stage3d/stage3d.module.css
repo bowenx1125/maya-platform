@@ -220,7 +220,16 @@
   align-items: center;
   gap: 6px;
   padding: 5px 14px 6px;
-  transform: translate(-50%, -190%);
+  padding-inline: min(
+    14px,
+    max(0px, calc((var(--name-plate-width) - 2px) / 4))
+  );
+  box-sizing: border-box;
+  min-width: 0;
+  transform: translate(
+    clamp(var(--name-plate-left), -50%, calc(var(--name-plate-right) - 100%)),
+    -190%
+  );
   border: 1px solid rgba(211, 167, 74, 0.52);
   border-radius: 6px;
   background: rgba(251, 250, 246, 0.94);
@@ -234,6 +243,12 @@
   transition: background-color 200ms ease;
 }
 
+.namePlateText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .namePlate[data-current="true"] {
   background: var(--indigo-dark);
   color: #fff;
@@ -245,6 +260,7 @@
   position: absolute;
   z-index: 5;
   width: min(290px, 62%);
+  overflow-wrap: anywhere;
   padding: 9px 12px 10px;
   transform: translate(-50%, calc(-100% - 16px));
   border: 1px solid var(--line, #dedee3);
@@ -406,7 +422,14 @@
   .scene[data-layout="preview"] .namePlate {
     display: flex;
     padding: 4px 8px;
-    transform: translate(-50%, -160%);
+    padding-inline: min(
+      8px,
+      max(0px, calc((var(--name-plate-width) - 2px) / 4))
+    );
+    transform: translate(
+      clamp(var(--name-plate-left), -50%, calc(var(--name-plate-right) - 100%)),
+      -160%
+    );
     font-size: 0.8rem;
   }
 

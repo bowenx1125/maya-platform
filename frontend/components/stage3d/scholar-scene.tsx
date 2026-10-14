@@ -275,6 +275,26 @@ export function ScholarScene({
       )
     : 0;
 
+  const nameAnchors = new Map<string, StageAnchor>();
+  for (const source of [...anchors].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  )) {
+    if (!source.visible || (source.id === speakingId && bubbleWindow)) continue;
+    const anchor = { ...source };
+    // Coincident or cramped heads need separate rows; only move a label
+    // whose minimum readable box would collide with one already placed.
+    for (let attempt = 0; attempt < anchors.length; attempt += 1) {
+      const collision = [...nameAnchors.values()].find(
+        (other) =>
+          Math.abs(other.x - anchor.x) < 40 &&
+          Math.abs(other.y - anchor.y) < 48,
+      );
+      if (!collision) break;
+      anchor.y = collision.y + 48;
+    }
+    nameAnchors.set(anchor.id, anchor);
+  }
+
   return (
     <div
       className={styles.scene}
@@ -312,17 +332,54 @@ export function ScholarScene({
 
         {status === "ready"
           ? characters.map((character) => {
-              const anchor = anchorById.get(character.id);
-              if (!anchor?.visible) return null;
+              const anchor = nameAnchors.get(character.id);
+              if (!anchor) return null;
               if (character.id === speakingId && bubbleWindow) return null;
+              // Neighbouring labels own separate horizontal space; the CSS
+              // clamp keeps short names over their heads within those bounds.
+              const neighbours = [...nameAnchors.values()].filter(
+                (other) =>
+                  other.visible &&
+                  other.id !== anchor.id &&
+                  Math.abs(other.y - anchor.y) < 48,
+              );
+              const left = Math.max(
+                8,
+                ...neighbours
+                  .filter((other) => other.x < anchor.x)
+                  .map((other) => (other.x + anchor.x) / 2 + 4),
+              );
+              const right = Math.min(
+                viewportWidth - 8,
+                ...neighbours
+                  .filter((other) => other.x > anchor.x)
+                  .map((other) => (other.x + anchor.x) / 2 - 4),
+              );
+              const maxWidth = Math.min(160, right - left);
+              if (maxWidth < 2)
+                return (
+                  <span className="sr-only" key={character.id}>
+                    {character.name}
+                  </span>
+                );
               return (
                 <span
                   className={styles.namePlate}
                   data-current={character.id === speakingId ? "true" : "false"}
                   key={character.id}
-                  style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}
+                  style={
+                    {
+                      left: `${anchor.x}px`,
+                      top: `${anchor.y}px`,
+                      maxWidth: `${maxWidth}px`,
+                      "--name-plate-width": `${maxWidth}px`,
+                      "--name-plate-left": `${left - anchor.x}px`,
+                      "--name-plate-right": `${right - anchor.x}px`,
+                    } as CSSProperties
+                  }
+                  title={character.name}
                 >
-                  {character.name}
+                  <span className={styles.namePlateText}>{character.name}</span>
                 </span>
               );
             })
