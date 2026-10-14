@@ -254,7 +254,8 @@ backend focused 58/58; expanded 299 pass/14 existing skip/3 Windows symlink-priv
 failures. Integrated frontend: 92 files, 816 pass/1 existing skip; types, lint
 (4 existing warnings), production build passed. Integrated Ruff check/format
 (471 files) and mypy (259 files) passed; full backend (6 workers): 2250 pass/21 skip/31 fail plus 1 teardown error.
-Failed cases are being checked against unmodified main before release.
+All 31 fail identically on isolated 7e36ba0: 23 ACL, 6 symlink, 1 POSIX mode,
+1 Windows asyncio case and its teardown; new failing nodes0.
 Input-frozen teacher controls no longer offer Interact (10 tests passed). Frozen
 OpenAPI/route gates passed after restoring checkout LF bytes; Node24.14.0 Latin
 gate passed. Tracked-only boundary probe passed; Windows permission probe remains
@@ -264,4 +265,5 @@ Production tree is 7e36ba0, backend/frontend healthy and HTTPS200. Voice config
 and media tools are present; no fallback configured. Voice changes fix recovery
 and diagnostics, not proof of supplier availability. Windows browser automation
 stopped on unreliable URL identification; no fresh public visual acceptance.
-Candidate not yet deployed.
+Changed-file formatting passed; whole tracked-tree Prettier retains 25 unchanged
+main formatting failures. Candidate not yet deployed.
