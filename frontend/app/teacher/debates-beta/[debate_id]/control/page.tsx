@@ -575,6 +575,7 @@ export default function TeacherDebateControlPage() {
               !playbackComplete &&
               detail.playback.mode !== "replay"
             }
+            interactionBarrages={interaction?.barrages ?? null}
             onInteractionOpened={() => void readInteraction()}
             debateId={debateId}
             detail={detail}
