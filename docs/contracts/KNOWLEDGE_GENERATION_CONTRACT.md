@@ -42,8 +42,11 @@ generation confirmation screen does not invent Team or Private-data consent.
 ## Atomic enqueue and replay
 
 The initiating transaction creates or reuses the owner/course/Agent's stable
-canonical Set, source bindings, Agent relation, job and generation run. These
-commit with the product action or its accepted Tool receipt, or roll back together.
+canonical Set, source bindings, Agent relation, job and generation run. When that
+deterministic Set was soft-deleted, an authorized enqueue revives the same Set
+identity (clears `deleted_at`, advances metadata revision and authorization
+epoch) rather than returning a bare `not_found`. These commit with the product
+action or its accepted Tool receipt, or roll back together.
 Only after commit does the process-local task manager wake the durable job.
 Startup recovery uses the same persisted claims and leases.
 

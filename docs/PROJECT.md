@@ -228,6 +228,8 @@ group and becomes inaccessible; catalog accounts keep catalog membership.
 On phones below 880px, sideways/upright/sideways within 6 seconds on Home opens
 the card room; training fits 844x390. Hidden published RAG fails Knowledge
 generation as knowledge_generation_sources_unavailable; reselect and publish.
+Soft-deleted deterministic Agent Knowledge Sets revive on the next authorized
+`generate_agent_knowledge` / publish enqueue instead of bare `not_found`.
 PRs #56/#58/#59/#60 integrated; PR #64 fixes Knowledge and Accounts Brainform.
 Prior build38eb07a: backup20261014T040843Z/schema0064/HTTPS200, healthy.
 

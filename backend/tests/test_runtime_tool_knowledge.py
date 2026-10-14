@@ -16,8 +16,10 @@ from app.modules.knowledge_sets.models import (
     AgentKnowledgeSet,
     KnowledgeGenerationRun,
     KnowledgeGenerationSourceReceipt,
+    KnowledgeSet,
     KnowledgeSetMarkdownVersion,
 )
+from app.modules.knowledge_sets.service import now_utc
 from app.modules.runtime_tools.builtin import runtime_registry
 from app.modules.runtime_tools.knowledge import (
     GENERATE_AGENT_KNOWLEDGE_TOOL,
@@ -778,6 +780,55 @@ def test_teacher_tool_is_not_exposed_to_students_or_cross_actor_or_revoked_sourc
             )
             == 0
         )
+
+
+def test_teacher_tool_revives_soft_deleted_canonical_set(
+    runtime_tool_workspace: Any,
+) -> None:
+    # Courser-class Agents keep one uuid5 Set. Soft-deleting that row used to
+    # make generate_agent_knowledge fail closed as not_found even with active RAG.
+    _app, database, client, settings = runtime_tool_workspace
+    _teacher, csrf = login(client, "maya")
+    agent_id, version_id, _document_id, conversation_id = _teacher_agent_chat(
+        client,
+        csrf,
+        agent_markdown="# Course Guide\n\nCall generate_agent_knowledge when asked.",
+    )
+    with database.session() as db:
+        actor = get_auth_context(db, settings, client.cookies.get("maya_session"))
+        row = db.get(Conversation, conversation_id)
+        assert actor is not None and row is not None
+        first = generate_agent_knowledge(
+            db,
+            actor,
+            row,
+            GenerateAgentKnowledgeArguments(),
+            str(uuid4()),
+            ToolCallIdentity(conversation_id, str(uuid4()), version_id, str(uuid4()), "call"),
+        )
+        set_id = first["canonical_set_id"]
+        set_row = db.get(KnowledgeSet, set_id)
+        assert set_row is not None
+        prior_epoch = set_row.authorization_epoch
+        prior_metadata = set_row.metadata_revision
+        set_row.deleted_at = now_utc()
+        db.flush()
+        revived = generate_agent_knowledge(
+            db,
+            actor,
+            row,
+            GenerateAgentKnowledgeArguments(),
+            str(uuid4()),
+            ToolCallIdentity(conversation_id, str(uuid4()), version_id, str(uuid4()), "call"),
+        )
+        set_row = db.get(KnowledgeSet, set_id)
+        assert set_row is not None
+        assert set_row.deleted_at is None
+        assert set_row.authorization_epoch == prior_epoch + 1
+        assert set_row.metadata_revision == prior_metadata + 1
+        assert revived["canonical_set_id"] == set_id
+        assert db.get(AgentKnowledgeSet, (agent_id, set_id)) is not None
+        db.commit()
 
 
 def test_an_old_chat_generates_from_the_swapped_rag_and_keeps_its_turn(

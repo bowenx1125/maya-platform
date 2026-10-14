@@ -407,9 +407,19 @@ def _new_private_set(db: Session, context: AuthContext, agent: Agent, set_id: st
             or existing.course_id != agent.course_id
             or existing.ownership_scope != "personal"
             or existing.group_id is not None
-            or existing.deleted_at is not None
         ):
             raise not_found()
+        # Stable generation Sets are uuid5(owner, course, agent). Soft-delete
+        # must not strand that identity: the next authorized enqueue revives it
+        # instead of failing closed as a bare not_found.
+        if existing.deleted_at is not None:
+            timestamp = now_utc()
+            existing.deleted_at = None
+            existing.display_name = f"{agent.name} Knowledge"
+            existing.metadata_revision += 1
+            existing.authorization_epoch += 1
+            existing.updated_at = timestamp
+            db.flush()
         return existing
     timestamp = now_utc()
     row = KnowledgeSet(
