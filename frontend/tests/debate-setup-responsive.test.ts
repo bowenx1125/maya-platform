@@ -87,7 +87,9 @@ describe("Debates list narrow-screen layout", () => {
       (rule) =>
         (rule as CSSStyleRule).selectorText === ".debateRow > .debateCard",
     ) as CSSStyleRule;
-    expect(rowCard.style.getPropertyValue("border-top-width") || "0px").toMatch(/^0/);
+    expect(rowCard.style.getPropertyValue("border-top-width") || "0px").toMatch(
+      /^0/,
+    );
     expect(rowCard.style.getPropertyValue("border") || "0px").toMatch(/^0/);
     const mobileActions = mobileRule(".debateActions");
     expect(mobileActions.getPropertyValue("border-left")).toBe("0px");
