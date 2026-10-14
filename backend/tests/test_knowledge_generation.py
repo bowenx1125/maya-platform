@@ -35,6 +35,7 @@ from app.modules.knowledge_sets.models import (
     KnowledgeGenerationRun,
     KnowledgeGenerationSourceReceipt,
     KnowledgeSet,
+    KnowledgeSetMarkdownVersion,
 )
 from app.providers.control import (
     FIXED_MODELS,
@@ -748,9 +749,9 @@ def test_teacher_generation_intent_confirms_exact_manifest_and_dispatches_once(
     with database.session() as db:
         run = db.get(KnowledgeGenerationRun, run_id)
         job = db.scalar(select(Job).where(Job.id == run.job_id)) if run is not None else None
-        assert run is not None and run.state == "failed"
-        assert job is not None and job.state == "failed"
-        assert run.safe_error_code == "knowledge_generation_partial_failure"
+        assert run is not None and run.state == "completed"
+        assert job is not None and job.state == "completed"
+        assert run.safe_error_code is None
         assert (
             db.scalar(
                 select(func.count())
@@ -766,6 +767,7 @@ def test_teacher_generation_intent_confirms_exact_manifest_and_dispatches_once(
             .order_by(KnowledgeGenerationItem.item_index)
         ).all()
         assert [item.state for item in items] == ["applied", "failed", "applied"]
+        assert items[1].safe_error_code == "provider_asset_invalid"
         assert items[2].citation_unverified_count == 1
         assert items[2].safe_error_code == "citation_unverified"
         versions = db.scalars(
@@ -773,11 +775,18 @@ def test_teacher_generation_intent_confirms_exact_manifest_and_dispatches_once(
         ).all()
         assert len(versions) == 2
         assert all(version.origin == "ai" for version in versions)
+        markdown_versions = db.scalars(
+            select(KnowledgeSetMarkdownVersion).where(
+                KnowledgeSetMarkdownVersion.knowledge_set_id == run.knowledge_set_id
+            )
+        ).all()
+        assert len(markdown_versions) == 1
         status = client.get(f"/api/v1/knowledge-generation-jobs/{job.id}")
         assert status.status_code == 200, status.text
         assert status.json()["accepted_item_count"] == 3
         assert status.json()["materialized_item_count"] == 2
         assert status.json()["failed_item_count"] == 1
+        assert status.json()["state"] == "completed"
 
 
 def test_new_teacher_regeneration_resumes_exact_unconfirmed_run_once(
@@ -1355,3 +1364,38 @@ def test_done_and_generation_run_share_the_publish_commit(
         assert retry.json()["knowledge_generation"]["run_id"] == runs[0].id
         with database.session() as db:
             assert db.scalar(select(func.count()).select_from(KnowledgeGenerationRun)) == 1
+
+
+def test_publish_enqueue_reuses_inflight_run_for_same_version_and_sources(
+    client: TestClient, app_bundle: Any
+) -> None:
+    _app, database, _settings = app_bundle
+    _teacher, csrf = login(client, "maya")
+    agent_id, version_id, revision, document_id = _teacher_agent_with_source(client, csrf)
+    first = _publish(client, csrf, version_id, revision, document_id, "k2-debounce-publish-1")
+    assert first.status_code == 200, first.text
+    receipt = first.json()["knowledge_generation"]
+    assert receipt is not None
+    run_id = receipt["run_id"]
+    job_id = receipt["job_id"]
+
+    with database.session() as db:
+        agent = db.get(Agent, agent_id)
+        version = db.get(AgentVersion, version_id)
+        assert agent is not None and version is not None
+        owner = db.get(User, agent.owner_user_id)
+        assert owner is not None
+        context = AuthContext("", None, owner, "")
+        intent = KnowledgeGenerationIntent(source_document_ids=[document_id])
+        replay = enqueue_generation_for_publish(db, context, agent, version, intent)
+        assert replay.created is False
+        assert replay.run.id == run_id
+        assert replay.job.id == job_id
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(KnowledgeGenerationRun)
+                .where(KnowledgeGenerationRun.agent_id == agent_id)
+            )
+            == 1
+        )

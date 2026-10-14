@@ -249,3 +249,11 @@ typecheck/lint (4 existing warnings), ruff/mypy, boundary. Production:
 backup `maya-20261014T111701Z.sqlite3` integrity ok; healthy/ready200/
 schema0064/public200. Courser Knowledge Set still soft-deleted until next
 authorized generate; revive code present in image.
+
+Knowledge materialization (in progress on `cursor/knowledge-partial-progress-874e`):
+schema-invalid provider assets (`provider_asset_invalid`) are skipped; when at
+least one item applied and no blocking failure remains, applied items promote a
+new canonical Markdown head (`prompt_v3`, assets `minItems:1`). Double Tool/
+publish enqueue on the same published version + exact source manifest reuses the
+in-flight run. Teacher Chat progress bar, report download links, raw chat dump
+Tool, and Teams staggered/formal-role work follow on the same branch.

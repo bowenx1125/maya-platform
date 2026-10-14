@@ -255,7 +255,7 @@ def test_manual_markdown_edit_is_overwritten_by_later_successful_generation(
         )
 
 
-def test_partial_refresh_keeps_previous_complete_markdown_version(
+def test_schema_invalid_items_are_skipped_and_applied_items_promote_markdown(
     client: TestClient, app_bundle: Any
 ) -> None:
     _app, database, settings = app_bundle
@@ -308,16 +308,28 @@ def test_partial_refresh_keeps_previous_complete_markdown_version(
         data_root=settings.resolved_data_root,
     )
 
+    after = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
+    assert after.status_code == 200, after.text
+    assert after.json()["version_seq"] == before_document["version_seq"] + 1
+    assert "Incomplete candidate" in after.json()["markdown"]
     with database.session() as db:
-        current_run = db.get(KnowledgeGenerationRun, queued.json()["run_id"])
-        assert current_run is not None
-        owner = db.get(User, current_run.owner_user_id)
-        version = db.get(AgentVersion, current_run.agent_version_id)
+        completed_run = db.get(KnowledgeGenerationRun, queued.json()["run_id"])
+        versions = db.scalars(
+            select(KnowledgeSetMarkdownVersion)
+            .where(KnowledgeSetMarkdownVersion.knowledge_set_id == set_id)
+            .order_by(KnowledgeSetMarkdownVersion.version_seq)
+        ).all()
+        assert completed_run is not None
+        assert completed_run.state == "completed"
+        assert completed_run.safe_error_code is None
+        assert [version.version_seq for version in versions] == [1, 2]
+        owner = db.get(User, completed_run.owner_user_id)
+        version = db.get(AgentVersion, completed_run.agent_version_id)
         assert owner is not None and version is not None
         runtime_knowledge = get_agent_runtime_knowledge(
             db,
             AuthContext("", None, owner, ""),
-            current_run.agent_id,
+            completed_run.agent_id,
         )
         messages, _ = chat_messages(
             version,
@@ -327,29 +339,10 @@ def test_partial_refresh_keeps_previous_complete_markdown_version(
         )
         chat_prompt = json.loads(messages[0]["content"].split("\n", 1)[1])
         canonical_markdown = chat_prompt["canonical_knowledge"][0]["markdown"]
-        assert "This is the last complete generated document." in canonical_markdown
-        assert "Incomplete candidate" not in canonical_markdown
-
-    after = client.get(f"/api/v1/knowledge-sets/{set_id}/markdown")
-    assert after.status_code == 200, after.text
-    assert after.json()["version_seq"] == before_document["version_seq"]
-    assert after.json()["content_hash"] == before_document["content_hash"]
-    assert after.json()["markdown"] == before_document["markdown"]
-    assert "Incomplete candidate" not in after.json()["markdown"]
-    with database.session() as db:
-        failed_run = db.get(KnowledgeGenerationRun, queued.json()["run_id"])
-        versions = db.scalars(
-            select(KnowledgeSetMarkdownVersion)
-            .where(KnowledgeSetMarkdownVersion.knowledge_set_id == set_id)
-            .order_by(KnowledgeSetMarkdownVersion.version_seq)
-        ).all()
-        assert failed_run is not None
-        assert failed_run.state == "failed"
-        assert failed_run.safe_error_code == "knowledge_generation_partial_failure"
-        assert [version.version_seq for version in versions] == [1]
+        assert "Incomplete candidate" in canonical_markdown
 
 
-def test_first_partial_generation_heads_are_not_available_to_chat_or_assessment(
+def test_first_generation_skips_invalid_assets_and_promotes_applied_heads(
     client: TestClient, app_bundle: Any
 ) -> None:
     _app, database, settings = app_bundle
@@ -454,13 +447,15 @@ def test_first_partial_generation_heads_are_not_available_to_chat_or_assessment(
             )
         )
         assert current_version is not None and current_version.origin == "ai"
+        assert run.state == "completed"
+        assert run.safe_error_code is None
         projection = runtime_knowledge_projection(db, set_id, run.owner_user_id)
-        assert projection.canonical_markdown is None
-        assert {item["content"]["kind"] for item in projection.assets} == {"note", "question"}
-        assert any(
-            "LEGACY_K1_NOTE_REMAINS_AVAILABLE" in str(item["content"]) for item in projection.assets
-        )
-        assert all("UNPROMOTED_PARTIAL_" not in str(item["content"]) for item in projection.assets)
+        assert projection.canonical_markdown is not None
+        assert "UNPROMOTED_PARTIAL_QUESTION" in projection.canonical_markdown
+        # Promoted head lists only applied generation items; prior manual heads
+        # remain historical Asset rows but leave the current Markdown projection.
+        assert {item["content"]["kind"] for item in projection.assets} == {"question"}
+        assert all("LEGACY_K1_" not in str(item["content"]) for item in projection.assets)
         owner = db.get(User, run.owner_user_id)
         agent_version = db.get(AgentVersion, run.agent_version_id)
         assert owner is not None and agent_version is not None
@@ -476,14 +471,13 @@ def test_first_partial_generation_heads_are_not_available_to_chat_or_assessment(
         chat_prompt = json.loads(messages[0]["content"].split("\n", 1)[1])
         assert len(chat_prompt["canonical_knowledge"]) == 1
         serialized_knowledge = json.dumps(chat_prompt["canonical_knowledge"], ensure_ascii=False)
-        assert "LEGACY_K1_NOTE_REMAINS_AVAILABLE" in serialized_knowledge
-        assert "LEGACY_K1_QUESTION_REMAINS_AVAILABLE" in serialized_knowledge
-        assert "UNPROMOTED_PARTIAL_" not in messages[0]["content"]
-        assert current_question_version_for_asset(db, set_row, asset.id) is None
+        assert "UNPROMOTED_PARTIAL_QUESTION" in serialized_knowledge
+        assert "LEGACY_K1_" not in serialized_knowledge
+        assert current_question_version_for_asset(db, set_row, asset.id) is not None
+        assert current_question_version_for_asset(db, set_row, manual_question_asset_id) is None
         selected = _selected_questions(db, (set_id,))
-        assert len(selected) == 1
-        assert selected[0][1] == manual_question_asset_id
-        assert set_row.current_markdown_version_seq == 0
+        assert {item[1] for item in selected} == {asset.id}
+        assert set_row.current_markdown_version_seq == 1
 
 
 def test_newer_intent_fences_older_run_before_provider_acceptance(

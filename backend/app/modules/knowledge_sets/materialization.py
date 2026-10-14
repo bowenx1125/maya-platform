@@ -640,18 +640,27 @@ def _finish_materialization(
             db.commit()
             return
         applied_count = sum(1 for state in item_states if state == "applied")
-        failed_count = sum(1 for state in item_states if state in {"failed", "skipped"})
+        # Schema-invalid provider assets are skipped for promotion: usable
+        # applied items still become the canonical Markdown head.
+        schema_invalid_count = sum(
+            1
+            for item in items
+            if item.state == "failed" and item.safe_error_code == "provider_asset_invalid"
+        )
+        blocking_failure_count = sum(
+            1
+            for item in items
+            if item.state == "skipped"
+            or (item.state == "failed" and item.safe_error_code != "provider_asset_invalid")
+        )
         if stage.item_count == 0:
-            failed_count = 1
+            blocking_failure_count = max(blocking_failure_count, 1)
         set_row = db.get(KnowledgeSet, run.knowledge_set_id)
         if set_row is None:
             _finish_blocked(db, run, job, "authorization_revoked")
             db.commit()
             return
-        # A complete document is promoted as one version. Per-item Assets are
-        # already durable historical projections, but a failed/partial refresh
-        # cannot replace an existing complete Markdown head with half a result.
-        promote_document = failed_count == 0
+        promote_document = applied_count > 0 and blocking_failure_count == 0
         if promote_document:
             applied_items = [item for item in items if item.state == "applied"]
             try:
@@ -660,7 +669,8 @@ def _finish_materialization(
                 )
             except (TypeError, ValueError, ValidationError):
                 applied_items = []
-                failed_count = max(failed_count, 1)
+                blocking_failure_count = max(blocking_failure_count, 1)
+                promote_document = False
             else:
                 try:
                     save_knowledge_markdown_version(
@@ -684,7 +694,12 @@ def _finish_materialization(
                         return
                     raise
         now = now_utc()
-        if failed_count:
+        if promote_document:
+            run.state = "completed"
+            run.safe_error_code = None
+            job.state = "completed"
+            job.safe_error_code = None
+        else:
             run.state = "failed"
             run.safe_error_code = (
                 "knowledge_generation_partial_failure"
@@ -693,13 +708,11 @@ def _finish_materialization(
                 if stage.item_count == 0
                 else "knowledge_generation_items_failed"
             )
+            # Keep diagnosis when every failure was schema-invalid and nothing applied.
+            if applied_count == 0 and schema_invalid_count and not blocking_failure_count:
+                run.safe_error_code = "knowledge_generation_items_failed"
             job.state = "failed"
             job.safe_error_code = run.safe_error_code
-        else:
-            run.state = "completed"
-            run.safe_error_code = None
-            job.state = "completed"
-            job.safe_error_code = None
         run.claim_token = None
         run.lease_expires_at = None
         run.updated_at = now

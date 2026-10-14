@@ -693,6 +693,32 @@ def enqueue_generation_for_publish(
     manifest_json = _canonical_json(source_manifest)
     manifest_hash = _sha256(manifest_json)
     agent_md_hash = _sha256(version.agent_md)
+    # Debounce double Tool/publish enqueue on the same published version and
+    # exact source set: reuse an in-flight run instead of bumping intent.
+    # A newer AgentVersion or a changed RAG selection must still enqueue.
+    active_run = db.scalar(
+        select(KnowledgeGenerationRun)
+        .where(
+            KnowledgeGenerationRun.knowledge_set_id == set_row.id,
+            KnowledgeGenerationRun.agent_id == agent.id,
+            KnowledgeGenerationRun.agent_version_id == version.id,
+            KnowledgeGenerationRun.owner_user_id == context.user.id,
+            KnowledgeGenerationRun.agent_md_hash == agent_md_hash,
+            KnowledgeGenerationRun.source_manifest_hash == manifest_hash,
+            KnowledgeGenerationRun.state.in_(("pending", "running")),
+        )
+        .order_by(
+            KnowledgeGenerationRun.created_at.desc(),
+            KnowledgeGenerationRun.id.desc(),
+        )
+        .limit(1)
+    )
+    if active_run is not None:
+        active_job = db.get(Job, active_run.job_id)
+        if active_job is None:
+            raise RuntimeError("Knowledge generation run lost its Job row.")
+        return GenerationEnqueue(active_run, active_job, False)
+
     base_payload = _input_payload(
         agent=agent,
         set_row=set_row,

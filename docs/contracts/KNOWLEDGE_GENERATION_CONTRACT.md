@@ -103,11 +103,14 @@ relations are saved only after rechecking the exact source/version/ACL.
 
 Each candidate uses a deterministic run/stage/item key and stable lineage.
 Concepts, Questions with teacher-only Rubric/reference, and Notes retain immutable
-versions and provenance. Partial successful items remain traceable, but a failed
-or incomplete generation does not replace a complete usable canonical document.
-The canonical Markdown and its executable question projection agree on the
-selected version and actual included assets; omitted/edited questions cannot
-silently use older live heads.
+versions and provenance. Schema-invalid provider assets (`provider_asset_invalid`)
+are skipped: when at least one item applied and no other blocking failure remains,
+those applied items promote a new canonical Markdown head. Blocking failures
+(for example target-head races or save failures) still refuse promotion and keep
+the previous usable document. The prompt and strict JSON schema require every
+emitted asset to be a complete concept, question, or note. The canonical Markdown
+and its executable question projection agree on the selected version and actual
+included assets; omitted/edited questions cannot silently use older live heads.
 
 A valid newest generation appends a new canonical version and makes it current,
 including when it replaces manually edited content. The manual version stays in
