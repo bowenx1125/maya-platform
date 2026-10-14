@@ -147,7 +147,7 @@ describe("Voice recovery", () => {
       const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
         type: "audio/wav",
       });
-      fireEvent.change(screen.getByLabelText(/10–15-second/), {
+      fireEvent.change(screen.getByLabelText(/10–20 second/), {
         target: { files: [file] },
       });
       fireEvent.click(screen.getByRole("checkbox"));
@@ -470,7 +470,7 @@ describe("Voice recovery", () => {
     const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
       type: "audio/wav",
     });
-    fireEvent.change(screen.getByLabelText(/10–15-second/), {
+    fireEvent.change(screen.getByLabelText(/10–20 second/), {
       target: { files: [file] },
     });
     fireEvent.click(screen.getByRole("checkbox"));

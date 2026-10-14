@@ -249,6 +249,7 @@ typecheck/lint (4 existing warnings), ruff/mypy, boundary. Production:
 backup `maya-20261014T111701Z.sqlite3` integrity ok; healthy/ready200/
 schema0064/public200. Courser Knowledge Set still soft-deleted until next
 authorized generate; revive code present in image.
+<<<<<<< HEAD
 
 Knowledge materialization (on `cursor/knowledge-partial-progress-874e`):
 schema-invalid provider assets (`provider_asset_invalid`) are skipped; when at
@@ -265,3 +266,7 @@ A Guide/Leader Agent.md `# Team Ruleset` section is the only override channel
 defaults. Bare Chatform sends use routing `all`; Guide card sorts last in the UI.
 Formal assessment executor machinery remains; product role copy is not hardcoded
 in the opening beyond pointing at `# Team Ruleset`.
+=======
+Voices New upload help tip (hover on the upload control) states the sample
+rules (10–20 s, 16-bit WAV/MP3/M4A, max 10 MB); no permanent side copy.
+>>>>>>> origin/cursor/voice-upload-hint-874e
