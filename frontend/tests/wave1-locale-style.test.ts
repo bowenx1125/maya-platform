@@ -80,6 +80,21 @@ describe("Wave 1A locale and V2 style boundary", () => {
       /\.section-card-header h2\s*\{[\s\S]*?font-family:\s*var\(--display-serif\)/,
     );
   });
+  it("keeps the debate setup section-card-header free of a hairline divider", () => {
+    const css = readFileSync(
+      resolve(
+        process.cwd(),
+        "components/debate/setup/create-section.module.css",
+      ),
+      "utf8",
+    );
+    const rule = css.match(
+      /\.section :global\(\.section-card-header\)\s*\{[^}]*\}/,
+    )?.[0];
+    expect(rule).toBeDefined();
+    expect(rule).not.toMatch(/border-bottom:\s*1px\s+solid/);
+    expect(rule).toMatch(/border-bottom:\s*0/);
+  });
   it("keeps hidden upload controls out of full-width input styling", () => {
     const css = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
     const selector = css

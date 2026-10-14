@@ -3,7 +3,7 @@
   min-height: 0;
   align-items: flex-start;
   padding-bottom: var(--section-content-gap);
-  border-bottom: 1px solid var(--line, #dedee3);
+  border-bottom: 0;
 }
 
 .section > :global(.section-card-header) + * {
