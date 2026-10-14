@@ -236,38 +236,39 @@ Integration refs: entaiaki eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba735
 ## October14 independent revalidation and release
 
 Integrated entaiaki ba7358f -> origin/main 7e36ba0 after a recoverable stash;
-kept latest main UI/API and both Avatar binding assertions. Fix6f89c7e spans
-23 files: Voice action recovery/expiry/diagnostics, text-only Rebirth and GET
-recovery, Immerse title/layers, empty-header rule, and frozen-input Interact.
-Frontend:92 files,816 pass/1 existing skip; types/lint(4 existing warnings)/build
-passed. Backend:2250 pass/21 skip/31 fail plus1 teardown error in241s. All31
-fail identically on isolated unmodified7e36ba0 with source-origin assertions:
-23 Windows ACL,6 symlink,1 POSIX mode,1 asyncio case and its teardown; new
-failing nodes0. Focused58/58, Ruff check/format(471 files),mypy(259 files) passed.
-Frozen OpenAPI,generated contracts/WS,response/negative tests,document authority,
-164-route comparison and reviewed Node24.14.0 Latin gates passed. Changed-file
-formatting and tracked-only boundary probe passed. Full tracked-tree Prettier
-retains25 unchanged main formatting failures; Unix-mode boundary probe fails
-on Windows. Full Linux/Safari and visual acceptance remain open.
+kept main UI/API and both Avatar assertions. Fix6f89c7e covers Voice recovery,
+text-only Rebirth/GET recovery, Immerse title/layers, empty-header rule and
+frozen-input Interact. Rebirth preserves rounds1-3 without a provider call.
 
-Published GitHub main first, then bare repo and ff-only server pull. Built
-c2292aa68ee1fd8cb3387afefde70a5541278861; SQLite backup API produced
-maya-20261014T050750Z.sqlite3 under production backups, integrity ok. Rebuild
-completed; backend/frontend healthy, gateway running, internal ready200, schema
-0064_active_debate_slot matches ALEMBIC_HEAD, public HTTPS200. Post-release
-read-only API:Guyue9/9,Maya8/8. Both Live empty; teacher Debates0,Voices2.
-Voice config/media tools present, no configured fallback. No new provider
-calls or content mutations. Voice recovery fixes do not prove supplier health.
-Windows browser automation stopped on unreliable URL identification: actual
-Voice upload/preview, Rebirth, active Live and visual clicks remain unaccepted.
+On1eb55d0, frontend92 files:816 pass/1 skip; types/lint(4 existing warnings)/build
+passed. Backend2308 unique cases in4 disjoint shards:2256 pass/21 skip/31 fail;
+1 additional teardown event belongs to a failed node. All31 match isolated
+unmodified7e36ba0:23 Windows ACL,6 symlink,1 POSIX mode,1 asyncio case; new failures0.
+The earlier serial run timed out at900s and is not counted as complete.
+Ruff check/format471 files,mypy259 files,OpenAPI/generated contracts/WS,
+response/negative/document tests,164-route comparison,Redocly,reset safety and
+Node24.14.0 Latin checks passed. Changed files format clean;25 unchanged tracked
+Prettier failures and Windows Unix-mode boundary/probe failures remain.
+Full Linux/Safari and real visual acceptance remain open.
 
-## October14 user-assisted Voice preview failure
+Prior buildc2292aa: backup maya-20261014T050750Z.sqlite3 integrityok;
+healthy/ready200/schema0064/public200. Read-only API Guyue9/9,Maya8/8;
+both Live empty, teacher Debates0,Voices2. Voice tools present, fallback absent.
+Browser control stopped on unreliable URL identification; active Live and
+Rebirth clicks remain unaccepted, regardless of API/mock results.
 
-User uploaded a sample and clicked preview. Correlated production requests:
-enrollment200 at07:37:54Z, synthesis404 at07:38:00Z, then tts_http_rejected;
-duplicate log handlers are not duplicate requests. No assistant provider call.
-Billing remains unverified; preview_ready alone is not successful audio acceptance.
-The TTS workspace-host assumption conflicts with the supplier model-family guide;
-correct synthesis to its shared Beijing endpoint and validated workspace header,
-keeping enrollment, model/region, single dispatch and audio-download protection.
-Tests and post-release listening/confirmation/binding remain pending.
+User-assisted Voice: enrollment200 at07:37:54Z, synthesis404 at07:38:00Z;
+preview_ready is not audio acceptance. PR #65 corrects the synthesis transport
+and validated workspace header, retaining one dispatch and strict audio/SSRF checks.
+GitHub main -> bare repo -> ff-only pull; built1eb55d0dcd4c4de2a159a5f3f9a46791bb683ab1.
+SQLite backup API:maya-20261014T080910Z-tts.sqlite3 integrityok; active work0;
+healthy/ready/public200,schema0064/ALEMBIC_HEAD and source hash match.
+Post-release user preview still FAIL:4 requests at08:13:49-52Z returned404;
+duplicate log handlers are not extra calls. No assistant provider calls;
+user-call billing unverified. Official notice118434 retires both pinned speech
+models onOctober10; catalog queries agree. A contract/provider migration and
+new voice enrollment are required; old voice IDs must not be relabelled.
+User paused speech migration to finish Rebirth/Interact/Avatar/UI; existing voices
+are preserved.
+Nonvoice recheck:Rebirth24/24 with a new Report-reset fixture; Live26/26 UI+2/2
+API; Avatar12/12 API. Active classroom browser clicks remain unaccepted.

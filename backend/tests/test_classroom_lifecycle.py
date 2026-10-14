@@ -5,11 +5,23 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from app.core.models import ProviderOperation, StoredFile
-from app.modules.debates.models import AuditLog, Debate, DebateTurn, PlaybackState
+from app.core.models import DemoAcceptanceRun, ProviderOperation, StoredFile
+from app.modules.debates.models import (
+    AuditLog,
+    Debate,
+    DebateParticipant,
+    DebateTurn,
+    PlaybackState,
+)
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.setup.rules import canonical_rule_snapshot_json
 from app.modules.interactions.models import ClassroomInteractionWindow
+from app.modules.reports.models import (
+    BarrageInsightSnapshot,
+    CivilizationReport,
+    CivilizationReportCurrentSuccess,
+    CivilizationReportRevision,
+)
 from app.providers.tts import MockTTSProvider
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, text
@@ -281,6 +293,147 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(
                         )
                         == 6
                     )
+    finally:
+        database.dispose()
+
+
+def test_rebirth_clears_report_and_unbinds_acceptance_run_without_new_provider_calls(
+    app_factory,
+):
+    app, database, settings = app_factory()
+    try:
+        with TestClient(app) as client:
+            debate_id = _saved_classroom(database, settings)
+            _, csrf = login(client)
+            report_id = str(uuid4())
+            revision_id = str(uuid4())
+            insight_id = str(uuid4())
+            now = datetime.now(UTC)
+            with database.session() as db:
+                debate = db.get(Debate, debate_id)
+                participant = db.scalar(
+                    select(DebateParticipant)
+                    .where(DebateParticipant.debate_id == debate_id)
+                    .order_by(DebateParticipant.order_index)
+                )
+                window = db.scalar(
+                    select(ClassroomInteractionWindow).where(
+                        ClassroomInteractionWindow.debate_id == debate_id
+                    )
+                )
+                assert debate is not None
+                assert participant is not None
+                assert window is not None
+                db.add(
+                    BarrageInsightSnapshot(
+                        id=insight_id,
+                        window_id=window.id,
+                        debate_id=debate_id,
+                        revision_no=1,
+                        policy_key="mock_barrage_insight_v1",
+                        status="ready",
+                        attempt=1,
+                        input_hash="1" * 64,
+                        included_count=0,
+                        filtered_count=0,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                db.add(
+                    CivilizationReport(
+                        id=report_id,
+                        debate_id=debate_id,
+                        generation_status="ready",
+                        latest_attempt_status="ready",
+                        policy_key="mock_maya_report_v1",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                db.flush()
+                db.add(
+                    CivilizationReportRevision(
+                        id=revision_id,
+                        report_id=report_id,
+                        debate_id=debate_id,
+                        insight_snapshot_id=insight_id,
+                        revision_no=1,
+                        status="ready",
+                        attempt=1,
+                        input_manifest_json="{}",
+                        input_manifest_hash="2" * 64,
+                        english_markdown="A saved report.",
+                        word_count=3,
+                        trigger="automatic",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                db.flush()
+                db.add(
+                    CivilizationReportCurrentSuccess(
+                        report_id=report_id,
+                        revision_id=revision_id,
+                        debate_id=debate_id,
+                        revision_status="ready",
+                    )
+                )
+                run_id = str(uuid4())
+                db.add(
+                    DemoAcceptanceRun(
+                        id=run_id,
+                        plan_version="real_core_demo_v2",
+                        fixture_hash="3" * 64,
+                        baseline_agent_id=participant.agent_id,
+                        baseline_version_id=participant.agent_version_id,
+                        baseline_snapshot_id=participant.knowledge_snapshot_id,
+                        target_agent_id=participant.agent_id,
+                        target_version_id=participant.agent_version_id,
+                        debate_id=debate_id,
+                        report_revision_id=revision_id,
+                        state="executed",
+                        starting_charged_requests=0,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                db.flush()
+                provider_operations_before = list(db.scalars(select(ProviderOperation.id)))
+                preview_turn_ids_before = list(
+                    db.scalars(
+                        select(DebateTurn.id)
+                        .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
+                        .order_by(DebateTurn.turn_index)
+                    )
+                )
+
+            result = client.post(
+                f"/api/v1/debates/{debate_id}/rebirth",
+                json=_body(client, debate_id),
+                headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+            )
+            assert result.status_code == 200, result.text
+
+            with database.session() as db:
+                assert db.get(CivilizationReport, report_id) is None
+                assert db.get(CivilizationReportRevision, revision_id) is None
+                assert db.get(CivilizationReportCurrentSuccess, report_id) is None
+                assert db.get(BarrageInsightSnapshot, insight_id) is None
+                run = db.get(DemoAcceptanceRun, run_id)
+                assert run is not None
+                assert run.report_revision_id is None
+                assert list(db.scalars(select(ProviderOperation.id))) == provider_operations_before
+                assert (
+                    list(
+                        db.scalars(
+                            select(DebateTurn.id)
+                            .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
+                            .order_by(DebateTurn.turn_index)
+                        )
+                    )
+                    == preview_turn_ids_before
+                )
     finally:
         database.dispose()
 
