@@ -541,6 +541,17 @@ export function bubbleLineFrom(speech: string): string {
     : `${head.trim()}\u2026`;
 }
 
+function barrageBullets(
+  items: BetaStageProps["interactionBarrages"],
+): BarrageBullet[] {
+  if (!items?.length) return [];
+  return items.map((item) => ({
+    id: item.id,
+    nickname: item.nickname,
+    text: item.raw_text,
+  }));
+}
+
 export function BetaDebateStage({
   debateId,
   detail,
@@ -709,23 +720,27 @@ export function BetaDebateStage({
   // Barrage and the join card are beta-only stage state. Both setters are
   // stable, so the socket handler below needs no extra dependency.
   const beta = betaLabels ?? defaultBetaStageLabels;
-  const [barrages, setBarrages] = useState<BarrageBullet[]>([]);
-  // Snapshot is history of record: reload starts empty even when classroom already
-  // sent messages. Merge by id so a live event before/after the read never duplicates.
-  useEffect(() => {
-    if (!interactionBarrages?.length) return;
-    setBarrages((current) => {
-      const known = new Set(current.map((item) => item.id));
-      const missing = interactionBarrages
-        .filter((item) => !known.has(item.id))
-        .map((item) => ({
-          id: item.id,
-          nickname: item.nickname,
-          text: item.raw_text,
-        }));
-      return missing.length ? [...current, ...missing] : current;
-    });
-  }, [interactionBarrages]);
+  const [barrages, setBarrages] = useState<BarrageBullet[]>(() =>
+    barrageBullets(interactionBarrages),
+  );
+  // Snapshot is history of record. A later read must union by id with bullets
+  // already on screen, and that adjustment belongs in render: an effect
+  // setState retriggers the lane after paint.
+  const [hydratedBarrages, setHydratedBarrages] = useState(interactionBarrages);
+  if (interactionBarrages !== hydratedBarrages) {
+    setHydratedBarrages(interactionBarrages);
+    if (interactionBarrages?.length) {
+      setBarrages((current) => {
+        const known = new Set(current.map((item) => item.id));
+        const missing = interactionBarrages.filter(
+          (item) => !known.has(item.id),
+        );
+        return missing.length
+          ? [...current, ...barrageBullets(missing)]
+          : current;
+      });
+    }
+  }
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const transcriptRef = useRef<HTMLElement>(null);
   const transcriptToggleRef = useRef<HTMLButtonElement>(null);
