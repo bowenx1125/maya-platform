@@ -451,12 +451,13 @@ export default function TeacherDebateControlPage() {
     if (reportOpen && showSegmentsReport) reportDialogRef.current?.showModal();
   }, [reportOpen, showSegmentsReport]);
   const showOpenInteraction =
-    Boolean(detail) &&
+    detail !== null &&
     !playbackComplete &&
-    detail?.status !== "draft" &&
-    detail?.playback.mode !== "replay" &&
+    !detail.final_input_frozen &&
+    detail.status !== "draft" &&
+    detail.playback.mode !== "replay" &&
     interaction?.status !== "finalized" &&
-    (Boolean(joinUrl) || !segmentsProtocol || detail?.status === "running");
+    (Boolean(joinUrl) || !segmentsProtocol || detail.status === "running");
 
   return (
     <RouteGuard role="teacher">

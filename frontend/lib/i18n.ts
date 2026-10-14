@@ -170,6 +170,12 @@ const enMessages = {
   debateRetryReason: "Playback did not start. You can retry this turn.",
   debateProviderSetupIncomplete:
     "A real provider is selected but its reviewed policy is not installed. Retrying cannot help; an operator has to import it.",
+  debatePreviewNotReady:
+    "Preview is not ready yet. Open Preview to check the saved speeches before trying again.",
+  debateCleanupDeferred:
+    "A classroom operation is still running. Wait for it to finish, then try again.",
+  debateRebirthRefreshFailed:
+    "The classroom was reset, but the list could not be refreshed. Retry only reloads the list.",
   debateProviderGateTitle: "External query confirmation is required.",
   debateProviderGateLoading: "Loading the exact disclosure…",
   debateProviderGateEmpty: "No pending queries yet.",
@@ -654,6 +660,10 @@ const enMessages = {
   voiceCustom: "Custom voice",
   voiceName: "Voice name",
   voicePreview: "Preview",
+  voicePreviewExpired:
+    "This preview has expired. Preview the voice again before confirming.",
+  voicePreviewFailed:
+    "The preview could not be played. Retry the preview before confirming.",
   voiceConfirm: "Confirm",
   voiceDelete: "Delete",
   voiceDeleteConfirm:
@@ -976,6 +986,11 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateRetryReason: "播放未能开始，可以重试当前发言。",
   debateProviderSetupIncomplete:
     "已选择真实供应商，但其已审阅策略尚未导入。重试无法解决，需要先导入策略。",
+  debatePreviewNotReady:
+    "预览尚未就绪。请打开 Preview 检查已保存的发言后重试。",
+  debateCleanupDeferred: "课堂仍有操作正在进行，请等待完成后重试。",
+  debateRebirthRefreshFailed:
+    "课堂已重置，但列表更新失败。重试只会重新加载列表。",
   debateProviderGateTitle: "需要确认本轮外部检索请求。",
   debateProviderGateLoading: "正在读取精确数据外发说明…",
   debateProviderGateEmpty: "还没有待处理的查询。",
@@ -1422,6 +1437,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voiceCustom: "自定义音色",
   voiceName: "音色名称",
   voicePreview: "试听",
+  voicePreviewExpired: "试听已过期，请重新试听后再确认。",
+  voicePreviewFailed: "试听音频无法播放，请重试试听后再确认。",
   voiceConfirm: "确认",
   voiceDelete: "删除",
   voiceDeleteConfirm: "删除这个自定义音色？新的播放将使用平台兜底音色。",
@@ -1714,6 +1731,9 @@ const errorCodeKeys: Record<string, MessageKey> = {
   csrf_failed: "errorCsrfFailed",
   invalid_state: "errorInvalidState",
   provider_preflight_blocked: "debateProviderSetupIncomplete",
+  preview_not_ready: "debatePreviewNotReady",
+  cleanup_deferred: "debateCleanupDeferred",
+  rebirth_refresh_failed: "debateRebirthRefreshFailed",
   version_immutable: "errorVersionImmutable",
   stale_revision: "errorStaleRevision",
   stale_control_version: "errorStaleControlVersion",

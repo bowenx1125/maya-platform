@@ -663,7 +663,7 @@ describe("Agent Voice binding scope", () => {
       workspaceDocuments: vi.fn(async () => []),
       createVoicePreview: vi.fn(async () => ({
         playback_url: "/api/v1/voice-previews/fixture/media",
-        expires_at: "2026-10-12T12:00:00Z",
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
       })),
       renameVoiceProfile: vi.fn(async (_id: string, name: string) => ({
         ...personalVoice,
@@ -677,19 +677,30 @@ describe("Agent Voice binding scope", () => {
     });
     // Personal Agents load the teacher's own catalog, not a group list.
     api.personalVoiceProfiles.mockResolvedValue([personalVoice]);
+    const session = makeSession();
+    api.me.mockResolvedValue({
+      ...session,
+      user: {
+        ...session.user,
+        courses: [{ course_id: "course-id", role: "teacher" }],
+        groups: [],
+      },
+    });
     api.publish.mockResolvedValue({ ...version, state: "published" });
     return api;
   }
 
-  it("lets a personal Agent bind the teacher's own Voice and preview it", async () => {
+  it("does not bind an unselected personal Voice while preserving text and Avatar edits", async () => {
     const api = await makePersonalApi(makeVersion());
     renderWorkbench(api as unknown as PlatformApi);
     const voice = await screen.findByRole("button", {
       name: "Saved voice.wav",
     });
-    // Personal Agents pick from the teacher's own catalog, same as binding.
+    expect(api.personalVoiceProfiles).toHaveBeenCalledWith("course-id");
+    expect(api.voiceProfiles).not.toHaveBeenCalled();
     expect(voice.getAttribute("aria-pressed")).toBe("false");
     expect((voice as HTMLButtonElement).disabled).toBe(false);
+
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() =>
       expect(api.createVoicePreview).toHaveBeenCalledWith(personalVoice.id),
@@ -717,6 +728,32 @@ describe("Agent Voice binding scope", () => {
     );
     // Saving without choosing a voice must not invent a binding.
     expect(body).not.toHaveProperty("voice_profile_id");
+  });
+
+  it("binds an explicitly selected personal Voice while preserving Avatar edits", async () => {
+    const api = await makePersonalApi(makeVersion());
+    renderWorkbench(api as unknown as PlatformApi);
+    const voice = await screen.findByRole("button", {
+      name: "Saved voice.wav",
+    });
+    fireEvent.click(voice);
+    expect(voice.getAttribute("aria-pressed")).toBe("true");
+    expect(api.renameVoiceProfile).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "AGENT.md editor" }), {
+      target: { value: "# Personal saved text" },
+    });
+    fireEvent.change(screen.getByLabelText("Material theme"), {
+      target: { value: "warm_sand" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.updateDraft).toHaveBeenCalledTimes(1));
+    expect(api.updateDraft.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        agent_md: "# Personal saved text",
+        avatar_config: expect.objectContaining({ material_theme: "warm_sand" }),
+        voice_profile_id: personalVoice.id,
+      }),
+    );
   });
 
   it("can explicitly clear a personal binding even when its Voice is listed", async () => {

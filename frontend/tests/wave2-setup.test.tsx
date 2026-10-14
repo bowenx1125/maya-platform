@@ -14,6 +14,7 @@ import type {
   DebateSummary,
   PublishedAgentSummary,
 } from "../lib/api";
+import { PlatformApiError } from "../lib/api";
 import { validateDebateTopic } from "../lib/debate-topic";
 import { localizeError } from "../lib/i18n";
 import { LocaleProvider } from "../components/locale";
@@ -81,6 +82,24 @@ function candidate(id: string, name: string): PublishedAgentSummary {
 
 function createdDebate(): DebateDetail {
   return { id: "debate-id" } as DebateDetail;
+}
+
+function completedDebate(
+  status: "completed" | "debate_finished" = "completed",
+): DebateSummary {
+  return {
+    id: "completed-classroom",
+    course_id: courseId,
+    topic: "A saved classroom",
+    status,
+    round_count: 4,
+    created_at: "2026-10-13T00:00:00Z",
+    audio_restore_needed: false,
+    prepared_turns: 8,
+    expected_turns: 8,
+    preview: { prepared_turns: 6, expected_turns: 6, ready: true },
+    stall: null,
+  };
 }
 
 describe("Wave 2 teacher debate setup", () => {
@@ -172,6 +191,223 @@ describe("Wave 2 teacher debate setup", () => {
       "/teacher/debates/debate-one/control",
     );
     expect(screen.getByText("4 Rounds")).toBeTruthy();
+    expect(
+      link.closest("section")?.querySelector(".section-card-header"),
+    ).toBeNull();
+    expect(
+      (
+        await within(screen.getByRole("navigation")).findByRole("link", {
+          name: "New",
+        })
+      ).getAttribute("href"),
+    ).toBe("/teacher/debates/new");
+  });
+
+  it.each(["completed", "debate_finished"] as const)(
+    "clicks Rebirth once and refreshes %s to Ready",
+    async (status) => {
+      const confirmed = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const completed = completedDebate(status);
+      let reborn = false;
+      let finishRefresh: () => void = () => {};
+      const refreshPending = new Promise<void>((resolve) => {
+        finishRefresh = resolve;
+      });
+      const api = {
+        debates: vi.fn(async () => {
+          if (reborn) await refreshPending;
+          return [
+            reborn
+              ? { ...completed, status: "draft", prepared_turns: 6 }
+              : completed,
+          ];
+        }),
+        debate: vi
+          .fn()
+          .mockResolvedValue({ revision: 4, playback: { control_version: 7 } }),
+        rebirthDebate: vi.fn(async () => {
+          reborn = true;
+        }),
+      };
+      useSessionMock.mockReturnValue({ ...teacherSession(), api });
+      try {
+        render(<TeacherDebateList />);
+        await screen.findByText("Completed");
+        const button = screen.getByRole("button", { name: "Rebirth" });
+        fireEvent.click(button);
+        fireEvent.click(button);
+        await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
+        expect((button as HTMLButtonElement).disabled).toBe(true);
+        fireEvent.click(button);
+        await act(async () => finishRefresh());
+        await screen.findByText("Ready");
+        expect(api.rebirthDebate).toHaveBeenCalledTimes(1);
+        expect(api.rebirthDebate).toHaveBeenCalledWith(
+          completed.id,
+          { expected_revision: 4, expected_control_version: 7 },
+          { idempotency: expect.anything() },
+        );
+        expect(confirmed).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText("Completed")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Rebirth" })).toBeNull();
+        expect(
+          screen.getByRole("link", { name: "Preview" }).getAttribute("href"),
+        ).toBe(`/teacher/debates/${completed.id}/control`);
+      } finally {
+        confirmed.mockRestore();
+      }
+    },
+  );
+
+  it("shows Rebirth refusal and keeps the saved classroom and error through polling", async () => {
+    const confirmed = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = {
+      debates: vi.fn().mockResolvedValue([completedDebate()]),
+      debate: vi
+        .fn()
+        .mockResolvedValue({ revision: 4, playback: { control_version: 7 } }),
+      rebirthDebate: vi.fn().mockRejectedValue(
+        new PlatformApiError(409, "private provider detail", {
+          code: "preview_not_ready",
+        }),
+      ),
+    };
+    useSessionMock.mockReturnValue({ ...teacherSession(), api });
+    try {
+      render(<TeacherDebateList />);
+      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toBeTruthy();
+      expect(alert.textContent).not.toContain("private provider detail");
+      expect(screen.getByText("Completed")).toBeTruthy();
+      expect(screen.queryByText("Ready")).toBeNull();
+      expect(api.debates).toHaveBeenCalledTimes(1);
+      fireEvent.focus(window);
+      await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(2));
+      expect(screen.getByRole("alert")).toBeTruthy();
+      expect(
+        (screen.getByRole("button", { name: "Rebirth" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    } finally {
+      confirmed.mockRestore();
+    }
+  });
+
+  it.each(["en", "zh"] as const)(
+    "recovers a committed Rebirth with only a list GET after refresh fails in %s",
+    async (locale) => {
+      const confirmed = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const completed = completedDebate();
+      const api = {
+        debates: vi
+          .fn()
+          .mockResolvedValueOnce([completed])
+          .mockRejectedValueOnce(new TypeError("private refresh failure"))
+          .mockRejectedValueOnce(new TypeError("private polling failure"))
+          .mockResolvedValue([{ ...completed, status: "draft" }]),
+        debate: vi
+          .fn()
+          .mockResolvedValue({ revision: 4, playback: { control_version: 7 } }),
+        rebirthDebate: vi.fn().mockResolvedValue({}),
+      };
+      useSessionMock.mockReturnValue({ ...teacherSession(), api });
+      try {
+        render(
+          <LocaleProvider initialLocale={locale}>
+            <TeacherDebateList />
+          </LocaleProvider>,
+        );
+        fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+        const alert = await screen.findByRole("alert");
+        expect(alert.textContent).toContain(
+          locale === "zh" ? "课堂已重置" : "The classroom was reset",
+        );
+        expect(alert.textContent).not.toContain("private refresh failure");
+        const reset = screen.getByRole("button", {
+          name: "Rebirth",
+        }) as HTMLButtonElement;
+        expect(reset.disabled).toBe(true);
+        fireEvent.click(reset);
+        expect(api.rebirthDebate).toHaveBeenCalledTimes(1);
+        expect(api.debates).toHaveBeenCalledTimes(2);
+
+        fireEvent.focus(window);
+        await waitFor(() => expect(api.debates).toHaveBeenCalledTimes(3));
+        expect(screen.getByRole("alert").textContent).toContain(
+          locale === "zh"
+            ? "重试只会重新加载列表"
+            : "Retry only reloads the list",
+        );
+        fireEvent.click(
+          screen.getByRole("button", {
+            name: locale === "zh" ? "重试" : "Retry",
+          }),
+        );
+        await screen.findByText(locale === "zh" ? "已就绪" : "Ready");
+        expect(api.debates).toHaveBeenCalledTimes(4);
+        expect(api.debate).toHaveBeenCalledTimes(1);
+        expect(api.rebirthDebate).toHaveBeenCalledTimes(1);
+        expect(confirmed).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole("alert")).toBeNull();
+      } finally {
+        confirmed.mockRestore();
+      }
+    },
+  );
+
+  it("retries an ambiguous Rebirth with the original request and idempotency key", async () => {
+    const confirmed = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const completed = completedDebate();
+    let reborn = false;
+    const api = {
+      debates: vi.fn(async () => [
+        reborn ? { ...completed, status: "draft" } : completed,
+      ]),
+      debate: vi
+        .fn()
+        .mockResolvedValue({ revision: 4, playback: { control_version: 7 } }),
+      rebirthDebate: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("connection reset"))
+        .mockImplementationOnce(async () => {
+          reborn = true;
+        }),
+    };
+    useSessionMock.mockReturnValue({ ...teacherSession(), api });
+    try {
+      render(<TeacherDebateList />);
+      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+      await screen.findByText("Ready");
+      expect(api.rebirthDebate).toHaveBeenCalledTimes(2);
+      expect(api.rebirthDebate.mock.calls[1]).toEqual(
+        api.rebirthDebate.mock.calls[0],
+      );
+      expect(api.debate).toHaveBeenCalledTimes(1);
+      expect(confirmed).toHaveBeenCalledTimes(1);
+    } finally {
+      confirmed.mockRestore();
+    }
+  });
+
+  it("leaves the saved classroom unchanged when Rebirth is cancelled", async () => {
+    const confirmed = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const api = {
+      debates: vi.fn().mockResolvedValue([completedDebate()]),
+      debate: vi.fn(),
+      rebirthDebate: vi.fn(),
+    };
+    useSessionMock.mockReturnValue({ ...teacherSession(), api });
+    try {
+      render(<TeacherDebateList />);
+      fireEvent.click(await screen.findByRole("button", { name: "Rebirth" }));
+      expect(api.debate).not.toHaveBeenCalled();
+      expect(api.rebirthDebate).not.toHaveBeenCalled();
+      expect(screen.getByText("Completed")).toBeTruthy();
+    } finally {
+      confirmed.mockRestore();
+    }
   });
 
   it.each(["en", "zh"] as const)(

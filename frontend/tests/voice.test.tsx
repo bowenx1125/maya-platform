@@ -208,7 +208,7 @@ describe("M08 voice library", () => {
     ]);
     api.createVoicePreview.mockResolvedValue({
       playback_url: "/api/v1/voice-previews/preview-1/media",
-      expires_at: "2026-01-01T00:10:00Z",
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
     });
     api.confirmVoiceProfile.mockResolvedValue({
       id: "voice-1",

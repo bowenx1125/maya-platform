@@ -45,6 +45,7 @@ from app.providers.audio import (
 )
 from app.providers.factory import tts_provider
 from app.providers.tts import TTSProvider, TTSProviderError
+from app.providers.voice import VoiceProviderError
 from app.seed import COURSE_ID
 
 LOGGER = logging.getLogger("maya.voices")
@@ -138,6 +139,9 @@ def _tts_external_id(profile: VoiceProfile, settings: object) -> str:
     try:
         return _profile_external_id(profile, settings)  # type: ignore[arg-type]
     except VoiceEncryptionError as exc:
+        LOGGER.warning(
+            "Voice preview failed profile_id=%s safe_code=voice_mapping_unavailable", profile.id
+        )
         raise PlatformError(
             "provider_unavailable", "The voice service is temporarily unavailable.", 503
         ) from exc
@@ -156,7 +160,15 @@ def create_voice_preview(
     profile = visible_student_voice(db, context, profile_id).profile
     if profile.status not in {"preview_ready", "ready"}:
         raise not_found()
-    tts = provider or tts_provider(settings)
+    try:
+        tts = provider or tts_provider(settings)
+    except (RuntimeError, OSError) as exc:
+        LOGGER.warning(
+            "Voice preview failed profile_id=%s safe_code=tts_configuration_unavailable", profile.id
+        )
+        raise PlatformError(
+            "provider_unavailable", "The voice service is temporarily unavailable.", 503
+        ) from exc
     external_id = _tts_external_id(profile, settings)
     try:
         output = tts.synthesize(
@@ -174,6 +186,13 @@ def create_voice_preview(
         LOGGER.warning("Voice preview failed profile_id=%s safe_code=%s", profile.id, code)
         raise PlatformError(
             "provider_unavailable", "The preview could not be generated.", 503
+        ) from exc
+    except VoiceProviderError as exc:
+        LOGGER.warning(
+            "Voice preview failed profile_id=%s safe_code=tts_configuration_unavailable", profile.id
+        )
+        raise PlatformError(
+            "provider_unavailable", "The voice service is temporarily unavailable.", 503
         ) from exc
     preview_id = str(uuid4())
     owner_dir = (
@@ -217,6 +236,9 @@ def create_voice_preview(
         except (ValueError, OSError):
             pass
         db.rollback()
+        LOGGER.warning(
+            "Voice preview failed profile_id=%s safe_code=voice_preview_storage_failed", profile.id
+        )
         raise PlatformError(
             "file_operation_failed", "The preview could not be stored.", 503
         ) from exc

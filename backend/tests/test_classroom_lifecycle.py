@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, text
 
 from tests.conftest import login
+from tests.test_text_playback_fallback import _wait
 from tests.test_wave2_playback import _headers
 from tests.test_wave3_interactions import COURSE_ID, _seed_finished_debate
 
@@ -98,7 +99,10 @@ def _body(client, debate_id):
 
 
 @pytest.mark.parametrize("mode", ["live", "replay"])
-def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory, mode):
+@pytest.mark.parametrize("preview_media", ["audio", "text_fallback", "text_only"])
+def test_rebirth_preserves_preview_clears_classroom_and_starts_again(
+    app_factory, mode, preview_media
+):
     app, database, settings = app_factory()
     try:
         with TestClient(app) as client:
@@ -117,13 +121,28 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
                     )
                 )
                 for turn in planned:
-                    if turn.round_no == 4:
-                        turn.predecessor_turn_ids_json = json.dumps(
-                            [item.id for item in planned[: turn.turn_index]], separators=(",", ":")
+                    if turn.round_no < 4 and preview_media != "audio":
+                        turn.audio_file_id = None
+                        turn.audio_duration_ms = 0 if preview_media == "text_only" else None
+                        turn.safe_error_code = (
+                            "tts_voice_unavailable"
+                            if preview_media == "text_only"
+                            else "tts_timeout"
                         )
-                        turn.cutoff_turn_index = turn.turn_index - 1
+                    predecessors = planned[: turn.turn_index] if turn.round_no > 1 else []
+                    turn.predecessor_turn_ids_json = json.dumps(
+                        [item.id for item in predecessors], separators=(",", ":")
+                    )
+                    turn.cutoff_turn_index = predecessors[-1].turn_index if predecessors else -1
                 before = [
-                    (t.id, t.speech, t.structured_json, t.audio_file_id)
+                    (
+                        t.id,
+                        t.speech,
+                        t.structured_json,
+                        t.audio_file_id,
+                        None if preview_media == "text_only" else t.audio_duration_ms,
+                        t.safe_error_code,
+                    )
                     for t in db.scalars(
                         select(DebateTurn)
                         .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
@@ -142,6 +161,7 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
                         ClassroomInteractionWindow.debate_id == debate_id
                     )
                 )
+                provider_operations_before = list(db.scalars(select(ProviderOperation.id)))
             body = _body(client, debate_id)
             headers = _headers(csrf, **{"Idempotency-Key": str(uuid4())})
             result = client.post(f"/api/v1/debates/{debate_id}/rebirth", json=body, headers=headers)
@@ -152,7 +172,14 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
             assert repeated.status_code == 200, repeated.text
             with database.session() as db:
                 after = [
-                    (t.id, t.speech, t.structured_json, t.audio_file_id)
+                    (
+                        t.id,
+                        t.speech,
+                        t.structured_json,
+                        t.audio_file_id,
+                        t.audio_duration_ms,
+                        t.safe_error_code,
+                    )
                     for t in db.scalars(
                         select(DebateTurn)
                         .where(DebateTurn.debate_id == debate_id, DebateTurn.round_no < 4)
@@ -160,6 +187,7 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
                     )
                 ]
                 assert after == before
+                assert list(db.scalars(select(ProviderOperation.id))) == provider_operations_before
                 rebuilt = list(
                     db.scalars(
                         select(DebateTurn)
@@ -201,6 +229,10 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
             assert detail["preview"]["ready"]
             assert detail["public_turns"] == []
             assert not detail["final_input_frozen"]
+            rows = client.get(f"/api/v1/courses/{COURSE_ID}/debates").json()
+            summary = next(row for row in rows if row["id"] == debate_id)
+            assert summary["status"] == "draft"
+            assert summary["preview"]["ready"]
             started = client.post(
                 f"/api/v1/debates/{debate_id}/start",
                 json={
@@ -212,6 +244,110 @@ def test_rebirth_preserves_preview_clears_classroom_and_starts_again(app_factory
                 headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
             )
             assert started.status_code == 200, started.text
+            if preview_media != "audio":
+                detail = _wait(client, debate_id, lambda item: len(item["public_turns"]) == 1)
+                assert detail["playback"]["status"] == "waiting_next"
+                for count in range(2, 7):
+                    state = detail["playback"]
+                    assert state["next_turn_ready"]
+                    advanced = client.post(
+                        f"/api/v1/debates/{debate_id}/next",
+                        json={
+                            "expected_control_version": state["control_version"],
+                            "expected_current_turn_id": state["current_turn_id"],
+                        },
+                        headers=_headers(csrf),
+                    )
+                    assert advanced.status_code == 200, advanced.text
+                    detail = _wait(
+                        client,
+                        debate_id,
+                        lambda item, count=count: len(item["public_turns"]) == count,
+                    )
+                    assert detail["playback"]["status"] == "waiting_next"
+                assert all(turn["audio_ready"] is False for turn in detail["public_turns"])
+                assert not detail["playback"]["next_turn_ready"]
+                with database.session() as db:
+                    assert (
+                        list(db.scalars(select(ProviderOperation.id))) == provider_operations_before
+                    )
+                    assert (
+                        db.scalar(
+                            text(
+                                "SELECT COUNT(*) FROM debate_events WHERE debate_id=:id "
+                                "AND event_type='playback.waiting_next'"
+                            ),
+                            {"id": debate_id},
+                        )
+                        == 6
+                    )
+    finally:
+        database.dispose()
+
+
+@pytest.mark.parametrize(
+    ("generation_status", "speech", "audio_duration_ms", "safe_error_code"),
+    [
+        ("final_ready", "Saved speech", None, None),
+        ("final_ready", "Saved speech", None, "provider_not_sent"),
+        ("final_ready", " ", None, "tts_voice_unavailable"),
+        ("final_ready", "Saved speech", 100, "tts_voice_unavailable"),
+        ("pending", "Saved speech", None, "tts_voice_unavailable"),
+    ],
+)
+def test_rebirth_rejects_unready_preview_without_resetting_classroom(
+    app_factory, generation_status, speech, audio_duration_ms, safe_error_code
+):
+    app, database, settings = app_factory()
+    try:
+        with TestClient(app) as client:
+            debate_id = _saved_classroom(database, settings)
+            _, csrf = login(client)
+            body = _body(client, debate_id)
+            with database.session() as db:
+                turn = db.scalar(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id)
+                    .order_by(DebateTurn.turn_index)
+                )
+                turn.generation_status = generation_status
+                turn.speech = speech
+                turn.audio_file_id = None
+                turn.audio_duration_ms = audio_duration_ms
+                turn.safe_error_code = safe_error_code
+                final_ids = set(
+                    db.scalars(
+                        select(DebateTurn.id).where(
+                            DebateTurn.debate_id == debate_id, DebateTurn.round_no == 4
+                        )
+                    )
+                )
+            result = client.post(
+                f"/api/v1/debates/{debate_id}/rebirth",
+                json=body,
+                headers=_headers(csrf, **{"Idempotency-Key": str(uuid4())}),
+            )
+            assert result.status_code == 409, result.text
+            assert result.json()["code"] == "preview_not_ready"
+            with database.session() as db:
+                debate = db.get(Debate, debate_id)
+                assert debate.status == "completed"
+                assert debate.revision == body["expected_revision"]
+                assert debate.final_input_json == "{}"
+                assert (
+                    set(
+                        db.scalars(
+                            select(DebateTurn.id).where(
+                                DebateTurn.debate_id == debate_id, DebateTurn.round_no == 4
+                            )
+                        )
+                    )
+                    == final_ids
+                )
+                assert list(db.scalars(select(ProviderOperation))) == []
+                assert not list(
+                    db.scalars(select(AuditLog).where(AuditLog.event_type == "debate.rebirth"))
+                )
     finally:
         database.dispose()
 

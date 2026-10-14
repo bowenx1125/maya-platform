@@ -84,7 +84,7 @@ export function TeacherDebateList({
   const loadSequence = useRef(0);
 
   const load = useCallback(
-    async (silent = false) => {
+    async (silent = false, propagateError = false) => {
       const sequence = ++loadSequence.current;
       if (!courseId) {
         setError(new Error(t("debateCreateUnavailable")));
@@ -104,6 +104,7 @@ export function TeacherDebateList({
         setError(null);
       } catch (cause) {
         if (!silent && sequence === loadSequence.current) setError(cause);
+        if (propagateError) throw cause;
       } finally {
         if (sequence === loadSequence.current) setLoading(false);
       }
@@ -144,7 +145,8 @@ export function TeacherDebateList({
       {loading ? <LoadingCard /> : null}
       {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
       {!loading && !error ? (
-        <SectionCard action={debates.length > 0 ? newDebate : undefined}>
+        <SectionCard>
+          {debates.length > 0 ? newDebate : null}
           {debates.length === 0 ? (
             <div className={styles.emptyState}>
               <strong>{t("debateNoDebates")}</strong>
@@ -183,7 +185,7 @@ export function TeacherDebateList({
                     ) ? (
                       <ClassroomResetButton
                         debateId={debate.id}
-                        onDone={() => void load(true)}
+                        onDone={() => load(true, true)}
                       />
                     ) : null}
                     {debate.status === "draft" && debate.preview ? (
@@ -240,47 +242,78 @@ function ClassroomResetButton({
   onDone,
 }: {
   debateId: string;
-  onDone: () => void;
+  onDone: () => Promise<void>;
 }) {
   const { api } = useSession();
   const [busy, setBusy] = useState(false);
+  const [resetCommitted, setResetCommitted] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const active = useRef(false);
-  return (
-    <button
-      className="secondary-action"
-      disabled={busy}
-      type="button"
-      onClick={async () => {
-        if (active.current) return;
-        if (
-          !window.confirm(
-            "Keep Preview and reset this classroom? Messages, Report and the final round will be removed.",
-          )
-        )
-          return;
-        active.current = true;
-        setBusy(true);
-        try {
+  const intent = useRef<{
+    body: {
+      expected_revision: number;
+      expected_control_version: number;
+    };
+    idempotency: IdempotencyHandle;
+  } | null>(null);
+
+  async function reset() {
+    if (active.current) return;
+    if (
+      !resetCommitted &&
+      !intent.current &&
+      !window.confirm(
+        "Keep Preview and reset this classroom? Messages, Report and the final round will be removed.",
+      )
+    )
+      return;
+    active.current = true;
+    setBusy(true);
+    setError(null);
+    let committed = resetCommitted;
+    try {
+      if (!committed) {
+        if (!intent.current) {
           const detail = await api.debate(debateId);
-          await api.rebirthDebate(
-            debateId,
-            {
+          intent.current = {
+            body: {
               expected_revision: detail.revision,
               expected_control_version: detail.playback.control_version,
             },
-            { idempotency: createIdempotencyHandle() },
-          );
-        } catch {
-          // A refused action leaves the row unchanged.
-        } finally {
-          active.current = false;
-          setBusy(false);
-          onDone();
+            idempotency: createIdempotencyHandle(),
+          };
         }
-      }}
-    >
-      Rebirth
-    </button>
+        await api.rebirthDebate(debateId, intent.current.body, {
+          idempotency: intent.current.idempotency,
+        });
+        committed = true;
+        setResetCommitted(true);
+        intent.current = null;
+      }
+      await onDone();
+    } catch (cause) {
+      if (!isAmbiguousMutationFailure(cause)) intent.current = null;
+      setError(committed ? { code: "rebirth_refresh_failed" } : cause);
+    } finally {
+      active.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      {error ? (
+        <ErrorNotice error={error} onRetry={() => void reset()} />
+      ) : null}
+      <button
+        className="secondary-action"
+        disabled={busy || resetCommitted}
+        type="button"
+        onClick={() => void reset()}
+      >
+        Rebirth
+      </button>
+    </>
   );
 }
 

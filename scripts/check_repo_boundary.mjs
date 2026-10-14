@@ -248,7 +248,7 @@ if (process.argv.includes("--probe-generated")) {
       ),
     );
     writeFileSync(
-      resolve(probeRoot, "credential.json"),
+      resolve(probeRoot, "nested-values.json"),
       JSON.stringify(
         {
           nested: { api_key: "unapproved-scalar-value" },
@@ -263,13 +263,29 @@ if (process.argv.includes("--probe-generated")) {
     probeFailures.push(...boundaryFailures);
     boundaryFailures.length = 0;
     boundaryFailures.push(...originalFailures);
-    if (probeFailures.length === 0)
+    const generatedLeak = "/frontend/lib/api/generated/simulated-leak.ts";
+    if (
+      !probeFailures.some(
+        (value) =>
+          value.startsWith("possible secret assignment/token in ") &&
+          value.endsWith(generatedLeak),
+      ) ||
+      !probeFailures.some(
+        (value) =>
+          value.startsWith("supplier endpoint outside its allow-list in ") &&
+          value.endsWith(generatedLeak),
+      )
+    )
       throw new Error(
         "generated-source secret probe did not detect the simulated key/supplier URL",
       );
     if (
       probeFailures.some((value) => value.endsWith("/schema.json")) ||
-      !probeFailures.some((value) => value.endsWith("/credential.json"))
+      !probeFailures.some(
+        (value) =>
+          value.startsWith("possible secret assignment/token in ") &&
+          value.endsWith("/nested-values.json"),
+      )
     ) {
       throw new Error(
         "schema metadata and nested credential values were not distinguished",

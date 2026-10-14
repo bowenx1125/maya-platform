@@ -32,6 +32,24 @@ type ScopeStatus = "loading" | "ready" | "denied" | "error";
 
 type ListedVoice = VoiceProfile;
 
+type RetryAction =
+  | { kind: "load" }
+  | { kind: "enroll"; file: File }
+  | { kind: "preview" | "confirm"; profileId: string }
+  | {
+      kind: "rename";
+      profile: ListedVoice;
+      name: string;
+      restoreFocus: boolean;
+    };
+
+type VoiceFailure = { cause: unknown; retry: RetryAction };
+
+function previewIsCurrent(expiresAt: string): boolean {
+  const expires = Date.parse(expiresAt);
+  return Number.isFinite(expires) && expires > Date.now();
+}
+
 export function VoiceLibrary({
   groupId,
   courseId = null,
@@ -84,7 +102,7 @@ export function VoiceLibrary({
   const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
   const controlsDisabled = busy || disabled;
-  const [error, setError] = useState<unknown>(null);
+  const [failure, setFailure] = useState<VoiceFailure | null>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
   const [preview, setPreview] = useState<Record<string, PreviewState>>({});
   const [editingName, setEditingName] = useState<{
@@ -107,7 +125,7 @@ export function VoiceLibrary({
         setProfiles([]);
         onProfilesChange?.([]);
         setScopeStatus({});
-        setError(null);
+        setFailure(null);
         setLoading(false);
         return;
       }
@@ -115,7 +133,9 @@ export function VoiceLibrary({
       // AGENT.md in the parent, and this list is the only place a new voice appears.
       if (!options?.quiet) {
         setLoading(true);
-        setError(null);
+        setFailure((current) =>
+          current?.retry.kind === "load" ? null : current,
+        );
       }
       const results = await Promise.all(
         scopes.map(async (scopeId) => {
@@ -156,7 +176,11 @@ export function VoiceLibrary({
       const denial = results.find((result) => result.status === "denied");
       const ready = results.some((result) => result.status === "ready");
       // A refused group is not an empty library. Say so when nothing else loaded.
-      setError(failure?.cause ?? (!ready && denial ? denial.cause : null));
+      const cause = failure?.cause ?? (!ready && denial ? denial.cause : null);
+      setFailure((current) => {
+        if (current && current.retry.kind !== "load") return current;
+        return cause ? { cause, retry: { kind: "load" } } : null;
+      });
       setLoading(false);
     },
     [api, courseId, onProfilesChange, scopes],
@@ -169,6 +193,46 @@ export function VoiceLibrary({
       loadSequence.current += 1;
     };
   }, [load]);
+
+  const invalidatePreview = useCallback(
+    (profileId: string, message: MessageKey) => {
+      setPreview((current) => {
+        const next = { ...current };
+        delete next[profileId];
+        return next;
+      });
+      setFailure(
+        (current) =>
+          current ?? {
+            cause: new Error(t(message)),
+            retry: { kind: "preview", profileId },
+          },
+      );
+    },
+    [t],
+  );
+
+  useEffect(() => {
+    const entries = Object.entries(preview);
+    if (entries.length === 0) return;
+    const expiry = Math.min(
+      ...entries.map(([, resource]) => Date.parse(resource.expiresAt)),
+    );
+    const timer = window.setTimeout(
+      () => {
+        for (const [profileId, resource] of entries) {
+          if (
+            !Number.isFinite(Date.parse(resource.expiresAt)) ||
+            Date.parse(resource.expiresAt) <= Date.now()
+          ) {
+            invalidatePreview(profileId, "voicePreviewExpired");
+          }
+        }
+      },
+      Math.max(0, Math.min(expiry - Date.now(), 2_147_483_647)),
+    );
+    return () => window.clearTimeout(timer);
+  }, [invalidatePreview, preview]);
 
   useEffect(() => {
     function refreshVisibleVoices() {
@@ -199,18 +263,23 @@ export function VoiceLibrary({
   const canEnroll =
     Boolean(enrollmentGroupId) && !loading && !listenOnly && !controlsDisabled;
 
-  async function submitEnrollment() {
-    if (!canEnroll || !enrollmentGroupId || !file || !consent) return;
+  async function submitEnrollment(upload = file) {
+    if (!canEnroll || !enrollmentGroupId || !upload || !consent) return;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     setNotice(null);
     try {
       const options = { idempotency: idempotency.handleFor("voice-enroll") };
       await (courseId
-        ? api.enrollPersonalVoice(courseId, file, CONSENT_COPY_VERSION, options)
+        ? api.enrollPersonalVoice(
+            courseId,
+            upload,
+            CONSENT_COPY_VERSION,
+            options,
+          )
         : api.enrollVoice(
             enrollmentGroupId,
-            file,
+            upload,
             CONSENT_COPY_VERSION,
             options,
           ));
@@ -221,7 +290,7 @@ export function VoiceLibrary({
       setNotice("voiceProfileCreatedNotice");
       await load();
     } catch (cause) {
-      setError(cause);
+      setFailure({ cause, retry: { kind: "enroll", file: upload } });
     } finally {
       setBusy(false);
     }
@@ -246,11 +315,20 @@ export function VoiceLibrary({
       closeNameEditor(profile.id, restoreFocus);
       return;
     }
+    await rename(profile, value, restoreFocus);
+  }
+
+  async function rename(
+    profile: ListedVoice,
+    name: string,
+    restoreFocus: boolean,
+  ) {
+    if (controlsDisabled || savingName.current) return;
     savingName.current = true;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      const renamed = await api.renameVoiceProfile(profile.id, value);
+      const renamed = await api.renameVoiceProfile(profile.id, name);
       setProfiles((current) =>
         current.map((item) =>
           item.id === profile.id ? { ...item, ...renamed } : item,
@@ -258,7 +336,10 @@ export function VoiceLibrary({
       );
       closeNameEditor(profile.id, restoreFocus);
     } catch (cause) {
-      setError(cause);
+      setFailure({
+        cause,
+        retry: { kind: "rename", profile, name, restoreFocus },
+      });
     } finally {
       savingName.current = false;
       setBusy(false);
@@ -268,10 +349,14 @@ export function VoiceLibrary({
   async function makePreview(profileId: string) {
     if (controlsDisabled) return;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     setNotice(null);
     try {
       const resource = await api.createVoicePreview(profileId);
+      if (!previewIsCurrent(resource.expires_at)) {
+        invalidatePreview(profileId, "voicePreviewExpired");
+        return;
+      }
       setPreview((current) => ({
         ...current,
         [profileId]: {
@@ -279,36 +364,105 @@ export function VoiceLibrary({
           expiresAt: resource.expires_at,
         },
       }));
+      setFailure((current) =>
+        current?.retry.kind === "preview" &&
+        current.retry.profileId === profileId
+          ? null
+          : current,
+      );
     } catch (cause) {
-      setError(cause);
+      setFailure({ cause, retry: { kind: "preview", profileId } });
     } finally {
       setBusy(false);
     }
   }
 
-  async function confirm(profileId: string) {
+  async function confirm(profileId: string, retry = false) {
     if (controlsDisabled) return;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
-      await api.confirmVoiceProfile(profileId);
+      // A lost confirmation response may already have promoted the profile.
+      const current = retry ? await api.voiceProfile(profileId) : null;
+      if (current?.status !== "ready") {
+        if (
+          !preview[profileId] ||
+          !previewIsCurrent(preview[profileId].expiresAt)
+        ) {
+          invalidatePreview(profileId, "voicePreviewExpired");
+          return;
+        }
+        await api.confirmVoiceProfile(profileId);
+      }
       setPreview((current) => {
         const next = { ...current };
         delete next[profileId];
         return next;
       });
+      clearConfirmationFailure(profileId);
       await load();
     } catch (cause) {
-      setError(cause);
+      if (
+        cause instanceof PlatformApiError &&
+        cause.status === 409 &&
+        cause.code === "invalid_state"
+      ) {
+        try {
+          const current = await api.voiceProfile(profileId);
+          if (current.status === "ready") {
+            setPreview((resources) => {
+              const next = { ...resources };
+              delete next[profileId];
+              return next;
+            });
+            clearConfirmationFailure(profileId);
+            await load();
+          } else {
+            invalidatePreview(profileId, "voicePreviewExpired");
+          }
+        } catch (lookupFailure) {
+          setFailure({
+            cause: lookupFailure,
+            retry: { kind: "confirm", profileId },
+          });
+        }
+      } else {
+        setFailure({ cause, retry: { kind: "confirm", profileId } });
+      }
     } finally {
       setBusy(false);
     }
   }
 
+  function clearConfirmationFailure(profileId: string) {
+    setFailure((current) =>
+      current &&
+      (current.retry.kind === "preview" || current.retry.kind === "confirm") &&
+      current.retry.profileId === profileId
+        ? null
+        : current,
+    );
+  }
+
+  function retryFailure() {
+    if (!failure || controlsDisabled) return;
+    const action = failure.retry;
+    if (action.kind === "load") void load();
+    else if (action.kind === "enroll") void submitEnrollment(action.file);
+    else if (action.kind === "preview") void makePreview(action.profileId);
+    else if (action.kind === "confirm") void confirm(action.profileId, true);
+    else if (action.kind === "rename")
+      void rename(action.profile, action.name, action.restoreFocus);
+  }
+
   const form = (
     <div className={styles.uploadCard}>
-      {error ? (
-        <ErrorNotice inline error={error} onRetry={() => void load()} />
+      {failure ? (
+        <ErrorNotice
+          inline
+          error={failure.cause}
+          onRetry={controlsDisabled ? undefined : retryFailure}
+        />
       ) : null}
       <div className={styles.uploadRow}>
         <label
@@ -322,7 +476,11 @@ export function VoiceLibrary({
             type="file"
             disabled={controlsDisabled}
             accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              idempotency.abandon("voice-enroll");
+              setFailure(null);
+              setFile(event.target.files?.[0] ?? null);
+            }}
             aria-label={t("voiceSampleFile")}
           />
         </label>
@@ -347,6 +505,7 @@ export function VoiceLibrary({
         disabled={controlsDisabled}
         onClick={() => {
           setCreating(false);
+          setFailure(null);
           setFile(null);
           setConsent(false);
         }}
@@ -380,12 +539,13 @@ export function VoiceLibrary({
                   value={editingName.value}
                   readOnly={controlsDisabled}
                   ref={focusNameInput}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setFailure(null);
                     setEditingName({
                       id: profile.id,
                       value: event.target.value,
-                    })
-                  }
+                    });
+                  }}
                   onBlur={() => void saveName(profile)}
                   onKeyDown={(event) => {
                     if (event.nativeEvent.isComposing) return;
@@ -423,7 +583,7 @@ export function VoiceLibrary({
                   }}
                   onClick={() => {
                     activeName.current = profile.id;
-                    setError(null);
+                    setFailure(null);
                     setEditingName({
                       id: profile.id,
                       value: profile.source_filename ?? "",
@@ -468,6 +628,9 @@ export function VoiceLibrary({
                   controls
                   preload="none"
                   src={preview[profile.id].url}
+                  onError={() =>
+                    invalidatePreview(profile.id, "voicePreviewFailed")
+                  }
                 />
               ) : null}
             </li>
@@ -478,10 +641,14 @@ export function VoiceLibrary({
 
   const body = creating ? (
     form
-  ) : error || loading || list ? (
+  ) : failure || loading || list ? (
     <>
-      {error ? (
-        <ErrorNotice inline error={error} onRetry={() => void load()} />
+      {failure ? (
+        <ErrorNotice
+          inline
+          error={failure.cause}
+          onRetry={controlsDisabled ? undefined : retryFailure}
+        />
       ) : null}
       {loading ? <LoadingCard /> : null}
       {list}

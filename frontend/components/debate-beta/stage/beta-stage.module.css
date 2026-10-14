@@ -212,25 +212,39 @@
   max-width: min(420px, calc(100% - 160px));
 }
 .notices {
+  /* Keep the title below Transcript while recovery actions stay above it. */
+  z-index: auto;
   top: auto;
-  bottom: 20px;
+  right: calc(max(16px, env(safe-area-inset-right)) + 120px);
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: max(20px, env(safe-area-inset-left));
   display: grid;
   gap: 12px;
-  max-width: min(640px, calc(100% - 48px));
+  max-width: 640px;
+  max-height: calc(
+    100dvh - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .stageTopic {
+  position: relative;
+  z-index: 9;
   width: fit-content;
   max-width: 100%;
   margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 2px 10px rgba(35, 28, 18, 0.12);
+  padding: 12px 18px;
+  border: 1px solid rgba(211, 167, 74, 0.28);
+  border-left: 3px solid var(--gold, #d3a74a);
+  border-radius: 4px 12px 12px 4px;
+  background: rgba(253, 250, 243, 0.96);
+  box-shadow: 0 4px 18px rgba(35, 28, 18, 0.12);
   color: var(--ink, #241f1a);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.35;
+  font-family: var(--display-serif);
+  font-size: clamp(1.125rem, 1.7vw, 1.625rem);
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 .endPrompt {
@@ -271,6 +285,10 @@
   background: var(--surface);
   font-size: 14px;
 }
+.providerGateCard {
+  position: relative;
+  z-index: 13;
+}
 .providerGateCard ul {
   margin: 0;
   padding-left: 16px;
@@ -295,6 +313,14 @@
   transform: none;
 }
 @media (max-width: 600px) {
+  .notices {
+    right: calc(max(8px, env(safe-area-inset-right)) + 104px);
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+  }
+  .stageTopic {
+    padding: 10px 14px;
+  }
   .controlsDock {
     top: max(12px, env(safe-area-inset-top));
     right: max(8px, env(safe-area-inset-right));

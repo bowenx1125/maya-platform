@@ -15,6 +15,7 @@ from app.core.errors import conflict
 from app.core.models import DemoAcceptanceRun, FileReference, Job, StoredFile
 from app.modules.debates import cleanup as cleanup
 from app.modules.debates.models import AuditLog, DebateParticipant, DebateTurn
+from app.modules.debates.playback._core import PlaybackCore
 from app.modules.debates.round_count import debate_round_count
 from app.modules.interactions.service import create_closed_window
 
@@ -108,11 +109,21 @@ async def rebirth_debate(
             not preview
             or not finals
             or any(
-                turn.generation_status != "final_ready" or not turn.audio_file_id
+                turn.generation_status != "final_ready"
+                or not (
+                    turn.audio_file_id
+                    or PlaybackCore._turn_text_fallback_ready(turn)
+                    or PlaybackCore._turn_text_only(turn)
+                )
                 for turn in preview
             )
         ):
-            raise conflict("preview_not_ready", "Saved Preview audio is required for Rebirth.")
+            raise conflict("preview_not_ready", "Saved Preview must be ready for Rebirth.")
+        for turn in preview:
+            if PlaybackCore._turn_text_only(turn):
+                # The legacy zero marker must re-enter the text publication path,
+                # which never emits a turn.ready event without actual audio.
+                turn.audio_duration_ms = None
         final_ids = {turn.id for turn in finals}
         owners = final_ids | graph.report_ids | graph.revision_ids | graph.insight_ids
         refs = list(db.scalars(select(FileReference).where(FileReference.owner_id.in_(owners))))

@@ -775,6 +775,7 @@ def create_app(
                             "testAgentDraft",
                             "publishAgentVersion",
                             "enrollVoice",
+                            "enrollPersonalVoice",
                             "createDebate",
                             "updateDebateDraft",
                             "startDebate",

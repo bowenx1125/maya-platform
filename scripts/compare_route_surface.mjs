@@ -78,6 +78,8 @@ const implementedOperationIds = new Set([
   "listAvatarTemplates",
   "listVoiceProfiles",
   "enrollVoice",
+  "listPersonalVoiceProfiles",
+  "enrollPersonalVoice",
   "getVoiceProfile",
   "deleteVoiceProfile",
   "createVoicePreview",

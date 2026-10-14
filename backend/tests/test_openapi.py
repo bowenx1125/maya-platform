@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from app.main import app
 
 
@@ -110,3 +111,21 @@ def test_wave0_openapi_security_and_contract_surface() -> None:
         assert csrf["in"] == "header"
         assert csrf["required"] is True
         assert csrf["schema"]["minLength"] == 32
+
+
+@pytest.mark.parametrize(
+    ("path", "operation_id"),
+    [
+        ("/groups/{group_id}/voice-profiles", "enrollVoice"),
+        ("/courses/{course_id}/voice-profiles", "enrollPersonalVoice"),
+    ],
+)
+def test_voice_enrollment_openapi_keeps_business_validation_response(
+    path: str, operation_id: str
+) -> None:
+    operation = app.openapi()["paths"][path]["post"]
+    assert operation["operationId"] == operation_id
+    assert set(operation["responses"]) == {"202", "404", "422", "503"}
+    assert operation["responses"]["422"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/Error"
+    }

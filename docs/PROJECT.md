@@ -213,4 +213,55 @@ October 13: Brainform: New adds .md Knowledge; click edits, double-click renames
 
 PR #52 (entaiaki): Debate text playback and Live recovery restored, Studyform Avatar fixed; `0064` frees the running slot from archived Debates. Its own production acceptance failed (Start 0/9, End failed). Live Interact explains the server gate when unavailable (UI 26/26; mock mobile click cycle PASS; production visual click unverified).
 
-UI polish: Team cards match Agents; Voices/Knowledge/RAG Import use upload-symbol bars (Voices full width). Agents create Done stays clickable with top name/AGENT.md or server errors like Teams. RAG/Knowledge Done only when dirty (RAG: filename/content/staged file; Knowledge: filename/content/overwrite import); save returns to the three-column list, no success tip. List: Download (+ Delete), Reindex on failed RAG; Memory is the whole row; no Agents-using block. Studyform Agents/Teams name links restored to the prior text-link look (whole-card hit reverted); version pills are green Public / grey Private. Chats pick tiles unchanged. Agent/Team first card title is Name (not Agent/Team) with the input under the rule; embedded Agent Voices uses SectionCard titles like Avatar/AGENT.md and Team. Agent editor drops withdrawn (hidden) RAG from the selectable set so Done can bind active files again; Team create returns `team_member_source_unavailable` / `agent_archived` instead of a generic not-found when a member’s RAG left the library or the Agent was archived; Chat/Team pickers mark such Agents unavailable. Agent Brainform knowledge-check dialog close (X) is fixed (viewport-fixed overlay, absolute close, backdrop dismiss). Teacher course Brainform still holds no student material; Accounts enter joins the group so the teacher reads that group’s public RAG/Knowledge like a peer (publisher-only edit unchanged). Team edit Done stays off until the form changes, like Agent Done, so an unchanged save cannot mint the next version; create Done stays clickable for validation. Card room on phones: under 880px, touch sideways→upright→sideways within 6 s on home opens the room (Training hand fits 844x390). Teacher public Agent Knowledge generation fails closed as `knowledge_generation_sources_unavailable` when published RAG was hidden from Brainform (re-select active RAG and publish). Accounts-visit teachers read student public Knowledge as full read-only (not empty student projection); own Brainform still lists no student material. A teacher who entered a group from Accounts sees Members, Test results and Recent activity: `GET /groups/{id}/overview`, 404 unless entered. Accounts lists members by group (natural name order, ungrouped last). A student moves to another existing group from Profile (`PATCH /auth/me` `group_name`, never creates one); their work stays in the old group, which they then cannot open. Catalog accounts keep their listed group. Integrated open PRs #56 (green/grey version pills), #58 (card-room phone turn), #59 (visiting-teacher group overview) and #60 (Accounts by group + student self-move) onto main. Production deploy 2026-10-13T155549Z: built `7a99dfa`, backup `maya-20261013T155549Z.sqlite3` (integrity ok), schema `0064_active_debate_slot`, `https://app.mayaform.net/` 200. Production deploy 2026-10-13T164658Z: built `bb81d34` (PRs #56/#58/#59/#60 fused), backup `maya-20261013T163853Z.sqlite3` (integrity ok), schema `0064_active_debate_slot`, `https://app.mayaform.net/` 200; containers healthy; kept 2 backups. Production deploy 2026-10-14T040843Z: built `38eb07a` (PR #64 Knowledge gen / Accounts-visit Brainform reads), backup `maya-20261014T040843Z.sqlite3` (integrity ok), schema `0064_active_debate_slot`, `https://app.mayaform.net/` 200; containers healthy; kept 2 backups.
+UI polish: Teams match Agents; Voices/Knowledge/RAG imports use upload-symbol bars
+(Voices full width). Agent/Team create Done validates missing fields; edit Done
+requires dirty state. RAG/Knowledge save returns to the library with no success
+tip; Download/Delete and failed-RAG Reindex stay. Memory uses the whole row; no
+Agents-using block. Studyform name text-links and green Public/grey Private pills
+are retained; Chat picker tiles unchanged. Agent/Team Name inputs sit under their
+rule; embedded Voices uses SectionCard like Avatar/AGENT.md. Withdrawn RAG is not
+selectable. Team create returns specific unavailable-member errors; pickers mark
+affected Agents unavailable. Knowledge-check dialog supports X/backdrop dismissal.
+Accounts visits temporarily join a group: teacher reads public RAG/Knowledge as
+full read-only with publisher-only editing; own Brainform has no student content.
+Entered teachers get Members/Test results/Recent activity from the permission-
+checked group overview. Accounts groups members in natural name order, ungrouped
+last. Profile moves students only to existing groups; work remains in the old
+group and becomes inaccessible; catalog accounts keep catalog membership.
+On phones below 880px, sideways/upright/sideways within 6 seconds on Home opens
+the card room; training fits 844x390. Hidden published RAG fails Knowledge
+generation as knowledge_generation_sources_unavailable; reselect and publish.
+PRs #56/#58/#59/#60 integrated; PR #64 fixes Knowledge generation and Accounts
+Brainform reads. Latest recorded production deploy 2026-10-14T040843Z: built
+38eb07a, backup maya-20261014T040843Z.sqlite3 (integrity ok), schema
+0064_active_debate_slot, HTTPS 200 and healthy containers; retained two backups.
+
+## October13 Debate and Voice acceptance repair
+
+entaiaki: eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f. Repairs:
+text-only Rebirth/GET recovery, Voice retry/expiry/confirm fencing, safe diagnostics,
+Immerse title/mobile layers, empty-header rule, personal Voice422. Historical
+afe3daa checks: frontend809/1skip and static/build/163-route checks passed;
+Windows backend2220/21skip/54fail/1error. Public read-only API31/31; candidate
+undeployed, charged calls0. Active Voice/Rebirth/Live/Safari still unaccepted.
+
+## October14 independent revalidation
+
+entaiaki advanced ba7358f -> origin/main 7e36ba0 after a recoverable tracked-work
+stash. Kept latest main UI/API and production records; resolved Avatar assertions
+without dropping explicit-selection or no-auto-binding coverage. Before integration:
+backend focused 58/58; expanded 299 pass/14 existing skip/3 Windows symlink-privilege
+failures. Integrated frontend: 92 files, 816 pass/1 existing skip; types, lint
+(4 existing warnings), production build passed. Integrated Ruff check/format
+(471 files) and mypy (259 files) passed; full backend (6 workers): 2250 pass/21 skip/31 fail plus 1 teardown error.
+Failed cases are being checked against unmodified main before release.
+Input-frozen teacher controls no longer offer Interact (10 tests passed). Frozen
+OpenAPI/route gates passed after restoring checkout LF bytes; Node24.14.0 Latin
+gate passed. Tracked-only boundary probe passed; Windows permission probe remains
+blocked. Two-account public read-only API baseline: Guyue9/9, Maya8/8; both Live
+empty, teacher Debates empty, teacher Voices2. No content or provider calls.
+Production tree is 7e36ba0, backend/frontend healthy and HTTPS200. Voice config
+and media tools are present; no fallback configured. Voice changes fix recovery
+and diagnostics, not proof of supplier availability. Windows browser automation
+stopped on unreliable URL identification; no fresh public visual acceptance.
+Candidate not yet deployed.

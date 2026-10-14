@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -154,6 +156,24 @@ function renderStage(readOnly = true) {
 }
 
 describe("BetaDebateStage scene layout", () => {
+  it("keeps Transcript above the title and recovery actions above Transcript", () => {
+    const css = readFileSync(
+      resolve(
+        process.cwd(),
+        "components/debate-beta/stage/beta-stage.module.css",
+      ),
+      "utf8",
+    );
+    const rule = (name: string) =>
+      css.match(new RegExp("^\\." + name + " \\{([^}]+)\\}", "m"))?.[1] ?? "";
+    const layer = (name: string) =>
+      Number(rule(name).match(/z-index:\s*(\d+)/)?.[1]);
+    expect(rule("notices")).toMatch(/z-index:\s*auto/);
+    expect(layer("stageTopic")).toBeLessThan(layer("transcriptDrawer"));
+    expect(layer("transcriptDrawer")).toBeLessThan(layer("controlsDock"));
+    expect(layer("transcriptDrawer")).toBeLessThan(layer("providerGateCard"));
+  });
+
   it("keeps the full-viewport courtyard scene", () => {
     renderStage();
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request
@@ -38,6 +40,7 @@ from app.modules.voices.uploads import (
 )
 
 router = APIRouter(tags=["Voices"])
+LOGGER = logging.getLogger("maya.voices")
 
 _VOICE_ENROLL_BODY = {
     "required": True,
@@ -58,8 +61,8 @@ _VOICE_ENROLL_BODY = {
 }
 
 
-def _safe_provider_failure(exc: Exception) -> PlatformError:
-    del exc
+def _safe_provider_failure(operation: Literal["enroll", "delete", "preview"]) -> PlatformError:
+    LOGGER.warning("Voice request failed operation=%s safe_code=provider_unavailable", operation)
     return PlatformError(
         "provider_unavailable",
         "The voice service is temporarily unavailable.",
@@ -109,7 +112,7 @@ async def _enroll(
         except PlatformError:
             raise
         except (RuntimeError, OSError) as exc:
-            raise _safe_provider_failure(exc) from exc
+            raise _safe_provider_failure("enroll") from exc
         return result
     finally:
         if upload is not None:
@@ -263,7 +266,7 @@ def delete_voice_profile_route(
     except PlatformError:
         raise
     except (RuntimeError, OSError) as exc:
-        raise _safe_provider_failure(exc) from exc
+        raise _safe_provider_failure("delete") from exc
     return result
 
 
@@ -288,7 +291,7 @@ def create_voice_preview_route(
     except PlatformError:
         raise
     except (RuntimeError, OSError) as exc:
-        raise _safe_provider_failure(exc) from exc
+        raise _safe_provider_failure("preview") from exc
 
 
 @router.post(

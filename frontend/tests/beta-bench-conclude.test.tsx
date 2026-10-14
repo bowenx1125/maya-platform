@@ -371,6 +371,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
 
   it("toggles the same join code without closing or reopening classroom messages", async () => {
     const detail = { ...finishedSegmentsDetail(), status: "running" as const };
+    detail.final_input_frozen = false;
     detail.playback = {
       ...detail.playback,
       status: "playing",
@@ -400,6 +401,7 @@ describe("segments_v2 Bench Conclude and Report", () => {
 
   it("restores the existing classroom URL after a reload without a new open request", async () => {
     const detail = { ...finishedSegmentsDetail(), status: "running" as const };
+    detail.final_input_frozen = false;
     detail.playback = {
       ...detail.playback,
       status: "playing",
@@ -415,6 +417,23 @@ describe("segments_v2 Bench Conclude and Report", () => {
     );
     expect(api.openInteraction).not.toHaveBeenCalled();
     expect(api.closeInteraction).not.toHaveBeenCalled();
+  });
+
+  it("does not offer Interact after final input has been frozen", async () => {
+    const detail = finishedSegmentsDetail();
+    detail.status = "running";
+    detail.playback.status = "playing";
+    detail.playback.current_turn_id = detail.public_turns[0]?.id ?? null;
+    const api = pageApi(
+      interaction("closed"),
+      interaction("finalized"),
+      detail,
+    );
+    renderPage(api);
+
+    await waitFor(() => expect(api.teacherInteraction).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Interact" })).toBeNull();
+    expect(api.openInteraction).not.toHaveBeenCalled();
   });
 
   it("closes an already-open classroom and opens the Report dialog", async () => {
