@@ -206,7 +206,9 @@ After the last answer the server runs scorer then summarizer as the student's li
 
 October 13: Brainform: New adds .md Knowledge; click edits, double-click renames. Saved RAG republishes its Agents; Teams follow. Agent editors offer only Brainform's library. Rubric "Follow-up for Question N; at most K" items follow wrong answers; scoring reruns. Cut replies fail visibly. Test Teams hide Questions from Agents; follow-up picking shows no bar; reports list answers; old Team versions' results stay readable. Bare letters/numbers always answer; answer sheets are server-written. Answers take one call; a new Chat starts a new test; 0063 stores names. Answers must fit the Question's form; others are named unrecorded. Teams New matches Agents New; refused Team members log why. The latest sentence sets the language. Leaders carry report links.
 
-PR #52 (entaiaki): Debate text playback and Live recovery restored, Studyform Avatar fixed; `0064` frees the running slot from archived Debates. Its own production acceptance failed (Start 0/9, End failed). Live Interact explains the server gate when unavailable (UI 26/26; mock mobile click cycle PASS; production visual click unverified).
+PR #52: text playback, Live recovery, Avatar,0064 archived-slot release.
+Initial production Start0/9/End failed; Interact UI26/26/mock mobile passed,
+production clicks unverified.
 
 UI polish: Teams match Agents; Voices/Knowledge/RAG imports use upload-symbol bars
 (Voices full width). Agent/Team create Done validates missing fields; edit Done
@@ -257,9 +259,8 @@ Rebirth clicks remain unaccepted, regardless of API/mock results.
 User-assisted Voice: enrollment200 at07:37:54Z, synthesis404 at07:38:00Z;
 preview_ready is not audio acceptance. PR #65 corrects the synthesis transport
 and validated workspace header, retaining one dispatch and strict audio/SSRF checks.
-GitHub main -> bare repo -> ff-only pull; built1eb55d0dcd4c4de2a159a5f3f9a46791bb683ab1.
-SQLite backup API:maya-20261014T080910Z-tts.sqlite3 integrityok; active work0;
-healthy/ready/public200,schema0064/ALEMBIC_HEAD and source hash match.
+PR #65 built1eb55d0 after backup20261014T080910Z integrityok; active work0,
+healthy/ready/public200,schema0064 and source matched.
 Post-release user preview still FAIL:4 requests at08:13:49-52Z returned404;
 duplicate log handlers are not extra calls. No assistant provider calls; user-call billing unverified. Official notice118434 retires both pinned speech
 models onOctober10; catalog queries agree. A contract/provider migration and
@@ -272,3 +273,8 @@ API; Avatar12/12 API. Active classroom browser clicks remain unaccepted.
 Stage-name fix:bounded long names, separated coincident labels, narrow-padding
 guard and wrapping speech. Independent review11/11; frontend822 pass/1 skip,
 types/lint/build passed; no real browser/phone visual acceptance.
+
+PR #66 merged; GitHub main -> bare repo -> ff-only pull. Builtf3e2dbfa53d1419218cd3da32659ec1f44e44c9e;
+SQLite backup API:maya-20261014T085227Z-nonvoice.sqlite3 integrityok; active work0.
+Healthy, ready/public200, schema0064_active_debate_slot=ALEMBIC_HEAD; running
+source, compiled CSS and build SHA match. No additional provider calls.
