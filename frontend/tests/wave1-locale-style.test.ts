@@ -88,10 +88,13 @@ describe("Wave 1A locale and V2 style boundary", () => {
       ),
       "utf8",
     );
+    // Must beat workspace-theme `.surface .section-card-header` (0,2,0) under
+    // `.surface` — a bare `.section .section-card-header` alone is not enough.
     const rule = css.match(
-      /\.section :global\(\.section-card-header\)\s*\{[^}]*\}/,
+      /:global\(\.surface\)\s*\.section\s*:global\(\.section-card-header\)\s*,[\s\S]*?\.section\s*:global\(\.section-card-header\)\s*\{[^}]*\}/,
     )?.[0];
     expect(rule).toBeDefined();
+    expect(rule).toMatch(/:global\(\.surface\)\s*\.section\s*:global\(\.section-card-header\)/);
     expect(rule).not.toMatch(/border-bottom:\s*1px\s+solid/);
     expect(rule).toMatch(/border-bottom:\s*0/);
   });
