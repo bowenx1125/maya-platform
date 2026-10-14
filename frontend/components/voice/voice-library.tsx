@@ -45,6 +45,23 @@ type RetryAction =
 
 type VoiceFailure = { cause: unknown; retry: RetryAction };
 
+
+function voiceAwareCause(cause: unknown): unknown {
+  // Supplier outages must steer the teacher to the platform fallback voice.
+  // Never present an unavailable custom-voice attempt as a successful enroll.
+  if (!(cause instanceof PlatformApiError)) return cause;
+  const providerDown =
+    cause.code === "provider_unavailable" ||
+    cause.code === "voice_enrollment_failed" ||
+    (typeof cause.status === "number" && cause.status >= 500);
+  if (!providerDown) return cause;
+  return new PlatformApiError(cause.status, cause.message, {
+    code: "voice_provider_unavailable",
+    details: cause.details,
+    ...(cause.requestId ? { request_id: cause.requestId } : {}),
+  });
+}
+
 function previewIsCurrent(expiresAt: string): boolean {
   const expires = Date.parse(expiresAt);
   return Number.isFinite(expires) && expires > Date.now();
@@ -179,7 +196,9 @@ export function VoiceLibrary({
       const cause = failure?.cause ?? (!ready && denial ? denial.cause : null);
       setFailure((current) => {
         if (current && current.retry.kind !== "load") return current;
-        return cause ? { cause, retry: { kind: "load" } } : null;
+        return cause
+          ? { cause: voiceAwareCause(cause), retry: { kind: "load" } }
+          : null;
       });
       setLoading(false);
     },
@@ -290,7 +309,7 @@ export function VoiceLibrary({
       setNotice("voiceProfileCreatedNotice");
       await load();
     } catch (cause) {
-      setFailure({ cause, retry: { kind: "enroll", file: upload } });
+      setFailure({ cause: voiceAwareCause(cause), retry: { kind: "enroll", file: upload } });
     } finally {
       setBusy(false);
     }
@@ -337,7 +356,7 @@ export function VoiceLibrary({
       closeNameEditor(profile.id, restoreFocus);
     } catch (cause) {
       setFailure({
-        cause,
+        cause: voiceAwareCause(cause),
         retry: { kind: "rename", profile, name, restoreFocus },
       });
     } finally {
@@ -371,7 +390,7 @@ export function VoiceLibrary({
           : current,
       );
     } catch (cause) {
-      setFailure({ cause, retry: { kind: "preview", profileId } });
+      setFailure({ cause: voiceAwareCause(cause), retry: { kind: "preview", profileId } });
     } finally {
       setBusy(false);
     }
@@ -422,12 +441,12 @@ export function VoiceLibrary({
           }
         } catch (lookupFailure) {
           setFailure({
-            cause: lookupFailure,
+            cause: voiceAwareCause(lookupFailure),
             retry: { kind: "confirm", profileId },
           });
         }
       } else {
-        setFailure({ cause, retry: { kind: "confirm", profileId } });
+        setFailure({ cause: voiceAwareCause(cause), retry: { kind: "confirm", profileId } });
       }
     } finally {
       setBusy(false);

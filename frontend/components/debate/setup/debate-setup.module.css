@@ -196,9 +196,19 @@
 
 .debateCard h2 {
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-family: var(--display-serif);
   font-size: 1.05rem;
   font-weight: 500;
+  line-height: 1.35;
+}
+
+/* Topic column must shrink so long titles wrap instead of squeezing actions. */
+.debateCard > div:first-child {
+  min-width: 0;
 }
 
 .debateCard p {
@@ -301,6 +311,7 @@
   flex: 1;
   min-width: 0;
   border: 0;
+  border-bottom: 0;
   background: transparent;
   box-shadow: none;
 }
@@ -370,7 +381,9 @@
     max-width: calc(100% - 32px);
     margin: 0 16px 12px;
     padding-left: 0;
+    padding-top: 4px;
     border-left: 0;
+    border-top: 0;
     justify-content: flex-start;
   }
 }

@@ -58,8 +58,14 @@
   color: var(--ink, #1d1d1f);
   font-size: 0.77rem;
   font-weight: 650;
+  line-height: 1.25;
+  text-align: right;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .loading {
