@@ -29,6 +29,8 @@ export type KnowledgeSetSummary = components["schemas"]["KnowledgeSetSummary"];
 export type KnowledgeSetDetail = components["schemas"]["KnowledgeSetDetail"];
 export type KnowledgeGenerationStatus =
   components["schemas"]["KnowledgeGenerationStatus"];
+export type KnowledgeGenerationChatProgress =
+  components["schemas"]["KnowledgeGenerationChatProgress"];
 export type KnowledgeSetSource = components["schemas"]["KnowledgeSetSourceDTO"];
 export type KnowledgeSetRevocation =
   components["schemas"]["KnowledgeSetRevocation"];

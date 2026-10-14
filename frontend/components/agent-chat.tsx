@@ -18,6 +18,7 @@ import {
   type ChatAgent,
   type ChatSession,
   type AgentChatSession,
+  type KnowledgeGenerationChatProgress,
   type MemoryEntryResult,
   type MemoryEntrySource,
   type ConversationSession,
@@ -161,17 +162,16 @@ function routingForMention(
   session: TeamChatSession,
   message: string,
 ): TeamRouting {
-  const leaderId = session.team.members.find((member) => member.is_leader)?.id;
-  const leader: TeamRouting = leaderId
-    ? { mode: "selected", participant_ids: [leaderId] }
-    : { mode: "auto", participant_ids: [] };
+  // Bare sends: every member reads and replies (length by relevance). Guide
+  // Agent.md may override via prompt rules. @Name / @All stay explicit.
+  const all: TeamRouting = { mode: "all", participant_ids: [] };
   const label = mentionLabel(message);
-  if (!label) return leader;
-  if (label === "All") return { mode: "all", participant_ids: [] };
+  if (!label) return all;
+  if (label === "All") return all;
   const member = session.team.members.find(
     (item) => item.name === label && item.available !== false,
   );
-  return member ? { mode: "selected", participant_ids: [member.id] } : leader;
+  return member ? { mode: "selected", participant_ids: [member.id] } : all;
 }
 
 function isAgentSession(
@@ -191,7 +191,7 @@ const ASSESSMENT_STAGE_LABEL = {
   completed: "assessmentStageCompleted",
 } as const;
 
-/** Shown under the newest message while the server finishes a formal test. */
+/** Shown under the Summarizer message while the server finishes a formal test. */
 function AssessmentProgress({
   stage,
 }: {
@@ -215,6 +215,104 @@ function AssessmentProgress({
         {t(ASSESSMENT_STAGE_LABEL[stage])} · {percent}%
       </span>
     </div>
+  );
+}
+
+function knowledgeGenerationView(status: KnowledgeGenerationChatProgress): {
+  percent: number;
+  labelKey:
+    | "knowledgeGenerationQueued"
+    | "knowledgeGenerationRunning"
+    | "knowledgeGenerationMaterializing"
+    | "knowledgeGenerationCompleted"
+    | "knowledgeGenerationFailed";
+} {
+  if (status.state === "completed") {
+    return { percent: 100, labelKey: "knowledgeGenerationCompleted" };
+  }
+  if (
+    status.state === "failed" ||
+    status.state === "blocked" ||
+    status.state === "interrupted"
+  ) {
+    return { percent: 100, labelKey: "knowledgeGenerationFailed" };
+  }
+  if (status.state === "pending") {
+    return { percent: 15, labelKey: "knowledgeGenerationQueued" };
+  }
+  if (status.accepted_item_count > 0 || status.materialized_item_count > 0) {
+    const total = Math.max(
+      status.accepted_item_count,
+      status.materialized_item_count + status.failed_item_count,
+      1,
+    );
+    const done = status.materialized_item_count + status.failed_item_count;
+    return {
+      percent: Math.min(95, 45 + Math.round((done / total) * 50)),
+      labelKey: "knowledgeGenerationMaterializing",
+    };
+  }
+  return { percent: 40, labelKey: "knowledgeGenerationRunning" };
+}
+
+/** Owner Teacher Chat bar for the Agent's latest Knowledge generation. */
+function KnowledgeGenerationProgress({
+  status,
+}: {
+  status: KnowledgeGenerationChatProgress;
+}) {
+  const t = useT();
+  const view = knowledgeGenerationView(status);
+  return (
+    <div
+      className={styles.assessmentProgress}
+      data-stage={status.state}
+      data-knowledge-generation={status.run_id}
+    >
+      <div
+        className={styles.assessmentProgressTrack}
+        role="progressbar"
+        aria-label={t("knowledgeGenerationProgress")}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={view.percent}
+      >
+        <span style={{ width: `${view.percent}%` }} />
+      </div>
+      <span className={styles.assessmentProgressLabel}>
+        {t(view.labelKey)} · {view.percent}%
+      </span>
+    </div>
+  );
+}
+
+function sortTeamMemberResults(
+  results: TeamMemberResult[],
+  members: TeamChatSession["team"]["members"],
+): TeamMemberResult[] {
+  // Guide (Leader) stays last so Courser/member Loading cards appear first.
+  const leaderIds = new Set(
+    members.filter((member) => member.is_leader).map((member) => member.id),
+  );
+  return [...results].sort((left, right) => {
+    const leftLeader = leaderIds.has(left.participant_id) ? 1 : 0;
+    const rightLeader = leaderIds.has(right.participant_id) ? 1 : 0;
+    if (leftLeader !== rightLeader) return leftLeader - rightLeader;
+    return left.ordinal - right.ordinal;
+  });
+}
+
+function visibleTeamMemberResults(
+  results: TeamMemberResult[],
+): TeamMemberResult[] {
+  // Empty ready cards are non-speakers that never got a relevant turn.
+  return results.filter(
+    (result) =>
+      result.state === "pending" ||
+      result.state === "running" ||
+      result.state === "failed" ||
+      result.state === "acceptance_unknown" ||
+      Boolean(result.assistant_text?.trim()),
   );
 }
 
@@ -454,6 +552,36 @@ function AgentChatScope({
       window.clearInterval(timer);
     };
   }, [api, finishingTeamId]);
+  const knowledgeGenerationActive =
+    selected &&
+    isAgentSession(selected) &&
+    selected.knowledge_generation &&
+    (selected.knowledge_generation.state === "pending" ||
+      selected.knowledge_generation.state === "running")
+      ? selected.id
+      : null;
+  useEffect(() => {
+    if (!knowledgeGenerationActive) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void api
+        .conversation(knowledgeGenerationActive)
+        .then((next) => {
+          if (active && isAgentSession(next)) {
+            setSelected((current) =>
+              current?.id === next.id ? next : current,
+            );
+          }
+        })
+        .catch(() => {
+          // The next tick asks again; generation status is also on refresh.
+        });
+    }, 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [api, knowledgeGenerationActive]);
   const [teamError, setTeamError] = useState<unknown>(null);
   const [teamLastEventId, setTeamLastEventId] = useState(0);
   const [memoryRetryEntry, setMemoryRetryEntry] =
@@ -2638,16 +2766,11 @@ function AgentChatScope({
                           {turn.user_text}
                         </div>
                       ) : null}
-                      {/* Bug (2026-10-13): the last fetch could catch a
-                          finished reply before its turn was closed; polling
-                          then stopped and "Loading…" stayed under it. */}
+                      {/* Turn-level Loading only until the first member slot
+                          appears; after that each agent shows its own spinner. */}
                       {turn.state === "pending" &&
-                      (turn.member_results.length === 0 ||
-                        turn.member_results.some(
-                          (item) =>
-                            item.state === "pending" ||
-                            item.state === "running",
-                        )) ? (
+                      visibleTeamMemberResults(turn.member_results).length ===
+                        0 ? (
                         <p className={styles.pending} role="status">
                           <span className="spinner" aria-hidden="true" />
                           {t("loading")}
@@ -2669,59 +2792,71 @@ function AgentChatScope({
                         </p>
                       ) : null}
                       <div className={styles.teamResults}>
-                        {[...turn.member_results]
-                          .sort((left, right) => left.ordinal - right.ordinal)
-                          .map((result) => {
-                            const participant = selectedTeam.team.members.find(
-                              (member) => member.id === result.participant_id,
-                            );
-                            return (
-                              <article
-                                className={styles.teamResult}
-                                key={result.id}
-                              >
-                                <h3>
-                                  {result.speaker_name}
-                                  {participant?.is_leader
-                                    ? ` · ${t("leader")}`
-                                    : ""}
-                                </h3>
-                                {result.assistant_text ? (
-                                  <ReportMarkdown>
-                                    {result.assistant_text}
-                                  </ReportMarkdown>
-                                ) : result.state === "pending" ||
-                                  result.state === "running" ? (
-                                  turn.state === "pending" ? (
-                                    <p className={styles.pending} role="status">
-                                      <span
-                                        className="spinner"
-                                        aria-hidden="true"
-                                      />
-                                      {t("loading")}
-                                    </p>
-                                  ) : null
-                                ) : result.state === "acceptance_unknown" ? (
-                                  <p
-                                    className={styles.teamWarning}
-                                    role="status"
-                                  >
-                                    {t("errorChatAcceptanceUnknown")}
-                                  </p>
-                                ) : (
-                                  <p
-                                    className={styles.teamWarning}
-                                    role="status"
-                                  >
-                                    {teamFailureText(
-                                      result.safe_error_code,
-                                      "teamMemberFailure",
-                                    )}
-                                  </p>
-                                )}
-                              </article>
-                            );
-                          })}
+                        {sortTeamMemberResults(
+                          visibleTeamMemberResults(turn.member_results),
+                          selectedTeam.team.members,
+                        ).map((result) => {
+                          const participant = selectedTeam.team.members.find(
+                            (member) => member.id === result.participant_id,
+                          );
+                          const isSummarizerTurn =
+                            !participant?.is_leader &&
+                            !turn.user_text &&
+                            (selectedTeam.assessment_stage === "summarizing" ||
+                              selectedTeam.assessment_stage === "completed" ||
+                              selectedTeam.assessment_stage === "scoring");
+                          return (
+                            <article
+                              className={styles.teamResult}
+                              key={result.id}
+                            >
+                              <h3>
+                                {result.speaker_name}
+                                {participant?.is_leader
+                                  ? ` · ${t("leader")}`
+                                  : ""}
+                              </h3>
+                              {result.assistant_text ? (
+                                <ReportMarkdown>
+                                  {result.assistant_text}
+                                </ReportMarkdown>
+                              ) : result.state === "pending" ||
+                                result.state === "running" ? (
+                                <p className={styles.pending} role="status">
+                                  <span
+                                    className="spinner"
+                                    aria-hidden="true"
+                                  />
+                                  {t("loading")}
+                                </p>
+                              ) : result.state === "acceptance_unknown" ? (
+                                <p className={styles.teamWarning} role="status">
+                                  {t("errorChatAcceptanceUnknown")}
+                                </p>
+                              ) : (
+                                <p className={styles.teamWarning} role="status">
+                                  {teamFailureText(
+                                    result.safe_error_code,
+                                    "teamMemberFailure",
+                                  )}
+                                </p>
+                              )}
+                              {/* Formal progress hangs under Summarizer (or the
+                                  active executor card while scoring). */}
+                              {isSummarizerTurn &&
+                              selectedTeam.assessment_stage &&
+                              selectedTeam.assessment_stage !== "preparing" &&
+                              turn.id ===
+                                selectedTeam.turns[
+                                  selectedTeam.turns.length - 1
+                                ]?.id ? (
+                                <AssessmentProgress
+                                  stage={selectedTeam.assessment_stage}
+                                />
+                              ) : null}
+                            </article>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -2777,11 +2912,27 @@ function AgentChatScope({
                       {teamErrorText(teamError)}
                     </Notice>
                   ) : null}
-                  {/* "preparing" picks the follow-ups: the test is not over,
-                      so no scoring bar shows yet. */}
+                  {/* Scoring with no executor card yet still needs a bar. */}
                   {selectedTeam?.assessment_stage &&
-                  selectedTeam.assessment_stage !== "preparing" ? (
+                  selectedTeam.assessment_stage !== "preparing" &&
+                  !selectedTeam.turns.some(
+                    (turn) =>
+                      !turn.user_text &&
+                      turn.member_results.some((result) => {
+                        const member = selectedTeam.team.members.find(
+                          (item) => item.id === result.participant_id,
+                        );
+                        return member && !member.is_leader;
+                      }),
+                  ) ? (
                     <AssessmentProgress stage={selectedTeam.assessment_stage} />
+                  ) : null}
+                  {selected &&
+                  isAgentSession(selected) &&
+                  selected.knowledge_generation ? (
+                    <KnowledgeGenerationProgress
+                      status={selected.knowledge_generation}
+                    />
                   ) : null}
                   <div ref={endRef} />
                 </div>

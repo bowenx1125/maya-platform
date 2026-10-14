@@ -635,3 +635,26 @@ def test_0042_populated_single_history_and_atomic_rollback(
         assert db.execute("SELECT * FROM provider_operations ORDER BY id").fetchall() == ledger
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+
+def test_extract_team_ruleset_only_from_guide_heading() -> None:
+    assert runtime.extract_team_ruleset("# Persona\n\nHello.") is None
+    assert runtime.extract_team_ruleset("# Team Ruleset\n") == ""
+    body = runtime.extract_team_ruleset(
+        "# Guide\n\nLead the room.\n\n"
+        "# Team Ruleset\n\n"
+        "Only Courser replies at length; others acknowledge briefly.\n\n"
+        "# Notes\n\nIgnore for routing.\n"
+    )
+    assert body == "Only Courser replies at length; others acknowledge briefly."
+    system = runtime._member_system(
+        "# Member\n\nSpeak.",
+        "{}",
+        team_ruleset=body,
+    )
+    assert "<team_ruleset>" in system
+    assert "Only Courser replies at length" in system
+    assert "overrides the defaults" in system
+    defaults_only = runtime._member_system("# Member\n\nSpeak.", "{}")
+    assert "<team_ruleset>" not in defaults_only
+    assert "no # Team Ruleset section" in defaults_only

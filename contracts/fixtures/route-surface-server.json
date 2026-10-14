@@ -10114,6 +10114,17 @@
             "title": "Id",
             "type": "string"
           },
+          "knowledge_generation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgeGenerationChatProgress"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Generation"
+          },
           "origin": {
             "const": "single_agent",
             "default": "single_agent",
@@ -16330,6 +16341,83 @@
           "state"
         ],
         "title": "KnowledgeGenerationReceipt",
+        "type": "object"
+      },
+      "KnowledgeGenerationChatProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_item_count": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Accepted Item Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed_item_count": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Failed Item Count",
+            "type": "integer"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "knowledge_set_id": {
+            "format": "uuid",
+            "title": "Knowledge Set Id",
+            "type": "string"
+          },
+          "materialized_item_count": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Materialized Item Count",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "safe_error_code": {
+            "title": "Safe Error Code",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "running",
+              "blocked",
+              "completed",
+              "failed",
+              "interrupted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "job_id",
+          "knowledge_set_id",
+          "state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "KnowledgeGenerationChatProgress",
         "type": "object"
       },
       "KnowledgeGenerationStatus": {

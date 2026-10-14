@@ -328,6 +328,21 @@ class KnowledgeGenerationStatus(StrictModel):
     updated_at: datetime
 
 
+class KnowledgeGenerationChatProgress(StrictModel):
+    """Owner Teacher Chat progress bar; omits provider_manifest_hash."""
+
+    run_id: UUID
+    job_id: UUID
+    knowledge_set_id: UUID
+    state: KnowledgeGenerationState
+    safe_error_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    accepted_item_count: int = Field(default=0, ge=0)
+    materialized_item_count: int = Field(default=0, ge=0)
+    failed_item_count: int = Field(default=0, ge=0)
+    created_at: datetime
+    updated_at: datetime
+
+
 class AgentKnowledgeSets(StrictModel):
     agent_id: UUID
     agent_metadata_revision: int = Field(ge=0)

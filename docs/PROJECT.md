@@ -250,10 +250,18 @@ backup `maya-20261014T111701Z.sqlite3` integrity ok; healthy/ready200/
 schema0064/public200. Courser Knowledge Set still soft-deleted until next
 authorized generate; revive code present in image.
 
-Knowledge materialization (in progress on `cursor/knowledge-partial-progress-874e`):
+Knowledge materialization (on `cursor/knowledge-partial-progress-874e`):
 schema-invalid provider assets (`provider_asset_invalid`) are skipped; when at
 least one item applied and no blocking failure remains, applied items promote a
 new canonical Markdown head (`prompt_v3`, assets `minItems:1`). Double Tool/
 publish enqueue on the same published version + exact source manifest reuses the
-in-flight run. Teacher Chat progress bar, report download links, raw chat dump
-Tool, and Teams staggered/formal-role work follow on the same branch.
+in-flight run. Teacher ChatSession carries `knowledge_generation` for an under-
+message progress bar; Agent Chat appends real report download links after Tool
+receipts.
+
+Team Chat defaults: every member reads and replies; length follows relevance.
+A Guide/Leader Agent.md `# Team Ruleset` section is the only override channel
+(including who replies / assessment role narrative); missing section keeps
+defaults. Bare Chatform sends use routing `all`; Guide card sorts last in the UI.
+Formal assessment executor machinery remains; product role copy is not hardcoded
+in the opening beyond pointing at `# Team Ruleset`.

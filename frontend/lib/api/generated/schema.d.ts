@@ -2362,6 +2362,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Knowledge Generation */
+            knowledge_generation?: components["schemas"]["KnowledgeGenerationChatProgress"] | null;
             /**
              * Origin
              * @default single_agent
@@ -4229,6 +4231,56 @@ export interface components {
              * @enum {string}
              */
             state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+        };
+        /** KnowledgeGenerationChatProgress */
+        KnowledgeGenerationChatProgress: {
+            /**
+             * Accepted Item Count
+             * @default 0
+             */
+            accepted_item_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Failed Item Count
+             * @default 0
+             */
+            failed_item_count: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Knowledge Set Id
+             * Format: uuid
+             */
+            knowledge_set_id: string;
+            /**
+             * Materialized Item Count
+             * @default 0
+             */
+            materialized_item_count: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Safe Error Code */
+            safe_error_code?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "blocked" | "completed" | "failed" | "interrupted";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** KnowledgeGenerationStatus */
         KnowledgeGenerationStatus: {

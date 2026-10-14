@@ -40,12 +40,16 @@ from .schemas import (
 )
 
 # Both languages: nothing yet says which one the student writes in. Later
-# replies follow the student's language.
+# replies follow the student's language. Framework defaults apply unless the
+# Guide Agent.md defines a "# Team Ruleset" section that overrides them.
 MAYA_TEAM_OPENING = (
-    "我是 Leader。直接发消息，由我来带。要叫某一位成员，输入 @ 再选。要正式测评，直接说你要测评。"
+    "我是 Guide（Leader）。默认规则：全体成员都会读并回复你的消息，相关性高则多说、低则少说。"
+    "若我的 Agent.md 里有「# Team Ruleset」段落，则以该段落覆盖默认规则。"
+    "直接发消息即可。要叫某一位成员，输入 @ 再选。"
     "\n\n"
-    "I'm the Leader. Message me and I'll lead. To call one member, type @ and choose them. "
-    "For a formal test, just say you want to take the test."
+    "I'm the Guide (Leader). Defaults: every member reads and replies; fuller when relevant, "
+    'brief when not. If my Agent.md has a "# Team Ruleset" section, that section overrides '
+    "these defaults. Just send a message. To call one member, type @ and choose them."
 )
 
 

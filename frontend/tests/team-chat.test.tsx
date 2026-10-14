@@ -931,7 +931,7 @@ describe("Chatform", () => {
     );
     expect(state.api.streamTeamConversation.mock.calls[0][1]).toMatchObject({
       message: "Open the discussion",
-      routing: { mode: "selected", participant_ids: ["participant-1"] },
+      routing: { mode: "all", participant_ids: [] },
     });
     expect(state.api.createTeam).not.toHaveBeenCalled();
     expect(state.api.updateTeam).not.toHaveBeenCalled();
@@ -1613,9 +1613,10 @@ describe("Chatform", () => {
     );
     expect(state.api.streamTeamConversation.mock.calls[1][1]).toMatchObject({
       message: pastedText,
+      // Mentions inside fenced code are ignored; bare default is all members.
       routing: {
-        mode: "selected",
-        participant_ids: ["participant-1"],
+        mode: "all",
+        participant_ids: [],
       },
     });
   });

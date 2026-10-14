@@ -41,6 +41,9 @@ from app.modules.knowledge.services import (
     can_invoke_version,
     snapshot_sources_are_readable,
 )
+from app.modules.knowledge_sets.generation import get_generation_status
+from app.modules.knowledge_sets.models import KnowledgeGenerationRun
+from app.modules.knowledge_sets.schemas import KnowledgeGenerationChatProgress
 from app.modules.learning.schemas import AssessmentRuntimeResult
 from app.modules.runtime_tools.models import RuntimeToolReceipt
 from app.providers.control_repository import ProviderSendingGuard
@@ -862,6 +865,9 @@ def store_assistant_text(
     """Commit the full assistant text once.  Callers must not store prefixes."""
 
     stored_sources = [item.model_dump(mode="json") for item in sources]
+    # Teacher report tools forbid inventing links; append the real ones here
+    # for single-Agent Chat the same way Team Leader replies do.
+    reply_with_reports = reply + _agent_report_download_suffix(db, conversation_id, request_id)
     write = db.execute(
         update(ConversationTurn)
         .where(
@@ -872,7 +878,7 @@ def store_assistant_text(
             _current_chat_claim(conversation_id, request_id, claim_revision),
         )
         .values(
-            assistant_text=reply,
+            assistant_text=reply_with_reports,
             sources_json=json.dumps(stored_sources, ensure_ascii=False),
             state="ready",
             safe_error_code=None,
@@ -1034,6 +1040,78 @@ def _version_sources_usable(db: Session, version: AgentVersion) -> bool:
     return all(workspace_state == "active" for (workspace_state,) in rows)
 
 
+def _agent_knowledge_generation_progress(
+    db: Session,
+    context: AuthContext,
+    *,
+    agent: Agent,
+    turns: list[ConversationTurn],
+    read_only: bool,
+) -> KnowledgeGenerationChatProgress | None:
+    """Latest generation for this Agent while the Teacher Chat should show a bar.
+
+    Active runs always show. Terminal runs stay until the teacher sends a newer
+    user message, matching Team assessment_stage completed retention.
+    """
+
+    if read_only or agent.owner_user_id != context.user.id:
+        return None
+    run = db.scalar(
+        select(KnowledgeGenerationRun)
+        .where(
+            KnowledgeGenerationRun.agent_id == agent.id,
+            KnowledgeGenerationRun.owner_user_id == context.user.id,
+        )
+        .order_by(
+            KnowledgeGenerationRun.created_at.desc(),
+            KnowledgeGenerationRun.id.desc(),
+        )
+        .limit(1)
+    )
+    if run is None:
+        return None
+    if run.state not in {"pending", "running"}:
+        newer_user = any(turn.user_text and turn.created_at > run.updated_at for turn in turns)
+        if newer_user:
+            return None
+    try:
+        status = get_generation_status(db, context, run.job_id)
+    except PlatformError:
+        return None
+    return KnowledgeGenerationChatProgress(
+        run_id=status.run_id,
+        job_id=status.job_id,
+        knowledge_set_id=status.knowledge_set_id,
+        state=status.state,
+        safe_error_code=status.safe_error_code,
+        accepted_item_count=status.accepted_item_count,
+        materialized_item_count=status.materialized_item_count,
+        failed_item_count=status.failed_item_count,
+        created_at=status.created_at,
+        updated_at=status.updated_at,
+    )
+
+
+def _agent_report_download_suffix(db: Session, conversation_id: str, turn_id: str) -> str:
+    """Append server-authored report links; models must not invent download paths."""
+
+    from app.modules.workspace.team_runtime import report_paths
+
+    raw = db.scalars(
+        select(RuntimeToolReceipt.result_json)
+        .where(
+            RuntimeToolReceipt.conversation_id == conversation_id,
+            RuntimeToolReceipt.turn_id == turn_id,
+            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+        )
+        .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
+    ).all()
+    links = report_paths(raw)
+    if not links:
+        return ""
+    return "\n\n" + "\n\n".join(f"[下载报告 / Download report]({path})" for path in links)
+
+
 def session_view(
     db: Session, conversation: Conversation, context: AuthContext, settings: Settings | None = None
 ) -> ConversationSession:
@@ -1122,6 +1200,9 @@ def session_view(
         title=conversation.title,
         pinned_at=conversation.pinned_at,
         turns=visible_turns,
+        knowledge_generation=_agent_knowledge_generation_progress(
+            db, context, agent=agent, turns=list(turns), read_only=read_only
+        ),
     )
 
 

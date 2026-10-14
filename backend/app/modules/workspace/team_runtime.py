@@ -1038,6 +1038,19 @@ def _start_member(
                 claim_token=token,
                 selected_binding_ids=selected_binding_ids,
             )
+        team_ruleset: str | None = None
+        if not assessment_active and assessment_purpose is None:
+            guide = db.scalar(
+                select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == row.id,
+                    ConversationParticipant.is_leader.is_(True),
+                )
+            )
+            guide_version = (
+                db.get(AgentVersion, guide.agent_version_id) if guide is not None else None
+            )
+            if guide_version is not None:
+                team_ruleset = extract_team_ruleset(guide_version.agent_md)
         system_message = _member_system(
             context.agent_md,
             context.knowledge_json,
@@ -1045,6 +1058,7 @@ def _start_member(
             assessment_purpose=assessment_purpose,
             assessment_task_json=assessment_task_json,
             assessment_source_revoked=assessment_source_revoked,
+            team_ruleset=team_ruleset,
         )
         if assessment_purpose is None and saved_protocol:
             if "<active_assessment_action_protocol>" not in system_message:
@@ -1218,6 +1232,26 @@ def _assessment_only_member_context(
     )
 
 
+_TEAM_RULESET_HEADING = re.compile(r"(?m)^#\s+Team Ruleset\s*$")
+_NEXT_MARKDOWN_HEADING = re.compile(r"(?m)^#{1,6}\s+\S")
+
+
+def extract_team_ruleset(agent_md: str) -> str | None:
+    """Return the Guide Agent.md `# Team Ruleset` body when that section exists.
+
+    Missing heading means framework defaults apply. A present heading overrides
+    those defaults with its body (until the next Markdown heading).
+    """
+
+    match = _TEAM_RULESET_HEADING.search(agent_md)
+    if match is None:
+        return None
+    rest = agent_md[match.end() :]
+    next_heading = _NEXT_MARKDOWN_HEADING.search(rest)
+    body = rest[: next_heading.start()] if next_heading is not None else rest
+    return body.strip()
+
+
 def _member_system(
     agent_md: str,
     knowledge_json: str,
@@ -1226,6 +1260,7 @@ def _member_system(
     assessment_purpose: Literal["assessment_evaluate", "boundary_summarize"] | None = None,
     assessment_task_json: str | None = None,
     assessment_source_revoked: bool = False,
+    team_ruleset: str | None = None,
 ) -> str:
     if assessment_source_revoked:
         from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
@@ -1304,7 +1339,27 @@ def _member_system(
     else:
         from .chat_provider import ACCOUNT_MEMORY_RULE, AGENT_LIMIT_REPLY_RULE
 
-        message += f"\n{ACCOUNT_MEMORY_RULE}\n{AGENT_LIMIT_REPLY_RULE}"
+        # Framework defaults. A Guide Agent.md "# Team Ruleset" section, when
+        # present, is the only override channel — including assessment roles.
+        message += (
+            "\n<team_reply_protocol>\n"
+            "Default Team rules: every member reads the user's latest message and "
+            "replies. Calibrate length by relevance — fuller when closely related, "
+            "brief when weakly related, a short acknowledgment when off-topic.\n"
+        )
+        if team_ruleset is not None:
+            message += (
+                "The Guide/Leader Agent.md defines a # Team Ruleset. That section "
+                "overrides the defaults above when they conflict; follow it.\n"
+                "<team_ruleset>\n"
+                f"{team_ruleset}\n"
+                "</team_ruleset>\n"
+            )
+        else:
+            message += (
+                "The Guide/Leader Agent.md has no # Team Ruleset section, so keep these defaults.\n"
+            )
+        message += f"</team_reply_protocol>\n{ACCOUNT_MEMORY_RULE}\n{AGENT_LIMIT_REPLY_RULE}"
     return message
 
 

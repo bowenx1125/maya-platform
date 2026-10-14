@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.debates.playback.schemas import PlaybackStateDTO
+from app.modules.knowledge_sets.schemas import KnowledgeGenerationChatProgress
 from app.modules.learning.schemas import AssessmentRuntimeResult
 
 
@@ -60,6 +61,9 @@ class ChatSession(ClosedModel):
     created_at: datetime
     title: str | None = None
     pinned_at: datetime | None = None
+    # Owner Teacher Chat progress for the Agent's latest Knowledge generation,
+    # same under-message slot as Team assessment_stage. Null when nothing to show.
+    knowledge_generation: KnowledgeGenerationChatProgress | None = None
 
 
 class TeamChatParticipant(ClosedModel):
