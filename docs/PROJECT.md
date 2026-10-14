@@ -268,3 +268,10 @@ Coding-A Maya-T2-20261014: Rebirth already returns draft with preview ready
 and interaction window to closed. Final freeze rejects new barrages; Conclude
 (`interaction_finalized`) now locks Vote and Send in the open audience form.
 Human clicks remain unsigned. Debates list title and rules stay with coding-B.
+
+Integration (pre-deploy): PR #69 `a9339f8` (voiceAwareCause enroll/preview only)
+plus soft-deleted Set revive `2385347` and Prettier `35ef6af` on
+`cursor/integrate-pr69-revive-874e`. Left conflicting #38–#41 out. Local:
+runtime-tool knowledge 8/8, knowledge generation suites 39/39, frontend
+831 pass/1 skip, typecheck/lint (4 existing warnings), ruff/mypy on touched
+files, boundary probe.
