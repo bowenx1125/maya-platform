@@ -30,6 +30,7 @@ from app.modules.voices.service import _reconcile_enrollment
 from app.providers.dashscope import (
     DEFAULT_TARGET_MODEL_KEY,
     PRESET_TTS_MODEL_KEY,
+    QWEN_TTS_URL,
     DashScopeConfig,
     DashScopeTTSProvider,
 )
@@ -55,7 +56,9 @@ class _CaptureClient:
         return None
 
     def post(self, url: str, **kwargs: object) -> httpx.Response:
-        self.calls.append({"url": url, "json": kwargs.get("json")})
+        self.calls.append(
+            {"url": url, "headers": kwargs.get("headers"), "json": kwargs.get("json")}
+        )
         return httpx.Response(
             200,
             json=self.payload,
@@ -163,6 +166,12 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
         language="zh",
         target_model_key=PRESET_TTS_MODEL_KEY,
     )
+    assert len(flash.calls) == 1
+    assert flash.calls[0]["url"] == QWEN_TTS_URL
+    assert flash.calls[0]["headers"] == {
+        "Authorization": "Bearer fixture",
+        "X-DashScope-WorkSpace": "workspace123",
+    }
     assert flash.calls[0]["json"] == {
         "model": PRESET_TTS_MODEL_KEY,
         "input": {
@@ -175,6 +184,12 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
     clone = _CaptureClient(audio)
     monkeypatch.setattr("app.providers.dashscope._client", lambda **_kwargs: clone)
     provider.synthesize("A cloned sentence.", "clone-voice-id", language="en")
+    assert len(clone.calls) == 1
+    assert clone.calls[0]["url"] == QWEN_TTS_URL
+    assert clone.calls[0]["headers"] == {
+        "Authorization": "Bearer fixture",
+        "X-DashScope-WorkSpace": "workspace123",
+    }
     assert clone.calls[0]["json"] == {
         "model": DEFAULT_TARGET_MODEL_KEY,
         "input": {

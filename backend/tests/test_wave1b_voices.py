@@ -1294,9 +1294,14 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     assert result.request_id == "tts-request"
     assert tts_client_options == [{"read_timeout": dashscope.TTS_GENERATION_READ_TIMEOUT_SECONDS}]
     assert downloader.url and downloader.url.endswith("?Expires=1")
+    assert len(tts_capture.calls) == 1
     assert tts_capture.calls[0][0] == (
-        "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     )
+    assert tts_capture.calls[0][1]["headers"] == {
+        "Authorization": "Bearer fixture",
+        "X-DashScope-WorkSpace": "workspace123",
+    }
     assert tts_capture.calls[0][1]["json"] == {
         "model": "qwen3-tts-vc-2026-01-22",
         "input": {
@@ -1308,29 +1313,70 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
 
 
 @pytest.mark.parametrize(
-    ("workspace_id", "region"),
+    ("api_key", "workspace_id", "region"),
     [
-        ("workspace with spaces", "cn-beijing"),
-        ("workspace/with/slash", "cn-beijing"),
-        ("workspace123", "cn-shanghai"),
+        ("fixture", "workspace with spaces", "cn-beijing"),
+        ("fixture", "workspace/with/slash", "cn-beijing"),
+        ("fixture", "workspace123\r\nX-Forged: true", "cn-beijing"),
+        ("fixture", "workspace123\x00", "cn-beijing"),
+        ("fixture", "", "cn-beijing"),
+        ("fixture", "workspace123", "cn-shanghai"),
+        ("fixture", "workspace123", ""),
+        ("", "workspace123", "cn-beijing"),
     ],
 )
-def test_dashscope_tts_rejects_invalid_workspace_or_region_before_network(
+def test_dashscope_tts_rejects_invalid_configuration_before_network(
     monkeypatch: pytest.MonkeyPatch,
+    api_key: str,
     workspace_id: str,
     region: str,
 ) -> None:
-    def unexpected_client() -> _CaptureDashScopeClient:
+    def unexpected_client(**_options: float) -> _CaptureDashScopeClient:
         raise AssertionError("invalid TTS configuration must not construct a client")
 
     monkeypatch.setattr(dashscope, "_client", unexpected_client)
     config = dashscope.DashScopeConfig(
-        api_key="fixture",
+        api_key=api_key,
         workspace_id=workspace_id,
         region=region,
     )
     with pytest.raises(VoiceProviderError):
         dashscope.DashScopeTTSProvider(config).synthesize("A sentence.", "opaque-voice")
+
+
+def test_dashscope_tts_404_does_not_fallback_retry_or_download(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture = _CaptureDashScopeClient(
+        [
+            httpx.Response(
+                404,
+                json={"message": "private-provider-response"},
+                request=httpx.Request("POST", "https://provider.invalid"),
+            )
+        ]
+    )
+    monkeypatch.setattr(dashscope, "_client", lambda **_options: capture)
+    downloader = _CaptureDownloader()
+    provider = dashscope.DashScopeTTSProvider(
+        dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123"),
+        downloader=downloader,
+    )
+
+    with pytest.raises(TTSHTTPRejectedError) as caught:
+        provider.synthesize("A sentence.", "opaque-voice", language="auto")
+
+    assert caught.value.safe_code == "tts_http_rejected"
+    assert "private-provider-response" not in str(caught.value)
+    assert len(capture.calls) == 1
+    assert capture.calls[0][0] == (
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    )
+    assert capture.calls[0][1]["headers"] == {
+        "Authorization": "Bearer fixture",
+        "X-DashScope-WorkSpace": "workspace123",
+    }
+    assert downloader.url is None
 
 
 def test_dashscope_tts_uses_frozen_safe_failure_classifications(

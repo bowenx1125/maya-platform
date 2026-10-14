@@ -772,6 +772,15 @@ The intended local Demo supplier is Alibaba Cloud Model Studio in the existing
 `latest`, unversioned fallback, automatic model upgrade and cross-region fallback are
 forbidden. Model unavailability requires a contract revision.
 
+October 14 transport correction: Qwen-TTS synthesis uses the documented shared
+Beijing HTTP endpoint, with the validated workspace sent in
+`X-DashScope-WorkSpace`. Enrollment keeps its workspace endpoint. The old
+workspace-host synthesis assertion was incorrect: the supplier documents these
+model-family endpoints as non-interchangeable. This changes neither model nor
+region and adds no retry, redirect or download-policy exception. References:
+[official synthesis guide](https://help.aliyun.com/en/model-studio/non-realtime-tts-user-guide)
+and [official SDK workspace header](https://github.com/dashscope/dashscope-sdk-python/blob/main/dashscope/client/base_api.py).
+
 Official references checked 2026-08-30:
 
 - <https://help.aliyun.com/zh/model-studio/text-generation-model>

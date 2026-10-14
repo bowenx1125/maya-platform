@@ -56,9 +56,8 @@ OFFICIAL_HTTP_RESULT_HOSTS = frozenset({"dashscope-result-bj.oss-cn-beijing.aliy
 VOICE_CUSTOMIZATION_PATH = "/api/v1/services/audio/tts/customization"
 TTS_GENERATION_PATH = "/api/v1/services/aigc/multimodal-generation/generation"
 TTS_GENERATION_READ_TIMEOUT_SECONDS = 120.0
-# Kept as a documented shared-endpoint reference for callers that need to
-# compare the provider's public API shape.  Actual TTS requests use the
-# workspace endpoint derived from ``_base_url`` below.
+# Qwen-TTS uses the shared Beijing endpoint; the request header retains
+# the workspace that owns the enrolled voice.
 QWEN_TTS_URL = f"https://dashscope.aliyuncs.com{TTS_GENERATION_PATH}"
 
 
@@ -608,16 +607,18 @@ class DashScopeTTSProvider:
                 "language_type": language_type,
             },
         }
-        # Validate region/workspace before constructing a client or crossing
-        # the provider boundary.  The reviewed contract selects the Beijing
-        # workspace endpoint rather than relying on a shared host/header.
-        endpoint = f"{_base_url(self.config)}{TTS_GENERATION_PATH}"
+        if self.config.region != "cn-beijing" or not self.config.api_key:
+            raise VoiceProviderError("provider is not configured")
+        workspace = _safe_workspace(self.config.workspace_id)
         try:
             # Cloned synthesis can take longer than the generic provider read window.
             with _client(read_timeout=TTS_GENERATION_READ_TIMEOUT_SECONDS) as client:
                 response = client.post(
-                    endpoint,
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    QWEN_TTS_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.config.api_key}",
+                        "X-DashScope-WorkSpace": workspace,
+                    },
                     json=payload,
                 )
             document = _tts_json(response)

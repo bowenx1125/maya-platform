@@ -136,20 +136,17 @@ Integrated PDF eb7e142 and selected colleague UI 817282e via b648efc/8987cf8; UI
 Components UI removed1d92a2f; maintenance APIs stay. October 9 pushed the v14
 line, including the colleague merges below; `main` is that same line.
 
-Maya backend/frontend30db274 deployed only; other containers/env preserved. Schema0053,
-readiness200/integrity/FK passed, Agno3.0.11 public SDK. Backup20261005T110321Z healthy;
-sending/pending0, historical unknown3 not retried. Real synthetic RAG used1 charged
-Embedding and2 accepted charged Knowledge LLM calls. Gen2 resumed same run; AIseq3
-replaced manualseq2, preserving history. Public synthetic first send denied uniformly
-for consent,4 member failures/no ORM error/input enabled/0calls/charges. Real natural
-Team/assessment/Teacher statistics/download and Private exclusion still unaccepted.
-User explicitly authorized specified synthetic Team payload and new Private test-body
-read; old auto-review permission blocks resolved. The latest October7 instruction now authorizes a fresh dedicated synthetic four-Agent
-Team/multi-student real workflow. Older no-Team-creation instructions are superseded.
-Do not read unrelated Private Chat bodies or use real learner data.
-
-Cleanup (backup20261005T130151Z, integrity/FK OK) withdrew exact synthetic fixtures only.
-Provider ledger unchanged: 457 operations/457 charged requests (whole-runtime totals).
+October5 build30db274/schema0053: ready/integrity/FK passed, Agno3.0.11 public
+SDK; backups20261005T110321Z and130151Z healthy. Sending/pending0; historical
+unknown3 retained. Synthetic RAG used1 charged Embedding and2 accepted charged
+Knowledge calls; resumed Gen2/seq3 replaced seq2 with history. Consent-denied
+synthetic sends made0 calls. Cleanup withdrew exact synthetic fixtures only;
+runtime ledger457 operations/457 charged requests remained unchanged.
+October7 explicitly authorizes a fresh dedicated synthetic four-Agent Team and
+multi-student workflow, superseding the older no-Team instruction. Approved
+synthetic payload/Private test reads stay scoped; never use real learner data or
+unrelated Private Chat bodies. Natural Team/assessment/Teacher statistics,
+download and Private exclusion remain unaccepted.
 
 [Current UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) overrides prior UI
 planning: same Studyform/Brainform structure for both roles, permissions differ.
@@ -180,14 +177,12 @@ and statistics for that student, Maya Team name and time, not the raw chat.
 
 Teacher save/generate/regenerate authorizes exact Knowledge generation without a second
 confirmation page; ACL, policy, manifest, accounting, idempotency and unknown protections
-remain. Local runtime/generation/UI/attempt checks passed; they were not classroom load tests.
-UI A–K found Voices/help gaps. Deployed DB at that review remained 0053.
-Final full gates, browser, real Team/report, GitHub and rollout remained incomplete.
+remain. Local runtime/generation/UI checks passed, without classroom load acceptance.
+The October7 review (schema0053) left Voices/help and real Team/report open.
 
 ## Current delivery closure — October7
 
-Closure needs warm-paper UI, exact-source checks, four-Agent workflow, GitHub and
-scoped Docker/manual verification; public launch needs DNS/TLS/off-host evidence.
+Closure retains four-Agent workflow and real classroom acceptance.
 Teacher `generate_agent_knowledge` uses accepted receipts and wakes after commit;
 first published Agent generation needs no prior Set. Knowledge keeps RAG editor,
 pending-save lock and draft fence. Production profile rejects Demo/quick-login/
@@ -236,12 +231,7 @@ Brainform reads. Latest recorded production deploy 2026-10-14T040843Z: built
 38eb07a, backup maya-20261014T040843Z.sqlite3 (integrity ok), schema
 0064_active_debate_slot, HTTPS 200 and healthy containers; retained two backups.
 
-## October13 Debate and Voice acceptance repair
-
-entaiaki inputs: eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f.
-The prior candidate was undeployed; frontend809/1skip and public read-only API31/31
-passed, but Windows backend and active Voice/Rebirth/Live/Safari remained open.
-No new provider calls. October14 evidence below supersedes those partial checks.
+Integration refs: entaiaki eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f.
 
 ## October14 independent revalidation and release
 
@@ -270,3 +260,14 @@ Voice config/media tools present, no configured fallback. No new provider
 calls or content mutations. Voice recovery fixes do not prove supplier health.
 Windows browser automation stopped on unreliable URL identification: actual
 Voice upload/preview, Rebirth, active Live and visual clicks remain unaccepted.
+
+## October14 user-assisted Voice preview failure
+
+User uploaded a sample and clicked preview. Correlated production requests:
+enrollment200 at07:37:54Z, synthesis404 at07:38:00Z, then tts_http_rejected;
+duplicate log handlers are not duplicate requests. No assistant provider call.
+Billing remains unverified; preview_ready alone is not successful audio acceptance.
+The TTS workspace-host assumption conflicts with the supplier model-family guide;
+correct synthesis to its shared Beijing endpoint and validated workspace header,
+keeping enrollment, model/region, single dispatch and audio-download protection.
+Tests and post-release listening/confirmation/binding remain pending.
