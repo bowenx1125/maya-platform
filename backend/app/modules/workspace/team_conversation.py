@@ -39,17 +39,10 @@ from .schemas import (
     TeamChatSession,
 )
 
-# Both languages: nothing yet says which one the student writes in. Later
-# replies follow the student's language. Framework defaults apply unless the
-# Guide Agent.md defines a "# Team Ruleset" section that overrides them.
+# Chat-create greeting. It is not the assessment opening: that line, with the
+# first question, is spoken only after an attempt exists.
 MAYA_TEAM_OPENING = (
     "我是 Guide（Leader）。默认规则：全体成员都会读并回复你的消息，相关性高则多说、低则少说。"
-    "若我的 Agent.md 里有「# Team Ruleset」段落，则以该段落覆盖默认规则。"
-    "直接发消息即可。要叫某一位成员，输入 @ 再选。"
-    "\n\n"
-    "I'm the Guide (Leader). Defaults: every member reads and replies; fuller when relevant, "
-    'brief when not. If my Agent.md has a "# Team Ruleset" section, that section overrides '
-    "these defaults. Just send a message. To call one member, type @ and choose them."
 )
 
 
@@ -106,9 +99,9 @@ def _published_recipe_is_complete(db: Session, selection: FrozenTeamSelection) -
         return False
     from app.modules.learning.recipes import (
         _selected_questions,
-        declared_assessment_role,
         declared_recipe,
     )
+    from app.modules.workspace.formal_assessment import resolve_formal_assessment
 
     leader = next((member for member in selection.members if member.is_leader), None)
     if leader is None:
@@ -119,17 +112,14 @@ def _published_recipe_is_complete(db: Session, selection: FrozenTeamSelection) -
     try:
         if declared_recipe(leader_version.agent_md) is None:
             return False
-        # Same role rule as ensure_assessment_activity: the Leader may itself
-        # be one of the two executors.
-        roles: list[str] = []
-        for member in selection.members:
-            version = db.get(AgentVersion, member.agent_version_id)
-            if version is None:
-                return False
-            role = declared_assessment_role(version.agent_md)
-            if role is not None:
-                roles.append(role)
-        if roles.count("evaluator") != 1 or roles.count("boundary_summarizer") != 1:
+        # Speakers come from ## Formal assessment, not MAYA-ASSESSMENT-ROLE.
+        if (
+            resolve_formal_assessment(
+                leader_version.agent_md,
+                [(member.binding_id, member.display_name) for member in selection.members],
+            )
+            is None
+        ):
             return False
         set_ids = tuple(
             dict.fromkeys(
@@ -252,13 +242,13 @@ def create_team_conversation(
     if recipe_ready:
         if leader_participant is None:
             raise not_found()
-        _persist_maya_team_opening(db, row, leader_participant)
+        _persist_maya_team_opening(db, row, leader_participant, MAYA_TEAM_OPENING)
     db.flush()
     return row
 
 
 def _persist_maya_team_opening(
-    db: Session, row: Conversation, leader: ConversationParticipant
+    db: Session, row: Conversation, leader: ConversationParticipant, opening: str
 ) -> None:
     """The Leader's first message is stored with the Chat, before any model call."""
 
@@ -267,7 +257,7 @@ def _persist_maya_team_opening(
     routing = {"mode": "selected", "participant_ids": [leader.id]}
     request_hash = hashlib.sha256(
         json.dumps(
-            {"conversation_id": row.id, "message": MAYA_TEAM_OPENING},
+            {"conversation_id": row.id, "message": opening},
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -298,7 +288,7 @@ def _persist_maya_team_opening(
             participant_id=leader.id,
             ordinal=0,
             state="ready",
-            assistant_text=MAYA_TEAM_OPENING,
+            assistant_text=opening,
             sources_json="[]",
             safe_error_code=None,
             created_at=now,

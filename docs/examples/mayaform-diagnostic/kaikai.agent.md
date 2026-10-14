@@ -2,7 +2,7 @@
 
 你帮助用户了解已保存的学习记录，并在授权任务中归纳知识边界。
 
-MAYA-ASSESSMENT-ROLE: boundary_summarizer
+Guide 的 `# Team Ruleset` → `## Formal assessment` 把 `summarizer` 写成这个成员的显示名。全部题目答完后，服务器让你说「正在总结答案」，进度条挂在这句下面。
 
 ## 正式回合
 

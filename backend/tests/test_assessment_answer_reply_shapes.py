@@ -36,7 +36,6 @@ from app.modules.workspace.chat_team_provider import (
 )
 from app.modules.workspace.models import (
     Conversation,
-    ConversationParticipant,
     ConversationTurn,
     TeamTurnResult,
 )
@@ -201,17 +200,23 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
             database, owner_id=MAYA_ID, name=name, visibility="public"
         )
         version_ids.append(version_id)
+        from app.modules.workspace.formal_assessment import formal_ruleset_markdown
+
         lines = [f"# {name}"]
         if name == "Bowen":
             lines += [
                 f"MAYA-ASSESSMENT-RECIPE: {SUPPORTED_RECIPE_ID}",
                 QUESTION_SCOPE_DECLARATION,
                 COMPLETION_DECLARATION,
+                "",
+                formal_ruleset_markdown(
+                    answer_recorder="Jade",
+                    question_guide="Bowen",
+                    scorer="Jade",
+                    summarizer="Kaikai",
+                    student_round_order=("Bowen", "Jade", "Kaikai"),
+                ),
             ]
-        elif name == "Jade":
-            lines.append("MAYA-ASSESSMENT-ROLE: evaluator")
-        else:
-            lines.append("MAYA-ASSESSMENT-ROLE: boundary_summarizer")
         with database.session() as db:
             version = db.get(AgentVersion, version_id)
             version.agent_md = "\n".join(lines)
@@ -294,12 +299,6 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
             expected_publication_epoch=plan.publication_epoch,
         )
         db.commit()
-        leader = db.scalar(
-            select(ConversationParticipant).where(
-                ConversationParticipant.conversation_id == conversation_id,
-                ConversationParticipant.is_leader.is_(True),
-            )
-        )
         claim = runtime.claim_team_turn(
             db,
             settings,
@@ -310,6 +309,11 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
             message=MESSAGES.get(scenario, ANSWER),
             routing=TeamRouting(mode="auto"),
             actor_context=actor,
+        )
+        scorer_id = db.scalar(
+            select(TeamTurnResult.participant_id)
+            .where(TeamTurnResult.turn_id == claim.turn_id)
+            .order_by(TeamTurnResult.ordinal)
         )
 
     script, expected_answers, expected_state, expected_code = SCENARIOS[scenario]
@@ -339,9 +343,9 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
     ) -> Any:
         ordinal = calls[request.result_id]
         calls[request.result_id] += 1
-        if request.participant_id != leader.id:
-            body = _text("member prose")
-        elif ordinal < len(script):
+        if request.participant_id != scorer_id:
+            raise AssertionError("only the scorer is dispatched on a student answer")
+        if ordinal < len(script):
             kind, *rest = script[ordinal]
             if kind == "text":
                 body = _text(rest[0])
@@ -370,16 +374,18 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
         assert after is not None
         assert len(read_attempt_answers(db, actor, conversation_id)) == expected_answers
         assert after.progress.resolved_count == expected_answers
-        assert [(result.state, result.safe_error_code) for result in results] == [
-            (expected_state, expected_code)
-        ]
+        scorer = results[0]
+        assert (scorer.state, scorer.safe_error_code) == (expected_state, expected_code)
+        assert all("已记录" not in (result.assistant_text or "") for result in results[1:])
+        if expected_state == "failed":
+            assert all("已记录" not in (result.assistant_text or "") for result in results)
         if scenario in MESSAGES and expected_answers:
             [saved] = read_attempt_answers(db, actor, conversation_id)
             assert saved.answer_text == MESSAGES[scenario]
         elif scenario in MESSAGES:
             pass
         elif expected_state == "ready":
-            assert results[0].assistant_text.startswith("已记录你的回答。")
+            assert scorer.assistant_text == "已记录你的回答。"
             assert turn.state == "ready"
 
 

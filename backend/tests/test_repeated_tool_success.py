@@ -144,17 +144,23 @@ def test_a_repeated_successful_read_does_not_refuse_the_test(
             database, owner_id=MAYA_ID, name=name, visibility="public"
         )
         version_ids.append(version_id)
+        from app.modules.workspace.formal_assessment import formal_ruleset_markdown
+
         lines = [f"# {name}"]
         if name == "Bowen":
             lines += [
                 f"MAYA-ASSESSMENT-RECIPE: {SUPPORTED_RECIPE_ID}",
                 QUESTION_SCOPE_DECLARATION,
                 COMPLETION_DECLARATION,
+                "",
+                formal_ruleset_markdown(
+                    answer_recorder="Jade",
+                    question_guide="Bowen",
+                    scorer="Jade",
+                    summarizer="Kaikai",
+                    student_round_order=("Bowen", "Jade", "Kaikai"),
+                ),
             ]
-        elif name == "Jade":
-            lines.append("MAYA-ASSESSMENT-ROLE: evaluator")
-        else:
-            lines.append("MAYA-ASSESSMENT-ROLE: boundary_summarizer")
         with database.session() as db:
             version = db.get(AgentVersion, version_id)
             version.agent_md = "\n".join(lines)

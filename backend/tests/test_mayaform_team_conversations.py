@@ -679,12 +679,19 @@ def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
         evaluator = db.get(AgentVersion, versions[1])
         boundary = db.get(AgentVersion, versions[2])
         assert leader is not None and evaluator is not None and boundary is not None
+        from app.modules.workspace.formal_assessment import formal_ruleset_markdown
+
         leader.agent_md = (
             f"{leader.agent_md}\nMAYA-ASSESSMENT-RECIPE: {SUPPORTED_RECIPE_ID}\n"
-            f"{QUESTION_SCOPE_DECLARATION}\n{COMPLETION_DECLARATION}\n"
+            f"{QUESTION_SCOPE_DECLARATION}\n{COMPLETION_DECLARATION}\n\n"
+            + formal_ruleset_markdown(
+                answer_recorder="Evaluator",
+                question_guide="Leader",
+                scorer="Evaluator",
+                summarizer="Boundary",
+                student_round_order=("Evaluator", "Leader", "Boundary"),
+            )
         )
-        evaluator.agent_md += "\nMAYA-ASSESSMENT-ROLE: evaluator\n"
-        boundary.agent_md += "\nMAYA-ASSESSMENT-ROLE: boundary_summarizer\n"
         db.commit()
 
     incomplete = _create(client, csrf, {"kind": "team", "team_id": team_id})
@@ -698,9 +705,7 @@ def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
     ready = _create(client, csrf, {"kind": "team", "team_id": team_id})
     assert ready["entry_kind"] == "maya_team"
     assert ready["origin"] == "published_course_team"
-    assert ready["turns"][0]["member_results"][0]["assistant_text"].startswith(
-        "我是 Guide"
-    )
+    assert ready["turns"][0]["member_results"][0]["assistant_text"].startswith("我是 Guide")
     with database.session() as db:
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 

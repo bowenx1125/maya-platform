@@ -38,9 +38,6 @@ RECIPE_DECLARATION = re.compile(r"(?m)^MAYA-ASSESSMENT-RECIPE:\s*([a-z0-9][a-z0-
 SUPPORTED_RECIPE_ID = "mayaform.diagnostic.v1"
 QUESTION_SCOPE_DECLARATION = "MAYA-ASSESSMENT-QUESTIONS: all-current-authorized"
 COMPLETION_DECLARATION = "MAYA-ASSESSMENT-COMPLETION: every-selected-question-resolved"
-ASSESSMENT_ROLE_DECLARATION = re.compile(
-    r"(?m)^MAYA-ASSESSMENT-ROLE:\s*(evaluator|boundary_summarizer)\s*$"
-)
 
 
 def _canonical(value: Any) -> str:
@@ -71,18 +68,6 @@ def declared_recipe(agent_md: str) -> str | None:
             "before assessment can start.",
         )
     return recipe_id
-
-
-def declared_assessment_role(agent_md: str) -> str | None:
-    """Read an executor role from the immutable AgentVersion's explicit template."""
-
-    roles = ASSESSMENT_ROLE_DECLARATION.findall(agent_md)
-    if len(roles) > 1:
-        raise conflict(
-            "assessment_executor_role_invalid",
-            "A Team member can have only one assessment execution role.",
-        )
-    return roles[0] if roles else None
 
 
 def _question_sources_current(
@@ -565,6 +550,25 @@ def ensure_assessment_activity(
     if recipe_id is None:
         return None
 
+    roster_members = db.scalars(
+        select(TeamVersionMember).where(
+            TeamVersionMember.team_version_id == conversation.team_version_id
+        )
+    ).all()
+    from app.modules.workspace.formal_assessment import resolve_formal_assessment
+
+    # Speaker choice is the Formal section, not MAYA-ASSESSMENT-ROLE. An incomplete
+    # section raises before any attempt row is inserted.
+    roles = resolve_formal_assessment(
+        leader_version.agent_md,
+        [(member.id, member.display_name) for member in roster_members],
+    )
+    if roles is None:
+        raise conflict(
+            "assessment_ruleset_incomplete",
+            "Formal assessment needs a complete # Team Ruleset section naming the roster.",
+        )
+
     existing = db.scalar(
         select(AssessmentActivity).where(
             AssessmentActivity.publication_id == conversation.publication_id,
@@ -574,6 +578,14 @@ def ensure_assessment_activity(
         )
     )
     if existing is not None:
+        if (
+            existing.evaluator_team_member_id != roles.scorer_id
+            or existing.boundary_team_member_id != roles.summarizer_id
+        ):
+            raise conflict(
+                "assessment_ruleset_incomplete",
+                "Formal assessment needs a complete # Team Ruleset section naming the roster.",
+            )
         return existing
 
     selection = resolve_chat_entry(
@@ -591,30 +603,17 @@ def ensure_assessment_activity(
     ):
         raise not_found()
 
-    declared_roles: dict[str, tuple[str, str]] = {}
-    for member in db.scalars(
-        select(TeamVersionMember).where(
-            TeamVersionMember.team_version_id == selection.team_version_id
-        )
-    ).all():
+    for member in roster_members:
         version = db.get(AgentVersion, member.agent_version_id)
         if version is None or version.state != "published" or version.agent_id != member.agent_id:
             raise not_found()
-        role = declared_assessment_role(version.agent_md)
-        if role is None:
-            continue
-        if role in declared_roles:
-            raise conflict(
-                "assessment_executor_role_ambiguous",
-                "The published Team must bind exactly one member to each assessment role.",
-            )
-        declared_roles[role] = (member.id, version.id)
-    evaluator = declared_roles.get("evaluator")
-    boundary = declared_roles.get("boundary_summarizer")
-    if evaluator is None or boundary is None or evaluator[0] == boundary[0]:
+    by_id = {member.id: member for member in roster_members}
+    scorer = by_id.get(roles.scorer_id)
+    summarizer = by_id.get(roles.summarizer_id)
+    if scorer is None or summarizer is None:
         raise conflict(
-            "assessment_executor_role_missing",
-            "The published Team must bind separate evaluator and boundary summarizer members.",
+            "assessment_ruleset_incomplete",
+            "Formal assessment needs a complete # Team Ruleset section naming the roster.",
         )
 
     set_ids = tuple(
@@ -649,10 +648,10 @@ def ensure_assessment_activity(
         publication_id=conversation.publication_id,
         recipe_id=recipe_id,
         recipe_version_id=leader_version.id,
-        evaluator_team_member_id=evaluator[0],
-        evaluator_agent_version_id=evaluator[1],
-        boundary_team_member_id=boundary[0],
-        boundary_agent_version_id=boundary[1],
+        evaluator_team_member_id=scorer.id,
+        evaluator_agent_version_id=scorer.agent_version_id,
+        boundary_team_member_id=summarizer.id,
+        boundary_agent_version_id=summarizer.agent_version_id,
         publisher_user_id=conversation.team_owner_user_id or "",
         questions_hash=_hash(_canonical(manifest)),
         question_selection_revision=1,

@@ -28,6 +28,7 @@ from app.modules.runtime_tools.models import RuntimeToolReceipt
 from app.modules.teams.models import TeamMemberInvokeGrant, TeamVersionMember
 from app.modules.teams.service import resolve_frozen_chat_selection
 
+from .formal_assessment import FormalRoles
 from .models import (
     Conversation,
     ConversationParticipant,
@@ -76,6 +77,8 @@ class MemberRequest:
     assessment_task_json: str | None = None
     assessment_source_revoked: bool = False
     assessment_revoked_scope: RevokedAssessmentDispatchScope | None = None
+    # Server slot for this result. Not a Tool and not set by the model.
+    formal_role: Literal["question_guide", "scorer", "summarizer"] | None = None
 
 
 @dataclass(frozen=True)
@@ -449,6 +452,190 @@ def persist_assessment_knowledge_update_notice(
     return turn
 
 
+def _active_attempt(db: Session, row: Conversation) -> AssessmentAttempt | None:
+    return db.scalar(
+        select(AssessmentAttempt).where(
+            AssessmentAttempt.source_conversation_id == row.id,
+            AssessmentAttempt.actor_user_id == row.user_id,
+            AssessmentAttempt.status.in_(("in_progress", "paused")),
+        )
+    )
+
+
+def _formal_roles_for_conversation(db: Session, row: Conversation) -> FormalRoles | None:
+    from .formal_assessment import resolve_formal_assessment
+
+    guide = db.scalar(
+        select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == row.id,
+            ConversationParticipant.is_leader.is_(True),
+        )
+    )
+    version = db.get(AgentVersion, guide.agent_version_id) if guide is not None else None
+    if version is None:
+        return None
+    members = db.scalars(
+        select(TeamVersionMember).where(TeamVersionMember.team_version_id == row.team_version_id)
+    ).all()
+    return resolve_formal_assessment(
+        version.agent_md, [(member.id, member.display_name) for member in members]
+    )
+
+
+def _attempt_question_presented(db: Session, attempt_id: str) -> bool:
+    from app.modules.learning.models import AssessmentAttemptQuestion
+
+    return (
+        db.scalar(
+            select(AssessmentAttemptQuestion.id)
+            .where(
+                AssessmentAttemptQuestion.attempt_id == attempt_id,
+                AssessmentAttemptQuestion.presented_at.is_not(None),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _formal_opening_stored(db: Session, conversation_id: str) -> bool:
+    from .formal_assessment import OPENING_PREFIX
+
+    text = db.scalar(
+        select(TeamTurnResult.assistant_text)
+        .join(ConversationTurn, ConversationTurn.id == TeamTurnResult.turn_id)
+        .where(
+            ConversationTurn.conversation_id == conversation_id,
+            TeamTurnResult.assistant_text.startswith(OPENING_PREFIX),
+        )
+        .limit(1)
+    )
+    return text is not None
+
+
+def _present_current_question(
+    db: Session, actor_context: AuthContext, conversation_id: str
+) -> None:
+    from app.modules.learning.attempts import (
+        get_assessment_runtime_context,
+        mark_attempt_question_presented,
+    )
+
+    context = get_assessment_runtime_context(db, actor_context, conversation_id)
+    if context is None or context.current_question is None or context.progress.presented_count > 0:
+        return
+    mark_attempt_question_presented(
+        db,
+        actor_context,
+        conversation_id,
+        question_version_id=context.current_question.question_version_id,
+    )
+
+
+def _formal_slot(
+    db: Session,
+    row: Conversation,
+    result: TeamTurnResult,
+    participant: ConversationParticipant,
+    assessment_purpose: Literal["assessment_evaluate", "boundary_summarize"] | None,
+) -> Literal["question_guide", "scorer", "summarizer"] | None:
+    """Which formal micro-round this result is. Executor turns keep their purpose."""
+
+    if assessment_purpose is not None:
+        return None
+    try:
+        roles = _formal_roles_for_conversation(db, row)
+    except PlatformError:
+        return None
+    if roles is None:
+        return None
+    # Only a ledger-selected micro-round is scripted. An auto turn, including
+    # the one that starts the attempt, keeps the ordinary action reply.
+    turn = db.get(ConversationTurn, result.turn_id)
+    try:
+        routed = json.loads(turn.routing_json or "{}") if turn is not None else {}
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(routed, dict) or routed.get("mode") != "selected":
+        return None
+    attempt = _active_attempt(db, row)
+    in_progress = attempt is not None and attempt.status == "in_progress"
+    if not in_progress:
+        # Abandon clears the ledger before the Guide settles. That turn still
+        # owes the Scorer and Guide lines; the next message does not.
+        projection = _assessment_result_for_turn(db, turn) if turn is not None else None
+        if projection is None or projection.response_key not in {
+            "assessment.abandoned",
+            "assessment.abandoned_and_restarted",
+        }:
+            return None
+        if participant.team_member_id == roles.scorer_id and result.ordinal == 0:
+            return "scorer"
+        if participant.team_member_id == roles.question_guide_id:
+            return "question_guide"
+        return None
+    same_person = (
+        participant.team_member_id == roles.question_guide_id
+        and participant.team_member_id == roles.scorer_id
+    )
+    if same_person:
+        attempt = _active_attempt(db, row)
+        presented = attempt is not None and _attempt_question_presented(db, attempt.id)
+        if not presented:
+            return "question_guide"
+        return "scorer" if result.ordinal == 0 else "question_guide"
+    if participant.team_member_id == roles.scorer_id:
+        return "scorer"
+    if participant.team_member_id == roles.question_guide_id:
+        return "question_guide"
+    if participant.team_member_id == roles.summarizer_id:
+        return "summarizer"
+    return None
+
+
+def _formal_micro_round_participants(
+    db: Session, row: Conversation, actor_context: AuthContext | None
+) -> list[ConversationParticipant] | None:
+    """Speakers for one active formal turn: opening Guide, or Scorer then Guide.
+
+    None leaves ordinary routing in place. A live attempt with an incomplete
+    Formal section fails closed and does not add another attempt.
+    """
+
+    if actor_context is None or actor_context.user.id != row.user_id:
+        return None
+    attempt = _active_attempt(db, row)
+    if attempt is None or attempt.status != "in_progress":
+        return None
+    roles = _formal_roles_for_conversation(db, row)
+    if roles is None:
+        raise conflict(
+            "assessment_ruleset_incomplete",
+            "Formal assessment needs a complete # Team Ruleset section naming the roster.",
+        )
+    participants = list(
+        db.scalars(
+            select(ConversationParticipant)
+            .where(ConversationParticipant.conversation_id == row.id)
+            .order_by(ConversationParticipant.position)
+        )
+    )
+    by_member = {participant.team_member_id: participant for participant in participants}
+    guide = by_member.get(roles.question_guide_id)
+    scorer = by_member.get(roles.scorer_id)
+    if guide is None or scorer is None:
+        raise conflict(
+            "assessment_ruleset_incomplete",
+            "Formal assessment needs a complete # Team Ruleset section naming the roster.",
+        )
+    if not _attempt_question_presented(db, attempt.id):
+        if _formal_opening_stored(db, row.id):
+            _present_current_question(db, actor_context, row.id)
+        else:
+            return [guide]
+    return [scorer, guide]
+
+
 def claim_team_turn(
     db: Session,
     settings: Settings,
@@ -507,6 +694,16 @@ def claim_team_turn(
         participants = [leader]
     else:
         _validate_members(db, row, participants)
+        # ACL already passed. An active assessment ledger then chooses speakers;
+        # the Team Ruleset does not.
+        micro = _formal_micro_round_participants(db, row, actor_context)
+        if micro is not None:
+            _validate_members(db, row, list(dict.fromkeys(micro)))
+            normalized = TeamRouting(
+                mode="selected",
+                participant_ids=[UUID(participant.id) for participant in dict.fromkeys(micro)],
+            )
+            participants = micro
     route_json = _canonical(normalized.model_dump(mode="json"))
     if settings.llm_provider not in {"mock", "dashscope"}:
         raise conflict(
@@ -1038,19 +1235,24 @@ def _start_member(
                 claim_token=token,
                 selected_binding_ids=selected_binding_ids,
             )
-        team_ruleset: str | None = None
-        if not assessment_active and assessment_purpose is None:
-            guide = db.scalar(
-                select(ConversationParticipant).where(
-                    ConversationParticipant.conversation_id == row.id,
-                    ConversationParticipant.is_leader.is_(True),
-                )
+        # The Team Ruleset is always injected. ACL and the assessment ledger
+        # outrank it; see _member_system.
+        guide = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == row.id,
+                ConversationParticipant.is_leader.is_(True),
             )
-            guide_version = (
-                db.get(AgentVersion, guide.agent_version_id) if guide is not None else None
-            )
-            if guide_version is not None:
-                team_ruleset = extract_team_ruleset(guide_version.agent_md)
+        )
+        guide_version = db.get(AgentVersion, guide.agent_version_id) if guide is not None else None
+        team_ruleset = (
+            extract_team_ruleset(guide_version.agent_md) if guide_version is not None else None
+        )
+        result_row = db.get(TeamTurnResult, result_id)
+        formal_role = (
+            _formal_slot(db, row, result_row, participant, assessment_purpose)
+            if result_row is not None
+            else None
+        )
         system_message = _member_system(
             context.agent_md,
             context.knowledge_json,
@@ -1088,6 +1290,7 @@ def _start_member(
             assessment_task_json=assessment_task_json,
             assessment_source_revoked=assessment_source_revoked,
             assessment_revoked_scope=assessment_revoked_scope,
+            formal_role=formal_role,
         )
 
 
@@ -1232,24 +1435,12 @@ def _assessment_only_member_context(
     )
 
 
-_TEAM_RULESET_HEADING = re.compile(r"(?m)^#\s+Team Ruleset\s*$")
-_NEXT_MARKDOWN_HEADING = re.compile(r"(?m)^#{1,6}\s+\S")
-
-
 def extract_team_ruleset(agent_md: str) -> str | None:
-    """Return the Guide Agent.md `# Team Ruleset` body when that section exists.
+    """Return the Guide Agent.md `# Team Ruleset` body, including its subsections."""
 
-    Missing heading means framework defaults apply. A present heading overrides
-    those defaults with its body (until the next Markdown heading).
-    """
+    from .formal_assessment import extract_team_ruleset as _extract
 
-    match = _TEAM_RULESET_HEADING.search(agent_md)
-    if match is None:
-        return None
-    rest = agent_md[match.end() :]
-    next_heading = _NEXT_MARKDOWN_HEADING.search(rest)
-    body = rest[: next_heading.start()] if next_heading is not None else rest
-    return body.strip()
+    return _extract(agent_md)
 
 
 def _member_system(
@@ -1265,6 +1456,9 @@ def _member_system(
     if assessment_source_revoked:
         from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
 
+        # This wire is compared and disclosed as the exact protocol. A Ruleset
+        # suffix would fail that check, so the closed revoked turn stays exact.
+        del team_ruleset
         return ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
     message = (
         "Reply in the language of the user's latest sentence, unless they ask you to "
@@ -1311,6 +1505,7 @@ def _member_system(
             "</assessment_executor_private_context>\n"
             "</assessment_executor_instruction>"
         )
+        message += _ruleset_precedence_block(team_ruleset)
     elif assessment_active:
         message += (
             "\n<active_assessment_action_protocol>\n"
@@ -1333,14 +1528,22 @@ def _member_system(
             "that phrase is start_request and every completed record stays. Never edit a saved "
             "answer from another attempt. A request to remember is not an answer: call "
             "write_agent_memory with an exact span of that request. Do not put assessment "
-            "answers, scores, or Rubric into account memory.\n"
+            "answers, scores, or Rubric into account memory. "
+            "assessment_active is a server ledger flag. No Tool can set it. Do not write "
+            "已记录 unless assessment_action has already returned; the server writes that "
+            "fact sentence from the Tool receipt. The question Guide does not call a write "
+            "Tool. Authorization (ACL) overrides this ledger, and this ledger overrides the "
+            "Team Ruleset.\n"
             "</active_assessment_action_protocol>"
         )
+        message += _ruleset_precedence_block(team_ruleset)
     else:
         from .chat_provider import ACCOUNT_MEMORY_RULE, AGENT_LIMIT_REPLY_RULE
 
-        # Framework defaults. A Guide Agent.md "# Team Ruleset" section, when
-        # present, is the only override channel — including assessment roles.
+        # Ordinary chat. ## Informal may override who replies and length.
+        # A live assessment ledger replaces this path entirely.
+        from .formal_assessment import extract_informal_section
+
         message += (
             "\n<team_reply_protocol>\n"
             "Default Team rules: every member reads the user's latest message and "
@@ -1349,18 +1552,40 @@ def _member_system(
         )
         if team_ruleset is not None:
             message += (
-                "The Guide/Leader Agent.md defines a # Team Ruleset. That section "
-                "overrides the defaults above when they conflict; follow it.\n"
+                "The Guide/Leader Agent.md defines a # Team Ruleset. "
+                "An optional ## Informal section overrides the defaults for who replies "
+                "and how long they speak. ## Formal assessment does not change ordinary chat.\n"
                 "<team_ruleset>\n"
                 f"{team_ruleset}\n"
                 "</team_ruleset>\n"
             )
+            informal = extract_informal_section(team_ruleset)
+            if informal:
+                message += f"<team_informal>\n{informal}\n</team_informal>\n"
         else:
             message += (
                 "The Guide/Leader Agent.md has no # Team Ruleset section, so keep these defaults.\n"
             )
-        message += f"</team_reply_protocol>\n{ACCOUNT_MEMORY_RULE}\n{AGENT_LIMIT_REPLY_RULE}"
+        message += (
+            "Authorization (ACL) overrides an assessment ledger, and that ledger "
+            "overrides this Team Ruleset. assessment_active is a server ledger flag; "
+            "no Tool can set it.\n"
+            f"</team_reply_protocol>\n{ACCOUNT_MEMORY_RULE}\n{AGENT_LIMIT_REPLY_RULE}"
+        )
     return message
+
+
+def _ruleset_precedence_block(team_ruleset: str | None) -> str:
+    if not team_ruleset:
+        return ""
+    return (
+        "\n<team_ruleset>\n"
+        f"{team_ruleset}\n"
+        "</team_ruleset>\n"
+        "Precedence: authorization (ACL) overrides the assessment ledger, and the "
+        "assessment ledger overrides this Team Ruleset. assessment_active is a server "
+        "ledger flag; no Tool can set it.\n"
+    )
 
 
 def invoke_mock_team_model(
@@ -1466,6 +1691,202 @@ def _safe_code(exc: Exception) -> str:
     )
 
 
+def _without_unreceipted_recorded(text: str) -> str:
+    """Drop any line that claims a record unless the caller already checked a receipt."""
+
+    return "\n".join(line for line in text.splitlines() if "已记录" not in line).strip()
+
+
+def _scorer_micro_reply(
+    db: Session,
+    row: Conversation,
+    assessment_result: AssessmentRuntimeResult | None,
+    reply: MemberReply | None,
+) -> tuple[MemberReply | None, Exception | None]:
+    """Scorer text is the server fact for a write-tool receipt, never model prose."""
+
+    from .chat_provider import (
+        assessment_reply_chinese,
+        assessment_safe_reply_text,
+        conversation_user_texts,
+    )
+    from .formal_assessment import ABANDON_SCORER, RECORDED_FACT
+
+    del reply
+    if assessment_result is None:
+        return None, PlatformError(
+            "assessment_action_required",
+            "Continue the current assessment action or pause this attempt.",
+            409,
+        )
+    if assessment_result.response_key in {
+        "assessment.abandoned",
+        "assessment.abandoned_and_restarted",
+    }:
+        return MemberReply(ABANDON_SCORER), None
+    if assessment_result.response_key in {
+        "assessment.answer_recorded",
+        "assessment.answer_recorded_restricted",
+    }:
+        return MemberReply(RECORDED_FACT), None
+    user_texts = conversation_user_texts(db, row.id)
+    text = _without_unreceipted_recorded(
+        assessment_safe_reply_text(
+            assessment_result,
+            user_texts,
+            chinese=assessment_reply_chinese(db, row.id, user_texts),
+        )
+    )
+    if not text:
+        return None, PlatformError(
+            "assessment_action_required",
+            "Continue the current assessment action or pause this attempt.",
+            409,
+        )
+    return MemberReply(text), None
+
+
+def _guide_micro_script(
+    db: Session,
+    row: Conversation,
+    turn: ConversationTurn,
+    actor_context: AuthContext | None,
+) -> str | None:
+    """Server lines for the Guide. None when the Scorer has no Tool receipt."""
+
+    from app.modules.learning.attempts import (
+        awaits_follow_up_round,
+        get_assessment_runtime_context,
+        mark_attempt_question_presented,
+    )
+
+    from .formal_assessment import ABANDON_GUIDE, ALL_DONE_GUIDE, opening_line
+
+    attempt = _active_attempt(db, row)
+    if attempt is None or attempt.status != "in_progress":
+        # Abandon has already cleared the ledger; the Guide still owes the closing line
+        # when this turn recorded it.
+        projection = _assessment_result_for_turn(db, turn)
+        if projection is not None and projection.response_key in {
+            "assessment.abandoned",
+            "assessment.abandoned_and_restarted",
+        }:
+            return ABANDON_GUIDE
+        return None
+    if not _attempt_question_presented(db, attempt.id):
+        prompt = None
+        if actor_context is not None:
+            context = get_assessment_runtime_context(db, actor_context, row.id)
+            if context is not None and context.current_question is not None:
+                prompt = context.current_question.prompt
+                mark_attempt_question_presented(
+                    db,
+                    actor_context,
+                    row.id,
+                    question_version_id=context.current_question.question_version_id,
+                )
+        return opening_line(prompt)
+    projection = _assessment_result_for_turn(db, turn)
+    if projection is None:
+        # An opening that was paused before it spoke has no scorer on the turn.
+        # A later answer may already have presented the question; still say it.
+        roles = _formal_roles_for_conversation(db, row)
+        scorer_on_turn = False
+        if roles is not None:
+            scorer_on_turn = (
+                db.scalar(
+                    select(TeamTurnResult.id)
+                    .join(
+                        ConversationParticipant,
+                        ConversationParticipant.id == TeamTurnResult.participant_id,
+                    )
+                    .where(
+                        TeamTurnResult.turn_id == turn.id,
+                        ConversationParticipant.team_member_id == roles.scorer_id,
+                    )
+                )
+                is not None
+            )
+        if scorer_on_turn:
+            return None
+        context = (
+            get_assessment_runtime_context(db, actor_context, row.id)
+            if actor_context is not None
+            else None
+        )
+        question = context.current_question if context is not None else None
+        if question is not None:
+            return f"第 {question.ordinal + 1} 题：{question.prompt}"
+        return opening_line(None)
+    if projection.response_key in {
+        "assessment.abandoned",
+        "assessment.abandoned_and_restarted",
+    }:
+        return ABANDON_GUIDE
+    progress = projection.context.progress
+    done = progress.question_count > 0 and progress.resolved_count >= progress.question_count
+    if done and not awaits_follow_up_round(db, str(projection.context.attempt.id)):
+        return ALL_DONE_GUIDE
+    if done:
+        return "请稍候。"
+    question = projection.context.current_question
+    if question is not None:
+        return f"第 {question.ordinal + 1} 题：{question.prompt}"
+    return "我们继续测试。"
+
+
+def _append_formal_summarizer(db: Session, row: Conversation, turn: ConversationTurn) -> None:
+    from .formal_assessment import SUMMARIZER_LINE
+
+    roles = _formal_roles_for_conversation(db, row)
+    if roles is None:
+        return
+    participant = db.scalar(
+        select(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == row.id,
+            ConversationParticipant.team_member_id == roles.summarizer_id,
+        )
+    )
+    if participant is None:
+        raise conflict(
+            "assessment_ruleset_incomplete",
+            "Formal assessment needs a complete # Team Ruleset section naming the roster.",
+        )
+    already = db.scalar(
+        select(TeamTurnResult.id).where(
+            TeamTurnResult.turn_id == turn.id,
+            TeamTurnResult.assistant_text == SUMMARIZER_LINE,
+        )
+    )
+    if already is not None:
+        return
+    ordinal = int(
+        db.scalar(
+            select(func.coalesce(func.max(TeamTurnResult.ordinal), -1)).where(
+                TeamTurnResult.turn_id == turn.id
+            )
+        )
+        or 0
+    )
+    now = datetime.now(UTC)
+    result = TeamTurnResult(
+        id=str(uuid4()),
+        turn_id=turn.id,
+        conversation_id=row.id,
+        participant_id=participant.id,
+        ordinal=ordinal + 1,
+        state="ready",
+        assistant_text=SUMMARIZER_LINE,
+        sources_json="[]",
+        safe_error_code=None,
+        created_at=now,
+        completed_at=now,
+    )
+    db.add(result)
+    db.flush()
+    _append_event(db, turn, "member_result", result.id)
+
+
 def settle_member(
     factory: SessionFactory,
     turn_id: str,
@@ -1507,7 +1928,32 @@ def settle_member(
             )
             is not None
         )
-        if assessment_purpose is not None and error is None:
+        formal_role = (
+            _formal_slot(db, row, result, participant, assessment_purpose)
+            if participant is not None
+            else None
+        )
+        if formal_role is not None and assessment_revoked_scope is not None:
+            # A revoked source keeps the closed owner-action reply.
+            formal_role = None
+        append_summarizer = False
+        if formal_role == "question_guide" and error is None:
+            from .formal_assessment import ALL_DONE_GUIDE
+
+            script = _guide_micro_script(db, row, turn, actor_context)
+            if script is None:
+                reply = None
+                error = PlatformError(
+                    "assessment_action_required",
+                    "Continue the current assessment action or pause this attempt.",
+                    409,
+                )
+            else:
+                reply = MemberReply(_without_unreceipted_recorded(script))
+                append_summarizer = script == ALL_DONE_GUIDE
+        elif formal_role == "scorer" and error is None:
+            reply, error = _scorer_micro_reply(db, row, assessment_result, reply)
+        elif assessment_purpose is not None and error is None:
             if _assessment_executor_write_saved(db, turn, result, assessment_purpose):
                 if assessment_purpose == "assessment_evaluate":
                     from .chat_provider import assessment_reply_chinese, conversation_user_texts
@@ -1654,6 +2100,8 @@ def settle_member(
             )
         result.completed_at = datetime.now(UTC)
         _append_event(db, turn, "member_result", result.id)
+        if append_summarizer and error is None:
+            _append_formal_summarizer(db, row, turn)
         _finish_run(db, row, turn)
     return True
 
@@ -2099,10 +2547,25 @@ def _assessment_result_for_turn(
     )
 
 
-def execute_member(factory: SessionFactory, turn_id: str, token: str, result_id: str) -> None:
+def execute_member(
+    factory: SessionFactory,
+    turn_id: str,
+    token: str,
+    result_id: str,
+    actor_context: AuthContext | None = None,
+) -> None:
     try:
-        request = _start_member(factory, turn_id, token, result_id)
+        request = _start_member(factory, turn_id, token, result_id, actor_context=actor_context)
         if request is None or request.already_ready:
+            return
+        if request.formal_role == "question_guide":
+            settle_member(
+                factory,
+                turn_id,
+                token,
+                result_id,
+                actor_context=actor_context,
+            )
             return
         reply = invoke_mock_member(request)
         settle_member(factory, turn_id, token, result_id, reply=reply)
@@ -2143,7 +2606,9 @@ def execute_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     execute_real_member(factory, claim, result_id)
             return
     for result_id in result_ids(factory, claim.turn_id):
-        execute_member(factory, claim.turn_id, claim.token, result_id)
+        execute_member(
+            factory, claim.turn_id, claim.token, result_id, actor_context=claim.actor_context
+        )
 
 
 def _pending_natural_assessment_resume(
@@ -2395,6 +2860,7 @@ def _dispatch_provider(
             and request.assessment_active
             and not request.assessment_source_revoked
             and request.assessment_revoked_scope is None
+            and request.formal_role != "question_guide"
         ):
             # An assessment turn without this call is rejected as
             # assessment_action_required, so the call cannot be optional: left
@@ -2483,6 +2949,20 @@ def _assessment_tool_name(request: MemberRequest) -> str:
 def _assessment_scoped_tool_schemas(
     tools: list[dict[str, Any]] | None, request: MemberRequest
 ) -> list[dict[str, Any]] | None:
+    if request.formal_role == "question_guide":
+        from .formal_assessment import WRITE_TOOLS
+
+        if not isinstance(tools, list):
+            return []
+        return [
+            tool
+            for tool in tools
+            if not (
+                isinstance(tool, dict)
+                and isinstance((function := tool.get("function")), dict)
+                and function.get("name") in WRITE_TOOLS
+            )
+        ]
     if not request.assessment_active:
         return tools
     allowed = _assessment_tool_name(request)
@@ -2559,7 +3039,17 @@ def execute_real_member(factory: SessionFactory, claim: TeamClaim, result_id: st
             settings=claim.settings,
             actor_context=claim.actor_context,
         )
-        if request is None:
+        if request is None or request.already_ready:
+            return
+        if request.formal_role == "question_guide":
+            # The Guide speaks server text and does not call a write Tool.
+            settle_member(
+                factory,
+                claim.turn_id,
+                claim.token,
+                result_id,
+                actor_context=claim.actor_context,
+            )
             return
         with factory() as db:
             current = _current_run(db, claim.turn_id, claim.token)
@@ -2716,10 +3206,8 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                 )
             tool_context = (row.id, turn.id)
         if leader.assessment_active:
-            # During an open test the Leader records answers alone. Scoring and
-            # the summary run as the server's own executor turns; a member
-            # called into the student's turn is not authorized there and only
-            # fails ("Your answer was not recorded") or hangs the turn.
+            # Auto routing still starts at the leader. A live formal attempt
+            # does not use this path: the ledger selects Scorer then Guide.
             specs = [spec for spec in specs if spec.is_leader]
         leader = replace(
             leader,

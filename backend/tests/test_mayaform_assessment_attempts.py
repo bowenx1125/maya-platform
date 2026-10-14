@@ -600,18 +600,25 @@ def _create_formal_conversation(
     db.flush()
     leader_version = db.get(AgentVersion, leader.agent_version_id)
     assert leader_version is not None
+    from app.modules.workspace.formal_assessment import formal_ruleset_markdown
+
+    ordered = list(members)
+    leader_name = leader.display_name
+    others = [member.display_name for member in ordered if not member.is_leader]
+    scorer_name = others[0]
+    summarizer_name = others[1] if len(others) > 1 else leader_name
     leader_version.agent_md = (
         f"{leader_version.agent_md}\n\nMAYA-ASSESSMENT-RECIPE: {SUPPORTED_RECIPE_ID}\n"
-        f"{QUESTION_SCOPE_DECLARATION}\n{COMPLETION_DECLARATION}\n"
-        "MAYA-ASSESSMENT-ROLE: boundary_summarizer\n"
+        f"{QUESTION_SCOPE_DECLARATION}\n{COMPLETION_DECLARATION}\n\n"
+        + formal_ruleset_markdown(
+            answer_recorder=scorer_name,
+            question_guide=leader_name,
+            scorer=scorer_name,
+            summarizer=summarizer_name,
+            student_round_order=tuple(member.display_name for member in ordered),
+        )
     )
     for member in members:
-        if not member.is_leader:
-            executor_version = db.get(AgentVersion, member.agent_version_id)
-            assert executor_version is not None
-            executor_version.agent_md = (
-                f"{executor_version.agent_md}\n\nMAYA-ASSESSMENT-ROLE: evaluator\n"
-            )
         grant = TeamMemberInvokeGrant(
             id=str(uuid4()),
             publication_id=conversation.publication_id,

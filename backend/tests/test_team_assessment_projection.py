@@ -102,12 +102,12 @@ def test_active_assessment_never_persists_free_form_member_output(
             routing=TeamRouting(mode="selected", participant_ids=[leader.id]),
             actor_context=actor,
         )
-    result_id = runtime.result_ids(database.session_factory, claim.turn_id)[0]
+    result_ids = runtime.result_ids(database.session_factory, claim.turn_id)
     request = runtime._start_member(
         database.session_factory,
         claim.turn_id,
         claim.token,
-        result_id,
+        result_ids[0],
         settings=settings,
         actor_context=actor,
     )
@@ -116,35 +116,39 @@ def test_active_assessment_never_persists_free_form_member_output(
     assert request.assessment_purpose is None
     assert "<active_assessment_action_protocol>" in request.system_message
     assert "assessment_action" in request.system_message
+    assert "assessment_active is a server ledger flag" in request.system_message
     assert "Internal answer" not in request.system_message
     assert request.knowledge_json == "{}"
     assert request.sources == ()
-    assert runtime.settle_member(
-        database.session_factory,
-        claim.turn_id,
-        claim.token,
-        result_id,
-        reply=runtime.MemberReply("This free-form answer must never reach the student."),
-    )
-    with database.session() as db:
-        result = db.get(TeamTurnResult, result_id)
-        turn = db.get(ConversationTurn, claim.turn_id)
-        assert result is not None and turn is not None
-        assert result.state == "failed"
-        assert result.assistant_text is None
-        assert result.sources_json == "[]"
-        assert result.safe_error_code == "assessment_action_required"
-        assert turn.state == "failed"
-        assert "free-form answer" not in (result.assistant_text or "")
-        assert (
-            db.scalar(
-                select(TeamTurnResult.id).where(
-                    TeamTurnResult.turn_id == turn.id,
-                    TeamTurnResult.assistant_text.is_not(None),
-                )
-            )
-            is None
+    for result_id in result_ids[1:]:
+        runtime._start_member(
+            database.session_factory,
+            claim.turn_id,
+            claim.token,
+            result_id,
+            settings=settings,
+            actor_context=actor,
         )
+    for result_id in result_ids:
+        runtime.settle_member(
+            database.session_factory,
+            claim.turn_id,
+            claim.token,
+            result_id,
+            reply=runtime.MemberReply("This free-form answer must never reach the student."),
+            actor_context=actor,
+        )
+    with database.session() as db:
+        results = db.scalars(
+            select(TeamTurnResult).where(TeamTurnResult.turn_id == claim.turn_id)
+        ).all()
+        turn = db.get(ConversationTurn, claim.turn_id)
+        assert turn is not None and results
+        assert all("free-form answer" not in (result.assistant_text or "") for result in results)
+        assert all("已记录" not in (result.assistant_text or "") for result in results)
+        assert results[0].state == "ready"
+        assert (results[0].assistant_text or "").startswith("收到，第一题是")
+        assert turn.state == "ready"
 
 
 def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executor(
@@ -282,17 +286,14 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
         with database.session() as db:
             row = db.get(Conversation, conversation_id)
             assert row is not None
-            claim = runtime.claim_team_turn(
+            claim = runtime.claim_assessment_executor_turn(
                 db,
                 app_settings,
                 conversation_id=conversation_id,
-                actor_id=actor.user.id,
-                request_id=str(uuid4()),
-                expected_revision=row.revision,
-                message="Please continue this saved assessment action.",
-                routing=TeamRouting(mode="selected", participant_ids=[UUID(participant.id)]),
+                participant_id=participant.id,
                 actor_context=actor,
             )
+            assert claim is not None
         result_id = runtime.result_ids(database.session_factory, claim.turn_id)[0]
         runtime.execute_real_member(database.session_factory, claim, result_id)
         assert requests[-1].knowledge_json == "{}"
@@ -375,6 +376,8 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
             labels={"Why question one?": "Follow-up for Question 1; at most 1"},
         )
 
+    from app.modules.workspace.formal_assessment import formal_ruleset_markdown
+
     names = ("Bowen", "Jade", "Kaikai", "Maya")
     version_ids: list[str] = []
     for name in names:
@@ -389,12 +392,16 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
                     f"MAYA-ASSESSMENT-RECIPE: {SUPPORTED_RECIPE_ID}",
                     QUESTION_SCOPE_DECLARATION,
                     COMPLETION_DECLARATION,
+                    "",
+                    formal_ruleset_markdown(
+                        answer_recorder="Jade",
+                        question_guide="Bowen",
+                        scorer="Jade",
+                        summarizer="Kaikai",
+                        student_round_order=names,
+                    ),
                 )
             )
-        elif name == "Jade":
-            instructions.append("MAYA-ASSESSMENT-ROLE: evaluator")
-        elif name == "Kaikai":
-            instructions.append("MAYA-ASSESSMENT-ROLE: boundary_summarizer")
         with database.session() as db:
             version = db.get(AgentVersion, version_id)
             assert version is not None
@@ -640,20 +647,9 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     monkeypatch.setattr(runtime_sdk, "_bind_one", record_bound_function)
 
     def response_for(request: runtime.MemberRequest, ordinal: int) -> bytes:
-        if request.participant_id == leader.id:
-            if request.message.startswith("My final answer"):
-                if ordinal == 0:
-                    return tool_body(
-                        f"answer-{request.turn_id}",
-                        "assessment_action",
-                        {
-                            "classification": "answer_only",
-                            "answer_span": "FINAL_ANSWER_CANARY",
-                        },
-                    )
-                return text_body("Untrusted coordinator prose after formal work.")
-            raise AssertionError("Assessment completion must not require a second student turn.")
-        if request.participant_id == evaluator.id:
+        # The student turn dispatches only the scorer. Executor turns keep
+        # their purpose and are not chosen by MAYA-ASSESSMENT-ROLE.
+        if request.assessment_purpose == "assessment_evaluate":
             if ordinal == 0:
                 return tool_body(
                     f"edit-assessment-{request.turn_id}",
@@ -661,7 +657,7 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
                     {"content": assessment_content},
                 )
             return text_body("EVALUATOR_RAW_CANARY includes private rubric and internal task JSON.")
-        if request.participant_id == boundary.id:
+        if request.assessment_purpose == "boundary_summarize":
             if ordinal == 0:
                 return tool_body(
                     f"edit-boundary-{request.turn_id}",
@@ -676,7 +672,21 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
                     },
                 )
             return text_body("BOUNDARY_RAW_CANARY includes private assessment task JSON.")
-        raise AssertionError(f"Unexpected participant dispatch: {request.participant_id}")
+        if request.participant_id == evaluator.id and request.message.startswith("My final answer"):
+            if ordinal == 0:
+                return tool_body(
+                    f"answer-{request.turn_id}",
+                    "assessment_action",
+                    {
+                        "classification": "answer_only",
+                        "answer_span": "FINAL_ANSWER_CANARY",
+                    },
+                )
+            return text_body("Untrusted coordinator prose after formal work.")
+        raise AssertionError(
+            f"Unexpected dispatch participant={request.participant_id} "
+            f"purpose={request.assessment_purpose}"
+        )
 
     def synthetic_dispatch(
         db: Any,
@@ -708,30 +718,34 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
         "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
     )
     runtime.execute_team_turn(database.session_factory, claim)
-    # An open test's turn runs the Leader alone; nothing is delegated to the
-    # scorer or summarizer from the student's turn.
-    assert wires[evaluator.id] == [] and wires[boundary.id] == []
+    # The student turn dispatches the scorer. The Guide and Summarizer are
+    # server text, so they have no model wire on this turn.
+    assert wires[leader.id] == [] and wires[boundary.id] == []
+    assert len(wires[evaluator.id]) >= 1
     with database.session() as db:
+        from app.modules.workspace.formal_assessment import ALL_DONE_GUIDE, SUMMARIZER_LINE
         from app.modules.workspace.team_conversation import _assessment_stage
 
-        leader_reply = db.scalar(
+        shown_now = db.scalars(
             select(TeamTurnResult.assistant_text).where(TeamTurnResult.turn_id == claim.turn_id)
-        )
+        ).all()
         stage = _assessment_stage(db, db.get(Conversation, conversation_id))
-    # Owner decision (2026-10-13): follow-ups come before the test is scored,
-    # so picking them is not announced as scoring and shows no bar.
+    # Follow-ups come before the test is scored, so that wait is not the
+    # completion line and shows no bar.
     if follow_up:
-        assert "One moment, please." in (leader_reply or "")
-        assert "scoring" not in (leader_reply or "")
+        assert any(text == "请稍候。" for text in shown_now)
+        assert ALL_DONE_GUIDE not in shown_now
+        assert SUMMARIZER_LINE not in shown_now
         assert stage == "preparing"
     else:
-        assert "Saving and scoring now." in (leader_reply or "")
+        assert ALL_DONE_GUIDE in shown_now
+        assert SUMMARIZER_LINE in shown_now
         assert stage == "scoring"
     from app.modules.learning import finalizer
 
     finalizer.drive_assessment(database.session_factory, settings, conversation_id)
 
-    assert len(wires[leader.id]) >= 1
+    assert wires[leader.id] == []
     assert len(wires[evaluator.id]) >= 1
     if follow_up:
         with database.session() as db:
@@ -1168,7 +1182,9 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
         assert old_turn is not None and old_turn.state == "ready"
         assert recovered_session["turns"][-1]["id"] == resume_id
         assert calls_by_turn[resume_id] == 1
-        assert calls_by_turn[resumed_source_id] == 1
+        # The paused source was claimed before any question was presented, so
+        # it is the Guide's server opening and does not call the model.
+        assert calls_by_turn[resumed_source_id] == 0
         assert calls_by_turn[old_query_id] == 0
         assert all(
             b"Internal only" not in wire and b"Internal answer" not in wire
