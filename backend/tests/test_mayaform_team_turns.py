@@ -101,6 +101,10 @@ def _configure_team_llm_preflight(settings: Any, database: Any) -> None:
         endpoint=config.resolved_endpoint,
     )
     settings.llm_provider_policy_hash = policy.policy_hash
+    # A developer .env can enable demo auto-confirm standing consent; the
+    # tests below cover the confirmation-required gate, so force it off.
+    settings.demo_auto_confirm_provider = False
+    settings.provider_standing_consent = False
     ProviderRepository(database).save_policy_snapshot(policy)
 
 
