@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import {
   isAmbiguousMutationFailure,
   isConflict,
+  PlatformApiError,
   type IdempotencyHandle,
   type AgentKnowledgeSets,
   type AgentDetail,
@@ -442,6 +443,20 @@ export function AgentWorkbench({
     setPendingKnowledgeUpload(null);
     setRetryAction((current) =>
       current === "uploadKnowledge" ? null : current,
+    );
+  }
+
+  // The API marks transient OCR/worker import failures as retryable; capacity
+  // and corruption answers are final and must not offer a Retry button.
+  function isRetryableKnowledgeImport(cause: unknown): boolean {
+    if (!(cause instanceof PlatformApiError)) return false;
+    if (cause.details?.retryable === true) return true;
+    return (
+      cause.details?.retryable !== false &&
+      (cause.code === "knowledge_import_ocr_unavailable" ||
+        cause.code === "knowledge_import_ocr_failed" ||
+        cause.code === "knowledge_import_ocr_timeout" ||
+        cause.code === "knowledge_import_processing_failed")
     );
   }
 
@@ -910,6 +925,8 @@ export function AgentWorkbench({
       setKnowledgeUploadError(null);
       return;
     }
+    // A Retry click during an in-flight upload must not double-submit.
+    if (saving) return;
     if (pendingKnowledgeUpload?.signature !== signature) {
       mutationStore.abandon(uploadIntent);
     }
@@ -969,6 +986,11 @@ export function AgentWorkbench({
         );
         setRetryAction(null);
       } else if (!mutationCompleted && isAmbiguousMutationFailure(cause)) {
+        setRetryAction("uploadKnowledge");
+      } else if (!mutationCompleted && isRetryableKnowledgeImport(cause)) {
+        // A 422 import failure never mutated anything, so the handle is
+        // abandoned and the retry gets a fresh key while reusing the file.
+        mutationStore.abandon(uploadIntent, handle);
         setRetryAction("uploadKnowledge");
       } else if (!mutationCompleted) {
         mutationStore.abandon(uploadIntent, handle);

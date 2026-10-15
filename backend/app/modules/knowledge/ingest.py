@@ -244,12 +244,14 @@ def _ingest_worker(
 
 def _wait_for_ocr_worker_limit(send_connection: Any, ocr_start_event: Any) -> None:
     send_connection.send(("ocr_needed", None))
+    # A missed handshake means the OCR slot/limits could not be established
+    # before any OCR work ran; that is an availability failure, not corruption.
     if not ocr_start_event.wait(timeout=INGEST_OCR_HANDSHAKE_TIMEOUT_SECONDS):
-        raise KnowledgeImportError("processing_failed")
+        raise KnowledgeImportError("ocr_unavailable")
     try:
         _raise_ingest_worker_limits_for_ocr()
     except Exception as exc:
-        raise KnowledgeImportError("processing_failed") from exc
+        raise KnowledgeImportError("ocr_unavailable") from exc
 
 
 def _convert_document_isolated(kind: Literal["pdf", "docx"], data: bytes) -> bytes:
@@ -290,27 +292,31 @@ def _convert_document_isolated(kind: Literal["pdf", "docx"], data: bytes) -> byt
         start_event.set()
         worker_started_at = time.monotonic()
         deadline = worker_started_at + INGEST_WORKER_TIMEOUT_SECONDS
+        ocr_started = False
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0 or not receive_connection.poll(remaining):
-                raise KnowledgeImportError("processing_failed")
+                raise KnowledgeImportError("ocr_timeout" if ocr_started else "processing_failed")
             try:
                 status, result = receive_connection.recv()
             except EOFError:
                 raise KnowledgeImportError("processing_failed") from None
             if status != "ocr_needed":
                 break
+            # The OCR slot and job-limit extension gate OCR work itself; losing
+            # either is a transient availability failure, not document damage.
             if not _INGEST_OCR_SLOTS.acquire(timeout=INGEST_OCR_SLOT_WAIT_SECONDS):
-                raise KnowledgeImportError("processing_failed")
+                raise KnowledgeImportError("ocr_unavailable")
             ocr_slot_acquired = True
             try:
                 _extend_windows_ingest_worker_job_for_ocr(job_handle)
             except Exception as exc:
-                raise KnowledgeImportError("processing_failed") from exc
+                raise KnowledgeImportError("ocr_unavailable") from exc
             deadline = worker_started_at + INGEST_OCR_WORKER_TIMEOUT_SECONDS
             if deadline <= time.monotonic():
-                raise KnowledgeImportError("processing_failed")
+                raise KnowledgeImportError("ocr_timeout")
             ocr_start_event.set()
+            ocr_started = True
         if status == "error":
             raise KnowledgeImportError(result)
         if status != "ok" or not isinstance(result, bytes):
@@ -403,17 +409,17 @@ def _bundled_rapidocr_model_dir() -> str:
             "PP-OCRv6_rec_small.onnx",
         )
         if not all(model_dir.joinpath(name).is_file() for name in required_models):
-            raise KnowledgeImportError("processing_failed")
+            raise KnowledgeImportError("ocr_unavailable")
         return str(model_dir)
     except KnowledgeImportError:
         raise
     except Exception as exc:
-        raise KnowledgeImportError("processing_failed") from exc
+        raise KnowledgeImportError("ocr_unavailable") from exc
 
 
 def _run_pdf_ocr(data: bytes, page_indexes: list[int]) -> dict[int, str]:
     if not page_indexes or len(page_indexes) > MAX_PDF_OCR_PAGES:
-        raise KnowledgeImportError("pdf_limit")
+        raise KnowledgeImportError("pdf_ocr_limit")
     try:
         with (
             redirect_stdout(StringIO()),
@@ -441,7 +447,7 @@ def _run_pdf_ocr(data: bytes, page_indexes: list[int]) -> dict[int, str]:
                         type(index) is not int or index < 0 or index >= len(document)
                         for index in page_indexes
                     ):
-                        raise KnowledgeImportError("processing_failed")
+                        raise KnowledgeImportError("ocr_failed")
                     recognized: dict[int, str] = {}
                     scale = PDF_OCR_DPI / 72
                     for page_index in page_indexes:
@@ -460,9 +466,9 @@ def _run_pdf_ocr(data: bytes, page_indexes: list[int]) -> dict[int, str]:
                         if texts is None:
                             continue
                         if not isinstance(texts, (list, tuple)):
-                            raise KnowledgeImportError("processing_failed")
+                            raise KnowledgeImportError("ocr_failed")
                         if any(not isinstance(line, str) for line in texts):
-                            raise KnowledgeImportError("processing_failed")
+                            raise KnowledgeImportError("ocr_failed")
                         normalized_text = "\n".join(
                             line.strip() for line in texts if line.strip()
                         ).strip()
@@ -473,8 +479,12 @@ def _run_pdf_ocr(data: bytes, page_indexes: list[int]) -> dict[int, str]:
         return recognized
     except KnowledgeImportError:
         raise
+    except MemoryError as exc:
+        # The OCR worker's memory ceiling still counts as an OCR-path failure,
+        # so the teacher sees a retryable OCR result rather than a generic one.
+        raise KnowledgeImportError("ocr_failed") from exc
     except Exception as exc:
-        raise KnowledgeImportError("processing_failed") from exc
+        raise KnowledgeImportError("ocr_failed") from exc
 
 
 def _pdf_to_markdown(
@@ -606,7 +616,7 @@ def _pdf_to_markdown(
                 if not page_text and raw_contents is not None:
                     ocr_page_indexes.append(page_number - 1)
             if len(ocr_page_indexes) > MAX_PDF_OCR_PAGES:
-                raise KnowledgeImportError("pdf_limit")
+                raise KnowledgeImportError("pdf_ocr_limit")
             if ocr_page_indexes:
                 if before_ocr is not None:
                     before_ocr()

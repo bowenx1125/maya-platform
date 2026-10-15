@@ -129,24 +129,66 @@ _UPLOAD_BODY = {
 
 
 def _raise_knowledge_import_failure(reason: str) -> None:
-    if reason in {"upload_size", "pdf_limit", "docx_limit"}:
+    details = {"reason": reason, "retryable": False}
+    if reason in {"upload_size", "pdf_limit", "pdf_ocr_limit", "docx_limit"}:
+        if reason == "pdf_ocr_limit":
+            raise validation_failure(
+                "This PDF needs OCR on more scanned pages than the local limit "
+                "allows. Split it, or upload its text as Markdown.",
+                details=details,
+                code="knowledge_import_too_large",
+            )
         raise validation_failure(
             "The document exceeds the local PDF/Word conversion capacity. "
             "Convert it to Markdown externally and upload that Markdown.",
+            details=details,
             code="knowledge_import_too_large",
         )
     if reason == "unsupported_format":
         raise validation_failure(
-            "Upload Markdown, PDF or Word (.docx).", code="knowledge_import_unsupported"
+            "Upload Markdown, PDF or Word (.docx).",
+            details=details,
+            code="knowledge_import_unsupported",
         )
     if reason in {"pdf_no_text", "docx_no_text"}:
         raise validation_failure(
             "No readable text could be extracted from this document.",
+            details=details,
             code="knowledge_import_no_text",
+        )
+    if reason in {"invalid_pdf", "invalid_docx", "invalid_filename", "invalid"}:
+        raise validation_failure(
+            "The document could not be read as a valid PDF/Word file. "
+            "Keep the original and upload converted Markdown.",
+            details=details,
+            code="knowledge_import_invalid",
+        )
+    retryable_details = {"reason": reason, "retryable": True}
+    if reason == "ocr_unavailable":
+        raise validation_failure(
+            "Local OCR is temporarily unavailable. You can retry, or convert "
+            "the PDF to Markdown and upload that.",
+            details=retryable_details,
+            code="knowledge_import_ocr_unavailable",
+        )
+    if reason == "ocr_failed":
+        raise validation_failure(
+            "Local OCR could not read this scanned PDF. Retry, or upload a "
+            "text-based PDF / Markdown instead.",
+            details=retryable_details,
+            code="knowledge_import_ocr_failed",
+        )
+    if reason == "ocr_timeout":
+        raise validation_failure(
+            "Local OCR timed out on this scanned PDF. Retry, or upload a "
+            "smaller scan / Markdown instead.",
+            details=retryable_details,
+            code="knowledge_import_ocr_timeout",
         )
     raise validation_failure(
         "The document could not be converted safely. "
         "Keep the original and upload converted Markdown.",
+        details={"reason": "processing_failed", "retryable": True},
         code="knowledge_import_processing_failed",
     )
 

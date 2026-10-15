@@ -449,4 +449,130 @@ describe("Wave 1A UI idempotency wiring", () => {
     await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(2));
     expect(keys[1]).toBe(keys[0]);
   });
+
+  it("offers Retry for a retryable OCR import failure with a fresh key", async () => {
+    const keys: string[] = [];
+    const version = draftVersion();
+    const agent = createdAgent();
+    const document = failedDocument();
+    const uploadKnowledge = vi.fn(async (...args: unknown[]) => {
+      const options = args[4] as { idempotency?: { key: string } } | undefined;
+      keys.push(options?.idempotency?.key ?? "missing");
+      if (keys.length === 1) {
+        throw new PlatformApiError(
+          422,
+          "Local OCR timed out on this scanned PDF.",
+          {
+            code: "knowledge_import_ocr_timeout",
+            details: { reason: "ocr_timeout", retryable: true },
+          },
+        );
+      }
+      return { agent_version: version, document };
+    });
+    const api = {
+      version: vi.fn().mockResolvedValue(version),
+      agent: vi.fn().mockResolvedValue(agent),
+      knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      replaceAgentKnowledgeSets: vi.fn(async (_id, body) => ({
+        agent_id: agent.id,
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      })),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        document_count: 0,
+        total_char_count: 0,
+        index_status: "ready",
+        combined_markdown: "",
+      }),
+      uploadKnowledge,
+    };
+    useSessionMock.mockReturnValue({ api });
+
+    render(
+      <AppShell role="student">
+        <AgentWorkbench versionId="version-id" />
+      </AppShell>,
+    );
+    const input = await screen.findByLabelText("Upload RAG");
+    const file = new File(["%PDF-1.7 scan"], "scan.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    const alert = await screen.findByRole("alert");
+    await waitFor(() =>
+      expect(alert.textContent).toContain("Local OCR timed out"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(uploadKnowledge).toHaveBeenCalledTimes(2));
+    expect(uploadKnowledge.mock.calls[1][2]).toBe(file);
+    // A 422 never reached the server, so the retry rotates to a fresh key.
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it("does not offer Retry when the import failure is not retryable", async () => {
+    const version = draftVersion();
+    const agent = createdAgent();
+    const uploadKnowledge = vi.fn(async () => {
+      throw new PlatformApiError(
+        422,
+        "The document could not be read as a valid PDF/Word file.",
+        {
+          code: "knowledge_import_invalid",
+          details: { reason: "invalid_pdf", retryable: false },
+        },
+      );
+    });
+    const api = {
+      version: vi.fn().mockResolvedValue(version),
+      agent: vi.fn().mockResolvedValue(agent),
+      knowledge: vi.fn().mockResolvedValue([]),
+      knowledgeSets: vi.fn().mockResolvedValue([]),
+      agentKnowledgeSets: vi.fn().mockResolvedValue({
+        agent_id: agent.id,
+        agent_metadata_revision: agent.metadata_revision,
+        sets: [],
+      }),
+      replaceAgentKnowledgeSets: vi.fn(async (_id, body) => ({
+        agent_id: agent.id,
+        agent_metadata_revision: body.expected_agent_metadata_revision + 1,
+        sets: [],
+      })),
+      avatarTemplates: vi.fn().mockResolvedValue([]),
+      voiceProfiles: vi.fn().mockResolvedValue([]),
+      ragPreview: vi.fn().mockResolvedValue({
+        document_count: 0,
+        total_char_count: 0,
+        index_status: "ready",
+        combined_markdown: "",
+      }),
+      uploadKnowledge,
+    };
+    useSessionMock.mockReturnValue({ api });
+
+    render(
+      <AppShell role="student">
+        <AgentWorkbench versionId="version-id" />
+      </AppShell>,
+    );
+    const input = await screen.findByLabelText("Upload RAG");
+    const file = new File(["broken"], "corrupt.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    const alert = await screen.findByRole("alert");
+    await waitFor(() =>
+      expect(alert.textContent).toContain("Use a readable PDF, Word (.docx)"),
+    );
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(uploadKnowledge).toHaveBeenCalledTimes(1);
+  });
 });

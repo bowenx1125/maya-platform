@@ -248,7 +248,7 @@ def test_pdf_ocr_rejects_invalid_page_indexes(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setitem(sys.modules, "rapidocr", rapidocr)
     monkeypatch.setattr(knowledge_ingest, "_bundled_rapidocr_model_dir", lambda: "models")
 
-    with pytest.raises(KnowledgeImportError, match="processing_failed"):
+    with pytest.raises(KnowledgeImportError, match="ocr_failed"):
         knowledge_ingest._run_pdf_ocr(b"private PDF bytes", [1])
 
 
@@ -263,7 +263,7 @@ def test_pdf_ocr_page_limit_fails_before_running_ocr(
     )
     pdf = _pdf_bytes([None, None], non_text_content_pages={0, 1})
 
-    with pytest.raises(KnowledgeImportError, match="pdf_limit"):
+    with pytest.raises(KnowledgeImportError, match="pdf_ocr_limit"):
         knowledge_ingest._pdf_to_markdown(pdf)
 
 
@@ -777,11 +777,145 @@ def test_upload_reports_distinct_format_text_size_and_metadata_errors(
         processing_failed = upload("lesson.pdf", b"%PDF-1.7", "pdf-worker-limit-key")
         assert processing_failed.status_code == 422
         assert processing_failed.json()["code"] == "knowledge_import_processing_failed"
+        assert processing_failed.json()["details"]["retryable"] is True
+        assert processing_failed.json()["details"]["reason"] == "processing_failed"
 
         monkeypatch.setattr(multipart, "MAX_UPLOAD_FILE_BYTES", 1)
         too_large = upload("lesson.pdf", b"%PDF-1.7", "too-large-upload-key")
         assert too_large.status_code == 422
         assert too_large.json()["code"] == "knowledge_import_too_large"
+        assert too_large.json()["details"]["retryable"] is False
+
+
+def test_upload_maps_invalid_and_ocr_reasons_to_distinct_retryable_codes(
+    app_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, _database, _settings = app_factory()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        _student, csrf = login(client, "bowen")
+        headers = {"Origin": "http://testserver", "X-CSRF-Token": csrf}
+
+        def upload(name: str, content: bytes, key: str) -> Any:
+            return client.post(
+                f"/api/v1/groups/{GROUP_DEMO_ID}/knowledge-documents",
+                headers={**headers, "Idempotency-Key": key},
+                files={"file": (name, content, "application/octet-stream")},
+            )
+
+        def reject_with(reason: str) -> Any:
+            def convert(filename: str, content: bytes) -> tuple[str, bytes]:
+                raise KnowledgeImportError(reason)
+
+            monkeypatch.setattr(knowledge_router, "convert_knowledge_upload", convert)
+
+        reject_with("invalid_pdf")
+        invalid = upload("corrupt.pdf", b"%PDF-1.7", "corrupt-pdf-upload-key")
+        assert invalid.status_code == 422
+        assert invalid.json()["code"] == "knowledge_import_invalid"
+        assert invalid.json()["details"]["retryable"] is False
+        assert invalid.json()["details"]["reason"] == "invalid_pdf"
+
+        reject_with("pdf_ocr_limit")
+        ocr_limit = upload("scan.pdf", b"%PDF-1.7", "ocr-page-limit-key")
+        assert ocr_limit.status_code == 422
+        assert ocr_limit.json()["code"] == "knowledge_import_too_large"
+        assert ocr_limit.json()["details"]["reason"] == "pdf_ocr_limit"
+        assert ocr_limit.json()["details"]["retryable"] is False
+
+        for reason, expected_code in (
+            ("ocr_unavailable", "knowledge_import_ocr_unavailable"),
+            ("ocr_failed", "knowledge_import_ocr_failed"),
+            ("ocr_timeout", "knowledge_import_ocr_timeout"),
+            ("processing_failed", "knowledge_import_processing_failed"),
+        ):
+            reject_with(reason)
+            response = upload("scan.pdf", b"%PDF-1.7", f"ocr-{reason}-key")
+            assert response.status_code == 422, response.text
+            assert response.json()["code"] == expected_code
+            assert response.json()["details"]["retryable"] is True
+            assert response.json()["details"]["reason"] == reason
+
+
+def test_pdf_ocr_wall_clock_timeout_after_handshake_reports_ocr_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Slot:
+        def acquire(self, *, timeout: float) -> bool:
+            return True
+
+        def release(self) -> None:
+            return None
+
+    class FakeEvent:
+        def wait(self, *, timeout: float) -> bool:
+            return True
+
+        def set(self) -> None:
+            return None
+
+    # The fake clock only moves forward when the parent waits on the pipe;
+    # poll(0) sees nothing yet, and the OCR-deadline wait delivers ocr_needed
+    # with the OCR budget already exhausted.
+    state = {"clock": 0.0, "delivered": False}
+
+    class FakePipe:
+        def __init__(self, messages: list[Any]) -> None:
+            self._messages = messages
+
+        def poll(self, timeout: float | None = None) -> bool:
+            if not timeout or not self._messages:
+                return False
+            if not state["delivered"]:
+                state["delivered"] = True
+                state["clock"] = float(knowledge_ingest.INGEST_OCR_WORKER_TIMEOUT_SECONDS + 5)
+            return True
+
+        def recv(self) -> Any:
+            return self._messages.pop(0)
+
+        def close(self) -> None:
+            return None
+
+    class FakeProcess:
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float | None = None) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class FakeContext:
+        def Pipe(self, *, duplex: bool) -> tuple[FakePipe, FakePipe]:
+            assert duplex is False
+            # The worker posts ocr_needed on the pipe; the parent's send end
+            # stays empty because it is closed right after start.
+            return FakePipe([("ocr_needed", None)]), FakePipe([])
+
+        def Event(self) -> FakeEvent:
+            return FakeEvent()
+
+        def Process(self, **_kwargs: Any) -> FakeProcess:
+            return FakeProcess()
+
+    monkeypatch.setattr(knowledge_ingest, "_INGEST_WORKER_SLOTS", Slot())
+    monkeypatch.setattr(knowledge_ingest, "_INGEST_OCR_SLOTS", Slot())
+    monkeypatch.setattr(
+        knowledge_ingest,
+        "time",
+        SimpleNamespace(monotonic=lambda: state["clock"]),
+    )
+    monkeypatch.setattr(
+        knowledge_ingest.multiprocessing, "get_context", lambda _name: FakeContext()
+    )
+
+    with pytest.raises(KnowledgeImportError, match="ocr_timeout"):
+        knowledge_ingest._convert_document_isolated("pdf", b"%PDF-1.7")
 
 
 def test_replacement_rechecks_workspace_membership_after_conversion(
