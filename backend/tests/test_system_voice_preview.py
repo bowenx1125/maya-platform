@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import wave
-from typing import Any
 
 import pytest
 from app.modules.voices import system_voice_preview as svp
@@ -95,9 +94,7 @@ def test_four_segments_succeed_downloadable_non_silent(
     provider = _TrackingTTS()
     monkeypatch.setattr(svp, "tts_provider", lambda _settings: provider)
     voice = MockVoiceCloneProvider()
-    monkeypatch.setattr(
-        "app.providers.factory.voice_provider", lambda _settings: voice
-    )
+    monkeypatch.setattr("app.providers.factory.voice_provider", lambda _settings: voice)
 
     _login, csrf = login(client, "maya")
     expected_voices = {

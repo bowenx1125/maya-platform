@@ -549,8 +549,9 @@ def _formal_slot(
         return None
     if roles is None:
         return None
-    # Only a ledger-selected micro-round is scripted. An auto turn, including
-    # the one that starts the attempt, keeps the ordinary action reply.
+    # Only a ledger-selected micro-round is scripted. An explicit start sets
+    # that ledger before this turn is routed. An auto turn that still manages
+    # to start through the Tool is rewritten when it settles.
     turn = db.get(ConversationTurn, result.turn_id)
     try:
         routed = json.loads(turn.routing_json or "{}") if turn is not None else {}
@@ -700,8 +701,10 @@ def claim_team_turn(
         participants = [leader]
     else:
         _validate_members(db, row, participants)
-        # ACL already passed. An active assessment ledger then chooses speakers;
-        # the Team Ruleset does not.
+        # ACL already passed. An explicit formal start sets the ledger before
+        # any member is chosen; otherwise coordinate follows Agent.md and every
+        # member speaks. The ledger then chooses speakers. The Ruleset does not.
+        _begin_formal_attempt_on_explicit_start(db, row, actor_context, message, request_id)
         micro = _formal_micro_round_participants(db, row, actor_context)
         if micro is not None:
             _validate_members(db, row, list(dict.fromkeys(micro)))
@@ -1528,6 +1531,8 @@ def _member_system(
             "answer, hint, judgment or score for any question, and must not restate progress or "
             "the current question. The server appends progress and the current question in "
             "reply_language, and discards your prose for every other result. "
+            "When the reply is not recorded, the scorer states the miss and the format once. "
+            "The question Guide restates the current question once on that turn. "
             "If the action tool cannot return a safe result, do not provide student-facing prose. "
             "Before this attempt is submitted, 再来一轮 or 再来一遍 is redo_request: abandon this "
             "round's answers for scoring and start a new scored round. After it is submitted, "
@@ -1712,6 +1717,7 @@ def _scorer_micro_reply(
     """Scorer text is the server fact for a write-tool receipt, never model prose."""
 
     from .chat_provider import (
+        assessment_answer_not_recorded,
         assessment_reply_chinese,
         assessment_safe_reply_text,
         conversation_user_texts,
@@ -1736,11 +1742,14 @@ def _scorer_micro_reply(
     }:
         return MemberReply(RECORDED_FACT), None
     user_texts = conversation_user_texts(db, row.id)
+    latest = user_texts[-1] if user_texts else ""
     text = _without_unreceipted_recorded(
         assessment_safe_reply_text(
             assessment_result,
             user_texts,
             chinese=assessment_reply_chinese(db, row.id, user_texts),
+            # The Guide line is the one restatement of this Question.
+            include_question=not assessment_answer_not_recorded(assessment_result, latest),
         )
     )
     if not text:
@@ -1839,6 +1848,67 @@ def _guide_micro_script(
     if question is not None:
         return f"第 {question.ordinal + 1} 题：{question.prompt}"
     return "我们继续测试。"
+
+
+def _begin_formal_attempt_on_explicit_start(
+    db: Session,
+    row: Conversation,
+    actor_context: AuthContext | None,
+    message: str,
+    request_id: str,
+) -> None:
+    """Set the formal ledger before member selection when the student asks to start.
+
+    A live or paused attempt keeps its own utterance (`继续`, an answer, redo).
+    An incomplete Formal section raises `assessment_ruleset_incomplete` and
+    inserts no attempt. A team that is not a formal recipe is left alone.
+    """
+
+    from .formal_assessment import is_formal_start_message
+
+    if actor_context is None or actor_context.user.id != row.user_id:
+        return
+    if not is_formal_start_message(message):
+        return
+    if _active_attempt(db, row) is not None:
+        return
+    from app.modules.learning.attempts import start_or_resume_attempt
+
+    start_or_resume_attempt(db, actor_context, row.id, client_event_id=request_id)
+
+
+def _scripted_opening_for_auto_start(
+    db: Session,
+    row: Conversation,
+    turn: ConversationTurn,
+    participant: ConversationParticipant,
+    assessment_result: AssessmentRuntimeResult,
+) -> MemberReply | None:
+    """Guide text for an auto turn whose Tool just started Formal.
+
+    Explicit start phrases never reach this path: the ledger is set first and
+    only the Guide is selected. A ready result cannot be stored empty, so this
+    does not try to erase a member who already spoke.
+    """
+
+    if assessment_result.response_key != "assessment.started":
+        return None
+    try:
+        routed = json.loads(turn.routing_json or "{}")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(routed, dict) or routed.get("mode") == "selected":
+        return None
+    try:
+        roles = _formal_roles_for_conversation(db, row)
+    except PlatformError:
+        return None
+    if roles is None or participant.team_member_id != roles.question_guide_id:
+        return None
+    from .formal_assessment import opening_line
+
+    question = assessment_result.context.current_question
+    return MemberReply(opening_line(question.prompt if question is not None else None))
 
 
 def _append_formal_summarizer(db: Session, row: Conversation, turn: ConversationTurn) -> None:
@@ -2001,30 +2071,40 @@ def settle_member(
                 conversation_user_texts,
             )
 
-            follow_up = False
-            if participant is not None and participant.is_leader:
-                assessment_result, follow_up = _with_follow_up_question(db, row, assessment_result)
-            prose = (
-                reply.text
-                if reply is not None
-                and assessment_result.disposition == "read"
-                and assessment_result.response_key == "assessment.progress"
+            rewritten = (
+                _scripted_opening_for_auto_start(db, row, turn, participant, assessment_result)
+                if participant is not None
                 else None
             )
-            reply = MemberReply(
-                assessment_safe_reply_text(
-                    assessment_result,
-                    conversation_user_texts(db, row.id),
-                    prose=prose,
-                    follow_up=follow_up,
-                    chinese=assessment_reply_chinese(
-                        db, row.id, conversation_user_texts(db, row.id)
-                    ),
-                    follow_up_pending=awaits_follow_up_round(
-                        db, str(assessment_result.context.attempt.id)
-                    ),
+            if rewritten is not None:
+                reply = rewritten
+            else:
+                follow_up = False
+                if participant is not None and participant.is_leader:
+                    assessment_result, follow_up = _with_follow_up_question(
+                        db, row, assessment_result
+                    )
+                prose = (
+                    reply.text
+                    if reply is not None
+                    and assessment_result.disposition == "read"
+                    and assessment_result.response_key == "assessment.progress"
+                    else None
                 )
-            )
+                reply = MemberReply(
+                    assessment_safe_reply_text(
+                        assessment_result,
+                        conversation_user_texts(db, row.id),
+                        prose=prose,
+                        follow_up=follow_up,
+                        chinese=assessment_reply_chinese(
+                            db, row.id, conversation_user_texts(db, row.id)
+                        ),
+                        follow_up_pending=awaits_follow_up_round(
+                            db, str(assessment_result.context.attempt.id)
+                        ),
+                    )
+                )
             error = None
         elif assessment_active and error is None:
             reply = None

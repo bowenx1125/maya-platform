@@ -20,7 +20,6 @@ from app.providers.dashscope import (
     DashScopeTTSProvider,
     DashScopeVoiceCloneProvider,
 )
-from app.providers.tts_flash_budget import FlashTrialBudget
 from app.providers.llm import (
     DashScopeLLMAdapter,
     DashScopeLLMConfig,
@@ -31,6 +30,7 @@ from app.providers.llm import (
 )
 from app.providers.llm import llm_provider as select_llm_provider
 from app.providers.tts import MockTTSProvider, TTSProvider
+from app.providers.tts_flash_budget import FlashTrialBudget
 from app.providers.voice import MockVoiceCloneProvider, VoiceCloneProvider
 
 
