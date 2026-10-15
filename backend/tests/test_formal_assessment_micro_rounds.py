@@ -1543,6 +1543,17 @@ def test_ordinary_protocol_omits_an_empty_reply_without_failing() -> None:
     assert "does not treat that member as failed" in text
     assert "Formal assessment does not change ordinary chat" in text
     assert "Scorer stays silent" not in text
+    assert "already completed or abandoned" not in text
+    closed = runtime._member_system(
+        "Guide",
+        "{}",
+        team_ruleset="# Team Ruleset\n\n## Formal assessment\nscorer: Scorer\n",
+        is_leader=True,
+        attempt_closed=True,
+    )
+    assert "already completed or abandoned" in closed
+    assert "does not end the turn" in closed
+    assert "is not a failure" in closed
 
 
 REASON = "关于第 1 题：你选了哪一项？能用一两句话说说你当时是怎么想的吗？"
@@ -1673,6 +1684,126 @@ def _participants(database: Any, conversation_id: str) -> list[tuple[str, str, s
             .order_by(ConversationParticipant.position)
         ).all()
         return [(row.id, row.team_member_id, row.display_name) for row in rows]
+
+
+def test_closed_assessment_status_question_lets_the_guide_answer(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    """A status question after the test must not fail the Team.
+
+    Members still call assessment_action, as the Ruleset tells them to. That
+    call used to end the turn, so the Guide, Scorer and Summarizer all came
+    back as unable to reply.
+    """
+
+    del client
+    _app, _database, _settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, _settings.resolved_data_root)
+        conversation_id, _team_id, team_version_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        _with_distinct_summarizer(db, conversation_id, team_version_id)
+        db.commit()
+        actor = _service_actor(db, _settings, STUDENT_ID)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None
+        attempt = db.get(AssessmentAttempt, str(started.attempt.id))
+        conversation = db.get(Conversation, conversation_id)
+        assert attempt is not None and conversation is not None
+        attempt.status = "completed"
+        attempt.completed_at = datetime.now(UTC)
+        roles = runtime._formal_roles_for_conversation(db, conversation)
+        assert roles is not None
+        names = {
+            participant.team_member_id: participant.display_name
+            for participant in db.scalars(
+                select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id
+                )
+            )
+        }
+        guide_name = names[roles.question_guide_id]
+        scorer_name = names[roles.answer_recorder_id]
+        summarizer_name = names[roles.summarizer_id]
+        assert len({guide_name, scorer_name, summarizer_name}) == 3
+        db.commit()
+    settings, policy = _dashscope(app_bundle, database, "formal-casual-after-end")
+    _grant(database, conversation_id, policy)
+    calls: dict[str, int] = {}
+
+    def synthetic_dispatch(
+        db: Any,
+        _settings: Any,
+        request: runtime.MemberRequest,
+        messages: Any,
+        tools: Any,
+        choice: Any,
+        **kwargs: Any,
+    ) -> Any:
+        calls[request.speaker_name] = calls.get(request.speaker_name, 0) + 1
+        if calls[request.speaker_name] == 1:
+            body = _tool(
+                f"status-{request.participant_id}",
+                "assessment_action",
+                {"classification": "progress_request"},
+            )
+        elif request.speaker_name == guide_name:
+            body = _text("正式测评已经结束，我们可以继续聊。")
+        elif request.speaker_name == scorer_name:
+            body = _text("第 1 题得 1 分，正确选项是 A。")
+        else:
+            body = _text(" ")
+        return real_dispatch_team_model(
+            db, settings, request, messages, tools, choice, transport=_Transport(body), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
+    )
+    with database.session() as db:
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        claim = runtime.claim_team_turn(
+            db,
+            settings,
+            conversation_id=conversation_id,
+            actor_id=actor.user.id,
+            request_id=str(uuid4()),
+            expected_revision=conversation.revision,
+            message="情况如何",
+            routing=TeamRouting(mode="all"),
+            actor_context=actor,
+        )
+    runtime.execute_team_turn(database.session_factory, claim)
+    assert calls[guide_name] >= 2
+    with database.session() as db:
+        turn = db.get(ConversationTurn, claim.turn_id)
+        assert turn is not None and turn.state == "ready" and turn.safe_error_code is None
+        stored = db.scalars(
+            select(TeamTurnResult).where(TeamTurnResult.turn_id == claim.turn_id)
+        ).all()
+        by_name = {
+            db.get(ConversationParticipant, result.participant_id).display_name: result
+            for result in stored
+        }
+        assert by_name[guide_name].state == "ready"
+        assert by_name[guide_name].assistant_text == "正式测评已经结束，我们可以继续聊。"
+        assert by_name[scorer_name].assistant_text == "第 1 题得 1 分，正确选项是 A。"
+        assert by_name[summarizer_name].assistant_text == SILENT_MEMBER_LINE
+        assert all(result.state == "ready" and result.safe_error_code is None for result in stored)
+        from app.modules.workspace.team_conversation import team_session_view
+
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        session = team_session_view(db, conversation, actor, [], runtime_available=True)
+        visible = [
+            result.assistant_text or "" for item in session.turns for result in item.member_results
+        ]
+        assert any("我们可以继续聊" in text for text in visible)
+        assert all(text != SILENT_MEMBER_LINE for text in visible)
+        assert all(item.state != "partial" for item in session.turns)
+        assert all(item.safe_error_code != "team_partial_failure" for item in session.turns)
 
 
 def test_finished_assessment_keeps_scorer_text_and_omits_silent_guide_and_summarizer(

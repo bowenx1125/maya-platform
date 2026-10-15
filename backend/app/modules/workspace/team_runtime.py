@@ -62,6 +62,15 @@ _POST_END_KEPT_FAILURES = frozenset(
         "team_response_truncated",
     }
 )
+# A finished attempt has no action left. These are "nothing to do", not a
+# member who failed to reply. A live attempt still surfaces them.
+_POST_END_NO_TASK = frozenset(
+    {
+        "team_dispatch_failed",
+        "assessment_not_configured",
+        "assessment_action_required",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -695,16 +704,8 @@ def _formal_micro_round_participants(
     return ordered
 
 
-def _post_end_casual_speaker(
-    db: Session, row: Conversation, participant: ConversationParticipant
-) -> bool:
-    """Guide and Summarizer are optional once the formal attempt is over.
-
-    A live or paused attempt still fails closed. After it is completed or
-    abandoned, an empty or failed reply from those two must not fail the
-    student's next chat. The Scorer is not optional: its text, including
-    scores, stays.
-    """
+def _closed_formal_attempt(db: Session, row: Conversation) -> bool:
+    """True after a formal attempt finished and none is still open."""
 
     live = db.scalar(
         select(AssessmentAttempt.id)
@@ -726,7 +727,21 @@ def _post_end_casual_speaker(
         )
         .limit(1)
     )
-    if closed is None:
+    return closed is not None
+
+
+def _post_end_casual_speaker(
+    db: Session, row: Conversation, participant: ConversationParticipant
+) -> bool:
+    """Guide and Summarizer are optional once the formal attempt is over.
+
+    A live or paused attempt still fails closed. After it is completed or
+    abandoned, an empty or failed reply from those two must not fail the
+    student's next chat. The Scorer is not optional: its text, including
+    scores, stays.
+    """
+
+    if not _closed_formal_attempt(db, row):
         return False
     try:
         roles = _formal_roles_for_conversation(db, row)
@@ -1460,6 +1475,7 @@ def _start_member(
             speaker_name=participant.display_name,
             is_leader=participant.is_leader,
             viewer_is_teacher=_viewer_is_teacher(db, row, actor_context),
+            attempt_closed=_closed_formal_attempt(db, row),
         )
         if assessment_purpose is None and saved_protocol:
             if "<active_assessment_action_protocol>" not in system_message:
@@ -1678,13 +1694,14 @@ def _member_system(
     speaker_name: str | None = None,
     is_leader: bool = False,
     viewer_is_teacher: bool = False,
+    attempt_closed: bool = False,
 ) -> str:
     if assessment_source_revoked:
         from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
 
         # This wire is compared and disclosed as the exact protocol. A Ruleset
         # or identity suffix would fail that check, so the closed revoked turn stays exact.
-        del team_ruleset, speaker_name, is_leader, viewer_is_teacher
+        del team_ruleset, speaker_name, is_leader, viewer_is_teacher, attempt_closed
         return ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
     identity = _speaker_identity(speaker_name, viewer_is_teacher=viewer_is_teacher)
     message = (
@@ -1793,6 +1810,16 @@ def _member_system(
             "If you have nothing to add, leave the reply empty. The server omits "
             "an empty reply and does not treat that member as failed.\n"
         )
+        if attempt_closed:
+            # The model still calls assessment_action for a status question.
+            # Ending the turn on that call left every member with nothing to say.
+            message += (
+                "This chat's formal attempt is already completed or abandoned. "
+                "Answer as ordinary chat. The server does not end the turn when "
+                "assessment_action reports that no assessment is active: answer "
+                "the student in prose and do not repeat that tool error. "
+                "An empty reply is still omitted and is not a failure.\n"
+            )
         if team_ruleset is not None:
             message += (
                 "The Guide/Leader Agent.md defines a # Team Ruleset. "
@@ -2459,6 +2486,23 @@ def settle_member(
                 "Empty ordinary reply settled silent turn_id=%s result_id=%s",
                 turn.id,
                 result.id,
+            )
+            reply = MemberReply(SILENT_MEMBER_LINE)
+            error = None
+        elif (
+            error is not None
+            and _safe_code(error) in _POST_END_NO_TASK
+            and _closed_formal_attempt(db, row)
+        ):
+            from .formal_assessment import SILENT_MEMBER_LINE
+
+            # The test is over, so "call the assessment tool" is not a task.
+            # Leaving it as a failure put the partial banner on casual chat.
+            LOGGER.warning(
+                "Closed-assessment no-task settled silent turn_id=%s result_id=%s code=%s",
+                turn.id,
+                result.id,
+                _safe_code(error),
             )
             reply = MemberReply(SILENT_MEMBER_LINE)
             error = None
@@ -3285,6 +3329,14 @@ def _runtime_tools(
         actor_context=claim.actor_context,
     )
     if assessment_revoked_scope is None:
+        with factory() as db:
+            row = db.get(Conversation, conversation_id)
+            closed = row is not None and _closed_formal_attempt(db, row)
+        if closed:
+            for function in functions:
+                if function.name == "assessment_action":
+                    # Stopping here used to swallow the casual reply.
+                    function.stop_after_tool_call = False
         return functions
     from app.modules.provider_disclosure.team_standing import (
         REVOKED_ASSESSMENT_ACTION_TOOL_DESCRIPTION,
