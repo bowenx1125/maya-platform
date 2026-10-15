@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -11,6 +13,7 @@ import pytest
 from app.core.errors import PlatformError
 from app.core.models import AgentVersion
 from app.modules.demo_baseline.service import ensure_demo_baseline
+from app.modules.knowledge_sets.models import KnowledgeSet, KnowledgeSetMarkdownVersion
 from app.modules.learning.attempts import (
     get_assessment_runtime_context,
     read_attempt_answers,
@@ -47,6 +50,7 @@ from app.modules.workspace.models import (
 from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
+from app.seed import TEACHER_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -1015,6 +1019,148 @@ def test_explicit_formal_start_is_the_guide_opening_before_any_member(
     assert "乙题" in (speakers[1][1] or "")
     assert "Gettier" not in "".join(text or "" for _member, text in speakers)
     assert SUMMARIZER_LINE not in [text for _member, text in speakers]
+
+
+_RUBRIC_CANARY = "RUBRIC_CANARY_DO_NOT_SHOW"
+_ANSWER_CANARY = "ANSWER_KEY_CANARY_DO_NOT_SHOW"
+_WELCOME = "约 8 分钟 · 没有对错\n\nAbout 8 minutes. No right or wrong answers."
+
+
+def _question_bank(preamble: str) -> str:
+    return (
+        "# 认识论小测\n\n"
+        f"{preamble}"
+        "## Questions\n\n"
+        "### Question 1\n\n"
+        "甲题\n\n"
+        "#### Rubric\n\n"
+        f"- **Reasoning** (2): {_RUBRIC_CANARY}\n\n"
+        "Total: 2 points\n\n"
+        "#### Reference answer\n\n"
+        f"{_ANSWER_CANARY}\n\n"
+        "### Question 2\n\n"
+        "乙题\n\n"
+        "#### Rubric\n\n"
+        f"- **Reasoning** (2): {_RUBRIC_CANARY}\n\n"
+        "Total: 2 points\n\n"
+        "#### Reference answer\n\n"
+        f"{_ANSWER_CANARY}\n"
+    )
+
+
+def _attach_markdown(db: Any, set_id: str, markdown: str, version_ids: list[str]) -> None:
+    set_row = db.get(KnowledgeSet, set_id)
+    assert set_row is not None
+    set_row.current_markdown_version_seq = 1
+    set_row.content_revision += 1
+    db.add(
+        KnowledgeSetMarkdownVersion(
+            id=str(uuid4()),
+            knowledge_set_id=set_id,
+            version_seq=1,
+            markdown=markdown,
+            student_projection_markdown=markdown,
+            asset_version_ids_json=json.dumps(
+                version_ids, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ),
+            content_hash=hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            origin="manual",
+            generation_run_id=None,
+            generation_intent_seq=None,
+            source_manifest_hash=None,
+            created_by_user_id=TEACHER_ID,
+            generator_agent_version_id=None,
+            created_at=datetime.now(UTC),
+        )
+    )
+    db.flush()
+
+
+def test_formal_start_speaks_the_knowledge_opening_before_question_one(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        (
+            conversation_id,
+            _team_id,
+            _team_version_id,
+            _publication_id,
+            set_id,
+            questions,
+        ) = _create_formal_conversation(db, visibility="private", prompts=("甲题", "乙题"))
+        _attach_markdown(
+            db,
+            set_id,
+            _question_bank(f"## Opening\n\n{_WELCOME}\n\n先读说明，再作答。\n\n"),
+            [version_id for _asset_id, version_id in questions],
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(app_bundle, database, "formal-knowledge-opening")
+    _grant(database, conversation_id, policy)
+    opening = _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    text = _texts(database, opening)
+    assert text == [
+        f"{_WELCOME}\n\n先读说明，再作答。\n\n收到，第一题是甲题",
+    ]
+    spoken = text[0] or ""
+    assert _RUBRIC_CANARY not in spoken
+    assert _ANSWER_CANARY not in spoken
+    assert spoken.index("约 8 分钟 · 没有对错") < spoken.index("收到，第一题是甲题")
+    answer = "甲题的回答"
+    answered = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        answer,
+        monkeypatch,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": answer},
+            )
+        ],
+    )
+    later = "\n".join(item or "" for item in _texts(database, answered))
+    assert "约 8 分钟" not in later
+    assert "About 8 minutes" not in later
+    assert "乙题" in later
+    assert _RUBRIC_CANARY not in later
+    assert _ANSWER_CANARY not in later
+
+
+def test_formal_start_without_an_opening_is_unchanged(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        (
+            conversation_id,
+            _team_id,
+            _team_version_id,
+            _publication_id,
+            set_id,
+            questions,
+        ) = _create_formal_conversation(db, visibility="private", prompts=("甲题", "乙题"))
+        _attach_markdown(
+            db,
+            set_id,
+            _question_bank("## Concepts\n\nCONCEPT_CANARY_NOT_A_WELCOME\n\n"),
+            [version_id for _asset_id, version_id in questions],
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(app_bundle, database, "formal-no-knowledge-opening")
+    _grant(database, conversation_id, policy)
+    opening = _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    assert _texts(database, opening) == ["收到，第一题是甲题"]
 
 
 def test_invalid_scale_answer_is_one_scorer_rejection(

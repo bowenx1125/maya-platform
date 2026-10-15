@@ -203,3 +203,12 @@ def opening_line(prompt: str | None) -> str:
     if prompt:
         return f"{OPENING_PREFIX}{prompt}"
     return f"{OPENING_PREFIX}…"
+
+
+def with_spoken_opening(line: str, opening: str) -> str:
+    """Put a Knowledge welcome before the first question, without padding when it is empty."""
+
+    text = opening.strip()
+    if not text:
+        return line
+    return f"{text}\n\n{line}"

@@ -504,16 +504,42 @@ def _attempt_question_presented(db: Session, attempt_id: str) -> bool:
 def _formal_opening_stored(db: Session, conversation_id: str) -> bool:
     from .formal_assessment import OPENING_PREFIX
 
+    # The Knowledge welcome, when there is one, is spoken before this prefix.
     text = db.scalar(
         select(TeamTurnResult.assistant_text)
         .join(ConversationTurn, ConversationTurn.id == TeamTurnResult.turn_id)
         .where(
             ConversationTurn.conversation_id == conversation_id,
-            TeamTurnResult.assistant_text.startswith(OPENING_PREFIX),
+            TeamTurnResult.assistant_text.contains(OPENING_PREFIX),
         )
         .limit(1)
     )
     return text is not None
+
+
+def _with_knowledge_opening(db: Session, line: str, question_version_id: object | None) -> str:
+    """Prepend the shared Knowledge welcome on the first-question line only."""
+
+    from app.modules.knowledge_sets.service import knowledge_opening_for_question_version
+
+    from .formal_assessment import with_spoken_opening
+
+    if question_version_id is None:
+        return line
+    return with_spoken_opening(
+        line, knowledge_opening_for_question_version(db, str(question_version_id))
+    )
+
+
+def _spoken_opening(db: Session, result: AssessmentRuntimeResult) -> str:
+    if result.response_key not in {"assessment.started", "assessment.abandoned_and_restarted"}:
+        return ""
+    question = result.context.current_question
+    if question is None:
+        return ""
+    from app.modules.knowledge_sets.service import knowledge_opening_for_question_version
+
+    return knowledge_opening_for_question_version(db, str(question.question_version_id))
 
 
 def _present_current_question(
@@ -1869,6 +1895,7 @@ def _scorer_micro_reply(
             chinese=assessment_reply_chinese(db, row.id, user_texts),
             # The Guide line is the one restatement of this Question.
             include_question=not assessment_answer_not_recorded(assessment_result, latest),
+            opening=_spoken_opening(db, assessment_result),
         )
     )
     if not text:
@@ -1909,17 +1936,19 @@ def _guide_micro_script(
         return None
     if not _attempt_question_presented(db, attempt.id):
         prompt = None
+        version_id = None
         if actor_context is not None:
             context = get_assessment_runtime_context(db, actor_context, row.id)
             if context is not None and context.current_question is not None:
                 prompt = context.current_question.prompt
+                version_id = context.current_question.question_version_id
                 mark_attempt_question_presented(
                     db,
                     actor_context,
                     row.id,
                     question_version_id=context.current_question.question_version_id,
                 )
-        return opening_line(prompt)
+        return _with_knowledge_opening(db, opening_line(prompt), version_id)
     projection = _assessment_result_for_turn(db, turn)
     if projection is None:
         # An opening that was paused before it spoke has no scorer on the turn.
@@ -2041,7 +2070,9 @@ def _scripted_opening_for_auto_start(
     from .formal_assessment import opening_line
 
     question = assessment_result.context.current_question
-    return MemberReply(opening_line(question.prompt if question is not None else None))
+    line = opening_line(question.prompt if question is not None else None)
+    version_id = question.question_version_id if question is not None else None
+    return MemberReply(_with_knowledge_opening(db, line, version_id))
 
 
 def _append_formal_summarizer(db: Session, row: Conversation, turn: ConversationTurn) -> None:
@@ -2239,6 +2270,7 @@ def settle_member(
                         follow_up_pending=awaits_follow_up_round(
                             db, str(assessment_result.context.attempt.id)
                         ),
+                        opening=_spoken_opening(db, assessment_result),
                     )
                 )
             error = None

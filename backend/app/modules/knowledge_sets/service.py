@@ -1607,6 +1607,147 @@ def _student_safe_markdown(markdown: str, parsed_questions: list[QuestionContent
     return result if _student_markdown_has_body(result) else ""
 
 
+# Generator sections around a question bank. They are not the welcome a student
+# hears when a test starts, so an existing bank without a preamble stays silent.
+_PREAMBLE_SKIP_TITLES = frozenset({"concepts", "graph", "notes"})
+_OPENING_HIDDEN_TITLES = _STUDENT_HIDDEN_HEADING_TITLES | frozenset({"questions", "题目"})
+
+
+def _is_opening_heading(title: str) -> bool:
+    stripped = title.strip()
+    return stripped.casefold() == "opening" or stripped == "开场白"
+
+
+def _is_opening_hidden(title: str) -> bool:
+    return title.casefold().strip() in _OPENING_HIDDEN_TITLES
+
+
+def _heading_section_end(
+    headings: list[tuple[int, int, str]], start: int, level: int, limit: int
+) -> int:
+    return next(
+        (
+            index
+            for index, next_level, _title in headings
+            if start < index < limit and next_level <= level
+        ),
+        limit,
+    )
+
+
+def _opening_paragraphs(lines: list[str]) -> str:
+    """Keep authored paragraphs and drop blank padding."""
+
+    paragraphs: list[str] = []
+    block: list[str] = []
+    for line in lines:
+        if line.strip():
+            block.append(line.rstrip())
+            continue
+        if block:
+            paragraphs.append("\n".join(block))
+            block = []
+    if block:
+        paragraphs.append("\n".join(block))
+    return "\n\n".join(paragraphs).strip()
+
+
+def _opening_prose(
+    lines: list[str],
+    headings: list[tuple[int, int, str]],
+    start: int,
+    end: int,
+    *,
+    skip_structural: bool,
+) -> str:
+    removed: set[int] = set()
+    for index, level, title in headings:
+        if index < start or index >= end:
+            continue
+        folded = title.casefold().strip()
+        skip = _is_opening_hidden(title) or (skip_structural and folded in _PREAMBLE_SKIP_TITLES)
+        if skip_structural and _QUESTION_HEADING.fullmatch(title.strip()) is not None:
+            skip = True
+        if skip:
+            removed.update(range(index, _heading_section_end(headings, index, level, end)))
+    heading_lines = {index for index, _level, _title in headings}
+    kept: list[str] = []
+    for index in range(start, end):
+        if index in removed or index in heading_lines:
+            continue
+        line = lines[index]
+        # A Setext underline is the heading marker, not welcome text.
+        if index > 0 and index - 1 in heading_lines and re.fullmatch(r"\s{0,3}(=+|-+)\s*", line):
+            continue
+        kept.append(line)
+    return _opening_paragraphs(kept)
+
+
+def knowledge_opening(markdown: str) -> str:
+    """Student-visible welcome from a Knowledge document.
+
+    ``## Opening`` or ``## 开场白`` wins. Otherwise the prose under the title and
+    before ``## Questions`` is used. Concepts, Graph, Notes, question prompts,
+    rubrics and reference answers are not part of that welcome, so a generated
+    bank with no preamble does not change the first-question line.
+    """
+
+    if not markdown or not markdown.strip():
+        return ""
+    lines = markdown.splitlines()
+    headings = _markdown_headings(markdown)
+    explicit = next(
+        (
+            (index, level)
+            for index, level, title in headings
+            if level == 2 and _is_opening_heading(title)
+        ),
+        None,
+    )
+    if explicit is not None:
+        index, level = explicit
+        end = _heading_section_end(headings, index, level, len(lines))
+        return _opening_prose(lines, headings, index + 1, end, skip_structural=False)
+    title = next((index for index, level, _title in headings if level == 1), None)
+    questions = next(
+        (
+            index
+            for index, level, heading in headings
+            if level == 2 and heading.casefold().strip() == "questions"
+        ),
+        None,
+    )
+    if title is None or questions is None or questions <= title:
+        return ""
+    return _opening_prose(lines, headings, title + 1, questions, skip_structural=True)
+
+
+def knowledge_opening_for_question_version(
+    db: Session, question_version_id: str | UUID | None
+) -> str:
+    """Opening on the current Markdown of the Question's Knowledge set.
+
+    A hash mismatch is not spoken. The question line still stands; this path
+    does not guess at a document the catalog check would reject.
+    """
+
+    if question_version_id is None:
+        return ""
+    version = db.get(KnowledgeAssetVersion, str(question_version_id))
+    if version is None:
+        return ""
+    asset = db.get(KnowledgeAsset, version.asset_id)
+    if asset is None:
+        return ""
+    set_row = db.get(KnowledgeSet, asset.knowledge_set_id)
+    if set_row is None or set_row.deleted_at is not None:
+        return ""
+    current = _current_markdown_version(db, set_row)
+    if current is None or _sha256(current.markdown) != current.content_hash:
+        return ""
+    return knowledge_opening(current.markdown)
+
+
 def _without_question_section(markdown: str) -> str:
     lines = markdown.splitlines()
     headings = _markdown_headings(markdown)

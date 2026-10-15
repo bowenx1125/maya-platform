@@ -966,6 +966,7 @@ def assessment_safe_reply_text(
     chinese: bool | None = None,
     follow_up_pending: bool = False,
     include_question: bool = True,
+    opening: str | None = None,
 ) -> str:
     """Render the server's student-safe assessment projection.
 
@@ -1115,7 +1116,17 @@ def assessment_safe_reply_text(
             if chinese
             else f"Question {ordinal}: {question.prompt}"
         )
-    return "\n\n".join(lines)
+    rendered = "\n\n".join(lines)
+    preamble = (opening or "").strip()
+    # Only the turn that opens Question 1. Later answers keep the question line alone.
+    if (
+        preamble
+        and include_question
+        and question is not None
+        and result.response_key in {"assessment.started", "assessment.abandoned_and_restarted"}
+    ):
+        return f"{preamble}\n\n{rendered}"
+    return rendered
 
 
 def assessment_answer_not_recorded(result: AssessmentRuntimeResult, latest_user_text: str) -> bool:

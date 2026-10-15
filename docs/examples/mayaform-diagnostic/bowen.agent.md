@@ -16,7 +16,7 @@ scorer: Jade
 summarizer: Kaikai
 student_round_order: Jade, Bowen
 
-`assessment_active` 是服务器账本标记，模型不能设置它。开场只由 question_guide 说「收到，第一题是…」。学生消息按 `student_round_order` 发言，通常先 scorer 再 question_guide。`answer_recorder` 与 `scorer` 是同一花名册成员：写工具和「已记录你的回答。」只属于这一人。question_guide 不调用写工具。全部答完后 question_guide 说「答题全部结束」，summarizer 说「正在总结答案」。
+`assessment_active` 是服务器账本标记，模型不能设置它。开场只由 question_guide 说。共享 Knowledge 若有「## Opening」或「## 开场白」，服务器先念这一段，再接「收到，第一题是…」；没有这段则仍只说「收到，第一题是…」。学生消息按 `student_round_order` 发言，通常先 scorer 再 question_guide。`answer_recorder` 与 `scorer` 是同一花名册成员：写工具和「已记录你的回答。」只属于这一人。question_guide 不调用写工具。全部答完后 question_guide 说「答题全部结束」，summarizer 说「正在总结答案」。
 
 ## Informal
 
