@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.modules.auth.service import AuthContext
@@ -48,9 +48,68 @@ class AssessmentEditArguments(BaseModel):
     follow_up_question_refs: list[str] = Field(default_factory=list)
 
 
+def _summary_text(item: Any) -> str:
+    if isinstance(item, str):
+        return " ".join(item.split())
+    if isinstance(item, dict):
+        for key in ("text", "point", "name", "knowledge_point", "summary"):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return " ".join(value.split())
+        for value in item.values():
+            if isinstance(value, str) and value.strip():
+                return " ".join(value.split())
+    return ""
+
+
+def _summary_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = _summary_text(value)
+        return [text] if text else []
+    if not isinstance(value, list):
+        return []
+    return [text for item in value if (text := _summary_text(item))]
+
+
+def _summary_content(raw: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the summary fields. Models often send them beside `content`."""
+
+    content: dict[str, Any] = {}
+    summary = raw.get("summary")
+    if isinstance(summary, str):
+        content["summary"] = summary.strip()
+    for key in ("strengths", "areas_to_explore", "not_yet_verified"):
+        if key in raw:
+            content[key] = _summary_list(raw[key])
+    next_step = raw.get("next_step")
+    if isinstance(next_step, str) and next_step.strip():
+        content["next_step"] = next_step.strip()
+    return content
+
+
 class BoundaryEditArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
     content: BoundarySummaryContent
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_flat_summary(cls, value: Any) -> Any:
+        # The schema nests the summary under content. A model that was told the
+        # field names puts them directly in arguments, and stop_after_tool_call
+        # then ends the turn before a second try. Accept that shape.
+        if not isinstance(value, dict):
+            return value
+        inner = value.get("arguments")
+        if "content" not in value and isinstance(inner, dict):
+            value = inner
+        content = value.get("content")
+        if isinstance(content, str) and content.strip():
+            return {"content": {"summary": content.strip()}}
+        if isinstance(content, dict):
+            return {"content": _summary_content(content)}
+        if isinstance(value.get("summary"), str):
+            return {"content": _summary_content(value)}
+        return value
 
 
 def read_attempt(

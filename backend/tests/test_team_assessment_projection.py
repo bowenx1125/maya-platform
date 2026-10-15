@@ -808,6 +808,24 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
         )
         assert any("This round's answers have been reviewed." in (text or "") for text in shown)
         assert any("Congratulations" in (text or "") for text in shown)
+        from app.modules.workspace.formal_assessment import SUMMARIZER_LINE
+        from app.modules.workspace.team_conversation import team_session_view
+
+        session = team_session_view(
+            db, db.get(Conversation, conversation_id), actor, [], runtime_available=True
+        )
+        visible = [
+            result.assistant_text or "" for turn in session.turns for result in turn.member_results
+        ]
+        assert visible[-1].strip() == SUMMARIZER_LINE
+        assert all("This round's answers have been reviewed." not in text for text in visible)
+        assert all("本轮回答已评估" not in text for text in visible)
+        assert all(turn.state != "partial" for turn in session.turns)
+        assert all(
+            result.safe_error_code != "assessment_executor_write_required"
+            for turn in session.turns
+            for result in turn.member_results
+        )
         assert get_assessment_runtime_context(db, actor, conversation_id) is None
         attempt = db.get(AssessmentAttempt, str(context.attempt.id))
         assert attempt is not None and attempt.status == "completed"

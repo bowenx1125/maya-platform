@@ -350,7 +350,7 @@ def team_session_view(
     *,
     runtime_available: bool = False,
 ) -> TeamChatSession:
-    from .team_runtime import _validate_members, project_team_turn
+    from .team_runtime import _student_hides_turn, _validate_members, project_team_turn
 
     selection = frozen_team_selection(db, row)
     participants = _participants(db, row.id)
@@ -404,6 +404,7 @@ def team_session_view(
                 )
                 .order_by(ConversationTurn.position, ConversationTurn.id)
             )
+            if not _student_hides_turn(db, turn)
         ],
         created_at=row.created_at,
         title=row.title,

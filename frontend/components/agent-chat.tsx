@@ -332,6 +332,42 @@ function visibleTeamMemberResults(
   );
 }
 
+function studentEndFlowTurns(turns: TeamChatTurn[]): TeamChatTurn[] {
+  // Once 正在总结答案 is on screen, that progress bar is the last thing the
+  // student sees. The closing answer's "已记录" line, the scorer's review,
+  // and a failed summary (banner plus member card) stay off this chat.
+  const completion = turns.findIndex((turn) =>
+    turn.member_results.some(
+      (result) => (result.assistant_text ?? "").trim() === "正在总结答案",
+    ),
+  );
+  if (completion < 0) return turns;
+  return turns.flatMap((turn, index) => {
+    if (index > completion && !(turn.user_text ?? "").trim()) {
+      const texts = turn.member_results.map(
+        (result) => result.assistant_text ?? "",
+      );
+      const keep = texts.some(
+        (text) =>
+          text.includes("下面是追问") ||
+          text.includes("Next, a follow-up question") ||
+          text.startsWith("老师已更改当前回合的 Knowledge"),
+      );
+      if (!keep) return [];
+    }
+    if (index !== completion) return [turn];
+    return [
+      {
+        ...turn,
+        member_results: turn.member_results.filter(
+          (result) =>
+            (result.assistant_text ?? "").trim() !== "已记录你的回答。",
+        ),
+      },
+    ];
+  });
+}
+
 function isTeamSession(
   session: ConversationSession,
 ): session is TeamChatSession {
@@ -1635,7 +1671,8 @@ function AgentChatScope({
       !preset &&
       (session?.assessment_stage === "preparing" ||
         session?.assessment_stage === "scoring" ||
-        session?.assessment_stage === "summarizing");
+        (session?.assessment_stage === "summarizing" &&
+          session.can_send === false));
     if (
       !session ||
       !message ||
@@ -2454,7 +2491,11 @@ function AgentChatScope({
     selectedTeam?.turns.at(-1)?.state === "pending" ||
     selectedTeam?.assessment_stage === "preparing" ||
     selectedTeam?.assessment_stage === "scoring" ||
-    selectedTeam?.assessment_stage === "summarizing";
+    (selectedTeam?.assessment_stage === "summarizing" &&
+      selectedTeam.can_send === false);
+  const shownTeamTurns = selectedTeam
+    ? studentEndFlowTurns(selectedTeam.turns)
+    : [];
   // Why this Chat cannot continue, shown once under its latest message.
   const closedNotice = selectedTeam
     ? selectedTeam.team.deleted
@@ -2777,7 +2818,7 @@ function AgentChatScope({
                       </div>
                     </div>
                   ))}
-                  {selectedTeam?.turns.map((turn) => (
+                  {shownTeamTurns.map((turn) => (
                     <div key={turn.id} className={styles.exchange}>
                       {turn.user_text ? (
                         <div className={styles.userMessage}>
@@ -2812,12 +2853,13 @@ function AgentChatScope({
                       <div className={styles.teamResults}>
                         {sortTeamMemberResults(
                           visibleTeamMemberResults(turn.member_results),
-                          selectedTeam.team.members,
+                          selectedTeam?.team.members ?? [],
                         ).map((result) => {
+                          if (!selectedTeam) return null;
                           const participant = selectedTeam.team.members.find(
                             (member) => member.id === result.participant_id,
                           );
-                          const summarizerTurnId = [...selectedTeam.turns]
+                          const summarizerTurnId = [...shownTeamTurns]
                             .reverse()
                             .find((item) =>
                               item.member_results.some((card) =>
@@ -2892,9 +2934,8 @@ function AgentChatScope({
                               {(formalSummarizerCard ||
                                 (isSummarizerTurn &&
                                   turn.id ===
-                                    selectedTeam.turns[
-                                      selectedTeam.turns.length - 1
-                                    ]?.id)) &&
+                                    shownTeamTurns[shownTeamTurns.length - 1]
+                                      ?.id)) &&
                               selectedTeam.assessment_stage &&
                               selectedTeam.assessment_stage !== "preparing" ? (
                                 <AssessmentProgress
@@ -2962,12 +3003,12 @@ function AgentChatScope({
                   {/* Scoring with no summarizer or executor card yet still needs a bar. */}
                   {selectedTeam?.assessment_stage &&
                   selectedTeam.assessment_stage !== "preparing" &&
-                  !selectedTeam.turns.some((turn) =>
+                  !shownTeamTurns.some((turn) =>
                     turn.member_results.some((result) =>
                       (result.assistant_text ?? "").includes("正在总结答案"),
                     ),
                   ) &&
-                  !selectedTeam.turns.some(
+                  !shownTeamTurns.some(
                     (turn) =>
                       !turn.user_text &&
                       turn.member_results.some((result) => {

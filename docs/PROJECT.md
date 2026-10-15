@@ -136,17 +136,7 @@ Integrated PDF eb7e142 and selected colleague UI 817282e via b648efc/8987cf8; UI
 Components UI removed1d92a2f; maintenance APIs stay. October 9 pushed the v14
 line, including the colleague merges below; `main` is that same line.
 
-October5 build30db274/schema0053: ready/integrity/FK passed, Agno3.0.11 public
-SDK; backups20261005T110321Z and130151Z healthy. Sending/pending0; historical
-unknown3 retained. Synthetic RAG used1 charged Embedding and2 accepted charged
-Knowledge calls; resumed Gen2/seq3 replaced seq2 with history. Consent-denied
-synthetic sends made0 calls. Cleanup withdrew exact synthetic fixtures only;
-runtime ledger457 operations/457 charged requests remained unchanged.
-October7 explicitly authorizes a fresh dedicated synthetic four-Agent Team and
-multi-student workflow, superseding the older no-Team instruction. Approved
-synthetic payload/Private test reads stay scoped; never use real learner data or
-unrelated Private Chat bodies. Natural Team/assessment/Teacher statistics,
-download and Private exclusion remain unaccepted.
+October5 build30db274/schema0053: ready/integrity/FK passed, Agno3.0.11 public SDK; backups20261005T110321Z and130151Z healthy. Sending/pending0; historical unknown3 retained. Synthetic RAG: 1 charged Embedding, 2 accepted charged Knowledge calls; Gen2/seq3 replaced seq2 with history. Consent-denied sends: 0 calls. Cleanup withdrew exact synthetic fixtures only; runtime ledger 457 operations/457 charged requests unchanged. October7 authorizes a fresh dedicated synthetic four-Agent Team and multi-student workflow. Synthetic reads stay scoped; never real learner data or unrelated Private Chat bodies.
 
 [Current UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) overrides prior UI
 planning: same Studyform/Brainform structure for both roles, permissions differ.
@@ -200,7 +190,7 @@ October 11: PR #50 → `556fdc5`. Version pills green Public / gray Private. Cha
 `0059`. RAG fixed Private/Public at creation; Accounts visits read Private. `0060`
 soft-retires prior work (Demo keeps Laozi/Plato/Socrates). Agent notes must quote user.
 
-October 12: From 4d0c981; mock Demo, 0 Provider calls. Debates 404: setup required a group that teacher Studyform Agents lack; 0061 makes debate_participants.group_id nullable (FK-checked rebuild); setup and generation use the Agent's course. Lost assessment answers: the Leader replied in prose (assessment_action_required); the first assessment model call now forces its action tool (not revoked-source). User decision: every Public Team, Maya Teams included, takes only Public Agents (team_member_private); Private Teams mix both. Deleted Agents take their unshared RAG; Brainform lists no Private RAG; removed accounts leave member lists. zh round caps 50/50/50/100. DOCX/PDF ingest tests fail locally on main too.
+October 12: From 4d0c981; mock Demo, 0 Provider calls. Debates 404: teacher Studyform Agents lack a group; 0061 makes debate_participants.group_id nullable (FK-checked rebuild); setup uses the Agent's course. Lost answers: the Leader replied in prose (assessment_action_required); the first assessment call forces its action tool (not revoked-source). Public Teams, Maya Teams included, take only Public Agents (team_member_private); Private Teams mix both. Deleted Agents take unshared RAG; Brainform lists no Private RAG; removed accounts leave member lists. zh round caps 50/50/50/100. DOCX/PDF ingest tests fail locally on main too.
 0062 adds teacher personal voices (personal scope, owner-only); students choose groupmates' ready voices but manage only their own; a missing voice never blocks publishing or Debates. 我不知道/忘了 is a scored answer, not a skip.
 After the last answer the server runs scorer then summarizer as the student's live sign-in; assessment_stage drives progress; results show points, feedback, summary. Teachers read raw test messages (Private too); the server adds report links. A test asks every Knowledge Question (no sampling). The Leader sets reply_language. Publishing an Agent moves its Teams along. Open tests run the Leader alone; attempts stay apart.
 
@@ -211,8 +201,6 @@ Initial production Start0/9/End failed; Interact UI26/26/mock mobile passed,
 production clicks unverified.
 
 UI polish through PR #64: Teams match Agents; create Done validates; edit Done needs a dirty form; RAG/Knowledge save returns to the library; withdrawn RAG is not selectable; Team create names unavailable members. Accounts visits read public RAG/Knowledge only (publisher edits); Members/Test results/Recent activity come from the group overview; members sort by name; Profile moves students only into existing groups and old-group work becomes inaccessible. Below 880px, sideways/upright/sideways within 6s opens the card room. Hidden published RAG fails as knowledge_generation_sources_unavailable. Soft-deleted Agent Knowledge Sets revive on the next authorized generate/publish. PRs #56/#58/#59/#60/#64. Prior build 38eb07a: backup 20261014T040843Z/schema0064/HTTPS200, healthy.
-
-Integration refs: entaiaki eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f.
 
 ## October14 independent revalidation and release
 
@@ -236,4 +224,4 @@ Formal micro-rounds need Guide `# Team Ruleset` → `## Formal assessment` namin
 
 Built `2c62871` (PR #72: Knowledge partial promote + Chat progress + Team `# Team Ruleset` defaults + fused PR #71 Voices hover tip). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200. Cleanup: removed `/tmp/maya-*` probes, orphan backup `-shm`/`-wal`/`.bak`, and ~23GB Docker build cache (disk 60%→23%).
 
-October 15: New Team chats stay at revision 0 with no canned opening. Each prompt names that member and forbids another name; history uses a provider-safe token and prefixes the display name when they differ. The formal roster stays server-parsed. Outside a live assessment the Guide says what to do next and sometimes one sentence offering 正式测评, not every reply; a live assessment keeps the scripted lines. `## Informal` may change who replies and length. `正在总结答案` is progress. A failed summary (`assessment_executor_write_required`) says to send again. A free answer is saved only when the model sets relevant true; otherwise the server speaks that guidance and does not paste the question. Choice and scale replies must match their letters or range. Includes post-#82 main #81 `9b6953b`, #83 `b3a0337`, #84 `3733df7`, #85 `a12d17d`. No production deploy.
+October 15: New Team chats stay at revision 0 with no canned opening. Each prompt names that member and forbids another name; history uses a provider-safe token and prefixes the display name when they differ. The formal roster stays server-parsed. Outside a live assessment the Guide says what to do next and sometimes one sentence offering 正式测评, not every reply; a live assessment keeps the scripted lines. `## Informal` may change who replies and length. `正在总结答案` is the last student-visible line: the closing answer does not show `已记录你的回答。`, and later executor turns (the review line, a failed summary, and the partial banner) stay off the student chat. The summary still saves in the background; a flat tool payload is accepted, one server retry follows a missed summary (scoring is not retried), and the teacher sheet phase is `summary_not_saved` when it still fails. A free answer is saved only when the model sets relevant true; otherwise the server speaks that guidance and does not paste the question. Choice and scale replies must match their letters or range. Includes post-#82 main #81 `9b6953b`, #83 `b3a0337`, #84 `3733df7`, #85 `a12d17d`, #86 `bb97ec6`. No production deploy.

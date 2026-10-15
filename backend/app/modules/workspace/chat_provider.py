@@ -6,7 +6,7 @@ import logging
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from agno.models.message import Message
@@ -1186,6 +1186,7 @@ def chat_messages(
     sources: list[ChatSource],
     *,
     canonical_knowledge: list[dict[str, Any]] | None = None,
+    audience: Literal["student", "teacher"] = "student",
 ) -> tuple[list[dict[str, str]], str]:
     context = {
         "agent_markdown": version.agent_md,
@@ -1217,6 +1218,20 @@ def chat_messages(
         "Reply directly in natural text. Use any available Maya Tools when the current task "
         "calls for a saved record or formal activity action; never claim an action succeeded "
         "unless its Tool returns success. "
-        f"{AGENT_LIMIT_REPLY_RULE}\n" + json.dumps(context, ensure_ascii=False)
+        + (
+            "The person writing is a course teacher, not a student taking a test. "
+            "Do not greet them as the learner or tell them to continue a question. "
+            "When they ask about attempts, answers, scores or summaries, call the teacher "
+            "tools and use only what those tools return. phase summary_not_saved, or "
+            "summary_status not_saved, means the answers are saved and the summary write "
+            "failed. Do not quote internal field names such as boundary_summary. "
+            "Do not say a report was generated, a download is below, or an answer sheet "
+            "is attached unless the tool result for this turn contains that report or "
+            "those attempts. "
+            if audience == "teacher"
+            else ""
+        )
+        + f"{AGENT_LIMIT_REPLY_RULE}\n"
+        + json.dumps(context, ensure_ascii=False)
     )
     return [{"role": "system", "content": instruction}, *history], markdown_hash(version.agent_md)

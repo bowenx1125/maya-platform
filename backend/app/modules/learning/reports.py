@@ -633,6 +633,24 @@ def _cell(value: str) -> str:
     return " ".join(value.split()).replace("|", "\\|") or "—"
 
 
+def attempt_teacher_phase(db: Session, attempt: AssessmentAttempt) -> str:
+    """What a teacher should be told. A missing summary is not still answering."""
+
+    if attempt.status != "in_progress":
+        return attempt.status
+    from app.modules.learning.attempts import awaits_follow_up_round
+    from app.modules.learning.finalizer import _next_purpose
+
+    if awaits_follow_up_round(db, attempt.id):
+        return "answering"
+    purpose = _next_purpose(db, attempt)
+    if purpose == "boundary_summarize":
+        return "summary_not_saved"
+    if purpose == "assessment_evaluate":
+        return "scoring_not_saved"
+    return "answering"
+
+
 def attempt_answer_sheet(db: Session, attempt: AssessmentAttempt) -> dict[str, Any]:
     """One attempt's Questions with the student's own words, points and feedback."""
 
@@ -684,6 +702,7 @@ def attempt_answer_sheet(db: Session, attempt: AssessmentAttempt) -> dict[str, A
         "student_name": user.display_name if user is not None else "Student",
         "learner_ref": f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}",
         "status": attempt.status,
+        "phase": attempt_teacher_phase(db, attempt),
         "started_at": attempt.started_at.isoformat(),
         "ended_at": ended_at.isoformat() if ended_at is not None else None,
         "questions": questions,
@@ -694,9 +713,14 @@ def render_answer_sheet(sheet: dict[str, Any]) -> str:
     """The answer sheet as a Markdown table, written by the server."""
 
     started = str(sheet.get("started_at") or "")[:16].replace("T", " ")
+    phase = str(sheet.get("phase") or "")
+    shown_status = {
+        "summary_not_saved": "in_progress · summary not saved",
+        "scoring_not_saved": "in_progress · scores not saved",
+    }.get(phase, str(sheet.get("status")))
     lines = [
         f"**{sheet.get('student_name')} ({sheet.get('learner_ref')}) · "
-        f"{started} · {sheet.get('status')}**",
+        f"{started} · {shown_status}**",
         "",
         "| No. | Question | Answer | Points | Feedback |",
         "| ---: | --- | --- | ---: | --- |",

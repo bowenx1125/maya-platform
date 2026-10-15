@@ -643,6 +643,12 @@ def _formal_micro_round_participants(
             _present_current_question(db, actor_context, row.id)
         else:
             return [guide]
+    from app.modules.learning.finalizer import _next_purpose
+
+    # Once every question is in, scoring and the summary run on the server.
+    # A later student message must not make the scorer speak again.
+    if _next_purpose(db, attempt) is not None:
+        return [guide]
     return ordered
 
 
@@ -1301,6 +1307,7 @@ def _start_member(
             team_ruleset=team_ruleset,
             speaker_name=participant.display_name,
             is_leader=participant.is_leader,
+            viewer_is_teacher=_viewer_is_teacher(db, row, actor_context),
         )
         if assessment_purpose is None and saved_protocol:
             if "<active_assessment_action_protocol>" not in system_message:
@@ -1483,12 +1490,25 @@ def extract_team_ruleset(agent_md: str) -> str | None:
     return _extract(agent_md)
 
 
-def _speaker_identity(speaker_name: str | None) -> str:
+def _viewer_is_teacher(db: Session, row: Conversation, actor_context: AuthContext | None) -> bool:
+    if actor_context is None:
+        return False
+    membership = db.get(CourseMember, (row.course_id, actor_context.user.id))
+    return membership is not None and membership.role == "teacher"
+
+
+def _speaker_identity(speaker_name: str | None, *, viewer_is_teacher: bool = False) -> str:
     name = _single_line_name(speaker_name or "")
     if not name:
         return ""
+    audience = (
+        "Speak only as yourself to the teacher who is writing. "
+        "They are not the student who took a test, and you are not them. "
+        if viewer_is_teacher
+        else "Speak only as yourself to the student. "
+    )
     return (
-        f"You are {name}. Speak only as yourself to the student. "
+        f"You are {name}. {audience}"
         "Do not claim another member's name, role, or title, and do not "
         "introduce yourself as anyone else.\n"
     )
@@ -1505,15 +1525,16 @@ def _member_system(
     team_ruleset: str | None = None,
     speaker_name: str | None = None,
     is_leader: bool = False,
+    viewer_is_teacher: bool = False,
 ) -> str:
     if assessment_source_revoked:
         from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
 
         # This wire is compared and disclosed as the exact protocol. A Ruleset
         # or identity suffix would fail that check, so the closed revoked turn stays exact.
-        del team_ruleset, speaker_name, is_leader
+        del team_ruleset, speaker_name, is_leader, viewer_is_teacher
         return ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
-    identity = _speaker_identity(speaker_name)
+    identity = _speaker_identity(speaker_name, viewer_is_teacher=viewer_is_teacher)
     message = (
         f"{identity}"
         "Reply in the language of the user's latest sentence, unless they ask you to "
@@ -1544,7 +1565,10 @@ def _member_system(
             instruction = (
                 "You are the server-authorized Boundary summarizer for this active assessment. "
                 "Use only the saved learner responses and persisted Assessment in this payload. "
-                "Call update_learning_boundary once with a complete structured summary, then stop. "
+                "Call update_learning_boundary once, then stop. "
+                "Its argument is one object, content: summary is one paragraph; "
+                "strengths, areas_to_explore and not_yet_verified are lists of short strings; "
+                "next_step is optional. Put those fields only inside content. "
                 "strengths lists knowledge points with evidence of mastery; areas_to_explore "
                 "lists weak points that submitted answers actually showed; not_yet_verified lists "
                 "knowledge points without evidence: skipped questions and the not_asked topics. "
@@ -1630,7 +1654,7 @@ def _member_system(
             message += (
                 "The Guide/Leader Agent.md has no # Team Ruleset section, so keep these defaults.\n"
             )
-        if is_leader:
+        if is_leader and not viewer_is_teacher:
             # Other members must not be told to offer a test. ## Informal can
             # restate that only the Guide does, and a live assessment never
             # reaches this branch.
@@ -1642,6 +1666,28 @@ def _member_system(
                 "## Informal may change who replies and how long they speak; "
                 "it does not make this offer every turn and does not replace "
                 "the server's formal assessment lines.\n"
+            )
+        elif not viewer_is_teacher:
+            message += (
+                "This member is not the Guide. Do not invite anyone to start 正式测评, "
+                "a formal test, or describe the test menu. "
+                "If ## Informal says only the Guide explains what to do next, "
+                "keep this reply to one short sentence.\n"
+            )
+        if viewer_is_teacher:
+            message += (
+                "The person writing is a course teacher, not a student taking this test. "
+                "Do not greet them as the learner, do not say an attempt is theirs, and "
+                "do not tell them to continue a question. "
+                "When they ask about attempts, answers, scores or summaries, call the "
+                "teacher tools and use only what those tools return. "
+                "phase summary_not_saved, or summary_status not_saved, means the answers "
+                "are saved and the summary write failed: say the summary was not saved. "
+                "Do not describe that attempt as still on a question, and do not quote "
+                "internal field names such as boundary_summary. "
+                "Do not say a report was generated, a download is below, or an answer "
+                "sheet is attached unless the tool result for this turn contains that "
+                "report or those attempts.\n"
             )
         message += (
             "Authorization (ACL) overrides an assessment ledger, and that ledger "
@@ -1914,6 +1960,17 @@ def _guide_micro_script(
     progress = projection.context.progress
     done = progress.question_count > 0 and progress.resolved_count >= progress.question_count
     if done and not awaits_follow_up_round(db, str(projection.context.attempt.id)):
+        from .formal_assessment import SILENT_MEMBER_LINE, SUMMARIZER_LINE
+
+        # The closing line and the progress bar are already on screen.
+        announced = db.scalar(
+            select(TeamTurnResult.id).where(
+                TeamTurnResult.conversation_id == row.id,
+                TeamTurnResult.assistant_text == SUMMARIZER_LINE,
+            )
+        )
+        if announced is not None:
+            return SILENT_MEMBER_LINE
         return ALL_DONE_GUIDE
     if done:
         return "请稍候。"
@@ -2054,14 +2111,17 @@ def settle_member(
     with _writer(factory) as db:
         current = _current_run(db, turn_id, token)
         result = db.get(TeamTurnResult, result_id)
-        if (
-            current is None
-            or result is None
-            or result.turn_id != turn_id
-            or result.state not in {"pending", "running"}
-        ):
+        if current is None or result is None or result.turn_id != turn_id:
             return False
         row, turn = current
+        if result.state == "ready":
+            # update_learning_boundary stores this result before the receipt
+            # commits. Finishing here releases the chat; a second settle must
+            # not replace that text or report the run as interrupted.
+            _finish_run(db, row, turn)
+            return True
+        if result.state not in {"pending", "running"}:
+            return False
         if error is None and result.state != "running":
             return False
         assessment_result = _assessment_result_for_result(db, turn, result)
@@ -2266,6 +2326,33 @@ def settle_member(
             _append_formal_summarizer(db, row, turn)
         _finish_run(db, row, turn)
     return True
+
+
+def answer_sheet_markdown(raw_receipts: Iterable[str]) -> str:
+    """Markdown tables for read_student_answers receipts, once each."""
+
+    from app.modules.learning.reports import render_answer_sheet
+
+    tables: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_receipts:
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            continue
+        value = payload.get("result")
+        sheets = value.get("attempts") if isinstance(value, dict) else None
+        for sheet in sheets if isinstance(sheets, list) else []:
+            attempt_id = sheet.get("attempt_id") if isinstance(sheet, dict) else None
+            if not isinstance(attempt_id, str) or attempt_id in seen:
+                continue
+            seen.add(attempt_id)
+            tables.append(render_answer_sheet(sheet))
+    if not tables:
+        return ""
+    return "\n\n" + "\n\n".join(tables)
 
 
 def report_paths(raw_receipts: Iterable[str]) -> list[str]:
@@ -2641,6 +2728,7 @@ def settle_completed_boundary_tool_call(
     result.safe_error_code = None
     result.completed_at = datetime.now(UTC)
     _append_event(db, current[1], "member_result", result.id)
+    _finish_run(db, row, current[1])
     db.flush()
 
 
@@ -3400,6 +3488,7 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                     "{}",
                     speaker_name=participant.display_name,
                     is_leader=participant.is_leader,
+                    viewer_is_teacher=_viewer_is_teacher(db, row, claim.actor_context),
                 )
                 base_systems[participant.id] = base_system
                 specs.append(
@@ -3836,6 +3925,83 @@ def recover_team_runs(db: Session) -> int:
     return recovered
 
 
+def _test_awaiting_final_write(db: Session, conversation_id: str) -> bool:
+    """Questions are all in, and scoring or the summary is not saved yet."""
+
+    from app.modules.learning.attempts import awaits_follow_up_round
+    from app.modules.learning.finalizer import _next_purpose
+
+    attempt = db.scalar(
+        select(AssessmentAttempt)
+        .where(AssessmentAttempt.source_conversation_id == conversation_id)
+        .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id.desc())
+        .limit(1)
+    )
+    if attempt is None:
+        return False
+    if attempt.status == "completed":
+        return True
+    if attempt.status != "in_progress" or awaits_follow_up_round(db, attempt.id):
+        return False
+    return _next_purpose(db, attempt) is not None
+
+
+def _hides_recorded_fact(db: Session, turn: ConversationTurn) -> bool:
+    """The closing answer keeps its receipt, but the student does not see it."""
+
+    from .formal_assessment import RECORDED_FACT
+
+    if not _test_awaiting_final_write(db, turn.conversation_id):
+        return False
+    latest = db.scalar(
+        select(TeamTurnResult.turn_id)
+        .where(
+            TeamTurnResult.conversation_id == turn.conversation_id,
+            TeamTurnResult.assistant_text == RECORDED_FACT,
+        )
+        .order_by(TeamTurnResult.created_at.desc(), TeamTurnResult.id.desc())
+        .limit(1)
+    )
+    return latest == turn.id
+
+
+def _student_hides_turn(db: Session, turn: ConversationTurn) -> bool:
+    """After 正在总结答案, executor turns stay off the student chat.
+
+    That includes the scorer's review line and a summary that failed to save.
+    Follow-up questions and a teacher's knowledge notice stay visible.
+    """
+
+    from .formal_assessment import SUMMARIZER_LINE
+
+    if (turn.user_text or "").strip():
+        return False
+    results = list(db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id)))
+    texts = [result.assistant_text or "" for result in results]
+    if any(text.startswith("老师已更改当前回合的 Knowledge") for text in texts):
+        return False
+    if any("下面是追问。" in text or "Next, a follow-up question." in text for text in texts):
+        return False
+    if any(text.strip() == SUMMARIZER_LINE for text in texts):
+        return False
+    announced = db.scalar(
+        select(TeamTurnResult.id).where(
+            TeamTurnResult.conversation_id == turn.conversation_id,
+            TeamTurnResult.assistant_text == SUMMARIZER_LINE,
+        )
+    )
+    return announced is not None
+
+
+def _student_hides_result(db: Session, turn: ConversationTurn, result: TeamTurnResult) -> bool:
+    from .formal_assessment import RECORDED_FACT, SILENT_MEMBER_LINE
+
+    text = (result.assistant_text or "").strip()
+    if text == SILENT_MEMBER_LINE:
+        return True
+    return text == RECORDED_FACT and _hides_recorded_fact(db, turn)
+
+
 def project_team_turn(db: Session, turn: ConversationTurn, *, read_only: bool) -> TeamChatTurn:
     members = db.execute(
         select(TeamTurnResult, ConversationParticipant)
@@ -3846,14 +4012,29 @@ def project_team_turn(db: Session, turn: ConversationTurn, *, read_only: bool) -
         .where(TeamTurnResult.turn_id == turn.id)
         .order_by(TeamTurnResult.ordinal)
     )
+    visible = [
+        (result, member)
+        for result, member in members
+        if not _student_hides_result(db, turn, result)
+    ]
+    failed_visible = any(result.state in {"failed", "acceptance_unknown"} for result, _ in visible)
+    state = turn.state
+    safe_error_code = turn.safe_error_code
+    if (
+        turn.state == "partial"
+        and not failed_visible
+        and any(result.state == "ready" for result, _ in visible)
+    ):
+        # A hidden executor failure must not leave the closing turn looking partial.
+        state, safe_error_code = "ready", None
     return TeamChatTurn(
         id=UUID(turn.id),
         user_text=turn.user_text,
         assistant_text=None,
         mode=cast(Literal["real", "mock"], turn.mode),
-        state=cast(Any, turn.state),
+        state=cast(Any, state),
         sources=[],
-        safe_error_code=turn.safe_error_code,
+        safe_error_code=safe_error_code,
         routing=TeamRouting.model_validate_json(turn.routing_json or "{}"),
         member_results=[
             TeamMemberResult(
@@ -3866,7 +4047,7 @@ def project_team_turn(db: Session, turn: ConversationTurn, *, read_only: bool) -
                 sources=[] if read_only else json.loads(result.sources_json),
                 safe_error_code=result.safe_error_code,
             )
-            for result, member in members
+            for result, member in visible
         ],
         assessment_result=(_assessment_result_for_turn(db, turn) if not read_only else None),
     )
@@ -3912,19 +4093,22 @@ def poll_team_events(
         )
         projected = project_team_turn(db, turn, read_only=False)
         results = {str(result.id): result for result in projected.member_results}
-        replayed = [
-            (
-                event.sequence,
-                event.kind,
-                {"request_id": turn.id, "result": results[event.result_id].model_dump(mode="json")}
-                if event.result_id
-                else {
+        replayed = []
+        for event in events:
+            if event.result_id:
+                shown = results.get(event.result_id)
+                if shown is None:
+                    continue
+                payload = {
                     "request_id": turn.id,
-                    "state": "pending" if event.kind == "turn_started" else turn.state,
-                },
-            )
-            for event in events
-        ]
+                    "result": shown.model_dump(mode="json"),
+                }
+            else:
+                payload = {
+                    "request_id": turn.id,
+                    "state": "pending" if event.kind == "turn_started" else projected.state,
+                }
+            replayed.append((event.sequence, event.kind, payload))
         return replayed, turn.state, row.active_request_id == turn.id
 
 
