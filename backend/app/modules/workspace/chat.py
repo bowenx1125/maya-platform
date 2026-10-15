@@ -772,8 +772,20 @@ def generate_reply(
             409,
         )
     if assessment_result is not None:
+        from app.modules.knowledge_sets.service import knowledge_opening_for_question_version
         from app.modules.learning.attempts import awaits_follow_up_round
 
+        question = assessment_result.context.current_question
+        opening = ""
+        if (
+            assessment_result.response_key
+            in {
+                "assessment.started",
+                "assessment.abandoned_and_restarted",
+            }
+            and question is not None
+        ):
+            opening = knowledge_opening_for_question_version(db, str(question.question_version_id))
         reply = assessment_safe_reply_text(
             assessment_result,
             conversation_user_texts(db, row.id),
@@ -785,6 +797,7 @@ def generate_reply(
                 and assessment_result.response_key == "assessment.progress"
                 else None
             ),
+            opening=opening,
         )
     return reply, sources, operation_id
 

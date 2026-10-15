@@ -102,6 +102,42 @@ def test_restricted_request_is_refused_and_ordinary_redirect_continues() -> None
     assert moved.startswith("Continue this test in its original chat.")
 
 
+def test_opening_is_spoken_only_on_the_turn_that_shows_question_one() -> None:
+    welcome = "约 8 分钟 · 没有对错\n\nAbout 8 minutes. No right or wrong answers."
+    started = assessment_safe_reply_text(
+        _result("assessment.started", "transitioned"),
+        ["正式测评"],
+        opening=welcome,
+    )
+    question = "第 2 题：What is aporia?"
+    assert started.index(welcome) < started.index(question)
+    assert started.index(question) > started.index("正式测试开始")
+    bare = assessment_safe_reply_text(
+        _result("assessment.started", "transitioned"),
+        ["正式测评"],
+    )
+    assert bare.startswith("正式测试开始，你的作答会保存到学习记录。")
+    assert welcome.split("\n", 1)[0] not in bare
+    blank = assessment_safe_reply_text(
+        _result("assessment.started", "transitioned"),
+        ["正式测评"],
+        opening=" \n\n ",
+    )
+    assert blank == bare
+    restarted = assessment_safe_reply_text(
+        _result("assessment.abandoned_and_restarted", "transitioned"),
+        ["再来一轮"],
+        opening=welcome,
+    )
+    assert restarted.index(welcome) < restarted.index(question)
+    later = assessment_safe_reply_text(
+        _result("assessment.answer_recorded", "recorded"),
+        ["正式测评"],
+        opening=welcome,
+    )
+    assert welcome.split("\n", 1)[0] not in later
+
+
 def test_completion_and_follow_up_wording() -> None:
     done = assessment_safe_reply_text(
         _result("assessment.completed", "transitioned", status="completed").model_copy(

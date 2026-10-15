@@ -45,6 +45,23 @@ LOGGER = logging.getLogger("maya.workspace")
 # Provider message names are a short token. A display name that does not fit
 # is still written at the start of that turn so the model sees the real name.
 _HISTORY_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# After the formal attempt is over, Guide and Summarizer failures become
+# silence except for these, which the student still has to see or the ledger
+# has to keep.
+_POST_END_KEPT_FAILURES = frozenset(
+    {
+        "chat_acceptance_unknown",
+        "team_acceptance_unknown",
+        "authorization_revoked",
+        "provider_authorization_revoked",
+        "tool_not_authorized",
+        "forbidden",
+        "provider_confirmation_required",
+        "assessment_action_required",
+        "assessment_executor_write_required",
+        "team_response_truncated",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -504,16 +521,42 @@ def _attempt_question_presented(db: Session, attempt_id: str) -> bool:
 def _formal_opening_stored(db: Session, conversation_id: str) -> bool:
     from .formal_assessment import OPENING_PREFIX
 
+    # The Knowledge welcome, when there is one, is spoken before this prefix.
     text = db.scalar(
         select(TeamTurnResult.assistant_text)
         .join(ConversationTurn, ConversationTurn.id == TeamTurnResult.turn_id)
         .where(
             ConversationTurn.conversation_id == conversation_id,
-            TeamTurnResult.assistant_text.startswith(OPENING_PREFIX),
+            TeamTurnResult.assistant_text.contains(OPENING_PREFIX),
         )
         .limit(1)
     )
     return text is not None
+
+
+def _with_knowledge_opening(db: Session, line: str, question_version_id: object | None) -> str:
+    """Prepend the shared Knowledge welcome on the first-question line only."""
+
+    from app.modules.knowledge_sets.service import knowledge_opening_for_question_version
+
+    from .formal_assessment import with_spoken_opening
+
+    if question_version_id is None:
+        return line
+    return with_spoken_opening(
+        line, knowledge_opening_for_question_version(db, str(question_version_id))
+    )
+
+
+def _spoken_opening(db: Session, result: AssessmentRuntimeResult) -> str:
+    if result.response_key not in {"assessment.started", "assessment.abandoned_and_restarted"}:
+        return ""
+    question = result.context.current_question
+    if question is None:
+        return ""
+    from app.modules.knowledge_sets.service import knowledge_opening_for_question_version
+
+    return knowledge_opening_for_question_version(db, str(question.question_version_id))
 
 
 def _present_current_question(
@@ -652,6 +695,98 @@ def _formal_micro_round_participants(
     return ordered
 
 
+def _post_end_casual_speaker(
+    db: Session, row: Conversation, participant: ConversationParticipant
+) -> bool:
+    """Guide and Summarizer are optional once the formal attempt is over.
+
+    A live or paused attempt still fails closed. After it is completed or
+    abandoned, an empty or failed reply from those two must not fail the
+    student's next chat. The Scorer is not optional: its text, including
+    scores, stays.
+    """
+
+    live = db.scalar(
+        select(AssessmentAttempt.id)
+        .where(
+            AssessmentAttempt.source_conversation_id == row.id,
+            AssessmentAttempt.actor_user_id == row.user_id,
+            AssessmentAttempt.status.in_(("in_progress", "paused")),
+        )
+        .limit(1)
+    )
+    if live is not None:
+        return False
+    closed = db.scalar(
+        select(AssessmentAttempt.id)
+        .where(
+            AssessmentAttempt.source_conversation_id == row.id,
+            AssessmentAttempt.actor_user_id == row.user_id,
+            AssessmentAttempt.status.in_(("completed", "abandoned")),
+        )
+        .limit(1)
+    )
+    if closed is None:
+        return False
+    try:
+        roles = _formal_roles_for_conversation(db, row)
+    except PlatformError:
+        return False
+    if roles is None:
+        return False
+    return participant.team_member_id in {roles.question_guide_id, roles.summarizer_id}
+
+
+def _release_unstarted_executor_turn(db: Session, row: Conversation) -> bool:
+    """Drop a server executor turn that has not started a model call.
+
+    The summary holds ``active_request_id`` for the whole turn, so a student
+    message in that window used to get ``chat_busy``. Releasing is safe only
+    while every result is still pending and no provider call exists: ``_start_member``
+    marks the result running before the call, and the sending guard refuses a
+    call once this lock is gone. A call already in flight stays put.
+    """
+
+    from .formal_assessment import SILENT_MEMBER_LINE
+
+    active_id = db.scalar(select(Conversation.active_request_id).where(Conversation.id == row.id))
+    if active_id is None:
+        return False
+    turn = db.get(ConversationTurn, active_id)
+    if turn is None or (turn.user_text or "").strip() or turn.state != "pending":
+        return False
+    results = list(db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id)))
+    if not results or any(result.state != "pending" for result in results):
+        return False
+    called = db.scalar(
+        select(TeamProviderCall.id)
+        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
+        .where(TeamTurnResult.turn_id == turn.id)
+        .limit(1)
+    )
+    if called is not None:
+        return False
+    now = datetime.now(UTC)
+    for result in results:
+        result.state = "ready"
+        result.assistant_text = SILENT_MEMBER_LINE
+        result.safe_error_code = None
+        result.completed_at = now
+    turn.state = "ready"
+    turn.safe_error_code = None
+    released = db.execute(
+        update(Conversation)
+        .where(Conversation.id == row.id, Conversation.active_request_id == turn.id)
+        .values(active_request_id=None)
+    )
+    if getattr(released, "rowcount", 0) != 1:
+        return False
+    _append_event(db, turn, "turn_done")
+    db.expire(row)
+    LOGGER.info("Released unstarted assessment executor turn_id=%s for a student message", turn.id)
+    return True
+
+
 def claim_team_turn(
     db: Session,
     settings: Settings,
@@ -727,6 +862,7 @@ def claim_team_turn(
         raise conflict(
             "team_chat_runtime_unavailable", "This Team routing mode is not available yet."
         )
+    claimed_revision = expected_revision
     changed = db.execute(
         update(Conversation)
         .where(
@@ -736,6 +872,22 @@ def claim_team_turn(
         )
         .values(active_request_id=request_id, revision=Conversation.revision + 1)
     )
+    if getattr(changed, "rowcount", 0) != 1 and _release_unstarted_executor_turn(db, row):
+        # The executor claim already consumed one revision. The client may
+        # still be holding the revision from before that claim, or the one
+        # the claim published. Either matches this release; anything else does not.
+        current_revision = db.scalar(select(Conversation.revision).where(Conversation.id == row.id))
+        if current_revision in {expected_revision, expected_revision + 1}:
+            claimed_revision = int(current_revision)
+            changed = db.execute(
+                update(Conversation)
+                .where(
+                    Conversation.id == row.id,
+                    Conversation.revision == claimed_revision,
+                    Conversation.active_request_id.is_(None),
+                )
+                .values(active_request_id=request_id, revision=Conversation.revision + 1)
+            )
     if getattr(changed, "rowcount", 0) != 1:
         raise conflict("chat_busy", "Refresh the conversation before sending another message.")
     now = datetime.now(UTC)
@@ -743,7 +895,7 @@ def claim_team_turn(
     turn = ConversationTurn(
         id=request_id,
         conversation_id=row.id,
-        position=expected_revision + 1,
+        position=claimed_revision + 1,
         user_text=message,
         assistant_text=None,
         sources_json="[]",
@@ -1869,6 +2021,7 @@ def _scorer_micro_reply(
             chinese=assessment_reply_chinese(db, row.id, user_texts),
             # The Guide line is the one restatement of this Question.
             include_question=not assessment_answer_not_recorded(assessment_result, latest),
+            opening=_spoken_opening(db, assessment_result),
         )
     )
     if not text:
@@ -1909,17 +2062,19 @@ def _guide_micro_script(
         return None
     if not _attempt_question_presented(db, attempt.id):
         prompt = None
+        version_id = None
         if actor_context is not None:
             context = get_assessment_runtime_context(db, actor_context, row.id)
             if context is not None and context.current_question is not None:
                 prompt = context.current_question.prompt
+                version_id = context.current_question.question_version_id
                 mark_attempt_question_presented(
                     db,
                     actor_context,
                     row.id,
                     question_version_id=context.current_question.question_version_id,
                 )
-        return opening_line(prompt)
+        return _with_knowledge_opening(db, opening_line(prompt), version_id)
     projection = _assessment_result_for_turn(db, turn)
     if projection is None:
         # An opening that was paused before it spoke has no scorer on the turn.
@@ -2041,7 +2196,9 @@ def _scripted_opening_for_auto_start(
     from .formal_assessment import opening_line
 
     question = assessment_result.context.current_question
-    return MemberReply(opening_line(question.prompt if question is not None else None))
+    line = opening_line(question.prompt if question is not None else None)
+    version_id = question.question_version_id if question is not None else None
+    return MemberReply(_with_knowledge_opening(db, line, version_id))
 
 
 def _append_formal_summarizer(db: Session, row: Conversation, turn: ConversationTurn) -> None:
@@ -2239,6 +2396,7 @@ def settle_member(
                         follow_up_pending=awaits_follow_up_round(
                             db, str(assessment_result.context.attempt.id)
                         ),
+                        opening=_spoken_opening(db, assessment_result),
                     )
                 )
             error = None
@@ -2282,6 +2440,21 @@ def settle_member(
                 )
         if error is None and (reply is None or not reply.text.strip()):
             error = PlatformError("team_response_invalid", "The member reply is invalid.", 422)
+        if error is not None and _safe_code(error) not in _POST_END_KEPT_FAILURES:
+            from .formal_assessment import SILENT_MEMBER_LINE
+
+            speaker = db.get(ConversationParticipant, result.participant_id)
+            if speaker is not None and _post_end_casual_speaker(db, row, speaker):
+                # The attempt is already over. Failing the Guide or Summarizer
+                # here turned casual chat into a partial banner.
+                LOGGER.warning(
+                    "Closed-assessment speaker settled silent turn_id=%s result_id=%s code=%s",
+                    turn.id,
+                    result.id,
+                    _safe_code(error),
+                )
+                reply = MemberReply(SILENT_MEMBER_LINE)
+                error = None
         if error is not None:
             code = _safe_code(error)
             result.state = (
@@ -3984,6 +4157,8 @@ def _student_hides_turn(db: Session, turn: ConversationTurn) -> bool:
         return False
     if any(text.strip() == SUMMARIZER_LINE for text in texts):
         return False
+    if results and all(_student_hides_result(db, turn, result) for result in results):
+        return True
     announced = db.scalar(
         select(TeamTurnResult.id).where(
             TeamTurnResult.conversation_id == turn.conversation_id,
@@ -3996,10 +4171,17 @@ def _student_hides_turn(db: Session, turn: ConversationTurn) -> bool:
 def _student_hides_result(db: Session, turn: ConversationTurn, result: TeamTurnResult) -> bool:
     from .formal_assessment import RECORDED_FACT, SILENT_MEMBER_LINE
 
-    text = (result.assistant_text or "").strip()
-    if text == SILENT_MEMBER_LINE:
+    text = result.assistant_text or ""
+    # Word joiners are not whitespace. A reply that is only those is silence.
+    if text and text.replace(SILENT_MEMBER_LINE, "").strip() == "":
         return True
-    return text == RECORDED_FACT and _hides_recorded_fact(db, turn)
+    if (
+        result.state == "failed"
+        and result.safe_error_code == "team_response_invalid"
+        and not text.strip()
+    ):
+        return True
+    return text.strip() == RECORDED_FACT and _hides_recorded_fact(db, turn)
 
 
 def project_team_turn(db: Session, turn: ConversationTurn, *, read_only: bool) -> TeamChatTurn:

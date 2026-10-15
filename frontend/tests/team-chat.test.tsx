@@ -1887,6 +1887,80 @@ describe("Chatform", () => {
     ).toBeTruthy();
   });
 
+  it("omits a silent member instead of a could-not-reply card", async () => {
+    const silentSession = {
+      ...teamSession,
+      revision: 2,
+      turns: [
+        {
+          id: "silent-turn",
+          user_text: "我答的怎么样",
+          assistant_text: null,
+          mode: "mock" as const,
+          state: "partial" as const,
+          sources: [],
+          safe_error_code: "team_partial_failure",
+          routing: { mode: "all" as const, participant_ids: [] },
+          member_results: [
+            {
+              id: "score",
+              participant_id: "participant-1",
+              speaker_name: "Scorer",
+              ordinal: 0,
+              state: "ready" as const,
+              assistant_text: "第 1 题得 1 分，正确选项是 A。",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "silent-invalid",
+              participant_id: "participant-2",
+              speaker_name: "Summarizer",
+              ordinal: 1,
+              state: "failed" as const,
+              assistant_text: null,
+              sources: [],
+              safe_error_code: "team_response_invalid",
+            },
+            {
+              id: "silent-mark",
+              participant_id: "participant-3",
+              speaker_name: "Guider",
+              ordinal: 2,
+              state: "ready" as const,
+              assistant_text: "\u2060",
+              sources: [],
+              safe_error_code: null,
+            },
+          ],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([silentSession]);
+    state.api.conversationSession.mockResolvedValue(silentSession);
+    render(
+      <LocaleProvider initialLocale="zh">
+        <UiGuideTooltip />
+        <AppShell role="student">
+          <AgentChat />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "我答的怎么样" }),
+    );
+    const log = await screen.findByRole("log");
+    expect(within(log).getByText(/正确选项是 A/)).toBeTruthy();
+    expect(within(log).queryByText("这位 Team 成员未能回复。")).toBeNull();
+    expect(
+      within(log).queryByText("部分成员未能回复；已成功的回复已保留。"),
+    ).toBeNull();
+    expect(
+      within(log).queryByText("This Team member could not reply."),
+    ).toBeNull();
+    expect(within(log).getAllByRole("heading")).toHaveLength(1);
+  });
+
   it.each([
     [
       "student",

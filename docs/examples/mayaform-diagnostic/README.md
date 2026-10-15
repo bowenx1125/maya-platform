@@ -11,6 +11,8 @@ Agent 在 **Studyform** 用共用工作台创建，资料从 **Brainform** 选�
 
 学生不开始测试时是练习，不写入答题记录；明确开始后才是正式测试。第一轮按题库抽查，Jade 评估后可以从服务器给出的候选题里选追问；"结束答题"按提前交卷保存，只有"放弃"不保留本次记录。Kaikai 把结果分为掌握证据、薄弱点和尚未验证，教师报告按学生列出。
 
+要在正式测评开头对学生说的话，写在共享 Knowledge 的 `## Opening` 或 `## 开场白` 里，放在 `# 标题` 和 `## Questions` 之间。没有这两个标题时，用标题下、`## Questions` 之前的正文；Concepts、Graph、Notes 不算开场白。学生说「正式测评」时，Guide 先念这一段，再接「收到，第一题是…」。Rubric 和 Reference answer 留在题目里，不会被念出来。没有这段文字时，开场和原来一样，后面的题也不再重复。
+
 Agent.md 中三条 `MAYA-ASSESSMENT-*` 配方声明定义正式诊断的选题和完成规则。发言顺序来自 Guide 的 `## Formal assessment`，不来自 `MAYA-ASSESSMENT-ROLE`。`assessment_active` 只是账本标记。它们不授予全局权限、不继承教师身份，也不允许模型自填授权。原始回答、题目版本、回合状态和发布关系仍由服务器校验。优先级是授权、测评账本、Team Ruleset。
 
 普通 Agent／Team 的自由用途不需要这些声明。教师无需逐个绑定 Toolkit，也不需要批准 AI 生成内容。教师明确保存/生成无需额外 Knowledge Provider 确认；实际 actor/source 权限与政策仍核查。Team 的准确资源外发授权沿已有入口单独检查，与内容审核分开。

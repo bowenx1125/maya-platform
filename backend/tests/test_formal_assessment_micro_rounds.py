@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from app.core.errors import PlatformError
 from app.core.models import AgentVersion
 from app.modules.demo_baseline.service import ensure_demo_baseline
+from app.modules.knowledge_sets.models import KnowledgeSet, KnowledgeSetMarkdownVersion
 from app.modules.learning.attempts import (
     get_assessment_runtime_context,
     read_attempt_answers,
@@ -33,6 +36,7 @@ from app.modules.workspace.formal_assessment import (
     ABANDON_SCORER,
     ALL_DONE_GUIDE,
     RECORDED_FACT,
+    SILENT_MEMBER_LINE,
     SUMMARIZER_LINE,
     formal_ruleset_markdown,
     is_formal_start_message,
@@ -47,6 +51,7 @@ from app.modules.workspace.models import (
 from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
+from app.seed import TEACHER_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -1017,6 +1022,148 @@ def test_explicit_formal_start_is_the_guide_opening_before_any_member(
     assert SUMMARIZER_LINE not in [text for _member, text in speakers]
 
 
+_RUBRIC_CANARY = "RUBRIC_CANARY_DO_NOT_SHOW"
+_ANSWER_CANARY = "ANSWER_KEY_CANARY_DO_NOT_SHOW"
+_WELCOME = "约 8 分钟 · 没有对错\n\nAbout 8 minutes. No right or wrong answers."
+
+
+def _question_bank(preamble: str) -> str:
+    return (
+        "# 认识论小测\n\n"
+        f"{preamble}"
+        "## Questions\n\n"
+        "### Question 1\n\n"
+        "甲题\n\n"
+        "#### Rubric\n\n"
+        f"- **Reasoning** (2): {_RUBRIC_CANARY}\n\n"
+        "Total: 2 points\n\n"
+        "#### Reference answer\n\n"
+        f"{_ANSWER_CANARY}\n\n"
+        "### Question 2\n\n"
+        "乙题\n\n"
+        "#### Rubric\n\n"
+        f"- **Reasoning** (2): {_RUBRIC_CANARY}\n\n"
+        "Total: 2 points\n\n"
+        "#### Reference answer\n\n"
+        f"{_ANSWER_CANARY}\n"
+    )
+
+
+def _attach_markdown(db: Any, set_id: str, markdown: str, version_ids: list[str]) -> None:
+    set_row = db.get(KnowledgeSet, set_id)
+    assert set_row is not None
+    set_row.current_markdown_version_seq = 1
+    set_row.content_revision += 1
+    db.add(
+        KnowledgeSetMarkdownVersion(
+            id=str(uuid4()),
+            knowledge_set_id=set_id,
+            version_seq=1,
+            markdown=markdown,
+            student_projection_markdown=markdown,
+            asset_version_ids_json=json.dumps(
+                version_ids, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ),
+            content_hash=hashlib.sha256(markdown.encode("utf-8")).hexdigest(),
+            origin="manual",
+            generation_run_id=None,
+            generation_intent_seq=None,
+            source_manifest_hash=None,
+            created_by_user_id=TEACHER_ID,
+            generator_agent_version_id=None,
+            created_at=datetime.now(UTC),
+        )
+    )
+    db.flush()
+
+
+def test_formal_start_speaks_the_knowledge_opening_before_question_one(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        (
+            conversation_id,
+            _team_id,
+            _team_version_id,
+            _publication_id,
+            set_id,
+            questions,
+        ) = _create_formal_conversation(db, visibility="private", prompts=("甲题", "乙题"))
+        _attach_markdown(
+            db,
+            set_id,
+            _question_bank(f"## Opening\n\n{_WELCOME}\n\n先读说明，再作答。\n\n"),
+            [version_id for _asset_id, version_id in questions],
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(app_bundle, database, "formal-knowledge-opening")
+    _grant(database, conversation_id, policy)
+    opening = _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    text = _texts(database, opening)
+    assert text == [
+        f"{_WELCOME}\n\n先读说明，再作答。\n\n收到，第一题是甲题",
+    ]
+    spoken = text[0] or ""
+    assert _RUBRIC_CANARY not in spoken
+    assert _ANSWER_CANARY not in spoken
+    assert spoken.index("约 8 分钟 · 没有对错") < spoken.index("收到，第一题是甲题")
+    answer = "甲题的回答"
+    answered = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        answer,
+        monkeypatch,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": answer},
+            )
+        ],
+    )
+    later = "\n".join(item or "" for item in _texts(database, answered))
+    assert "约 8 分钟" not in later
+    assert "About 8 minutes" not in later
+    assert "乙题" in later
+    assert _RUBRIC_CANARY not in later
+    assert _ANSWER_CANARY not in later
+
+
+def test_formal_start_without_an_opening_is_unchanged(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        (
+            conversation_id,
+            _team_id,
+            _team_version_id,
+            _publication_id,
+            set_id,
+            questions,
+        ) = _create_formal_conversation(db, visibility="private", prompts=("甲题", "乙题"))
+        _attach_markdown(
+            db,
+            set_id,
+            _question_bank("## Concepts\n\nCONCEPT_CANARY_NOT_A_WELCOME\n\n"),
+            [version_id for _asset_id, version_id in questions],
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(app_bundle, database, "formal-no-knowledge-opening")
+    _grant(database, conversation_id, policy)
+    opening = _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    assert _texts(database, opening) == ["收到，第一题是甲题"]
+
+
 def test_invalid_scale_answer_is_one_scorer_rejection(
     client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
 ) -> None:
@@ -1265,3 +1412,259 @@ def test_free_response_relevance_follows_the_model_judgment(
         assert bool(answers) is saved
         if saved:
             assert answers[0].answer_text == message
+
+
+def _participants(database: Any, conversation_id: str) -> list[tuple[str, str, str]]:
+    with database.session() as db:
+        rows = db.scalars(
+            select(ConversationParticipant)
+            .where(ConversationParticipant.conversation_id == conversation_id)
+            .order_by(ConversationParticipant.position)
+        ).all()
+        return [(row.id, row.team_member_id, row.display_name) for row in rows]
+
+
+def test_finished_assessment_keeps_scorer_text_and_omits_silent_guide_and_summarizer(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None
+        attempt = db.get(AssessmentAttempt, str(started.attempt.id))
+        assert attempt is not None
+        conversation = db.get(Conversation, conversation_id)
+        guide = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id,
+                ConversationParticipant.is_leader.is_(True),
+            )
+        )
+        assert conversation is not None and guide is not None
+        assert runtime._post_end_casual_speaker(db, conversation, guide) is False
+        attempt.status = "completed"
+        attempt.completed_at = datetime.now(UTC)
+        db.commit()
+        assert runtime._post_end_casual_speaker(db, conversation, guide)
+    roles = _roles(database, conversation_id)
+    assert roles is not None
+    participants = _participants(database, conversation_id)
+    names = {member_id: display_name for _id, member_id, display_name in participants}
+    guide_name = names[roles.question_guide_id]
+    scorer_name = names[roles.answer_recorder_id]
+
+    def fake_reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        if request.speaker_name == guide_name:
+            if request.message == "我答的怎么样":
+                return runtime.MemberReply("结果会稍后公布，我们也可以随便聊聊。")
+            return runtime.MemberReply(" ")
+        return runtime.MemberReply("第 1 题得 1 分，正确选项是 A。")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", fake_reply)
+
+    def send(message: str) -> str:
+        with database.session() as db:
+            conversation = db.get(Conversation, conversation_id)
+            assert conversation is not None
+            claim = runtime.claim_team_turn(
+                db,
+                settings,
+                conversation_id=conversation_id,
+                actor_id=actor.user.id,
+                request_id=str(uuid4()),
+                expected_revision=conversation.revision,
+                message=message,
+                routing=TeamRouting(
+                    mode="selected",
+                    participant_ids=[
+                        UUID(participant_id) for participant_id, _member, _name in participants
+                    ],
+                ),
+                actor_context=actor,
+            )
+        runtime.execute_team_turn(database.session_factory, claim)
+        return claim.turn_id
+
+    casual = send("我答的怎么样")
+    again = send("再聊一句")
+    with database.session() as db:
+        from app.modules.workspace.team_conversation import team_session_view
+
+        for turn_id in (casual, again):
+            turn = db.get(ConversationTurn, turn_id)
+            assert turn is not None and turn.state == "ready"
+            stored = db.scalars(
+                select(TeamTurnResult).where(TeamTurnResult.turn_id == turn_id)
+            ).all()
+            assert stored
+            assert all(result.state == "ready" for result in stored)
+            by_name = {
+                db.get(ConversationParticipant, result.participant_id).display_name: result
+                for result in stored
+            }
+            assert by_name[scorer_name].assistant_text == "第 1 题得 1 分，正确选项是 A。"
+        casual_guide = next(
+            result.assistant_text
+            for result in db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == casual))
+            if db.get(ConversationParticipant, result.participant_id).display_name == guide_name
+        )
+        later_guide = next(
+            result.assistant_text
+            for result in db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == again))
+            if db.get(ConversationParticipant, result.participant_id).display_name == guide_name
+        )
+        assert casual_guide == "结果会稍后公布，我们也可以随便聊聊。"
+        assert later_guide == SILENT_MEMBER_LINE
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        session = team_session_view(db, conversation, actor, [], runtime_available=True)
+        visible = [
+            result.assistant_text or "" for turn in session.turns for result in turn.member_results
+        ]
+        assert any("正确选项是 A" in text for text in visible)
+        assert any("随便聊聊" in text for text in visible)
+        assert all(text != SILENT_MEMBER_LINE for text in visible)
+        assert all(turn.state != "partial" for turn in session.turns)
+        assert all(
+            result.safe_error_code != "team_response_invalid" and result.state != "failed"
+            for turn in session.turns
+            for result in turn.member_results
+        )
+
+
+def test_student_message_preempts_an_unstarted_executor_turn(
+    client: TestClient, database: Any, app_bundle: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        before = conversation.revision
+        participant = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id
+            )
+        )
+        assert participant is not None
+        executor = runtime.claim_assessment_executor_turn(
+            db,
+            settings,
+            conversation_id=conversation_id,
+            participant_id=participant.id,
+            actor_context=actor,
+        )
+    assert executor is not None
+    with database.session() as db:
+        student = runtime.claim_team_turn(
+            db,
+            settings,
+            conversation_id=conversation_id,
+            actor_id=actor.user.id,
+            request_id=str(uuid4()),
+            expected_revision=before,
+            message="还在吗",
+            routing=TeamRouting(mode="auto"),
+            actor_context=actor,
+        )
+    assert student.created
+    with database.session() as db:
+        from app.modules.workspace.team_conversation import team_session_view
+
+        released = db.get(ConversationTurn, executor.turn_id)
+        assert released is not None and released.state == "ready"
+        assert _texts(database, executor.turn_id) == [SILENT_MEMBER_LINE]
+        row = db.get(Conversation, conversation_id)
+        assert row is not None and row.active_request_id == student.turn_id
+        held = db.get(ConversationTurn, student.turn_id)
+        assert held is not None and held.state == "pending" and held.position == before + 2
+        session = team_session_view(db, row, actor, [], runtime_available=True)
+        assert all(str(turn.id) != executor.turn_id for turn in session.turns)
+        assert any(turn.user_text == "还在吗" for turn in session.turns)
+        with pytest.raises(PlatformError) as caught:
+            runtime.claim_team_turn(
+                db,
+                settings,
+                conversation_id=conversation_id,
+                actor_id=actor.user.id,
+                request_id=str(uuid4()),
+                expected_revision=before,
+                message="再来",
+                routing=TeamRouting(mode="auto"),
+                actor_context=actor,
+            )
+        assert caught.value.code == "chat_busy"
+        db.rollback()
+    with database.session() as db:
+        row = db.get(Conversation, conversation_id)
+        held = db.get(ConversationTurn, student.turn_id)
+        assert row is not None and row.active_request_id == student.turn_id
+        assert held is not None and held.state == "pending" and held.user_text == "还在吗"
+
+
+def test_running_executor_and_student_turn_still_report_chat_busy(
+    client: TestClient, database: Any, app_bundle: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        before = conversation.revision
+        participant = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id
+            )
+        )
+        assert participant is not None
+        executor = runtime.claim_assessment_executor_turn(
+            db,
+            settings,
+            conversation_id=conversation_id,
+            participant_id=participant.id,
+            actor_context=actor,
+        )
+        assert executor is not None
+        result = db.scalar(select(TeamTurnResult).where(TeamTurnResult.turn_id == executor.turn_id))
+        assert result is not None
+        result.state = "running"
+        db.commit()
+    with database.session() as db:
+        with pytest.raises(PlatformError) as caught:
+            runtime.claim_team_turn(
+                db,
+                settings,
+                conversation_id=conversation_id,
+                actor_id=actor.user.id,
+                request_id=str(uuid4()),
+                expected_revision=before,
+                message="还在吗",
+                routing=TeamRouting(mode="auto"),
+                actor_context=actor,
+            )
+        assert caught.value.code == "chat_busy"
+        db.rollback()
+    with database.session() as db:
+        row = db.get(Conversation, conversation_id)
+        turn = db.get(ConversationTurn, executor.turn_id)
+        assert row is not None and row.active_request_id == executor.turn_id
+        assert turn is not None and turn.state == "pending"

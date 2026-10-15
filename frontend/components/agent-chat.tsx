@@ -318,18 +318,30 @@ function sortTeamMemberResults(
   });
 }
 
+function normalizedMemberText(result: TeamMemberResult): string {
+  // U+2060 is the server's silent-member mark. trim() does not remove it.
+  return (result.assistant_text ?? "").replace(/\u2060/g, "").trim();
+}
+
 function visibleTeamMemberResults(
   results: TeamMemberResult[],
 ): TeamMemberResult[] {
-  // Empty ready cards are non-speakers that never got a relevant turn.
-  return results.filter(
-    (result) =>
+  // Empty ready cards are non-speakers. A word-joiner or invalid empty reply
+  // is the same silence: no card, and no "could not reply" banner.
+  return results.filter((result) => {
+    if (
       result.state === "pending" ||
       result.state === "running" ||
-      result.state === "failed" ||
-      result.state === "acceptance_unknown" ||
-      Boolean(result.assistant_text?.trim()),
-  );
+      result.state === "acceptance_unknown"
+    ) {
+      return true;
+    }
+    if (normalizedMemberText(result)) return true;
+    return (
+      result.state === "failed" &&
+      result.safe_error_code !== "team_response_invalid"
+    );
+  });
 }
 
 function studentEndFlowTurns(turns: TeamChatTurn[]): TeamChatTurn[] {
@@ -2840,8 +2852,7 @@ function AgentChatScope({
                           {t("errorChatAcceptanceUnknown")}
                         </p>
                       ) : null}
-                      {turn.state === "partial" ||
-                      turn.member_results.some(
+                      {visibleTeamMemberResults(turn.member_results).some(
                         (item) =>
                           item.state === "failed" ||
                           item.state === "acceptance_unknown",
