@@ -162,8 +162,8 @@ function routingForMention(
   session: TeamChatSession,
   message: string,
 ): TeamRouting {
-  // Bare sends: every member reads and replies (length by relevance). Guide
-  // Agent.md may override via prompt rules. @Name / @All stay explicit.
+  // Bare sends use mode all. The server omits the Scorer and Summarizer
+  // until a formal turn needs a score or a summary. @Name / @All stay explicit.
   const all: TeamRouting = { mode: "all", participant_ids: [] };
   const label = mentionLabel(message);
   if (!label) return all;

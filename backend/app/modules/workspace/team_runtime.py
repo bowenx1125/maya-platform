@@ -695,6 +695,91 @@ def _formal_micro_round_participants(
     return ordered
 
 
+def _closed_attempt_exists(db: Session, row: Conversation) -> bool:
+    return (
+        db.scalar(
+            select(AssessmentAttempt.id)
+            .where(
+                AssessmentAttempt.source_conversation_id == row.id,
+                AssessmentAttempt.actor_user_id == row.user_id,
+                AssessmentAttempt.status.in_(("completed", "abandoned")),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _idle_specialist_member_ids(db: Session, row: Conversation) -> set[str]:
+    """Scorer and Summarizer member ids that stay off ordinary chat.
+
+    Empty when this conversation has no formal roster. Before any formal
+    answer is saved, both stay off a greeting. After the attempt is over the
+    Scorer may speak, and that text, including scores, stays. The leader is
+    never included: a two-member team names the Guide as Summarizer, and that
+    person still answers a greeting.
+    """
+
+    try:
+        roles = _formal_roles_for_conversation(db, row)
+    except PlatformError:
+        return set()
+    if roles is None:
+        return set()
+    leader_member_id = db.scalar(
+        select(ConversationParticipant.team_member_id).where(
+            ConversationParticipant.conversation_id == row.id,
+            ConversationParticipant.is_leader.is_(True),
+        )
+    )
+    idle = {roles.summarizer_id}
+    if not _closed_attempt_exists(db, row):
+        idle.add(roles.scorer_id)
+        idle.add(roles.answer_recorder_id)
+    if leader_member_id is not None:
+        idle.discard(leader_member_id)
+    return idle
+
+
+def _ordinary_speakers(
+    db: Session, row: Conversation, participants: list[ConversationParticipant]
+) -> list[ConversationParticipant]:
+    """Who may speak when this turn is not a formal micro-round.
+
+    Before a formal answer is saved, the Scorer and Summarizer stay silent.
+    After the attempt is over the Scorer may speak. An explicit mention that
+    names only a silent member still gets the Guide, so the turn is not
+    speaker-less.
+    """
+
+    idle = _idle_specialist_member_ids(db, row)
+    if not idle:
+        return participants
+    kept = [participant for participant in participants if participant.team_member_id not in idle]
+    if kept:
+        return kept
+    try:
+        roles = _formal_roles_for_conversation(db, row)
+    except PlatformError:
+        roles = None
+    guide: ConversationParticipant | None = None
+    if roles is not None:
+        guide = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == row.id,
+                ConversationParticipant.team_member_id == roles.question_guide_id,
+            )
+        )
+    if guide is None:
+        guide = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == row.id,
+                ConversationParticipant.is_leader.is_(True),
+            )
+        )
+    return [guide] if guide is not None else participants
+
+
 def _post_end_casual_speaker(
     db: Session, row: Conversation, participant: ConversationParticipant
 ) -> bool:
@@ -846,8 +931,10 @@ def claim_team_turn(
     else:
         _validate_members(db, row, participants)
         # ACL already passed. An explicit formal start sets the ledger before
-        # any member is chosen; otherwise coordinate follows Agent.md and every
-        # member speaks. The ledger then chooses speakers. The Ruleset does not.
+        # any member is chosen, and that ledger picks the micro-round. Ordinary
+        # chat, including a greeting before any scored answer, asks the Guide
+        # and anyone who is not the Scorer or Summarizer. After the attempt
+        # is over the Scorer may speak again; the Summarizer stays off.
         _begin_formal_attempt_on_explicit_start(db, row, actor_context, message, request_id)
         micro = _formal_micro_round_participants(db, row, actor_context)
         if micro is not None:
@@ -857,6 +944,21 @@ def claim_team_turn(
                 participant_ids=[UUID(participant.id) for participant in dict.fromkeys(micro)],
             )
             participants = micro
+        else:
+            speakers = _ordinary_speakers(db, row, participants)
+            if [speaker.id for speaker in speakers] != [speaker.id for speaker in participants]:
+                _validate_members(db, row, speakers)
+                participants = speakers
+                if normalized.mode == "selected":
+                    normalized = TeamRouting(
+                        mode="selected",
+                        participant_ids=[UUID(speaker.id) for speaker in speakers],
+                    )
+                elif normalized.mode == "all":
+                    normalized = TeamRouting(
+                        mode="all",
+                        participant_ids=[UUID(speaker.id) for speaker in speakers],
+                    )
     route_json = _canonical(normalized.model_dump(mode="json"))
     if settings.llm_provider not in {"mock", "dashscope"}:
         raise conflict(
@@ -1781,10 +1883,12 @@ def _member_system(
     else:
         from .chat_provider import ACCOUNT_MEMORY_RULE, AGENT_LIMIT_REPLY_RULE
 
-        # Ordinary chat. ## Informal may override who replies and length.
-        # A live assessment ledger replaces this path entirely.
-        from .formal_assessment import extract_informal_section
+        # Ordinary chat. A live assessment ledger replaces this path entirely.
+        # Before a formal answer is saved, the server omits the Scorer and
+        # Summarizer. After the attempt, Scorer text, including scores, stays.
+        from .formal_assessment import _formal_body, extract_informal_section
 
+        has_formal = team_ruleset is not None and _formal_body(team_ruleset) is not None
         message += (
             "\n<team_reply_protocol>\n"
             "Default Team rules: every member reads the user's latest message and "
@@ -1796,9 +1900,25 @@ def _member_system(
                 "The Guide/Leader Agent.md defines a # Team Ruleset. "
                 "The server parses ## Formal assessment and applies that roster; "
                 "it does not rename you. "
-                "An optional ## Informal section overrides the defaults for who replies "
-                "and how long they speak. ## Formal assessment does not change ordinary chat.\n"
             )
+            if has_formal:
+                message += (
+                    "On ordinary chat before any formal answer is saved, the server "
+                    "asks the Guide and members who are not the Scorer or the "
+                    "Summarizer. The Scorer stays silent until a formal turn has an "
+                    "answer to score. After the attempt is over, the Scorer may speak, "
+                    "and that text, including scores, stays. The Summarizer stays off "
+                    "ordinary chat; an empty summarizer reply is silence, not a failed "
+                    "member. "
+                    "An optional ## Informal section may change who else replies and how "
+                    "long they speak. It does not put the Scorer or the Summarizer on a "
+                    "greeting before a formal answer is saved.\n"
+                )
+            else:
+                message += (
+                    "An optional ## Informal section overrides the defaults for who replies "
+                    "and how long they speak.\n"
+                )
             informal = extract_informal_section(team_ruleset)
             if informal:
                 message += f"<team_informal>\n{informal}\n</team_informal>\n"
@@ -1815,10 +1935,13 @@ def _member_system(
                 "When no formal assessment is running, regularly add one natural "
                 "sentence that they can start one by saying 正式测评, but not on "
                 "every reply. Do not start a test until they ask. "
-                "## Informal may change who replies and how long they speak; "
+                "## Informal may change who else replies and how long they speak; "
                 "it does not make this offer every turn and does not replace "
-                "the server's formal assessment lines.\n"
+                "the server's formal assessment lines."
             )
+            if has_formal:
+                message += " It does not put the Scorer or the Summarizer on a greeting."
+            message += "\n"
         elif not viewer_is_teacher:
             message += (
                 "This member is not the Guide. Do not invite anyone to start 正式测评, "
@@ -2440,10 +2563,31 @@ def settle_member(
                 )
         if error is None and (reply is None or not reply.text.strip()):
             error = PlatformError("team_response_invalid", "The member reply is invalid.", 422)
-        if error is not None and _safe_code(error) not in _POST_END_KEPT_FAILURES:
+        speaker = db.get(ConversationParticipant, result.participant_id)
+        if (
+            speaker is not None
+            and not speaker.is_leader
+            and formal_role is None
+            and assessment_purpose is None
+            and speaker.team_member_id in _idle_specialist_member_ids(db, row)
+            and (error is None or _safe_code(error) not in _POST_END_KEPT_FAILURES)
+        ):
             from .formal_assessment import SILENT_MEMBER_LINE
 
-            speaker = db.get(ConversationParticipant, result.participant_id)
+            # A greeting has nothing to score or summarize. A long Scorer intro
+            # or an empty Summarizer used to become a partial banner.
+            if error is not None or (reply is not None and reply.text != SILENT_MEMBER_LINE):
+                LOGGER.warning(
+                    "Idle formal specialist settled silent turn_id=%s result_id=%s code=%s",
+                    turn.id,
+                    result.id,
+                    _safe_code(error) if error is not None else "prose",
+                )
+            reply = MemberReply(SILENT_MEMBER_LINE)
+            error = None
+        elif error is not None and _safe_code(error) not in _POST_END_KEPT_FAILURES:
+            from .formal_assessment import SILENT_MEMBER_LINE
+
             if speaker is not None and _post_end_casual_speaker(db, row, speaker):
                 # The attempt is already over. Failing the Guide or Summarizer
                 # here turned casual chat into a partial banner.
@@ -3672,6 +3816,8 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                         participant.is_leader,
                     )
                 )
+            speaking = {speaker.id for speaker in _ordinary_speakers(db, row, participants)}
+            specs = [spec for spec in specs if spec.participant_id in speaking]
             tool_context = (row.id, turn.id)
         if leader.assessment_active:
             # Auto routing still starts at the leader. A live formal attempt
