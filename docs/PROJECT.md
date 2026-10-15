@@ -210,28 +210,7 @@ PR #52: text playback, Live recovery, Avatar,0064 archived-slot release.
 Initial production Start0/9/End failed; Interact UI26/26/mock mobile passed,
 production clicks unverified.
 
-UI polish: Teams match Agents; Voices/Knowledge/RAG imports use upload-symbol bars
-(Voices full width). Agent/Team create Done validates missing fields; edit Done
-requires dirty state. RAG/Knowledge save returns to the library with no success
-tip; Download/Delete and failed-RAG Reindex stay. Memory uses the whole row; no
-Agents-using block. Studyform name text-links and green Public/grey Private pills
-are retained; Chat picker tiles unchanged. Agent/Team Name inputs sit under their
-rule; embedded Voices uses SectionCard like Avatar/AGENT.md. Withdrawn RAG is not
-selectable. Team create returns specific unavailable-member errors; pickers mark
-affected Agents unavailable. Knowledge-check dialog supports X/backdrop dismissal.
-Accounts visits temporarily join a group: teacher reads public RAG/Knowledge as
-full read-only with publisher-only editing; own Brainform has no student content.
-Entered teachers get Members/Test results/Recent activity from the permission-
-checked group overview. Accounts groups members in natural name order, ungrouped
-last. Profile moves students only to existing groups; work remains in the old
-group and becomes inaccessible; catalog accounts keep catalog membership.
-On phones below 880px, sideways/upright/sideways within 6 seconds on Home opens
-the card room; training fits 844x390. Hidden published RAG fails Knowledge
-generation as knowledge_generation_sources_unavailable; reselect and publish.
-Soft-deleted deterministic Agent Knowledge Sets revive on the next authorized
-`generate_agent_knowledge` / publish enqueue instead of bare `not_found`.
-PRs #56/#58/#59/#60 integrated; PR #64 fixes Knowledge and Accounts Brainform.
-Prior build38eb07a: backup20261014T040843Z/schema0064/HTTPS200, healthy.
+UI polish through PR #64: Teams match Agents; create Done validates; edit Done needs a dirty form; RAG/Knowledge save returns to the library; withdrawn RAG is not selectable; Team create names unavailable members. Accounts visits read public RAG/Knowledge only (publisher edits); Members/Test results/Recent activity come from the group overview; members sort by name; Profile moves students only into existing groups and old-group work becomes inaccessible. Below 880px, sideways/upright/sideways within 6s opens the card room. Hidden published RAG fails as knowledge_generation_sources_unavailable. Soft-deleted Agent Knowledge Sets revive on the next authorized generate/publish. PRs #56/#58/#59/#60/#64. Prior build 38eb07a: backup 20261014T040843Z/schema0064/HTTPS200, healthy.
 
 Integration refs: entaiaki eb2c9f1 -> main956d2c2 -> bfc7bd0 -> afe3daa -> ba7358f.
 
@@ -256,3 +235,5 @@ receipts. Integrates PR #71 Voices hover tip.
 Formal micro-rounds need Guide `# Team Ruleset` → `## Formal assessment` naming `answer_recorder`, `question_guide`, `scorer`, `summarizer`, and `student_round_order` as roster display names. The order is exactly scorer and question_guide; anything else is `assessment_ruleset_incomplete` with no attempt. `answer_recorder` is that scorer: the write Tool, `已记录你的回答。` (receipt only), and the abandon recorder line. Explicit starts (正式测评, 正式测试, 开始测试, 再来一轮/再来一遍, formal test/assessment) set the ledger before members run, so that turn is Guide-only `收到，第一题是…`. An auto Tool start rewrites only the Guide to that opening; spoken members stay because a ready result cannot be blank. Later student messages follow `student_round_order`. The Tool runs before the Guide line, so Guide-first still records first. A non-answer is the scorer's rejection once; the Guide restates that Question once. All answered: Guide `答题全部结束`, Summarizer `正在总结答案`. Abandon uses that order, then Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false. `MAYA-ASSESSMENT-ROLE` does not choose speakers. `assessment_active` is a ledger flag, not a Tool. Ordinary chat replies by relevance; optional `## Informal` overrides that prompt. Precedence is ACL, ledger, Ruleset. The server alone appends report links. Later executor turns stay on that scorer and the summarizer.
 
 Built `2c62871` (PR #72: Knowledge partial promote + Chat progress + Team `# Team Ruleset` defaults + fused PR #71 Voices hover tip). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200. Cleanup: removed `/tmp/maya-*` probes, orphan backup `-shm`/`-wal`/`.bak`, and ~23GB Docker build cache (disk 60%→23%).
+
+October 15: New Team chats stay at revision 0 with no canned opening. Each prompt names that member and forbids another name; history uses a provider-safe token and prefixes the display name when they differ. The formal roster stays server-parsed. Outside a live assessment the Guide says what to do next and sometimes one sentence offering 正式测评, not every reply; a live assessment keeps the scripted lines. `## Informal` may change who replies and length. `正在总结答案` is progress. A failed summary (`assessment_executor_write_required`) says to send again. A free answer is saved only when the model sets relevant true; otherwise the server speaks that guidance and does not paste the question. Choice and scale replies must match their letters or range. Includes post-#82 main #81 `9b6953b`, #83 `b3a0337`, #84 `3733df7`, #85 `a12d17d`. No production deploy.

@@ -284,7 +284,8 @@ export default function TeacherDebateControlPage() {
     setInteractionError(null);
     // Reuse the Conclude close key so a click racing Conclude replays the same
     // durable request instead of double-finalizing.
-    const idempotency = interactionCloseKey.current ?? createIdempotencyHandle();
+    const idempotency =
+      interactionCloseKey.current ?? createIdempotencyHandle();
     interactionCloseKey.current = idempotency;
     try {
       const finalized = await api.closeInteraction(debateId, { idempotency });

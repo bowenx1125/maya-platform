@@ -3,7 +3,7 @@
 这四份可编辑文件是课后诊断 Team 的四个角色，建立在普通 Agent 上。苏格拉底、柏拉图、老子没有这些声明，不能拿来做正式测评。显示名字可以更换；服务器依据已发布版本、真实成员、当前学生与任务建立授权。
 
 1. `maya.agent.md` 根据课件整理知识点和题目。教师在自己的已发布 Agent 单聊里调用 `generate_agent_knowledge`，或在发布时提交明确的生成意图。工具只读取该 Agent 已选的 RAG，由一次性生成写成 Concepts、带参考答案和 Rubric 的 Questions、Notes。聊天里的临场想法不会另写进 Knowledge。
-2. `bowen.agent.md` 是 Guide。三条 `MAYA-ASSESSMENT-*` 声明只放在这一份，用来选题和判断完成。`# Team Ruleset` → `## Formal assessment` 用花名册显示名写 `answer_recorder`、`question_guide`、`scorer`、`summarizer`、`student_round_order`。`student_round_order` 只能是 scorer 与 question_guide，顺序即学生消息的发言顺序。`answer_recorder` 必须与 scorer 是同一人。缺任何一项或名单对不上，正式测评拒绝且不创建 attempt。
+2. `bowen.agent.md` 是 Guide。三条 `MAYA-ASSESSMENT-*` 声明只放在这一份，用来选题和判断完成。`# Team Ruleset` → `## Formal assessment` 用花名册显示名写 `answer_recorder`、`question_guide`、`scorer`、`summarizer`、`student_round_order`。`student_round_order` 只能是 scorer 与 question_guide，顺序即学生消息的发言顺序。`answer_recorder` 必须与 scorer 是同一人。缺任何一项或名单对不上，正式测评拒绝且不创建 attempt。`## Informal` 约定没有进行中的正式测评时，只有 Guide 说明下一步，并偶尔用一句话提到可以说「正式测评」开始；进行中的正式测评仍用服务器台词。
 3. `jade.agent.md` 是 scorer，也是 `answer_recorder`（必须是同一花名册成员）。学生每答一题，按 `student_round_order` 发言；写工具和「已记录你的回答。」属于这一人，Guide 不调用写工具。Jade 随后用 `edit_assessment` 按 Rubric 评估，并从服务器给出的未问题目里选择追问。
 4. `kaikai.agent.md` 是 summarizer。全部答完后说「正在总结答案」，并用 `update_learning_boundary` 把结果分成有掌握证据、作答显示的薄弱点、尚未验证。漏答和没问到的归入尚未验证。教师查统计和下报告时用 `list_course_assessments`、`read_course_statistics`、`create_course_report`，只覆盖学生设为 Public 的正式记录。报告链接只由服务器附加。
 

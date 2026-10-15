@@ -13,6 +13,7 @@ from app.core.models import AgentVersion
 from app.modules.demo_baseline.service import ensure_demo_baseline
 from app.modules.learning.attempts import (
     get_assessment_runtime_context,
+    read_attempt_answers,
     start_or_resume_attempt,
 )
 from app.modules.learning.models import AssessmentAttempt
@@ -364,7 +365,11 @@ def test_formal_micro_round_follows_the_eight_step_script(
         first,
         monkeypatch,
         [
-            ("tool", "assessment_action", {"classification": "answer_only", "answer_span": first}),
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": first},
+            ),
             ("text", "已记录你的回答。"),
         ],
     )
@@ -391,7 +396,11 @@ def test_formal_micro_round_follows_the_eight_step_script(
         second,
         monkeypatch,
         [
-            ("tool", "assessment_action", {"classification": "answer_only", "answer_span": second}),
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": second},
+            ),
             ("text", "已记录。"),
         ],
     )
@@ -622,7 +631,13 @@ def test_guide_then_scorer_order_speaks_the_guide_first(
         conversation_id,
         answer,
         monkeypatch,
-        [("tool", "assessment_action", {"classification": "answer_only", "answer_span": answer})],
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": answer},
+            )
+        ],
     )
     with database.session() as db:
         speakers = db.execute(
@@ -704,7 +719,13 @@ def test_explicit_formal_start_is_the_guide_opening_before_any_member(
         conversation_id,
         answer,
         monkeypatch,
-        [("tool", "assessment_action", {"classification": "answer_only", "answer_span": answer})],
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": answer},
+            )
+        ],
     )
     with database.session() as db:
         speakers = db.execute(
@@ -853,3 +874,123 @@ def test_greeting_does_not_open_formal_and_incomplete_ruleset_refuses(
     with database.session() as db:
         assert db.scalar(select(func.count()).select_from(AssessmentAttempt)) == before
         assert db.scalar(select(func.count()).select_from(ConversationTurn)) == before_turns
+
+
+REASON = "关于第 1 题：你选了哪一项？能用一两句话说说你当时是怎么想的吗？"
+HOW_TO_ANSWER = "请说出你在第 1 题选了哪项，并用一两句话说说理由"
+SAD = "听起来你现在很难受。想答的时候，回复 1 到 5 里的一个数字就好。"
+QUIT = "不想做的时候可以先停一下。想答时，回复 1 到 5 里的一个数字就好。"
+SCALE = (
+    "今天被认为正确的知识，将来可能会被修正。\n\n请选择你同意的程度，回复数字即可：\n\n"
+    "1 = 非常不同意　2 = 不同意　3 = 不确定　4 = 同意　5 = 非常同意"
+)
+
+
+@pytest.mark.parametrize(
+    ("prompt", "message", "arguments", "saved", "spoken", "repeats_question"),
+    [
+        (
+            REASON,
+            "现在进展如何",
+            {"classification": "off_topic", "relevant": False, "guidance": HOW_TO_ANSWER},
+            False,
+            HOW_TO_ANSWER,
+            False,
+        ),
+        (
+            REASON,
+            "B",
+            {"classification": "off_topic", "relevant": False, "guidance": HOW_TO_ANSWER},
+            False,
+            HOW_TO_ANSWER,
+            False,
+        ),
+        (
+            REASON,
+            "现在进展如何",
+            {"classification": "answer_only", "answer_span": "现在进展如何"},
+            False,
+            "这条回复不是本题的答案，没有记录。请直接写出你对这道题的回答。",
+            True,
+        ),
+        (
+            SCALE,
+            "我好伤心感觉好难啊",
+            {"classification": "off_topic", "relevant": False, "guidance": SAD},
+            False,
+            SAD,
+            False,
+        ),
+        (
+            SCALE,
+            "我感觉好难不想做了怎么办",
+            {"classification": "off_topic", "relevant": False, "guidance": QUIT},
+            False,
+            QUIT,
+            False,
+        ),
+        (
+            REASON,
+            "我选了 B，因为当时觉得那一项最接近。",
+            {
+                "classification": "answer_only",
+                "relevant": True,
+                "answer_span": "我选了 B，因为当时觉得那一项最接近。",
+            },
+            True,
+            RECORDED_FACT,
+            True,
+        ),
+    ],
+)
+def test_free_response_relevance_follows_the_model_judgment(
+    client: TestClient,
+    database: Any,
+    app_bundle: Any,
+    monkeypatch: Any,
+    prompt: str,
+    message: str,
+    arguments: dict[str, Any],
+    saved: bool,
+    spoken: str,
+    repeats_question: bool,
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=(prompt, "乙题")
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(
+        app_bundle,
+        database,
+        f"formal-relevant-{arguments['classification']}-{len(message)}-{saved}",
+    )
+    _grant(database, conversation_id, policy)
+    _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    turn_id = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        message,
+        monkeypatch,
+        [("tool", "assessment_action", arguments)],
+    )
+    texts = [text for text in _texts(database, turn_id) if text]
+    assert texts[0] == spoken
+    if saved:
+        assert "乙题" in (texts[1] or "")
+    elif repeats_question:
+        assert prompt in (texts[1] or "")
+    else:
+        assert texts[1] == "还是这道题。"
+        assert prompt not in "\n".join(texts)
+    with database.session() as db:
+        answers = read_attempt_answers(db, actor, conversation_id)
+        assert bool(answers) is saved
+        if saved:
+            assert answers[0].answer_text == message

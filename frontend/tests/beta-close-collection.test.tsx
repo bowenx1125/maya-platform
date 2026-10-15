@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -295,7 +301,9 @@ describe("segments_v2 close collection while running", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = pageApi(interaction("open"));
     renderPage(api);
-    const close = await screen.findByRole("button", { name: "Close collection" });
+    const close = await screen.findByRole("button", {
+      name: "Close collection",
+    });
     expect(screen.queryByRole("button", { name: "Conclude" })).toBeNull();
     fireEvent.click(close);
     await waitFor(() => expect(api.closeInteraction).toHaveBeenCalledTimes(1));
@@ -305,7 +313,9 @@ describe("segments_v2 close collection while running", () => {
       expect.objectContaining({ idempotency: expect.anything() }),
     );
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Close collection" })).toBeNull(),
+      expect(
+        screen.queryByRole("button", { name: "Close collection" }),
+      ).toBeNull(),
     );
     expect(screen.queryByRole("button", { name: "Interact" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Hide" })).toBeNull();
@@ -318,13 +328,17 @@ describe("segments_v2 close collection while running", () => {
     const api = pageApi(interaction("open"));
     api.closeInteraction.mockRejectedValue(new Error("Close failed"));
     renderPage(api);
-    const close = await screen.findByRole("button", { name: "Close collection" });
+    const close = await screen.findByRole("button", {
+      name: "Close collection",
+    });
     fireEvent.click(close);
     expect((await screen.findByRole("status")).textContent).toContain(
       "Close failed",
     );
     expect(api.closeInteraction).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Close collection" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Close collection" }),
+    ).toBeTruthy();
     expect(api.regenerateReport).not.toHaveBeenCalled();
   });
 
@@ -332,11 +346,15 @@ describe("segments_v2 close collection while running", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     const api = pageApi(interaction("open"));
     renderPage(api);
-    const close = await screen.findByRole("button", { name: "Close collection" });
+    const close = await screen.findByRole("button", {
+      name: "Close collection",
+    });
     fireEvent.click(close);
     await waitFor(() => expect(confirmCancelled(api)));
     expect(api.closeInteraction).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Close collection" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Close collection" }),
+    ).toBeTruthy();
   });
 });
 

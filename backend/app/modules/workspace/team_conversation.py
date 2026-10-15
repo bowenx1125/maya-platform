@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Literal, cast
-from uuid import UUID, uuid4, uuid5
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +27,6 @@ from .models import (
     ConversationParticipantSet,
     ConversationSharedSet,
     ConversationTurn,
-    TeamTurnResult,
 )
 from .schemas import (
     ChatTeam,
@@ -37,12 +35,6 @@ from .schemas import (
     SavedTeamChatEntry,
     TeamChatParticipant,
     TeamChatSession,
-)
-
-# Chat-create greeting. It is not the assessment opening: that line, with the
-# first question, is spoken only after an attempt exists.
-MAYA_TEAM_OPENING = (
-    "我是 Guide（Leader）。默认规则：全体成员都会读并回复你的消息，相关性高则多说、低则少说。"
 )
 
 
@@ -200,7 +192,6 @@ def create_team_conversation(
     )
     db.add(row)
     db.flush()
-    leader_participant: ConversationParticipant | None = None
     for member in selection.members:
         version = db.get(AgentVersion, member.agent_version_id)
         agent = db.get(Agent, member.agent_id)
@@ -223,8 +214,6 @@ def create_team_conversation(
         )
         db.add(participant)
         db.flush()
-        if participant.is_leader:
-            leader_participant = participant
         for position, set_id in enumerate(member.own_knowledge_set_ids):
             db.add(
                 ConversationParticipantSet(
@@ -237,65 +226,10 @@ def create_team_conversation(
                 conversation_id=row.id, knowledge_set_id=set_id, position=position
             )
         )
-    # The opening is a fixed rule of a complete published recipe, whoever opens
-    # the chat; without that recipe the Team waits for the first message.
-    if recipe_ready:
-        if leader_participant is None:
-            raise not_found()
-        _persist_maya_team_opening(db, row, leader_participant, MAYA_TEAM_OPENING)
+    # A new Team chat stays quiet until the student sends a message. Formal
+    # Guide lines are spoken only after that message starts an attempt.
     db.flush()
     return row
-
-
-def _persist_maya_team_opening(
-    db: Session, row: Conversation, leader: ConversationParticipant, opening: str
-) -> None:
-    """The Leader's first message is stored with the Chat, before any model call."""
-
-    now = datetime.now(UTC)
-    turn_id = str(uuid5(UUID(row.id), "maya-team-opening"))
-    routing = {"mode": "selected", "participant_ids": [leader.id]}
-    request_hash = hashlib.sha256(
-        json.dumps(
-            {"conversation_id": row.id, "message": opening},
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
-    turn = ConversationTurn(
-        id=turn_id,
-        conversation_id=row.id,
-        position=1,
-        user_text="",
-        assistant_text=None,
-        sources_json="[]",
-        mode="mock",
-        state="ready",
-        safe_error_code=None,
-        routing_json=json.dumps(routing, ensure_ascii=False, separators=(",", ":")),
-        request_hash=request_hash,
-        claim_token=str(uuid5(UUID(turn_id), "maya-team-opening")),
-        created_at=now,
-    )
-    db.add(turn)
-    db.flush()
-    db.add(
-        TeamTurnResult(
-            id=str(uuid5(UUID(turn_id), leader.id)),
-            turn_id=turn_id,
-            conversation_id=row.id,
-            participant_id=leader.id,
-            ordinal=0,
-            state="ready",
-            assistant_text=opening,
-            sources_json="[]",
-            safe_error_code=None,
-            created_at=now,
-            completed_at=now,
-        )
-    )
-    row.revision = 1
 
 
 def _participants(db: Session, conversation_id: str) -> list[ConversationParticipant]:

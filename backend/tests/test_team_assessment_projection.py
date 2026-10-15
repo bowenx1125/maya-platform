@@ -679,6 +679,7 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
                     "assessment_action",
                     {
                         "classification": "answer_only",
+                        "relevant": True,
                         "answer_span": "FINAL_ANSWER_CANARY",
                     },
                 )

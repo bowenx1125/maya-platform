@@ -705,7 +705,8 @@ def test_team_list_chat_scores_only_when_the_published_recipe_is_complete(
     ready = _create(client, csrf, {"kind": "team", "team_id": team_id})
     assert ready["entry_kind"] == "maya_team"
     assert ready["origin"] == "published_course_team"
-    assert ready["turns"][0]["member_results"][0]["assistant_text"].startswith("我是 Guide")
+    assert ready["turns"] == []
+    assert ready["revision"] == 0
     with database.session() as db:
         assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 

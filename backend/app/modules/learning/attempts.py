@@ -1767,6 +1767,17 @@ _RECLASSIFIABLE = frozenset(
 )
 
 
+def _student_guidance(value: str | None) -> str | None:
+    """One sentence the server may speak. A record claim is dropped."""
+
+    if not value:
+        return None
+    text = " ".join(value.split())
+    if not text or "已记录" in text or "Answer saved" in text:
+        return None
+    return text[:400]
+
+
 def _fit_answer_action(
     db: Session,
     actor: AuthContext,
@@ -1774,18 +1785,17 @@ def _fit_answer_action(
     user_text: str,
     action: AssessmentStudentAction,
 ) -> AssessmentStudentAction:
-    """Hold the model's classification to the open Question's answer format.
+    """Hold the model's classification to the open Question.
 
-    Owner decision (2026-10-13), after answers were lost or let through:
-    - a choice Question takes only its own option letters, a scale Question
-      only a number in its range; anything else is not recorded, and the
-      student is told the format;
-    - a fill-in or open Question takes the student's own words; a request or
-      a question back is not an answer;
-    - an answer is always saved in the student's own text, never the model's
-      copy of it (a copy that did not match was dropped as "我们继续测试").
+    A choice or scale reply must match that question's letters or range.
+    A free-form reply is saved only when the model set relevant to true;
+    the server does not decide relevance from the wording.
+    An answer is saved in the student's own text, never a model paraphrase
+    that is not in the message.
     """
 
+    guidance = _student_guidance(action.guidance)
+    action = action.model_copy(update={"guidance": guidance})
     if action.classification not in _ANSWER_CLASSES | _RECLASSIFIABLE:
         return action
     context = get_assessment_runtime_context(db, actor, conversation_id)
@@ -1799,15 +1809,23 @@ def _fit_answer_action(
 
     text = user_text.strip()
     form = answer_format(context.current_question.prompt)
+    if form.kind == "free":
+        if action.classification in _ANSWER_CLASSES and action.relevant is True:
+            span = action.answer_span or ""
+            if not span.strip() or span not in user_text:
+                return action.model_copy(update={"answer_span": text})
+            return action
+        if action.classification in _ANSWER_CLASSES:
+            return AssessmentStudentAction(classification="off_topic", guidance=guidance)
+        return action
     if action.classification in _ANSWER_CLASSES:
-        if form.kind != "free" and not fits(form, text):
-            return AssessmentStudentAction(classification="off_topic")
+        if not fits(form, text):
+            return AssessmentStudentAction(classification="off_topic", guidance=guidance)
         span = action.answer_span or ""
         if not span.strip() or span not in user_text:
             return action.model_copy(update={"answer_span": text})
         return action
-    # The model called it something else: record it only when it can only be
-    # an answer, and asks for nothing.
+    # A fitting choice or scale reply is an answer even when the model missed it.
     if fits(form, text) and is_statement(text):
         return AssessmentStudentAction(classification="answer_only", answer_span=text)
     return action
@@ -1944,6 +1962,11 @@ def apply_assessment_action(
             question_version_id=current_question.question_version_id,
         )
         result = result.model_copy(update={"context": shown})
+    if action.guidance and result.response_key not in {
+        "assessment.answer_recorded",
+        "assessment.answer_recorded_restricted_request",
+    }:
+        result = result.model_copy(update={"guidance": action.guidance})
     return result
 
 
