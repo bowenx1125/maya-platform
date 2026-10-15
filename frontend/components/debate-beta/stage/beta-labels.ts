@@ -16,6 +16,9 @@ export type BetaStageLabels = {
   transcriptToggle: string;
   interactionOpening: string;
   interactionClosedHint: string;
+  closeCollection: string;
+  closeCollectionConfirm: string;
+  closingCollection: string;
 };
 
 export const defaultBetaStageLabels: BetaStageLabels = {
@@ -30,6 +33,10 @@ export const defaultBetaStageLabels: BetaStageLabels = {
   interactionOpening: "Opening…",
   interactionClosedHint:
     "Open classroom messages to show a join code on the stage.",
+  closeCollection: "Close collection",
+  closeCollectionConfirm:
+    "Close collection? Students will no longer be able to submit, and the debate will keep running.",
+  closingCollection: "Closing…",
 };
 
 export const betaStageLabelsZh: BetaStageLabels = {
@@ -43,6 +50,9 @@ export const betaStageLabelsZh: BetaStageLabels = {
   transcriptToggle: "发言记录",
   interactionOpening: "正在开启…",
   interactionClosedHint: "开启课堂弹幕后，讲席上会出现扫码入口。",
+  closeCollection: "关闭收集",
+  closeCollectionConfirm: "关闭收集后，学生将无法继续提交，但辩论会继续进行。确定关闭吗？",
+  closingCollection: "正在关闭…",
 };
 
 export function resolveBetaStageLabels(locale: string): BetaStageLabels {

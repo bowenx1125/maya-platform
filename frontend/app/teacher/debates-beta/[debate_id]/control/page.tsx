@@ -270,6 +270,36 @@ export default function TeacherDebateControlPage() {
     }
   }, [api, debateId, joinUrl, locale]);
 
+  const closeCollection = useCallback(async () => {
+    if (
+      !debateId ||
+      interactionInFlight.current ||
+      (!joinUrl && interaction?.status !== "open")
+    ) {
+      return;
+    }
+    if (!window.confirm(betaLabels.closeCollectionConfirm)) return;
+    interactionInFlight.current = true;
+    setInteractionBusy(true);
+    setInteractionError(null);
+    // Reuse the Conclude close key so a click racing Conclude replays the same
+    // durable request instead of double-finalizing.
+    const idempotency = interactionCloseKey.current ?? createIdempotencyHandle();
+    interactionCloseKey.current = idempotency;
+    try {
+      const finalized = await api.closeInteraction(debateId, { idempotency });
+      interactionCloseKey.current = null;
+      setInteraction(finalized);
+      setJoinUrl(null);
+      setJoinCodeVisible(false);
+    } catch (cause) {
+      setInteractionError(localizeError(cause, locale));
+    } finally {
+      interactionInFlight.current = false;
+      setInteractionBusy(false);
+    }
+  }, [api, betaLabels, debateId, interaction?.status, joinUrl, locale]);
+
   const refreshSnapshot = useCallback(async () => {
     if (!debateId) throw new Error("Debate id is missing.");
     const next = await api.debate(debateId);
@@ -513,20 +543,36 @@ export default function TeacherDebateControlPage() {
                       after it, so the join code can go up on the stage while
                       the Agents are still speaking. */}
                 {showOpenInteraction ? (
-                  <button
-                    aria-expanded={Boolean(joinUrl) && joinCodeVisible}
-                    aria-controls="classroom-join-code"
-                    className="secondary-action"
-                    disabled={interactionBusy}
-                    onClick={() => void openInteraction()}
-                    type="button"
-                  >
-                    {interactionBusy
-                      ? betaLabels.interactionOpening
-                      : joinUrl && joinCodeVisible
-                        ? betaLabels.hideInteraction
-                        : betaLabels.openInteraction}
-                  </button>
+                  <>
+                    <button
+                      aria-expanded={Boolean(joinUrl) && joinCodeVisible}
+                      aria-controls="classroom-join-code"
+                      className="secondary-action"
+                      disabled={interactionBusy}
+                      onClick={() => void openInteraction()}
+                      type="button"
+                    >
+                      {interactionBusy && !joinUrl
+                        ? betaLabels.interactionOpening
+                        : joinUrl && joinCodeVisible
+                          ? betaLabels.hideInteraction
+                          : betaLabels.openInteraction}
+                    </button>
+                    {/* Close collection is independent of Hide: it finalizes
+                        the open window while the debate keeps running. */}
+                    {joinUrl ? (
+                      <button
+                        className="secondary-action"
+                        disabled={interactionBusy}
+                        onClick={() => void closeCollection()}
+                        type="button"
+                      >
+                        {interactionBusy
+                          ? betaLabels.closingCollection
+                          : betaLabels.closeCollection}
+                      </button>
+                    ) : null}
+                  </>
                 ) : null}
                 {replayButton}
                 {showSegmentsConclude ? (

@@ -554,6 +554,63 @@ def test_live_open_needs_two_agents_on_the_bench(interaction_app: Any) -> None:
     assert bare.value.code == "invalid_state"
 
 
+def test_live_close_collection_keeps_running_debate_running(interaction_app: Any) -> None:
+    """只关收集: closing collection mid-lesson finalizes only the window.
+
+    A segments debate that is still running must close its open interaction
+    without the Conclude playback gate and without promoting the Debate to
+    completed; a student submit afterwards gets interaction_finalized.
+    """
+
+    app, database, _client = interaction_app
+    debate_id, _participant_ids = _seed_finished_debate(database)
+    settings = app.state.settings
+    settings.debates_beta_live_interaction = True
+    service, collector = _service(database, settings)
+    with database.session() as session:
+        row = session.get(Debate, debate_id)
+        assert row is not None
+        row.status = "running"
+        snapshot = json.loads(str(row.rule_snapshot_json))
+        snapshot["turn_protocol"] = "segments_v2"
+        row.rule_snapshot_json = json.dumps(snapshot)
+
+    opened = service.open_interaction(
+        actor_user_id=TEACHER_ID,
+        debate_id=debate_id,
+        idempotency_key="beta-close-collection-open-1",
+    )
+    assert opened.status == "open"
+    token = (opened.public_url or "").rsplit("/", 1)[-1]
+
+    finalized = service.close_interaction(
+        actor_user_id=TEACHER_ID,
+        debate_id=debate_id,
+        idempotency_key="beta-close-collection-0001",
+    )
+    assert finalized.status == "finalized"
+    with database.session() as session:
+        row = session.get(Debate, debate_id)
+        assert row is not None
+        assert row.status == "running"
+
+    with pytest.raises(PlatformError) as ended:
+        service.submit_barrage(
+            access_token=token,
+            payload=BarrageRequest(
+                nickname=" learner ",
+                raw_text="Too late.",
+                client_submission_id=uuid4(),
+            ),
+        )
+    assert ended.value.code == "interaction_finalized"
+    assert ended.value.status_code == 410
+    assert [event.event_type for event in collector.events] == [
+        "interaction.opened",
+        "interaction.closed",
+    ]
+
+
 def test_open_requires_the_complete_two_round_turn_plan(interaction_app: Any) -> None:
     app, database, _client = interaction_app
     debate_id, _participant_ids = _seed_finished_debate(database)
