@@ -5035,6 +5035,8 @@ export interface components {
              * @enum {string}
              */
             disposition: "recorded" | "transitioned" | "read" | "redirected";
+            /** Guidance */
+            guidance?: string | null;
             /**
              * Response Key
              * @enum {string}

@@ -250,6 +250,7 @@ export type AssessmentRuntimeResult = {
     answer_text: string;
     created_at: string;
   }>;
+  guidance?: string | null;
 };
 export type AssessmentLifecycleAction = "pause" | "resume" | "abandon" | "redo";
 export type MemoryEntrySource =

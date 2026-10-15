@@ -18328,6 +18328,13 @@
             "title": "Disposition",
             "type": "string"
           },
+          "guidance": {
+            "title": "Guidance",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "response_key": {
             "enum": [
               "assessment.started",
