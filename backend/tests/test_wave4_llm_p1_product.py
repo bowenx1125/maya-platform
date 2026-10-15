@@ -315,6 +315,10 @@ def _install_fake_dashscope_product_path(
     repository = ProviderRepository(database, require_export_confirmation=False)
     policy_id = repository.save_policy_snapshot(policy, snapshot_id="product-policy")
     settings.provider_policy_hash = policy.policy_hash  # type: ignore[attr-defined]
+    # The preflight seam prefers llm_provider_policy_hash over the legacy
+    # field; both must point at the fake snapshot or a developer .env value
+    # leaks into the lookup and blocks the fake product path.
+    settings.llm_provider_policy_hash = policy.policy_hash  # type: ignore[attr-defined]
     settings.llm_provider = "dashscope"  # type: ignore[attr-defined]
     settings.dashscope_api_key = "fake-product-key"  # type: ignore[attr-defined]
     settings.dashscope_workspace_id = "fake-product-workspace"  # type: ignore[attr-defined]
