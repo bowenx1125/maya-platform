@@ -18,7 +18,15 @@ from app.modules.auth.service import AuthContext
 from app.modules.voices.schemas import (
     PlaybackResource,
     RenameVoiceProfileRequest,
+    SystemVoicePreviewRequest,
+    SystemVoicePreviewResponse,
+    SystemVoiceScriptResponse,
     VoiceProfileResponse,
+)
+from app.modules.voices.system_voice_preview import (
+    create_system_voice_preview,
+    list_system_voice_scripts,
+    media_path_for_system_voice_preview,
 )
 from app.modules.voices.service import (
     confirm_voice_profile,
@@ -325,6 +333,111 @@ def voice_preview_media(
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
     path, media_type = media_path_for_preview(db, context, str(preview_id), settings)
+    return FileResponse(
+        Path(path),
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get(
+    "/system-voice-previews/scripts",
+    response_model=list[SystemVoiceScriptResponse],
+    operation_id="listSystemVoicePreviewScripts",
+    include_in_schema=False,
+)
+def list_system_voice_preview_scripts(
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[SystemVoiceScriptResponse]:
+    from app.modules.voices.system_voice_preview import require_system_voice_teacher
+
+    require_system_voice_teacher(db, context)
+    return [
+        SystemVoiceScriptResponse(
+            segment_id=script.segment_id,
+            voice=script.voice,
+            language=script.language,
+            text=script.text,
+            expected_reading=script.expected_reading,
+        )
+        for script in list_system_voice_scripts()
+    ]
+
+
+@router.post(
+    "/system-voice-previews",
+    response_model=SystemVoicePreviewResponse | list[SystemVoicePreviewResponse],
+    operation_id="createSystemVoicePreview",
+    include_in_schema=False,
+    responses={
+        403: {"model": Error, "description": "Teacher access required."},
+        503: {"model": Error, "description": "Flash preview unavailable."},
+    },
+)
+def create_system_voice_preview_route(
+    payload: SystemVoicePreviewRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> SystemVoicePreviewResponse | list[SystemVoicePreviewResponse]:
+    try:
+        result = create_system_voice_preview(
+            db, context, settings, payload.segment_id
+        )
+    except PlatformError:
+        raise
+    except (RuntimeError, OSError) as exc:
+        raise _safe_provider_failure("preview") from exc
+    if isinstance(result, list):
+        return [
+            SystemVoicePreviewResponse(
+                request_id=item.request_id,
+                segment_id=item.segment_id,
+                voice=item.voice,
+                language=item.language,
+                text=item.text,
+                expected_reading=item.expected_reading,
+                playback_url=item.playback_url,
+                expires_at=item.expires_at,
+                provider_request_id=item.provider_request_id,
+                deduplicated=item.deduplicated,
+            )
+            for item in result
+        ]
+    return SystemVoicePreviewResponse(
+        request_id=result.request_id,
+        segment_id=result.segment_id,
+        voice=result.voice,
+        language=result.language,
+        text=result.text,
+        expected_reading=result.expected_reading,
+        playback_url=result.playback_url,
+        expires_at=result.expires_at,
+        provider_request_id=result.provider_request_id,
+        deduplicated=result.deduplicated,
+    )
+
+
+@router.get(
+    "/system-voice-previews/{request_id}/media",
+    include_in_schema=False,
+    name="systemVoicePreviewMedia",
+)
+def system_voice_preview_media(
+    request_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    path, media_type = media_path_for_system_voice_preview(
+        db, context, str(request_id), settings
+    )
     return FileResponse(
         Path(path),
         media_type=media_type,
