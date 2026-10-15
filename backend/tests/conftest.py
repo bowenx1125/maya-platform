@@ -78,6 +78,10 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
             session_secret="x" * 32,
             demo_mode=demo_mode,
             demo_quick_login=False,
+            # A developer .env with DEMO_AUTO_CONFIRM_PROVIDER=true would let
+            # standing consent auto-confirm disclosures and skip the explicit
+            # confirmation step tests must exercise.
+            demo_auto_confirm_provider=False,
             allow_legacy_demo_users=True,
             database_url=f"sqlite:///{tmp_path / 'maya.sqlite3'}",
             data_root=tmp_path,
@@ -89,6 +93,8 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
             embedding_provider="mock",
             tts_provider="mock",
             voice_provider="mock",
+            report_provider="mock",
+            dashscope_api_key=None,
         )
         database = Database(settings.database_url, settings.data_root)
         return create_app(settings, database), database, settings

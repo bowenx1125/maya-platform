@@ -987,6 +987,10 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
     settings.dashscope_workspace_id = "fixture"
     settings.dashscope_region = "cn-beijing"
     settings.provider_policy_hash = policy.policy_hash
+    # The per-slice hash takes precedence over the shared one; without it a
+    # developer .env value would win and preflight would look up the wrong
+    # policy snapshot and fail with a 503.
+    settings.embedding_provider_policy_hash = policy.policy_hash
     transport = _CaptureTransport()
     adapter = DashScopeEmbeddingAdapter(config, transport)
     agents_router_module = importlib.import_module("app.modules.agents.router")

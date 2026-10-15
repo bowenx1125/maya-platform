@@ -24,7 +24,13 @@ def _settings(tmp_path: Path, **updates: object) -> Settings:
         "voice_provider": "mock",
         "llm_provider": "mock",
         "embedding_provider": "mock",
+        "report_provider": "mock",
         "provider_policy_hash": "a" * 64,
+        # Pin the per-slice hashes so a developer .env (EMBEDDING/LLM/REPORT_
+        # PROVIDER_POLICY_HASH) cannot shadow the shared fixture hash.
+        "embedding_provider_policy_hash": None,
+        "llm_provider_policy_hash": None,
+        "report_provider_policy_hash": None,
     }
     values.update(updates)
     return Settings(**values)

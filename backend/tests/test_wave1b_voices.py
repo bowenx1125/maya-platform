@@ -1977,6 +1977,12 @@ def _fallback_settings(tmp_path: Path) -> Settings:
         session_secret="f" * 32,
         database_url=f"sqlite:///{tmp_path / 'fallback.sqlite3'}",
         data_root=tmp_path / "fallback-data",
+        llm_provider="mock",
+        embedding_provider="mock",
+        tts_provider="mock",
+        voice_provider="mock",
+        report_provider="mock",
+        dashscope_api_key=None,
     )
 
 
