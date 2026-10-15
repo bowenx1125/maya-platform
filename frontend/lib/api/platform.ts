@@ -1591,12 +1591,22 @@ export class PlatformApi {
     );
   }
 
-  /** Members, test results and recent work, for a teacher who entered. */
+  /** Members, test results and recent work, for a course teacher. */
   async groupOverview(groupId: string): Promise<GroupOverview> {
     return unwrap(
       await this.client.GET("/groups/{group_id}/overview", {
         params: { path: { group_id: groupId } },
       }),
+    );
+  }
+
+  /** Formal attempts in the course. Entering a group is not required. */
+  async courseAssessmentAttempts(courseId: string): Promise<OverviewResult[]> {
+    return unwrap(
+      await this.client.GET(
+        "/learning/courses/{course_id}/assessment-attempts",
+        { params: { path: { course_id: courseId } } },
+      ),
     );
   }
 

@@ -567,7 +567,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** @description Members, formal test results and recent work of a group, for a course teacher who has entered it from Accounts. Private work is included, read-only, as on the visit itself. */
+        /** @description Members, formal test results and recent work of a group, for a course teacher. Formal attempts are included without entering the group. Private Agents, Teams, RAG and voices are included only after the teacher enters, and only to read. */
         get: operations["getGroupOverview"];
         put?: never;
         post?: never;
@@ -2186,6 +2186,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/learning/courses/{course_id}/assessment-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Course Assessment Attempts Route
+         * @description Formal attempts for a course teacher, with no group visit required.
+         */
+        get: operations["listCourseAssessmentAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/learning/courses/{course_id}/assessment-activities": {
         parameters: {
             query?: never;
@@ -2885,6 +2905,11 @@ export interface components {
             team_name: string;
             /** @enum {string} */
             status: "in_progress" | "paused" | "completed";
+            /** @enum {string} */
+            phase: "answering" | "summary_not_saved" | "scoring_not_saved" | "paused" | "completed";
+            conversation_id: components["schemas"]["Uuid"];
+            group_id?: components["schemas"]["Uuid"] | null;
+            group_name?: string | null;
             started_at: components["schemas"]["IsoTime"];
             ended_at?: components["schemas"]["IsoTime"] | null;
             points_awarded?: number | null;
@@ -11764,6 +11789,41 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCourseAssessmentAttempts: {
+        parameters: {
+            query?: {
+                group_id?: string | null;
+                attempt_id?: string | null;
+                conversation_id?: string | null;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewResult"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

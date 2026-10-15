@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import Error, not_found
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
+from app.modules.org.schemas import OverviewResult
 
 from .attempts import apply_attempt_lifecycle_action
 from .models import AssessmentActivity
@@ -18,6 +19,7 @@ from .reports import (
     create_assessment_course_report,
     download_assessment_course_report,
     list_authorized_assessment_activities,
+    list_course_assessment_attempts,
 )
 from .schemas import (
     AssessmentActivityListItem,
@@ -66,6 +68,35 @@ def list_assessment_activities_route(
     db: Session = Depends(get_db),
 ) -> list[AssessmentActivityListItem]:
     return list_authorized_assessment_activities(db, actor, course_id=str(course_id))
+
+
+@router.get(
+    "/courses/{course_id}/assessment-attempts",
+    response_model=list[OverviewResult],
+    operation_id="listCourseAssessmentAttempts",
+    responses={404: {"model": Error}},
+)
+def list_course_assessment_attempts_route(
+    course_id: UUID,
+    group_id: UUID | None = Query(default=None),
+    attempt_id: UUID | None = Query(default=None),
+    conversation_id: UUID | None = Query(default=None),
+    actor: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[OverviewResult]:
+    """Formal attempts for a course teacher, with no group visit required."""
+
+    return [
+        OverviewResult.model_validate(row)
+        for row in list_course_assessment_attempts(
+            db,
+            actor,
+            course_id=str(course_id),
+            group_id=str(group_id) if group_id is not None else None,
+            attempt_id=str(attempt_id) if attempt_id is not None else None,
+            conversation_id=str(conversation_id) if conversation_id is not None else None,
+        )
+    ]
 
 
 @router.post(

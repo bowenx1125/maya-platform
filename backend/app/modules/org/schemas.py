@@ -112,7 +112,11 @@ class OverviewQuestion(BaseModel):
 
 
 class OverviewResult(BaseModel):
-    """One formal test attempt by a group member, with its answer sheet."""
+    """One formal test attempt by a group member, with its answer sheet.
+
+    ``phase`` is what a teacher should be told: a missing summary or score is
+    not still answering. ``conversation_id`` is the chat the attempt ran in.
+    """
 
     attempt_id: UUID
     user_id: UUID
@@ -120,6 +124,16 @@ class OverviewResult(BaseModel):
     test_name: str
     team_name: str
     status: Literal["in_progress", "paused", "completed"]
+    phase: Literal[
+        "answering",
+        "summary_not_saved",
+        "scoring_not_saved",
+        "paused",
+        "completed",
+    ]
+    conversation_id: UUID
+    group_id: UUID | None = None
+    group_name: str | None = None
     started_at: datetime
     ended_at: datetime | None = None
     points_awarded: float | None = None
