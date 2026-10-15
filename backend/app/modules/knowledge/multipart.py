@@ -30,6 +30,8 @@ async def parse_upload(request: Request) -> tuple[dict[str, str], str, bytes]:
             raise ValueError("invalid content length") from exc
         if declared_length < 0:
             raise ValueError("invalid content length")
+        if declared_length > MAX_UPLOAD_REQUEST_BYTES:
+            raise UploadTooLargeError("upload request is too large")
     chunks = bytearray()
     total_seen = 0
     try:
@@ -37,6 +39,8 @@ async def parse_upload(request: Request) -> tuple[dict[str, str], str, bytes]:
             if not isinstance(chunk, bytes):
                 raise ValueError("invalid upload body")
             total_seen += len(chunk)
+            if total_seen > MAX_UPLOAD_REQUEST_BYTES:
+                raise UploadTooLargeError("upload request is too large")
             chunks.extend(chunk)
     except ClientDisconnect as exc:
         raise ValueError("upload was interrupted") from exc
