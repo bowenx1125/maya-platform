@@ -699,7 +699,10 @@ const enMessages = {
   overviewWorkCounts:
     "Agents {agents} · Teams {teams} · RAG {rag} · Voices {voices}",
   overviewInProgress: "In progress",
+  overviewSummaryNotSaved: "Summary not saved",
+  overviewScoringNotSaved: "Scores not saved",
   overviewPaused: "Paused",
+  overviewConversation: "Conversation",
   overviewNoScore: "Not scored",
   overviewReport: "Report",
   overviewReportFor: "Download the report for {name}",
@@ -1489,7 +1492,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   overviewWorkCounts:
     "Agent {agents} · Team {teams} · 资料 {rag} · 声音 {voices}",
   overviewInProgress: "进行中",
+  overviewSummaryNotSaved: "总结未保存",
+  overviewScoringNotSaved: "评分未保存",
   overviewPaused: "已暂停",
+  overviewConversation: "会话",
   overviewNoScore: "未评分",
   overviewReport: "报告",
   overviewReportFor: "下载「{name}」的报告",

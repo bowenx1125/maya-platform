@@ -133,6 +133,7 @@ const implementedOperationIds = new Set([
   "getChatStandingProviderDisclosure",
   "getKnowledgeMarkdown",
   "listAuthorizedAssessmentActivities",
+  "listCourseAssessmentAttempts",
   "listBrainformKnowledge",
   "pauseTeamConversationTurn",
   "previewTeamProviderStandingGrant",

@@ -1,8 +1,7 @@
-"""A group's members, test results and recent work, for a visiting teacher.
+"""A group's members, test results and recent work, for a course teacher.
 
-Only a course teacher who has entered the group from Accounts may read it,
-the same visit that lets them read the group's private work. Like that
-read, it changes nothing.
+Formal attempts are readable without entering the group. Private Agents,
+Teams, RAG and voices stay behind that visit. The read changes nothing.
 """
 
 from __future__ import annotations
@@ -37,7 +36,13 @@ from app.modules.teams.models import Team
 RECENT_EVENTS = 20
 
 
-def group_overview(db: Session, context: AuthContext, group: Group) -> GroupOverview:
+def group_overview(
+    db: Session,
+    context: AuthContext,
+    group: Group,
+    *,
+    include_private: bool,
+) -> GroupOverview:
     students = db.execute(
         select(User.id, User.display_name, User.avatar)
         .join(GroupMember, GroupMember.user_id == User.id)
@@ -74,6 +79,8 @@ def group_overview(db: Session, context: AuthContext, group: Group) -> GroupOver
     ).all():
         if agent.owner_user_id is None:
             continue
+        if not include_private and agent.visibility != "public":
+            continue
         agents[agent.owner_user_id].append(
             OverviewWork(id=UUID(agent.id), name=agent.name, visibility=agent.visibility)
         )
@@ -97,6 +104,8 @@ def group_overview(db: Session, context: AuthContext, group: Group) -> GroupOver
         .where(Team.group_id == group.id, Team.deleted_at.is_(None))
         .order_by(Team.created_at, Team.id)
     ).all():
+        if not include_private and team.visibility != "public":
+            continue
         teams[team.owner_user_id].append(
             OverviewWork(id=UUID(team.id), name=team.display_name, visibility=team.visibility)
         )
@@ -111,24 +120,35 @@ def group_overview(db: Session, context: AuthContext, group: Group) -> GroupOver
     ).all():
         if document.owner_user_id is None:
             continue
+        if not include_private and document.visibility != "public":
+            continue
         rag_counts[document.owner_user_id] += 1
         event("rag_added", document.created_at, document.owner_user_id, document.source_filename)
 
     voice_counts: dict[str, int] = defaultdict(int)
-    for voice in db.scalars(
-        select(VoiceProfile).where(
-            VoiceProfile.group_id == group.id,
-            VoiceProfile.status.notin_(("deleting", "deleted", "failed")),
-        )
-    ).all():
-        if voice.consent_actor_user_id is None:
-            continue
-        voice_counts[voice.consent_actor_user_id] += 1
-        event("voice_added", voice.created_at, voice.consent_actor_user_id, voice.display_name)
+    # A voice name is the student's own recording. It stays on the visit.
+    if include_private:
+        for voice in db.scalars(
+            select(VoiceProfile).where(
+                VoiceProfile.group_id == group.id,
+                VoiceProfile.status.notin_(("deleting", "deleted", "failed")),
+            )
+        ).all():
+            if voice.consent_actor_user_id is None:
+                continue
+            voice_counts[voice.consent_actor_user_id] += 1
+            event("voice_added", voice.created_at, voice.consent_actor_user_id, voice.display_name)
 
     results = [
         OverviewResult.model_validate(row)
-        for row in read_group_results(db, context, course_id=group.course_id, user_ids=set(names))
+        for row in read_group_results(
+            db,
+            context,
+            course_id=group.course_id,
+            user_ids=set(names),
+            group_id=group.id,
+            group_name=group.name,
+        )
     ]
     for result in results:
         event("test_completed", result.ended_at, str(result.user_id), result.team_name)

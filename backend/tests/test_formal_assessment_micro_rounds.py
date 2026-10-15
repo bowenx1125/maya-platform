@@ -6,13 +6,13 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import pytest
 from app.core.errors import PlatformError
-from app.core.models import AgentVersion
-from app.modules.demo_baseline.service import ensure_demo_baseline
+from app.core.models import Agent, AgentVersion
+from app.modules.demo_baseline.service import BASELINE_VERSION_IDS, ensure_demo_baseline
 from app.modules.knowledge_sets.models import KnowledgeSet, KnowledgeSetMarkdownVersion
 from app.modules.learning.attempts import (
     get_assessment_runtime_context,
@@ -26,7 +26,8 @@ from app.modules.provider_disclosure.team_standing import (
 )
 from app.modules.runtime_tools.builtin import runtime_registry
 from app.modules.runtime_tools.models import RuntimeToolReceipt
-from app.modules.teams.models import TeamVersionMember
+from app.modules.teams.models import TeamMemberInvokeGrant, TeamVersionMember
+from app.modules.teams.service import _capture_raw_source_fences
 from app.modules.workspace import team_runtime as runtime
 from app.modules.workspace.chat_team_provider import (
     dispatch_team_model as real_dispatch_team_model,
@@ -51,7 +52,7 @@ from app.modules.workspace.models import (
 from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
-from app.seed import TEACHER_ID
+from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -1294,6 +1295,267 @@ def test_greeting_does_not_open_formal_and_incomplete_ruleset_refuses(
         assert db.scalar(select(func.count()).select_from(ConversationTurn)) == before_turns
 
 
+def _with_distinct_summarizer(db: Any, conversation_id: str, team_version_id: str) -> None:
+    """Add the unused baseline Agent as a Summarizer who is not the Guide."""
+
+    conversation = db.get(Conversation, conversation_id)
+    assert conversation is not None and conversation.publication_id is not None
+    members = db.scalars(
+        select(TeamVersionMember)
+        .where(TeamVersionMember.team_version_id == team_version_id)
+        .order_by(TeamVersionMember.position)
+    ).all()
+    used = {member.agent_id for member in members}
+    version = db.scalar(
+        select(AgentVersion)
+        .join(Agent, Agent.id == AgentVersion.agent_id)
+        .where(
+            Agent.course_id == COURSE_ID,
+            AgentVersion.state == "published",
+            AgentVersion.id.in_(BASELINE_VERSION_IDS),
+            Agent.id.not_in(used),
+        )
+        .order_by(AgentVersion.version_seq, AgentVersion.id)
+    )
+    assert version is not None
+    agent = db.get(Agent, version.agent_id)
+    assert agent is not None
+    now = datetime.now(UTC)
+    member_id = str(uuid4())
+    position = max(member.position for member in members) + 1
+    db.add(
+        TeamVersionMember(
+            id=member_id,
+            team_version_id=team_version_id,
+            agent_id=agent.id,
+            agent_version_id=version.id,
+            position=position,
+            is_leader=False,
+            display_name=agent.name,
+            avatar_config_json=version.avatar_config_json,
+            own_knowledge_set_snapshots_json="[]",
+            raw_source_fences_json=json.dumps(
+                _capture_raw_source_fences(db, version, COURSE_ID),
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ),
+            created_at=now,
+        )
+    )
+    db.flush()
+    grant_id = str(uuid4())
+    db.add(
+        TeamMemberInvokeGrant(
+            id=grant_id,
+            publication_id=conversation.publication_id,
+            team_version_id=team_version_id,
+            team_member_id=member_id,
+            agent_id=agent.id,
+            agent_version_id=version.id,
+            authorization_epoch=0,
+            created_at=now,
+        )
+    )
+    db.add(
+        ConversationParticipant(
+            id=str(uuid4()),
+            conversation_id=conversation_id,
+            team_version_id=team_version_id,
+            team_member_id=member_id,
+            agent_id=agent.id,
+            agent_version_id=version.id,
+            snapshot_id=version.knowledge_snapshot_id,
+            agent_authorization_epoch=agent.authorization_epoch,
+            position=position,
+            is_leader=False,
+            display_name=agent.name,
+            avatar_config_json=version.avatar_config_json,
+            invoke_grant_id=grant_id,
+        )
+    )
+    leader = next(member for member in members if member.is_leader)
+    scorer = next(member for member in members if not member.is_leader)
+    guide = _guide_version(db, conversation_id)
+    head, _separator, _rest = guide.agent_md.partition("# Team Ruleset")
+    guide.agent_md = (
+        head.rstrip()
+        + "\n\n"
+        + formal_ruleset_markdown(
+            answer_recorder=scorer.display_name,
+            question_guide=leader.display_name,
+            scorer=scorer.display_name,
+            summarizer=agent.name,
+            student_round_order=(scorer.display_name, leader.display_name),
+        )
+    )
+    db.flush()
+
+
+def test_greeting_keeps_relevant_replies_and_skips_an_empty_one(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, _team_id, team_version_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        _with_distinct_summarizer(db, conversation_id, team_version_id)
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        participants = db.scalars(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id
+            )
+        ).all()
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        roles = runtime._formal_roles_for_conversation(db, conversation)
+        assert roles is not None
+        scorer_id = next(
+            participant.id
+            for participant in participants
+            if participant.team_member_id == roles.scorer_id
+        )
+        summarizer_id = next(
+            participant.id
+            for participant in participants
+            if participant.team_member_id == roles.summarizer_id
+        )
+
+    scorer_line = "我是 Scorer，还没有给我任何实际作答记录。"
+
+    def reply_for(request: runtime.MemberRequest) -> runtime.MemberReply:
+        if request.participant_id == scorer_id:
+            return runtime.MemberReply(scorer_line)
+        if request.participant_id == summarizer_id:
+            return runtime.MemberReply("   ")
+        return runtime.MemberReply(f"Mock · {request.speaker_name}\n\n{request.message}")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply_for)
+
+    def send(message: str, mode: Literal["auto", "all"]) -> str:
+        with database.session() as db:
+            conversation = db.get(Conversation, conversation_id)
+            assert conversation is not None
+            claim = runtime.claim_team_turn(
+                db,
+                settings,
+                conversation_id=conversation_id,
+                actor_id=actor.user.id,
+                request_id=str(uuid4()),
+                expected_revision=conversation.revision,
+                message=message,
+                routing=TeamRouting(mode=mode),
+                actor_context=actor,
+            )
+        runtime.execute_team_turn(database.session_factory, claim)
+        return claim.turn_id
+
+    def texts_by_role(turn_id: str) -> dict[str, str | None]:
+        with database.session() as db:
+            conversation = db.get(Conversation, conversation_id)
+            assert conversation is not None
+            roles = runtime._formal_roles_for_conversation(db, conversation)
+            assert roles is not None
+            rows = db.execute(
+                select(
+                    ConversationParticipant.team_member_id,
+                    ConversationParticipant.is_leader,
+                    TeamTurnResult.assistant_text,
+                    TeamTurnResult.safe_error_code,
+                    TeamTurnResult.state,
+                )
+                .join(
+                    TeamTurnResult,
+                    TeamTurnResult.participant_id == ConversationParticipant.id,
+                )
+                .where(TeamTurnResult.turn_id == turn_id)
+            ).all()
+        found: dict[str, str | None] = {}
+        for member_id, is_leader, text, code, state in rows:
+            assert code is None and state == "ready"
+            if is_leader:
+                found["guide"] = text
+            if member_id == roles.scorer_id:
+                found["scorer"] = text
+            if member_id == roles.summarizer_id:
+                found["summarizer"] = text
+        return found
+
+    hello = send("你好", "all")
+    with database.session() as db:
+        turn = db.get(ConversationTurn, hello)
+        assert turn is not None
+        assert json.loads(turn.routing_json or "{}")["mode"] == "all"
+        assert turn.state == "ready"
+        assert turn.safe_error_code is None
+    spoken = texts_by_role(hello)
+    assert spoken["guide"] and "你好" in spoken["guide"]
+    assert spoken["scorer"] == scorer_line
+    assert spoken["summarizer"] == SILENT_MEMBER_LINE
+
+    auto = send("你好", "auto")
+    with database.session() as db:
+        turn = db.get(ConversationTurn, auto)
+        assert turn is not None
+        assert json.loads(turn.routing_json or "{}")["mode"] == "auto"
+        assert turn.state == "ready"
+        assert turn.safe_error_code is None
+    spoken = texts_by_role(auto)
+    assert spoken["scorer"] == scorer_line
+    assert spoken["summarizer"] == SILENT_MEMBER_LINE
+
+    def fail_summarizer(request: runtime.MemberRequest) -> runtime.MemberReply:
+        if request.participant_id == summarizer_id:
+            raise PlatformError("team_provider_not_sent", "The provider was not called.", 502)
+        return reply_for(request)
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", fail_summarizer)
+    failed = send("你好", "all")
+    with database.session() as db:
+        turn = db.get(ConversationTurn, failed)
+        assert turn is not None
+        assert turn.state == "partial"
+        assert turn.safe_error_code == "team_partial_failure"
+        rows = db.execute(
+            select(ConversationParticipant.id, TeamTurnResult.state, TeamTurnResult.safe_error_code)
+            .join(
+                TeamTurnResult,
+                TeamTurnResult.participant_id == ConversationParticipant.id,
+            )
+            .where(TeamTurnResult.turn_id == failed)
+        ).all()
+        by_id = {participant_id: (state, code) for participant_id, state, code in rows}
+        assert by_id[summarizer_id] == ("failed", "team_provider_not_sent")
+        assert by_id[scorer_id][0] == "ready"
+
+
+def test_ordinary_protocol_omits_an_empty_reply_without_failing() -> None:
+    text = runtime._member_system(
+        "Guide",
+        "{}",
+        team_ruleset="# Team Ruleset\n\n## Formal assessment\nscorer: Scorer\n",
+        is_leader=True,
+    )
+    assert "every member reads the user's latest message and replies" in text
+    assert "does not treat that member as failed" in text
+    assert "Formal assessment does not change ordinary chat" in text
+    assert "Scorer stays silent" not in text
+    assert "already completed or abandoned" not in text
+    closed = runtime._member_system(
+        "Guide",
+        "{}",
+        team_ruleset="# Team Ruleset\n\n## Formal assessment\nscorer: Scorer\n",
+        is_leader=True,
+        attempt_closed=True,
+    )
+    assert "already completed or abandoned" in closed
+    assert "does not end the turn" in closed
+    assert "is not a failure" in closed
+
+
 REASON = "关于第 1 题：你选了哪一项？能用一两句话说说你当时是怎么想的吗？"
 HOW_TO_ANSWER = "请说出你在第 1 题选了哪项，并用一两句话说说理由"
 SAD = "听起来你现在很难受。想答的时候，回复 1 到 5 里的一个数字就好。"
@@ -1422,6 +1684,126 @@ def _participants(database: Any, conversation_id: str) -> list[tuple[str, str, s
             .order_by(ConversationParticipant.position)
         ).all()
         return [(row.id, row.team_member_id, row.display_name) for row in rows]
+
+
+def test_closed_assessment_status_question_lets_the_guide_answer(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    """A status question after the test must not fail the Team.
+
+    Members still call assessment_action, as the Ruleset tells them to. That
+    call used to end the turn, so the Guide, Scorer and Summarizer all came
+    back as unable to reply.
+    """
+
+    del client
+    _app, _database, _settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, _settings.resolved_data_root)
+        conversation_id, _team_id, team_version_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        _with_distinct_summarizer(db, conversation_id, team_version_id)
+        db.commit()
+        actor = _service_actor(db, _settings, STUDENT_ID)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None
+        attempt = db.get(AssessmentAttempt, str(started.attempt.id))
+        conversation = db.get(Conversation, conversation_id)
+        assert attempt is not None and conversation is not None
+        attempt.status = "completed"
+        attempt.completed_at = datetime.now(UTC)
+        roles = runtime._formal_roles_for_conversation(db, conversation)
+        assert roles is not None
+        names = {
+            participant.team_member_id: participant.display_name
+            for participant in db.scalars(
+                select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id
+                )
+            )
+        }
+        guide_name = names[roles.question_guide_id]
+        scorer_name = names[roles.answer_recorder_id]
+        summarizer_name = names[roles.summarizer_id]
+        assert len({guide_name, scorer_name, summarizer_name}) == 3
+        db.commit()
+    settings, policy = _dashscope(app_bundle, database, "formal-casual-after-end")
+    _grant(database, conversation_id, policy)
+    calls: dict[str, int] = {}
+
+    def synthetic_dispatch(
+        db: Any,
+        _settings: Any,
+        request: runtime.MemberRequest,
+        messages: Any,
+        tools: Any,
+        choice: Any,
+        **kwargs: Any,
+    ) -> Any:
+        calls[request.speaker_name] = calls.get(request.speaker_name, 0) + 1
+        if calls[request.speaker_name] == 1:
+            body = _tool(
+                f"status-{request.participant_id}",
+                "assessment_action",
+                {"classification": "progress_request"},
+            )
+        elif request.speaker_name == guide_name:
+            body = _text("正式测评已经结束，我们可以继续聊。")
+        elif request.speaker_name == scorer_name:
+            body = _text("第 1 题得 1 分，正确选项是 A。")
+        else:
+            body = _text(" ")
+        return real_dispatch_team_model(
+            db, settings, request, messages, tools, choice, transport=_Transport(body), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
+    )
+    with database.session() as db:
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        claim = runtime.claim_team_turn(
+            db,
+            settings,
+            conversation_id=conversation_id,
+            actor_id=actor.user.id,
+            request_id=str(uuid4()),
+            expected_revision=conversation.revision,
+            message="情况如何",
+            routing=TeamRouting(mode="all"),
+            actor_context=actor,
+        )
+    runtime.execute_team_turn(database.session_factory, claim)
+    assert calls[guide_name] >= 2
+    with database.session() as db:
+        turn = db.get(ConversationTurn, claim.turn_id)
+        assert turn is not None and turn.state == "ready" and turn.safe_error_code is None
+        stored = db.scalars(
+            select(TeamTurnResult).where(TeamTurnResult.turn_id == claim.turn_id)
+        ).all()
+        by_name = {
+            db.get(ConversationParticipant, result.participant_id).display_name: result
+            for result in stored
+        }
+        assert by_name[guide_name].state == "ready"
+        assert by_name[guide_name].assistant_text == "正式测评已经结束，我们可以继续聊。"
+        assert by_name[scorer_name].assistant_text == "第 1 题得 1 分，正确选项是 A。"
+        assert by_name[summarizer_name].assistant_text == SILENT_MEMBER_LINE
+        assert all(result.state == "ready" and result.safe_error_code is None for result in stored)
+        from app.modules.workspace.team_conversation import team_session_view
+
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        session = team_session_view(db, conversation, actor, [], runtime_available=True)
+        visible = [
+            result.assistant_text or "" for item in session.turns for result in item.member_results
+        ]
+        assert any("我们可以继续聊" in text for text in visible)
+        assert all(text != SILENT_MEMBER_LINE for text in visible)
+        assert all(item.state != "partial" for item in session.turns)
+        assert all(item.safe_error_code != "team_partial_failure" for item in session.turns)
 
 
 def test_finished_assessment_keeps_scorer_text_and_omits_silent_guide_and_summarizer(

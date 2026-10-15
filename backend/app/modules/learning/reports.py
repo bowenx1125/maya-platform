@@ -13,14 +13,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, idempotency_conflict, not_found, stale_revision
-from app.core.models import Course, CourseMember, User
+from app.core.models import Course, CourseMember, Group, GroupMember, User
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role
+from app.modules.knowledge_sets.models import KnowledgeSet
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion, TeamVersionMember
 from app.modules.workspace.models import Conversation
 
 from .models import (
     AssessmentActivity,
+    AssessmentActivityQuestion,
     AssessmentAttempt,
     AssessmentAttemptEvent,
     AssessmentAttemptQuestion,
@@ -148,6 +150,41 @@ def _validated_activity(
     return activity
 
 
+_TEACHER_PHASES = frozenset(
+    {"answering", "summary_not_saved", "scoring_not_saved", "paused", "completed"}
+)
+
+
+def _activity_label(db: Session, activity: AssessmentActivity, team_version: TeamVersion) -> str:
+    """Team and Knowledge names, then the Team version.
+
+    One title of ``Diagnostic assessment · V1.0`` hid which questionnaire a
+    row belonged to. The version suffix still separates republished Teams.
+    """
+
+    names: list[str] = []
+    for (name,) in db.execute(
+        select(KnowledgeSet.display_name)
+        .join(
+            AssessmentActivityQuestion,
+            AssessmentActivityQuestion.knowledge_set_id == KnowledgeSet.id,
+        )
+        .where(
+            AssessmentActivityQuestion.activity_id == activity.id,
+            AssessmentActivityQuestion.selection_revision == activity.question_selection_revision,
+        )
+        .order_by(AssessmentActivityQuestion.ordinal, KnowledgeSet.id)
+    ).all():
+        cleaned = str(name).strip()
+        if cleaned and cleaned not in names:
+            names.append(cleaned)
+    version = f"V1.{max(0, team_version.version_seq - 1)}"
+    team = team_version.display_name.strip()
+    if names:
+        return f"{team} · {', '.join(names)} · {version}"
+    return f"{team} · {version}"
+
+
 def list_authorized_assessment_activities(
     db: Session,
     actor: AuthContext,
@@ -182,9 +219,7 @@ def list_authorized_assessment_activities(
             output.append(
                 AssessmentActivityListItem(
                     id=UUID(activity.id),
-                    # One Team has an activity per version; the label tells
-                    # them apart (Teams count from V1.0).
-                    name=f"Diagnostic assessment · V1.{max(0, team_version.version_seq - 1)}",
+                    name=_activity_label(db, activity, team_version),
                     team_name=team_version.display_name,
                     created_at=activity.created_at,
                 )
@@ -352,7 +387,7 @@ def _build_snapshot(
     content = AssessmentReportContent(
         course_name=course.name,
         team_name=team_version.display_name,
-        activity_name="Diagnostic assessment",
+        activity_name=_activity_label(db, activity, team_version),
         generated_at=_now(),
         student_count=len(actor_attempts),
         attempt_count=len(attempts),
@@ -774,12 +809,21 @@ def read_student_answers(
     return sheets
 
 
+def _overview_phase(db: Session, attempt: AssessmentAttempt) -> str:
+    phase = attempt_teacher_phase(db, attempt)
+    if phase not in _TEACHER_PHASES:
+        raise not_found()
+    return phase
+
+
 def read_group_results(
     db: Session,
     actor: AuthContext,
     *,
     course_id: str,
     user_ids: set[str],
+    group_id: str | None = None,
+    group_name: str | None = None,
 ) -> list[dict[str, Any]]:
     """Each formal attempt by these students, newest first, with its sheet.
 
@@ -814,6 +858,10 @@ def read_group_results(
                     "test_name": item.name,
                     "team_name": item.team_name,
                     "status": attempt.status,
+                    "phase": _overview_phase(db, attempt),
+                    "conversation_id": attempt.source_conversation_id,
+                    "group_id": group_id,
+                    "group_name": group_name,
                     "started_at": attempt.started_at,
                     "ended_at": attempt.completed_at,
                     "points_awarded": sum(awarded) if awarded else None,
@@ -824,6 +872,59 @@ def read_group_results(
             )
     results.sort(key=lambda row: row["started_at"], reverse=True)
     return results
+
+
+def list_course_assessment_attempts(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+    group_id: str | None = None,
+    attempt_id: str | None = None,
+    conversation_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Formal attempts in a course, without the teacher entering a group.
+
+    A conversation or attempt id that is not one of these attempts is not
+    found. The same rule hides a group outside the course.
+    """
+
+    list_authorized_assessment_activities(db, actor, course_id=course_id)
+    groups = list(
+        db.scalars(
+            select(Group).where(Group.course_id == course_id).order_by(Group.name, Group.id)
+        ).all()
+    )
+    if group_id is not None:
+        groups = [group for group in groups if group.id == group_id]
+        if not groups:
+            raise not_found()
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for group in groups:
+        member_ids = set(
+            db.scalars(select(GroupMember.user_id).where(GroupMember.group_id == group.id)).all()
+        )
+        for row in read_group_results(
+            db,
+            actor,
+            course_id=course_id,
+            user_ids=member_ids,
+            group_id=group.id,
+            group_name=group.name,
+        ):
+            if row["attempt_id"] in seen:
+                continue
+            seen.add(row["attempt_id"])
+            rows.append(row)
+    if attempt_id is not None:
+        rows = [row for row in rows if row["attempt_id"] == attempt_id]
+    if conversation_id is not None:
+        rows = [row for row in rows if row["conversation_id"] == conversation_id]
+    if (attempt_id is not None or conversation_id is not None) and not rows:
+        raise not_found()
+    rows.sort(key=lambda row: row["started_at"], reverse=True)
+    return rows
 
 
 def _latest_report_path(db: Session, actor: AuthContext, *, activity_id: str) -> str | None:
@@ -932,6 +1033,7 @@ __all__ = [
     "create_assessment_course_report",
     "download_assessment_course_report",
     "list_authorized_assessment_activities",
+    "list_course_assessment_attempts",
     "read_assessment_activity_aggregate",
 ]
 

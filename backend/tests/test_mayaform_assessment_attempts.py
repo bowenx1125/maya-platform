@@ -3337,7 +3337,30 @@ def test_diagnosis_asks_every_question_then_scores_and_summarizes(
         assert result["report_download_path"] == (
             f"/api/v1/learning/reports/{report.id}/download?revision_id={report.revision_id}"
         )
+        assert result["phase"] == "completed"
+        assert result["conversation_id"] == str(started.attempt.conversation_id)
+        assert "Formal diagnostic questions" in result["test_name"]
+        assert result["test_name"].startswith(f"{result['team_name']} · ")
         assert read_group_results(db, teacher, course_id=COURSE_ID, user_ids=set()) == []
+
+        from app.modules.learning.reports import list_course_assessment_attempts
+
+        found = list_course_assessment_attempts(
+            db,
+            teacher,
+            course_id=COURSE_ID,
+            conversation_id=str(started.attempt.conversation_id),
+        )
+        assert [row["attempt_id"] for row in found] == [str(started.attempt.id)]
+        by_attempt = list_course_assessment_attempts(
+            db, teacher, course_id=COURSE_ID, attempt_id=str(started.attempt.id)
+        )
+        assert by_attempt == found
+        with pytest.raises(PlatformError) as missing:
+            list_course_assessment_attempts(
+                db, teacher, course_id=COURSE_ID, conversation_id=str(uuid4())
+            )
+        assert missing.value.code == "not_found"
 
         # Bug (2026-10-13): when the Team moved to a new version (its Agents
         # were republished), the old version's results vanished from the

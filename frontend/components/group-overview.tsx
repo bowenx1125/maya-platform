@@ -17,9 +17,9 @@ import { ErrorNotice } from "./ui";
 import { UserAvatar } from "./user-avatar";
 
 /**
- * What a group is doing, for a teacher who entered it from Accounts: who is
- * in it and what each made, their test results with every answer, and what
- * happened lately. Everything here is read-only.
+ * What a group is doing, for a course teacher: who is in it and what each
+ * made, their test results with every answer, and what happened lately.
+ * Private work is present only after Enter. Everything here is read-only.
  */
 export function GroupOverview({ groupId }: { groupId: string }) {
   const t = useT();
@@ -145,49 +145,7 @@ export function GroupOverview({ groupId }: { groupId: string }) {
         labelledBy="group-overview-results"
         empty={results.length ? undefined : t("overviewNoResults")}
       >
-        {results.length ? (
-          <ModuleList>
-            {results.map((result) => {
-              const key = `result:${result.attempt_id}`;
-              return (
-                <li className={styles.row} key={result.attempt_id}>
-                  <button
-                    type="button"
-                    className={styles.rowHit}
-                    aria-expanded={open === key}
-                    onClick={() => toggle(key)}
-                  >
-                    <span className={styles.staticTitle}>
-                      {result.student_name} · {result.team_name}
-                    </span>
-                    <span className={styles.rowMeta}>
-                      {score(result, t)} · {when(result.started_at)}
-                    </span>
-                  </button>
-                  {result.report_download_path ? (
-                    <div className={styles.actions}>
-                      <a
-                        className={overview.report}
-                        href={result.report_download_path}
-                        download
-                        aria-label={t("overviewReportFor", {
-                          name: result.team_name,
-                        })}
-                      >
-                        {t("overviewReport")}
-                      </a>
-                    </div>
-                  ) : null}
-                  {open === key ? (
-                    <div className={styles.rowExtra}>
-                      <AnswerSheet result={result} />
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ModuleList>
-        ) : undefined}
+        {results.length ? <AttemptResults attempts={results} /> : undefined}
       </ModuleCard>
 
       <ModuleCard
@@ -219,7 +177,85 @@ export function GroupOverview({ groupId }: { groupId: string }) {
 
 type Translate = ReturnType<typeof useT>;
 
+export function AttemptResults({
+  attempts,
+  showGroup = false,
+}: {
+  attempts: OverviewResult[];
+  showGroup?: boolean;
+}) {
+  const t = useT();
+  const { locale } = useLocale();
+  const [open, setOpen] = useState<string | null>(null);
+  const when = (value: string) =>
+    new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  if (!attempts.length) return null;
+  return (
+    <ModuleList>
+      {attempts.map((result) => {
+        const key = `result:${result.attempt_id}`;
+        const title = [
+          showGroup ? result.group_name : null,
+          result.student_name,
+          result.test_name,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return (
+          <li className={styles.row} key={result.attempt_id}>
+            <button
+              type="button"
+              className={styles.rowHit}
+              aria-expanded={open === key}
+              onClick={() =>
+                setOpen((current) => (current === key ? null : key))
+              }
+            >
+              <span className={styles.staticTitle}>{title}</span>
+              <span className={styles.rowMeta}>
+                {score(result, t)} · {when(result.started_at)}
+              </span>
+            </button>
+            {result.report_download_path ? (
+              <div className={styles.actions}>
+                <a
+                  className={overview.report}
+                  href={result.report_download_path}
+                  download
+                  aria-label={t("overviewReportFor", {
+                    name: result.team_name,
+                  })}
+                >
+                  {t("overviewReport")}
+                </a>
+              </div>
+            ) : null}
+            {open === key ? (
+              <div className={styles.rowExtra}>
+                {result.conversation_id ? (
+                  <p className={styles.rowMeta}>
+                    {t("overviewConversation")}{" "}
+                    <code>{result.conversation_id}</code>
+                  </p>
+                ) : null}
+                <AnswerSheet result={result} />
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
+    </ModuleList>
+  );
+}
+
 function score(result: OverviewResult, t: Translate): string {
+  if (result.phase === "summary_not_saved") return t("overviewSummaryNotSaved");
+  if (result.phase === "scoring_not_saved") return t("overviewScoringNotSaved");
   if (result.status === "in_progress") return t("overviewInProgress");
   if (result.status === "paused") return t("overviewPaused");
   const awarded = result.points_awarded;

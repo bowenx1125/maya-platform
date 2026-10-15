@@ -45,9 +45,11 @@ const overview = {
       attempt_id: "attempt-1",
       user_id: "ada",
       student_name: "Ada",
-      test_name: "Diagnostic assessment · V1.0",
+      test_name: "Keynotes · Formal diagnostic questions · V1.0",
       team_name: "Keynotes",
       status: "completed",
+      phase: "completed",
+      conversation_id: "4afc794f-1111-4111-8111-111111111111",
       started_at: "2026-10-13T08:00:00Z",
       ended_at: "2026-10-13T08:20:00Z",
       points_awarded: 3,
@@ -99,7 +101,7 @@ describe("group overview", () => {
     ).toBe("/student/groups/group-1?mode=team-edit&team_id=team-1");
 
     const result = screen.getByRole("button", {
-      name: /Ada · Keynotes.*3 \/ 4/,
+      name: /Ada · Keynotes · Formal diagnostic questions · V1\.0.*3 \/ 4/,
     });
     const report = screen.getByRole("link", {
       name: "Download the report for Keynotes",
@@ -109,6 +111,9 @@ describe("group overview", () => {
     );
     expect(report.hasAttribute("download")).toBe(true);
     fireEvent.click(result);
+    expect(
+      screen.getByText("4afc794f-1111-4111-8111-111111111111"),
+    ).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Humaneness" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Right." })).toBeTruthy();
 

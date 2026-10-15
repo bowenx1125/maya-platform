@@ -170,6 +170,7 @@ const implemented = new Set([
   "getChatStandingProviderDisclosure",
   "getKnowledgeMarkdown",
   "listAuthorizedAssessmentActivities",
+  "listCourseAssessmentAttempts",
   "listBrainformKnowledge",
   "pauseTeamConversationTurn",
   "previewTeamProviderStandingGrant",

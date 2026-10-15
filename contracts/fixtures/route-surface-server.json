@@ -2618,7 +2618,7 @@
           "Organization"
         ],
         "operationId": "getGroupOverview",
-        "description": "Members, formal test results and recent work of a group, for a course teacher who has entered it from Accounts. Private work is included, read-only, as on the visit itself.",
+        "description": "Members, formal test results and recent work of a group, for a course teacher. Formal attempts are included without entering the group. Private Agents, Teams, RAG and voices are included only after the teacher enters, and only to read.",
         "responses": {
           "200": {
             "description": "Members, test results and recent work.",
@@ -9314,6 +9314,110 @@
         ]
       }
     },
+    "/api/v1/learning/courses/{course_id}/assessment-attempts": {
+      "get": {
+        "description": "Formal attempts for a course teacher, with no group visit required.",
+        "operationId": "listCourseAssessmentAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OverviewResult"
+                  },
+                  "title": "Response Listcourseassessmentattempts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Course Assessment Attempts Route",
+        "tags": [
+          "learning"
+        ]
+      }
+    },
     "/api/v1/learning/courses/{course_id}/assessment-activities": {
       "get": {
         "operationId": "listAuthorizedAssessmentActivities",
@@ -11809,6 +11913,8 @@
           "test_name",
           "team_name",
           "status",
+          "phase",
+          "conversation_id",
           "started_at"
         ],
         "properties": {
@@ -11833,6 +11939,35 @@
               "in_progress",
               "paused",
               "completed"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "answering",
+              "summary_not_saved",
+              "scoring_not_saved",
+              "paused",
+              "completed"
+            ]
+          },
+          "conversation_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "group_name": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "started_at": {
@@ -18192,6 +18327,13 @@
             ],
             "title": "Disposition",
             "type": "string"
+          },
+          "guidance": {
+            "title": "Guidance",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "response_key": {
             "enum": [
