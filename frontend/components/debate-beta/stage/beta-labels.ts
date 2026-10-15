@@ -51,7 +51,8 @@ export const betaStageLabelsZh: BetaStageLabels = {
   interactionOpening: "正在开启…",
   interactionClosedHint: "开启课堂弹幕后，讲席上会出现扫码入口。",
   closeCollection: "关闭收集",
-  closeCollectionConfirm: "关闭收集后，学生将无法继续提交，但辩论会继续进行。确定关闭吗？",
+  closeCollectionConfirm:
+    "关闭收集后，学生将无法继续提交，但辩论会继续进行。确定关闭吗？",
   closingCollection: "正在关闭…",
 };
 

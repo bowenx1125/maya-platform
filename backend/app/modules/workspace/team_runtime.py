@@ -42,6 +42,9 @@ from .team_conversation import frozen_team_selection
 
 SessionFactory = Callable[[], Session]
 LOGGER = logging.getLogger("maya.workspace")
+# Provider message names are a short token. A display name that does not fit
+# is still written at the start of that turn so the model sees the real name.
+_HISTORY_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 @dataclass(frozen=True)
@@ -1073,6 +1076,25 @@ def _current_run(
     return row, turn
 
 
+def _single_line_name(display_name: str) -> str:
+    return " ".join(display_name.split())
+
+
+def history_speaker_name(display_name: str, participant_id: str) -> str:
+    """Name token safe to send as a provider message name."""
+
+    stripped = _single_line_name(display_name)
+    if _HISTORY_NAME.fullmatch(stripped):
+        return stripped
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", stripped).strip("_")
+    suffix = participant_id.replace("-", "")[:8] or "member"
+    token = f"{slug}_{suffix}" if slug else suffix
+    token = token[:64].strip("_") or suffix[:64]
+    if not _HISTORY_NAME.fullmatch(token):
+        return suffix[:64]
+    return token
+
+
 def team_history(
     db: Session, conversation_id: str, before_position: int
 ) -> tuple[dict[str, str], ...]:
@@ -1130,12 +1152,20 @@ def team_history(
             .order_by(TeamTurnResult.ordinal)
         )
         for result, member in rows:
+            shown = _single_line_name(member.display_name) or history_speaker_name(
+                member.display_name, member.id
+            )
             if result.state == "ready" and result.assistant_text is not None:
+                token = history_speaker_name(member.display_name, member.id)
+                content = result.assistant_text
+                # The name field cannot carry a display name the provider rejects.
+                if shown and token != shown:
+                    content = f"{shown}: {content}"
                 history.append(
                     {
                         "role": "assistant",
-                        "name": member.id,
-                        "content": result.assistant_text,
+                        "name": token,
+                        "content": content,
                     }
                 )
             else:
@@ -1143,8 +1173,7 @@ def team_history(
                     {
                         "role": "system",
                         "content": (
-                            f"Participant {member.id} request status: {result.state}. "
-                            "No saved reply."
+                            f"Participant {shown} request status: {result.state}. No saved reply."
                         ),
                     }
                 )
@@ -1244,8 +1273,8 @@ def _start_member(
                 claim_token=token,
                 selected_binding_ids=selected_binding_ids,
             )
-        # The Team Ruleset is always injected. ACL and the assessment ledger
-        # outrank it; see _member_system.
+        # Informal length rules may be injected. The formal roster stays on the
+        # server; copying it into every prompt made members claim each other's names.
         guide = db.scalar(
             select(ConversationParticipant).where(
                 ConversationParticipant.conversation_id == row.id,
@@ -1270,6 +1299,8 @@ def _start_member(
             assessment_task_json=assessment_task_json,
             assessment_source_revoked=assessment_source_revoked,
             team_ruleset=team_ruleset,
+            speaker_name=participant.display_name,
+            is_leader=participant.is_leader,
         )
         if assessment_purpose is None and saved_protocol:
             if "<active_assessment_action_protocol>" not in system_message:
@@ -1452,6 +1483,17 @@ def extract_team_ruleset(agent_md: str) -> str | None:
     return _extract(agent_md)
 
 
+def _speaker_identity(speaker_name: str | None) -> str:
+    name = _single_line_name(speaker_name or "")
+    if not name:
+        return ""
+    return (
+        f"You are {name}. Speak only as yourself to the student. "
+        "Do not claim another member's name, role, or title, and do not "
+        "introduce yourself as anyone else.\n"
+    )
+
+
 def _member_system(
     agent_md: str,
     knowledge_json: str,
@@ -1461,15 +1503,19 @@ def _member_system(
     assessment_task_json: str | None = None,
     assessment_source_revoked: bool = False,
     team_ruleset: str | None = None,
+    speaker_name: str | None = None,
+    is_leader: bool = False,
 ) -> str:
     if assessment_source_revoked:
         from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
 
         # This wire is compared and disclosed as the exact protocol. A Ruleset
-        # suffix would fail that check, so the closed revoked turn stays exact.
-        del team_ruleset
+        # or identity suffix would fail that check, so the closed revoked turn stays exact.
+        del team_ruleset, speaker_name, is_leader
         return ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
+    identity = _speaker_identity(speaker_name)
     message = (
+        f"{identity}"
         "Reply in the language of the user's latest sentence, unless they ask you to "
         "translate or switch. A reply that is only an option letter, a number or an ID is "
         "not a sentence: keep the language you were using. "
@@ -1523,16 +1569,24 @@ def _member_system(
             "free-form assessment prose. Call assessment_action to classify the saved current "
             "user message. For an answer, provide only its exact answer span; never invent an "
             "answer or a question identifier. Not knowing or having forgotten (我不知道, 不会, "
-            "忘了) is answer_only with that exact text as the span, never skip_request; "
+            "忘了) is answer_only with relevant true and that exact text as the span, never "
+            "skip_request; "
             "skip_request is only an explicit request to skip (跳过, 下一题). "
             "A plain restart request does not abandon an attempt. "
-            "Only after an off_topic or progress_request result may you add a short plain reply, "
-            "such as how to format an answer or an unrelated fact; it must not contain an "
-            "answer, hint, judgment or score for any question, and must not restate progress or "
-            "the current question. The server appends progress and the current question in "
-            "reply_language, and discards your prose for every other result. "
-            "When the reply is not recorded, the scorer states the miss and the format once. "
-            "The question Guide restates the current question once on that turn. "
+            "On a free-response question set relevant to true only when the message actually "
+            "answers that question. A progress or status question, a question back, a help "
+            "request, emotional venting, or a bare letter or digit when the question asks for "
+            "a reason is not an answer: set relevant to false, classification to off_topic, "
+            "and guidance to one sentence that says what this question wants or that "
+            "acknowledges distress. Do not repeat the question text in guidance, and do not "
+            "say the answer was recorded. The server saves a free answer only when relevant "
+            "is true and classification is answer_only or answer_with_restricted_request. "
+            "When guidance is set, the server speaks that sentence and does not paste the "
+            "question again. A choice or scale reply is saved only when it matches that "
+            "question's letters or range. Not knowing or having forgotten is still an answer: "
+            "relevant true. When guidance is absent and the reply is not recorded, the scorer "
+            "states the miss and the format once, and the question Guide restates the current "
+            "question once. The server discards other prose. "
             "If the action tool cannot return a safe result, do not provide student-facing prose. "
             "Before this attempt is submitted, 再来一轮 or 再来一遍 is redo_request: abandon this "
             "round's answers for scoring and start a new scored round. After it is submitted, "
@@ -1564,11 +1618,10 @@ def _member_system(
         if team_ruleset is not None:
             message += (
                 "The Guide/Leader Agent.md defines a # Team Ruleset. "
+                "The server parses ## Formal assessment and applies that roster; "
+                "it does not rename you. "
                 "An optional ## Informal section overrides the defaults for who replies "
                 "and how long they speak. ## Formal assessment does not change ordinary chat.\n"
-                "<team_ruleset>\n"
-                f"{team_ruleset}\n"
-                "</team_ruleset>\n"
             )
             informal = extract_informal_section(team_ruleset)
             if informal:
@@ -1577,26 +1630,46 @@ def _member_system(
             message += (
                 "The Guide/Leader Agent.md has no # Team Ruleset section, so keep these defaults.\n"
             )
+        if is_leader:
+            # Other members must not be told to offer a test. ## Informal can
+            # restate that only the Guide does, and a live assessment never
+            # reaches this branch.
+            message += (
+                "You are the Guide. Tell the student what they can do next. "
+                "When no formal assessment is running, regularly add one natural "
+                "sentence that they can start one by saying 正式测评, but not on "
+                "every reply. Do not start a test until they ask. "
+                "## Informal may change who replies and how long they speak; "
+                "it does not make this offer every turn and does not replace "
+                "the server's formal assessment lines.\n"
+            )
         message += (
             "Authorization (ACL) overrides an assessment ledger, and that ledger "
             "overrides this Team Ruleset. assessment_active is a server ledger flag; "
             "no Tool can set it.\n"
             f"</team_reply_protocol>\n{ACCOUNT_MEMORY_RULE}\n{AGENT_LIMIT_REPLY_RULE}"
         )
+    if identity:
+        message = f"{message}\n{identity}"
     return message
 
 
 def _ruleset_precedence_block(team_ruleset: str | None) -> str:
     if not team_ruleset:
         return ""
-    return (
-        "\n<team_ruleset>\n"
-        f"{team_ruleset}\n"
-        "</team_ruleset>\n"
+    from .formal_assessment import extract_informal_section
+
+    informal = extract_informal_section(team_ruleset)
+    block = (
+        "\nThe formal roster in the Guide's # Team Ruleset is applied by the server "
+        "and does not change who you are. "
         "Precedence: authorization (ACL) overrides the assessment ledger, and the "
-        "assessment ledger overrides this Team Ruleset. assessment_active is a server "
+        "assessment ledger overrides the Team Ruleset. assessment_active is a server "
         "ledger flag; no Tool can set it.\n"
     )
+    if informal:
+        block += f"<team_informal>\n{informal}\n</team_informal>\n"
+    return block
 
 
 def invoke_mock_team_model(
@@ -1844,6 +1917,9 @@ def _guide_micro_script(
         return ALL_DONE_GUIDE
     if done:
         return "请稍候。"
+    if (projection.guidance or "").strip():
+        # The scorer already said how to answer, or acknowledged the student.
+        return "还是这道题。"
     question = projection.context.current_question
     if question is not None:
         return f"第 {question.ordinal + 1} 题：{question.prompt}"
@@ -3319,7 +3395,12 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
                 version = db.get(AgentVersion, participant.agent_version_id)
                 if version is None:
                     raise not_found()
-                base_system = _member_system(version.agent_md, "{}")
+                base_system = _member_system(
+                    version.agent_md,
+                    "{}",
+                    speaker_name=participant.display_name,
+                    is_leader=participant.is_leader,
+                )
                 base_systems[participant.id] = base_system
                 specs.append(
                     MemberSpec(

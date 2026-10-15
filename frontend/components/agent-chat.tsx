@@ -446,6 +446,8 @@ function AgentChatScope({
   ) => {
     if (code === "assessment_action_required")
       return t("teamAnswerNotRecorded");
+    if (code === "assessment_executor_write_required")
+      return t("teamSummaryNotSaved");
     if (code === "team_response_truncated") return t("teamReplyCutOff");
     if (code === "provider_confirmation_required") {
       return t(
@@ -1240,8 +1242,8 @@ function AgentChatScope({
     if (nextVersionId) setVersionId(nextVersionId);
   }
 
-  // Done on the New page creates the Chat at once. A Team whose published
-  // recipe is complete arrives with the Leader's opening already saved.
+  // Done on the New page creates the Chat at once. A new Team chat stays
+  // empty until the student sends the first message.
   async function createPicked() {
     const separator = pick.indexOf(":");
     const kind = pick.slice(0, separator);
@@ -2850,9 +2852,19 @@ function AgentChatScope({
                                   : ""}
                               </h3>
                               {result.assistant_text ? (
-                                <ReportMarkdown>
-                                  {result.assistant_text}
-                                </ReportMarkdown>
+                                result.assistant_text.trim() ===
+                                "正在总结答案" ? (
+                                  <p
+                                    role="status"
+                                    data-team-progress="summarizing"
+                                  >
+                                    {result.assistant_text}
+                                  </p>
+                                ) : (
+                                  <ReportMarkdown>
+                                    {result.assistant_text}
+                                  </ReportMarkdown>
+                                )
                               ) : result.state === "pending" ||
                                 result.state === "running" ? (
                                 <p className={styles.pending} role="status">
@@ -3079,7 +3091,9 @@ function AgentChatScope({
                       aria-label={
                         selectedTeam?.read_only
                           ? t("teamChatReadOnly")
-                          : selectedTeam && !selectedTeam.can_send
+                          : selectedTeam &&
+                              !selectedTeam.can_send &&
+                              !teamWorking
                             ? t("teamChatUnavailable")
                             : !teamMode && character?.available === false
                               ? "Read-only"
@@ -3087,7 +3101,9 @@ function AgentChatScope({
                       }
                       data-ui-guide={
                         selectedTeam?.read_only ||
-                        (selectedTeam !== null && !selectedTeam.can_send) ||
+                        (selectedTeam !== null &&
+                          !selectedTeam.can_send &&
+                          !teamWorking) ||
                         (!teamMode && !agentCanSend)
                           ? "chat.readOnly"
                           : "chat.send"
@@ -3095,7 +3111,9 @@ function AgentChatScope({
                       data-ui-guide-text={
                         selectedTeam?.read_only
                           ? t("teamChatReadOnly")
-                          : selectedTeam && !selectedTeam.can_send
+                          : selectedTeam &&
+                              !selectedTeam.can_send &&
+                              !teamWorking
                             ? t("teamChatUnavailable")
                             : !teamMode && !agentCanSend
                               ? readOnlyHelp

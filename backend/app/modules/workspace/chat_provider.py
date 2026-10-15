@@ -1061,7 +1061,12 @@ def assessment_safe_reply_text(
     # progress count the student did not ask for.
     not_recorded = assessment_answer_not_recorded(result, latest)
     lines = []
-    if not_recorded and question is not None:
+    guidance = (result.guidance or "").strip()
+    if not_recorded and guidance:
+        # The model said how to answer, or acknowledged the student. The
+        # question text is not pasted again on this turn.
+        lines.append(guidance)
+    elif not_recorded and question is not None:
         lines.append(
             (
                 "这条回复不是本题的答案，没有记录。"

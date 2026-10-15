@@ -1113,6 +1113,40 @@ describe("Chatform", () => {
     expect(screen.queryByText("This Team member could not reply.")).toBeNull();
   });
 
+  it("tells the student a summary that was not saved can be tried again", async () => {
+    state.api.streamTeamConversation.mockResolvedValue({
+      ...teamSession,
+      revision: 1,
+      turns: [
+        {
+          id: "summary-turn",
+          user_text: "请总结",
+          state: "partial",
+          member_results: [
+            {
+              id: "summarizer-result",
+              participant_id: "participant-2",
+              speaker_name: "Kaikai",
+              ordinal: 0,
+              state: "failed",
+              assistant_text: null,
+              sources: [],
+              safe_error_code: "assessment_executor_write_required",
+            },
+          ],
+        },
+      ],
+    });
+    renderChats();
+    await startMayaTeamChat("请总结");
+    expect(
+      await screen.findByText(
+        "This Team member could not save the summary. Send a new message to try again.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("This Team member could not reply.")).toBeNull();
+  });
+
   it("shows a sent Team message at once with its loading state", async () => {
     state.api.streamTeamConversation.mockImplementation(
       () => new Promise(() => {}),

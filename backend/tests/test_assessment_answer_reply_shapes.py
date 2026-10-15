@@ -89,7 +89,7 @@ def _text(content: str | None) -> bytes:
     ).encode()
 
 
-ANSWER_ACTION = {"classification": "answer_only", "answer_span": ANSWER}
+ANSWER_ACTION = {"classification": "answer_only", "relevant": True, "answer_span": ANSWER}
 MESSAGES = {
     "bare_letter_called_off_topic": "b",
     "bare_letter_with_a_wrong_span": "B",
@@ -125,27 +125,44 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
         "ready",
         None,
     ),
-    # Bug (2026-10-13): late in a long test the Leader called a bare answer
-    # something else, and the same Question kept coming back.
+    # A free-form letter the model did not judge relevant is not saved.
     "bare_letter_called_off_topic": (
-        [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
-        1,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "off_topic", "relevant": False},
+            ),
+            ("text", ""),
+        ],
+        0,
         "ready",
         None,
     ),
     "bare_letter_with_a_wrong_span": (
         [
-            ("tool", "assessment_action", {"classification": "answer_only", "answer_span": "B."}),
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": "B."},
+            ),
             ("text", ""),
         ],
         1,
         "ready",
         None,
     ),
-    # Bug (2026-10-13): an open question's answer called off_topic repeatedly.
+    # The model judged this free-form sentence off topic, so it stays unrecorded.
     "statement_on_open_question": (
-        [("tool", "assessment_action", {"classification": "off_topic"}), ("text", "")],
-        1,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "off_topic", "relevant": False},
+            ),
+            ("text", ""),
+        ],
+        0,
         "ready",
         None,
     ),
@@ -156,7 +173,11 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
             (
                 "tool",
                 "assessment_action",
-                {"classification": "answer_only", "answer_span": "知道就是行动"},
+                {
+                    "classification": "answer_only",
+                    "relevant": True,
+                    "answer_span": "知道就是行动",
+                },
             ),
             ("text", ""),
         ],
@@ -171,9 +192,10 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
         "ready",
         None,
     ),
+    # A short free-form token is not an answer unless the model judged it relevant.
     "bare_number_called_start": (
         [("tool", "assessment_action", {"classification": "start_request"}), ("text", "")],
-        1,
+        0,
         "ready",
         None,
     ),

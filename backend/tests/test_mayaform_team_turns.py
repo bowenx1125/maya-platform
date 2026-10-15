@@ -346,7 +346,8 @@ def test_partial_unknown_replay_followup_full_history_and_late_result_are_isolat
     assert [turn["state"] for turn in continued.json()["turns"]] == ["partial", "ready"]
     history = seen[-1].history
     assert history[0] == {"role": "user", "content": body["message"]}
-    assert history[1]["content"] == "Accepted member answer"
+    assert history[1]["content"].endswith("Accepted member answer")
+    assert history[1]["name"] != ids[1]
     assert "acceptance_unknown" in history[2]["content"]
     assert all(item["content"] != "Follow-up" for item in history)
     with database.session() as db:
@@ -647,18 +648,74 @@ def test_extract_team_ruleset_only_from_guide_heading() -> None:
     body = runtime.extract_team_ruleset(
         "# Guide\n\nLead the room.\n\n"
         "# Team Ruleset\n\n"
+        "## Formal assessment\n"
+        "answer_recorder: Jade\n"
+        "question_guide: Bowen\n"
+        "scorer: Jade\n"
+        "summarizer: Kaikai\n"
+        "student_round_order: Jade, Bowen\n\n"
+        "## Informal\n"
         "Only Courser replies at length; others acknowledge briefly.\n\n"
         "# Notes\n\nIgnore for routing.\n"
     )
-    assert body == "Only Courser replies at length; others acknowledge briefly."
+    assert body is not None
+    assert "scorer: Jade" in body
+    assert "## Informal" in body
     system = runtime._member_system(
         "# Member\n\nSpeak.",
         "{}",
         team_ruleset=body,
+        speaker_name="Scorer",
     )
-    assert "<team_ruleset>" in system
+    assert "You are Scorer." in system
+    assert "<team_informal>" in system
     assert "Only Courser replies at length" in system
-    assert "overrides the defaults" in system
+    assert "does not rename you" in system
+    assert "scorer: Jade" not in system
+    assert "<team_ruleset>" not in system
+    assert system.index("You are Scorer.") < system.index("<team_informal>")
+    assert system.rstrip().endswith(
+        "You are Scorer. Speak only as yourself to the student. "
+        "Do not claim another member's name, role, or title, and do not "
+        "introduce yourself as anyone else."
+    )
+    assert "saying 正式测评" not in system
+    leader = runtime._member_system(
+        "# Member\n\nSpeak.",
+        "{}",
+        team_ruleset=body,
+        speaker_name="Bowen",
+        is_leader=True,
+    )
+    assert "You are Bowen." in leader
+    assert "saying 正式测评" in leader
+    assert "not on every reply" in leader
+    assert "scorer: Jade" not in leader
+    active = runtime._member_system(
+        "# Member\n\nSpeak.",
+        "{}",
+        assessment_active=True,
+        team_ruleset=body,
+        speaker_name="Bowen",
+        is_leader=True,
+    )
+    assert "saying 正式测评" not in active
+    assert "<active_assessment_action_protocol>" in active
     defaults_only = runtime._member_system("# Member\n\nSpeak.", "{}")
     assert "<team_ruleset>" not in defaults_only
+    assert "<team_informal>" not in defaults_only
     assert "no # Team Ruleset section" in defaults_only
+    assert "You are " not in defaults_only
+    assert "saying 正式测评" not in defaults_only
+    leader_defaults = runtime._member_system(
+        "# Member\n\nSpeak.", "{}", speaker_name="Guide", is_leader=True
+    )
+    assert "saying 正式测评" in leader_defaults
+    assert "no # Team Ruleset section" in leader_defaults
+
+
+def test_history_speaker_name_keeps_ascii_and_sanitizes_the_rest() -> None:
+    participant_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    assert runtime.history_speaker_name("Scorer", participant_id) == "Scorer"
+    assert runtime.history_speaker_name("评分员", participant_id) == "aaaaaaaa"
+    assert runtime.history_speaker_name("Jade Li", participant_id) == "Jade_Li_aaaaaaaa"

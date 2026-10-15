@@ -141,6 +141,10 @@ class AssessmentStudentAction(StrictModel):
 
     classification: AssessmentClassification
     answer_span: str | None = None
+    # The model's judgment that a free-form message answers the current question.
+    relevant: bool | None = None
+    # Student-facing sentence when that message is not saved.
+    guidance: str | None = None
 
 
 class AssessmentEvaluationQuestion(StrictModel):
@@ -237,6 +241,8 @@ class AssessmentRuntimeResult(StrictModel):
     response_key: AssessmentRuntimeResponseKey
     context: AssessmentRuntimeContext
     answers: list[AssessmentOwnerAnswerDTO] = Field(default_factory=list)
+    # Spoken when the message was not saved. Absent on older receipts.
+    guidance: str | None = None
 
 
 class AssessmentActorReport(StrictModel):
