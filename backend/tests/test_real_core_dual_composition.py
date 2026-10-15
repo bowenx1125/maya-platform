@@ -36,6 +36,10 @@ def _settings(tmp_path: Path, **updates: object) -> Settings:
         "voice_provider": "mock",
         "llm_provider": "mock",
         "embedding_provider": "mock",
+        # Explicitly pin the report selector and the credential so a developer
+        # .env (MAYA_REPORT_PROVIDER / DASHSCOPE_*) cannot leak into fixtures.
+        "report_provider": "mock",
+        "dashscope_api_key": None,
     }
     values.update(updates)
     return Settings(**values)
@@ -49,6 +53,7 @@ def _dual(tmp_path: Path, **updates: object) -> Settings:
     values: dict[str, object] = {
         "llm_provider": "dashscope",
         "embedding_provider": "dashscope",
+        "report_provider": "mock",
         "dashscope_region": "cn-beijing",
         "embedding_provider_policy_hash": "a" * 64,
         "llm_provider_policy_hash": "b" * 64,
@@ -92,6 +97,11 @@ def test_legacy_hash_remains_valid_for_one_real_slice(tmp_path: Path) -> None:
         dashscope_workspace_id="fixture-workspace",
         dashscope_region="cn-beijing",
         provider_policy_hash="a" * 64,
+        # Clear the per-slice hashes so .env values cannot shadow the legacy
+        # shared hash, which must apply to each individually selected slice.
+        embedding_provider_policy_hash=None,
+        llm_provider_policy_hash=None,
+        report_provider_policy_hash=None,
     )
     settings.validate_provider_configuration()
     assert settings.provider_policy_hash_for("embedding") == "a" * 64
@@ -103,6 +113,9 @@ def test_legacy_hash_remains_valid_for_one_real_slice(tmp_path: Path) -> None:
         dashscope_workspace_id="fixture-workspace",
         dashscope_region="cn-beijing",
         provider_policy_hash="b" * 64,
+        embedding_provider_policy_hash=None,
+        llm_provider_policy_hash=None,
+        report_provider_policy_hash=None,
     )
     llm.validate_provider_configuration()
     assert llm.provider_policy_hash_for("llm") == "b" * 64

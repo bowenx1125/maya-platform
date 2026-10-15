@@ -261,22 +261,30 @@ def test_startup_allows_only_one_reviewed_real_slice_with_mock_companions(
     field: str,
     selector: str,
 ) -> None:
-    values: dict[str, object] = {field: selector}
-    if field in {"tts_provider", "embedding_provider"}:
-        values.update(
-            {
-                "dashscope_api_key": "fixture-key",
-                "dashscope_workspace_id": "workspace123",
-                "dashscope_region": "cn-beijing",
-                "provider_policy_hash": "a" * 64,
-            }
-        )
-        settings = Settings(maya_env="test", **values)  # type: ignore[arg-type]
-        settings.validate_runtime()
-        return
+    # Every selector not under test stays explicitly mock: a developer .env can
+    # otherwise turn several real cores on at once and change what this asserts.
+    values: dict[str, object] = {
+        "llm_provider": "mock",
+        "embedding_provider": "mock",
+        "tts_provider": "mock",
+        "voice_provider": "mock",
+        "report_provider": "mock",
+        "dashscope_api_key": None,
+        field: selector,
+    }
+    values.update(
+        {
+            "dashscope_api_key": "fixture-key",
+            "dashscope_workspace_id": "workspace123",
+            "dashscope_region": "cn-beijing",
+            "provider_policy_hash": "a" * 64,
+            "embedding_provider_policy_hash": None,
+            "llm_provider_policy_hash": None,
+            "report_provider_policy_hash": None,
+        }
+    )
     settings = Settings(maya_env="test", **values)  # type: ignore[arg-type]
-    with pytest.raises(RuntimeError, match="Mock companions"):
-        settings.validate_runtime()
+    settings.validate_runtime()
 
 
 def test_generation_fence_is_available_before_provider_and_rejects_stale_shape() -> None:

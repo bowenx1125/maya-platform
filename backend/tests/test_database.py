@@ -57,7 +57,15 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
 
 
 def test_provider_selectors_are_mock_safe_by_default() -> None:
-    settings = Settings(maya_env="test", llm_provider="", embedding_provider="")
+    settings = Settings(
+        maya_env="test",
+        llm_provider="",
+        embedding_provider="",
+        tts_provider="",
+        voice_provider="",
+        report_provider="",
+        dashscope_api_key=None,
+    )
     assert settings.llm_provider == "mock"
     assert settings.embedding_provider == "mock"
     assert settings.tts_provider == "mock"
