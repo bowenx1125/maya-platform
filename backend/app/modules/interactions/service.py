@@ -874,7 +874,10 @@ class InteractionService:
         event: PostCommitInteractionEvent | None = None
         try:
             debate = _require_teacher(session, actor_user_id, debate_id)
-            if uses_segment_protocol(debate):
+            if uses_segment_protocol(debate) and debate.status != "running":
+                # Only the Conclude path needs the complete playback matrix; a
+                # teacher closing collection mid-lesson (只关收集) must be able
+                # to finalize the open window while the debate keeps running.
                 from app.modules.debates.playback.eligibility import has_complete_finished_playback
 
                 if not has_complete_finished_playback(session, debate_id):
@@ -957,7 +960,10 @@ class InteractionService:
                 # vote+barrage hash for the teacher-stage catch-up signal.
                 input_hash=barrage_input_hash,
             )
-            if uses_segment_protocol(debate):
+            # 只关收集: closing during a running debate finalizes only the
+            # window; promoting the Debate to its completed report state stays
+            # exclusive to the Conclude path, which arrives not running.
+            if uses_segment_protocol(debate) and debate.status != "running":
                 debate.status = "completed"
                 debate.updated_at = timestamp
             event = _event(
