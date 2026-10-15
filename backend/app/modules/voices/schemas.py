@@ -55,3 +55,31 @@ class PlaybackResource(BaseModel):
 # The descriptive alias keeps route/service code readable while the class name
 # remains exactly the frozen OpenAPI component name.
 VoiceProfileResponse = VoiceProfile
+
+
+SystemVoiceSegmentId = Literal["mandarin", "cantonese", "mixed", "numbers", "all"]
+
+
+class SystemVoicePreviewRequest(BaseModel):
+    segment_id: SystemVoiceSegmentId
+
+
+class SystemVoiceScriptResponse(BaseModel):
+    segment_id: Literal["mandarin", "cantonese", "mixed", "numbers"]
+    voice: str
+    language: str
+    text: str
+    expected_reading: str
+
+
+class SystemVoicePreviewResponse(BaseModel):
+    request_id: str
+    segment_id: Literal["mandarin", "cantonese", "mixed", "numbers"]
+    voice: str
+    language: str
+    text: str
+    expected_reading: str
+    playback_url: str = Field(json_schema_extra={"format": "uri-reference"})
+    expires_at: datetime
+    provider_request_id: str | None = None
+    deduplicated: bool = False
