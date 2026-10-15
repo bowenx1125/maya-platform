@@ -34,9 +34,15 @@ from app.modules.workspace.formal_assessment import (
     RECORDED_FACT,
     SUMMARIZER_LINE,
     formal_ruleset_markdown,
+    is_formal_start_message,
     resolve_formal_assessment,
 )
-from app.modules.workspace.models import Conversation, ConversationParticipant, TeamTurnResult
+from app.modules.workspace.models import (
+    Conversation,
+    ConversationParticipant,
+    ConversationTurn,
+    TeamTurnResult,
+)
 from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
@@ -54,6 +60,19 @@ from tests.test_wave4_provider_preflight import _digest, _policy
 
 def test_assessment_active_is_not_a_tool() -> None:
     assert "assessment_active" not in runtime_registry()
+
+
+def test_formal_start_messages_are_explicit() -> None:
+    assert is_formal_start_message("正式测评")
+    assert is_formal_start_message("  我想开始测试。")
+    assert is_formal_start_message("请做正式测试")
+    assert is_formal_start_message("再来一轮")
+    assert is_formal_start_message("Start the formal test")
+    assert is_formal_start_message("formal assessment")
+    assert not is_formal_start_message("你好")
+    assert not is_formal_start_message("开始吧")
+    assert not is_formal_start_message("Take the test")
+    assert not is_formal_start_message("甲题的回答")
 
 
 def test_formal_section_must_name_the_roster_uniquely() -> None:
@@ -635,3 +654,202 @@ def test_guide_then_scorer_order_speaks_the_guide_first(
     assert "乙题" in (speakers[0][1] or "")
     assert speakers[1][1] == RECORDED_FACT
     assert "已记录" not in (speakers[0][1] or "")
+
+
+def _roles(database: Any, conversation_id: str) -> Any:
+    with database.session() as db:
+        version = _guide_version(db, conversation_id)
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None and conversation.team_version_id is not None
+        members = db.scalars(
+            select(TeamVersionMember).where(
+                TeamVersionMember.team_version_id == conversation.team_version_id
+            )
+        ).all()
+        return resolve_formal_assessment(
+            version.agent_md, [(member.id, member.display_name) for member in members]
+        )
+
+
+def test_explicit_formal_start_is_the_guide_opening_before_any_member(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题", "乙题")
+        )
+        version = _guide_version(db, conversation_id)
+        version.agent_md += (
+            "\n\n## 开场\n"
+            "学生说正式测评时，由 Scorer 用 Gettier 认识论开场，然后由 Scorer 启动测试。\n"
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(app_bundle, database, "formal-explicit-start")
+    _grant(database, conversation_id, policy)
+    opening = _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    assert _texts(database, opening) == ["收到，第一题是甲题"]
+    with database.session() as db:
+        context = get_assessment_runtime_context(db, actor, conversation_id)
+        assert context is not None and context.progress.presented_count == 1
+        assert context.progress.resolved_count == 0
+    answer = "甲题的回答"
+    turn_id = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        answer,
+        monkeypatch,
+        [("tool", "assessment_action", {"classification": "answer_only", "answer_span": answer})],
+    )
+    with database.session() as db:
+        speakers = db.execute(
+            select(ConversationParticipant.team_member_id, TeamTurnResult.assistant_text)
+            .join(
+                TeamTurnResult,
+                TeamTurnResult.participant_id == ConversationParticipant.id,
+            )
+            .where(TeamTurnResult.turn_id == turn_id)
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+    roles = _roles(database, conversation_id)
+    assert roles is not None
+    assert [member_id for member_id, _text in speakers] == list(roles.student_round_order_ids)
+    assert speakers[0][1] == RECORDED_FACT
+    assert "乙题" in (speakers[1][1] or "")
+    assert "Gettier" not in "".join(text or "" for _member, text in speakers)
+    assert SUMMARIZER_LINE not in [text for _member, text in speakers]
+
+
+def test_invalid_scale_answer_is_one_scorer_rejection(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    prompt = "请给信心打 1-5 分"
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=(prompt, "乙题")
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+    settings, policy = _dashscope(app_bundle, database, "formal-invalid-scale")
+    _grant(database, conversation_id, policy)
+    _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    rejected = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        "u",
+        monkeypatch,
+        [
+            ("tool", "assessment_action", {"classification": "answer_only", "answer_span": "u"}),
+            ("text", "第 1 题再来一次"),
+        ],
+    )
+    with database.session() as db:
+        context = get_assessment_runtime_context(db, actor, conversation_id)
+        assert context is not None
+        assert context.progress.resolved_count == 0
+        assert context.current_question is not None
+        assert context.current_question.prompt == prompt
+        speakers = db.execute(
+            select(
+                ConversationParticipant.team_member_id,
+                TeamTurnResult.assistant_text,
+                TeamTurnResult.state,
+            )
+            .join(
+                TeamTurnResult,
+                TeamTurnResult.participant_id == ConversationParticipant.id,
+            )
+            .where(TeamTurnResult.turn_id == rejected)
+            .order_by(TeamTurnResult.ordinal)
+        ).all()
+    roles = _roles(database, conversation_id)
+    assert roles is not None
+    assert [member_id for member_id, _text, _state in speakers] == list(
+        roles.student_round_order_ids
+    )
+    assert all(state == "ready" for _member, _text, state in speakers)
+    rejection, question = speakers[0][1], speakers[1][1]
+    assert rejection == "这条回复不是本题的答案，没有记录。请回复 1–5 之间的一个数字。"
+    assert question == f"第 1 题：{prompt}"
+    assert prompt not in (rejection or "")
+    assert (question or "").count(prompt) == 1
+    recorded = _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        "3",
+        monkeypatch,
+        [("tool", "assessment_action", {"classification": "answer_only", "answer_span": "3"})],
+    )
+    recorded_text = [text for text in _texts(database, recorded) if text and text.strip()]
+    assert recorded_text[0] == RECORDED_FACT
+    assert any("乙题" in (text or "") for text in recorded_text)
+    with database.session() as db:
+        context = get_assessment_runtime_context(db, actor, conversation_id)
+        assert context is not None and context.progress.resolved_count == 1
+
+
+def test_greeting_does_not_open_formal_and_incomplete_ruleset_refuses(
+    client: TestClient, database: Any, app_bundle: Any
+) -> None:
+    del client
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        before = db.scalar(select(func.count()).select_from(AssessmentAttempt))
+        claim = runtime.claim_team_turn(
+            db,
+            settings,
+            conversation_id=conversation_id,
+            actor_id=actor.user.id,
+            request_id=str(uuid4()),
+            expected_revision=conversation.revision,
+            message="你好",
+            routing=TeamRouting(mode="auto"),
+            actor_context=actor,
+        )
+        turn = db.get(ConversationTurn, claim.turn_id)
+        assert turn is not None
+        assert json.loads(turn.routing_json or "{}")["mode"] == "auto"
+        assert db.scalar(select(func.count()).select_from(AssessmentAttempt)) == before
+        version = _guide_version(db, conversation_id)
+        version.agent_md = version.agent_md.split("# Team Ruleset")[0].rstrip() + "\n"
+        db.commit()
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None
+        before_turns = db.scalar(select(func.count()).select_from(ConversationTurn))
+        with pytest.raises(PlatformError) as caught:
+            runtime.claim_team_turn(
+                db,
+                settings,
+                conversation_id=conversation_id,
+                actor_id=actor.user.id,
+                request_id=str(uuid4()),
+                expected_revision=conversation.revision,
+                message="正式测评",
+                routing=TeamRouting(mode="auto"),
+                actor_context=actor,
+            )
+        assert caught.value.code == "assessment_ruleset_incomplete"
+        db.rollback()
+    with database.session() as db:
+        assert db.scalar(select(func.count()).select_from(AssessmentAttempt)) == before
+        assert db.scalar(select(func.count()).select_from(ConversationTurn)) == before_turns

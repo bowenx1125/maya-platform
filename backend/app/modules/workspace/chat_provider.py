@@ -965,6 +965,7 @@ def assessment_safe_reply_text(
     follow_up: bool = False,
     chinese: bool | None = None,
     follow_up_pending: bool = False,
+    include_question: bool = True,
 ) -> str:
     """Render the server's student-safe assessment projection.
 
@@ -1053,20 +1054,12 @@ def assessment_safe_reply_text(
     )
     question = context.current_question
     latest = user_texts[-1].strip() if user_texts else ""
-    from app.modules.learning.answer_format import answer_format, asks_progress, format_hint
+    from app.modules.learning.answer_format import answer_format, format_hint
 
     # Owner decision (2026-10-13): a reply that is not this Question's answer
     # is named as such, with the format to use, instead of "我们继续测试" or a
     # progress count the student did not ask for.
-    not_recorded = (
-        question is not None
-        and not grading
-        and not context.redirect_to_original_conversation
-        and (
-            (result.response_key == "assessment.progress" and not asks_progress(latest))
-            or (result.response_key == "assessment.redirect" and result.disposition != "read")
-        )
-    )
+    not_recorded = assessment_answer_not_recorded(result, latest)
     lines = []
     if not_recorded and question is not None:
         lines.append(
@@ -1108,7 +1101,7 @@ def assessment_safe_reply_text(
                 if chinese
                 else f"Your answer: {answer.answer_text}"
             )
-    if question is not None:
+    if include_question and question is not None:
         if follow_up:
             lines.append("下面是追问。" if chinese else "Next, a follow-up question.")
         ordinal = question.ordinal + 1
@@ -1118,6 +1111,37 @@ def assessment_safe_reply_text(
             else f"Question {ordinal}: {question.prompt}"
         )
     return "\n\n".join(lines)
+
+
+def assessment_answer_not_recorded(result: AssessmentRuntimeResult, latest_user_text: str) -> bool:
+    """Whether this result refused to store the latest message as an answer.
+
+    The scorer states the miss and the format. The Guide restates the Question
+    once. Both pasting the Question is the duplicate re-ask.
+    """
+
+    from app.modules.learning.answer_format import asks_progress
+
+    context = result.context
+    progress = context.progress
+    grading = (
+        context.attempt.status == "in_progress"
+        and progress.question_count > 0
+        and progress.resolved_count >= progress.question_count
+    )
+    question = context.current_question
+    return (
+        question is not None
+        and not grading
+        and not context.redirect_to_original_conversation
+        and (
+            (
+                result.response_key == "assessment.progress"
+                and not asks_progress(latest_user_text.strip())
+            )
+            or (result.response_key == "assessment.redirect" and result.disposition != "read")
+        )
+    )
 
 
 ACCOUNT_MEMORY_RULE = (

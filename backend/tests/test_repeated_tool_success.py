@@ -340,7 +340,11 @@ def test_a_repeated_successful_read_does_not_refuse_the_test(
         [result] = results
         assert result.assistant_text != "Can't."
         if scenario == "read_twice_then_start":
-            assert result.assistant_text.startswith("Formal test started.")
+            # The Tool start used to keep the safe "Formal test started." line
+            # and would have left any delegated member prose in place. The
+            # opening is the Guide's scripted line.
+            assert result.assistant_text.startswith("收到，第一题是")
+            assert "Formal test started." not in (result.assistant_text or "")
             assert get_assessment_runtime_context(db, actor, conversation_id) is not None
         else:
             assert result.assistant_text == "Let's begin."

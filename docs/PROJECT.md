@@ -253,23 +253,6 @@ in-flight run. Teacher ChatSession carries `knowledge_generation` for an under-
 message progress bar; Agent Chat appends real report download links after Tool
 receipts. Integrates PR #71 Voices hover tip.
 
-Formal assessment micro-rounds require Guide `# Team Ruleset` →
-`## Formal assessment`: `answer_recorder`, `question_guide`, `scorer`,
-`summarizer`, and `student_round_order`, each one roster display name.
-`student_round_order` is exactly the scorer and question_guide, and that order
-speaks on a student message (usual `Scorer, Guide`). Any other set returns
-`assessment_ruleset_incomplete` and inserts no attempt. `answer_recorder` must
-be that same scorer: the write Tool, `已记录你的回答。` (receipt only), and
-`做题者放弃作答，已保存记录已删除。`. Opening is Guide-only: `收到，第一题是…`.
-The Guide calls no write Tool. The Tool runs before the Guide line is chosen,
-so Guide-first still records first, then shows the Guide ahead of the fact.
-All answered: Guide `答题全部结束`, Summarizer `正在总结答案`, progress bar
-under that message. Abandon uses the same order, then Guide
-`已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false.
-`MAYA-ASSESSMENT-ROLE` does not choose speakers. `assessment_active` is a ledger
-flag, not a Tool. Ordinary chat replies by relevance; optional `## Informal`
-overrides that prompt. Precedence is ACL, ledger, then Ruleset. The server
-alone appends report links. Later `edit_assessment` /
-`update_learning_boundary` turns stay on that scorer and the summarizer.
+Formal micro-rounds need Guide `# Team Ruleset` → `## Formal assessment` naming `answer_recorder`, `question_guide`, `scorer`, `summarizer`, and `student_round_order` as roster display names. The order is exactly scorer and question_guide; anything else is `assessment_ruleset_incomplete` with no attempt. `answer_recorder` is that scorer: the write Tool, `已记录你的回答。` (receipt only), and the abandon recorder line. Explicit starts (正式测评, 正式测试, 开始测试, 再来一轮/再来一遍, formal test/assessment) set the ledger before members run, so that turn is Guide-only `收到，第一题是…`. An auto Tool start rewrites only the Guide to that opening; spoken members stay because a ready result cannot be blank. Later student messages follow `student_round_order`. The Tool runs before the Guide line, so Guide-first still records first. A non-answer is the scorer's rejection once; the Guide restates that Question once. All answered: Guide `答题全部结束`, Summarizer `正在总结答案`. Abandon uses that order, then Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false. `MAYA-ASSESSMENT-ROLE` does not choose speakers. `assessment_active` is a ledger flag, not a Tool. Ordinary chat replies by relevance; optional `## Informal` overrides that prompt. Precedence is ACL, ledger, Ruleset. The server alone appends report links. Later executor turns stay on that scorer and the summarizer.
 
 Built `2c62871` (PR #72: Knowledge partial promote + Chat progress + Team `# Team Ruleset` defaults + fused PR #71 Voices hover tip). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200. Cleanup: removed `/tmp/maya-*` probes, orphan backup `-shm`/`-wal`/`.bak`, and ~23GB Docker build cache (disk 60%→23%).
