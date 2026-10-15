@@ -367,6 +367,114 @@ async def test_multipart_stream_preserves_markdown_beyond_binary_upload_limit(
     assert content == b"1234567890"
 
 
+@pytest.mark.asyncio
+async def test_multipart_rejects_declared_content_length_over_request_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(multipart, "MAX_UPLOAD_REQUEST_BYTES", 64)
+    chunks = [
+        b'--test\r\nContent-Disposition: form-data; name="file"; filename="notes.md"\r\n'
+        b"Content-Type: text/markdown\r\n\r\n",
+        b"ok\r\n--test--\r\n",
+    ]
+
+    async def receive() -> dict[str, Any]:
+        if chunks:
+            chunk = chunks.pop(0)
+            return {"type": "http.request", "body": chunk, "more_body": bool(chunks)}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/upload",
+            "headers": [
+                (b"content-type", b"multipart/form-data; boundary=test"),
+                (b"content-length", b"65"),
+            ],
+        },
+        receive,
+    )
+    with pytest.raises(multipart.UploadTooLargeError):
+        await multipart.parse_upload(request)
+
+
+@pytest.mark.asyncio
+async def test_multipart_rejects_streamed_body_over_request_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(multipart, "MAX_UPLOAD_REQUEST_BYTES", 80)
+    prefix = (
+        b'--b\r\nContent-Disposition: form-data; name="file"; filename="notes.md"\r\n'
+        b"Content-Type: text/markdown\r\n\r\n"
+    )
+    suffix = b"\r\n--b--\r\n"
+    pad = b"M" * (80 - len(prefix) - len(suffix) + 1)
+    body = prefix + pad + suffix
+    assert len(body) > 80
+    chunks = [body]
+
+    async def receive() -> dict[str, Any]:
+        if chunks:
+            chunk = chunks.pop(0)
+            return {"type": "http.request", "body": chunk, "more_body": False}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/upload",
+            "headers": [(b"content-type", b"multipart/form-data; boundary=b")],
+        },
+        receive,
+    )
+    with pytest.raises(multipart.UploadTooLargeError):
+        await multipart.parse_upload(request)
+
+
+@pytest.mark.asyncio
+async def test_multipart_allows_streamed_body_at_request_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(multipart, "MAX_UPLOAD_REQUEST_BYTES", 200)
+    monkeypatch.setattr(multipart, "MAX_UPLOAD_FILE_BYTES", 200)
+    prefix = (
+        b'--b\r\nContent-Disposition: form-data; name="file"; filename="notes.md"\r\n'
+        b"Content-Type: text/markdown\r\n\r\n"
+    )
+    suffix = b"\r\n--b--\r\n"
+    pad_len = 200 - len(prefix) - len(suffix)
+    assert pad_len > 0
+    body = prefix + (b"M" * pad_len) + suffix
+    assert len(body) == 200
+    chunks = [body]
+
+    async def receive() -> dict[str, Any]:
+        if chunks:
+            chunk = chunks.pop(0)
+            return {"type": "http.request", "body": chunk, "more_body": False}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/upload",
+            "headers": [
+                (b"content-type", b"multipart/form-data; boundary=b"),
+                (b"content-length", b"200"),
+            ],
+        },
+        receive,
+    )
+    fields, filename, content = await multipart.parse_upload(request)
+    assert fields == {}
+    assert filename == "notes.md"
+    assert content == b"M" * pad_len
+
+
 def test_teacher_can_add_own_courseware_without_access_to_student_private_library(
     app_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
