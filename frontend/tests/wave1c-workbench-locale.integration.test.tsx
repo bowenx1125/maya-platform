@@ -340,11 +340,13 @@ describe("Wave 1C real workbench locale boundary", () => {
       expect(
         await screen.findByRole("button", { name: "Current voice" }),
       ).toBeTruthy();
+      // The voice list loads after the inherited binding is painted. Waiting
+      // here keeps the unfinished profile from being read before it exists.
       expect(
         (
-          screen.getByRole("button", {
+          (await screen.findByRole("button", {
             name: "Not confirmed",
-          }) as HTMLButtonElement
+          })) as HTMLButtonElement
         ).disabled,
       ).toBe(true);
       if (choice) {
