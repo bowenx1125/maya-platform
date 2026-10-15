@@ -75,7 +75,7 @@ class FlashTrialBudget:
                 if characters > self.cap or current > self.cap - characters:
                     raise TTSProviderUnavailableError("tts trial budget exhausted")
                 updated = current + characters
-                payload = f"{updated}\n".encode("utf-8")
+                payload = f"{updated}\n".encode()
                 handle.seek(0)
                 handle.truncate()
                 handle.write(payload)

@@ -7,13 +7,13 @@ from pathlib import Path
 import httpx
 import pytest
 from app.providers.dashscope import (
+    ALLOWED_TTS_TARGET_MODELS,
     DEFAULT_TARGET_MODEL_KEY,
     FLASH_SYSTEM_VOICES,
     FLASH_TTS_MODEL_KEY,
     PRESET_TTS_MODEL_KEY,
     QWEN_TTS_URL,
     VOICE_CUSTOMIZATION_PATH,
-    ALLOWED_TTS_TARGET_MODELS,
     DashScopeConfig,
     DashScopeTTSProvider,
     DashScopeVoiceCloneProvider,
@@ -25,8 +25,8 @@ from app.providers.tts import (
     TTSVoiceUnavailableError,
 )
 from app.providers.tts_flash_budget import (
-    FlashTrialBudget,
     TTS_FLASH_TRIAL_BUDGET_CHARS,
+    FlashTrialBudget,
 )
 from app.providers.voice import VoiceProviderError
 
@@ -119,9 +119,7 @@ def test_switch_off_keeps_snapshot_and_clone_paths(
     assert capture.calls[1]["json"]["model"] == DEFAULT_TARGET_MODEL_KEY
 
 
-def test_switch_on_flash_sends_alias_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_switch_on_flash_sends_alias_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
     provider.synthesize(
         "A short line.",
@@ -142,9 +140,7 @@ def test_switch_on_flash_sends_alias_model(
     assert VOICE_CUSTOMIZATION_PATH not in capture.calls[0]["url"]
 
 
-def test_illegal_clone_voice_zero_outbound(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_illegal_clone_voice_zero_outbound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
     with pytest.raises(TTSVoiceUnavailableError) as rejected:
         provider.synthesize(
@@ -157,9 +153,7 @@ def test_illegal_clone_voice_zero_outbound(
     assert capture.calls == []
 
 
-def test_oversize_text_zero_outbound(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_oversize_text_zero_outbound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
     text = "字" * 601
     with pytest.raises(TTSProviderError) as rejected:
@@ -266,9 +260,7 @@ def test_factory_wires_switch_default_off(tmp_path: Path) -> None:
     assert provider.trial_budget is not None
 
 
-def test_flash_errors_never_echo_api_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_flash_errors_never_echo_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
     with pytest.raises(TTSVoiceUnavailableError) as rejected:
         provider.synthesize(

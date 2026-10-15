@@ -690,9 +690,7 @@ class DashScopeTTSProvider:
             if external_voice_id not in FLASH_SYSTEM_VOICES:
                 raise TTSVoiceUnavailableError("tts voice unavailable")
             if len(text) > TTS_FLASH_MAX_CHARS:
-                raise TTSProviderError(
-                    "tts text too long", safe_code="tts_response_invalid"
-                )
+                raise TTSProviderError("tts text too long", safe_code="tts_response_invalid")
             budget = self.trial_budget
             if budget is None or not hasattr(budget, "preclaim"):
                 raise TTSProviderUnavailableError("tts trial budget unavailable")

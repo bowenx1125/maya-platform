@@ -23,11 +23,6 @@ from app.modules.voices.schemas import (
     SystemVoiceScriptResponse,
     VoiceProfileResponse,
 )
-from app.modules.voices.system_voice_preview import (
-    create_system_voice_preview,
-    list_system_voice_scripts,
-    media_path_for_system_voice_preview,
-)
 from app.modules.voices.service import (
     confirm_voice_profile,
     create_voice_preview,
@@ -39,6 +34,11 @@ from app.modules.voices.service import (
     rename_voice_profile,
     visible_student_voice,
     voice_profile_dto,
+)
+from app.modules.voices.system_voice_preview import (
+    create_system_voice_preview,
+    list_system_voice_scripts,
+    media_path_for_system_voice_preview,
 )
 from app.modules.voices.uploads import (
     VoiceUploadDisconnected,
@@ -387,9 +387,7 @@ def create_system_voice_preview_route(
     settings: Settings = Depends(get_settings),
 ) -> SystemVoicePreviewResponse | list[SystemVoicePreviewResponse]:
     try:
-        result = create_system_voice_preview(
-            db, context, settings, payload.segment_id
-        )
+        result = create_system_voice_preview(db, context, settings, payload.segment_id)
     except PlatformError:
         raise
     except (RuntimeError, OSError) as exc:
@@ -435,9 +433,7 @@ def system_voice_preview_media(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
-    path, media_type = media_path_for_system_voice_preview(
-        db, context, str(request_id), settings
-    )
+    path, media_type = media_path_for_system_voice_preview(db, context, str(request_id), settings)
     return FileResponse(
         Path(path),
         media_type=media_type,

@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -79,8 +79,7 @@ SCRIPTS: dict[SegmentId, SystemVoiceScript] = {
         voice="Cherry",
         language="auto",
         text=(
-            "Welcome to Maya classroom. "
-            "今天我们学习 machine learning 的基础概念，请跟我一起读。"
+            "Welcome to Maya classroom. 今天我们学习 machine learning 的基础概念，请跟我一起读。"
         ),
         expected_reading="中英切换自然；machine learning 按英文词可读。",
     ),
@@ -137,8 +136,7 @@ def _preview_root(data_root: Path) -> Path:
 
 def _content_key(script: SystemVoiceScript) -> str:
     payload = (
-        f"{script.segment_id}|{script.voice}|{script.language}|"
-        f"{script.text}|{FLASH_TTS_MODEL_KEY}"
+        f"{script.segment_id}|{script.voice}|{script.language}|{script.text}|{FLASH_TTS_MODEL_KEY}"
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -220,9 +218,7 @@ def _expire_entry(data_root: Path, request_id: str, entry: dict[str, object]) ->
         _write_index(data_root, index)
 
 
-def _active_entry(
-    data_root: Path, request_id: str
-) -> tuple[dict[str, object], Path] | None:
+def _active_entry(data_root: Path, request_id: str) -> tuple[dict[str, object], Path] | None:
     entry = _load_entry(data_root, request_id)
     if entry is None:
         return None
@@ -248,9 +244,7 @@ def _active_entry(
     return entry, path
 
 
-def _result_from_entry(
-    entry: dict[str, object], *, deduplicated: bool
-) -> SystemVoicePreviewResult:
+def _result_from_entry(entry: dict[str, object], *, deduplicated: bool) -> SystemVoicePreviewResult:
     request_id = str(entry["request_id"])
     segment_id = str(entry["segment_id"])
     if segment_id not in SCRIPTS:
@@ -261,7 +255,7 @@ def _result_from_entry(
     provider_request_id = entry.get("provider_request_id")
     return SystemVoicePreviewResult(
         request_id=request_id,
-        segment_id=segment_id,  # type: ignore[arg-type]
+        segment_id=segment_id,
         voice=str(entry["voice"]),
         language=str(entry["language"]),
         text=str(entry["text"]),
@@ -280,7 +274,7 @@ def resolve_segment_id(raw: str) -> SegmentId | Literal["all"]:
     if value == "all":
         return "all"
     if value in SCRIPTS:
-        return value  # type: ignore[return-value]
+        return value
     raise validation_failure(
         "Unknown system voice segment.",
         code="invalid_segment",
@@ -301,16 +295,15 @@ def create_system_voice_preview(
     resolved = resolve_segment_id(segment_id)
     if resolved == "all":
         return [
-            create_system_voice_preview(
-                db, context, settings, item, provider=provider
+            cast(
+                SystemVoicePreviewResult,
+                create_system_voice_preview(db, context, settings, item, provider=provider),
             )
             for item in SEGMENT_IDS
         ]
 
     if not settings.tts_qwen3_flash_enabled:
-        LOGGER.warning(
-            "System voice preview refused flash_disabled segment_id=%s", resolved
-        )
+        LOGGER.warning("System voice preview refused flash_disabled segment_id=%s", resolved)
         raise PlatformError(
             "provider_unavailable",
             "System voice preview requires the flash trial switch.",
@@ -364,9 +357,7 @@ def create_system_voice_preview(
         code = getattr(exc, "safe_code", None)
         if not isinstance(code, str) or code not in _SAFE_SYNTH_ERRORS:
             code = "tts_audio_invalid" if isinstance(exc, AudioValidationError) else "tts_failed"
-        LOGGER.warning(
-            "System voice preview failed segment_id=%s safe_code=%s", resolved, code
-        )
+        LOGGER.warning("System voice preview failed segment_id=%s safe_code=%s", resolved, code)
         raise PlatformError(
             "provider_unavailable",
             "The system voice preview could not be generated.",
