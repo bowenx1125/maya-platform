@@ -293,6 +293,12 @@ const enMessages = {
     "This file type is not supported. Upload Markdown, PDF, or Word (.docx).",
   knowledgeImportProcessingFailed:
     "Maya could not safely process this document. Try a smaller or less complex file.",
+  knowledgeImportOcrUnavailable:
+    "Local OCR is temporarily unavailable. You can retry, or convert the PDF to Markdown and upload that.",
+  knowledgeImportOcrFailed:
+    "Local OCR could not read this scanned PDF. Retry, or upload a text-based PDF / Markdown instead.",
+  knowledgeImportOcrTimeout:
+    "Local OCR timed out on this scanned PDF. Retry, or upload a smaller scan / Markdown instead.",
   noGroupMarkdown: "No RAG yet.",
   testChat: "Test chat",
   noSources:
@@ -1113,6 +1119,12 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "暂不支持此文件类型。请上传 Markdown、PDF 或 Word（.docx）。",
   knowledgeImportProcessingFailed:
     "Maya 未能在安全限制内处理此文件。请尝试较小或内容较简单的文档。",
+  knowledgeImportOcrUnavailable:
+    "本地 OCR 暂时不可用。可以重试，或先将 PDF 转换为 Markdown 再上传。",
+  knowledgeImportOcrFailed:
+    "本地 OCR 无法读取此扫描 PDF。请重试，或改上传含文本层的 PDF / Markdown。",
+  knowledgeImportOcrTimeout:
+    "本地 OCR 处理此扫描 PDF 超时。请重试，或改上传较小的扫描件 / Markdown。",
   noGroupMarkdown: "还没有 RAG。",
   testChat: "测试聊天",
   noSources: "没有返回来源文件。一般推理不会被呈现为证据。",
@@ -1734,6 +1746,9 @@ const errorCodeKeys: Record<string, MessageKey> = {
   knowledge_import_no_text: "knowledgeImportNoText",
   knowledge_import_unsupported: "knowledgeImportUnsupported",
   knowledge_import_processing_failed: "knowledgeImportProcessingFailed",
+  knowledge_import_ocr_unavailable: "knowledgeImportOcrUnavailable",
+  knowledge_import_ocr_failed: "knowledgeImportOcrFailed",
+  knowledge_import_ocr_timeout: "knowledgeImportOcrTimeout",
   unauthenticated: "errorUnauthenticated",
   account_not_found: "errorAccountNotFound",
   username_taken: "errorUsernameTaken",
