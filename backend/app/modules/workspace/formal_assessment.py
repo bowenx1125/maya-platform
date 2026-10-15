@@ -35,8 +35,8 @@ _NEXT_HEADING = re.compile(r"(?m)^#{1,6}\s+\S")
 _FIELD_LINE = re.compile(
     r"^(answer_recorder|question_guide|scorer|summarizer|student_round_order)\s*:\s*(.*?)\s*$"
 )
-# Explicit start utterances. The ledger has to exist before member selection.
-# Ordinary chat does not ask the Scorer or Summarizer.
+# Explicit start utterances. The ledger has to exist before member selection;
+# a free coordinate turn lets every member follow Agent.md prose instead.
 _FORMAL_START = re.compile(
     r"(?:"
     r"正式测评|正式测试|开始测试|再来一轮|再来一遍|"

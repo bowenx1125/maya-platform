@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import pytest
@@ -1391,25 +1391,7 @@ def _with_distinct_summarizer(db: Any, conversation_id: str, team_version_id: st
     db.flush()
 
 
-def _hello_speakers(db: Any, turn_id: str) -> list[tuple[bool, str | None, str | None]]:
-    return list(
-        db.execute(
-            select(
-                ConversationParticipant.is_leader,
-                TeamTurnResult.assistant_text,
-                TeamTurnResult.safe_error_code,
-            )
-            .join(
-                TeamTurnResult,
-                TeamTurnResult.participant_id == ConversationParticipant.id,
-            )
-            .where(TeamTurnResult.turn_id == turn_id)
-            .order_by(TeamTurnResult.ordinal)
-        ).all()
-    )
-
-
-def test_greeting_asks_only_the_guide(
+def test_greeting_keeps_relevant_replies_and_skips_an_empty_one(
     client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
 ) -> None:
     del client
@@ -1422,52 +1404,6 @@ def test_greeting_asks_only_the_guide(
         _with_distinct_summarizer(db, conversation_id, team_version_id)
         db.commit()
         actor = _service_actor(db, settings, STUDENT_ID)
-        conversation = db.get(Conversation, conversation_id)
-        assert conversation is not None
-        claim = runtime.claim_team_turn(
-            db,
-            settings,
-            conversation_id=conversation_id,
-            actor_id=actor.user.id,
-            request_id=str(uuid4()),
-            expected_revision=conversation.revision,
-            message="你好",
-            routing=TeamRouting(mode="all"),
-            actor_context=actor,
-        )
-    runtime.execute_team_turn(database.session_factory, claim)
-    with database.session() as db:
-        turn = db.get(ConversationTurn, claim.turn_id)
-        assert turn is not None
-        assert json.loads(turn.routing_json or "{}")["mode"] == "all"
-        assert turn.state == "ready"
-        assert turn.safe_error_code is None
-        speakers = _hello_speakers(db, claim.turn_id)
-        assert len(speakers) == 1
-        assert speakers[0][0] is True
-        assert speakers[0][1] and SILENT_MEMBER_LINE not in speakers[0][1]
-        conversation = db.get(Conversation, conversation_id)
-        assert conversation is not None
-        auto = runtime.claim_team_turn(
-            db,
-            settings,
-            conversation_id=conversation_id,
-            actor_id=actor.user.id,
-            request_id=str(uuid4()),
-            expected_revision=conversation.revision,
-            message="你好",
-            routing=TeamRouting(mode="auto"),
-            actor_context=actor,
-        )
-    runtime.execute_team_turn(database.session_factory, auto)
-    with database.session() as db:
-        turn = db.get(ConversationTurn, auto.turn_id)
-        assert turn is not None
-        assert json.loads(turn.routing_json or "{}")["mode"] == "auto"
-        assert turn.state == "ready"
-        assert turn.safe_error_code is None
-        speakers = _hello_speakers(db, auto.turn_id)
-        assert len(speakers) == 1 and speakers[0][0] is True
         participants = db.scalars(
             select(ConversationParticipant).where(
                 ConversationParticipant.conversation_id == conversation_id
@@ -1477,99 +1413,136 @@ def test_greeting_asks_only_the_guide(
         assert conversation is not None
         roles = runtime._formal_roles_for_conversation(db, conversation)
         assert roles is not None
-        scorer = next(
-            participant
+        scorer_id = next(
+            participant.id
             for participant in participants
             if participant.team_member_id == roles.scorer_id
         )
-        summarizer = next(
-            participant
+        summarizer_id = next(
+            participant.id
             for participant in participants
             if participant.team_member_id == roles.summarizer_id
         )
-        guide = next(participant for participant in participants if participant.is_leader)
-        scorer_id, summarizer_id = scorer.id, summarizer.id
-        mentioned = runtime.claim_team_turn(
-            db,
-            settings,
-            conversation_id=conversation_id,
-            actor_id=actor.user.id,
-            request_id=str(uuid4()),
-            expected_revision=conversation.revision,
-            message="你好",
-            routing=TeamRouting(mode="selected", participant_ids=[UUID(scorer_id)]),
-            actor_context=actor,
-        )
-        pending = db.scalars(
-            select(TeamTurnResult).where(TeamTurnResult.turn_id == mentioned.turn_id)
-        ).all()
-        assert len(pending) == 1
-        assert pending[0].participant_id == guide.id
-        # A result row that still exists must not fail the turn or keep a Scorer intro.
-        now = datetime.now(UTC)
-        db.add(
-            TeamTurnResult(
-                id=str(uuid4()),
-                turn_id=mentioned.turn_id,
-                conversation_id=conversation_id,
-                participant_id=scorer_id,
-                ordinal=1,
-                state="pending",
-                sources_json="[]",
-                created_at=now,
-            )
-        )
-        db.add(
-            TeamTurnResult(
-                id=str(uuid4()),
-                turn_id=mentioned.turn_id,
-                conversation_id=conversation_id,
-                participant_id=summarizer_id,
-                ordinal=2,
-                state="pending",
-                sources_json="[]",
-                created_at=now,
-            )
-        )
-        db.commit()
+
+    scorer_line = "我是 Scorer，还没有给我任何实际作答记录。"
 
     def reply_for(request: runtime.MemberRequest) -> runtime.MemberReply:
         if request.participant_id == scorer_id:
-            return runtime.MemberReply("我是 Scorer，还没有给我任何实际作答记录。")
+            return runtime.MemberReply(scorer_line)
         if request.participant_id == summarizer_id:
             return runtime.MemberReply("   ")
         return runtime.MemberReply(f"Mock · {request.speaker_name}\n\n{request.message}")
 
     monkeypatch.setattr(runtime, "invoke_mock_member", reply_for)
-    runtime.execute_team_turn(database.session_factory, mentioned)
+
+    def send(message: str, mode: Literal["auto", "all"]) -> str:
+        with database.session() as db:
+            conversation = db.get(Conversation, conversation_id)
+            assert conversation is not None
+            claim = runtime.claim_team_turn(
+                db,
+                settings,
+                conversation_id=conversation_id,
+                actor_id=actor.user.id,
+                request_id=str(uuid4()),
+                expected_revision=conversation.revision,
+                message=message,
+                routing=TeamRouting(mode=mode),
+                actor_context=actor,
+            )
+        runtime.execute_team_turn(database.session_factory, claim)
+        return claim.turn_id
+
+    def texts_by_role(turn_id: str) -> dict[str, str | None]:
+        with database.session() as db:
+            conversation = db.get(Conversation, conversation_id)
+            assert conversation is not None
+            roles = runtime._formal_roles_for_conversation(db, conversation)
+            assert roles is not None
+            rows = db.execute(
+                select(
+                    ConversationParticipant.team_member_id,
+                    ConversationParticipant.is_leader,
+                    TeamTurnResult.assistant_text,
+                    TeamTurnResult.safe_error_code,
+                    TeamTurnResult.state,
+                )
+                .join(
+                    TeamTurnResult,
+                    TeamTurnResult.participant_id == ConversationParticipant.id,
+                )
+                .where(TeamTurnResult.turn_id == turn_id)
+            ).all()
+        found: dict[str, str | None] = {}
+        for member_id, is_leader, text, code, state in rows:
+            assert code is None and state == "ready"
+            if is_leader:
+                found["guide"] = text
+            if member_id == roles.scorer_id:
+                found["scorer"] = text
+            if member_id == roles.summarizer_id:
+                found["summarizer"] = text
+        return found
+
+    hello = send("你好", "all")
     with database.session() as db:
-        turn = db.get(ConversationTurn, mentioned.turn_id)
+        turn = db.get(ConversationTurn, hello)
         assert turn is not None
+        assert json.loads(turn.routing_json or "{}")["mode"] == "all"
         assert turn.state == "ready"
         assert turn.safe_error_code is None
-        speakers = _hello_speakers(db, mentioned.turn_id)
-        assert [leader for leader, _text, _code in speakers] == [True, False, False]
-        guide_text, scorer_text, summarizer_text = (text for _leader, text, _code in speakers)
-        assert guide_text and "你好" in guide_text
-        assert scorer_text == SILENT_MEMBER_LINE
-        assert summarizer_text == SILENT_MEMBER_LINE
+    spoken = texts_by_role(hello)
+    assert spoken["guide"] and "你好" in spoken["guide"]
+    assert spoken["scorer"] == scorer_line
+    assert spoken["summarizer"] == SILENT_MEMBER_LINE
+
+    auto = send("你好", "auto")
+    with database.session() as db:
+        turn = db.get(ConversationTurn, auto)
+        assert turn is not None
+        assert json.loads(turn.routing_json or "{}")["mode"] == "auto"
+        assert turn.state == "ready"
+        assert turn.safe_error_code is None
+    spoken = texts_by_role(auto)
+    assert spoken["scorer"] == scorer_line
+    assert spoken["summarizer"] == SILENT_MEMBER_LINE
+
+    def fail_summarizer(request: runtime.MemberRequest) -> runtime.MemberReply:
+        if request.participant_id == summarizer_id:
+            raise PlatformError("team_provider_not_sent", "The provider was not called.", 502)
+        return reply_for(request)
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", fail_summarizer)
+    failed = send("你好", "all")
+    with database.session() as db:
+        turn = db.get(ConversationTurn, failed)
+        assert turn is not None
+        assert turn.state == "partial"
+        assert turn.safe_error_code == "team_partial_failure"
+        rows = db.execute(
+            select(ConversationParticipant.id, TeamTurnResult.state, TeamTurnResult.safe_error_code)
+            .join(
+                TeamTurnResult,
+                TeamTurnResult.participant_id == ConversationParticipant.id,
+            )
+            .where(TeamTurnResult.turn_id == failed)
+        ).all()
+        by_id = {participant_id: (state, code) for participant_id, state, code in rows}
+        assert by_id[summarizer_id] == ("failed", "team_provider_not_sent")
+        assert by_id[scorer_id][0] == "ready"
 
 
-def test_ordinary_protocol_states_that_idle_specialists_stay_silent() -> None:
-    formal = runtime._member_system(
+def test_ordinary_protocol_omits_an_empty_reply_without_failing() -> None:
+    text = runtime._member_system(
         "Guide",
         "{}",
         team_ruleset="# Team Ruleset\n\n## Formal assessment\nscorer: Scorer\n",
         is_leader=True,
     )
-    assert "The Scorer stays silent until a formal turn has an answer to score." in formal
-    assert "an empty summarizer reply is silence, not a failed member." in formal
-    assert "After the attempt is over, the Scorer may speak" in formal
-    assert "does not put the Scorer or the Summarizer on a greeting" in formal
-    assert "Formal assessment does not change ordinary chat" not in formal
-    plain = runtime._member_system("Guide", "{}", is_leader=True)
-    assert "every member reads the user's latest message and replies" in plain
-    assert "Scorer stays silent" not in plain
+    assert "every member reads the user's latest message and replies" in text
+    assert "does not treat that member as failed" in text
+    assert "Formal assessment does not change ordinary chat" in text
+    assert "Scorer stays silent" not in text
 
 
 REASON = "关于第 1 题：你选了哪一项？能用一两句话说说你当时是怎么想的吗？"
