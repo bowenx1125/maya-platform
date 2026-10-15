@@ -1113,22 +1113,104 @@ describe("Chatform", () => {
     expect(screen.queryByText("This Team member could not reply.")).toBeNull();
   });
 
-  it("tells the student a summary that was not saved can be tried again", async () => {
-    state.api.streamTeamConversation.mockResolvedValue({
+  it("ends a finished test at the summary progress bar", async () => {
+    const finished = {
       ...teamSession,
-      revision: 1,
+      assessment_stage: "summarizing" as const,
+      can_send: true,
       turns: [
         {
-          id: "summary-turn",
-          user_text: "请总结",
-          state: "partial",
+          id: "q1",
+          user_text: "B",
+          state: "ready" as const,
           member_results: [
             {
-              id: "summarizer-result",
-              participant_id: "participant-2",
-              speaker_name: "Kaikai",
+              id: "recorded",
+              participant_id: "participant-1",
+              speaker_name: "Scorer",
               ordinal: 0,
-              state: "failed",
+              state: "ready" as const,
+              assistant_text: "已记录你的回答。",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "next",
+              participant_id: "participant-3",
+              speaker_name: "Guider",
+              ordinal: 1,
+              state: "ready" as const,
+              assistant_text: "第 2 题：下一题",
+              sources: [],
+              safe_error_code: null,
+            },
+          ],
+        },
+        {
+          id: "last",
+          user_text: "4",
+          state: "ready" as const,
+          member_results: [
+            {
+              id: "recorded-last",
+              participant_id: "participant-1",
+              speaker_name: "Scorer",
+              ordinal: 0,
+              state: "ready" as const,
+              assistant_text: "已记录你的回答。",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "done",
+              participant_id: "participant-3",
+              speaker_name: "Guider",
+              ordinal: 1,
+              state: "ready" as const,
+              assistant_text: "答题全部结束",
+              sources: [],
+              safe_error_code: null,
+            },
+            {
+              id: "summary",
+              participant_id: "participant-2",
+              speaker_name: "Summarizer",
+              ordinal: 2,
+              state: "ready" as const,
+              assistant_text: "正在总结答案",
+              sources: [],
+              safe_error_code: null,
+            },
+          ],
+        },
+        {
+          id: "score-turn",
+          user_text: "",
+          state: "ready" as const,
+          member_results: [
+            {
+              id: "reviewed",
+              participant_id: "participant-1",
+              speaker_name: "Scorer",
+              ordinal: 0,
+              state: "ready" as const,
+              assistant_text: "本轮回答已评估。",
+              sources: [],
+              safe_error_code: null,
+            },
+          ],
+        },
+        {
+          id: "save-turn",
+          user_text: "",
+          state: "partial" as const,
+          member_results: [
+            {
+              id: "save-failed",
+              participant_id: "participant-2",
+              speaker_name: "Summarizer",
+              ordinal: 0,
+              state: "failed" as const,
               assistant_text: null,
               sources: [],
               safe_error_code: "assessment_executor_write_required",
@@ -1136,15 +1218,41 @@ describe("Chatform", () => {
           ],
         },
       ],
-    });
+    };
+    state.api.conversationSessions.mockResolvedValue([finished]);
+    state.api.conversationSession.mockResolvedValue(finished);
     renderChats();
-    await startMayaTeamChat("请总结");
+    fireEvent.click(await screen.findByRole("button", { name: "B" }));
+    const log = await screen.findByRole("log");
+    const cards = [
+      ...log.querySelectorAll<HTMLElement>('article[class*="teamResult"]'),
+    ];
+    const visible = cards.map((card) => card.textContent ?? "");
+    expect(visible).toHaveLength(4);
+    expect(visible[0]).toContain("已记录你的回答。");
+    expect(visible[1]).toContain("第 2 题：下一题");
+    expect(visible[2]).toContain("答题全部结束");
+    expect(visible[3]).toContain("正在总结答案");
     expect(
-      await screen.findByText(
-        "This Team member could not save the summary. Send a new message to try again.",
-      ),
+      visible.filter((text) => text.includes("已记录你的回答。")),
+    ).toHaveLength(1);
+    expect(
+      within(cards[3]).getByRole("progressbar", {
+        name: "Test progress",
+      }),
     ).toBeTruthy();
-    expect(screen.queryByText("This Team member could not reply.")).toBeNull();
+    expect(within(log).getAllByRole("progressbar")).toHaveLength(1);
+    expect(log.textContent).not.toContain("本轮回答已评估。");
+    expect(log.textContent).not.toContain(
+      "Some members could not reply. Successful replies are kept.",
+    );
+    expect(log.textContent).not.toContain(
+      "This Team member could not save the summary. Send a new message to try again.",
+    );
+    expect(
+      (screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement)
+        .disabled,
+    ).toBe(false);
   });
 
   it("shows a sent Team message at once with its loading state", async () => {
@@ -1246,7 +1354,8 @@ describe("Chatform", () => {
     const headings = within(log)
       .getAllByRole("heading", { level: 3 })
       .map((heading) => heading.textContent);
-    expect(headings).toEqual(["Jade", "Bowen · leader", "Kaikai"]);
+    expect(headings).toEqual(["Jade", "Kaikai"]);
+    expect(log.textContent).not.toContain("已记录你的回答。");
     const articles = within(log).getAllByRole("article");
     const summarizer = articles.find((article) =>
       article.textContent?.includes("正在总结答案"),

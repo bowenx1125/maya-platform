@@ -416,6 +416,277 @@ def test_formal_micro_round_follows_the_eight_step_script(
         assert stage in {"scoring", "summarizing", "completed"}
 
 
+def _visible_lines(database: Any, actor: Any, conversation_id: str) -> list[str]:
+    from app.modules.workspace.team_conversation import team_session_view
+
+    with database.session() as db:
+        row = db.get(Conversation, conversation_id)
+        assert row is not None
+        session = team_session_view(db, row, actor, [], runtime_available=True)
+        assert all(turn.state != "partial" for turn in session.turns)
+        assert all(
+            result.state != "failed" and result.safe_error_code is None
+            for turn in session.turns
+            for result in turn.member_results
+        )
+        return [
+            result.assistant_text
+            for turn in session.turns
+            for result in turn.member_results
+            if result.assistant_text
+        ]
+
+
+def test_finished_assessment_ends_on_the_summary_line_and_retries_the_save(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    """Choice, free answer, then scale. The student sees the summary bar and nothing after it."""
+
+    del client
+    from app.modules.learning.execution import attempt_has_final_evidence
+    from app.modules.learning.finalizer import drive_assessment
+    from app.modules.learning.reports import attempt_answer_sheet
+
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db,
+            visibility="private",
+            prompts=(
+                "第一题\nA. 甲\nB. 乙\nC. 丙",
+                "用你自己的话说明理由。",
+                "请打分\n1 = 不同意\n2 = 一般\n3 = 同意\n4 = 非常同意",
+            ),
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None
+        attempt_id = str(started.attempt.id)
+        db.commit()
+    settings, policy = _dashscope(app_bundle, database, "formal-end-flow")
+    _grant(database, conversation_id, policy)
+    _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        "B",
+        monkeypatch,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": "B"},
+            ),
+            ("text", "已记录你的回答。"),
+        ],
+    )
+    _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        "我不知道",
+        monkeypatch,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": "我不知道"},
+            ),
+            ("text", "已记录你的回答。"),
+        ],
+    )
+    _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        "4",
+        monkeypatch,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": "4"},
+            ),
+            ("text", "已记录你的回答。"),
+        ],
+    )
+    before = _visible_lines(database, actor, conversation_id)
+    assert before == [
+        "收到，第一题是第一题\nA. 甲\nB. 乙\nC. 丙",
+        RECORDED_FACT,
+        "第 2 题：用你自己的话说明理由。",
+        RECORDED_FACT,
+        "第 3 题：请打分\n1 = 不同意\n2 = 一般\n3 = 同意\n4 = 非常同意",
+        ALL_DONE_GUIDE,
+        SUMMARIZER_LINE,
+    ]
+    assert before.count(RECORDED_FACT) == 2
+
+    boundary_calls = {"n": 0}
+
+    def synthetic_dispatch(
+        db: Any, _settings: Any, request: runtime.MemberRequest, messages, tools, choice, **kwargs
+    ):
+        if request.assessment_purpose == "assessment_evaluate":
+            body = _tool(
+                f"edit-{request.turn_id}",
+                "edit_assessment",
+                {
+                    "content": {
+                        "overall_feedback": "Saved.",
+                        "questions": [
+                            {
+                                "question_ordinal": ordinal,
+                                "feedback": "Recorded.",
+                                "points_awarded": 1,
+                            }
+                            for ordinal in range(3)
+                        ],
+                        "strengths": ["Persistence"],
+                        "next_steps": ["Continue."],
+                    }
+                },
+            )
+        elif request.assessment_purpose == "boundary_summarize":
+            call = boundary_calls["n"]
+            boundary_calls["n"] = call + 1
+            if call == 0:
+                body = _text("内部总结，不要给学生看")
+            else:
+                body = _tool(
+                    f"boundary-{request.turn_id}",
+                    "update_learning_boundary",
+                    {
+                        "summary": "三题都有作答，总结已保存。",
+                        "strengths": ["完成了三题"],
+                        "areas_to_explore": ["自由回答很短"],
+                        "not_yet_verified": [],
+                        "next_step": "再练一次理由。",
+                    },
+                )
+        else:
+            raise AssertionError(f"unexpected dispatch {request.assessment_purpose}")
+        return real_dispatch_team_model(
+            db, settings, request, messages, tools, choice, transport=_Transport(body), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
+    )
+    drive_assessment(database.session_factory, settings, conversation_id)
+    assert boundary_calls["n"] == 2
+    assert _visible_lines(database, actor, conversation_id) == before
+    with database.session() as db:
+        attempt = db.get(AssessmentAttempt, attempt_id)
+        assert attempt is not None and attempt.status == "completed"
+        assert attempt_has_final_evidence(db, attempt)
+        sheet = attempt_answer_sheet(db, attempt)
+        assert sheet["phase"] == "completed"
+        answers = [question["answers"] for question in sheet["questions"]]
+        assert answers == [["B"], ["我不知道"], ["4"]]
+        conversation = db.get(Conversation, conversation_id)
+        assert conversation is not None and conversation.active_request_id is None
+
+
+def test_a_summary_that_still_fails_is_recorded_for_the_teacher(
+    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
+) -> None:
+    del client
+    from app.modules.learning.finalizer import drive_assessment
+    from app.modules.learning.reports import (
+        attempt_answer_sheet,
+        attempt_teacher_phase,
+        render_answer_sheet,
+    )
+
+    _app, _database, settings = app_bundle
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        conversation_id, *_rest = _create_formal_conversation(
+            db, visibility="private", prompts=("甲题",)
+        )
+        db.commit()
+        actor = _service_actor(db, settings, STUDENT_ID)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None
+        attempt_id = str(started.attempt.id)
+        db.commit()
+    settings, policy = _dashscope(app_bundle, database, "formal-summary-miss")
+    _grant(database, conversation_id, policy)
+    _run(database, settings, actor, conversation_id, "正式测评", monkeypatch, [])
+    _run(
+        database,
+        settings,
+        actor,
+        conversation_id,
+        "甲",
+        monkeypatch,
+        [
+            (
+                "tool",
+                "assessment_action",
+                {"classification": "answer_only", "relevant": True, "answer_span": "甲"},
+            ),
+            ("text", "已记录。"),
+        ],
+    )
+    before = _visible_lines(database, actor, conversation_id)
+    assert before[-2:] == [ALL_DONE_GUIDE, SUMMARIZER_LINE]
+    assert RECORDED_FACT not in before
+
+    calls = {"evaluate": 0, "boundary": 0}
+
+    def synthetic_dispatch(
+        db: Any, _settings: Any, request: runtime.MemberRequest, messages, tools, choice, **kwargs
+    ):
+        if request.assessment_purpose == "assessment_evaluate":
+            calls["evaluate"] += 1
+            body = _tool(
+                f"edit-{request.turn_id}-{calls['evaluate']}",
+                "edit_assessment",
+                {
+                    "content": {
+                        "overall_feedback": "Saved.",
+                        "questions": [
+                            {
+                                "question_ordinal": 0,
+                                "feedback": "Recorded.",
+                                "points_awarded": 1,
+                            }
+                        ],
+                    }
+                },
+            )
+        elif request.assessment_purpose == "boundary_summarize":
+            calls["boundary"] += 1
+            body = _text("没有调用保存工具")
+        else:
+            raise AssertionError(request.assessment_purpose)
+        return real_dispatch_team_model(
+            db, settings, request, messages, tools, choice, transport=_Transport(body), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
+    )
+    drive_assessment(database.session_factory, settings, conversation_id)
+    assert calls["boundary"] == 2
+    assert _visible_lines(database, actor, conversation_id) == before
+    with database.session() as db:
+        attempt = db.get(AssessmentAttempt, attempt_id)
+        assert attempt is not None and attempt.status == "in_progress"
+        assert attempt_teacher_phase(db, attempt) == "summary_not_saved"
+        sheet = attempt_answer_sheet(db, attempt)
+        assert sheet["phase"] == "summary_not_saved"
+        assert "summary not saved" in render_answer_sheet(sheet)
+
+
 def test_recorded_fact_requires_a_tool_receipt(
     client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any
 ) -> None:

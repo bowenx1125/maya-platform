@@ -21,6 +21,8 @@ ABANDON_SCORER = "做题者放弃作答，已保存记录已删除。"
 ABANDON_GUIDE = "已放弃作答，你要重新开始吗，或者和我随便聊聊"
 # Emitted only when an assessment_action receipt exists for this reply.
 RECORDED_FACT = "已记录你的回答。"
+# Settles a member after the test is already closed, with no student-visible bubble.
+SILENT_MEMBER_LINE = "\u2060"
 
 WRITE_TOOLS = frozenset({"assessment_action", "edit_assessment", "update_learning_boundary"})
 _ROLE_FIELDS = ("answer_recorder", "question_guide", "scorer", "summarizer")

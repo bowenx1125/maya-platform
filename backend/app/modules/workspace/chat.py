@@ -734,11 +734,17 @@ def generate_reply(
         from app.modules.knowledge_sets.service import get_agent_runtime_knowledge
 
         canonical_knowledge = get_agent_runtime_knowledge(db, actor_context, agent.id)
+    audience: Literal["student", "teacher"] = "student"
+    if actor_context is not None:
+        membership = db.get(CourseMember, (row.course_id, actor_context.user.id))
+        if membership is not None and membership.role == "teacher":
+            audience = "teacher"
     messages, persona_hash = chat_messages(
         version,
         history,
         sources,
         canonical_knowledge=canonical_knowledge,
+        audience=audience,
     )
     reply, operation_id = real_reply(
         db,
@@ -867,7 +873,11 @@ def store_assistant_text(
     stored_sources = [item.model_dump(mode="json") for item in sources]
     # Teacher report tools forbid inventing links; append the real ones here
     # for single-Agent Chat the same way Team Leader replies do.
-    reply_with_reports = reply + _agent_report_download_suffix(db, conversation_id, request_id)
+    reply_with_reports = (
+        reply
+        + _agent_report_download_suffix(db, conversation_id, request_id)
+        + _agent_answer_sheet_suffix(db, conversation_id, request_id)
+    )
     write = db.execute(
         update(ConversationTurn)
         .where(
@@ -1110,6 +1120,23 @@ def _agent_report_download_suffix(db: Session, conversation_id: str, turn_id: st
     if not links:
         return ""
     return "\n\n" + "\n\n".join(f"[下载报告 / Download report]({path})" for path in links)
+
+
+def _agent_answer_sheet_suffix(db: Session, conversation_id: str, turn_id: str) -> str:
+    """Append the sheets this turn read. The model must not invent a table."""
+
+    from app.modules.workspace.team_runtime import answer_sheet_markdown
+
+    raw = db.scalars(
+        select(RuntimeToolReceipt.result_json)
+        .where(
+            RuntimeToolReceipt.conversation_id == conversation_id,
+            RuntimeToolReceipt.turn_id == turn_id,
+            RuntimeToolReceipt.tool_name == "read_student_answers",
+        )
+        .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
+    ).all()
+    return answer_sheet_markdown(raw)
 
 
 def session_view(

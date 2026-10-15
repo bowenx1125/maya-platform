@@ -114,9 +114,20 @@ def read_statistics(
     _identity: ToolCallIdentity,
 ) -> dict[str, Any]:
     arguments = ActivityArguments.model_validate(payload)
-    return read_assessment_activity_aggregate(
+    statistics = read_assessment_activity_aggregate(
         db, actor, course_id=row.course_id, activity_id=str(arguments.activity_id)
     ).model_dump(mode="json")
+    # The model quoted the field name when the summary was missing. Give it a
+    # status word instead, and keep the prose under summary.
+    for actor_row in statistics.get("actors") or []:
+        if not isinstance(actor_row, dict):
+            continue
+        summary = actor_row.pop("boundary_summary", None)
+        actor_row["summary"] = summary
+        actor_row["summary_status"] = (
+            "saved" if isinstance(summary, str) and summary.strip() else "not_saved"
+        )
+    return statistics
 
 
 def create_report(
@@ -229,7 +240,10 @@ def teacher_tools() -> dict[str, ToolSpec]:
             "read_course_statistics",
             "Teacher",
             "Read the current course's formal assessment aggregate, Public and Private "
-            "attempts alike. Ordinary chats outside a test are excluded.",
+            "attempts alike. Ordinary chats outside a test are excluded. "
+            "summary_status not_saved means the answers are saved and the summary write "
+            "failed: say that, and do not describe the attempt as still on a question. "
+            "Do not quote internal field names.",
             ActivityArguments,
             authorize_activity,
             read_statistics,
@@ -256,9 +270,11 @@ def teacher_tools() -> dict[str, ToolSpec]:
             "Read each formal attempt's answer sheet in an activity, newest first: every "
             "Question with the student's exact answers, points and feedback, and when the "
             "attempt started and ended. Use learner_ref from the statistics for one student. "
-            "Use it whenever the teacher asks what a student answered. Do not retype the "
-            "answers or dates in your reply: the server writes the exact sheets under it. "
-            "Name which attempt you mean by its start time.",
+            "Use it whenever the teacher asks what a student answered. phase "
+            "summary_not_saved means the answers are saved and the summary write failed. "
+            "Do not retype the answers or dates in your reply: the server writes the exact "
+            "sheets under it. Do not say a sheet or a download is below unless this tool "
+            "returns those attempts. Name which attempt you mean by its start time.",
             TranscriptArguments,
             authorize_transcripts,
             read_answers,

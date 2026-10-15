@@ -75,6 +75,7 @@ def drive_assessment(
     from .execution import _activity_executor
 
     attempted: set[tuple[str, int, Purpose]] = set()
+    retried: set[tuple[str, int, Purpose]] = set()
     for _step in range(MAX_STEPS):
         with factory() as db:
             row = db.get(Conversation, conversation_id)
@@ -87,15 +88,22 @@ def drive_assessment(
             purpose = _next_purpose(db, attempt)
             if purpose is None:
                 return
-            # The same step on the same attempt revision again means the
-            # executor did not save; stop instead of paying for it repeatedly.
+            # The same step on the same attempt revision means the executor did
+            # not save. Scoring is one attempt. A missed summary gets one server
+            # retry; a second miss is recorded for the teacher and stays off
+            # the student chat.
             key = (attempt.id, attempt.revision, purpose)
             if key in attempted:
-                LOGGER.warning(
-                    "Assessment step did not save attempt_id=%s purpose=%s", attempt.id, purpose
-                )
-                return
-            attempted.add(key)
+                if purpose != "boundary_summarize" or key in retried:
+                    LOGGER.warning(
+                        "Assessment step did not save attempt_id=%s purpose=%s",
+                        attempt.id,
+                        purpose,
+                    )
+                    return
+                retried.add(key)
+            else:
+                attempted.add(key)
             activity = db.get(AssessmentActivity, attempt.activity_id)
             if activity is None:
                 return
