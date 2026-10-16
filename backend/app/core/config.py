@@ -191,6 +191,22 @@ class Settings(BaseSettings):
     auth_login_queue_ticket_seconds: int = Field(
         default=180, ge=10, le=1_800, validation_alias="AUTH_LOGIN_QUEUE_TICKET_SECONDS"
     )
+    # Refuse new LLM HTTP attempts when host MemAvailable falls below this
+    # floor (MiB). Zero disables the guard. In-flight calls are not cancelled.
+    memory_guard_min_available_mb: int = Field(
+        default=500, ge=0, le=1_000_000, validation_alias="MEMORY_GUARD_MIN_AVAILABLE_MB"
+    )
+    # After pressure latches, MemAvailable must climb to this resume floor (MiB)
+    # before new LLM calls are admitted again. When <= min, hysteresis is off.
+    memory_guard_resume_available_mb: int = Field(
+        default=550,
+        ge=0,
+        le=1_000_000,
+        validation_alias="MEMORY_GUARD_RESUME_AVAILABLE_MB",
+    )
+    memory_guard_retry_seconds: int = Field(
+        default=15, ge=1, le=300, validation_alias="MEMORY_GUARD_RETRY_SECONDS"
+    )
     # Read-only SQLite snapshot imported into an empty PostgreSQL database on
     # startup. Empty means do not import. The source file is never modified.
     postgres_import_source: str = Field(default="", validation_alias="MAYA_POSTGRES_IMPORT_SOURCE")

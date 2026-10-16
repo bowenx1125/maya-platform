@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -910,6 +911,10 @@ def run_claimed_knowledge_generation(
                     content=exact_bytes,
                     timeout=HttpxLLMTransport.timeout(),
                 )
+            except PlatformError as exc:
+                repository.mark_not_sent(operation.id, safe_error_code=exc.code)
+                _mark_run_blocked(session_factory, run.id, token, exc.code)
+                raise
             except LLMTransportNotSent as exc:
                 repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)
                 _mark_run_blocked(session_factory, run.id, token, "llm_transport_not_sent")

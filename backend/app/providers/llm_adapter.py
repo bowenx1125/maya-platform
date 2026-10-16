@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from app.core.errors import PlatformError
 from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
 from app.modules.debates.generation.prompt_budget import (
     PromptBudgetError,
@@ -1102,6 +1103,8 @@ class DashScopeLLMAdapter:
                 json=request.body,
                 timeout=HttpxLLMTransport.timeout(),
             )
+        except PlatformError:
+            raise
         except LLMTransportNotSent:
             raise
         except LLMAcceptanceUnknown:

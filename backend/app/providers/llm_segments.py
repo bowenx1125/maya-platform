@@ -20,6 +20,7 @@ from typing import Literal, cast
 
 import httpx
 
+from app.core.errors import PlatformError
 from app.modules.debates.generation.prompt_budget import (
     PromptBudgetError,
     preflight_prompt_budget,
@@ -857,6 +858,8 @@ class SegmentLLMAdapter:
                 json=request.body,
                 timeout=HttpxLLMTransport.timeout(),
             )
+        except PlatformError:
+            raise
         except LLMTransportNotSent:
             raise
         except LLMAcceptanceUnknown:

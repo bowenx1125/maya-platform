@@ -8,6 +8,8 @@ from typing import Literal, Protocol
 
 import httpx
 
+from app.core.memory_guard import ensure_memory_for_new_llm
+
 # Measured TLS handshakes to the fixed Beijing endpoint take 2.0-2.7s from
 # a developer network, so a 5s connect budget classified a healthy endpoint
 # as unreachable and burned an acceptance call. The total request timeout and
@@ -172,6 +174,9 @@ class HttpxLLMTransport:
         json_payload: Mapping[str, object] | None = None,
         content: bytes | None = None,
     ) -> object:
+        # Refuse a *new* outbound attempt when the host is already near OOM.
+        # PlatformError must propagate unchanged; in-flight calls are untouched.
+        ensure_memory_for_new_llm()
         # A caller may pass the frozen total as a float or an HTTPX timeout;
         # either way redirects stay disabled and this method performs one call.
         resolved_timeout: float | httpx.Timeout
