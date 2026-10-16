@@ -31,7 +31,6 @@ https://{$MAYA_DOMAIN} {
 	@platform path /api/* /ws/*
 	handle @platform {
 		reverse_proxy backend:8000 {
-			resolvers 127.0.0.11
 			lb_policy cookie
 			lb_try_duration 2s
 			health_uri /health/ready
