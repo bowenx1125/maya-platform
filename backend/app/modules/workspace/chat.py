@@ -30,6 +30,7 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.create_admission import create_admission_slot
 from app.core.write_guard import write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import (
@@ -1359,49 +1360,50 @@ def create_conversation(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> ConversationSession:
-    # Freeze one coherent Team definition while another request may save a new version.
-    if db.get_bind().dialect.name == "sqlite":
-        db.rollback()
-        begin_immediate(db)
-    if payload.entry is not None and not isinstance(payload.entry, AgentChatEntry):
-        row = create_team_conversation(db, context, payload.entry)
+    with create_admission_slot():
+        # Freeze one coherent Team definition while another request may save a new version.
+        if db.get_bind().dialect.name == "sqlite":
+            db.rollback()
+            begin_immediate(db)
+        if payload.entry is not None and not isinstance(payload.entry, AgentChatEntry):
+            row = create_team_conversation(db, context, payload.entry)
+            return session_view(db, row, context, settings)
+        version_id = (
+            payload.entry.version_id
+            if isinstance(payload.entry, AgentChatEntry)
+            else payload.version_id
+        )
+        version = db.get(AgentVersion, str(version_id))
+        agent = db.get(Agent, version.agent_id) if version else None
+        if (
+            version is None
+            or agent is None
+            or agent.status != "active"
+            or agent.deleted_at is not None
+            or version.state != "published"
+            or agent.current_published_version_id != version.id
+            or not _version_chat_allowed(db, context, version, agent)
+        ):
+            raise not_found()
+        course_member(db, context, agent.course_id)
+        row = Conversation(
+            id=str(uuid4()),
+            user_id=context.user.id,
+            course_id=agent.course_id,
+            entry_kind="agent",
+            chat_visibility="private",
+            origin="single_agent",
+            agent_version_id=version.id,
+            snapshot_id=version.knowledge_snapshot_id,
+            agent_name_snapshot=agent.name,
+            agent_authorization_epoch=agent.authorization_epoch,
+            revision=0,
+            active_request_id=None,
+            created_at=datetime.now(UTC),
+        )
+        db.add(row)
+        db.flush()
         return session_view(db, row, context, settings)
-    version_id = (
-        payload.entry.version_id
-        if isinstance(payload.entry, AgentChatEntry)
-        else payload.version_id
-    )
-    version = db.get(AgentVersion, str(version_id))
-    agent = db.get(Agent, version.agent_id) if version else None
-    if (
-        version is None
-        or agent is None
-        or agent.status != "active"
-        or agent.deleted_at is not None
-        or version.state != "published"
-        or agent.current_published_version_id != version.id
-        or not _version_chat_allowed(db, context, version, agent)
-    ):
-        raise not_found()
-    course_member(db, context, agent.course_id)
-    row = Conversation(
-        id=str(uuid4()),
-        user_id=context.user.id,
-        course_id=agent.course_id,
-        entry_kind="agent",
-        chat_visibility="private",
-        origin="single_agent",
-        agent_version_id=version.id,
-        snapshot_id=version.knowledge_snapshot_id,
-        agent_name_snapshot=agent.name,
-        agent_authorization_epoch=agent.authorization_epoch,
-        revision=0,
-        active_request_id=None,
-        created_at=datetime.now(UTC),
-    )
-    db.add(row)
-    db.flush()
-    return session_view(db, row, context, settings)
 
 
 _MEMORY_CHAT_MESSAGE = "你目前记得我们之前聊过什么？"

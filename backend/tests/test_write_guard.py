@@ -34,6 +34,7 @@ def _settings(**overrides: object) -> Settings:
         "write_guard_queue_max": 100,
         "write_guard_wait_seconds": 180,
         "write_guard_retry_seconds": 5,
+        "host_load_reject_threshold": 0,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

@@ -8,6 +8,7 @@ from typing import Literal, Protocol
 
 import httpx
 
+from app.core.host_load_guard import ensure_host_load_ok
 from app.core.llm_admission import llm_admission_slot
 from app.core.memory_guard import ensure_memory_for_new_llm
 
@@ -180,10 +181,12 @@ class HttpxLLMTransport:
         # propagate unchanged; in-flight calls are untouched; the slot is
         # always released when this attempt finishes.
         ensure_memory_for_new_llm()
+        ensure_host_load_ok()
         with llm_admission_slot():
-            # Recheck memory after any queue wait so a recovered/falling host
+            # Recheck memory/load after any queue wait so a recovered/falling host
             # is observed before bytes leave.
             ensure_memory_for_new_llm()
+            ensure_host_load_ok()
             # A caller may pass the frozen total as a float or an HTTPX timeout;
             # either way redirects stay disabled and this method performs one call.
             resolved_timeout: float | httpx.Timeout

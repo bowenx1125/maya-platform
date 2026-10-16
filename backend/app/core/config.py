@@ -238,6 +238,34 @@ class Settings(BaseSettings):
     write_guard_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
+    # Cap concurrent Agent/Team/Conversation creates per process. MayaLoad's
+    # n=40 ChatForm spike hit load ~13.5 during create before LLM busy fired;
+    # default 4 keeps two replicas near ~8 concurrent creates. Zero disables.
+    create_admission_limit: int = Field(
+        default=4, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
+    )
+    create_admission_queue_max: int = Field(
+        default=100, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_QUEUE_MAX"
+    )
+    create_admission_wait_seconds: int = Field(
+        default=60, ge=0, le=3_600, validation_alias="CREATE_ADMISSION_WAIT_SECONDS"
+    )
+    create_admission_retry_seconds: int = Field(
+        default=5, ge=1, le=300, validation_alias="CREATE_ADMISSION_RETRY_SECONDS"
+    )
+    # Refuse new LLM / write / create admissions when host 1m loadavg is at or
+    # above this threshold. Zero disables. In-flight work is not cancelled.
+    host_load_reject_threshold: float = Field(
+        default=6.0, ge=0, le=10_000, validation_alias="HOST_LOAD_REJECT_THRESHOLD"
+    )
+    # After pressure latches, 1m load must fall to this resume floor before new
+    # heavy work is admitted. When >= reject, hysteresis is off.
+    host_load_resume_threshold: float = Field(
+        default=4.0, ge=0, le=10_000, validation_alias="HOST_LOAD_RESUME_THRESHOLD"
+    )
+    host_load_retry_seconds: int = Field(
+        default=15, ge=1, le=300, validation_alias="HOST_LOAD_RETRY_SECONDS"
+    )
     # Read-only SQLite snapshot imported into an empty PostgreSQL database on
     # startup. Empty means do not import. The source file is never modified.
     postgres_import_source: str = Field(default="", validation_alias="MAYA_POSTGRES_IMPORT_SOURCE")

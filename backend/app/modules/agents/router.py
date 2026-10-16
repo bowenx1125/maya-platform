@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
 
 from app.core.config import Settings, get_settings
+from app.core.create_admission import create_admission_slot
 from app.core.errors import (
     Error,
     PlatformError,
@@ -803,73 +804,74 @@ def create_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
-    scoped_student_group_role(db, context, str(group_id))
-    body_hash = parse_json_payload_hash(
-        "createAgent", context, [str(group_id)], payload.model_dump()
-    )
-    record, replay = claim_idempotency(db, context, "createAgent", idempotency_key, body_hash)
-    if replay is not None:
-        return replay  # type: ignore[return-value]
-    _begin_immediate(db)
-    try:
+    with create_admission_slot():
         scoped_student_group_role(db, context, str(group_id))
-        assert_claim_owned(db, record)
-        _require_available_agent_name(
-            db,
-            payload.name,
+        body_hash = parse_json_payload_hash(
+            "createAgent", context, [str(group_id)], payload.model_dump()
+        )
+        record, replay = claim_idempotency(db, context, "createAgent", idempotency_key, body_hash)
+        if replay is not None:
+            return replay  # type: ignore[return-value]
+        _begin_immediate(db)
+        try:
+            scoped_student_group_role(db, context, str(group_id))
+            assert_claim_owned(db, record)
+            _require_available_agent_name(
+                db,
+                payload.name,
+                group_id=str(group_id),
+                owner_user_id=context.user.id,
+                visibility=payload.visibility,
+            )
+        except PlatformError:
+            abandon_claim(db, record)
+            raise
+        timestamp = _time()
+        group = db.get(Group, str(group_id))
+        if group is None:
+            abandon_claim(db, record)
+            raise not_found()
+        agent = Agent(
+            id=str(uuid4()),
             group_id=str(group_id),
             owner_user_id=context.user.id,
+            course_id=group.course_id,
+            ownership_scope="group",
             visibility=payload.visibility,
+            authorization_epoch=0,
+            name=payload.name,
+            description=(
+                payload.description if payload.description and payload.description.strip() else ""
+            ),
+            metadata_revision=0,
+            status="active",
+            created_at=timestamp,
+            updated_at=timestamp,
         )
-    except PlatformError:
-        abandon_claim(db, record)
-        raise
-    timestamp = _time()
-    group = db.get(Group, str(group_id))
-    if group is None:
-        abandon_claim(db, record)
-        raise not_found()
-    agent = Agent(
-        id=str(uuid4()),
-        group_id=str(group_id),
-        owner_user_id=context.user.id,
-        course_id=group.course_id,
-        ownership_scope="group",
-        visibility=payload.visibility,
-        authorization_epoch=0,
-        name=payload.name,
-        description=(
-            payload.description if payload.description and payload.description.strip() else ""
-        ),
-        metadata_revision=0,
-        status="active",
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    version = AgentVersion(
-        id=str(uuid4()),
-        agent_id=agent.id,
-        version_seq=0,
-        state="draft",
-        revision=0,
-        agent_md="",
-        raw_agent_md_hash=raw_agent_md_hash(""),
-        persona_required=True,
-        avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
-        authorization_epoch=agent.authorization_epoch,
-        draft_visibility=payload.visibility,
-        published_visibility=None,
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    db.add_all([agent, version])
-    db.flush()
-    result = _detail_with_metadata(db, agent, "owner", context)
-    finish_idempotency(db, record, 201, result.model_dump(mode="json"))
-    saga_checkpoint("create_agent.before_final_commit")
-    db.commit()
-    saga_checkpoint("create_agent.after_final_commit")
-    return result
+        version = AgentVersion(
+            id=str(uuid4()),
+            agent_id=agent.id,
+            version_seq=0,
+            state="draft",
+            revision=0,
+            agent_md="",
+            raw_agent_md_hash=raw_agent_md_hash(""),
+            persona_required=True,
+            avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+            authorization_epoch=agent.authorization_epoch,
+            draft_visibility=payload.visibility,
+            published_visibility=None,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        db.add_all([agent, version])
+        db.flush()
+        result = _detail_with_metadata(db, agent, "owner", context)
+        finish_idempotency(db, record, 201, result.model_dump(mode="json"))
+        saga_checkpoint("create_agent.before_final_commit")
+        db.commit()
+        saga_checkpoint("create_agent.after_final_commit")
+        return result
 
 
 @router.get(
@@ -922,74 +924,75 @@ def create_course_workspace_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
-    course_key = str(course_id)
-    if course_member_role(db, context.user.id, course_key) != "teacher":
-        raise not_found()
-    body_hash = parse_json_payload_hash(
-        "createCourseWorkspaceAgent", context, [course_key, "personal"], payload.model_dump()
-    )
-    record, replay = claim_idempotency(
-        db, context, "createCourseWorkspaceAgent", idempotency_key, body_hash
-    )
-    if replay is not None:
-        return replay  # type: ignore[return-value]
-    _begin_immediate(db)
-    try:
+    with create_admission_slot():
+        course_key = str(course_id)
         if course_member_role(db, context.user.id, course_key) != "teacher":
             raise not_found()
-        assert_claim_owned(db, record)
-        _require_available_agent_name(
-            db,
-            payload.name,
+        body_hash = parse_json_payload_hash(
+            "createCourseWorkspaceAgent", context, [course_key, "personal"], payload.model_dump()
+        )
+        record, replay = claim_idempotency(
+            db, context, "createCourseWorkspaceAgent", idempotency_key, body_hash
+        )
+        if replay is not None:
+            return replay  # type: ignore[return-value]
+        _begin_immediate(db)
+        try:
+            if course_member_role(db, context.user.id, course_key) != "teacher":
+                raise not_found()
+            assert_claim_owned(db, record)
+            _require_available_agent_name(
+                db,
+                payload.name,
+                owner_user_id=context.user.id,
+                course_id=course_key,
+                visibility=payload.visibility,
+            )
+        except PlatformError:
+            abandon_claim(db, record)
+            raise
+        timestamp = _time()
+        agent = Agent(
+            id=str(uuid4()),
+            group_id=None,
             owner_user_id=context.user.id,
             course_id=course_key,
+            ownership_scope="personal",
             visibility=payload.visibility,
+            authorization_epoch=0,
+            name=payload.name,
+            description=(
+                payload.description if payload.description and payload.description.strip() else ""
+            ),
+            metadata_revision=0,
+            status="active",
+            created_at=timestamp,
+            updated_at=timestamp,
         )
-    except PlatformError:
-        abandon_claim(db, record)
-        raise
-    timestamp = _time()
-    agent = Agent(
-        id=str(uuid4()),
-        group_id=None,
-        owner_user_id=context.user.id,
-        course_id=course_key,
-        ownership_scope="personal",
-        visibility=payload.visibility,
-        authorization_epoch=0,
-        name=payload.name,
-        description=(
-            payload.description if payload.description and payload.description.strip() else ""
-        ),
-        metadata_revision=0,
-        status="active",
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    version = AgentVersion(
-        id=str(uuid4()),
-        agent_id=agent.id,
-        version_seq=0,
-        state="draft",
-        revision=0,
-        agent_md="",
-        raw_agent_md_hash=raw_agent_md_hash(""),
-        persona_required=True,
-        avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
-        authorization_epoch=agent.authorization_epoch,
-        draft_visibility="private",
-        published_visibility=None,
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    db.add_all([agent, version])
-    db.flush()
-    result = _detail_with_metadata(db, agent, "owner", context)
-    finish_idempotency(db, record, 201, result.model_dump(mode="json"))
-    saga_checkpoint("create_course_workspace_agent.before_final_commit")
-    db.commit()
-    saga_checkpoint("create_course_workspace_agent.after_final_commit")
-    return result
+        version = AgentVersion(
+            id=str(uuid4()),
+            agent_id=agent.id,
+            version_seq=0,
+            state="draft",
+            revision=0,
+            agent_md="",
+            raw_agent_md_hash=raw_agent_md_hash(""),
+            persona_required=True,
+            avatar_config_json=DEFAULT_AVATAR_CONFIG.model_dump_json(),
+            authorization_epoch=agent.authorization_epoch,
+            draft_visibility="private",
+            published_visibility=None,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        db.add_all([agent, version])
+        db.flush()
+        result = _detail_with_metadata(db, agent, "owner", context)
+        finish_idempotency(db, record, 201, result.model_dump(mode="json"))
+        saga_checkpoint("create_course_workspace_agent.before_final_commit")
+        db.commit()
+        saga_checkpoint("create_course_workspace_agent.after_final_commit")
+        return result
 
 
 @router.get(

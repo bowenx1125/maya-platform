@@ -37,6 +37,7 @@ def _settings(**overrides: object) -> Settings:
         "llm_admission_wait_seconds": 180,
         "llm_admission_retry_seconds": 5,
         "memory_guard_min_available_mb": 0,
+        "host_load_reject_threshold": 0,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -152,6 +153,10 @@ def test_transport_holds_admission_around_http(monkeypatch: pytest.MonkeyPatch) 
         "app.providers.llm_transport.ensure_memory_for_new_llm",
         lambda settings=None: None,
     )
+    monkeypatch.setattr(
+        "app.providers.llm_transport.ensure_host_load_ok",
+        lambda settings=None: None,
+    )
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         HttpxLLMTransport(client).post(
@@ -190,6 +195,10 @@ def test_transport_rejects_before_http_when_admission_busy(
 
     monkeypatch.setattr(
         "app.providers.llm_transport.ensure_memory_for_new_llm",
+        lambda settings=None: None,
+    )
+    monkeypatch.setattr(
+        "app.providers.llm_transport.ensure_host_load_ok",
         lambda settings=None: None,
     )
     monkeypatch.setattr(
