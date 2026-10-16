@@ -8,6 +8,7 @@ from typing import Literal, Protocol
 
 import httpx
 
+from app.core.llm_admission import llm_admission_slot
 from app.core.memory_guard import ensure_memory_for_new_llm
 
 # Measured TLS handshakes to the fixed Beijing endpoint take 2.0-2.7s from
@@ -174,52 +175,58 @@ class HttpxLLMTransport:
         json_payload: Mapping[str, object] | None = None,
         content: bytes | None = None,
     ) -> object:
-        # Refuse a *new* outbound attempt when the host is already near OOM.
-        # PlatformError must propagate unchanged; in-flight calls are untouched.
+        # Refuse a *new* outbound attempt when the host is already near OOM,
+        # then take one LLM admission slot (bounded queue). PlatformError must
+        # propagate unchanged; in-flight calls are untouched; the slot is
+        # always released when this attempt finishes.
         ensure_memory_for_new_llm()
-        # A caller may pass the frozen total as a float or an HTTPX timeout;
-        # either way redirects stay disabled and this method performs one call.
-        resolved_timeout: float | httpx.Timeout
-        if isinstance(timeout, httpx.Timeout):
-            resolved_timeout = timeout
-        else:
-            resolved_timeout = self.timeout()
-        try:
-            if self.client is not None:
-                return self._dispatch(
-                    self.client,
-                    url,
-                    headers=headers,
-                    timeout=resolved_timeout,
-                    json_payload=json_payload,
-                    content=content,
-                )
-            with httpx.Client(follow_redirects=False) as client:
-                return self._dispatch(
-                    client,
-                    url,
-                    headers=headers,
-                    timeout=resolved_timeout,
-                    json_payload=json_payload,
-                    content=content,
-                )
-        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
-            raise LLMTransportNotSent() from exc
-        except (
-            httpx.WriteError,
-            httpx.WriteTimeout,
-            httpx.ReadError,
-            httpx.ReadTimeout,
-            httpx.RemoteProtocolError,
-            httpx.NetworkError,
-            httpx.TimeoutException,
-        ) as exc:
-            # A write may have begun and read/protocol failures happen after
-            # send.  They can never authorize an automatic resend.
-            raise LLMAcceptanceUnknown() from exc
-        except httpx.HTTPError as exc:
-            # Unknown HTTPX failures are conservatively uncertain.
-            raise LLMAcceptanceUnknown() from exc
+        with llm_admission_slot():
+            # Recheck memory after any queue wait so a recovered/falling host
+            # is observed before bytes leave.
+            ensure_memory_for_new_llm()
+            # A caller may pass the frozen total as a float or an HTTPX timeout;
+            # either way redirects stay disabled and this method performs one call.
+            resolved_timeout: float | httpx.Timeout
+            if isinstance(timeout, httpx.Timeout):
+                resolved_timeout = timeout
+            else:
+                resolved_timeout = self.timeout()
+            try:
+                if self.client is not None:
+                    return self._dispatch(
+                        self.client,
+                        url,
+                        headers=headers,
+                        timeout=resolved_timeout,
+                        json_payload=json_payload,
+                        content=content,
+                    )
+                with httpx.Client(follow_redirects=False) as client:
+                    return self._dispatch(
+                        client,
+                        url,
+                        headers=headers,
+                        timeout=resolved_timeout,
+                        json_payload=json_payload,
+                        content=content,
+                    )
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+                raise LLMTransportNotSent() from exc
+            except (
+                httpx.WriteError,
+                httpx.WriteTimeout,
+                httpx.ReadError,
+                httpx.ReadTimeout,
+                httpx.RemoteProtocolError,
+                httpx.NetworkError,
+                httpx.TimeoutException,
+            ) as exc:
+                # A write may have begun and read/protocol failures happen after
+                # send.  They can never authorize an automatic resend.
+                raise LLMAcceptanceUnknown() from exc
+            except httpx.HTTPError as exc:
+                # Unknown HTTPX failures are conservatively uncertain.
+                raise LLMAcceptanceUnknown() from exc
 
     @staticmethod
     def _dispatch(

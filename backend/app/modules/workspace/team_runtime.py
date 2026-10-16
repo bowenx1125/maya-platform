@@ -22,6 +22,7 @@ from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.sqlutil import begin_immediate
+from app.core.write_guard import write_guard_slot
 from app.modules.auth.service import AuthContext
 from app.modules.learning.models import AssessmentAttempt
 from app.modules.learning.schemas import AssessmentRuntimeResult
@@ -3117,6 +3118,11 @@ def _formal_run_order(factory: SessionFactory, turn_id: str) -> list[str]:
 def execute_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
     if not claim.created:
         return
+    with write_guard_slot():
+        _execute_team_turn_body(factory, claim)
+
+
+def _execute_team_turn_body(factory: SessionFactory, claim: TeamClaim) -> None:
     with factory() as db:
         turn = db.get(ConversationTurn, claim.turn_id)
         if turn is None:

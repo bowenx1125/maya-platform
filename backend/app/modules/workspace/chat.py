@@ -30,6 +30,7 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.write_guard import write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import (
     get_database,
@@ -672,6 +673,32 @@ def generate_reply(
 ) -> tuple[str, list[ChatSource], str | None]:
     """Produce one full reply in memory.  This does not store assistant text."""
 
+    with write_guard_slot(settings):
+        return _generate_reply_body(
+            db,
+            settings,
+            row,
+            request_id,
+            claim_revision,
+            message,
+            actor_context=actor_context,
+            allow_not_sent_retry=allow_not_sent_retry,
+            generation_waker=generation_waker,
+        )
+
+
+def _generate_reply_body(
+    db: Session,
+    settings: Settings,
+    row: Conversation,
+    request_id: str,
+    claim_revision: int,
+    message: str,
+    *,
+    actor_context: AuthContext | None = None,
+    allow_not_sent_retry: bool = False,
+    generation_waker: Callable[[str], None] | None = None,
+) -> tuple[str, list[ChatSource], str | None]:
     require_single_runtime(row)
     current_turn = require_current_chat_claim(db, row.id, request_id, claim_revision)
     if current_turn.user_text != message:

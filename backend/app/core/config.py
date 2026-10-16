@@ -207,6 +207,37 @@ class Settings(BaseSettings):
     memory_guard_retry_seconds: int = Field(
         default=15, ge=1, le=300, validation_alias="MEMORY_GUARD_RETRY_SECONDS"
     )
+    # Cap concurrent in-flight LLM HTTP attempts per process. MayaLoad's real
+    # model Team assessment held at 10 concurrent (peak load ~3.8) and melted
+    # past load 8 at 20; default 12 is the midpoint of the 10–15 band. Final
+    # tune may follow ChatForm max-concurrency findings. Zero disables.
+    # Callers wait in a bounded queue so messages still send when a slot frees.
+    llm_admission_limit: int = Field(
+        default=12, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
+    )
+    llm_admission_queue_max: int = Field(
+        default=100, ge=0, le=10_000, validation_alias="LLM_ADMISSION_QUEUE_MAX"
+    )
+    llm_admission_wait_seconds: int = Field(
+        default=180, ge=0, le=3_600, validation_alias="LLM_ADMISSION_WAIT_SECONDS"
+    )
+    llm_admission_retry_seconds: int = Field(
+        default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
+    )
+    # Cap concurrent Team/Chat turn execution (write-heavy paths) per process.
+    # Same measured band as LLM admission; zero disables.
+    write_guard_limit: int = Field(
+        default=12, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
+    )
+    write_guard_queue_max: int = Field(
+        default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
+    )
+    write_guard_wait_seconds: int = Field(
+        default=180, ge=0, le=3_600, validation_alias="WRITE_GUARD_WAIT_SECONDS"
+    )
+    write_guard_retry_seconds: int = Field(
+        default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
+    )
     # Read-only SQLite snapshot imported into an empty PostgreSQL database on
     # startup. Empty means do not import. The source file is never modified.
     postgres_import_source: str = Field(default="", validation_alias="MAYA_POSTGRES_IMPORT_SOURCE")

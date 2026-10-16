@@ -1821,8 +1821,11 @@ function AgentChatScope({
           rememberTeam(refreshed);
           setSelectedTeam(refreshed);
           const turn = refreshed.turns.find((item) => item.id === requestId);
-          // Nothing was saved: give the message back to resend.
-          if (!turn) setTeamDraft(message);
+          // Nothing was saved, or the turn failed (e.g. server busy): give
+          // the message back so the student can resend without retyping.
+          if (!turn || turn.state === "failed") {
+            setTeamDraft((current) => current || message);
+          }
           setTeamError(
             turn?.state === "pending"
               ? new ChatRequestPendingError()
