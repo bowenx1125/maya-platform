@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from app.core.concurrency_gate import ConcurrencyGate, GateRejected
 from app.core.config import Settings, get_settings
 from app.core.errors import PlatformError
+from app.core.host_load_guard import ensure_host_load_ok
 
 _GATE = ConcurrencyGate()
 
@@ -56,6 +57,7 @@ def write_guard_slot(settings: Settings | None = None) -> Iterator[None]:
     """Hold one write-path slot for the duration of the ``with`` block."""
 
     runtime = settings if settings is not None else get_settings()
+    ensure_host_load_ok(runtime)
     limit = int(runtime.write_guard_limit)
     if limit <= 0:
         yield
@@ -65,6 +67,7 @@ def write_guard_slot(settings: Settings | None = None) -> Iterator[None]:
     retry_after = int(runtime.write_guard_retry_seconds)
     try:
         with _GATE.hold(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds):
+            ensure_host_load_ok(runtime)
             yield
     except GateRejected as rejected:
         raise write_pressure_error(

@@ -41,6 +41,7 @@ def _settings(**overrides: object) -> Settings:
         "memory_guard_min_available_mb": 500,
         "memory_guard_resume_available_mb": 550,
         "memory_guard_retry_seconds": 15,
+        "host_load_reject_threshold": 0,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -175,6 +176,10 @@ def test_transport_checks_memory_before_http(monkeypatch: pytest.MonkeyPatch) ->
         "app.providers.llm_transport.ensure_memory_for_new_llm",
         refuse,
     )
+    monkeypatch.setattr(
+        "app.providers.llm_transport.ensure_host_load_ok",
+        lambda settings=None: None,
+    )
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(PlatformError) as raised:
             HttpxLLMTransport(client).post(
@@ -205,6 +210,10 @@ def test_transport_post_bytes_also_checks_memory(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         "app.providers.llm_transport.ensure_memory_for_new_llm",
         refuse,
+    )
+    monkeypatch.setattr(
+        "app.providers.llm_transport.ensure_host_load_ok",
+        lambda settings=None: None,
     )
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(PlatformError) as raised:

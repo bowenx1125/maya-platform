@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, cast
 from uuid import UUID
 
+from app.core.create_admission import create_admission_slot
 from app.core.errors import Error, PlatformError
 from app.core.sqlutil import begin_immediate
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
@@ -100,18 +101,19 @@ def create_team(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> TeamDetail:
-    return _idempotent_mutation(
-        db,
-        context,
-        operation_id="createTeam",
-        idempotency_key=idempotency_key,
-        scope=[str(course_id)],
-        payload=payload,
-        status_code=201,
-        response_model=TeamDetail,
-        operation=lambda: service.create_team(db, context, str(course_id), payload),
-        replay=lambda body: _replay_team_detail(db, context, body),
-    )
+    with create_admission_slot():
+        return _idempotent_mutation(
+            db,
+            context,
+            operation_id="createTeam",
+            idempotency_key=idempotency_key,
+            scope=[str(course_id)],
+            payload=payload,
+            status_code=201,
+            response_model=TeamDetail,
+            operation=lambda: service.create_team(db, context, str(course_id), payload),
+            replay=lambda body: _replay_team_detail(db, context, body),
+        )
 
 
 @router.delete(
