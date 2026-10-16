@@ -8,6 +8,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from app.core.errors import Error, PlatformError
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
@@ -28,7 +29,6 @@ from app.modules.teams.schemas import (
 )
 from fastapi import APIRouter, Depends, Header, Query, Response
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["teams"])
@@ -65,7 +65,7 @@ def _idempotent_mutation[T: BaseModel](
             # A WAL reader cannot safely upgrade its snapshot after a rival
             # Team writer commits.
             db.rollback()
-            db.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(db)
         result = operation()
         finish_idempotency(db, record, status_code, result.model_dump(mode="json"))
         db.commit()
@@ -138,7 +138,7 @@ def delete_team(
     try:
         if db.get_bind().dialect.name == "sqlite":
             db.rollback()
-            db.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(db)
         service.delete_team(db, context, str(team_id))
         finish_idempotency(db, record, 204, {})
         db.commit()

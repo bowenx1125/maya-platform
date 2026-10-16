@@ -17,12 +17,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, not_found, stale_revision
 from app.core.models import CourseMember
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.service import AuthContext
 from app.modules.workspace.access import course_member
 
@@ -106,7 +107,7 @@ def _lock(db: Session) -> None:
         return
     db.rollback()
     try:
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
     except OperationalError:
         raise conflict("card_room_busy", "The table is busy; try again.") from None
 

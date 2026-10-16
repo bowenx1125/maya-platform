@@ -172,6 +172,24 @@ class Settings(BaseSettings):
     auth_abuse_max_buckets: int = Field(
         default=8_192, ge=128, le=65_536, validation_alias="AUTH_ABUSE_MAX_BUCKETS"
     )
+    # How many sign-ins may check a password at once. Further clients wait in
+    # line instead of receiving a capability error. Zero disables the queue.
+    auth_login_admission_limit: int = Field(
+        default=8, ge=0, le=10_000, validation_alias="AUTH_LOGIN_ADMISSION_LIMIT"
+    )
+    auth_login_admission_lease_seconds: int = Field(
+        default=60, ge=5, le=600, validation_alias="AUTH_LOGIN_ADMISSION_LEASE_SECONDS"
+    )
+    auth_login_queue_max: int = Field(
+        default=200, ge=1, le=10_000, validation_alias="AUTH_LOGIN_QUEUE_MAX"
+    )
+    auth_login_queue_retry_seconds: int = Field(
+        default=2, ge=1, le=60, validation_alias="AUTH_LOGIN_QUEUE_RETRY_SECONDS"
+    )
+    # Read-only SQLite snapshot imported into an empty PostgreSQL database on
+    # startup. Empty means do not import. The source file is never modified.
+    postgres_import_source: str = Field(default="", validation_alias="MAYA_POSTGRES_IMPORT_SOURCE")
+    postgres_allow_empty: bool = Field(default=False, validation_alias="MAYA_POSTGRES_ALLOW_EMPTY")
     # This is safe only when the application is reachable through the isolated
     # production Caddy network and that gateway overwrites X-Forwarded-For.
     auth_trust_gateway_x_forwarded_for: bool = Field(

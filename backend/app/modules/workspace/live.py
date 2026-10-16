@@ -7,10 +7,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Response, WebSocket, WebSocketDisconnect
 from sqlalchemy import delete, select
-from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error, PlatformError, conflict, not_found
+from app.core.sqlutil import dialect_insert
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext, get_auth_context
@@ -81,7 +81,7 @@ def heartbeat(
         expires_at=now + timedelta(seconds=20),
     )
     db.execute(
-        insert(LivePresence)
+        dialect_insert(db, LivePresence)
         .values(**values)
         .on_conflict_do_update(
             index_elements=[LivePresence.course_id],

@@ -15,7 +15,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_, case, delete, exists, or_, select, text, update
+from sqlalchemy import and_, case, delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,7 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.agents.markdown import markdown_hash
 from app.modules.agents.persona import (
     PersonaCompilerVersion,
@@ -1252,7 +1253,7 @@ def publish_without_snapshot(
     captured_pointer = agent.current_published_version_id
 
     db.rollback()
-    db.execute(text("BEGIN IMMEDIATE"))
+    begin_immediate(db)
     current_version = db.get(AgentVersion, version.id)
     current_agent = db.get(Agent, agent.id)
     if current_version is None or current_agent is None:
@@ -1916,7 +1917,7 @@ def create_snapshot(
         # Final transaction revalidates the complete captured relation and
         # source/index state before inserting immutable snapshot rows.
         db.rollback()
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
         if idempotency_record_id is not None and claim_token is not None:
             record = db.get(IdempotencyRecord, idempotency_record_id)
             if record is None:

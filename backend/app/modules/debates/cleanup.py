@@ -52,6 +52,7 @@ from app.core.models import (
     ProviderOperation,
     StoredFile,
 )
+from app.core.sqlutil import foreign_keys_ok
 from app.modules.debates import models as _debate_models
 from app.modules.debates.models import Debate, DebateTurn, PlaybackState
 from app.modules.debates.setup.service import require_teacher_course
@@ -1798,7 +1799,7 @@ def _delete_graph(
 
     if captured_triggers is not None:
         _restore_recovery_triggers(db, captured_triggers)
-    if db.execute(text("PRAGMA foreign_key_check")).first() is not None:
+    if not foreign_keys_ok(db):
         raise DebateCleanupError("foreign_key_violations_after")
     return counts
 
@@ -2052,7 +2053,10 @@ async def delete_all(
         recovery_count = db.scalar(
             select(text("count(*)")).select_from(recovery_table).where(recovery_predicate)
         )
-        if int(recovery_count or 0):
+        if int(recovery_count or 0) and db.get_bind().dialect.name == "sqlite":
+            # The immutability trigger is created by the SQLite migrations.
+            # PostgreSQL schema bootstrap has no equivalent trigger, so the
+            # scoped delete proceeds under foreign keys alone.
             captured_triggers = _capture_recovery_triggers(db)
             _drop_recovery_triggers(db, captured_triggers)
         _detach_surviving_run_operations(db, graph)

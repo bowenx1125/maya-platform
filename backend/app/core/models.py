@@ -30,6 +30,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.core.identity import group_name_key, username_key
+from app.core.sqlutil import portable_sql
 
 
 def _course_id_from_group(context: object) -> str | None:
@@ -392,6 +393,7 @@ class AgentVersion(Base):
             "agent_id",
             unique=True,
             sqlite_where=(state == "draft"),
+            postgresql_where=(state == "draft"),
         ),
     )
 
@@ -562,6 +564,7 @@ class AgentVersionDocument(Base):
             "order_index",
             unique=True,
             sqlite_where=(enabled.is_(True)),
+            postgresql_where=(enabled.is_(True)),
         ),
         Index("ix_agent_version_documents_document", "document_id"),
     )
@@ -996,12 +999,14 @@ class Job(Base):
             "insight_snapshot_id",
             unique=True,
             sqlite_where=insight_snapshot_id.is_not(None),
+            postgresql_where=insight_snapshot_id.is_not(None),
         ),
         Index(
             "uq_jobs_report_revision",
             "report_revision_id",
             unique=True,
             sqlite_where=report_revision_id.is_not(None),
+            postgresql_where=report_revision_id.is_not(None),
         ),
         Index(
             "uq_jobs_operation_idempotency_key",
@@ -1009,6 +1014,7 @@ class Job(Base):
             "idempotency_key",
             unique=True,
             sqlite_where=idempotency_key.is_not(None),
+            postgresql_where=idempotency_key.is_not(None),
         ),
     )
 
@@ -1123,6 +1129,10 @@ class VoiceProfile(Base):
                 "scope = 'system' AND COALESCE(json_extract(provenance_json, '$.kind'), '') "
                 "!= 'preset'"
             ),
+            postgresql_where=sql_text(
+                "scope = 'system' AND COALESCE(json_extract(provenance_json, '$.kind'), '') "
+                "!= 'preset'"
+            ),
         ),
     )
 
@@ -1211,12 +1221,18 @@ class VoiceProviderOperation(Base):
                 & (operation_type == "enroll")
                 & state.in_(("prepared", "dispatched", "reconciling", "outcome_unknown"))
             ),
+            postgresql_where=(
+                (profile_scope == "system")
+                & (operation_type == "enroll")
+                & state.in_(("prepared", "dispatched", "reconciling", "outcome_unknown"))
+            ),
         ),
         Index(
             "uq_voice_provider_operations_profile_delete",
             "profile_id",
             unique=True,
             sqlite_where=(operation_type == "delete"),
+            postgresql_where=(operation_type == "delete"),
         ),
     )
 
@@ -1308,13 +1324,25 @@ class ProviderPolicySnapshot(Base):
             name="ck_provider_policy_snapshots_account_product",
         ),
         CheckConstraint(
-            "prompt_response_logging_disabled = 1 "
-            "AND inference_log_backflow_disabled = 1 "
-            "AND optional_content_logging_disabled = 1 "
-            "AND service_improvement_disabled = 1",
+            portable_sql(
+                "prompt_response_logging_disabled = 1 "
+                "AND inference_log_backflow_disabled = 1 "
+                "AND optional_content_logging_disabled = 1 "
+                "AND service_improvement_disabled = 1",
+                "prompt_response_logging_disabled IS TRUE "
+                "AND inference_log_backflow_disabled IS TRUE "
+                "AND optional_content_logging_disabled IS TRUE "
+                "AND service_improvement_disabled IS TRUE",
+            ),
             name="ck_provider_policy_snapshots_controls",
         ),
-        CheckConstraint("storage_disclosed = 1", name="ck_provider_policy_snapshots_storage"),
+        CheckConstraint(
+            portable_sql(
+                "storage_disclosed = 1",
+                "storage_disclosed IS TRUE",
+            ),
+            name="ck_provider_policy_snapshots_storage",
+        ),
         CheckConstraint("snapshot_revision >= 1", name="ck_provider_policy_snapshots_revision"),
         Index("ix_provider_policy_snapshots_policy", "policy_id", "snapshot_revision"),
     )
@@ -1417,8 +1445,12 @@ class ProviderExportManifest(Base):
         ),
         CheckConstraint("operation_revision >= 1", name="ck_provider_export_manifests_revision"),
         CheckConstraint(
-            "contains_secret = 0 AND contains_identity = 0 "
-            "AND contains_private_audio = 0 AND contains_teacher_note = 0",
+            portable_sql(
+                "contains_secret = 0 AND contains_identity = 0 "
+                "AND contains_private_audio = 0 AND contains_teacher_note = 0",
+                "contains_secret IS FALSE AND contains_identity IS FALSE "
+                "AND contains_private_audio IS FALSE AND contains_teacher_note IS FALSE",
+            ),
             name="ck_provider_export_manifests_no_forbidden_data",
         ),
         CheckConstraint(
@@ -1595,7 +1627,11 @@ class DemoAcceptanceRun(Base):
             name="ck_demo_acceptance_runs_plan_version",
         ),
         CheckConstraint(
-            "length(fixture_hash) = 64 AND fixture_hash NOT GLOB '*[^0-9a-f]*'",
+            portable_sql(
+                "length(fixture_hash) = 64 AND fixture_hash NOT GLOB '*[^0-9a-f]*'",
+                "length(fixture_hash) = 64 AND "
+                "translate(fixture_hash, '0123456789abcdef', '') = ''",
+            ),
             name="ck_demo_acceptance_runs_fixture_hash",
         ),
         CheckConstraint(
@@ -1958,11 +1994,17 @@ class LlmRecoveryInput(Base):
             name="ck_llm_recovery_inputs_version",
         ),
         CheckConstraint(
-            "length(CAST(input_json AS BLOB)) > 0",
+            portable_sql(
+                "length(CAST(input_json AS BLOB)) > 0",
+                "octet_length(input_json) > 0",
+            ),
             name="ck_llm_recovery_inputs_size",
         ),
         CheckConstraint(
-            "length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'",
+            portable_sql(
+                "length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'",
+                "length(input_hash) = 64 AND translate(input_hash, '0123456789abcdef', '') = ''",
+            ),
             name="ck_llm_recovery_inputs_hash",
         ),
         Index("ix_llm_recovery_inputs_turn", "turn_id", "attempt_no"),

@@ -15,6 +15,25 @@ describe("Wave 1A locale and V2 style boundary", () => {
       "登录或注册尝试过于频繁，请在 37 秒后重试。",
     );
     expect(localizeError(error, "en")).toContain("37 seconds");
+    expect(
+      localizeError(
+        {
+          code: "auth_login_queued",
+          status: 429,
+          details: { position: 4, retry_after_seconds: 2 },
+        },
+        "zh",
+      ),
+    ).toBe("排队等待入列，前面还有 4 位。");
+    expect(
+      localizeError(
+        { code: "auth_login_queued", status: 429, details: { position: 0 } },
+        "en",
+      ),
+    ).toBe("Waiting to enter. You are next.");
+    expect(
+      localizeError({ code: "provider_unavailable", status: 503 }, "zh"),
+    ).toBe("平台能力暂时不可用。");
     const malformed = Object.assign(new Error("Please try again later."), {
       ...error,
       details: { retry_after_seconds: "not-a-delay" },

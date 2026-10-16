@@ -42,6 +42,7 @@ from app.core.models import (
     ProviderOperation,
     ProviderPolicySnapshot,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.debates.final_input import read_final_input
 from app.modules.debates.generation.segment_grading import (
     AgentGradeSummary,
@@ -2997,7 +2998,7 @@ def _begin_immediate(db: Session) -> None:
     """Acquire the short SQLite writer lock for a report command."""
 
     db.rollback()
-    db.execute(text("BEGIN IMMEDIATE"))
+    begin_immediate(db)
 
 
 def _request_hash(debate_id: str) -> str:

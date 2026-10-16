@@ -4,11 +4,11 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from app.core.identity import group_name_key, normalize_group_name
 from app.core.models import Group
+from app.core.sqlutil import dialect_insert
 
 
 def resolve_named_group(db: Session, course_id: str, name: str) -> Group:
@@ -16,7 +16,7 @@ def resolve_named_group(db: Session, course_id: str, name: str) -> Group:
     key = group_name_key(normalized)
     # The unique key arbitrates simultaneous first joins, including Unicode variants.
     db.execute(
-        insert(Group)
+        dialect_insert(db, Group)
         .values(
             id=str(uuid4()),
             course_id=course_id,

@@ -579,6 +579,8 @@ const enMessages = {
   errorRequestFallback: "The platform request could not be completed.",
   errorAuthRateLimited:
     "Too many sign-in or registration attempts. Try again in {seconds} seconds.",
+  loginQueueWaiting: "Waiting to enter. {position} people are ahead of you.",
+  loginQueueNext: "Waiting to enter. You are next.",
   wave3Title: "Interaction",
   interactionTitleClosed: "Classroom interaction",
   interactionTitleOpen: "Live classroom interaction",
@@ -1376,6 +1378,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorMalformedRequest: "请检查提交的信息后重试。",
   errorRequestFallback: "平台请求无法完成。",
   errorAuthRateLimited: "登录或注册尝试过于频繁，请在 {seconds} 秒后重试。",
+  loginQueueWaiting: "排队等待入列，前面还有 {position} 位。",
+  loginQueueNext: "排队等待入列，马上就到你了。",
   wave3Title: "课堂互动",
   interactionTitleClosed: "课堂互动",
   interactionTitleOpen: "课堂互动进行中",
@@ -1808,6 +1812,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  auth_login_queued: "loginQueueNext",
   voice_provider_unavailable: "errorVoiceProviderUnavailable",
   chat_acceptance_unknown: "errorChatAcceptanceUnknown",
   memory_entry_invalid: "brainformMemoryInvalid",
@@ -1834,6 +1839,24 @@ export function localizeError(
       status?: unknown;
       details?: unknown;
     };
+    if (
+      candidate.code === "auth_login_queued" &&
+      candidate.details &&
+      typeof candidate.details === "object" &&
+      "position" in candidate.details
+    ) {
+      const position = candidate.details.position;
+      if (
+        typeof position === "number" &&
+        Number.isSafeInteger(position) &&
+        position >= 0
+      ) {
+        return position === 0
+          ? t("loginQueueNext", locale)
+          : tm("loginQueueWaiting", { position }, locale);
+      }
+      return t("loginQueueNext", locale);
+    }
     if (
       candidate.code === "auth_rate_limited" &&
       candidate.details &&

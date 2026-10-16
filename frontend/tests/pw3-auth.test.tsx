@@ -153,7 +153,14 @@ describe("PW3-A anonymous Demo login", () => {
     fireEvent.submit(password.closest("form") as HTMLFormElement);
 
     await waitFor(() =>
-      expect(login).toHaveBeenCalledWith("student", "secret"),
+      expect(login).toHaveBeenCalledWith(
+        "student",
+        "secret",
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          onQueued: expect.any(Function),
+        }),
+      ),
     );
     expect(navigation.replace).toHaveBeenCalledWith("/student");
   });

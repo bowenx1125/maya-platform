@@ -633,6 +633,52 @@ export async function readSseEvents(
   }
 }
 
+function readLoginQueue(error: unknown): {
+  ticket?: string;
+  position: number;
+  retryAfterSeconds: number;
+} | null {
+  if (
+    !(error instanceof PlatformApiError) ||
+    error.code !== "auth_login_queued"
+  ) {
+    return null;
+  }
+  const details = error.details ?? {};
+  const position =
+    typeof details.position === "number" &&
+    Number.isSafeInteger(details.position)
+      ? details.position
+      : 0;
+  const retryAfterSeconds =
+    typeof details.retry_after_seconds === "number" &&
+    Number.isSafeInteger(details.retry_after_seconds) &&
+    details.retry_after_seconds > 0
+      ? details.retry_after_seconds
+      : 2;
+  const ticket =
+    typeof details.ticket === "string" ? details.ticket : undefined;
+  return { ticket, position, retryAfterSeconds };
+}
+
+function waitForQueue(
+  milliseconds: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, milliseconds);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("The sign-in wait was cancelled.", "AbortError"));
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
 async function unwrap<T>(result: ClientResult<T>): Promise<T> {
   if (result.data !== undefined) return result.data;
   if (result.response.ok) return undefined as T;
@@ -944,13 +990,41 @@ export class PlatformApi {
     }
   }
 
-  async login(username: string, password: string): Promise<AuthSession> {
-    const result = await this.client.POST("/auth/login", {
-      body: { username, password },
-    });
-    const session = await unwrap<AuthSession>(result);
-    this.setCsrfToken(session.csrf_token);
-    return session;
+  async login(
+    username: string,
+    password: string,
+    options?: {
+      onQueued?: (notice: {
+        position: number;
+        retryAfterSeconds: number;
+      }) => void;
+      signal?: AbortSignal;
+    },
+  ): Promise<AuthSession> {
+    let ticket: string | undefined;
+    for (;;) {
+      if (options?.signal?.aborted) {
+        throw new DOMException("The sign-in wait was cancelled.", "AbortError");
+      }
+      const result = await this.client.POST("/auth/login", {
+        body: { username, password },
+        headers: ticket ? { "X-Auth-Admission-Ticket": ticket } : {},
+      });
+      try {
+        const session = await unwrap<AuthSession>(result);
+        this.setCsrfToken(session.csrf_token);
+        return session;
+      } catch (cause) {
+        const queued = readLoginQueue(cause);
+        if (!queued) throw cause;
+        ticket = queued.ticket ?? ticket;
+        options?.onQueued?.({
+          position: queued.position,
+          retryAfterSeconds: queued.retryAfterSeconds,
+        });
+        await waitForQueue(queued.retryAfterSeconds * 1000, options?.signal);
+      }
+    }
   }
 
   async me(): Promise<AuthSession> {

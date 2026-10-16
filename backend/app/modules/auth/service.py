@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.identity import username_key
 from app.core.models import Course, CourseMember, Group, GroupMember, SessionRecord, User
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.credentials import (
     CredentialFileError,
     DemoAccount,
@@ -288,7 +289,7 @@ def _sync_graph_in_session(
         if not transaction_started:
             # ``BEGIN IMMEDIATE`` obtains SQLite's single writer lock before
             # any catalog-owned row is read or changed.
-            session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(session)
 
         course = session.scalar(select(Course).where(Course.code == "demo-course-001"))
         if course is None:
@@ -528,7 +529,7 @@ def bootstrap_demo_accounts(
     desired = _catalog_for_sync(settings, graph)
     try:
         with target.session() as session:
-            session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(session)
             seed_callback(session)
             outcome = _sync_graph_in_session(
                 session,

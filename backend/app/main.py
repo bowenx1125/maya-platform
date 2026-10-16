@@ -106,6 +106,7 @@ from app.providers.llm_recovery import recover_llm_startup
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.providers.policy_store import ensure_reviewed_policies
 from app.seed import COURSE_ID, seed_demo_data
+from app.tools.sqlite_import import maybe_import_postgres
 
 logger = logging.getLogger("maya.backend")
 
@@ -166,6 +167,22 @@ def _production_teacher_auth_available(database: Database, settings: Settings) -
             account.role == "teacher" and snapshot.user_id_for(account) in teacher_ids
             for account in snapshot.accounts
         )
+
+
+def _bootstrap_accounts(database: Database, settings: Settings) -> None:
+    """Seed and synchronize accounts once, while the startup lock is held."""
+
+    if settings.demo_mode or settings.production_account_catalog_available:
+
+        def seed_if_empty(session: Any) -> None:
+            if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
+                seed_demo_data(session)
+
+        bootstrap_demo_accounts(database, settings, seed_if_empty)
+        return
+    with database.session() as session:
+        if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
+            seed_demo_data(session)
 
 
 def create_app(
@@ -294,64 +311,49 @@ def create_app(
         runtime_settings.validate_runtime()
         runtime_settings.ensure_data_root()
         if initialize_database:
-            if runtime_settings.is_test:
-                runtime_database.initialize_schema()
-            else:
-                runtime_database.upgrade_schema()
+            with runtime_database.startup_lock():
+                if runtime_settings.is_test:
+                    runtime_database.initialize_schema()
+                else:
+                    runtime_database.upgrade_schema()
+                    maybe_import_postgres(
+                        runtime_database,
+                        runtime_settings.postgres_import_source,
+                        allow_empty=runtime_settings.postgres_allow_empty,
+                    )
+                _bootstrap_accounts(runtime_database, runtime_settings)
+            background_leader = runtime_database.try_background_leader()
+        else:
+            background_leader = False
+        if initialize_database:
             with runtime_database.session() as session:
                 preferences = session.get(ProviderPreferences, 1)
                 if preferences is not None:
                     next_settings = preferences_settings(app.state.base_settings, preferences)
                     app.state.prepare_provider_settings(next_settings)()
-                recover_single_chat_runs(session)
-                from app.modules.workspace.team_runtime import recover_team_runs
+                if background_leader:
+                    recover_single_chat_runs(session)
+                    from app.modules.workspace.team_runtime import recover_team_runs
 
-                recover_team_runs(session)
+                    recover_team_runs(session)
             with runtime_database.session() as session:
-                stranded = [
-                    (operation.id, accepted_chat_stage_complete(session, operation))
-                    for operation in session.scalars(
-                        select(ProviderOperation).where(
-                            ProviderOperation.provider_operation == "llm_agent_chat",
-                            ProviderOperation.state.in_(("reserved", "sending", "accepted")),
+                stranded = (
+                    []
+                    if not background_leader
+                    else [
+                        (operation.id, accepted_chat_stage_complete(session, operation))
+                        for operation in session.scalars(
+                            select(ProviderOperation).where(
+                                ProviderOperation.provider_operation == "llm_agent_chat",
+                                ProviderOperation.state.in_(("reserved", "sending", "accepted")),
+                            )
                         )
-                    )
-                ]
+                    ]
+                )
             for operation_id, stage_complete in stranded:
                 ProviderRepository(runtime_database).recover_one(
                     operation_id, staged_response_complete=stage_complete
                 )
-            if runtime_settings.demo_mode:
-                # Parse first, then seed a fresh organization and apply the
-                # complete private-account desired graph in one BEGIN
-                # IMMEDIATE transaction.  Once a catalog has renamed or
-                # disabled identities, skip the historical strict seed and
-                # let the durable account binding remain authoritative.
-                def seed_if_empty(session: Any) -> None:
-                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
-                        seed_demo_data(session)
-
-                bootstrap_demo_accounts(
-                    runtime_database,
-                    runtime_settings,
-                    seed_if_empty,
-                )
-            elif runtime_settings.production_account_catalog_available:
-                # Production reuses the strict private account synchronizer
-                # while Demo discovery, quick-login and switching stay off.
-                def seed_if_empty(session: Any) -> None:
-                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
-                        seed_demo_data(session)
-
-                bootstrap_demo_accounts(
-                    runtime_database,
-                    runtime_settings,
-                    seed_if_empty,
-                )
-            else:
-                with runtime_database.session() as session:
-                    if session.scalar(select(Course.id).where(Course.id == COURSE_ID)) is None:
-                        seed_demo_data(session)
             if runtime_settings.is_production and not _production_teacher_auth_available(
                 runtime_database, runtime_settings
             ):
@@ -374,24 +376,27 @@ def create_app(
                     if restored:
                         session.commit()
                         logger.info("Reinstalled %s reviewed provider policies", restored)
-            recover_embedding_provider_startup(runtime_database)
-            recover_llm_startup(ProviderRepository(runtime_database))
-            with runtime_database.session() as session:
-                resume_cleanup_journals(session, runtime_settings.resolved_data_root)
-            with runtime_database.session() as session:
-                startup_resume_audio_regeneration(session, playback_service=playback_service)
-                if playback_service.audio_store is not None:
-                    discard_unjournaled_audio_stages(session, playback_service.audio_store)
-            with runtime_database.session() as session:
-                recover_startup(session, runtime_settings.resolved_data_root)
-                startup_voice_cleanup(runtime_settings.resolved_data_root)
-                await playback_service.recover_startup(session)
-                recover_report_jobs(session)
-                recover_generation_runs_at_startup(session)
-            report_tasks.schedule_pending()
-            if not runtime_settings.is_test:
-                knowledge_generation_tasks.schedule_pending()
-                assessment_finalizer.recover()
+            if background_leader:
+                recover_embedding_provider_startup(runtime_database)
+                recover_llm_startup(ProviderRepository(runtime_database))
+                with runtime_database.session() as session:
+                    resume_cleanup_journals(session, runtime_settings.resolved_data_root)
+                with runtime_database.session() as session:
+                    startup_resume_audio_regeneration(session, playback_service=playback_service)
+                    if playback_service.audio_store is not None:
+                        discard_unjournaled_audio_stages(session, playback_service.audio_store)
+                with runtime_database.session() as session:
+                    recover_startup(session, runtime_settings.resolved_data_root)
+                    startup_voice_cleanup(runtime_settings.resolved_data_root)
+                    await playback_service.recover_startup(session)
+                    recover_report_jobs(session)
+                    recover_generation_runs_at_startup(session)
+                report_tasks.schedule_pending()
+                if not runtime_settings.is_test:
+                    knowledge_generation_tasks.schedule_pending()
+                    assessment_finalizer.recover()
+            else:
+                logger.info("Background recovery is owned by another backend replica")
         try:
             yield
         finally:

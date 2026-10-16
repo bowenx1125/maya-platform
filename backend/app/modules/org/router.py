@@ -12,11 +12,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Header, status
 from sqlalchemy import and_, or_, select
-from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error, forbidden, not_found
 from app.core.models import Course, CourseMember, Group, GroupMember, TeacherGroupAccess, User
+from app.core.sqlutil import dialect_insert
 from app.modules.auth.dependencies import (
     CourseScope,
     get_db,
@@ -303,7 +303,7 @@ def join_group(
 
     group = _teacher_group(db, context, str(group_id))
     db.execute(
-        insert(TeacherGroupAccess)
+        dialect_insert(db, TeacherGroupAccess)
         .values(group_id=group.id, user_id=context.user.id, created_at=datetime.now(UTC))
         .on_conflict_do_nothing(index_elements=["group_id", "user_id"])
     )

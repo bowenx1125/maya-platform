@@ -1,4 +1,8 @@
-"""Synchronous SQLAlchemy/SQLite database boundary."""
+"""Synchronous SQLAlchemy database boundary.
+
+SQLite remains the local and test database. PostgreSQL is the production
+database: concurrent writers, and one schema shared by every backend replica.
+"""
 
 from __future__ import annotations
 
@@ -7,16 +11,22 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.logging import configure_application_logging
 from app.core.models import Base
+from app.core.postgres_compat import ensure_postgres_compat
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
+POSTGRES_POOL_SIZE = 10
+POSTGRES_MAX_OVERFLOW = 20
 
-ALEMBIC_HEAD = "0064_active_debate_slot"
+ALEMBIC_HEAD = "0065_auth_login_admission"
+_STARTUP_LOCK = "maya-startup"
+_LEADER_LOCK = "maya-background-leader"
 
 
 def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
@@ -32,19 +42,32 @@ def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> Non
 
 
 def build_engine(database_url: str) -> Engine:
-    """Build an engine with SQLite safety settings and test-friendly pooling."""
+    """Build an engine. SQLite keeps its pragmas; PostgreSQL uses a checked pool."""
 
-    connect_args: dict[str, object] = {"check_same_thread": False}
-    kwargs: dict[str, object] = {
-        "future": True,
-        "connect_args": connect_args,
-    }
-    if database_url in {"sqlite://", "sqlite:///:memory:"}:
-        kwargs["poolclass"] = StaticPool
-    engine = create_engine(database_url, **kwargs)
-    if engine.url.get_backend_name() == "sqlite":
+    backend = make_url(database_url).get_backend_name()
+    if backend == "sqlite":
+        connect_args: dict[str, object] = {"check_same_thread": False}
+        kwargs: dict[str, object] = {
+            "future": True,
+            "connect_args": connect_args,
+        }
+        if database_url in {"sqlite://", "sqlite:///:memory:"}:
+            kwargs["poolclass"] = StaticPool
+        engine = create_engine(database_url, **kwargs)
         event.listen(engine, "connect", _sqlite_pragmas)
-    return engine
+        return engine
+    if backend == "postgresql":
+        engine = create_engine(
+            database_url,
+            future=True,
+            pool_pre_ping=True,
+            pool_size=POSTGRES_POOL_SIZE,
+            max_overflow=POSTGRES_MAX_OVERFLOW,
+            pool_timeout=30,
+        )
+        ensure_postgres_compat(engine)
+        return engine
+    raise RuntimeError("Unsupported database backend.")
 
 
 class Database:
@@ -54,6 +77,7 @@ class Database:
         self.database_url = database_url
         self.data_root = data_root
         self.using_migrations = False
+        self._leader_connection: Connection | None = None
         self.engine = build_engine(database_url)
         self.session_factory = sessionmaker(
             bind=self.engine,
@@ -72,6 +96,7 @@ class Database:
 
         # Register Wave 2/3 vertical-domain tables before isolated tests call
         # create_all. Deployment still uses Alembic as the source of truth.
+        from app.modules.auth import admission as _admission_models
         from app.modules.debates import models as _debate_models
         from app.modules.interactions import models as _interaction_models
         from app.modules.knowledge_sets import models as _knowledge_set_models
@@ -82,6 +107,7 @@ class Database:
         from app.modules.workspace import models as _workspace_models
 
         del (
+            _admission_models,
             _debate_models,
             _interaction_models,
             _knowledge_set_models,
@@ -91,6 +117,8 @@ class Database:
             _team_models,
             _workspace_models,
         )
+        if self.engine.url.get_backend_name() == "postgresql":
+            ensure_postgres_compat(self.engine)
         if self.engine.url.get_backend_name() == "sqlite":
             database = self.engine.url.database
             if database and database != ":memory:":
@@ -100,10 +128,7 @@ class Database:
         # the source of truth for the Wave 1A head.
         Base.metadata.create_all(self.engine)
 
-    def upgrade_schema(self) -> None:
-        """Upgrade an application database through the checked-in Alembic head."""
-
-        from alembic import command
+    def _alembic_config(self) -> object:
         from alembic.config import Config
 
         migration_dir = Path(__file__).resolve().parents[2]
@@ -111,7 +136,100 @@ class Database:
         config.set_main_option("script_location", str(migration_dir / "migrations"))
         config.set_main_option("sqlalchemy.url", self.database_url)
         config.attributes["database_url"] = self.database_url
-        command.upgrade(config, "head")
+        return config
+
+    def _alembic_version(self) -> str | None:
+        with self.engine.connect() as connection:
+            if self.engine.dialect.name == "postgresql":
+                exists = connection.execute(
+                    text("SELECT to_regclass('public.alembic_version')")
+                ).scalar_one_or_none()
+                if exists is None:
+                    return None
+            else:
+                row = connection.execute(
+                    text(
+                        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                        "AND name = 'alembic_version'"
+                    )
+                ).first()
+                if row is None:
+                    return None
+            return connection.execute(
+                text("SELECT version_num FROM alembic_version LIMIT 1")
+            ).scalar_one_or_none()
+
+    @contextmanager
+    def startup_lock(self) -> Iterator[None]:
+        """Serialize schema upgrade and the first import across replicas.
+
+        SQLite has one process, so the lock is a no-op. The PostgreSQL lock is
+        held on its own connection and released before background leadership is
+        claimed, so the two locks cannot deadlock.
+        """
+
+        if self.engine.dialect.name != "postgresql":
+            yield
+            return
+        connection = self.engine.connect()
+        connection.execute(
+            text("SELECT pg_advisory_lock(hashtext(:key))"),
+            {"key": _STARTUP_LOCK},
+        )
+        connection.commit()
+        try:
+            yield
+        finally:
+            connection.execute(
+                text("SELECT pg_advisory_unlock(hashtext(:key))"),
+                {"key": _STARTUP_LOCK},
+            )
+            connection.commit()
+            connection.close()
+
+    def try_background_leader(self) -> bool:
+        """True when this process should run startup recovery and schedulers.
+
+        The lock is held until dispose. Another replica serves HTTP and leaves
+        the stranded-work recovery to the holder, so a provider call is not
+        resumed twice.
+        """
+
+        if self.engine.dialect.name != "postgresql":
+            return True
+        connection = self.engine.connect()
+        acquired = connection.execute(
+            text("SELECT pg_try_advisory_lock(hashtext(:key))"),
+            {"key": _LEADER_LOCK},
+        ).scalar_one()
+        connection.commit()
+        if not acquired:
+            connection.close()
+            return False
+        self._leader_connection = connection
+        return True
+
+    def upgrade_schema(self) -> None:
+        """Upgrade an application database through the checked-in Alembic head.
+
+        PostgreSQL does not replay the SQLite-shaped migration history. An
+        empty database is created from the current models and stamped at head.
+        Later revisions run through Alembic and must stay dialect-neutral.
+        """
+
+        from alembic import command
+
+        if self.engine.dialect.name == "postgresql":
+            ensure_postgres_compat(self.engine)
+            version = self._alembic_version()
+            config = self._alembic_config()
+            if version is None:
+                self.initialize_schema()
+                command.stamp(config, "head")  # type: ignore[arg-type]
+            elif version != ALEMBIC_HEAD:
+                command.upgrade(config, "head")  # type: ignore[arg-type]
+        else:
+            command.upgrade(self._alembic_config(), "head")  # type: ignore[arg-type]
         # Alembic's fileConfig rewrites the root logger from alembic.ini,
         # which drops the application's stdout handler and forces the root
         # level back to WARN. Re-assert the application configuration so
@@ -146,15 +264,26 @@ class Database:
                     )
                     if not pragma_ready:
                         return False
-                    if self.using_migrations:
-                        version = connection.execute(
-                            text("SELECT version_num FROM alembic_version LIMIT 1")
-                        ).scalar_one_or_none()
-                        return version == ALEMBIC_HEAD
-                    return True
+                if self.using_migrations or self.engine.url.get_backend_name() == "postgresql":
+                    version = connection.execute(
+                        text("SELECT version_num FROM alembic_version LIMIT 1")
+                    ).scalar_one_or_none()
+                    return version == ALEMBIC_HEAD
                 return True
         except Exception:
             return False
 
     def dispose(self) -> None:
+        leader = self._leader_connection
+        self._leader_connection = None
+        if leader is not None:
+            try:
+                leader.execute(
+                    text("SELECT pg_advisory_unlock(hashtext(:key))"),
+                    {"key": _LEADER_LOCK},
+                )
+                leader.commit()
+            except Exception:
+                pass
+            leader.close()
         self.engine.dispose()

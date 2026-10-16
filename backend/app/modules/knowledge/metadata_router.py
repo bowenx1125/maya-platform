@@ -4,11 +4,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, conflict
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.dependencies import get_db, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.demo_baseline.service import reject_baseline_document_mutation
@@ -84,7 +84,7 @@ def rename_knowledge_document(
         return replay  # type: ignore[return-value]
     try:
         db.rollback()
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
         assert_claim_owned(db, record)
         document = visible_mutable_document(db, context, document_key).document
         if document.source_filename != payload.expected_filename:

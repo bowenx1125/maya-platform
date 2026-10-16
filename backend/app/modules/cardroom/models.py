@@ -27,7 +27,10 @@ class CardRoom(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "length(code) = 4 AND code GLOB '[0-9][0-9][0-9][0-9]'",
+            "length(code) = 4 AND substr(code, 1, 1) BETWEEN '0' AND '9' "
+            "AND substr(code, 2, 1) BETWEEN '0' AND '9' "
+            "AND substr(code, 3, 1) BETWEEN '0' AND '9' "
+            "AND substr(code, 4, 1) BETWEEN '0' AND '9'",
             name="ck_card_rooms_code",
         ),
         # A code names one open room at a time; closed rooms free it again.
@@ -36,6 +39,7 @@ class CardRoom(Base):
             "code",
             unique=True,
             sqlite_where=text("closed_at IS NULL"),
+            postgresql_where=text("closed_at IS NULL"),
         ),
         Index("ix_card_rooms_course_id", "course_id"),
     )

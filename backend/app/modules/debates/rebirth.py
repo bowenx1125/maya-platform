@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import conflict
 from app.core.models import DemoAcceptanceRun, FileReference, Job, StoredFile
+from app.core.sqlutil import foreign_keys_ok
 from app.modules.debates import cleanup as cleanup
 from app.modules.debates.models import AuditLog, DebateParticipant, DebateTurn
 from app.modules.debates.playback._core import PlaybackCore
@@ -28,12 +29,14 @@ def _write_reset_final_input(
 
     # BEGIN IMMEDIATE is held by both callers. Other writers cannot observe
     # the scoped exception; rollback also restores the original SQLite DDL.
-    trigger = db.scalar(
-        text(
-            "SELECT sql FROM sqlite_master WHERE type='trigger' "
-            "AND name='debate_final_input_immutable'"
+    trigger = None
+    if db.get_bind().dialect.name == "sqlite":
+        trigger = db.scalar(
+            text(
+                "SELECT sql FROM sqlite_master WHERE type='trigger' "
+                "AND name='debate_final_input_immutable'"
+            )
         )
-    )
     if trigger:
         db.execute(text("DROP TRIGGER debate_final_input_immutable"))
     try:
@@ -304,7 +307,7 @@ async def rebirth_debate(
             )
         )
         db.flush()
-        if db.execute(text("PRAGMA foreign_key_check")).first() is not None:
+        if not foreign_keys_ok(db):
             raise cleanup.DebateCleanupError("foreign_key_violations_after")
         result = cleanup.DeleteAllResult(
             debate_id=debate_id,

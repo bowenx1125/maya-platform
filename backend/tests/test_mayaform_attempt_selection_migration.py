@@ -117,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0064_active_debate_slot"
+    assert ALEMBIC_HEAD == "0065_auth_login_admission"
     _assert_foreign_keys(database)
 
 

@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from pwdlib import PasswordHash
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -30,6 +30,7 @@ from app.core.errors import PlatformError, conflict, unprocessable
 from app.core.identity import normalize_group_name as canonical_group_name
 from app.core.identity import username_key
 from app.core.models import Course, CourseMember, Group, GroupMember, User
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.credentials import CredentialFileError, active_catalog_snapshot
 from app.modules.auth.models import UserCredential
 from app.modules.auth.service import revoke_user_sessions
@@ -171,7 +172,7 @@ def register_student(
     # transaction must be serialized, but Argon2 work must not hold that lock.
     password_hash = _hasher().hash(password)
     try:
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db, lock_key="maya-student-registration")
     except OperationalError:
         raise conflict("registration_busy", "Registration is busy. Please try again.") from None
 

@@ -29,7 +29,13 @@ services:
       DEMO_ACCOUNTS_FILE: ${MAYA_PRODUCTION_ACCOUNTS_FILE:-/app/config/production-accounts/accounts.private.md}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET to a managed value of at least 32 bytes}
       CLASSROOM_PUBLIC_BASE_URL: https://${MAYA_DOMAIN:?Set MAYA_DOMAIN to the public DNS name}
-      DATABASE_URL: sqlite:////app/data/maya.sqlite3
+      DATABASE_URL: postgresql+psycopg://maya:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/maya
+      MAYA_POSTGRES_IMPORT_SOURCE: ${MAYA_POSTGRES_IMPORT_SOURCE:-/app/data/maya.sqlite3}
+      MAYA_POSTGRES_ALLOW_EMPTY: ${MAYA_POSTGRES_ALLOW_EMPTY:-false}
+      AUTH_LOGIN_ADMISSION_LIMIT: ${AUTH_LOGIN_ADMISSION_LIMIT:-8}
+      AUTH_LOGIN_ADMISSION_LEASE_SECONDS: ${AUTH_LOGIN_ADMISSION_LEASE_SECONDS:-60}
+      AUTH_LOGIN_QUEUE_MAX: ${AUTH_LOGIN_QUEUE_MAX:-200}
+      AUTH_LOGIN_QUEUE_RETRY_SECONDS: ${AUTH_LOGIN_QUEUE_RETRY_SECONDS:-2}
       DATA_ROOT: /app/data
       AUTH_TRUST_GATEWAY_X_FORWARDED_FOR: "true"
       AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT: ${AUTH_LOGIN_ACCOUNT_FAILURE_LIMIT:-10}
@@ -40,10 +46,32 @@ services:
       AUTH_ABUSE_MAX_BUCKETS: ${AUTH_ABUSE_MAX_BUCKETS:-8192}
     networks: !override
       - maya_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: ${BACKEND_REPLICAS:-2}
     volumes: !override
       - ${MAYA_PRODUCTION_DATA_DIR:?Set a dedicated production data directory}:/app/data
       - ${MAYA_PRODUCTION_CONFIG_DIR:?Set a dedicated production config directory}:/app/config:ro
       - ./contracts:/app/contracts:ro
+
+  postgres:
+    image: postgres:16.10-alpine
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      POSTGRES_USER: maya
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: maya
+    volumes:
+      - maya_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maya -d maya"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - maya_backend
 
 networks:
   maya_public:
@@ -54,3 +82,4 @@ networks:
 volumes:
   maya_caddy_data:
   maya_caddy_config:
+  maya_postgres:

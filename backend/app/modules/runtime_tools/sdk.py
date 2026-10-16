@@ -9,10 +9,11 @@ from contextvars import ContextVar
 from typing import Any
 
 from agno.tools.function import Function, FunctionCall
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.service import AuthContext
 from app.modules.workspace.models import (
     Conversation,
@@ -166,7 +167,7 @@ def _bind_one(
         try:
             with factory() as db:
                 if db.get_bind().dialect.name == "sqlite":
-                    db.execute(text("BEGIN IMMEDIATE"))
+                    begin_immediate(db)
                 identity = _call_identity(
                     db,
                     conversation_id=conversation_id,
