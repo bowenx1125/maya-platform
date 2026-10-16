@@ -186,6 +186,11 @@ class Settings(BaseSettings):
     auth_login_queue_retry_seconds: int = Field(
         default=2, ge=1, le=60, validation_alias="AUTH_LOGIN_QUEUE_RETRY_SECONDS"
     )
+    # How long a waiting ticket keeps its place without a retry. Long enough to
+    # survive a page refresh (re-typing the password) or a brief network drop.
+    auth_login_queue_ticket_seconds: int = Field(
+        default=180, ge=10, le=1_800, validation_alias="AUTH_LOGIN_QUEUE_TICKET_SECONDS"
+    )
     # Read-only SQLite snapshot imported into an empty PostgreSQL database on
     # startup. Empty means do not import. The source file is never modified.
     postgres_import_source: str = Field(default="", validation_alias="MAYA_POSTGRES_IMPORT_SOURCE")
