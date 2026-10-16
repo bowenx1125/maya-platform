@@ -36,6 +36,7 @@ _REVISIONS = (
     ("0061_personal_agent_debaters", "0062_teacher_personal_voices"),
     ("0062_teacher_personal_voices", "0063_attempt_actor_name"),
     ("0063_attempt_actor_name", "0064_active_debate_slot"),
+    ("0064_active_debate_slot", "0065_auth_login_admission"),
 )
 
 

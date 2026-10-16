@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import case, select, text, update
+from sqlalchemy import case, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
@@ -33,6 +33,7 @@ from app.core.models import (
     KnowledgeDocument,
     StoredFile,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.knowledge.files import (
     promote_atomic,
     remove_empty_directory,
@@ -167,7 +168,7 @@ def replace_document_copy_on_write(
         # A filename-only edit changes the visible name while keeping the
         # indexed content, receipts and generation inputs identical.
         db.rollback()
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
         record = db.get(IdempotencyRecord, idempotency_record_id)
         final_old = db.get(KnowledgeDocument, old_document_id)
         if record is None:
@@ -336,7 +337,7 @@ def replace_document_copy_on_write(
         # relation rewrites, revision CAS updates and old-document hiding are
         # one serialized decision.
         db.rollback()
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
         record = db.get(IdempotencyRecord, idempotency_record_id)
         if record is None:
             raise invalid_state("The idempotency claim could not be loaded.")

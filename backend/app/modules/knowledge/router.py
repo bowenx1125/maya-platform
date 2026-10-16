@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Request, Response
-from sqlalchemy import case, delete, or_, select, text, update
+from sqlalchemy import case, delete, or_, select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -36,6 +36,7 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.agents.schemas import (
     AgentVersion as AgentVersionDTO,
 )
@@ -908,7 +909,7 @@ def update_knowledge_document_visibility(
     if scoped.document.owner_user_id != context.user.id:
         raise not_found()
     db.rollback()
-    db.execute(text("BEGIN IMMEDIATE"))
+    begin_immediate(db)
     current = db.scalar(
         select(KnowledgeDocument).where(
             KnowledgeDocument.id == str(document_id),

@@ -9,9 +9,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.core.sqlutil import begin_immediate
 from app.modules.debates.models import Debate, DebateEvent
 
 from .events import DebateEventHub, EventRecord, validate_event_payload
@@ -69,7 +70,7 @@ class Wave3EventPublisher:
         validated = validate_event_payload(event_type, payload)
         session = self.session_factory()
         try:
-            session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(session)
             debate = session.scalar(select(Debate).where(Debate.id == debate_id))
             if debate is None:
                 session.rollback()

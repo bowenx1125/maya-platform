@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.models import Base
+from app.core.sqlutil import portable_sql
 
 
 class BarrageInsightSnapshot(Base):
@@ -93,7 +94,10 @@ class BarrageInsightSnapshot(Base):
         CheckConstraint("included_count >= 0", name="ck_barrage_insight_snapshots_included_count"),
         CheckConstraint("filtered_count >= 0", name="ck_barrage_insight_snapshots_filtered_count"),
         CheckConstraint(
-            "length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'",
+            portable_sql(
+                "length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'",
+                "length(input_hash) = 64 AND translate(input_hash, '0123456789abcdef', '') = ''",
+            ),
             name="ck_barrage_insight_snapshots_input_hash",
         ),
         CheckConstraint(
@@ -115,6 +119,7 @@ class BarrageInsightSnapshot(Base):
             "debate_id",
             unique=True,
             sqlite_where=(status == "generating"),
+            postgresql_where=(status == "generating"),
         ),
         Index("ix_barrage_insight_snapshots_debate", "debate_id", "revision_no"),
     )
@@ -351,7 +356,11 @@ class CivilizationReportRevision(Base):
             name="ck_civilization_report_revisions_generating_shape",
         ),
         CheckConstraint(
-            "length(input_manifest_hash) = 64 AND input_manifest_hash NOT GLOB '*[^0-9a-f]*'",
+            portable_sql(
+                "length(input_manifest_hash) = 64 AND input_manifest_hash NOT GLOB '*[^0-9a-f]*'",
+                "length(input_manifest_hash) = 64 AND "
+                "translate(input_manifest_hash, '0123456789abcdef', '') = ''",
+            ),
             name="ck_civilization_report_revisions_input_hash",
         ),
         Index(
@@ -359,6 +368,7 @@ class CivilizationReportRevision(Base):
             "debate_id",
             unique=True,
             sqlite_where=(status == "generating"),
+            postgresql_where=(status == "generating"),
         ),
         Index("ix_civilization_report_revisions_debate", "debate_id", "revision_no"),
     )

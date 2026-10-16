@@ -8,7 +8,7 @@ from unicodedata import normalize
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
-from sqlalchemy import and_, exists, or_, select, text, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
 
@@ -37,6 +37,7 @@ from app.core.models import (
     SnapshotDocument,
     User,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.agents.persona import (
     agent_name_from_markdown,
     raw_agent_md_hash,
@@ -426,7 +427,7 @@ def _begin_immediate(db: Session) -> None:
     """
 
     db.rollback()
-    db.execute(text("BEGIN IMMEDIATE"))
+    begin_immediate(db)
 
 
 def _acquire_publish_guard(
@@ -505,7 +506,7 @@ def _recover_publish_guard(db: Session, guard_id: str | None) -> None:
     if guard_id is None:
         return
     db.rollback()
-    db.execute(text("BEGIN IMMEDIATE"))
+    begin_immediate(db)
     changed = db.execute(
         update(FileOperation)
         .where(FileOperation.id == guard_id, FileOperation.state == "prepared")

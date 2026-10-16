@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, select, text, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ from app.core.errors import (
     unprocessable,
 )
 from app.core.models import CourseMember, IdempotencyRecord, User
+from app.core.sqlutil import begin_immediate
 from app.modules.debates.models import (
     Debate,
     DebateEvent,
@@ -747,7 +748,7 @@ def _begin_writer(session_factory: Callable[[], Session]) -> Session:
     session = session_factory()
     try:
         # This must be the first SQL statement on this short-lived connection.
-        session.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(session)
         return session
     except Exception:
         session.close()

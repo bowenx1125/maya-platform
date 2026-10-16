@@ -16,3 +16,5 @@ ADRs record durable decisions, not execution history. Status is one of `PROPOSED
   for single-Agent text/voice/3D chat, Provider controls and student Live.
 - [ADR-009](ADR-009-agno-sdk-boundary.md): pinned Agno version, public SDK boundary
   and W0 extension probes for MayaForm.
+- [ADR-010](ADR-010-postgres-replicas-login-admission.md): PostgreSQL, backend
+  replicas, and a login admission queue.

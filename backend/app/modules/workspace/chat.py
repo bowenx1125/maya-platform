@@ -9,7 +9,7 @@ from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
@@ -29,6 +29,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import (
     get_database,
@@ -1334,7 +1335,7 @@ def create_conversation(
     # Freeze one coherent Team definition while another request may save a new version.
     if db.get_bind().dialect.name == "sqlite":
         db.rollback()
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
     if payload.entry is not None and not isinstance(payload.entry, AgentChatEntry):
         row = create_team_conversation(db, context, payload.entry)
         return session_view(db, row, context, settings)
@@ -1480,7 +1481,7 @@ def create_memory_entry_action(
     source_kind, source_id = _memory_source_identity(payload)
     if db.get_bind().dialect.name == "sqlite":
         db.rollback()
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
     course_member(db, context, course_id)
     actor = db.get(User, context.user.id)
     if actor is None or actor.status != "active":

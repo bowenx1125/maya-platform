@@ -25,16 +25,18 @@ https://{$MAYA_DOMAIN} {
 		max_size 16KB
 	}
 
-	@platform_api path /api/*
-	handle @platform_api {
+	# One upstream pool so the load-balancer cookie keeps a browser on the
+	# replica that owns its in-memory playback work. Sign-in state itself
+	# lives in PostgreSQL and does not require that stickiness.
+	@platform path /api/* /ws/*
+	handle @platform {
 		reverse_proxy backend:8000 {
-			header_up X-Forwarded-For {remote_host}
-		}
-	}
-
-	@platform_websocket path /ws/*
-	handle @platform_websocket {
-		reverse_proxy backend:8000 {
+			resolvers 127.0.0.11
+			lb_policy cookie
+			lb_try_duration 2s
+			health_uri /health/ready
+			health_interval 10s
+			health_timeout 3s
 			header_up X-Forwarded-For {remote_host}
 		}
 	}

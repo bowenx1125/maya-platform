@@ -15,12 +15,13 @@ from uuid import UUID, uuid4, uuid5
 
 from agno.models.message import Message
 from agno.models.response import ModelResponse
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
+from app.core.sqlutil import begin_immediate
 from app.modules.auth.service import AuthContext
 from app.modules.learning.models import AssessmentAttempt
 from app.modules.learning.schemas import AssessmentRuntimeResult
@@ -136,7 +137,7 @@ def _canonical(value: object) -> str:
 def _begin(db: Session) -> None:
     db.rollback()
     if db.get_bind().dialect.name == "sqlite":
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
 
 
 @contextmanager

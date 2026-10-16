@@ -143,7 +143,15 @@ def test_production_compose_requires_dedicated_data_and_config_roots() -> None:
         "${MAYA_PRODUCTION_CONFIG_DIR:?Set a dedicated production config directory}:/app/config:ro"
         in compose
     )
-    assert "DATABASE_URL: sqlite:////app/data/maya.sqlite3" in compose
+    database_url = (
+        "DATABASE_URL: postgresql+psycopg://maya:"
+        "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/maya"
+    )
+    assert database_url in compose
+    assert "MAYA_POSTGRES_IMPORT_SOURCE:" in compose
+    assert "replicas: ${BACKEND_REPLICAS:-2}" in compose
+    assert 'command: ["postgres", "-c", "max_connections=200"]' in compose
+    assert "AUTH_LOGIN_ADMISSION_LIMIT:" in compose
     assert "DATA_ROOT: /app/data" in compose
     assert "./data:/app/data" not in compose
     assert "./backend/config:/app/config" not in compose

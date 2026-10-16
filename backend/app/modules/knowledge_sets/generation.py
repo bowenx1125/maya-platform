@@ -9,7 +9,7 @@ from datetime import UTC, timedelta
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -24,6 +24,7 @@ from app.core.models import (
     ProviderOperation,
     StoredFile,
 )
+from app.core.sqlutil import begin_immediate
 from app.modules.agents.schemas import KnowledgeGenerationIntent, KnowledgeGenerationReceipt
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
@@ -1428,7 +1429,7 @@ def current_generation_authorized_on_connection(
 
 def _start_immediate(db: Session) -> None:
     if db.get_bind().dialect.name == "sqlite":
-        db.execute(text("BEGIN IMMEDIATE"))
+        begin_immediate(db)
 
 
 def claim_generation_run(db: Session, run_id: str) -> str | None:

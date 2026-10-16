@@ -19,6 +19,7 @@ from uuid import uuid4
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
+from app.core.sqlutil import begin_immediate
 from app.providers.tts import TTS_UNAVAILABLE_CODES
 
 from .audio import AudioMetadata
@@ -787,12 +788,21 @@ class SqlPlaybackRepository(PlaybackRepository):
         )
 
     @staticmethod
+    def _dialect_name(db: Any) -> str:
+        bind = db.get_bind()
+        return str(getattr(getattr(bind, "dialect", None), "name", ""))
+
+    @staticmethod
     def _has_table(db: Any, table: str) -> bool:
         try:
-            row = db.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"),
-                {"name": table},
-            ).first()
+            if SqlPlaybackRepository._dialect_name(db) == "postgresql":
+                statement = text(
+                    "SELECT 1 FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = :name"
+                )
+            else:
+                statement = text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name")
+            row = db.execute(statement, {"name": table}).first()
         except Exception:
             return False
         return row is not None
@@ -800,6 +810,15 @@ class SqlPlaybackRepository(PlaybackRepository):
     @staticmethod
     def _columns(db: Any, table: str) -> set[str]:
         try:
+            if SqlPlaybackRepository._dialect_name(db) == "postgresql":
+                rows = db.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'public' AND table_name = :name"
+                    ),
+                    {"name": table},
+                ).all()
+                return {str(row[0]) for row in rows}
             return {str(row[1]) for row in db.execute(text(f"PRAGMA table_info({table})")).all()}
         except Exception:
             return set()
@@ -1019,7 +1038,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         try:
             # Do not issue a SELECT (or any other statement) before this
             # explicit write transaction.  This is the WAL snapshot fix.
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.rowid AS claim_rowid, successor.audio_file_id, "
@@ -1298,7 +1317,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return None
         with self.session_factory() as db:
             try:
-                db.execute(text("BEGIN IMMEDIATE"))
+                begin_immediate(db)
                 event = self._publish_text_current_tx(
                     db,
                     debate_id=debate_id,
@@ -1335,7 +1354,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.rowid, ps.current_turn_id, ps.control_version "
@@ -1399,7 +1418,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.rowid, ps.current_turn_id FROM playback_states AS ps "
@@ -1481,7 +1500,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return None
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             row = (
                 claim_session.execute(
                     text(
@@ -1648,7 +1667,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "teacher_user_id": teacher_user_id,
         }
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.rowid AS claim_rowid FROM playback_states AS ps "
@@ -1752,7 +1771,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             columns = self._columns(claim_session, "playback_states")
             pending_clear = ""
             if {
@@ -1824,7 +1843,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             raise RuntimeError("operator reset requires a SQL session factory")
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             row = (
                 claim_session.execute(
                     text(
@@ -2055,7 +2074,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             columns = self._columns(claim_session, "playback_states")
             required = {
                 "pending_action",
@@ -2173,7 +2192,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return False
         claim_session = self.session_factory()
         try:
-            claim_session.execute(text("BEGIN IMMEDIATE"))
+            begin_immediate(claim_session)
             columns = self._columns(claim_session, "playback_states")
             required = {
                 "pending_action",
@@ -2219,12 +2238,7 @@ class SqlPlaybackRepository(PlaybackRepository):
 
     @staticmethod
     def _has_table_in_session(session: Any, table_name: str) -> bool:
-        return bool(
-            session.execute(
-                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:table_name"),
-                {"table_name": table_name},
-            ).first()
-        )
+        return SqlPlaybackRepository._has_table(session, table_name)
 
     def save_turn_text(
         self,

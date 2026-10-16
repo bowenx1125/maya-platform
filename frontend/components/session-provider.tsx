@@ -38,7 +38,17 @@ type SessionContextValue = {
   identityGeneration: number;
   error: unknown;
   refresh: () => Promise<AuthSession | null>;
-  login: (username: string, password: string) => Promise<AuthSession>;
+  login: (
+    username: string,
+    password: string,
+    options?: {
+      onQueued?: (notice: {
+        position: number;
+        retryAfterSeconds: number;
+      }) => void;
+      signal?: AbortSignal;
+    },
+  ) => Promise<AuthSession>;
   register: (body: RegisterRequest) => Promise<AuthSession>;
   quickLogin: (userId: string) => Promise<AuthSession>;
   logout: () => Promise<void>;
@@ -225,11 +235,21 @@ export function SessionProvider({
   }, [refresh]);
 
   const login = useCallback(
-    (username: string, password: string) =>
+    (
+      username: string,
+      password: string,
+      options?: {
+        onQueued?: (notice: {
+          position: number;
+          retryAfterSeconds: number;
+        }) => void;
+        signal?: AbortSignal;
+      },
+    ) =>
       enqueueSessionMutation(async () => {
         const epoch = beginSessionOperation();
         try {
-          const next = await api.login(username, password);
+          const next = await api.login(username, password, options);
           commitAuthenticatedSession(epoch, next);
           return next;
         } catch (cause) {
@@ -489,11 +509,15 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
   const [emptyField, setEmptyField] = useState<MessageKey | null>(null);
   const setMood = useSetAcademyMood();
+  const loginAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => () => loginAbort.current?.abort(), []);
 
   useEffect(() => {
     // The shake is a one-shot reaction, not a state the panel stays in.
@@ -543,9 +567,23 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
     setEmptyField(null);
     setBusy(true);
     setError(null);
+    setQueueNotice(null);
     setErrorFallback("loginFailed");
+    const controller = new AbortController();
+    loginAbort.current = controller;
     try {
-      const session = await login(name, password);
+      const session = await login(name, password, {
+        signal: controller.signal,
+        onQueued: (notice) => {
+          setMood("attentive");
+          setQueueNotice(
+            notice.position === 0
+              ? t("loginQueueNext")
+              : t("loginQueueWaiting", { position: notice.position }),
+          );
+        },
+      });
+      setQueueNotice(null);
       router.replace(
         nextPath ||
           (session.user.courses.some((item) => item.role === "teacher")
@@ -553,6 +591,8 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
             : "/student"),
       );
     } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      setQueueNotice(null);
       setError(cause);
     } finally {
       setBusy(false);
@@ -607,6 +647,11 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
             ))}
           </div>
         </div>
+      ) : null}
+      {queueNotice ? (
+        <p className="lede" role="status" aria-live="polite">
+          {queueNotice}
+        </p>
       ) : null}
       {emptyField ? (
         <p className="form-error" role="alert">

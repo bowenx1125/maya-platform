@@ -23,6 +23,7 @@ dependencies = [
   "SQLAlchemy==2.0.52",
   "uvicorn[standard]==0.52.4",
   "cryptography==42.0.5",
+  "psycopg[binary]==3.2.10",
 ]
 
 [project.scripts]
