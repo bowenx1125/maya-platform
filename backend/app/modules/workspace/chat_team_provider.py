@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.errors import PlatformError
 from app.modules.auth.service import AuthContext
 from app.modules.provider_disclosure.team_standing import authorize_team_dispatch
 from app.modules.workspace.models import (
@@ -722,6 +723,10 @@ def dispatch_team_model(
             content=wire,
             timeout=HttpxLLMTransport.timeout(),
         )
+    except PlatformError as exc:
+        # Pre-send refusal (e.g. host_memory_pressure): nothing left the host.
+        repository.mark_not_sent(operation.id, safe_error_code=exc.code)
+        raise
     except LLMTransportError as exc:
         if exc.acceptance == "not_sent":
             repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)

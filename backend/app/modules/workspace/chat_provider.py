@@ -694,6 +694,11 @@ def real_reply(
                     content=wire,
                     timeout=HttpxLLMTransport.timeout(),
                 )
+            except PlatformError as exc:
+                # Memory pressure (and any future pre-send PlatformError) means
+                # bytes never left the host — treat as not_sent, preserve code.
+                repository.mark_not_sent(operation.id, safe_error_code=exc.code)
+                raise
             except LLMTransportError as exc:
                 if exc.acceptance == "not_sent":
                     repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)

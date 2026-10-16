@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Final, cast
 
+from app.core.errors import PlatformError
 from app.modules.reports.real_prompt import (
     REPORT_PROMPT_CONTRACT_VERSION,
     ReportWireRequest,
@@ -234,6 +235,8 @@ class RealReportProvider:
                 json=prepared.body,
                 timeout=HttpxLLMTransport.timeout(),
             )
+        except PlatformError:
+            raise
         except LLMTransportNotSent:
             raise ReportProviderError("report_transport_not_sent") from None
         except LLMAcceptanceUnknown:
