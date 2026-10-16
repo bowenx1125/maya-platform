@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import cast
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -1425,10 +1426,10 @@ class ProviderExportManifest(Base):
         Integer, nullable=False, default=1, server_default="1"
     )
     max_total_tokens: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
+        BigInteger, nullable=False, default=0, server_default="0"
     )
     max_cost_cny: Mapped[float] = mapped_column(
-        Numeric(12, 6), nullable=False, default=0, server_default="0"
+        Numeric(28, 6), nullable=False, default=0, server_default="0"
     )
     repair_policy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     repair_policy_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -1547,11 +1548,11 @@ class ProviderScopeBudget(Base):
     scope_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     budget_bucket: Mapped[str] = mapped_column(String(40), primary_key=True)
     max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_total_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    max_total_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    max_cost_cny: Mapped[float] = mapped_column(Numeric(28, 6), nullable=False)
     allocated_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    allocated_total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    allocated_cost_cny: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False, default=0)
+    allocated_total_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    allocated_cost_cny: Mapped[float] = mapped_column(Numeric(28, 6), nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -1816,7 +1817,7 @@ class EmbeddingAcceptedVector(Base):
     )
     item_index: Mapped[int] = mapped_column(Integer, primary_key=True)
     chunk_id: Mapped[str] = mapped_column(
-        String(36),
+        String(64),
         nullable=False,
     )
     embedding_blob: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
