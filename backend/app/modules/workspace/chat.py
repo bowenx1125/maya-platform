@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app.core.config import Settings, get_settings
+from app.core.create_admission import create_admission_slot
 from app.core.db import Database
 from app.core.errors import Error, PlatformError, conflict, not_found
 from app.core.models import (
@@ -30,7 +31,6 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
-from app.core.create_admission import create_admission_slot
 from app.core.write_guard import write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import (
