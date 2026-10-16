@@ -738,7 +738,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             return ()
         rows = db.execute(
             text(
-                "SELECT DISTINCT t.debate_id, t.id FROM debate_turns AS t "
+                "SELECT DISTINCT t.debate_id, t.turn_index, t.id FROM debate_turns AS t "
                 "JOIN debates AS d ON d.id=t.debate_id AND d.deleted_at IS NULL "
                 "JOIN llm_accepted_stages AS s ON s.turn_id=t.id "
                 "JOIN llm_recovery_inputs AS r ON r.operation_id=s.operation_id "
@@ -747,7 +747,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "AND p.logical_item_id=t.id ORDER BY t.debate_id, t.turn_index, t.id"
             )
         ).all()
-        return tuple((str(row[0]), str(row[1])) for row in rows)
+        return tuple((str(row[0]), str(row[2])) for row in rows)
 
     def unattempted_llm_turn(self, db: Any, debate_id: str, turn_id: str) -> bool:
         if not self._has_table(db, "provider_operations"):

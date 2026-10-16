@@ -117,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0065_auth_login_admission"
+    assert ALEMBIC_HEAD == "0066_postgres_column_widths"
     _assert_foreign_keys(database)
 
 
