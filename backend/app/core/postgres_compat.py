@@ -85,14 +85,18 @@ def ensure_postgres_compat(engine: Engine) -> None:
             {"key": POSTGRES_COMPAT_LOCK_KEY},
         )
         for name, ddl in _FUNCTIONS:
-            existing = connection.execute(
-                text(
-                    "SELECT p.prosrc FROM pg_proc p "
-                    "JOIN pg_namespace n ON n.oid = p.pronamespace "
-                    "WHERE p.proname = :name AND n.nspname = current_schema()"
-                ),
-                {"name": name},
-            ).scalars().all()
+            existing = (
+                connection.execute(
+                    text(
+                        "SELECT p.prosrc FROM pg_proc p "
+                        "JOIN pg_namespace n ON n.oid = p.pronamespace "
+                        "WHERE p.proname = :name AND n.nspname = current_schema()"
+                    ),
+                    {"name": name},
+                )
+                .scalars()
+                .all()
+            )
             if _function_body(ddl) in existing:
                 continue
             connection.execute(text(ddl))

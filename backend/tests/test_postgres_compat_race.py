@@ -61,8 +61,7 @@ def test_lock_is_taken_before_any_ddl():
 
 def test_skips_when_definitions_already_match():
     existing = {
-        name: [postgres_compat._function_body(ddl)]
-        for name, ddl in postgres_compat._FUNCTIONS
+        name: [postgres_compat._function_body(ddl)] for name, ddl in postgres_compat._FUNCTIONS
     }
     engine = _Engine(existing)
     ensure_postgres_compat(engine)
@@ -70,8 +69,10 @@ def test_skips_when_definitions_already_match():
 
 
 def test_replaces_stale_definition_only():
-    existing = {"json_valid": [postgres_compat._function_body(postgres_compat._JSON_VALID)],
-                "json_extract": ["old body"]}
+    existing = {
+        "json_valid": [postgres_compat._function_body(postgres_compat._JSON_VALID)],
+        "json_extract": ["old body"],
+    }
     engine = _Engine(existing)
     ensure_postgres_compat(engine)
     creates = _creates(engine.connection.statements)
