@@ -33,7 +33,7 @@ def _settings(**overrides: object) -> Settings:
         "voice_provider": "mock",
         "report_provider": "mock",
         "llm_admission_limit": 12,
-        "llm_admission_queue_max": 48,
+        "llm_admission_queue_max": 100,
         "llm_admission_wait_seconds": 180,
         "llm_admission_retry_seconds": 5,
         "memory_guard_min_available_mb": 0,

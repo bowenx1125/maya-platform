@@ -31,7 +31,7 @@ def _settings(**overrides: object) -> Settings:
         "voice_provider": "mock",
         "report_provider": "mock",
         "write_guard_limit": 12,
-        "write_guard_queue_max": 48,
+        "write_guard_queue_max": 100,
         "write_guard_wait_seconds": 180,
         "write_guard_retry_seconds": 5,
     }

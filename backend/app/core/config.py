@@ -216,7 +216,7 @@ class Settings(BaseSettings):
         default=12, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
     )
     llm_admission_queue_max: int = Field(
-        default=48, ge=0, le=10_000, validation_alias="LLM_ADMISSION_QUEUE_MAX"
+        default=100, ge=0, le=10_000, validation_alias="LLM_ADMISSION_QUEUE_MAX"
     )
     llm_admission_wait_seconds: int = Field(
         default=180, ge=0, le=3_600, validation_alias="LLM_ADMISSION_WAIT_SECONDS"
@@ -230,7 +230,7 @@ class Settings(BaseSettings):
         default=12, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
     )
     write_guard_queue_max: int = Field(
-        default=48, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
+        default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
     )
     write_guard_wait_seconds: int = Field(
         default=180, ge=0, le=3_600, validation_alias="WRITE_GUARD_WAIT_SECONDS"
