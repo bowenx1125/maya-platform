@@ -1,4 +1,5 @@
 import type { components, operations } from "./generated/schema";
+import type { LoginQueueNotice } from "../login-queue";
 import {
   createPlatformClient,
   type PlatformClientHandle,
@@ -633,11 +634,7 @@ export async function readSseEvents(
   }
 }
 
-function readLoginQueue(error: unknown): {
-  ticket?: string;
-  position: number;
-  retryAfterSeconds: number;
-} | null {
+function readLoginQueue(error: unknown): LoginQueueNotice | null {
   if (
     !(error instanceof PlatformApiError) ||
     error.code !== "auth_login_queued"
@@ -645,20 +642,36 @@ function readLoginQueue(error: unknown): {
     return null;
   }
   const details = error.details ?? {};
-  const position =
-    typeof details.position === "number" &&
-    Number.isSafeInteger(details.position)
-      ? details.position
-      : 0;
-  const retryAfterSeconds =
-    typeof details.retry_after_seconds === "number" &&
-    Number.isSafeInteger(details.retry_after_seconds) &&
-    details.retry_after_seconds > 0
-      ? details.retry_after_seconds
-      : 2;
+  const count = (value: unknown, fallback: number, min = 0) =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= min
+      ? value
+      : fallback;
+  const position = count(details.position, 0);
+  const retryAfterSeconds = count(details.retry_after_seconds, 2, 1);
   const ticket =
     typeof details.ticket === "string" ? details.ticket : undefined;
-  return { ticket, position, retryAfterSeconds };
+  const ticketExpiresInSeconds =
+    typeof details.ticket_expires_in_seconds === "number" &&
+    Number.isSafeInteger(details.ticket_expires_in_seconds) &&
+    details.ticket_expires_in_seconds > 0
+      ? details.ticket_expires_in_seconds
+      : undefined;
+  return {
+    ticket,
+    position,
+    retryAfterSeconds,
+    queueLength: count(details.queue_length, position + 1, 1),
+    estimatedWaitSeconds: count(
+      details.estimated_wait_seconds,
+      (position + 1) * retryAfterSeconds,
+      1,
+    ),
+    ticketExpiresInSeconds,
+  };
+}
+
+function isNetworkFailure(error: unknown): boolean {
+  return error instanceof TypeError;
 }
 
 function waitForQueue(
@@ -994,22 +1007,49 @@ export class PlatformApi {
     username: string,
     password: string,
     options?: {
-      onQueued?: (notice: {
-        position: number;
-        retryAfterSeconds: number;
-      }) => void;
+      onQueued?: (notice: LoginQueueNotice) => void;
       signal?: AbortSignal;
+      /** A ticket kept from an earlier attempt, e.g. before a page refresh. */
+      ticket?: string;
+      /** Upper bound for riding out a network drop while holding a ticket. */
+      reconnectWindowMs?: number;
     },
   ): Promise<AuthSession> {
-    let ticket: string | undefined;
+    let ticket: string | undefined = options?.ticket;
+    let last: LoginQueueNotice | null = null;
+    let offlineSince: number | null = null;
+    const reconnectWindow = options?.reconnectWindowMs ?? 90_000;
     for (;;) {
       if (options?.signal?.aborted) {
         throw new DOMException("The sign-in wait was cancelled.", "AbortError");
       }
-      const result = await this.client.POST("/auth/login", {
-        body: { username, password },
-        headers: ticket ? { "X-Auth-Admission-Ticket": ticket } : {},
-      });
+      let result;
+      try {
+        result = await this.client.POST("/auth/login", {
+          body: { username, password },
+          headers: ticket ? { "X-Auth-Admission-Ticket": ticket } : {},
+        });
+        offlineSince = null;
+      } catch (cause) {
+        // A brief network drop must not cost the place in line: keep the
+        // ticket and retry until the connection returns or the window ends.
+        if (!ticket || !isNetworkFailure(cause)) throw cause;
+        offlineSince ??= Date.now();
+        if (Date.now() - offlineSince > reconnectWindow) throw cause;
+        const retry = last?.retryAfterSeconds ?? 2;
+        options?.onQueued?.({
+          ...(last ?? {
+            position: 0,
+            retryAfterSeconds: retry,
+            queueLength: 1,
+            estimatedWaitSeconds: retry,
+          }),
+          ticket,
+          reconnecting: true,
+        });
+        await waitForQueue(Math.max(retry, 2) * 1000, options?.signal);
+        continue;
+      }
       try {
         const session = await unwrap<AuthSession>(result);
         this.setCsrfToken(session.csrf_token);
@@ -1018,10 +1058,8 @@ export class PlatformApi {
         const queued = readLoginQueue(cause);
         if (!queued) throw cause;
         ticket = queued.ticket ?? ticket;
-        options?.onQueued?.({
-          position: queued.position,
-          retryAfterSeconds: queued.retryAfterSeconds,
-        });
+        last = { ...queued, ticket };
+        options?.onQueued?.(last);
         await waitForQueue(queued.retryAfterSeconds * 1000, options?.signal);
       }
     }

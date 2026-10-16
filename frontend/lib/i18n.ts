@@ -581,6 +581,12 @@ const enMessages = {
     "Too many sign-in or registration attempts. Try again in {seconds} seconds.",
   loginQueueWaiting: "Waiting to enter. {position} people are ahead of you.",
   loginQueueNext: "Waiting to enter. You are next.",
+  loginQueueEta: "About {seconds} s left · {total} waiting",
+  loginQueueProgressLabel: "Sign-in queue progress",
+  loginQueueReconnecting:
+    "Connection lost. Reconnecting — your place in line is kept.",
+  loginQueueResume:
+    "Your place in line is kept ({position} ahead). Enter your password again to continue.",
   wave3Title: "Interaction",
   interactionTitleClosed: "Classroom interaction",
   interactionTitleOpen: "Live classroom interaction",
@@ -1380,6 +1386,11 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorAuthRateLimited: "登录或注册尝试过于频繁，请在 {seconds} 秒后重试。",
   loginQueueWaiting: "排队等待入列，前面还有 {position} 位。",
   loginQueueNext: "排队等待入列，马上就到你了。",
+  loginQueueEta: "预计还需约 {seconds} 秒 · 共 {total} 人排队",
+  loginQueueProgressLabel: "登录排队进度",
+  loginQueueReconnecting: "网络中断，正在重连，你的排队位置会保留。",
+  loginQueueResume:
+    "已为你保留排队位置（前面 {position} 位），请重新输入密码继续。",
   wave3Title: "课堂互动",
   interactionTitleClosed: "课堂互动",
   interactionTitleOpen: "课堂互动进行中",

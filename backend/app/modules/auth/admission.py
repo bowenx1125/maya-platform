@@ -8,6 +8,7 @@ Excess sign-ins wait in a table every replica can see. The response code is
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -53,13 +54,34 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def _queued(position: int, retry_after: int, ticket: str | None) -> PlatformError:
+def _queued(
+    position: int,
+    retry_after: int,
+    ticket: str | None,
+    *,
+    queue_length: int | None = None,
+    limit: int = 1,
+    ticket_seconds: int | None = None,
+) -> PlatformError:
+    """Build the 429 the sign-in page renders as a progress bar.
+
+    ``position`` counts people ahead (0 = next). ``queue_length`` is everyone
+    waiting, including this ticket. ``estimated_wait_seconds`` is a rough
+    figure: every retry interval roughly ``limit`` sign-ins finish.
+    """
+
     details: dict[str, int | str] = {
         "position": position,
         "retry_after_seconds": retry_after,
+        "queue_length": max(queue_length if queue_length is not None else position + 1, 1),
+        "estimated_wait_seconds": max(
+            retry_after, math.ceil((position + 1) / max(limit, 1)) * retry_after
+        ),
     }
     if ticket is not None:
         details["ticket"] = ticket
+        if ticket_seconds is not None:
+            details["ticket_expires_in_seconds"] = ticket_seconds
     return PlatformError(
         "auth_login_queued",
         "Waiting to enter. Stay on this page; your place in line is kept.",
@@ -114,7 +136,15 @@ def _waiting_count(db: Session, now: datetime) -> int:
 
 
 def _refresh(row: AuthLoginAdmission, now: datetime, settings: Settings) -> None:
-    row.expires_at = now + timedelta(seconds=settings.auth_login_admission_lease_seconds)
+    row.expires_at = now + timedelta(seconds=_lease_seconds(row.state, settings))
+
+
+def _lease_seconds(state: str, settings: Settings) -> int:
+    """Admitted slots use the short lease; waiting tickets the longer one."""
+
+    if state == "waiting":
+        return settings.auth_login_queue_ticket_seconds
+    return settings.auth_login_admission_lease_seconds
 
 
 def acquire_login_admission(
@@ -135,23 +165,41 @@ def acquire_login_admission(
     now = _now()
     _expire(db, now)
     retry_after = settings.auth_login_queue_retry_seconds
+    ticket_seconds = settings.auth_login_queue_ticket_seconds
+
+    def queued(row: AuthLoginAdmission, position: int) -> PlatformError:
+        return _queued(
+            position,
+            retry_after,
+            row.id,
+            queue_length=_waiting_count(db, now),
+            limit=limit,
+            ticket_seconds=ticket_seconds,
+        )
+
     if ticket:
         row = db.get(AuthLoginAdmission, ticket)
         if row is not None and _as_utc(row.expires_at) > now and row.state == "waiting":
-            if _active_count(db, now) < limit:
+            # First come, first served: a ticket enters only when everyone
+            # ahead of it can also fit in the free slots.
+            free = limit - _active_count(db, now)
+            position = _ahead(db, row, now)
+            if position < free:
                 row.state = "admitted"
                 _refresh(row, now, settings)
                 db.commit()
                 return row.id
             _refresh(row, now, settings)
-            position = _ahead(db, row, now)
+            error = queued(row, position)
             db.commit()
-            raise _queued(position, retry_after, row.id)
+            raise error
         if row is not None and _as_utc(row.expires_at) > now and row.state == "admitted":
             _refresh(row, now, settings)
             db.commit()
             return row.id
-    if _active_count(db, now) < limit:
+    # A newcomer may skip the line only when nobody is waiting in it.
+    waiting_now = _waiting_count(db, now)
+    if waiting_now == 0 and _active_count(db, now) < limit:
         admitted = AuthLoginAdmission(
             id=str(uuid4()),
             state="admitted",
@@ -161,20 +209,27 @@ def acquire_login_admission(
         db.add(admitted)
         db.commit()
         return admitted.id
-    if _waiting_count(db, now) >= settings.auth_login_queue_max:
+    if waiting_now >= settings.auth_login_queue_max:
         db.commit()
-        raise _queued(settings.auth_login_queue_max, retry_after, None)
+        raise _queued(
+            settings.auth_login_queue_max,
+            retry_after,
+            None,
+            queue_length=waiting_now,
+            limit=limit,
+        )
     waiting = AuthLoginAdmission(
         id=str(uuid4()),
         state="waiting",
         created_at=now,
-        expires_at=now + timedelta(seconds=settings.auth_login_admission_lease_seconds),
+        expires_at=now + timedelta(seconds=ticket_seconds),
     )
     db.add(waiting)
     db.flush()
     position = _ahead(db, waiting, now)
+    error = queued(waiting, position)
     db.commit()
-    raise _queued(position, retry_after, waiting.id)
+    raise error
 
 
 def release_login_admission(db: Session, admission_id: str | None) -> None:

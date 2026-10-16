@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  clearLoginQueue,
+  loadLoginQueue,
+  loginQueueProgress,
+  saveLoginQueue,
+  type LoginQueueNotice,
+  type SavedLoginQueue,
+} from "../lib/login-queue";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -42,11 +50,9 @@ type SessionContextValue = {
     username: string,
     password: string,
     options?: {
-      onQueued?: (notice: {
-        position: number;
-        retryAfterSeconds: number;
-      }) => void;
+      onQueued?: (notice: LoginQueueNotice) => void;
       signal?: AbortSignal;
+      ticket?: string;
     },
   ) => Promise<AuthSession>;
   register: (body: RegisterRequest) => Promise<AuthSession>;
@@ -239,11 +245,9 @@ export function SessionProvider({
       username: string,
       password: string,
       options?: {
-        onQueued?: (notice: {
-          position: number;
-          retryAfterSeconds: number;
-        }) => void;
+        onQueued?: (notice: LoginQueueNotice) => void;
         signal?: AbortSignal;
+        ticket?: string;
       },
     ) =>
       enqueueSessionMutation(async () => {
@@ -509,7 +513,10 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  const [queue, setQueue] = useState<LoginQueueNotice | null>(null);
+  const [savedQueue, setSavedQueue] = useState<SavedLoginQueue | null>(null);
+  const [resumeQueue, setResumeQueue] = useState(false);
+  const savedQueueRef = useRef<SavedLoginQueue | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
@@ -518,6 +525,20 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const loginAbort = useRef<AbortController | null>(null);
 
   useEffect(() => () => loginAbort.current?.abort(), []);
+
+  useEffect(() => {
+    // After a refresh, keep the typed name and the place in line. The
+    // password was never stored, so the student only re-types it.
+    const timer = window.setTimeout(() => {
+      const saved = loadLoginQueue();
+      if (!saved) return;
+      savedQueueRef.current = saved;
+      setSavedQueue(saved);
+      setResumeQueue(true);
+      setUsername((current) => current || saved.username);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // The shake is a one-shot reaction, not a state the panel stays in.
@@ -567,23 +588,29 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
     setEmptyField(null);
     setBusy(true);
     setError(null);
-    setQueueNotice(null);
+    setQueue(null);
+    setResumeQueue(false);
     setErrorFallback("loginFailed");
     const controller = new AbortController();
     loginAbort.current = controller;
+    // The stored copy is checked for expiry; a stale ticket simply rejoins.
+    const held = loadLoginQueue();
     try {
       const session = await login(name, password, {
         signal: controller.signal,
+        ticket: held?.ticket,
         onQueued: (notice) => {
           setMood("attentive");
-          setQueueNotice(
-            notice.position === 0
-              ? t("loginQueueNext")
-              : t("loginQueueWaiting", { position: notice.position }),
-          );
+          setQueue(notice);
+          const next = saveLoginQueue(name, notice, savedQueueRef.current);
+          savedQueueRef.current = next;
+          setSavedQueue(next);
         },
       });
-      setQueueNotice(null);
+      clearLoginQueue();
+      savedQueueRef.current = null;
+      setSavedQueue(null);
+      setQueue(null);
       router.replace(
         nextPath ||
           (session.user.courses.some((item) => item.role === "teacher")
@@ -592,7 +619,14 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
       );
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
-      setQueueNotice(null);
+      // A rejected sign-in has left the line; a network failure keeps the
+      // ticket so the next attempt resumes the same place.
+      if (!(cause instanceof TypeError)) {
+        clearLoginQueue();
+        savedQueueRef.current = null;
+        setSavedQueue(null);
+      }
+      setQueue(null);
       setError(cause);
     } finally {
       setBusy(false);
@@ -648,9 +682,49 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
           </div>
         </div>
       ) : null}
-      {queueNotice ? (
+      {queue ? (
+        <div className="login-queue" role="status" aria-live="polite">
+          <p className="lede">
+            {queue.reconnecting
+              ? t("loginQueueReconnecting")
+              : queue.position === 0
+                ? t("loginQueueNext")
+                : t("loginQueueWaiting", { position: queue.position })}
+          </p>
+          <div
+            className="login-queue-bar"
+            role="progressbar"
+            aria-label={t("loginQueueProgressLabel")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(
+              loginQueueProgress(
+                queue.position,
+                savedQueue?.initialPosition ?? queue.position,
+              ) * 100,
+            )}
+          >
+            <span
+              style={{
+                width: `${Math.round(
+                  loginQueueProgress(
+                    queue.position,
+                    savedQueue?.initialPosition ?? queue.position,
+                  ) * 100,
+                )}%`,
+              }}
+            />
+          </div>
+          <small>
+            {t("loginQueueEta", {
+              seconds: queue.estimatedWaitSeconds,
+              total: queue.queueLength,
+            })}
+          </small>
+        </div>
+      ) : resumeQueue && savedQueue ? (
         <p className="lede" role="status" aria-live="polite">
-          {queueNotice}
+          {t("loginQueueResume", { position: savedQueue.position })}
         </p>
       ) : null}
       {emptyField ? (
