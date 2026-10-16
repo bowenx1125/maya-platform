@@ -565,7 +565,9 @@ const enMessages = {
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
   errorHostMemoryPressure:
-    "The server is low on memory. Wait a moment and try again.",
+    "The server is busy right now. Your message was kept; please try again shortly.",
+  errorServerBusy:
+    "Too many people are using Maya right now. Your message was kept; please try again shortly.",
   errorVoiceProviderUnavailable:
     "Voice provider is temporarily unavailable. Use the platform fallback voice; this is not a successful custom voice.",
   errorChatAcceptanceUnknown:
@@ -1373,7 +1375,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
-  errorHostMemoryPressure: "服务器内存紧张，请稍后再试。",
+  errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
+  errorServerBusy: "人多，请稍后重试（消息已保留）。",
   errorVoiceProviderUnavailable:
     "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
   errorChatAcceptanceUnknown:
@@ -1827,6 +1830,8 @@ const errorCodeKeys: Record<string, MessageKey> = {
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
   host_memory_pressure: "errorHostMemoryPressure",
+  llm_admission_busy: "errorServerBusy",
+  write_pressure: "errorServerBusy",
   auth_login_queued: "loginQueueNext",
   voice_provider_unavailable: "errorVoiceProviderUnavailable",
   chat_acceptance_unknown: "errorChatAcceptanceUnknown",
