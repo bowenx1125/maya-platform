@@ -11,6 +11,7 @@ from app.core.errors import PlatformError
 from app.core.memory_guard import (
     ensure_memory_for_new_llm,
     read_mem_available_mb,
+    reset_memory_guard_state,
     set_mem_available_reader,
 )
 from app.providers.llm_transport import HttpxLLMTransport
@@ -19,8 +20,10 @@ from app.providers.llm_transport import HttpxLLMTransport
 @pytest.fixture(autouse=True)
 def _clear_mem_reader() -> None:
     set_mem_available_reader(None)
+    reset_memory_guard_state()
     yield
     set_mem_available_reader(None)
+    reset_memory_guard_state()
 
 
 def _settings(**overrides: object) -> Settings:
@@ -36,6 +39,7 @@ def _settings(**overrides: object) -> Settings:
         "voice_provider": "mock",
         "report_provider": "mock",
         "memory_guard_min_available_mb": 500,
+        "memory_guard_resume_available_mb": 550,
         "memory_guard_retry_seconds": 15,
     }
     base.update(overrides)
@@ -82,6 +86,63 @@ def test_ensure_memory_allows_at_or_above_floor() -> None:
     ensure_memory_for_new_llm(_settings(memory_guard_min_available_mb=500))
     set_mem_available_reader(lambda: 501)
     ensure_memory_for_new_llm(_settings(memory_guard_min_available_mb=500))
+
+
+def test_ensure_memory_hysteresis_keeps_rejecting_between_min_and_resume() -> None:
+    settings = _settings(
+        memory_guard_min_available_mb=500,
+        memory_guard_resume_available_mb=550,
+    )
+    set_mem_available_reader(lambda: 400)
+    with pytest.raises(PlatformError):
+        ensure_memory_for_new_llm(settings)
+    # Still below resume — sticky pressure must keep rejecting.
+    set_mem_available_reader(lambda: 520)
+    with pytest.raises(PlatformError) as raised:
+        ensure_memory_for_new_llm(settings)
+    assert raised.value.code == "host_memory_pressure"
+    assert raised.value.details["mem_available_mb"] == 520
+
+
+def test_ensure_memory_recovers_at_or_above_resume() -> None:
+    settings = _settings(
+        memory_guard_min_available_mb=500,
+        memory_guard_resume_available_mb=550,
+    )
+    set_mem_available_reader(lambda: 400)
+    with pytest.raises(PlatformError):
+        ensure_memory_for_new_llm(settings)
+    set_mem_available_reader(lambda: 549)
+    with pytest.raises(PlatformError):
+        ensure_memory_for_new_llm(settings)
+    # Reject → recover → admit again in the same process/session.
+    set_mem_available_reader(lambda: 550)
+    ensure_memory_for_new_llm(settings)
+    set_mem_available_reader(lambda: 600)
+    ensure_memory_for_new_llm(settings)
+
+
+def test_ensure_memory_between_min_and_resume_admits_without_prior_pressure() -> None:
+    settings = _settings(
+        memory_guard_min_available_mb=500,
+        memory_guard_resume_available_mb=550,
+    )
+    # Never dipped below min — bandwidth between min and resume is allowed.
+    set_mem_available_reader(lambda: 520)
+    ensure_memory_for_new_llm(settings)
+
+
+def test_ensure_memory_no_hysteresis_when_resume_le_min() -> None:
+    settings = _settings(
+        memory_guard_min_available_mb=500,
+        memory_guard_resume_available_mb=400,
+    )
+    set_mem_available_reader(lambda: 400)
+    with pytest.raises(PlatformError):
+        ensure_memory_for_new_llm(settings)
+    # resume clamped to min → recovering to min admits.
+    set_mem_available_reader(lambda: 500)
+    ensure_memory_for_new_llm(settings)
 
 
 def test_ensure_memory_fails_open_when_unreadable() -> None:

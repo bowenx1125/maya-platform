@@ -7,6 +7,10 @@ SSH and the gateway stop answering. This guard reads MemAvailable from
 containers) and refuses *new* LLM HTTP attempts when the free pool drops below
 a configured floor. Requests already past the transport entry point keep
 running; only admission of a fresh outbound call is blocked.
+
+Hysteresis keeps the host from flapping around the floor: once pressure is
+latched, new calls stay rejected until MemAvailable climbs to a higher resume
+threshold (default reject below 500 MiB, resume at 550 MiB).
 """
 
 from __future__ import annotations
@@ -22,6 +26,9 @@ MemAvailableReader = Callable[[], int | None]
 _DEFAULT_MEMINFO = Path("/proc/meminfo")
 # Tests and operators can replace the reader without patching Path.open.
 _reader: MemAvailableReader | None = None
+# Process-local sticky flag: once MemAvailable dips below the reject floor,
+# keep refusing until it recovers to the resume threshold.
+_under_pressure: bool = False
 
 
 def set_mem_available_reader(reader: MemAvailableReader | None) -> None:
@@ -29,6 +36,13 @@ def set_mem_available_reader(reader: MemAvailableReader | None) -> None:
 
     global _reader
     _reader = reader
+
+
+def reset_memory_guard_state() -> None:
+    """Clear the sticky pressure latch (tests only)."""
+
+    global _under_pressure
+    _under_pressure = False
 
 
 def read_mem_available_mb(meminfo_path: Path | str = _DEFAULT_MEMINFO) -> int | None:
@@ -82,31 +96,57 @@ def host_memory_pressure_error(
 
 
 def ensure_memory_for_new_llm(settings: Settings | None = None) -> None:
-    """Raise ``host_memory_pressure`` when MemAvailable is below the floor.
+    """Raise ``host_memory_pressure`` when host RAM is under the admit floor.
 
-    A missing or unreadable ``/proc/meminfo`` fails open so a broken probe
-    cannot take every model call offline. Setting the floor to 0 disables the
-    guard (used in unit tests that never touch the host).
+    Uses a process-local sticky pressure flag with optional hysteresis:
+
+    * Not under pressure: reject (and latch) when ``available < min_mb``.
+    * Under pressure: keep rejecting until ``available >= resume_mb``, then
+      clear the latch and admit.
+    * When ``resume_mb <= min_mb``, hysteresis is off (resume equals min).
+    * Floor 0 disables the guard entirely.
+    * A missing or unreadable ``/proc/meminfo`` fails open so a broken probe
+      cannot take every model call offline.
     """
+
+    global _under_pressure
 
     runtime = settings if settings is not None else get_settings()
     minimum = int(runtime.memory_guard_min_available_mb)
     if minimum <= 0:
         return
+    resume = int(runtime.memory_guard_resume_available_mb)
+    if resume <= minimum:
+        resume = minimum
     available = _active_reader()()
     if available is None:
         return
-    if available < minimum:
-        raise host_memory_pressure_error(
-            available_mb=available,
-            minimum_mb=minimum,
-            retry_after_seconds=int(runtime.memory_guard_retry_seconds),
-        )
+
+    if not _under_pressure:
+        if available < minimum:
+            _under_pressure = True
+            raise host_memory_pressure_error(
+                available_mb=available,
+                minimum_mb=minimum,
+                retry_after_seconds=int(runtime.memory_guard_retry_seconds),
+            )
+        return
+
+    if available >= resume:
+        _under_pressure = False
+        return
+
+    raise host_memory_pressure_error(
+        available_mb=available,
+        minimum_mb=minimum,
+        retry_after_seconds=int(runtime.memory_guard_retry_seconds),
+    )
 
 
 __all__ = [
     "ensure_memory_for_new_llm",
     "host_memory_pressure_error",
     "read_mem_available_mb",
+    "reset_memory_guard_state",
     "set_mem_available_reader",
 ]

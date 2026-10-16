@@ -196,6 +196,14 @@ class Settings(BaseSettings):
     memory_guard_min_available_mb: int = Field(
         default=500, ge=0, le=1_000_000, validation_alias="MEMORY_GUARD_MIN_AVAILABLE_MB"
     )
+    # After pressure latches, MemAvailable must climb to this resume floor (MiB)
+    # before new LLM calls are admitted again. When <= min, hysteresis is off.
+    memory_guard_resume_available_mb: int = Field(
+        default=550,
+        ge=0,
+        le=1_000_000,
+        validation_alias="MEMORY_GUARD_RESUME_AVAILABLE_MB",
+    )
     memory_guard_retry_seconds: int = Field(
         default=15, ge=1, le=300, validation_alias="MEMORY_GUARD_RETRY_SECONDS"
     )
