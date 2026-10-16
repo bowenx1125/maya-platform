@@ -1,0 +1,102 @@
+"""Process-local concurrency gate with a bounded wait queue.
+
+Used by LLM admission and write-path guards. Callers acquire a slot (waiting
+briefly when the in-flight cap is full) and always release it afterwards.
+In-flight work is never cancelled. A limit of 0 disables the gate.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+
+
+class GateRejected(Exception):
+    """The wait queue is full or the wait budget expired."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
+class ConcurrencyGate:
+    """Thread-safe in-flight counter with Condition-based waiters."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._cond = threading.Condition(self._lock)
+        self._in_flight = 0
+        self._waiters = 0
+
+    @property
+    def in_flight(self) -> int:
+        with self._lock:
+            return self._in_flight
+
+    @property
+    def waiters(self) -> int:
+        with self._lock:
+            return self._waiters
+
+    def reset(self) -> None:
+        """Drop counters (tests only). Wake any waiters so they re-check."""
+
+        with self._cond:
+            self._in_flight = 0
+            self._waiters = 0
+            self._cond.notify_all()
+
+    @contextmanager
+    def hold(
+        self,
+        *,
+        limit: int,
+        queue_max: int,
+        wait_seconds: float,
+    ) -> Iterator[None]:
+        """Acquire one slot for the duration of the ``with`` block.
+
+        * ``limit <= 0``: no throttling (yield immediately).
+        * Under the limit: admit at once.
+        * At the limit with room in the wait queue: block until a slot frees
+          or ``wait_seconds`` elapses (then raise ``GateRejected``).
+        * Wait queue full: raise ``GateRejected`` immediately.
+        """
+
+        if limit <= 0:
+            yield
+            return
+
+        acquired = False
+        with self._cond:
+            if self._in_flight < limit:
+                self._in_flight += 1
+                acquired = True
+            else:
+                if queue_max <= 0 or self._waiters >= queue_max:
+                    raise GateRejected("queue_full")
+                self._waiters += 1
+                try:
+                    deadline = time.monotonic() + max(0.0, float(wait_seconds))
+                    while self._in_flight >= limit:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise GateRejected("wait_timeout")
+                        self._cond.wait(timeout=remaining)
+                    self._in_flight += 1
+                    acquired = True
+                finally:
+                    self._waiters -= 1
+
+        try:
+            yield
+        finally:
+            if acquired:
+                with self._cond:
+                    self._in_flight = max(0, self._in_flight - 1)
+                    self._cond.notify()
+
+
+__all__ = ["ConcurrencyGate", "GateRejected"]
