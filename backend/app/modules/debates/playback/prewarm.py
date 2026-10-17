@@ -73,8 +73,14 @@ class PrewarmScheduler:
 
         loop = self._loop
         if self._closed or loop is None or loop.is_closed():
+            LOGGER.warning(
+                "prewarm_focus_skip debate_id=%s reason=%s",
+                debate_id,
+                "closed" if self._closed else "loop_unbound",
+            )
             return
         if debate_id in self._ended:
+            LOGGER.info("prewarm_focus_skip debate_id=%s reason=ended", debate_id)
             return
         loop.call_soon_threadsafe(self._focus, debate_id)
 

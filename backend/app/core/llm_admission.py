@@ -5,7 +5,8 @@ MayaLoad's real-model Team assessment run showed 10 concurrent users stable
 12 (midpoint of the 10–15 recommendation). Callers wait in a bounded queue
 so messages still send when a slot frees; only a full queue or wait timeout
 returns a retryable 503. In-flight calls are never cancelled. Limit 0
-disables the gate.
+disables the gate. This is now the only per-operation backstop; it sits
+behind the unified adaptive queue and shares its single wait deadline.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from app.core.adaptive_admission import adaptive_slot, shared_wait_seconds
 from app.core.concurrency_gate import ConcurrencyGate, GateRejected
 from app.core.config import Settings, get_settings
 from app.core.errors import PlatformError
@@ -56,24 +58,28 @@ def llm_admission_slot(settings: Settings | None = None) -> Iterator[None]:
     """Hold one LLM in-flight slot for the duration of the ``with`` block."""
 
     runtime = settings if settings is not None else get_settings()
-    limit = int(runtime.llm_admission_limit)
-    if limit <= 0:
-        yield
-        return
-    queue_max = int(runtime.llm_admission_queue_max)
-    wait_seconds = float(runtime.llm_admission_wait_seconds)
-    retry_after = int(runtime.llm_admission_retry_seconds)
-    try:
-        with _GATE.hold(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds):
+    # Layer 1: the unified pressure queue (suspends under the danger line).
+    with adaptive_slot("llm", runtime):
+        limit = int(runtime.llm_admission_limit)
+        if limit <= 0:
             yield
-    except GateRejected as rejected:
-        raise llm_admission_busy_error(
-            reason=rejected.reason,
-            limit=limit,
-            retry_after_seconds=retry_after,
-            in_flight=_GATE.in_flight,
-            waiters=_GATE.waiters,
-        ) from None
+            return
+        queue_max = int(runtime.llm_admission_queue_max)
+        # Layer 2 backstop waits only for what is left of the one request
+        # deadline started in layer 1, so a call is never timed twice.
+        wait_seconds = shared_wait_seconds(float(runtime.llm_admission_wait_seconds))
+        retry_after = int(runtime.llm_admission_retry_seconds)
+        try:
+            with _GATE.hold(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds):
+                yield
+        except GateRejected as rejected:
+            raise llm_admission_busy_error(
+                reason=rejected.reason,
+                limit=limit,
+                retry_after_seconds=retry_after,
+                in_flight=_GATE.in_flight,
+                waiters=_GATE.waiters,
+            ) from None
 
 
 __all__ = [

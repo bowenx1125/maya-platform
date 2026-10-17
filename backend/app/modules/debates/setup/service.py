@@ -817,6 +817,16 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 db.commit()
         except Exception:
             db.rollback()
+    # Line C M2: draft Preview used to stay "No saved turns yet" forever when
+    # prewarm never owned the slot — ensure plan + head prepare job on read so
+    # expire/stall/Retry have a row to attach to.
+    if str(getattr(debate, "status", "")) == "draft":
+        try:
+            from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+            SqlPlaybackRepository().ensure_turn_plan(db, debate)
+        except Exception:
+            db.rollback()
     participants = db.scalars(
         select(DebateParticipant)
         .where(DebateParticipant.debate_id == debate.id)
@@ -1226,6 +1236,13 @@ def create_debate_draft(
         )
     )
     db.flush()
+    # Line C M2: materialise the turn plan + head debate_turn_prepare job in the
+    # create transaction. Prewarm remains the worker, but must not be the only
+    # asker for the plan — otherwise a busy/skipped warmer leaves zero turns,
+    # bare list "thinking", and an empty Preview with no Retry surface.
+    from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+    SqlPlaybackRepository().ensure_turn_plan(db, debate)
     result = _detail(db, debate)
     if record is not None:
         response_json = json.dumps(result.model_dump(mode="json"), separators=(",", ":"))

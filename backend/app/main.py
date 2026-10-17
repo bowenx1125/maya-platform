@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from threading import RLock
@@ -17,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.adaptive_admission import adaptive_admission_snapshot, record_request_ms
 from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import (
@@ -517,7 +519,12 @@ def create_app(
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
         request.state.request_id = str(uuid4())
+        started = time.perf_counter()
         response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            # Time-to-headers (SSE bodies stream afterwards) feeds the
+            # adaptive admission request-p95 pressure signal.
+            record_request_ms((time.perf_counter() - started) * 1000.0)
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -541,6 +548,11 @@ def create_app(
     @app.get("/health/live", tags=["Health"])
     def health_live() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/health/admission", tags=["Health"])
+    def health_admission() -> dict[str, Any]:
+        # Queue depth / adaptive limit / per-class rejects; no secrets.
+        return adaptive_admission_snapshot()
 
     @app.get("/health/ready", tags=["Health"])
     def health_ready() -> JSONResponse:

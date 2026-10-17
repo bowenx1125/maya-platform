@@ -177,46 +177,32 @@ class Settings(BaseSettings):
     auth_abuse_max_buckets: int = Field(
         default=8_192, ge=128, le=65_536, validation_alias="AUTH_ABUSE_MAX_BUCKETS"
     )
-    # How many sign-ins may check a password at once. Further clients wait in
-    # line instead of receiving a capability error. Zero disables the queue.
-    auth_login_admission_limit: int = Field(
-        default=8, ge=0, le=10_000, validation_alias="AUTH_LOGIN_ADMISSION_LIMIT"
-    )
-    auth_login_admission_lease_seconds: int = Field(
-        default=60, ge=5, le=600, validation_alias="AUTH_LOGIN_ADMISSION_LEASE_SECONDS"
-    )
-    auth_login_queue_max: int = Field(
-        default=200, ge=1, le=10_000, validation_alias="AUTH_LOGIN_QUEUE_MAX"
-    )
+    # Retry hint when sign-in hits a locked / overloaded database.
     auth_login_queue_retry_seconds: int = Field(
         default=2, ge=1, le=60, validation_alias="AUTH_LOGIN_QUEUE_RETRY_SECONDS"
     )
-    # How long a waiting ticket keeps its place without a retry. Long enough to
-    # survive a page refresh (re-typing the password) or a brief network drop.
-    auth_login_queue_ticket_seconds: int = Field(
-        default=180, ge=10, le=1_800, validation_alias="AUTH_LOGIN_QUEUE_TICKET_SECONDS"
-    )
-    # Refuse new LLM HTTP attempts when host MemAvailable falls below this
-    # floor (MiB). Zero disables the guard. In-flight calls are not cancelled.
+    # Unified pressure signal (app/core/adaptive_admission.py). Below this
+    # MemAvailable floor (MiB) or at/above the 1m load reject threshold, new
+    # work only queues; it resumes once MemAvailable >= the resume floor AND
+    # load <= the resume threshold. Zero disables that half of the signal.
     memory_guard_min_available_mb: int = Field(
         default=500, ge=0, le=1_000_000, validation_alias="MEMORY_GUARD_MIN_AVAILABLE_MB"
     )
-    # After pressure latches, MemAvailable must climb to this resume floor (MiB)
-    # before new LLM calls are admitted again. When <= min, hysteresis is off.
     memory_guard_resume_available_mb: int = Field(
         default=550,
         ge=0,
         le=1_000_000,
         validation_alias="MEMORY_GUARD_RESUME_AVAILABLE_MB",
     )
-    memory_guard_retry_seconds: int = Field(
-        default=15, ge=1, le=300, validation_alias="MEMORY_GUARD_RETRY_SECONDS"
+    host_load_reject_threshold: float = Field(
+        default=6.0, ge=0, le=10_000, validation_alias="HOST_LOAD_REJECT_THRESHOLD"
     )
-    # Cap concurrent in-flight LLM HTTP attempts per process. MayaLoad's real
-    # model Team assessment held at 10 concurrent (peak load ~3.8) and melted
-    # past load 8 at 20; default 12 is the midpoint of the 10–15 band. Final
-    # tune may follow ChatForm max-concurrency findings. Zero disables.
-    # Callers wait in a bounded queue so messages still send when a slot frees.
+    host_load_resume_threshold: float = Field(
+        default=4.0, ge=0, le=10_000, validation_alias="HOST_LOAD_RESUME_THRESHOLD"
+    )
+    # Per-operation backstop behind the unified queue: in-flight
+    # LLM HTTP attempts per process (MayaLoad: 10 stable, 20 melted; 12 is
+    # the midpoint). It waits only for what is left of the shared deadline.
     llm_admission_limit: int = Field(
         default=12, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
     )
@@ -229,8 +215,8 @@ class Settings(BaseSettings):
     llm_admission_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
     )
-    # Cap concurrent Team/Chat turn execution (write-heavy paths) per process.
-    # Same measured band as LLM admission; zero disables.
+    # Second per-operation backstop: concurrent Team/Chat turn execution
+    # (write-heavy) per process, same 12 / 100 / 180 band and shared deadline.
     write_guard_limit: int = Field(
         default=12, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
     )
@@ -243,9 +229,8 @@ class Settings(BaseSettings):
     write_guard_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
-    # Cap concurrent Agent/Team/Conversation creates per process. MayaLoad's
-    # n=40 ChatForm spike hit load ~13.5 during create before LLM busy fired;
-    # default 4 keeps two replicas near ~8 concurrent creates. Zero disables.
+    # Third per-operation backstop: concurrent Agent/Team/Conversation
+    # creates per process (MayaLoad n=40 create spike hit load ~13.5).
     create_admission_limit: int = Field(
         default=4, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
     )
@@ -253,23 +238,80 @@ class Settings(BaseSettings):
         default=100, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_QUEUE_MAX"
     )
     create_admission_wait_seconds: int = Field(
-        default=60, ge=0, le=3_600, validation_alias="CREATE_ADMISSION_WAIT_SECONDS"
+        default=180, ge=0, le=3_600, validation_alias="CREATE_ADMISSION_WAIT_SECONDS"
     )
     create_admission_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="CREATE_ADMISSION_RETRY_SECONDS"
     )
-    # Refuse new LLM / write / create admissions when host 1m loadavg is at or
-    # above this threshold. Zero disables. In-flight work is not cancelled.
-    host_load_reject_threshold: float = Field(
-        default=6.0, ge=0, le=10_000, validation_alias="HOST_LOAD_REJECT_THRESHOLD"
+    # One request-level queue for login / create / write / LLM (the old
+    # per-op login queue folds in; LLM / write / create gates stay behind it
+    # as backstops). AIMD sizes a weighted budget from load, MemAvailable,
+    # DB write p95 and request p95. Disabling only freezes the
+    # budget at max; pressure queueing and the global cap always apply.
+    adaptive_admission_enabled: bool = Field(
+        default=True, validation_alias="ADAPTIVE_ADMISSION_ENABLED"
     )
-    # After pressure latches, 1m load must fall to this resume floor before new
-    # heavy work is admitted. When >= reject, hysteresis is off.
-    host_load_resume_threshold: float = Field(
-        default=4.0, ge=0, le=10_000, validation_alias="HOST_LOAD_RESUME_THRESHOLD"
+    # Single global backstop: admitted requests per process never exceed this,
+    # whatever the budget says (MayaLoad: ~10-12 model users per replica was
+    # the stable band on the 2 vCPU host).
+    adaptive_admission_max_in_flight: int = Field(
+        default=24, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
     )
-    host_load_retry_seconds: int = Field(
-        default=15, ge=1, le=300, validation_alias="HOST_LOAD_RETRY_SECONDS"
+    # Max budget = 12 concurrent LLM calls at weight 4. Min keeps one model
+    # call moving.
+    adaptive_admission_max_units: int = Field(
+        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
+    )
+    adaptive_admission_min_units: int = Field(
+        default=4, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MIN_UNITS"
+    )
+    adaptive_admission_increase_units: float = Field(
+        default=2.0, gt=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_INCREASE_UNITS"
+    )
+    adaptive_admission_decrease_factor: float = Field(
+        default=0.7, gt=0, lt=1, validation_alias="ADAPTIVE_ADMISSION_DECREASE_FACTOR"
+    )
+    adaptive_admission_sample_seconds: float = Field(
+        default=1.0, gt=0, le=60, validation_alias="ADAPTIVE_ADMISSION_SAMPLE_SECONDS"
+    )
+    adaptive_admission_adjust_seconds: float = Field(
+        default=2.0, ge=0, le=300, validation_alias="ADAPTIVE_ADMISSION_ADJUST_SECONDS"
+    )
+    # Soft pressure (shrink, still admit). Danger line reuses
+    # HOST_LOAD_REJECT/RESUME and MEMORY_GUARD_MIN/RESUME (queue only).
+    adaptive_admission_soft_load: float = Field(
+        default=4.0, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_LOAD"
+    )
+    adaptive_admission_soft_mem_mb: int = Field(
+        default=800, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_MEM_MB"
+    )
+    adaptive_admission_db_write_p95_ms: float = Field(
+        default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_DB_WRITE_P95_MS"
+    )
+    adaptive_admission_request_p95_ms: float = Field(
+        default=8_000.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_REQUEST_P95_MS"
+    )
+    # Layer-1 queue depth; past it callers get an immediate retryable 503.
+    adaptive_admission_queue_max: int = Field(
+        default=200, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_QUEUE_MAX"
+    )
+    adaptive_admission_wait_seconds: int = Field(
+        default=180, ge=0, le=3_600, validation_alias="ADAPTIVE_ADMISSION_WAIT_SECONDS"
+    )
+    adaptive_admission_retry_seconds: int = Field(
+        default=5, ge=1, le=300, validation_alias="ADAPTIVE_ADMISSION_RETRY_SECONDS"
+    )
+    adaptive_admission_weight_llm: int = Field(
+        default=4, ge=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_WEIGHT_LLM"
+    )
+    adaptive_admission_weight_create: int = Field(
+        default=3, ge=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_WEIGHT_CREATE"
+    )
+    adaptive_admission_weight_write: int = Field(
+        default=2, ge=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_WEIGHT_WRITE"
+    )
+    adaptive_admission_weight_login: int = Field(
+        default=1, ge=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_WEIGHT_LOGIN"
     )
     # Read-only SQLite snapshot imported into an empty PostgreSQL database on
     # startup. Empty means do not import. The source file is never modified.

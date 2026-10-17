@@ -10,6 +10,7 @@ repository, which keeps Wave 1 tests independent.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -32,6 +33,8 @@ from .protocols import (
     PreparedTurn,
     ResolvedTurnVoice,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -899,6 +902,11 @@ class SqlPlaybackRepository(PlaybackRepository):
     def ensure_turn_plan(self, db: Any, debate: SqlRow) -> list[SqlRow]:
         existing = self.turns(db, debate)
         if existing or not self._has_table(db, "debate_turns"):
+            # Drafts that already have turns (prewarm plan / reopen) still need
+            # the first prepare job, or Preview ages into preparation_timeout
+            # with zero jobs rows — the D3 prod shape.
+            if existing:
+                self.ensure_turn_jobs(db, debate, existing)
             return existing
         # M10 is the sole owner of the deterministic plan and predecessor
         # prefix.  Do not duplicate that algorithm here: its helper assigns
@@ -911,7 +919,9 @@ class SqlPlaybackRepository(PlaybackRepository):
             expected_revision=int(debate.revision),
             expected_status="draft",
         )
-        return self.turns(db, debate)
+        turns = self.turns(db, debate)
+        self.ensure_turn_jobs(db, debate, turns)
+        return turns
 
     def playback_state(self, db: Any, debate: SqlRow) -> SqlRow:
         if not self._has_table(db, "playback_states"):
@@ -1035,6 +1045,10 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        # Postgres cannot infer a type for ``:teacher_user_id IS NOT NULL`` alone
+        # (AmbiguousParameter).  Gate in Python; SQL only compares the bound id.
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         params = {
             "debate_id": debate_id,
@@ -1050,9 +1064,52 @@ class SqlPlaybackRepository(PlaybackRepository):
             # Do not issue a SELECT (or any other statement) before this
             # explicit write transaction.  This is the WAL snapshot fix.
             begin_immediate(claim_session)
+            # SQLite has json_array_length / json_group_array; Postgres compat only
+            # installs json_extract / json_valid.  Keep claim SQL dialect-portable.
+            if self._dialect_name(claim_session) == "postgresql":
+                predecessor_len = (
+                    "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
+                )
+                # json_agg(...)::text inserts spaces after commas; stored rows use
+                # json.dumps(separators=(",", ":")). Compare as jsonb so prod Next
+                # is not blocked by whitespace-only inequality.
+                predecessor_json = (
+                    "SELECT COALESCE(jsonb_agg(dt.id ORDER BY dt.turn_index, dt.id), "
+                    "'[]'::jsonb) FROM debate_turns AS dt "
+                    "WHERE dt.debate_id=ps.debate_id "
+                    "AND dt.turn_index < successor.turn_index "
+                    "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                    "= :teaching_protocol AND successor.round_no > 1) "
+                    "OR dt.round_no < successor.round_no)"
+                )
+                predecessor_eq = (
+                    "successor.predecessor_turn_ids_json::jsonb = ("
+                    + predecessor_json
+                    + ")"
+                )
+            else:
+                predecessor_len = "json_array_length(successor.predecessor_turn_ids_json)"
+                predecessor_json = (
+                    "SELECT json_group_array(prefix_ids.id) FROM ("
+                    "SELECT id FROM debate_turns "
+                    "WHERE debate_id=ps.debate_id "
+                    "AND turn_index < successor.turn_index "
+                    "AND (d.rule_set_id <> :mutual_rule_set_id "
+                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                    "= :teaching_protocol AND successor.round_no > 1) "
+                    "OR round_no < successor.round_no) "
+                    "ORDER BY turn_index, id"
+                    ") AS prefix_ids"
+                )
+                predecessor_eq = (
+                    "successor.predecessor_turn_ids_json = ("
+                    + predecessor_json
+                    + ")"
+                )
             candidate = claim_session.execute(
                 text(
-                    "SELECT ps.rowid AS claim_rowid, successor.audio_file_id, "
+                    "SELECT ps.id AS claim_id, successor.audio_file_id, "
                     "successor.audio_duration_ms "
                     "FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
@@ -1069,7 +1126,6 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND ps.control_version=:expected_control_version "
                     "AND ps.replay_scope IS NULL AND ps.replay_index IS NULL "
                     "AND d.status='running' "
-                    "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher') "
@@ -1096,7 +1152,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "= :teaching_protocol AND successor.round_no > 1) "
                     "OR prefix_count.round_no < successor.round_no)) "
                     "= CASE WHEN d.rule_set_id=:mutual_rule_set_id "
-                    "THEN json_array_length(successor.predecessor_turn_ids_json) "
+                    "THEN " + predecessor_len + " "
                     "ELSE current_turn.turn_index END "
                     "AND NOT EXISTS (SELECT 1 FROM debate_turns AS duplicate "
                     "WHERE duplicate.debate_id=ps.debate_id "
@@ -1133,20 +1189,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND prior.round_no < successor.round_no), -1) "
                     "ELSE successor.turn_index - 1 END "
                     "AND json_valid(successor.predecessor_turn_ids_json) "
-                    "AND successor.predecessor_turn_ids_json = ("
-                    "SELECT json_group_array(prefix_ids.id) FROM ("
-                    "SELECT id FROM debate_turns "
-                    "WHERE debate_id=ps.debate_id "
-                    "AND turn_index < successor.turn_index "
-                    "AND (d.rule_set_id <> :mutual_rule_set_id "
-                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
-                    "= :teaching_protocol AND successor.round_no > 1) "
-                    "OR round_no < successor.round_no) "
-                    "ORDER BY turn_index, id"
-                    ") AS prefix_ids) "
+                    "AND " + predecessor_eq + " "
                     "AND EXISTS (SELECT 1 FROM jobs AS successor_job "
                     "WHERE successor_job.debate_id=ps.debate_id "
                     "AND successor_job.turn_id=successor.id "
+                    "AND successor_job.operation='debate_turn_prepare' "
                     "AND successor_job.state='completed' "
                     "AND successor_job.cancellation_generation=d.cancellation_generation)"
                 ).bindparams(bindparam("tts_codes", expanding=True)),
@@ -1163,7 +1210,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "control_version=:next_control_version, server_started_at=NULL, "
                     "pending_action=NULL, pending_ticket_hash=NULL, "
                     "pending_media_command_id=NULL, audio_duration_ms=0, "
-                    "updated_at=:updated_at WHERE rowid=:claim_rowid "
+                    "updated_at=:updated_at WHERE id=:claim_id "
                     "AND debate_id=:debate_id "
                     "AND status IN ('playing','paused','waiting_next') AND mode='live' "
                     "AND current_turn_id=:expected_current_turn_id "
@@ -1172,7 +1219,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 ),
                 {
                     **params,
-                    "claim_rowid": candidate[0],
+                    "claim_id": candidate[0],
                     "next_control_version": expected_control_version + 1,
                     "updated_at": _now(),
                 },
@@ -1195,11 +1242,20 @@ class SqlPlaybackRepository(PlaybackRepository):
             if event is not None and committed_events is not None:
                 committed_events.append(event)
             return True
-        except OperationalError:
-            # Includes a bounded SQLite busy timeout.  The caller exposes the
-            # same stale 409 as a losing CAS; it must never retry a provider or
-            # leak a transient 503 for this teacher command.
-            claim_session.rollback()
+        except Exception as exc:
+            # OperationalError (busy) plus any unexpected SQL/RuntimeError must
+            # stay a soft CAS miss.  An uncaught exception here becomes the
+            # global provider_unavailable 503 and freezes teacher Next.
+            LOGGER.error(
+                "Next playback claim failed debate_id=%s error_type=%s",
+                debate_id,
+                type(exc).__name__,
+                exc_info=False,
+            )
+            try:
+                claim_session.rollback()
+            except Exception:
+                pass
             return False
         finally:
             claim_session.close()
@@ -1245,10 +1301,17 @@ class SqlPlaybackRepository(PlaybackRepository):
             or turn.preparation_stage != "ready"
             or turn.publication_status != "unpublished"
             or turn.audio_file_id is not None
-            or turn.audio_duration_ms is not None
             or turn.safe_error_code not in TTS_UNAVAILABLE_CODES
             or not str(turn.speech or "").strip()
             or not str(turn.transcript_hash or "").strip()
+            # Align with claim SELECT: null duration OR tts_voice_unavailable+0.
+            or not (
+                turn.audio_duration_ms is None
+                or (
+                    turn.safe_error_code == "tts_voice_unavailable"
+                    and turn.audio_duration_ms == 0
+                )
+            )
         ):
             return None
         prior = [item for item in turns if int(item.turn_index) < int(turn.turn_index)]
@@ -1280,7 +1343,8 @@ class SqlPlaybackRepository(PlaybackRepository):
         job = db.execute(
             text(
                 "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
-                "AND state='completed' AND cancellation_generation=:generation"
+                "AND operation='debate_turn_prepare' AND state='completed' "
+                "AND cancellation_generation=:generation"
             ),
             {"debate_id": debate_id, "turn_id": turn_id, "generation": generation},
         ).first()
@@ -1303,7 +1367,9 @@ class SqlPlaybackRepository(PlaybackRepository):
             },
         )
         if int(getattr(changed, "rowcount", 0)) != 1 or not self.publish_turn(db, turn):
-            raise RuntimeError("text publication lost its current turn fence")
+            # Soft-fail: claim_next_playback treats None as CAS miss (409),
+            # never as an unhandled 503 provider_unavailable.
+            return None
         return self.append_event_tx(
             db,
             debate_id=debate_id,
@@ -1363,17 +1429,19 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         try:
             begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
-                    "SELECT ps.rowid, ps.current_turn_id, ps.control_version "
+                    "SELECT ps.id, ps.current_turn_id, ps.control_version "
                     "FROM playback_states AS ps JOIN debates AS d ON d.id=ps.debate_id "
                     "WHERE ps.debate_id=:debate_id AND ps.status='playing' "
                     "AND ps.current_turn_id IS NOT NULL "
                     "AND ps.control_version=:expected_control_version "
-                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND d.status='running' "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher')"
@@ -1393,11 +1461,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "control_version=:next_control_version, server_started_at=NULL, "
                     "pending_action=NULL, pending_ticket_hash=NULL, "
                     "pending_media_command_id=NULL, audio_duration_ms=0, "
-                    "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                    "updated_at=:updated_at WHERE id=:claim_id AND debate_id=:debate_id "
                     "AND status='playing' AND control_version=:expected_control_version"
                 ),
                 {
-                    "rowid": candidate[0],
+                    "claim_id": candidate[0],
                     "debate_id": debate_id,
                     "expected_control_version": expected_control_version,
                     "next_control_version": expected_control_version + 1,
@@ -1427,19 +1495,21 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         try:
             begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
-                    "SELECT ps.rowid, ps.current_turn_id FROM playback_states AS ps "
+                    "SELECT ps.id, ps.current_turn_id FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
                     "JOIN debate_turns AS t ON t.id=ps.current_turn_id "
                     "AND t.debate_id=ps.debate_id "
                     "WHERE ps.debate_id=:debate_id AND ps.status='paused' "
                     "AND ps.current_turn_id IS NOT NULL "
                     "AND ps.control_version=:expected_control_version "
-                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND d.status='running' "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher') "
@@ -1467,11 +1537,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "control_version=:next_control_version, server_started_at=NULL, "
                     "pending_action=NULL, pending_ticket_hash=NULL, "
                     "pending_media_command_id=NULL, audio_duration_ms=0, "
-                    "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                    "updated_at=:updated_at WHERE id=:claim_id AND debate_id=:debate_id "
                     "AND status='paused' AND control_version=:expected_control_version"
                 ),
                 {
-                    "rowid": candidate[0],
+                    "claim_id": candidate[0],
                     "debate_id": debate_id,
                     "expected_control_version": expected_control_version,
                     "next_control_version": expected_control_version + 1,
@@ -1509,13 +1579,15 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return None
+        if teacher_user_id is None:
+            return None
         claim_session = self.session_factory()
         try:
             begin_immediate(claim_session)
             row = (
                 claim_session.execute(
                     text(
-                        "SELECT ps.rowid, ps.current_turn_id, ps.control_version, "
+                        "SELECT ps.id, ps.current_turn_id, ps.control_version, "
                         "d.course_id, d.status, "
                         "(SELECT COUNT(*) FROM debate_turns t "
                         "WHERE t.debate_id=d.id) AS total_turns, "
@@ -1527,7 +1599,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "AND ps.control_version=:expected_control_version "
                         "AND ps.status IN ('preparing','ready','playing','paused','waiting_next') "
                         "AND ps.mode='live' "
-                        "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                        "AND d.status='running' "
                         "AND EXISTS (SELECT 1 FROM course_members cm "
                         "WHERE cm.course_id=d.course_id "
                         "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
@@ -1570,11 +1642,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "server_started_at=NULL, replay_scope=NULL, replay_index=NULL, "
                         "pending_action=NULL, pending_ticket_hash=NULL, "
                         "pending_media_command_id=NULL, audio_duration_ms=0, "
-                        "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                        "updated_at=:updated_at WHERE id=:claim_id AND debate_id=:debate_id "
                         "AND control_version=:expected_control_version"
                     ),
                     {
-                        "rowid": row["rowid"],
+                        "claim_id": row["id"],
                         "debate_id": debate_id,
                         "expected_control_version": expected_control_version,
                         "control_version": next_version,
@@ -1613,11 +1685,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "server_started_at=NULL, replay_scope=NULL, replay_index=NULL, "
                         "pending_action=NULL, pending_ticket_hash=NULL, "
                         "pending_media_command_id=NULL, audio_duration_ms=0, "
-                        "updated_at=:updated_at WHERE rowid=:rowid AND debate_id=:debate_id "
+                        "updated_at=:updated_at WHERE id=:claim_id AND debate_id=:debate_id "
                         "AND control_version=:expected_control_version"
                     ),
                     {
-                        "rowid": row["rowid"],
+                        "claim_id": row["id"],
                         "debate_id": debate_id,
                         "expected_control_version": expected_control_version,
                         "control_version": next_version,
@@ -1665,6 +1737,8 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         params = {
             "debate_id": debate_id,
@@ -1681,7 +1755,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             begin_immediate(claim_session)
             candidate = claim_session.execute(
                 text(
-                    "SELECT ps.rowid AS claim_rowid FROM playback_states AS ps "
+                    "SELECT ps.id AS claim_id FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
                     "JOIN courses AS c ON c.id=d.course_id "
                     "JOIN debate_turns AS current_turn ON current_turn.id=ps.current_turn_id "
@@ -1698,7 +1772,6 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND d.status IN ('debate_finished','completed') "
                     "AND (c.current_audio_debate_id=d.id OR "
                     "json_extract(d.rule_snapshot_json, '$.turn_protocol')='segments_v2') "
-                    "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher') "
@@ -1734,7 +1807,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "pending_action=NULL, pending_ticket_hash=NULL, "
                     "pending_media_command_id=NULL, audio_duration_ms=0, "
                     "control_version=:next_control_version, updated_at=:updated_at "
-                    "WHERE rowid=:claim_rowid AND debate_id=:debate_id "
+                    "WHERE id=:claim_id AND debate_id=:debate_id "
                     "AND status IN ('playing','paused','waiting_next') AND mode='replay' "
                     "AND replay_scope='all' AND replay_index=:expected_replay_index "
                     "AND current_turn_id=:expected_current_turn_id "
@@ -1745,7 +1818,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "next_replay_index": expected_replay_index + 1,
                     "next_control_version": expected_control_version + 1,
                     "updated_at": _now(),
-                    "claim_rowid": candidate[0],
+                    "claim_id": candidate[0],
                 },
             )
             if int(getattr(changed, "rowcount", 0)) != 1:
@@ -1753,8 +1826,17 @@ class SqlPlaybackRepository(PlaybackRepository):
                 return False
             claim_session.commit()
             return True
-        except OperationalError:
-            claim_session.rollback()
+        except Exception as exc:
+            LOGGER.error(
+                "Replay next playback claim failed debate_id=%s error_type=%s",
+                debate_id,
+                type(exc).__name__,
+                exc_info=False,
+            )
+            try:
+                claim_session.rollback()
+            except Exception:
+                pass
             return False
         finally:
             claim_session.close()
@@ -2098,7 +2180,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 return False
             candidate = claim_session.execute(
                 text(
-                    "SELECT ps.rowid AS claim_rowid FROM playback_states AS ps "
+                    "SELECT ps.id AS claim_id FROM playback_states AS ps "
                     "JOIN debates AS d ON d.id=ps.debate_id "
                     "JOIN debate_turns AS t ON t.id=ps.current_turn_id "
                     "AND t.debate_id=ps.debate_id "
@@ -2148,7 +2230,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "pending_ticket_hash=:ticket_hash, "
                     "pending_media_command_id=:command_id, "
                     "audio_duration_ms=:audio_duration_ms, updated_at=:updated_at "
-                    "WHERE rowid=:claim_rowid AND debate_id=:debate_id "
+                    "WHERE id=:claim_id AND debate_id=:debate_id "
                     "AND status='ready' AND current_turn_id=:turn_id "
                     "AND ((:action='replay' AND mode='replay') OR "
                     "(:action<>'replay' AND mode='live')) "
@@ -2163,7 +2245,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "command_id": command_id,
                     "audio_duration_ms": audio_duration_ms,
                     "updated_at": _now(),
-                    "claim_rowid": candidate[0],
+                    "claim_id": candidate[0],
                     "debate_id": debate_id,
                     "turn_id": turn_id,
                     "expected_control_version": expected_control_version,
@@ -2731,27 +2813,47 @@ class SqlPlaybackRepository(PlaybackRepository):
 
     @staticmethod
     def _ensure_turn_job(db: Any, debate: SqlRow, turn: SqlRow) -> None:
+        """Insert the durable prepare job if missing (SQLite + Postgres).
+
+        Prod R3 (201bcff): ``uq_jobs_operation_idempotency_key`` is a *partial*
+        unique index ``UNIQUE (operation, idempotency_key)
+        WHERE (idempotency_key IS NOT NULL)``. Pinning
+        ``ON CONFLICT (operation, idempotency_key)`` without that predicate
+        raises ``InvalidColumnReference`` and aborts the prewarm transaction
+        (zero turns + zero jobs). Target the partial index explicitly with
+        the matching WHERE. SQLite keeps ``INSERT OR IGNORE``.
+        """
+
         key = f"{debate.id}:{turn.id}"
         timestamp = _now()
-        db.execute(
-            text(
-                "INSERT OR IGNORE INTO jobs "
-                "(id, document_id, debate_id, turn_id, idempotency_key, claim_token, "
-                "cancellation_generation, operation, state, safe_error_code, attempt, "
-                "created_at, updated_at) VALUES "
-                "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
-                "'debate_turn_prepare', 'pending', NULL, 0, :created_at, :updated_at)"
-            ),
-            {
-                "id": str(uuid4()),
-                "debate_id": str(debate.id),
-                "turn_id": str(turn.id),
-                "key": key,
-                "generation": int(debate.cancellation_generation or 0),
-                "created_at": timestamp,
-                "updated_at": timestamp,
-            },
+        params = {
+            "id": str(uuid4()),
+            "debate_id": str(debate.id),
+            "turn_id": str(turn.id),
+            "key": key,
+            "generation": int(debate.cancellation_generation or 0),
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+        columns = (
+            "(id, document_id, debate_id, turn_id, idempotency_key, claim_token, "
+            "cancellation_generation, operation, state, safe_error_code, attempt, "
+            "created_at, updated_at) VALUES "
+            "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
+            "'debate_turn_prepare', 'pending', NULL, 0, :created_at, :updated_at)"
         )
+        if SqlPlaybackRepository._dialect_name(db) == "postgresql":
+            db.execute(
+                text(
+                    "INSERT INTO jobs "
+                    + columns
+                    + " ON CONFLICT (operation, idempotency_key) "
+                    "WHERE idempotency_key IS NOT NULL DO NOTHING"
+                ),
+                params,
+            )
+        else:
+            db.execute(text("INSERT OR IGNORE INTO jobs " + columns), params)
 
     def ensure_turn_job(self, db: Any, debate: SqlRow, turn: SqlRow) -> None:
         """Persist an on-demand next-turn job before exposing its preparing state."""
@@ -2992,12 +3094,13 @@ class SqlPlaybackRepository(PlaybackRepository):
         """Exit stuck Preparing by marking recoverable preparation_timeout.
 
         Idempotent: already-failed / deferred-coded turns are left alone.
-        Does not advance turns, create jobs, or terminate the Debate.  A later
-        teacher Retry clears the code through the existing draft/live retry CAS.
+        Does not advance turns or terminate the Debate.  A later teacher Retry
+        clears the code through the existing draft/live retry CAS.
 
         Turns without a debate_turn_prepare job still expire by turn age
         (updated_at, else created_at) so Preview cannot spin forever when the
-        worker never enqueued work.
+        worker never enqueued work.  When that happens a matching failed /
+        pending timeout job is materialised so Retry's job CAS can succeed.
         """
 
         if not self._has_table(db, "debate_turns"):
@@ -3120,6 +3223,51 @@ class SqlPlaybackRepository(PlaybackRepository):
                 ).bindparams(bindparam("turn_ids", expanding=True)),
                 params,
             )
+            # D3 recovery: turns that timed out with never-inserted jobs still
+            # need a failed/pending row so draft Retry's job CAS can match.
+            for turn_id in stale_ids:
+                row = db.execute(
+                    text(
+                        "SELECT t.debate_id, d.status, d.cancellation_generation "
+                        "FROM debate_turns AS t JOIN debates AS d ON d.id=t.debate_id "
+                        "WHERE t.id=:turn_id"
+                    ),
+                    {"turn_id": turn_id},
+                ).first()
+                if row is None:
+                    continue
+                debate_id_value, debate_status, generation = row[0], row[1], row[2]
+                exists = db.execute(
+                    text(
+                        "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                        "AND operation='debate_turn_prepare'"
+                    ),
+                    {"debate_id": str(debate_id_value), "turn_id": turn_id},
+                ).first()
+                if exists is not None:
+                    continue
+                job_state = "failed" if str(debate_status) == "draft" else "pending"
+                db.execute(
+                    text(
+                        "INSERT INTO jobs "
+                        "(id, document_id, debate_id, turn_id, idempotency_key, claim_token, "
+                        "cancellation_generation, operation, state, safe_error_code, attempt, "
+                        "created_at, updated_at) VALUES "
+                        "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
+                        "'debate_turn_prepare', :state, :code, 0, :created_at, :updated_at)"
+                    ),
+                    {
+                        "id": str(uuid4()),
+                        "debate_id": str(debate_id_value),
+                        "turn_id": turn_id,
+                        "key": f"{debate_id_value}:{turn_id}",
+                        "generation": int(generation or 0),
+                        "state": job_state,
+                        "code": code,
+                        "created_at": params["updated_at"],
+                        "updated_at": params["updated_at"],
+                    },
+                )
         return int(getattr(draft_turned, "rowcount", 0) or 0) + int(
             getattr(running_turned, "rowcount", 0) or 0
         )
@@ -3377,10 +3525,22 @@ class SqlPlaybackRepository(PlaybackRepository):
             },
         )
         if int(getattr(job, "rowcount", 0)) != 1:
-            rollback = getattr(db, "rollback", None)
-            if callable(rollback):
-                rollback()
-            return False
+            # Timed-out drafts that never received a prepare job (D3) still
+            # need Retry to re-queue; insert the missing pending row.
+            self._ensure_turn_job(db, debate, turn)
+            verified = db.execute(
+                text(
+                    "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                    "AND operation='debate_turn_prepare' AND state='pending' "
+                    "AND claim_token IS NULL AND safe_error_code IS NULL"
+                ),
+                {"debate_id": debate_id, "turn_id": turn_id},
+            ).first()
+            if verified is None:
+                rollback = getattr(db, "rollback", None)
+                if callable(rollback):
+                    rollback()
+                return False
         return True
 
     def defer_turn_job(

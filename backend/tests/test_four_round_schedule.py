@@ -298,3 +298,70 @@ def test_sql_next_claim_accepts_all_round_boundaries_and_same_round_prefixes(fou
             successor_turn_id=ids[index + 1],
             teacher_user_id=TEACHER_ID,
         ), f"Next failed at turn {index}"
+
+
+def test_sql_next_claim_advances_tts_voice_unavailable_with_nonempty_predecessors(four_round_db):
+    """Prod R1/D2: turn3→4 text-fallback with compact predecessor JSON must claim True."""
+    database, debate_id, ids = four_round_db
+    now = datetime.now(UTC)
+    with database.session() as db:
+        debate = db.get(Debate, debate_id)
+        turns = commit_start_plan(db, debate_id=debate_id)
+        for turn in turns:
+            _ready(db, debate, turn)
+            turn.audio_file_id = None
+            turn.audio_duration_ms = None
+            turn.safe_error_code = "tts_voice_unavailable"
+            # Compact separators match setup writes; claim must not require spaced json_agg text.
+            turn.predecessor_turn_ids_json = json.dumps(
+                json.loads(turn.predecessor_turn_ids_json),
+                separators=(",", ":"),
+            )
+            db.add(
+                Job(
+                    id=str(uuid4()),
+                    debate_id=debate_id,
+                    turn_id=turn.id,
+                    operation="debate_turn_prepare",
+                    state="completed",
+                    cancellation_generation=int(debate.cancellation_generation or 0),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        debate.status = "running"
+        # Publish prefix through turn index 3 (ids[3]); claim successor ids[4] (non-empty preds).
+        for turn in turns[:4]:
+            turn.publication_status = "public"
+        state = db.scalar(select(PlaybackState).where(PlaybackState.debate_id == debate_id))
+        assert state is not None
+        state.current_turn_id = ids[3]
+        state.status = "waiting_next"
+        state.mode = "live"
+        state.control_version = 61
+        state.replay_scope = None
+        state.replay_index = None
+        version = state.control_version
+        successor = turns[4]
+        assert json.loads(successor.predecessor_turn_ids_json)
+        assert successor.cutoff_turn_index == 3
+
+    repository = SqlPlaybackRepository(session_factory=database.session_factory)
+    assert repository.claim_next_playback(
+        debate_id=debate_id,
+        expected_control_version=version,
+        expected_current_turn_id=ids[3],
+        successor_turn_id=ids[4],
+        teacher_user_id=TEACHER_ID,
+    )
+    with database.session() as db:
+        row = db.execute(
+            text(
+                "SELECT status, current_turn_id, control_version FROM playback_states "
+                "WHERE debate_id=:id"
+            ),
+            {"id": debate_id},
+        ).one()
+        assert row[1] == ids[4]
+        assert int(row[2]) > version
+        assert db.get(DebateTurn, ids[4]).publication_status == "public"

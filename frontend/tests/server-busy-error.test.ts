@@ -9,6 +9,7 @@ describe("server busy / pressure errors", () => {
     "host_memory_pressure",
     "create_admission_busy",
     "host_load_pressure",
+    "adaptive_admission_busy",
   ]) {
     it(`${code} tells the student to retry and that input was kept`, () => {
       const error = { status: 503, code };
@@ -33,6 +34,9 @@ describe("server busy / pressure errors", () => {
     ).toContain("人多");
     expect(
       localizeError({ status: 503, code: "host_load_pressure" }, "zh"),
+    ).toContain("人多");
+    expect(
+      localizeError({ status: 503, code: "adaptive_admission_busy" }, "zh"),
     ).toContain("人多");
   });
 });
