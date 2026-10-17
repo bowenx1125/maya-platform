@@ -45,6 +45,7 @@ import { TeacherStudyformWorkspace } from "../components/teacher-workspace";
 import { LocaleProvider } from "../components/locale";
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 import { abandonChatRequest } from "../lib/chat-request-store";
+import { PlatformApiError } from "../lib/api/platform";
 
 const agents = [
   {
@@ -1253,6 +1254,59 @@ describe("Chatform", () => {
       (screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it.each([
+    [
+      503,
+      "adaptive_admission_busy",
+      "Many people are using Maya right now. Press Send again in a moment.",
+    ],
+    [
+      409,
+      "chat_busy",
+      "The previous message is still being answered. Send again in a moment.",
+    ],
+  ])(
+    "keeps a refused Team message (%s %s) in the box without resending it",
+    async (status, code, hint) => {
+      state.api.streamTeamConversation.mockRejectedValue(
+        new PlatformApiError(status, "busy", { code, message: "busy" }),
+      );
+      renderChats();
+      await startMayaTeamChat("我的答案是 B");
+      expect(await screen.findByText(hint)).toBeTruthy();
+      const box = screen.getByRole("textbox", {
+        name: "Message",
+      }) as HTMLTextAreaElement;
+      expect(box.value).toBe("我的答案是 B");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
+      const send = screen.getByRole("button", { name: "Send" });
+      expect(send.hasAttribute("disabled")).toBe(false);
+      fireEvent.click(send);
+      await waitFor(() =>
+        expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(2),
+      );
+      expect(state.api.streamTeamConversation.mock.calls[1][1]).toMatchObject({
+        message: "我的答案是 B",
+      });
+    },
+  );
+
+  it("disables Send while a Team message is in flight", async () => {
+    state.api.streamTeamConversation.mockImplementation(
+      () => new Promise(() => {}),
+    );
+    renderChats();
+    await startMayaTeamChat("只发一次");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
   });
 
   it("shows a sent Team message at once with its loading state", async () => {

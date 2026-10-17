@@ -474,14 +474,42 @@ def adaptive_admission_busy_error(
     )
 
 
-@contextmanager
-def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
-    """Hold weighted budget for one ``cls`` operation; reads bypass entirely."""
+class Reservation:
+    """Admitted budget for one operation, releasable from any thread.
+
+    A send claims its turn only after admission, but its model work runs on
+    a worker thread; the reservation carries the slot across. ``release`` is
+    idempotent, so every exit path may call it.
+    """
+
+    __slots__ = ("cls", "weight", "deadline", "settings", "_released")
+
+    def __init__(self, cls: str, weight: int, deadline: float, settings: Settings) -> None:
+        self.cls = cls
+        self.weight = weight
+        self.deadline = deadline
+        self.settings = settings
+        self._released = weight == 0
+
+    def release(self) -> None:
+        with _cond:
+            if self._released:
+                return
+            self._released = True
+            _state.in_flight_units = max(0, _state.in_flight_units - self.weight)
+            _state.in_flight[self.cls] = max(0, _state.in_flight[self.cls] - 1)
+            _refresh_locked(self.settings)
+            _dispatch_locked(self.settings)
+
+
+def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
+    """Wait for weighted budget for one ``cls`` operation and hold it.
+
+    Raises the retryable ``adaptive_admission_busy`` 503 when the queue is
+    full or the request deadline passes; nothing is held in that case.
+    """
 
     runtime = settings if settings is not None else get_settings()
-    if cls == READ_CLASS:
-        yield
-        return
     if cls not in CLASSES:
         raise ValueError(f"unknown admission class: {cls}")
     if cls == "llm":
@@ -495,13 +523,9 @@ def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
         else time.monotonic() + float(runtime.adaptive_admission_wait_seconds)
     )
     weight = max(0, _weight(runtime, cls))
+    reservation = Reservation(cls, weight, deadline, runtime)
     if weight == 0:
-        _held.deadline = deadline
-        try:
-            yield
-        finally:
-            _held.deadline = outer_deadline
-        return
+        return reservation
     retry_after = int(runtime.adaptive_admission_retry_seconds)
     waiter = _Waiter(cls=cls, weight=weight)
     depth = int(getattr(_held, "depth", 0))
@@ -535,18 +559,40 @@ def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
                 if not waiter.granted:
                     _refresh_locked(runtime)
                     _dispatch_locked(runtime)
-    _held.depth = depth + 1
-    _held.deadline = deadline
+    return reservation
+
+
+@contextmanager
+def adopt_reservation(reservation: Reservation) -> Iterator[None]:
+    """Run the ``with`` block as the holder of ``reservation``, then release it.
+
+    Nested slots on this thread are charged without queueing behind it, and
+    layer-2 gates wait only for what is left of its deadline.
+    """
+
+    depth = int(getattr(_held, "depth", 0))
+    outer_deadline = getattr(_held, "deadline", None)
+    if reservation.weight > 0:
+        _held.depth = depth + 1
+    _held.deadline = reservation.deadline
     try:
         yield
     finally:
         _held.depth = depth
         _held.deadline = outer_deadline
-        with _cond:
-            _state.in_flight_units = max(0, _state.in_flight_units - weight)
-            _state.in_flight[cls] = max(0, _state.in_flight[cls] - 1)
-            _refresh_locked(runtime)
-            _dispatch_locked(runtime)
+        reservation.release()
+
+
+@contextmanager
+def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
+    """Hold weighted budget for one ``cls`` operation; reads bypass entirely."""
+
+    if cls == READ_CLASS:
+        yield
+        return
+    reservation = reserve_slot(cls, settings)
+    with adopt_reservation(reservation):
+        yield
 
 
 def shared_wait_seconds(cap: float) -> float:
@@ -609,6 +655,9 @@ __all__ = [
     "begin_request_sample",
     "record_request_sample",
     "adaptive_slot",
+    "adopt_reservation",
+    "Reservation",
+    "reserve_slot",
     "record_db_write_ms",
     "record_pool_wait_ms",
     "record_request_ms",

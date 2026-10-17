@@ -48,6 +48,40 @@ class ConcurrencyGate:
             self._waiters = 0
             self._cond.notify_all()
 
+    def acquire(self, *, limit: int, queue_max: int, wait_seconds: float) -> bool:
+        """Take one slot, waiting up to ``wait_seconds``; ``False`` means unthrottled.
+
+        Raises ``GateRejected`` when the wait queue is full or the wait ends.
+        A ``True`` result must be paired with exactly one ``release()``, which
+        may run on another thread.
+        """
+
+        if limit <= 0:
+            return False
+        with self._cond:
+            if self._in_flight < limit:
+                self._in_flight += 1
+                return True
+            if queue_max <= 0 or self._waiters >= queue_max:
+                raise GateRejected("queue_full")
+            self._waiters += 1
+            try:
+                deadline = time.monotonic() + max(0.0, float(wait_seconds))
+                while self._in_flight >= limit:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise GateRejected("wait_timeout")
+                    self._cond.wait(timeout=remaining)
+                self._in_flight += 1
+                return True
+            finally:
+                self._waiters -= 1
+
+    def release(self) -> None:
+        with self._cond:
+            self._in_flight = max(0, self._in_flight - 1)
+            self._cond.notify()
+
     @contextmanager
     def hold(
         self,
@@ -65,38 +99,12 @@ class ConcurrencyGate:
         * Wait queue full: raise ``GateRejected`` immediately.
         """
 
-        if limit <= 0:
-            yield
-            return
-
-        acquired = False
-        with self._cond:
-            if self._in_flight < limit:
-                self._in_flight += 1
-                acquired = True
-            else:
-                if queue_max <= 0 or self._waiters >= queue_max:
-                    raise GateRejected("queue_full")
-                self._waiters += 1
-                try:
-                    deadline = time.monotonic() + max(0.0, float(wait_seconds))
-                    while self._in_flight >= limit:
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
-                            raise GateRejected("wait_timeout")
-                        self._cond.wait(timeout=remaining)
-                    self._in_flight += 1
-                    acquired = True
-                finally:
-                    self._waiters -= 1
-
+        acquired = self.acquire(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds)
         try:
             yield
         finally:
             if acquired:
-                with self._cond:
-                    self._in_flight = max(0, self._in_flight - 1)
-                    self._cond.notify()
+                self.release()
 
 
 __all__ = ["ConcurrencyGate", "GateRejected"]

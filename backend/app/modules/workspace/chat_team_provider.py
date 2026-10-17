@@ -523,7 +523,7 @@ def dispatch_team_model(
     """Replay a durable result stage or make one exact, one-shot provider call."""
 
     del actor_context
-    selected = llm_provider(settings)
+    selected = llm_provider(settings.chat_settings())
     if not isinstance(selected, DashScopeLLMAdapter):
         raise TeamDispatchError("provider_preflight_blocked")
     config = selected.config

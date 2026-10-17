@@ -159,6 +159,7 @@ def test_stream_worker_handoff_rechecks_the_request_session_for_every_member(
             claim: Any,
             after_sequence: int = 0,
             on_finished: Any = None,
+            write_slot: Any = None,
         ) -> Any:
             if not claim.created:
                 return original_stream(
@@ -168,6 +169,7 @@ def test_stream_worker_handoff_rechecks_the_request_session_for_every_member(
                     claim,
                     after_sequence,
                     on_finished=on_finished,
+                    write_slot=write_slot,
                 )
             with selected_database.session() as db:
                 auth_session = db.get(SessionRecord, session_id_hash)
@@ -185,6 +187,7 @@ def test_stream_worker_handoff_rechecks_the_request_session_for_every_member(
                 claim,
                 after_sequence,
                 on_finished=on_finished,
+                write_slot=write_slot,
             )
 
         monkeypatch.setattr(chat_module, "stream_team_events", change_session_before_worker)
