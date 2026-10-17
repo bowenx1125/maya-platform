@@ -216,7 +216,6 @@ describe("M08 voice library", () => {
     expect(await screen.findByText("Created")).toBeTruthy();
   });
 
-
   it("does not show Created when enroll returns a failed profile", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     api.enrollVoice.mockResolvedValue({
