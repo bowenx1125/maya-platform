@@ -20,6 +20,8 @@ from app.modules.debates.round_count import (
 )
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
 
+from app.providers.tts import TTS_UNAVAILABLE_CODES
+
 from ._core import (
     _RECOVERABLE_PROVIDER_GENERATION_CODES,
     EvidenceTraceCorruptError,
@@ -35,9 +37,11 @@ from .schemas import (
 )
 
 LOGGER = logging.getLogger(__name__)
+# Draft Preview may soft-fail TTS via mark_turn_ready (final_ready + tts_*),
+# including voice/provider unavailable which are not in the live recoverable set.
 _DRAFT_TTS_RETRY_CODES = frozenset(
     code for code in _RECOVERABLE_PROVIDER_GENERATION_CODES if code.startswith("tts_")
-)
+) | frozenset(TTS_UNAVAILABLE_CODES)
 
 
 class PlaybackControlMixin(PlaybackCore):
@@ -537,14 +541,29 @@ class PlaybackControlMixin(PlaybackCore):
                 preview_turns = [
                     item for item in turns if self._round(item) < debate_round_count(debate)
                 ]
-                target = next(
+                requested = next(
                     (
                         item
                         for item in preview_turns
-                        if not (self._turn_ready(item) or self._turn_text_fallback_ready(item))
+                        if str(self._get(item, "id", default="")) == turn_id
                     ),
                     None,
                 )
+                # Text-fallback (final_ready + tts_* + speech, no audio) must remain
+                # retryable so Preview can re-run TTS without touching A-face claim.
+                if requested is not None and self._turn_text_fallback_ready(requested):
+                    target = requested
+                else:
+                    target = next(
+                        (
+                            item
+                            for item in preview_turns
+                            if not (
+                                self._turn_ready(item) or self._turn_text_fallback_ready(item)
+                            )
+                        ),
+                        None,
+                    )
                 if target is None or str(self._get(target, "id", default="")) != turn_id:
                     raise invalid_state("Only the next unprepared Preview turn can be retried.")
                 code = str(self._get(target, "safe_error_code", "failed_code", default="") or "")

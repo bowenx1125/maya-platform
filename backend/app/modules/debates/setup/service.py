@@ -12,7 +12,7 @@ import json
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, delete, func, or_, select, update
@@ -812,7 +812,9 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         try:
             from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 
-            expired = SqlPlaybackRepository().expire_stale_preparation(db, debate_id=str(debate.id))
+            expired = SqlPlaybackRepository().expire_stale_preparation(
+                db, debate_id=str(debate.id)
+            )
             if expired:
                 db.commit()
         except Exception:
@@ -824,7 +826,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         try:
             from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 
-            SqlPlaybackRepository().ensure_turn_plan(db, cast(Any, debate))
+            SqlPlaybackRepository().ensure_turn_plan(db, debate)
         except Exception:
             db.rollback()
     participants = db.scalars(
@@ -1242,7 +1244,7 @@ def create_debate_draft(
     # bare list "thinking", and an empty Preview with no Retry surface.
     from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 
-    SqlPlaybackRepository().ensure_turn_plan(db, cast(Any, debate))
+    SqlPlaybackRepository().ensure_turn_plan(db, debate)
     result = _detail(db, debate)
     if record is not None:
         response_json = json.dumps(result.model_dump(mode="json"), separators=(",", ":"))
