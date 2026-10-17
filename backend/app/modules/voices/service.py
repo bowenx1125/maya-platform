@@ -47,7 +47,7 @@ from app.providers.audio import (
     run_ffmpeg_normalize,
     validate_source_audio,
 )
-from app.providers.dashscope import FLASH_TTS_MODEL_KEY
+from app.providers.dashscope import DEFAULT_TARGET_MODEL_KEY, FLASH_TTS_MODEL_KEY
 from app.providers.factory import voice_provider
 from app.providers.tts import TTSProvider
 from app.providers.voice import (
@@ -59,7 +59,7 @@ from app.providers.voice import (
 )
 
 CONSENT_COPY_VERSION = "voice-consent-v1"
-TARGET_MODEL_KEY = "qwen3-tts-vc-2026-01-22"
+TARGET_MODEL_KEY = DEFAULT_TARGET_MODEL_KEY
 PREVIEW_TEXT = (
     "I will listen carefully, respond with evidence, and explain what different "
     "perspectives can learn from one another."
@@ -429,10 +429,10 @@ def _voice_request_hash(
 
 
 def _new_recovery_name(profile_id: str) -> str:
-    # Qwen-TTS preferred_name accepts only letters/digits/underscore and at
-    # most 16 characters. The platform UUID keeps this deterministic for
-    # provider-side reconciliation without exposing an external identifier.
-    return f"maya{profile_id.replace('-', '')[:12]}"
+    # The enrollment prefix accepts only lowercase letters and digits, fewer
+    # than ten. The platform UUID keeps this deterministic for provider-side
+    # reconciliation without exposing an external identifier.
+    return f"m{profile_id.replace('-', '')[:8]}"
 
 
 def _safe_provider_error(exc: Exception) -> PlatformError:
@@ -888,10 +888,7 @@ def enroll_voice(
                 finish_idempotency(db, record, 202, result.model_dump(mode="json"))
                 db.commit()
                 return result
-            elif (
-                operation.state == "failed"
-                and operation.safe_error_code == "voice_clone_refused"
-            ):
+            elif operation.state == "failed" and operation.safe_error_code == "voice_clone_refused":
                 # A refused clone never becomes retryable, not even with the
                 # same key: the answer was decided before any charged call.
                 raise CLONE_REFUSED_ERROR
@@ -943,9 +940,7 @@ def enroll_voice(
             profile.status = "failed"
             profile.safe_error_code = "voice_clone_refused"
             profile.updated_at = now_utc()
-            _finish_operation(
-                db, operation, state="failed", safe_error_code="voice_clone_refused"
-            )
+            _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
             raise CLONE_REFUSED_ERROR
         _dispatch_operation(db, operation)
         assert_claim_owned(db, record)
@@ -971,9 +966,7 @@ def enroll_voice(
             # re-issue this enrollment.
             profile.status = "failed"
             profile.safe_error_code = "voice_clone_refused"
-            _finish_operation(
-                db, operation, state="failed", safe_error_code="voice_clone_refused"
-            )
+            _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
             raise _safe_provider_error(exc) from exc
         except VoiceProviderError as exc:
             # Once the durable dispatch row is committed, a generic provider

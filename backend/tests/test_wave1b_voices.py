@@ -511,7 +511,6 @@ def test_voice_scope_and_upload_validation(
     assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
 
 
-
 def test_flash_target_model_refuses_clone_before_dispatch(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
@@ -1338,18 +1337,11 @@ def _provider_response(payload: dict[str, object]) -> httpx.Response:
 def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The retired clone model takes no new voices, but its owners can still
+    # find and delete the ones they made. New-clone enrollment shapes are
+    # covered in test_qwen3_tts_flash.py.
     capture = _CaptureDashScopeClient(
         [
-            _provider_response(
-                {
-                    "output": {
-                        "voice": "maya123456789012-generated",
-                        "target_model": "qwen3-tts-vc-2026-01-22",
-                        "fallback_mode": False,
-                    },
-                    "request_id": "enroll-request",
-                }
-            ),
             _provider_response(
                 {
                     "output": {
@@ -1369,36 +1361,26 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     monkeypatch.setattr(dashscope, "_client", lambda **_options: capture)
     config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
     voice = dashscope.DashScopeVoiceCloneProvider(config)
-    enrolled = voice.enroll(
-        "data:audio/wav;base64,AAAA",
-        recovery_name="maya123456789012",
-        target_model_key="qwen3-tts-vc-2026-01-22",
-        language="en",
-    )
-    assert enrolled.external_voice_id == "maya123456789012-generated"
-    assert enrolled.request_id == "enroll-request"
+    with pytest.raises(VoiceCloneRefusedError):
+        voice.enroll(
+            "data:audio/wav;base64,AAAA",
+            recovery_name="maya123456789012",
+            target_model_key="qwen3-tts-vc-2026-01-22",
+            language="en",
+        )
+    assert capture.calls == []
     exists = voice.exists("maya123456789012", target_model_key="qwen3-tts-vc-2026-01-22")
     assert exists.matches == ("maya123456789012-generated",)
     voice.delete("maya123456789012-generated", target_model_key="qwen3-tts-vc-2026-01-22")
     expected_customization = (
         "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/customization"
     )
-    assert [call[0] for call in capture.calls] == [expected_customization] * 3
-    create_body = capture.calls[0][1]["json"]
-    assert isinstance(create_body, dict)
-    assert create_body["model"] == "qwen-voice-enrollment"
-    assert create_body["input"] == {
-        "action": "create",
-        "target_model": "qwen3-tts-vc-2026-01-22",
-        "preferred_name": "maya123456789012",
-        "audio": {"data": "data:audio/wav;base64,AAAA"},
-        "language": "en",
-    }
-    assert capture.calls[1][1]["json"] == {
+    assert [call[0] for call in capture.calls] == [expected_customization] * 2
+    assert capture.calls[0][1]["json"] == {
         "model": "qwen-voice-enrollment",
         "input": {"action": "list", "page_index": 0, "page_size": 100},
     }
-    assert capture.calls[2][1]["json"] == {
+    assert capture.calls[1][1]["json"] == {
         "model": "qwen-voice-enrollment",
         "input": {"action": "delete", "voice": "maya123456789012-generated"},
     }
@@ -1426,24 +1408,26 @@ def test_dashscope_voice_and_tts_adapters_match_current_official_http_shapes(
     monkeypatch.setattr(dashscope, "_client", make_tts_client)
     downloader = _CaptureDownloader()
     tts = dashscope.DashScopeTTSProvider(config, downloader=downloader)
-    result = tts.synthesize("A new English sentence.", enrolled.external_voice_id)
+    clone = "qwen-audio-3.1-tts-flash-m12345678-generated"
+    result = tts.synthesize("A new English sentence.", clone)
     assert result.request_id == "tts-request"
     assert tts_client_options == [{"read_timeout": dashscope.TTS_GENERATION_READ_TIMEOUT_SECONDS}]
     assert downloader.url and downloader.url.endswith("?Expires=1")
     assert len(tts_capture.calls) == 1
     assert tts_capture.calls[0][0] == (
-        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
     )
     assert tts_capture.calls[0][1]["headers"] == {
         "Authorization": "Bearer fixture",
         "X-DashScope-WorkSpace": "workspace123",
     }
     assert tts_capture.calls[0][1]["json"] == {
-        "model": "qwen3-tts-vc-2026-01-22",
+        "model": "qwen-audio-3.1-tts-flash",
         "input": {
             "text": "A new English sentence.",
-            "voice": "maya123456789012-generated",
-            "language_type": "English",
+            "voice": clone,
+            "format": "wav",
+            "sample_rate": 24000,
         },
     }
 
@@ -1506,7 +1490,7 @@ def test_dashscope_tts_404_does_not_fallback_retry_or_download(
     assert "private-provider-response" not in str(caught.value)
     assert len(capture.calls) == 1
     assert capture.calls[0][0] == (
-        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+        "https://workspace123.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
     )
     assert capture.calls[0][1]["headers"] == {
         "Authorization": "Bearer fixture",
@@ -1621,11 +1605,12 @@ def test_dashscope_tts_repairs_streamed_placeholder_wav(
     )
     assert result.audio_bytes == raw
     assert capture.calls[0][1]["json"] == {
-        "model": "qwen3-tts-vc-2026-01-22",
+        "model": "qwen-audio-3.1-tts-flash",
         "input": {
             "text": "A new English sentence.",
             "voice": "opaque-voice",
-            "language_type": "English",
+            "format": "wav",
+            "sample_rate": 24000,
         },
     }
 
@@ -1692,17 +1677,19 @@ def test_dashscope_tts_sends_supported_languages_and_refuses_other_languages(
             del value
             return _wav(2)
 
+    # Only system voices name their language; a clone detects it.
     config = dashscope.DashScopeConfig(api_key="fixture", workspace_id="workspace123")
     dashscope.DashScopeTTSProvider(config, downloader=_WavDownloader()).synthesize(
         text,
-        "opaque-voice",
+        "Cherry",
         language=language,
+        target_model_key=dashscope.FLASH_TTS_MODEL_KEY,
     )
     body = capture.calls[0][1]["json"]
     assert isinstance(body, dict)
     assert body["input"] == {
         "text": text,
-        "voice": "opaque-voice",
+        "voice": "Cherry",
         "language_type": language_type,
     }
 

@@ -16,8 +16,8 @@ from app.modules.debates.playback.protocols import (
 )
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import (
-    SqlPlaybackRepository,
     _PREPARATION_TIMEOUT_CODE,
+    SqlPlaybackRepository,
 )
 from sqlalchemy import text
 
@@ -87,9 +87,7 @@ def test_expire_stale_preparation_exits_preparing_idempotently(timeout_db) -> No
         db.commit()
         assert first == 1
         row = db.execute(
-            text(
-                "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
-            ),
+            text("SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"),
             {"turn_id": ids["turn"]},
         ).one()
         assert row[0] == "failed"
@@ -103,7 +101,6 @@ def test_expire_stale_preparation_exits_preparing_idempotently(timeout_db) -> No
         second = repository.expire_stale_preparation(db, debate_id=ids["debate"])
         db.commit()
         assert second == 0
-
 
 
 def test_expire_stale_preparation_without_prepare_job(timeout_db) -> None:
@@ -160,9 +157,7 @@ def test_expire_stale_preparation_fresh_turn_not_expired(timeout_db) -> None:
         assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == 0
         db.commit()
         row = db.execute(
-            text(
-                "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
-            ),
+            text("SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"),
             {"turn_id": ids["turn"]},
         ).one()
         assert row[0] == "pending"

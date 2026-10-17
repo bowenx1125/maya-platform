@@ -29,10 +29,13 @@ from app.modules.voices.preset import (
 from app.modules.voices.service import _reconcile_enrollment
 from app.providers.dashscope import (
     DEFAULT_TARGET_MODEL_KEY,
+    FLASH_TTS_MODEL_KEY,
     PRESET_TTS_MODEL_KEY,
     QWEN_TTS_URL,
+    SPEECH_SYNTHESIZER_PATH,
     DashScopeConfig,
     DashScopeTTSProvider,
+    _base_url,
 )
 from app.providers.tts import TTSProviderError, TTSResult
 from app.seed import GROUP_DEMO_ID, seed_uuid
@@ -172,8 +175,9 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
         "Authorization": "Bearer fixture",
         "X-DashScope-WorkSpace": "workspace123",
     }
+    # The preset row keeps its stored key; the request uses the flash alias.
     assert flash.calls[0]["json"] == {
-        "model": PRESET_TTS_MODEL_KEY,
+        "model": FLASH_TTS_MODEL_KEY,
         "input": {
             "text": "A steady sentence.",
             "voice": ELDRIC_SAGE_VOICE,
@@ -185,7 +189,7 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
     monkeypatch.setattr("app.providers.dashscope._client", lambda **_kwargs: clone)
     provider.synthesize("A cloned sentence.", "clone-voice-id", language="en")
     assert len(clone.calls) == 1
-    assert clone.calls[0]["url"] == QWEN_TTS_URL
+    assert clone.calls[0]["url"] == f"{_base_url(config)}{SPEECH_SYNTHESIZER_PATH}"
     assert clone.calls[0]["headers"] == {
         "Authorization": "Bearer fixture",
         "X-DashScope-WorkSpace": "workspace123",
@@ -195,7 +199,8 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
         "input": {
             "text": "A cloned sentence.",
             "voice": "clone-voice-id",
-            "language_type": "English",
+            "format": "wav",
+            "sample_rate": 24000,
         },
     }
 

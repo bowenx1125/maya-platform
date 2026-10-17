@@ -812,9 +812,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
         try:
             from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 
-            expired = SqlPlaybackRepository().expire_stale_preparation(
-                db, debate_id=str(debate.id)
-            )
+            expired = SqlPlaybackRepository().expire_stale_preparation(db, debate_id=str(debate.id))
             if expired:
                 db.commit()
         except Exception:
