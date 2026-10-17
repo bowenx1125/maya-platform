@@ -44,7 +44,6 @@ import {
   useAssessmentRecord,
 } from "./assessment-record";
 import {
-  IconArrowRight,
   IconClose,
   IconDownload,
   IconRefresh,
@@ -54,12 +53,13 @@ import {
 import styles from "./brainform-workspace.module.css";
 
 /**
- * A Brainform row title that enters the way a Team or Agent tile does: the
- * enter button appears when the pointer is over the title (always on touch
- * screens, and whenever it has keyboard focus), and only that button opens
- * the item. A double-click on the title renames it in place.
+ * A Brainform row title that enters exactly like an Agent tile's title: the
+ * title itself is the button (the same ``agent-tile-name text-link`` classes
+ * and styles), so it turns into a pressable button on hover or keyboard
+ * focus and a click on it enters. The rest of the row does not enter. A
+ * double-click renames in place, so a single click waits out a double-click.
  */
-function EnterTitle({
+function TitleButton({
   title,
   enterLabel,
   onEnter,
@@ -72,23 +72,46 @@ function EnterTitle({
   onRename?: () => void;
   editable: boolean;
 }) {
+  const clickTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+    },
+    [],
+  );
+  function clearTimer() {
+    if (clickTimer.current !== null) {
+      window.clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+  }
   return (
-    <span className={styles.enterTitle}>
-      <span className={styles.staticTitle} onDoubleClick={onRename}>
-        {title}
-      </span>
-      {onEnter ? (
-        <button
-          type="button"
-          className={`${styles.iconButton} ${styles.enterButton}`}
-          aria-label={enterLabel}
-          data-ui-guide={editable ? "knowledge.edit" : "knowledge.view"}
-          onClick={onEnter}
-        >
-          <IconArrowRight size={15} />
-        </button>
-      ) : null}
-    </span>
+    <button
+      type="button"
+      className={`agent-tile-name text-link ${styles.titleLink}`}
+      aria-label={enterLabel}
+      aria-disabled={onEnter ? undefined : true}
+      data-ui-guide={editable ? "knowledge.edit" : "knowledge.view"}
+      onClick={() => {
+        if (!onEnter) return;
+        if (!onRename) {
+          onEnter();
+          return;
+        }
+        clearTimer();
+        clickTimer.current = window.setTimeout(() => {
+          clickTimer.current = null;
+          onEnter();
+        }, 220);
+      }}
+      onDoubleClick={() => {
+        if (!onRename) return;
+        clearTimer();
+        onRename();
+      }}
+    >
+      {title}
+    </button>
   );
 }
 
@@ -2260,7 +2283,7 @@ function BrainformWorkspaceBody({
                               }}
                             />
                           ) : (
-                            <EnterTitle
+                            <TitleButton
                               title={document.source_filename}
                               editable={canEdit}
                               enterLabel={t(
@@ -2429,7 +2452,7 @@ function BrainformWorkspaceBody({
                           // enter button shows on hover over the title and
                           // opens the editor, whose Done saves a version
                           // every user reads; a double-click renames.
-                          <EnterTitle
+                          <TitleButton
                             title={row.knowledge_display_name}
                             editable={row.can_edit}
                             enterLabel={

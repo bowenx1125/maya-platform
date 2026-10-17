@@ -265,10 +265,8 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
     )
     assert preview.status_code == 200, preview.text
-    assert provider.last_text == (
-        "Should we find each other in the next life, let‘s live on a planet of our own.\n"
-        "我会将花种满山谷，为你而歌，老死方休。"
-    )
+    # The first preview ever generated reads line 1 of the rotation.
+    assert provider.last_text == voice_preview.VOICE_PREVIEW_LINES[0]
     assert preview_languages == ["auto"]
     media = client.get(preview.json()["playback_url"])
     assert media.status_code == 200

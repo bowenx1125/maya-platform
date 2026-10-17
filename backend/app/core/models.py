@@ -1278,6 +1278,20 @@ class VoicePreview(Base):
     )
 
 
+class VoicePreviewCounter(Base):
+    """A persisted, shared counter that picks the next preview sample line.
+
+    One row per key (``global``); each preview generation atomically adds one
+    and reads the new value, so lines rotate in click order across all users
+    and backend replicas.
+    """
+
+    __tablename__ = "voice_preview_counters"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+
 class ProviderPolicySnapshot(Base):
     """Server-only, immutable supplier policy evidence for ProviderDataCallV1."""
 
