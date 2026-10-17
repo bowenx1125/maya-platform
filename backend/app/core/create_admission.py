@@ -12,10 +12,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from app.core.adaptive_admission import adaptive_slot, shared_wait_seconds
 from app.core.concurrency_gate import ConcurrencyGate, GateRejected
 from app.core.config import Settings, get_settings
 from app.core.errors import PlatformError
-from app.core.host_load_guard import ensure_host_load_ok
 
 _GATE = ConcurrencyGate()
 
@@ -56,28 +56,28 @@ def create_admission_slot(settings: Settings | None = None) -> Iterator[None]:
     """Hold one create-path slot for the duration of the ``with`` block."""
 
     runtime = settings if settings is not None else get_settings()
-    # Host load is checked before and after any queue wait so a spiked host
-    # rejects creates even when the create gate still has room.
-    ensure_host_load_ok(runtime)
-    limit = int(runtime.create_admission_limit)
-    if limit <= 0:
-        yield
-        return
-    queue_max = int(runtime.create_admission_queue_max)
-    wait_seconds = float(runtime.create_admission_wait_seconds)
-    retry_after = int(runtime.create_admission_retry_seconds)
-    try:
-        with _GATE.hold(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds):
-            ensure_host_load_ok(runtime)
+    # Layer 1: the unified pressure queue (suspends under the danger line).
+    with adaptive_slot("create", runtime):
+        limit = int(runtime.create_admission_limit)
+        if limit <= 0:
             yield
-    except GateRejected as rejected:
-        raise create_admission_busy_error(
-            reason=rejected.reason,
-            limit=limit,
-            retry_after_seconds=retry_after,
-            in_flight=_GATE.in_flight,
-            waiters=_GATE.waiters,
-        ) from None
+            return
+        queue_max = int(runtime.create_admission_queue_max)
+        # Layer 2 backstop waits only for what is left of the one request
+        # deadline started in layer 1, so a create is never timed twice.
+        wait_seconds = shared_wait_seconds(float(runtime.create_admission_wait_seconds))
+        retry_after = int(runtime.create_admission_retry_seconds)
+        try:
+            with _GATE.hold(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds):
+                yield
+        except GateRejected as rejected:
+            raise create_admission_busy_error(
+                reason=rejected.reason,
+                limit=limit,
+                retry_after_seconds=retry_after,
+                in_flight=_GATE.in_flight,
+                waiters=_GATE.waiters,
+            ) from None
 
 
 __all__ = [

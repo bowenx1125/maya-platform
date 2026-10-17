@@ -511,7 +511,6 @@ def test_voice_scope_and_upload_validation(
     assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
 
 
-
 def test_flash_target_model_refuses_clone_before_dispatch(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,

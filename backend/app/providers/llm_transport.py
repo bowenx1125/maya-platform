@@ -8,9 +8,7 @@ from typing import Literal, Protocol
 
 import httpx
 
-from app.core.host_load_guard import ensure_host_load_ok
 from app.core.llm_admission import llm_admission_slot
-from app.core.memory_guard import ensure_memory_for_new_llm
 
 # Measured TLS handshakes to the fixed Beijing endpoint take 2.0-2.7s from
 # a developer network, so a 5s connect budget classified a healthy endpoint
@@ -176,17 +174,11 @@ class HttpxLLMTransport:
         json_payload: Mapping[str, object] | None = None,
         content: bytes | None = None,
     ) -> object:
-        # Refuse a *new* outbound attempt when the host is already near OOM,
-        # then take one LLM admission slot (bounded queue). PlatformError must
-        # propagate unchanged; in-flight calls are untouched; the slot is
-        # always released when this attempt finishes.
-        ensure_memory_for_new_llm()
-        ensure_host_load_ok()
+        # Take an LLM slot (unified queue, then the 12-call backstop). Host
+        # memory/load pressure suspends the attempt until recovery; only a
+        # wait timeout or full queue raises a retryable 503. PlatformError
+        # propagates unchanged; the slot is always released afterwards.
         with llm_admission_slot():
-            # Recheck memory/load after any queue wait so a recovered/falling host
-            # is observed before bytes leave.
-            ensure_memory_for_new_llm()
-            ensure_host_load_ok()
             # A caller may pass the frozen total as a float or an HTTPX timeout;
             # either way redirects stay disabled and this method performs one call.
             resolved_timeout: float | httpx.Timeout

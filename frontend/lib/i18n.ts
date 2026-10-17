@@ -1838,6 +1838,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   llm_admission_busy: "errorServerBusy",
   create_admission_busy: "errorServerBusy",
   write_pressure: "errorServerBusy",
+  adaptive_admission_busy: "errorServerBusy",
   auth_login_queued: "loginQueueNext",
   voice_provider_unavailable: "errorVoiceProviderUnavailable",
   chat_acceptance_unknown: "errorChatAcceptanceUnknown",

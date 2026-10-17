@@ -6,6 +6,7 @@ database: concurrent writers, and one schema shared by every backend replica.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -66,8 +67,28 @@ def build_engine(database_url: str) -> Engine:
             pool_timeout=30,
         )
         ensure_postgres_compat(engine)
+        _time_writes(engine)
         return engine
     raise RuntimeError("Unsupported database backend.")
+
+
+def _time_writes(engine: Engine) -> None:
+    """Feed non-SELECT statement latency to adaptive admission's DB signal."""
+
+    from app.core.adaptive_admission import record_db_write_ms
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _start(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        conn.info.setdefault("_adaptive_t0", []).append(time.perf_counter())
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _end(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        stack = conn.info.get("_adaptive_t0")
+        if not stack:
+            return
+        started = stack.pop()
+        if not statement.lstrip()[:6].upper().startswith("SELECT"):
+            record_db_write_ms((time.perf_counter() - started) * 1000.0)
 
 
 class Database:

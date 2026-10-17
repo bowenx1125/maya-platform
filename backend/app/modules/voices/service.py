@@ -888,10 +888,7 @@ def enroll_voice(
                 finish_idempotency(db, record, 202, result.model_dump(mode="json"))
                 db.commit()
                 return result
-            elif (
-                operation.state == "failed"
-                and operation.safe_error_code == "voice_clone_refused"
-            ):
+            elif operation.state == "failed" and operation.safe_error_code == "voice_clone_refused":
                 # A refused clone never becomes retryable, not even with the
                 # same key: the answer was decided before any charged call.
                 raise CLONE_REFUSED_ERROR
@@ -943,9 +940,7 @@ def enroll_voice(
             profile.status = "failed"
             profile.safe_error_code = "voice_clone_refused"
             profile.updated_at = now_utc()
-            _finish_operation(
-                db, operation, state="failed", safe_error_code="voice_clone_refused"
-            )
+            _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
             raise CLONE_REFUSED_ERROR
         _dispatch_operation(db, operation)
         assert_claim_owned(db, record)
@@ -971,9 +966,7 @@ def enroll_voice(
             # re-issue this enrollment.
             profile.status = "failed"
             profile.safe_error_code = "voice_clone_refused"
-            _finish_operation(
-                db, operation, state="failed", safe_error_code="voice_clone_refused"
-            )
+            _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
             raise _safe_provider_error(exc) from exc
         except VoiceProviderError as exc:
             # Once the durable dispatch row is committed, a generic provider
