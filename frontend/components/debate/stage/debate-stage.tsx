@@ -3111,11 +3111,11 @@ export function DebateStage({
           } else if (action === "next") {
             // Any Next failure (503 host_load_pressure, provider_unavailable,
             // etc.) must stay visible — never clear controlError and only
-            // recover. recoverPlayback can reset next_turn_ready from a
-            // stale snapshot, so force it false after sync.
+            // recover. Readiness comes from the refreshed snapshot: the turn
+            // is still ready, so Next stays enabled for a retry instead of
+            // dead-ending as disabled after a transient failure.
             setFailure(null);
             await recoverPlayback();
-            applyPlayback({ next_turn_ready: false });
             setControlError(
               errorText(cause, labelsRef.current.connectionError),
             );
@@ -3230,8 +3230,7 @@ export function DebateStage({
   const finalActionLabel =
     finalBoundary && !detailState.final_input_frozen
       ? "Final"
-      : (playback.status === "waiting_next" && !playback.next_turn_ready) ||
-          (finalBoundary && !playback.next_turn_ready)
+      : finalBoundary && !playback.next_turn_ready
         ? "Preparing"
         : labels.next;
   const canAdvance =

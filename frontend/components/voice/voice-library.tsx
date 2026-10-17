@@ -49,7 +49,9 @@ type VoiceFailure = { cause: unknown; retry: RetryAction | null };
 // outage: it gets no Retry affordance and is never remapped to the fallback
 // voice banner.
 function isCloneRefusal(cause: unknown): boolean {
-  return cause instanceof PlatformApiError && cause.code === "voice_clone_refused";
+  return (
+    cause instanceof PlatformApiError && cause.code === "voice_clone_refused"
+  );
 }
 
 function voiceAwareCause(cause: unknown): unknown {
@@ -324,13 +326,9 @@ export function VoiceLibrary({
       if (!enrollmentCreated(profile)) {
         idempotency.abandon("voice-enroll");
         setFailure({
-          cause: new PlatformApiError(
-            502,
-            t("errorVoiceEnrollmentFailed"),
-            {
-              code: profile?.safe_error_code ?? "voice_enrollment_failed",
-            },
-          ),
+          cause: new PlatformApiError(502, t("errorVoiceEnrollmentFailed"), {
+            code: profile?.safe_error_code ?? "voice_enrollment_failed",
+          }),
           // Soft-fail responses are terminal for this upload; no auto-retry.
           retry: null,
         });

@@ -1381,8 +1381,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
   errorVoiceProviderUnavailable:
     "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
-  errorVoiceCloneRefused:
-    "当前音色通道不支持克隆。该样本未保存为自定义音色。",
+  errorVoiceCloneRefused: "当前音色通道不支持克隆。该样本未保存为自定义音色。",
   errorChatAcceptanceUnknown:
     "这次请求的结果尚不确定。Maya 不会自动重发。消息会保留在当前对话中，你可以继续发送新消息。",
   errorChatTransportUncertain:

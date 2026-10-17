@@ -703,9 +703,11 @@ describe("saved media failure recovery", () => {
         ),
       );
       expect(api.retryDebatePreparation).not.toHaveBeenCalled();
+      // #100: a failed Next stays visible instead of being silently cleared,
+      // while Next remains enabled so the teacher can retry in place.
       expect(
-        screen.queryByText("The platform request could not be completed."),
-      ).toBeNull();
+        screen.getByText("The platform request could not be completed."),
+      ).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
       expect(
         screen.queryByText("Playback did not start. You can retry this turn."),

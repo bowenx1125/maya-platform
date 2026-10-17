@@ -522,9 +522,7 @@ describe.each([
       expect(api.advanceDebatePlayback).toHaveBeenCalledTimes(1),
     );
     await waitFor(() =>
-      expect(
-        screen.getByText(/Next turn is not ready yet/i),
-      ).toBeTruthy(),
+      expect(screen.getByText(/Next turn is not ready yet/i)).toBeTruthy(),
     );
     // Still Turn 1 identity: do not pretend the advance succeeded.
     expect(screen.queryByText(speech("Second"))).toBeNull();
