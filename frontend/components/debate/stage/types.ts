@@ -90,6 +90,7 @@ export type PlaybackStageLabels = {
   phaseExchange?: string;
   phaseFinalIntegration?: string;
   next?: string;
+  nextNotReady?: string;
   waitingForAudio?: string;
   connectionWaiting?: string;
   connectionReady?: string;

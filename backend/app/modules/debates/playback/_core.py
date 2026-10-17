@@ -66,6 +66,8 @@ _SAFE_GENERATION_CODES = {
     "tts_result_dns_failed",
     "tts_result_download_failed",
     "tts_audio_invalid",
+    # Stuck pending/running prepare work past the agreed watchdog.
+    "preparation_timeout",
 }
 _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "provider_confirmation_required",
@@ -78,6 +80,7 @@ _RECOVERABLE_PROVIDER_GENERATION_CODES = {
     "tts_result_dns_failed",
     "tts_result_download_failed",
     "tts_audio_invalid",
+    "preparation_timeout",
 }
 
 

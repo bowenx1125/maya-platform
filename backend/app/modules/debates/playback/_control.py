@@ -568,6 +568,7 @@ class PlaybackControlMixin(PlaybackCore):
                     not in {
                         "provider_confirmation_required",
                         "provider_not_sent",
+                        "preparation_timeout",
                     }
                     and code not in _DRAFT_TTS_RETRY_CODES
                 ):
@@ -1175,6 +1176,17 @@ class PlaybackControlMixin(PlaybackCore):
                     and not self._get(debate, "final_input_json")
                 ):
                     raise conflict("invalid_state", "Freeze the classroom input before Final.")
+                expire = getattr(self.repository, "expire_stale_preparation", None)
+                if callable(expire):
+                    try:
+                        if expire(db, debate_id=str(debate.id)):
+                            self._commit(db)
+                            debate = self._get_debate(db, debate_id)
+                            state = self._state(db, debate)
+                    except Exception:
+                        self._rollback(db)
+                        debate = self._get_debate(db, debate_id)
+                        state = self._state(db, debate)
                 if not self._next_turn_ready(db, debate, state):
                     raise conflict(
                         "next_not_ready",
@@ -1220,6 +1232,30 @@ class PlaybackControlMixin(PlaybackCore):
                     **claim_kwargs,
                 )
                 if not claimed:
+                    # The pre-CAS readiness check and the durable claim can
+                    # disagree (for example missing StoredFile).  Re-read once:
+                    # unchanged control version + still unready is next_not_ready
+                    # (no false advance); a bumped version is a true race.
+                    self._rollback(db)
+                    debate = self._get_debate(db, debate_id)
+                    state = self._state(db, debate)
+                    if (
+                        state.control_version == expected_control_version
+                        and state.current_turn_id == expected_current_turn_id
+                    ):
+                        if is_replay:
+                            still_ready = self._replay_next_turn_ready(db, debate, state)
+                        else:
+                            still_ready = self._next_turn_ready(db, debate, state)
+                        if not still_ready:
+                            raise conflict(
+                                "next_not_ready",
+                                (
+                                    "The adjacent retained replay turn is not ready for playback."
+                                    if is_replay
+                                    else "The adjacent next turn is not ready for playback."
+                                ),
+                            )
                     raise conflict(
                         "stale_control_version",
                         "The playback transition was claimed by another controller.",

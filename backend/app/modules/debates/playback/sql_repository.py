@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
 
@@ -48,6 +48,13 @@ _TTS_DEFERRED_CODES = frozenset(
         "tts_audio_invalid",
     }
 )
+
+# Draft/running prepare rows older than this leave Preparing forever.  Pending
+# work that never claimed is shorter; a claimed running job gets a longer
+# window so a slow but live provider call is not mistaken for a stuck worker.
+_PREPARATION_PENDING_TIMEOUT = timedelta(seconds=90)
+_PREPARATION_RUNNING_TIMEOUT = timedelta(seconds=300)
+_PREPARATION_TIMEOUT_CODE = "preparation_timeout"
 
 
 def _row_value(row: object, name: str, default: object = None) -> object:
@@ -2970,6 +2977,127 @@ class SqlPlaybackRepository(PlaybackRepository):
                 raise RuntimeError("turn claim lost its durable job fence")
         return accepted
 
+
+    def expire_stale_preparation(
+        self,
+        db: Any,
+        *,
+        debate_id: str | None = None,
+        pending_timeout: timedelta | None = None,
+        running_timeout: timedelta | None = None,
+    ) -> int:
+        """Exit stuck Preparing by marking recoverable preparation_timeout.
+
+        Idempotent: already-failed / deferred-coded turns are left alone.
+        Does not advance turns, create jobs, or terminate the Debate.  A later
+        teacher Retry clears the code through the existing draft/live retry CAS.
+        """
+
+        if not self._has_table(db, "debate_turns") or not self._has_table(db, "jobs"):
+            return 0
+        pending_cut = _now() - (pending_timeout or _PREPARATION_PENDING_TIMEOUT)
+        running_cut = _now() - (running_timeout or _PREPARATION_RUNNING_TIMEOUT)
+        code = _PREPARATION_TIMEOUT_CODE
+        params: dict[str, Any] = {
+            "code": code,
+            "updated_at": _now(),
+            "pending_cut": pending_cut,
+            "running_cut": running_cut,
+        }
+        debate_filter = ""
+        if debate_id is not None:
+            debate_filter = "AND t.debate_id=:debate_id "
+            params["debate_id"] = debate_id
+        # Only the earliest unfinished turn of a draft (or an unpublished
+        # successor of a running Debate) can block Preparing.  Later pending
+        # siblings stay pending so Retry on the stalled head can resume order.
+        stale_ids = [
+            str(row[0])
+            for row in db.execute(
+                text(
+                    "SELECT t.id FROM debate_turns AS t "
+                    "JOIN debates AS d ON d.id=t.debate_id "
+                    "JOIN jobs AS j ON j.turn_id=t.id AND j.debate_id=t.debate_id "
+                    "AND j.operation='debate_turn_prepare' "
+                    "WHERE t.generation_status IN ('pending','running') "
+                    "AND t.publication_status='unpublished' "
+                    "AND COALESCE(t.safe_error_code,'') = '' "
+                    "AND d.status IN ('draft','running') "
+                    "AND d.deleted_at IS NULL "
+                    + debate_filter
+                    + "AND ("
+                    "(j.state='pending' AND j.claim_token IS NULL "
+                    "AND j.updated_at<=:pending_cut) OR "
+                    "(j.state IN ('pending','running') AND j.claim_token IS NOT NULL "
+                    "AND j.updated_at<=:running_cut) OR "
+                    "(t.generation_status='running' AND t.updated_at<=:running_cut)"
+                    ") "
+                    "AND NOT EXISTS ("
+                    "SELECT 1 FROM debate_turns AS earlier "
+                    "WHERE earlier.debate_id=t.debate_id "
+                    "AND earlier.turn_index < t.turn_index "
+                    "AND earlier.generation_status NOT IN "
+                    "('final_ready','ready','completed') "
+                    "AND COALESCE(earlier.safe_error_code,'') = '')"
+                ),
+                params,
+            ).all()
+        ]
+        if not stale_ids:
+            return 0
+        params["turn_ids"] = tuple(stale_ids)
+        # Draft Preview uses failed + stall badges; a running Debate must keep
+        # pending + code so retry_preparation's recoverable fence still matches.
+        draft_turned = db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='failed', "
+                "preparation_stage='failed', safe_error_code=:code, "
+                "updated_at=:updated_at WHERE id IN :turn_ids "
+                "AND generation_status IN ('pending','running') "
+                "AND COALESCE(safe_error_code,'') = '' "
+                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=debate_turns.debate_id "
+                "AND d.status='draft')"
+            ).bindparams(bindparam("turn_ids", expanding=True)),
+            params,
+        )
+        running_turned = db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='pending', "
+                "preparation_stage='generation', safe_error_code=:code, "
+                "updated_at=:updated_at WHERE id IN :turn_ids "
+                "AND generation_status IN ('pending','running') "
+                "AND COALESCE(safe_error_code,'') = '' "
+                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=debate_turns.debate_id "
+                "AND d.status='running')"
+            ).bindparams(bindparam("turn_ids", expanding=True)),
+            params,
+        )
+        db.execute(
+            text(
+                "UPDATE jobs SET state='failed', claim_token=NULL, safe_error_code=:code, "
+                "updated_at=:updated_at WHERE turn_id IN :turn_ids "
+                "AND operation='debate_turn_prepare' "
+                "AND state IN ('pending','running') "
+                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=jobs.debate_id "
+                "AND d.status='draft')"
+            ).bindparams(bindparam("turn_ids", expanding=True)),
+            params,
+        )
+        db.execute(
+            text(
+                "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=:code, "
+                "updated_at=:updated_at WHERE turn_id IN :turn_ids "
+                "AND operation='debate_turn_prepare' "
+                "AND state IN ('pending','running') "
+                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=jobs.debate_id "
+                "AND d.status='running')"
+            ).bindparams(bindparam("turn_ids", expanding=True)),
+            params,
+        )
+        return int(getattr(draft_turned, "rowcount", 0) or 0) + int(
+            getattr(running_turned, "rowcount", 0) or 0
+        )
+
     def fail_prewarm_turn(
         self, db: Any, turn: SqlRow, *, claim_token: str | None, code: str
     ) -> bool:
@@ -3129,6 +3257,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "provider_confirmation_required",
             "provider_not_sent",
             "turn_generation_failed",
+            _PREPARATION_TIMEOUT_CODE,
         } | _TTS_DEFERRED_CODES
         if code not in retry_codes or not self._has_table(db, "playback_states"):
             return False
