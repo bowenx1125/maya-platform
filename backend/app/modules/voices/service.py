@@ -225,18 +225,14 @@ def _student_in_group(db: Session, context: AuthContext, group_id: str) -> bool:
     )
 
 
-def previewable_voice(db: Session, context: AuthContext, profile_id: str) -> VoiceProfile:
-    """A voice the caller may play: their own, or a groupmate's ready group voice.
+def groupmate_ready_voice(db: Session, context: AuthContext, profile_id: str) -> VoiceProfile:
+    """A groupmate's ready group voice the calling student may play; else not found.
 
     Owner decision (2026-10-18): students of one group hear each other's ready
     voices in Brainform. A teacher, even one who entered the group, is not a
     groupmate and plays no student voice.
     """
 
-    try:
-        return visible_student_voice(db, context, profile_id).profile
-    except PlatformError:
-        pass
     profile = db.scalar(
         select(VoiceProfile).where(
             VoiceProfile.id == profile_id,

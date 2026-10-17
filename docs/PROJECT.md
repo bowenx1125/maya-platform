@@ -148,7 +148,7 @@ otherwise Teachers confirm at the unlinked approvals route. Teacher Accounts (re
 Public group visit, temporary membership removed on return) and Debates are restored.
 Sidebar New/Back/Done; Back/Done only contextual. Voice New is module-right; its form
 skips the sidebar: consent creates, top-right ← cancels. Agent Voice: radio,
-None default; groupmates choose/hear ready voices, teachers never.
+None default; groupmates choose/hear ready voices; teachers never.
 Colleague Mayaform Home preserved except Components, Guide destinations and data-use
 entry moved to Brainform. All decorative heading explanations become immediate help;
 no1500ms wait. Brainform three columns, no page title/eyebrow; RAG fully reuses original
@@ -204,9 +204,9 @@ Oct14: Voice/Rebirth recovery, speech routing, nonvoice, Coding-A locks.
 Speech models stay paused after Notice118434.
 
 Built `f007a11` (PR #69); backup `maya-20261014T111701Z.sqlite3` ok, schema0064.
-Voices upload help states the sample rules; no side copy.
+Voices upload help states sample rules; no side copy.
 
-Knowledge partial promote skips `provider_asset_invalid` assets and still promotes a head when something applied (`prompt_v3`, `minItems:1`). The same published version and source manifest reuses the in-flight run. Teacher Chat shows generation progress; Agent Chat appends report links.
+Knowledge partial promote skips `provider_asset_invalid` assets and still promotes a head when something applied (`prompt_v3`, `minItems:1`). Same published version + source manifest reuses the in-flight run. Teacher Chat shows generation progress; Agent Chat appends report links.
 
 Formal micro-rounds need Guide `# Team Ruleset` → `## Formal assessment` naming `answer_recorder`, `question_guide`, `scorer`, `summarizer`, and `student_round_order` as roster display names. The order is exactly scorer and question_guide; anything else is `assessment_ruleset_incomplete` with no attempt. `answer_recorder` is that scorer: the write Tool, `已记录你的回答。` (receipt only), and the abandon recorder line. Explicit starts (正式测评/测试, 开始测试, 再来一轮/一遍, formal test/assessment) set the ledger first; that turn is Guide-only `收到，第一题是…`. Later messages follow `student_round_order` (the Tool runs before the Guide line). A non-answer is rejected once; the Guide restates that Question once. All answered: Guide `答题全部结束`, Summarizer `正在总结答案`. Abandon uses that order, then Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false. `MAYA-ASSESSMENT-ROLE` does not choose speakers. `assessment_active` is a ledger flag, not a Tool. Ordinary chat (greetings too) asks every member, length by relevance; an empty reply is omitted, not a member failure or partial banner. Formal assessment still chooses who speaks. `## Informal` may change who replies and length. Precedence: ACL, ledger, Ruleset. Only the server appends report links. Later executor turns stay on that scorer and summarizer.
 

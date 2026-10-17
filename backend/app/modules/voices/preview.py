@@ -39,8 +39,8 @@ from app.modules.voices.service import (
     EffectiveVoice,
     _profile_external_id,
     _utc,
+    groupmate_ready_voice,
     now_utc,
-    previewable_voice,
     visible_student_voice,
     voice_profile_dto,
 )
@@ -210,7 +210,12 @@ def create_voice_preview(
 ) -> PlaybackResource:
     """Generate bounded server-side preview bytes and return an opaque URL."""
 
-    profile = previewable_voice(db, context, profile_id)
+    # Own voice first, exactly as before; a groupmate's ready voice only when
+    # the caller owns no such voice.
+    try:
+        profile = visible_student_voice(db, context, profile_id).profile
+    except PlatformError:
+        profile = groupmate_ready_voice(db, context, profile_id)
     if profile.status not in {"preview_ready", "ready"}:
         raise not_found()
     try:
@@ -445,7 +450,7 @@ def media_path_for_preview(
         ).first()
         if shared is not None:
             try:
-                previewable_voice(db, context, shared[1].id)
+                groupmate_ready_voice(db, context, shared[1].id)
             except PlatformError:
                 shared = None
         row = shared
