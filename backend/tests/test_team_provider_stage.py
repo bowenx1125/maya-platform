@@ -37,6 +37,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.engine import Engine
 
+from tests.conftest import post_message
 from tests.test_mayaform_team_conversations import MAYA_ID
 from tests.test_team_provider_disclosure import _prepared
 from tests.test_wave4_provider_control_orm import _repository_with_confirmed_manifest, _request
@@ -425,7 +426,8 @@ def test_0044_preserves_populated_results_and_rolls_back_all_ddl(
     from tests.test_mayaform_team_turns import _body, _chat
 
     session, csrf, _actor = _chat(client, database)
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{session['id']}/messages",
         headers=_headers(csrf),
         json=_body(session, "all"),

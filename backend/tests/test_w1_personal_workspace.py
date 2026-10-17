@@ -7,7 +7,7 @@ from app.core.models import Agent, AgentVersion, GroupMember, KnowledgeDocument
 from app.modules.workspace.models import Conversation
 from fastapi.testclient import TestClient
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_auth_self_registration import register
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
@@ -63,7 +63,8 @@ def test_teacher_personal_no_rag_agent_chat_and_private_source_acl(
     )
     assert chat.status_code == 200, chat.text
     conversation_id = chat.json()["id"]
-    sent = client.post(
+    sent = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=_headers(csrf),
         json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Hello"},
@@ -329,7 +330,8 @@ def test_owner_history_survives_sharing_an_active_private_source(
     )
     assert conversation.status_code == 200, conversation.text
     conversation_id = conversation.json()["id"]
-    first_turn = client.post(
+    first_turn = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=_headers(owner_csrf),
         json={
@@ -369,7 +371,8 @@ def test_owner_history_survives_sharing_an_active_private_source(
     assert source_download.status_code == 200, source_download.text
     assert "OWNER_HISTORY_SOURCE_CANARY" in source_download.text
 
-    second_turn = client.post(
+    second_turn = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=_headers(owner_csrf),
         json={
@@ -589,7 +592,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     )
     assert peer_chat.status_code == 200, peer_chat.text
     peer_conversation_id = peer_chat.json()["id"]
-    sent = client.post(
+    sent = post_message(
+        client,
         f"/api/v1/conversations/{peer_conversation_id}/messages",
         headers=_headers(peer_csrf),
         json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Keep history"},
@@ -617,7 +621,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     )
     assert owner_chat.status_code == 200, owner_chat.text
     owner_conversation_id = owner_chat.json()["id"]
-    owner_sent = client.post(
+    owner_sent = post_message(
+        client,
         f"/api/v1/conversations/{owner_conversation_id}/messages",
         headers=_headers(owner_csrf),
         json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Owner history"},
@@ -672,7 +677,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     assert lost_access.json()["agent"]["available"] is False
     assert len(lost_access.json()["turns"]) == 1
     assert lost_access.json()["turns"][0]["user_text"] == "Keep history"
-    denied_continue = client.post(
+    denied_continue = post_message(
+        client,
         f"/api/v1/conversations/{peer_conversation_id}/messages",
         headers=_headers(peer_csrf),
         json={"request_id": str(uuid4()), "expected_revision": 1, "message": "Continue"},
@@ -692,7 +698,8 @@ def test_group_public_access_is_scoped_to_group_and_lost_access_only_disables_ch
     assert owner_history.json()["agent"]["available"] is False
     assert len(owner_history.json()["turns"]) == 1
     assert owner_history.json()["turns"][0]["user_text"] == "Owner history"
-    owner_denied = client.post(
+    owner_denied = post_message(
+        client,
         f"/api/v1/conversations/{owner_conversation_id}/messages",
         headers=_headers(owner_csrf),
         json={"request_id": str(uuid4()), "expected_revision": 1, "message": "No longer live"},

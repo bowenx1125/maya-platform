@@ -33,7 +33,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.engine import Engine
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_mayaform_team_conversations import (
     COURSE_ID,
     MAYA_ID,
@@ -256,7 +256,7 @@ def test_explicit_targets_are_frozen_once_and_do_not_add_a_leader_summary(
     monkeypatch.setattr(runtime, "invoke_mock_member", reply)
     body = _body(session, mode, ids=[ids[2], ids[1], ids[1]])
     url = f"/api/v1/conversations/{session['id']}/messages"
-    response = client.post(url, headers=_headers(csrf), json=body)
+    response = post_message(client, url, headers=_headers(csrf), json=body)
     assert response.status_code == 200, response.text
     turn = [item for item in response.json()["turns"] if item["user_text"]][-1]
     expected = ids if mode == "all" else ids[1:]
@@ -267,13 +267,13 @@ def test_explicit_targets_are_frozen_once_and_do_not_add_a_leader_summary(
     assert turn["user_text"] == body["message"] and turn["assistant_text"] is None
     assert turn["state"] == "ready"
     assert [result["participant_id"] for result in turn["member_results"]] == expected
-    assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
+    assert post_message(client, url, headers=_headers(csrf), json=body).json() == response.json()
     assert len(seen) == len(expected)
     changed = {**body, "message": body["message"] + "x"}
-    assert client.post(url, headers=_headers(csrf), json=changed).status_code == 409
+    assert post_message(client, url, headers=_headers(csrf), json=changed).status_code == 409
     if mode == "selected":
         changed = {**body, "routing": {"mode": "selected", "participant_ids": [ids[0]]}}
-        assert client.post(url, headers=_headers(csrf), json=changed).status_code == 409
+        assert post_message(client, url, headers=_headers(csrf), json=changed).status_code == 409
     with database.session() as db:
         assert db.scalar(select(func.count()).select_from(ConversationTurn)) == 1
         parent = db.get(ConversationTurn, body["request_id"])
@@ -303,14 +303,16 @@ def test_selected_preflight_blocks_revoked_target_without_blocking_other_members
 
     monkeypatch.setattr(runtime, "invoke_mock_member", reply)
     url = f"/api/v1/conversations/{session['id']}/messages"
-    blocked = client.post(url, headers=_headers(csrf), json=_body(session, "selected", ids=ids[1:]))
-    assert blocked.status_code == 404 and seen == []
-    blocked = client.post(
-        url, headers=_headers(csrf), json=_body(session, "selected", ids=[str(uuid4())])
+    blocked = post_message(
+        client, url, headers=_headers(csrf), json=_body(session, "selected", ids=ids[1:])
     )
     assert blocked.status_code == 404 and seen == []
-    allowed = client.post(
-        url, headers=_headers(csrf), json=_body(session, "selected", ids=[ids[1]])
+    blocked = post_message(
+        client, url, headers=_headers(csrf), json=_body(session, "selected", ids=[str(uuid4())])
+    )
+    assert blocked.status_code == 404 and seen == []
+    allowed = post_message(
+        client, url, headers=_headers(csrf), json=_body(session, "selected", ids=[ids[1]])
     )
     assert allowed.status_code == 200, allowed.text
     assert seen == [ids[1]]
@@ -333,7 +335,7 @@ def test_partial_unknown_replay_followup_full_history_and_late_result_are_isolat
     monkeypatch.setattr(runtime, "invoke_mock_member", reply)
     url = f"/api/v1/conversations/{session['id']}/messages"
     body = _body(session, "selected", ids=ids[1:])
-    response = client.post(url, headers=_headers(csrf), json=body)
+    response = post_message(client, url, headers=_headers(csrf), json=body)
     assert response.status_code == 200, response.text
     first = [item for item in response.json()["turns"] if item["user_text"]][-1]
     assert first["state"] == "partial"
@@ -341,10 +343,10 @@ def test_partial_unknown_replay_followup_full_history_and_late_result_are_isolat
         "ready",
         "acceptance_unknown",
     ]
-    assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
+    assert post_message(client, url, headers=_headers(csrf), json=body).json() == response.json()
     assert len(seen) == 2
     followup = {**_body(response.json(), "selected", ids=[ids[1]]), "message": "Follow-up"}
-    continued = client.post(url, headers=_headers(csrf), json=followup)
+    continued = post_message(client, url, headers=_headers(csrf), json=followup)
     assert continued.status_code == 200, continued.text
     assert [turn["state"] for turn in continued.json()["turns"]] == ["partial", "ready"]
     history = seen[-1].history

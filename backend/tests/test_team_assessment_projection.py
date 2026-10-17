@@ -56,6 +56,7 @@ from app.providers.llm_adapter import DashScopeLLMConfig
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from tests.conftest import post_message
 from tests.test_mayaform_assessment_attempts import (
     _accepted_tool_identity,
     _begin_pending_executor_turn,
@@ -1070,7 +1071,8 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
 
     def send(message: str, request_id: str) -> dict[str, Any]:
         current = client.get(f"/api/v1/conversations/{conversation_id}").json()
-        response = client.post(
+        response = post_message(
+            client,
             f"/api/v1/conversations/{conversation_id}/messages",
             headers=_headers(student_csrf),
             json={
@@ -1138,17 +1140,15 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
         )
 
     resume_id = str(uuid4())
-    from app.modules.workspace import chat as chat_module
-
-    real_resume_wrapper = chat_module.execute_team_turn_with_natural_assessment_resume
+    real_resume_wrapper = runtime.execute_team_turn_with_natural_assessment_resume
     monkeypatch.setattr(
-        chat_module,
+        runtime,
         "execute_team_turn_with_natural_assessment_resume",
         runtime.execute_team_turn,
     )
     resumed_session = send("Continue the same assessment.", resume_id)
     monkeypatch.setattr(
-        chat_module,
+        runtime,
         "execute_team_turn_with_natural_assessment_resume",
         real_resume_wrapper,
     )
@@ -1168,9 +1168,11 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
     # the user command commits but before the old turn is claimed.
     original_execute_team_turn = runtime.execute_team_turn
 
-    def crash_after_resume_claim(factory: Any, claim: runtime.TeamClaim) -> None:
+    def crash_after_resume_claim(
+        factory: Any, claim: runtime.TeamClaim, write_slot: Any = None
+    ) -> None:
         if claim.turn_id != resumed_source_id:
-            original_execute_team_turn(factory, claim)
+            original_execute_team_turn(factory, claim, write_slot)
 
     monkeypatch.setattr(runtime, "execute_team_turn", crash_after_resume_claim)
     send("Continue the same assessment.", resume_id)
@@ -1442,7 +1444,8 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         for participant in current.json()["team"]["members"]
     )
     answers_request_id = str(uuid4())
-    answers_response = client.post(
+    answers_response = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=pause_headers,
         json={
@@ -1485,7 +1488,8 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
 
     current = client.get(f"/api/v1/conversations/{conversation_id}")
     continue_request_id = str(uuid4())
-    continue_response = client.post(
+    continue_response = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=pause_headers,
         json={
@@ -1513,7 +1517,8 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
 
     current = client.get(f"/api/v1/conversations/{conversation_id}")
     request_id = str(uuid4())
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=pause_headers,
         json={

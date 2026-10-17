@@ -229,13 +229,6 @@ class UpdateChat(ClosedModel):
         return self
 
 
-class SendChat(ClosedModel):
-    request_id: UUID
-    expected_revision: int = Field(ge=0)
-    message: str = Field(min_length=1)
-    routing: TeamRouting | None = None
-
-
 class StreamChat(ClosedModel):
     request_id: UUID
     expected_revision: int = Field(ge=0)

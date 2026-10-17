@@ -15,6 +15,7 @@ from app.modules.workspace.chat_team_provider import (
 )
 from fastapi.testclient import TestClient
 
+from tests.conftest import post_message
 from tests.test_mayaform_team_conversations import _headers
 from tests.test_mayaform_team_turns import _chat
 
@@ -155,7 +156,7 @@ def test_coordinate_cycle_pauses_and_explicit_resume_continues_saved_run(
     }
     body["request_id"] = str(uuid4())
     messages_url = f"/api/v1/conversations/{session['id']}/messages"
-    paused = client.post(messages_url, headers=_headers(csrf), json=body)
+    paused = post_message(client, messages_url, headers=_headers(csrf), json=body)
     assert paused.status_code == 200, paused.text
     turn = next(item for item in paused.json()["turns"] if item["user_text"])
     assert turn["state"] == "paused"

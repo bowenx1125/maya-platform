@@ -52,7 +52,7 @@ from app.providers.control_repository import ProviderRepository, ProviderReposit
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 
@@ -268,7 +268,8 @@ def test_ordinary_teacher_done_with_rag_does_not_enqueue_and_chat_still_works(
     )
     assert conversation.status_code == 200, conversation.text
     conversation_id = conversation.json()["id"]
-    sent = client.post(
+    sent = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=_headers(csrf),
         json={

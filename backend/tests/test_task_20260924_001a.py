@@ -34,7 +34,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_wave1b_voices import GROUP_A, _headers, _wav
 
 
@@ -381,7 +381,8 @@ def test_chat_rejects_removed_language_field(
         )
         assert response.status_code == 400, response.text
         assert response.json()["code"] == "malformed_request"
-    kept = client.post(
+    kept = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"X-CSRF-Token": csrf},
         json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Still here"},
@@ -414,7 +415,8 @@ def test_send_message_stores_assistant_text_once(
 
     monkeypatch.setattr("app.modules.workspace.chat.store_assistant_text", wrapped)
     request_id = str(uuid4())
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"X-CSRF-Token": csrf},
         json={"request_id": request_id, "expected_revision": 0, "message": "Once"},

@@ -105,7 +105,6 @@ const implementedOperationIds = new Set([
   "listConversations",
   "createConversation",
   "getConversation",
-  "sendConversationMessage",
   "streamConversationMessage",
   "deleteConversation",
   "updateConversation",

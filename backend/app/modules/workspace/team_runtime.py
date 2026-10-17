@@ -3275,15 +3275,14 @@ def execute_team_turn_with_natural_assessment_resume(
 ) -> None:
     """Run the new command, then resume only an old turn authorized by its receipt.
 
+    A replayed command (``claim.created`` false) runs nothing itself but still
+    drives a receipt left behind by a crash after the command committed.
     ``write_slot`` is the slot the send reserved before claiming; this thread
     adopts it for the command and any resumed turn.
     """
 
     if write_slot is None:
         _execute_with_natural_resume(factory, claim)
-        return
-    if not claim.created:
-        write_slot.release()
         return
     with write_guard_slot(reserved=write_slot):
         _execute_with_natural_resume(factory, claim)

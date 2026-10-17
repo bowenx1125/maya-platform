@@ -17,6 +17,7 @@ from app.modules.workspace.models import (
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from tests.conftest import post_message
 from tests.test_mayaform_team_conversations import _headers
 from tests.test_mayaform_team_turns import _body, _chat
 
@@ -60,7 +61,7 @@ def test_coordinate_twelve_effective_delegations_keep_every_result_and_replay_no
     monkeypatch.setattr(runtime, "invoke_mock_team_model", invoke)
     body = _body(session, "auto")
     url = f"/api/v1/conversations/{session['id']}/messages"
-    response = client.post(url, headers=_headers(csrf), json=body)
+    response = post_message(client, url, headers=_headers(csrf), json=body)
     assert response.status_code == 200, response.text
     turn = next(item for item in response.json()["turns"] if item["user_text"])
     assert turn["state"] == "ready", turn
@@ -70,7 +71,7 @@ def test_coordinate_twelve_effective_delegations_keep_every_result_and_replay_no
     assert sum(result["participant_id"] == member_id for result in results) == 12
     assert results[0]["assistant_text"] == "coordinated final"
     assert len({result["assistant_text"] for result in results[1:]}) == 12
-    assert client.post(url, headers=_headers(csrf), json=body).json() == response.json()
+    assert post_message(client, url, headers=_headers(csrf), json=body).json() == response.json()
     assert len(calls) == 25
     with database.session() as db:
         # Without a complete published recipe the Team has no Leader opening.

@@ -55,7 +55,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import delete, func, select
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_mayaform_team_conversations import _make_agent_version
 from tests.test_wave4_llm_adapter import _adapter
 from tests.test_wave4_llm_ledger import _valid_policy
@@ -91,18 +91,21 @@ def test_chat_is_private_idempotent_and_preserves_multiturn_history(workspace: A
     conversation_id = created.json()["id"]
     url = f"/api/v1/conversations/{conversation_id}"
     body = {"request_id": str(uuid4()), "expected_revision": 0, "message": "What is justice?"}
-    first = client.post(f"{url}/messages", headers=headers, json=body)
+    first = post_message(client, f"{url}/messages", headers=headers, json=body)
     assert first.status_code == 200
     assert first.json()["turns"][0]["state"] == "ready"
     assert first.json()["turns"][0]["mode"] == "mock"
-    assert client.post(f"{url}/messages", headers=headers, json=body).json() == first.json()
     assert (
-        client.post(
-            f"{url}/messages", headers=headers, json={**body, "message": "Changed"}
+        post_message(client, f"{url}/messages", headers=headers, json=body).json() == first.json()
+    )
+    assert (
+        post_message(
+            client, f"{url}/messages", headers=headers, json={**body, "message": "Changed"}
         ).status_code
         == 409
     )
-    second = client.post(
+    second = post_message(
+        client,
         f"{url}/messages",
         headers=headers,
         json={"request_id": str(uuid4()), "expected_revision": 1, "message": "Why?"},
@@ -118,7 +121,8 @@ def test_chat_is_private_idempotent_and_preserves_multiturn_history(workspace: A
         "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
     ).json()
     url = f"/api/v1/conversations/{created['id']}"
-    first = client.post(
+    first = post_message(
+        client,
         f"{url}/messages",
         headers=headers,
         json={
@@ -132,8 +136,8 @@ def test_chat_is_private_idempotent_and_preserves_multiturn_history(workspace: A
     assert client.get(url).status_code == 404
     assert client.get("/api/v1/conversations").json() == []
     assert (
-        client.post(
-            f"{url}/messages", headers={"X-CSRF-Token": teacher_csrf}, json=body
+        post_message(
+            client, f"{url}/messages", headers={"X-CSRF-Token": teacher_csrf}, json=body
         ).status_code
         == 404
     )
@@ -190,11 +194,11 @@ def test_real_chat_keeps_decimal_budget_stable_across_messages(
             "expected_revision": revision,
             "message": "请用中文解释刚才的观点。" if revision == 2 else f"Question {revision}",
         }
-        result = client.post(url, headers=headers, json=body)
+        result = post_message(client, url, headers=headers, json=body)
         assert result.status_code == 200
         assert len(result.json()["turns"]) == revision + 1
         assert all(turn["state"] == "ready" for turn in result.json()["turns"])
-        assert client.post(url, headers=headers, json=body).json() == result.json()
+        assert post_message(client, url, headers=headers, json=body).json() == result.json()
         assert transport.call_count == revision + 1
     sent_payload = _last_wire_payload(transport)
     assert [message["role"] for message in sent_payload["messages"]] == [
@@ -300,7 +304,8 @@ def test_exact_student_chat_confirmation_does_not_expand_into_a_course_grant(
         json={"version_id": BASELINE_VERSION_ID},
     ).json()
     conversation_url = f"/api/v1/conversations/{created['id']}"
-    first = client.post(
+    first = post_message(
+        client,
         f"{conversation_url}/messages",
         headers=student_headers,
         json={
@@ -458,7 +463,8 @@ def test_static_course_chat_disclosure_creates_standing_grant_before_any_student
         headers={"X-CSRF-Token": student_csrf},
         json={"version_id": BASELINE_VERSION_ID},
     ).json()
-    sent = client.post(
+    sent = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": student_csrf},
         json={
@@ -519,7 +525,8 @@ def test_operator_standing_consent_records_course_chat_grant_without_disclosure_
         headers={"X-CSRF-Token": student_csrf},
         json={"version_id": BASELINE_VERSION_ID},
     ).json()
-    sent = client.post(
+    sent = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": student_csrf},
         json={
@@ -857,7 +864,8 @@ def test_single_llm_sending_guard_rechecks_live_owner_source_and_consent(
     monkeypatch.setattr(
         "app.modules.workspace.chat_provider.HttpxLLMTransport.post_bytes", transport
     )
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -866,7 +874,12 @@ def test_single_llm_sending_guard_rechecks_live_owner_source_and_consent(
             "message": "current synthetic private user",
         },
     )
-    expected_status = 404 if mutation in {"actor_course_removed", "chat_withdrawn"} else 200
+    # The send streams; the follow-up read reflects any access the actor lost.
+    expected_status = {
+        "actor_course_removed": 404,
+        "chat_withdrawn": 404,
+        "actor_inactive": 401,
+    }.get(mutation, 200)
     assert response.status_code == expected_status, response.text
     assert len(boundary_seen) == 1
     with database.session() as db:
@@ -924,7 +937,8 @@ def test_memory_entry_action_reuses_its_chat_and_request_identity_without_sendin
     assert repeated.json()["request_id"] == request_id
     assert repeated.json()["session"]["turns"] == []
 
-    sent = client.post(
+    sent = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=headers,
         json={
@@ -1088,7 +1102,8 @@ def test_real_chat_allows_educational_authorization_word(workspace: Any, monkeyp
     created = client.post(
         "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
     ).json()
-    result = client.post(
+    result = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers=headers,
         json={
@@ -1278,7 +1293,8 @@ def test_single_agent_replays_tools_from_the_exact_accepted_model_stage(
         headers={"X-CSRF-Token": csrf},
         json={"version_id": BASELINE_VERSION_ID},
     ).json()
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -1364,7 +1380,8 @@ def test_single_not_sent_releases_reservation_and_a_new_request_can_continue(
         json={"version_id": BASELINE_VERSION_ID},
     ).json()
     failed_id = str(uuid4())
-    failed = client.post(
+    failed = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -1393,7 +1410,8 @@ def test_single_not_sent_releases_reservation_and_a_new_request_can_continue(
             )
         )
         assert budget is not None and budget.allocated_requests == 0
-    continued = client.post(
+    continued = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -1439,9 +1457,9 @@ def test_single_unknown_stage_is_not_resent_on_idempotent_replay(
         "message": "Provider acceptance is uncertain.",
     }
     url = f"/api/v1/conversations/{created['id']}/messages"
-    first = client.post(url, headers={"X-CSRF-Token": csrf}, json=body)
+    first = post_message(client, url, headers={"X-CSRF-Token": csrf}, json=body)
     assert first.json()["turns"][0]["state"] == "acceptance_unknown"
-    replay = client.post(url, headers={"X-CSRF-Token": csrf}, json=body)
+    replay = post_message(client, url, headers={"X-CSRF-Token": csrf}, json=body)
     assert replay.json() == first.json()
     assert transport.call_count == 1
     with database.session() as db:
@@ -1515,7 +1533,8 @@ def test_single_resume_reuses_accepted_stage_and_new_revision_fences_old_worker(
         raise PlatformError("chat_interrupted", "Synthetic accepted-stage interruption.", 503)
 
     monkeypatch.setattr(chat_module, "store_assistant_text", simulate_crash)
-    original = client.post(
+    original = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -1539,7 +1558,8 @@ def test_single_resume_reuses_accepted_stage_and_new_revision_fences_old_worker(
 
     paused_view = client.get(f"/api/v1/conversations/{created['id']}").json()
     assert paused_view["can_send"] is True
-    new_message = client.post(
+    new_message = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -1669,7 +1689,8 @@ def test_single_resume_retries_only_a_proven_not_sent_followup_stage(
             PlatformError("chat_interrupted", "Synthetic recovery point.", 503)
         ),
     )
-    failed = client.post(
+    failed = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
@@ -1792,8 +1813,8 @@ def test_chat_rejects_stale_revision_csrf_revoked_membership_and_unknown_outcome
     ).json()
     url = f"/api/v1/conversations/{created['id']}"
     body = {"request_id": str(uuid4()), "expected_revision": 10, "message": "Hello"}
-    assert client.post(f"{url}/messages", headers=headers, json=body).status_code == 409
-    assert client.post(f"{url}/messages", json=body).status_code == 403
+    assert post_message(client, f"{url}/messages", headers=headers, json=body).status_code == 409
+    assert post_message(client, f"{url}/messages", json=body).status_code == 403
     with database.session() as db:
         db.add(
             ConversationTurn(
@@ -1810,7 +1831,8 @@ def test_chat_rejects_stale_revision_csrf_revoked_membership_and_unknown_outcome
         )
         row = db.get(Conversation, created["id"])
         row.revision = 1
-    recovered = client.post(
+    recovered = post_message(
+        client,
         f"{url}/messages",
         headers=headers,
         json={"request_id": str(uuid4()), "expected_revision": 1, "message": "Try again"},
@@ -1966,7 +1988,8 @@ def test_chat_unknown_replay_is_free_and_followup_receives_complete_saved_histor
         "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
     ).json()
     url = f"/api/v1/conversations/{created['id']}"
-    earlier = client.post(
+    earlier = post_message(
+        client,
         f"{url}/messages",
         headers=headers,
         json={
@@ -1983,14 +2006,15 @@ def test_chat_unknown_replay_is_free_and_followup_receives_complete_saved_histor
         "expected_revision": 1,
         "message": "uncertain original",
     }
-    first = client.post(f"{url}/messages", headers=headers, json=first_body)
+    first = post_message(client, f"{url}/messages", headers=headers, json=first_body)
     assert first.status_code == 200
     assert first.json()["turns"][1]["state"] == "acceptance_unknown"
     assert first.json()["turns"][1]["user_text"] == "uncertain original"
-    replay = client.post(f"{url}/messages", headers=headers, json=first_body)
+    replay = post_message(client, f"{url}/messages", headers=headers, json=first_body)
     assert replay.json() == first.json()
     assert generated == ["Earlier successful question", "uncertain original"]
-    second = client.post(
+    second = post_message(
+        client,
         f"{url}/messages",
         headers=headers,
         json={
@@ -2198,7 +2222,8 @@ def test_chat_usage_metadata_never_gates_a_valid_reply(
         "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
     ).json()
     request_id = str(uuid4())
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers=headers,
         json={
@@ -2266,7 +2291,8 @@ def test_chat_invalid_content_stays_failed_even_after_http_200(
         "/api/v1/conversations", headers=headers, json={"version_id": BASELINE_VERSION_ID}
     ).json()
     request_id = str(uuid4())
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers=headers,
         json={"request_id": request_id, "expected_revision": 0, "message": "Check content"},
@@ -2860,9 +2886,9 @@ def test_chat_failure_is_safe_and_does_not_retry(
     monkeypatch.setattr("app.modules.workspace.chat.retrieve_sources", fail)
     body = {"request_id": str(uuid4()), "expected_revision": 0, "message": "Private learner text"}
     url = f"/api/v1/conversations/{created['id']}/messages"
-    result = client.post(url, headers=headers, json=body)
+    result = post_message(client, url, headers=headers, json=body)
     assert result.json()["turns"][0]["safe_error_code"] == "chat_failed"
-    assert client.post(url, headers=headers, json=body).status_code == 200
+    assert post_message(client, url, headers=headers, json=body).status_code == 200
     assert len(calls) == 1
     assert "chat_failed" in caplog.text
     assert "private-provider-body" not in caplog.text + result.text
@@ -2882,7 +2908,9 @@ def test_provider_controls_are_teacher_only_and_key_is_encrypted(workspace: Any)
     headers = {"X-CSRF-Token": csrf}
     assert client.get(url).json()["credential_ready"] is False
     missing = client.post(
-        url, headers=headers, json={"expected_revision": 0, "component": "llm", "mode": "real"}
+        url,
+        headers=headers,
+        json={"expected_revision": 0, "component": "llm", "mode": "real"},
     )
     assert missing.json()["code"] == "provider_key_required"
     secret = "test-only-not-a-real-key"
@@ -2896,13 +2924,17 @@ def test_provider_controls_are_teacher_only_and_key_is_encrypted(workspace: Any)
         assert preferences_settings(app.state.base_settings, row).dashscope_api_key == secret
     assert (
         client.post(
-            url, headers=headers, json={"expected_revision": 0, "component": "llm", "mode": "mock"}
+            url,
+            headers=headers,
+            json={"expected_revision": 0, "component": "llm", "mode": "mock"},
         ).status_code
         == 409
     )
     assert (
         client.post(
-            url, headers=headers, json={"expected_revision": 1, "component": "tts", "mode": "real"}
+            url,
+            headers=headers,
+            json={"expected_revision": 1, "component": "tts", "mode": "real"},
         ).json()["code"]
         == "provider_deferred"
     )
@@ -2930,7 +2962,9 @@ def test_environment_dashscope_key_wins_over_saved_dialog_key(workspace: Any) ->
     url = f"/api/v1/courses/{COURSE_ID}/provider-settings"
     saved_key = "saved-dialog-key-not-real"
     saved = client.post(
-        url, headers={"X-CSRF-Token": csrf}, json={"expected_revision": 0, "api_key": saved_key}
+        url,
+        headers={"X-CSRF-Token": csrf},
+        json={"expected_revision": 0, "api_key": saved_key},
     )
     assert saved.status_code == 200, saved.text
     rotated = "rotated-env-key-not-real"
@@ -2991,14 +3025,18 @@ def test_mode_change_invalidates_only_that_check_and_key_change_invalidates_all(
         )
     app.state.settings = app.state.settings.model_copy(update={"llm_provider": "dashscope"})
     result = client.post(
-        url, headers=headers, json={"expected_revision": 0, "component": "llm", "mode": "mock"}
+        url,
+        headers=headers,
+        json={"expected_revision": 0, "component": "llm", "mode": "mock"},
     )
     assert result.status_code == 200
     statuses = {item["key"]: item["status"] for item in result.json()["components"]}
     assert statuses["llm"] == "unchecked"
     assert statuses["embedding"] == statuses["report"] == "ready"
     result = client.post(
-        url, headers=headers, json={"expected_revision": 1, "api_key": "test-only-not-a-real-key"}
+        url,
+        headers=headers,
+        json={"expected_revision": 1, "api_key": "test-only-not-a-real-key"},
     )
     assert result.status_code == 200
     assert all(item["status"] in ("unchecked", "deferred") for item in result.json()["components"])

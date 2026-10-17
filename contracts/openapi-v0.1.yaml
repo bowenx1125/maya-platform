@@ -304,74 +304,6 @@ paths:
       summary: Update Conversation
       tags:
       - Chat
-  /conversations/{conversation_id}/messages:
-    post:
-      operationId: sendConversationMessage
-      parameters:
-      - in: path
-        name: conversation_id
-        required: true
-        schema:
-          format: uuid
-          title: Conversation Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendChat'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                discriminator:
-                  mapping:
-                    agent: '#/components/schemas/ChatSession'
-                    maya_team: '#/components/schemas/TeamChatSession'
-                    team: '#/components/schemas/TeamChatSession'
-                  propertyName: entry_kind
-                oneOf:
-                - $ref: '#/components/schemas/ChatSession'
-                - $ref: '#/components/schemas/TeamChatSession'
-                title: Response Sendconversationmessage
-          description: Successful Response
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Not Found
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Conflict
-        '503':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Service Unavailable
-      security:
-      - sessionCookie: []
-      summary: Send Message
-      tags:
-      - Chat
   /conversations/{conversation_id}/messages:stream:
     post:
       operationId: streamConversationMessage
@@ -6614,31 +6546,6 @@ components:
       - credential_ready
       - components
       title: ProviderSettings
-      type: object
-    SendChat:
-      additionalProperties: false
-      properties:
-        expected_revision:
-          minimum: 0.0
-          title: Expected Revision
-          type: integer
-        message:
-          minLength: 1
-          title: Message
-          type: string
-        request_id:
-          format: uuid
-          title: Request Id
-          type: string
-        routing:
-          anyOf:
-          - $ref: '#/components/schemas/TeamRouting'
-          - type: 'null'
-      required:
-      - request_id
-      - expected_revision
-      - message
-      title: SendChat
       type: object
     StreamChat:
       additionalProperties: false

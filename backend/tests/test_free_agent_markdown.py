@@ -20,7 +20,7 @@ from app.modules.workspace.chat_provider import chat_messages
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_segments_protocol import _snapshot
 from tests.test_wave1_agents_knowledge import COURSE_ID, GROUP_DEMO_ID, _headers, _make_agent
 
@@ -99,7 +99,8 @@ def test_free_markdown_publishes_without_persona_compile_or_confirmation(
     assert deleted.status_code == 204, deleted.text
     saved = client.get(f"/api/v1/conversations/{conversation_id}")
     assert saved.status_code == 200 and saved.json()["agent"]["available"] is False
-    denied = client.post(
+    denied = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=_headers(csrf),
         json={

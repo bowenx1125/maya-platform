@@ -88,7 +88,6 @@ from .schemas import (
     MemoryMayaTeamSource,
     MemoryTeamSource,
     SavedTeamChatEntry,
-    SendChat,
     StreamChat,
     UpdateChat,
 )
@@ -101,7 +100,6 @@ from .team_conversation import (
 from .team_runtime import (
     claim_team_turn,
     execute_team_turn,
-    execute_team_turn_with_natural_assessment_resume,
     pause_team_turn,
     resume_team_turn,
 )
@@ -1680,104 +1678,6 @@ def update_conversation(
     db.commit()
     db.refresh(row)
     return session_view(db, row, context, settings)
-
-
-@router.post(
-    "/conversations/{conversation_id}/messages",
-    response_model=ConversationSession,
-    operation_id="sendConversationMessage",
-    responses={503: {"model": Error}},
-)
-def send_message(
-    conversation_id: UUID,
-    payload: SendChat,
-    request: Request,
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-    database: Database = Depends(get_database),
-) -> ConversationSession:
-    row = owned_conversation(db, context, str(conversation_id))
-    with message_timing(
-        "chat" if row.entry_kind == "agent" else "team",
-        conversation_id=row.id,
-        request_id=payload.request_id,
-    ):
-        if row.entry_kind != "agent":
-            _require_canonical_assessment_conversation(db, context, row)
-            db.commit()  # hold no pooled connection while queued
-            with write_guard_slot(settings):
-                claim = claim_team_turn(
-                    db,
-                    settings,
-                    conversation_id=row.id,
-                    actor_id=context.user.id,
-                    request_id=str(payload.request_id),
-                    expected_revision=payload.expected_revision,
-                    message=payload.message,
-                    routing=payload.routing,
-                    actor_context=context,
-                )
-                execute_team_turn_with_natural_assessment_resume(database.session_factory, claim)
-            _wake_assessment_finalizer(request, row.id)
-            db.expire_all()
-            return session_view(
-                db, owned_conversation(db, context, str(conversation_id)), context, settings
-            )
-        if payload.routing is not None and payload.routing.mode != "auto":
-            raise conflict("chat_routing_invalid", "Single Chats cannot select Team participants.")
-        version = db.get(AgentVersion, row.agent_version_id)
-        agent = db.get(Agent, version.agent_id) if version else None
-        if (
-            version is None
-            or agent is None
-            or not _conversation_is_callable(db, row, version, agent, context.user.id)
-        ):
-            raise _conversation_unavailable_error(agent)
-        request_id = str(payload.request_id)
-        message = payload.message.strip()
-        if not message:
-            raise PlatformError("chat_message_empty", "Enter a message.", 400)
-        reject_if_chat_busy(db, row, request_id)
-        # Admission comes before the claim: a busy server answers 503 with
-        # nothing stored, and the student resends the text still in the box.
-        # No pooled connection is held while waiting in the queue (nothing is
-        # pending; commit only ends the read transaction, keeping the rows).
-        db.commit()
-        with write_guard_slot(settings):
-            turn, created = claim_chat_send(
-                db,
-                row,
-                request_id=request_id,
-                expected_revision=payload.expected_revision,
-                message=message,
-                settings=settings,
-            )
-            claim_revision = turn.position
-            if not created:
-                return session_view(db, row, context, settings)
-            try:
-                reply, sources, operation_id = generate_reply(
-                    db,
-                    settings,
-                    row,
-                    request_id,
-                    claim_revision,
-                    message,
-                    actor_context=context,
-                    generation_waker=_knowledge_generation_waker(request),
-                )
-                store_assistant_text(
-                    db, row.id, request_id, claim_revision, reply, sources, operation_id
-                )
-            except Exception as exc:
-                record_chat_failure(db, row.id, request_id, claim_revision, exc)
-            release_chat_request(db, row.id, request_id, claim_revision)
-            db.commit()
-        db.expire_all()
-        return session_view(
-            db, owned_conversation(db, context, str(conversation_id)), context, settings
-        )
 
 
 @router.post(
