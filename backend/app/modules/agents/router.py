@@ -39,6 +39,7 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.version_label import agent_version_label
 from app.modules.agents.persona import (
     agent_name_from_markdown,
     raw_agent_md_hash,
@@ -1612,7 +1613,7 @@ def download_agent_md(
     filename = frozen_download_filename(
         "AGENT.md",
         scoped.agent.name,
-        f"V1.{scoped.version.version_seq}",
+        agent_version_label(scoped.version.version_seq),
     )
     return Response(
         scoped.version.agent_md.encode("utf-8"),

@@ -1,9 +1,11 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -192,25 +194,143 @@ describe("M08 voice library", () => {
     ).toBeNull();
   });
 
-  it("offers no delete while a delete is in flight or awaiting reconciliation", async () => {
-    api.voiceProfiles.mockResolvedValue(
-      ["deleting", "outcome_unknown"].map((status) => ({
-        id: `voice-${status}`,
-        scope: "group",
-        group_id: "group-a",
-        status,
-        source_filename: `${status}.wav`,
-        created_at: "2026-10-12T00:00:00Z",
-        can_manage: true,
-      })),
+  it("shows × on every voice status and keeps it visible, disabled, while that delete runs", async () => {
+    const statuses = [
+      "enrolling",
+      "preview_ready",
+      "ready",
+      "failed",
+      "deleting",
+      "outcome_unknown",
+    ];
+    const rows = statuses.map((status) => ({
+      id: `voice-${status}`,
+      scope: "group",
+      group_id: "group-a",
+      status,
+      source_filename: `${status}.wav`,
+      created_at: "2026-10-12T00:00:00Z",
+      can_manage: true,
+    }));
+    api.voiceProfiles.mockResolvedValue(rows);
+    let finishDelete: (value: unknown) => void = () => undefined;
+    api.deleteVoiceProfile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishDelete = resolve;
+        }),
+    );
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
     );
     render(
       <AppShell role="student">
-        <VoiceLibrary groupId="group-a" />
+        <VoiceLibrary groupId="group-a" moduleCard />
       </AppShell>,
     );
-    expect(await screen.findByText("deleting.wav")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Delete / })).toBeNull();
+    for (const status of statuses) {
+      const button = await screen.findByRole("button", {
+        name: `Delete ${status}.wav`,
+      });
+      expect(button).toHaveProperty("disabled", false);
+    }
+
+    const unknown = screen.getByRole("button", {
+      name: "Delete outcome_unknown.wav",
+    });
+    fireEvent.click(unknown);
+    await waitFor(() =>
+      expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
+        "voice-outcome_unknown",
+        expect.objectContaining({ idempotency: expect.anything() }),
+      ),
+    );
+    // Mid-delete the × is still there: disabled, busy, with a spinner.
+    const busy = screen.getByRole("button", {
+      name: "Delete outcome_unknown.wav",
+    });
+    expect(busy).toHaveProperty("disabled", true);
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(busy.querySelector(".spinner")).toBeTruthy();
+    for (const status of statuses) {
+      expect(
+        screen.getByRole("button", { name: `Delete ${status}.wav` }),
+      ).toBeTruthy();
+    }
+    api.voiceProfiles.mockResolvedValue(
+      rows.filter((row) => row.status !== "outcome_unknown"),
+    );
+    await act(async () => {
+      finishDelete({ ...rows[5], status: "deleted" });
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("outcome_unknown.wav")).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete deleting.wav" }),
+    ).toHaveProperty("disabled", false);
+  });
+
+  it("lays out each voice as one row with only Preview and Delete, and deletes a failed voice", async () => {
+    const failed = {
+      id: "failed-voice",
+      scope: "group",
+      group_id: "group-a",
+      status: "failed",
+      source_filename: "refused.m4a",
+      created_at: "2026-10-12T00:00:00Z",
+      can_manage: true,
+    };
+    const unconfirmed = {
+      ...failed,
+      id: "preview-voice",
+      status: "preview_ready",
+      source_filename: "sample.m4a",
+    };
+    api.voiceProfiles
+      .mockResolvedValueOnce([unconfirmed, failed])
+      .mockResolvedValue([unconfirmed]);
+    api.deleteVoiceProfile.mockResolvedValue({ ...failed, status: "deleted" });
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" moduleCard />
+      </AppShell>,
+    );
+    const failedRow = (await screen.findByText("refused.m4a")).closest("li")!;
+    const readyRow = screen.getByText("sample.m4a").closest("li")!;
+    // No status pill and no separate check button on any row.
+    expect(screen.queryByText(/preview ready/i)).toBeNull();
+    expect(screen.queryByText(/^failed$/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^confirm$/i })).toBeNull();
+    // The status moves into a tooltip instead.
+    expect(failedRow.getAttribute("title")).toBeTruthy();
+    expect(readyRow.getAttribute("title")).toBeTruthy();
+    // Exactly Preview and Delete per row; a failed voice cannot be played.
+    expect(
+      within(readyRow)
+        .getAllByRole("button")
+        .map(
+          (button) => button.getAttribute("aria-label") ?? button.textContent,
+        ),
+    ).toEqual(["sample.m4a", "Preview", "Delete sample.m4a"]);
+    expect(
+      within(failedRow).getByRole("button", { name: "Preview" }),
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(
+      within(failedRow).getByRole("button", { name: "Delete refused.m4a" }),
+    );
+    await waitFor(() =>
+      expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
+        "failed-voice",
+        expect.objectContaining({ idempotency: expect.anything() }),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText("refused.m4a")).toBeNull());
   });
 
   it("requires consent and a local file before enrollment", async () => {
@@ -386,7 +506,7 @@ describe("M08 voice library", () => {
     expect(screen.queryByText("Created")).toBeNull();
   });
 
-  it("shows a platform preview URL and only confirms after preview", async () => {
+  it("shows a platform preview URL and confirms only after the sample plays to the end", async () => {
     api.voiceProfiles.mockResolvedValue([
       {
         id: "voice-1",
@@ -414,15 +534,16 @@ describe("M08 voice library", () => {
     render(<VoiceLibrary groupId="group-a" />);
     await waitFor(() => expect(screen.getByText("sample.wav")).toBeTruthy());
     expect(screen.queryByText("voice-1")).toBeNull();
-    const confirm = screen.getByRole("button", { name: /^confirm$/i });
-    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    // No separate check button and no status pill on the row.
+    expect(screen.queryByRole("button", { name: /^confirm$/i })).toBeNull();
+    expect(screen.queryByText(/preview ready/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
     await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
     expect((document.querySelector("audio") as HTMLAudioElement).src).toContain(
       "/api/v1/voice-previews/preview-1/media",
     );
-    expect((confirm as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(confirm);
+    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
+    fireEvent.ended(document.querySelector("audio")!);
     await waitFor(() =>
       expect(api.confirmVoiceProfile).toHaveBeenCalledWith("voice-1"),
     );

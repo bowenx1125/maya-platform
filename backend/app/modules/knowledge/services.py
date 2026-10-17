@@ -50,6 +50,7 @@ from app.core.models import (
     StoredFile,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.version_label import agent_version_label
 from app.modules.agents.markdown import markdown_hash
 from app.modules.agents.persona import (
     PersonaCompilerVersion,
@@ -1388,7 +1389,7 @@ def version_dto(
     return AgentVersionDTO(
         id=UUID(version.id),
         agent_id=UUID(version.agent_id),
-        version_label=f"V1.{version.version_seq}",
+        version_label=agent_version_label(version.version_seq),
         state=cast(Literal["draft", "published", "superseded"], version.state),
         revision=version.revision,
         agent_md=version.agent_md,

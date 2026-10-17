@@ -97,10 +97,7 @@ describe("Voice recovery", () => {
       );
       fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
       expect(await screen.findByRole("alert")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-        "disabled",
-        true,
-      );
+      expect(document.querySelector("audio")).toBeNull();
       fireEvent.focus(window);
       await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
       expect(screen.getByRole("alert")).toBeTruthy();
@@ -111,7 +108,7 @@ describe("Voice recovery", () => {
         [unfinished.id],
         [unfinished.id],
       ]);
-      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+      fireEvent.ended(document.querySelector("audio")!);
       const choice = screen.getByRole("button", { name: "sample.wav" });
       await waitFor(() => expect(choice).toHaveProperty("disabled", false));
       fireEvent.click(choice);
@@ -169,22 +166,16 @@ describe("Voice recovery", () => {
     const preview = await screen.findByRole("button", { name: "Preview" });
     vi.useFakeTimers();
     await act(async () => fireEvent.click(preview));
-    expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-      "disabled",
-      false,
-    );
+    expect(document.querySelector("audio")).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1001);
     });
     expect(
       screen.getByText(
-        "This preview has expired. Preview the voice again before confirming.",
+        "This preview has expired. Play the voice again to finish setting it up.",
       ),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(document.querySelector("audio")).toBeNull();
     expect(document.querySelector("audio")).toBeNull();
     expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
     expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
@@ -201,24 +192,16 @@ describe("Voice recovery", () => {
     fireEvent.error(document.querySelector("audio")!);
     expect(
       screen.getByText(
-        "The preview could not be played. Retry the preview before confirming.",
+        "The preview could not be played. Play the voice again to finish setting it up.",
       ),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    expect(document.querySelector("audio")).toBeNull();
     expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() =>
       expect(api.createVoicePreview).toHaveBeenCalledTimes(2),
     );
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-        "disabled",
-        false,
-      ),
-    );
+    await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
   });
 
   it("recovers a lost confirmation response without confirming or synthesizing again", async () => {
@@ -229,19 +212,12 @@ describe("Voice recovery", () => {
     api.voiceProfile.mockResolvedValue(ready);
     render(<VoiceLibrary groupId="group-a" />);
     fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-        "disabled",
-        false,
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
+    fireEvent.ended(document.querySelector("audio")!);
     expect(await screen.findByRole("alert")).toBeTruthy();
     api.voiceProfiles.mockResolvedValue([ready]);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull(),
-    );
+    await waitFor(() => expect(document.querySelector("audio")).toBeNull());
     expect(api.voiceProfile).toHaveBeenCalledWith(unfinished.id);
     expect(api.confirmVoiceProfile).toHaveBeenCalledTimes(1);
     expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
@@ -267,9 +243,7 @@ describe("Voice recovery", () => {
       const preview = await screen.findByRole("button", { name: "Preview" });
       vi.useFakeTimers();
       await act(async () => fireEvent.click(preview));
-      await act(async () =>
-        fireEvent.click(screen.getByRole("button", { name: "Confirm" })),
-      );
+      await act(async () => fireEvent.ended(document.querySelector("audio")!));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1001);
       });
@@ -327,7 +301,7 @@ describe("Voice recovery", () => {
       await act(async () => fireEvent.click(previews[0]));
       await act(async () => fireEvent.click(previews[1]));
       await act(async () =>
-        fireEvent.click(screen.getAllByRole("button", { name: "Confirm" })[0]),
+        fireEvent.ended(document.querySelectorAll("audio")[0]),
       );
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1001);
@@ -368,32 +342,22 @@ describe("Voice recovery", () => {
       api.voiceProfile.mockResolvedValue({ ...unfinished, status });
       render(<VoiceLibrary groupId="group-a" />);
       fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-          "disabled",
-          false,
-        ),
-      );
+      await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
       api.voiceProfiles.mockResolvedValue([{ ...unfinished, status }]);
-      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+      fireEvent.ended(document.querySelector("audio")!);
       await waitFor(() =>
         expect(api.voiceProfile).toHaveBeenCalledWith(unfinished.id),
       );
       if (status === "ready") {
-        await waitFor(() =>
-          expect(screen.queryByRole("button", { name: "Confirm" })).toBeNull(),
-        );
+        await waitFor(() => expect(document.querySelector("audio")).toBeNull());
         expect(screen.queryByRole("alert")).toBeNull();
       } else {
         expect(
           await screen.findByText(
-            "This preview has expired. Preview the voice again before confirming.",
+            "This preview has expired. Play the voice again to finish setting it up.",
           ),
         ).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Confirm" })).toHaveProperty(
-          "disabled",
-          true,
-        );
+        expect(document.querySelector("audio")).toBeNull();
       }
       expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
       expect(api.confirmVoiceProfile).toHaveBeenCalledTimes(1);

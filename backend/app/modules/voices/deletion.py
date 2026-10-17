@@ -8,29 +8,29 @@ boundary used by both operations.
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import PlatformError, invalid_state, not_found
-from app.core.models import VoiceProfile, VoiceProviderOperation
+from app.core.errors import PlatformError, not_found
+from app.core.models import IdempotencyRecord, VoiceProfile, VoiceProviderOperation
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
-    abandon_claim,
     assert_claim_owned,
     claim_idempotency,
     finish_idempotency,
+    renew_idempotency_lease,
     request_hash,
 )
 from app.modules.voices.preset import is_preset_profile
 from app.modules.voices.preview import expire_profile_previews
 from app.modules.voices.service import (
-    _claim_provider_operation,
     _dispatch_operation,
     _finish_operation,
     _record_reconciliation_request,
@@ -41,7 +41,9 @@ from app.modules.voices.service import (
     visible_student_voice,
     voice_profile_dto,
 )
-from app.providers.voice import VoiceCloneProvider, VoiceProviderError, VoiceProviderTimeout
+from app.providers.voice import VoiceCloneProvider, VoiceProviderError
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _delete_operation_hash(context: AuthContext, profile_id: str) -> str:
@@ -108,6 +110,73 @@ def _reconcile_delete(
     return False
 
 
+DELETE_LEASE_SECONDS = 120
+
+
+def _owner_is_live(db: Session, operation: VoiceProviderOperation) -> bool:
+    """True when another request still holds the lease on this delete."""
+
+    if operation.idempotency_record_id is None:
+        return False
+    owner = db.get(IdempotencyRecord, operation.idempotency_record_id)
+    if owner is None or owner.state != "pending":
+        return False
+    return _utc(owner.lease_expires_at) > now_utc()
+
+
+def _soft_delete(db: Session, profile: VoiceProfile, settings: Settings) -> None:
+    """The card goes now, whatever state the voice was in."""
+
+    if profile.status != "deleted":
+        profile.status = "deleted"
+        profile.safe_error_code = None
+        profile.updated_at = now_utc()
+    expire_profile_previews(db, settings.resolved_data_root, profile.id)
+    db.commit()
+
+
+def _enrollment_may_have_reached_provider(db: Session, profile: VoiceProfile) -> bool:
+    return (
+        db.scalar(
+            select(VoiceProviderOperation.id).where(
+                VoiceProviderOperation.profile_id == profile.id,
+                VoiceProviderOperation.operation_type == "enroll",
+                (VoiceProviderOperation.request_count > 0)
+                | VoiceProviderOperation.state.in_(
+                    ("dispatched", "reconciling", "outcome_unknown")
+                ),
+            )
+        )
+        is not None
+    )
+
+
+def _remote_voice_ids(
+    db: Session,
+    profile: VoiceProfile,
+    provider: VoiceCloneProvider,
+    settings: Settings,
+) -> tuple[list[str], bool]:
+    """The supplier voices to delete, and whether that list is complete.
+
+    A stored id is used directly. Without one (an enrollment whose outcome was
+    never learned, or an id that cannot be decrypted), the supplier is asked
+    for voices carrying this profile's recovery name.
+    """
+
+    if profile.external_id_encrypted:
+        try:
+            return [_tts_external_id(profile, settings)], True
+        except PlatformError:
+            pass
+    elif not _enrollment_may_have_reached_provider(db, profile):
+        # Refused or failed before the supplier returned a voice: nothing
+        # exists remotely, only the card goes.
+        return [], True
+    result = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
+    return list(result.matches), result.visibility_known
+
+
 def delete_voice_profile(
     db: Session,
     context: AuthContext,
@@ -117,7 +186,16 @@ def delete_voice_profile(
     idempotency_key: str,
     provider: VoiceCloneProvider | None = None,
 ) -> Any:
-    """Delete one group voice with durable dispatch and reconciliation."""
+    """Delete one voice in any state: soft-delete locally, then clean up remotely.
+
+    Every status can be deleted, including enrolling, failed, refused,
+    outcome_unknown and a delete already in progress. The profile becomes
+    ``deleted`` before any supplier call, so a slow or failing supplier never
+    keeps the card on screen. The supplier delete is best effort: a stored id
+    is deleted directly; an unknown id is looked up by recovery name. When the
+    supplier cannot confirm, the delete operation stays ``outcome_unknown`` so
+    a later delete (or enrollment completion) can finish the cleanup.
+    """
 
     scoped = visible_student_voice(db, context, profile_id)
     profile = scoped.profile
@@ -138,16 +216,30 @@ def delete_voice_profile(
     except PlatformError as exc:
         if exc.status_code == 409:
             raise PlatformError(
-                "provider_unavailable", "The delete outcome needs reconciliation.", 503
+                "provider_unavailable", "The delete is already in progress.", 503
             ) from exc
         raise
     if replay is not None:
         return replay
     assert_claim_owned(db, record)
+    # A supplier lookup plus delete can outlast the default 10 s lease.
+    renew_idempotency_lease(db, record, lease_seconds=DELETE_LEASE_SECONDS)
+    profile_id = profile.id
+    current = db.get(VoiceProfile, profile_id)
+    if current is None:
+        raise not_found()
+    profile = current
     from app.providers.factory import voice_provider
 
     provider_instance = provider or voice_provider(settings)
-    profile_operation = db.scalar(
+
+    def finish(result_profile: VoiceProfile) -> Any:
+        result = voice_profile_dto(result_profile)
+        finish_idempotency(db, record, 200, result.model_dump(mode="json"))
+        db.commit()
+        return result
+
+    operation = db.scalar(
         select(VoiceProviderOperation)
         .where(
             VoiceProviderOperation.profile_id == profile.id,
@@ -155,93 +247,24 @@ def delete_voice_profile(
         )
         .order_by(VoiceProviderOperation.created_at)
     )
-    if profile_operation is not None and profile_operation.idempotency_record_id != record.id:
-        if profile_operation.state == "succeeded" or profile.status == "deleted":
-            result = voice_profile_dto(profile)
-            finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-            db.commit()
-            return result
-        abandon_claim(db, record)
-        raise PlatformError("provider_unavailable", "The delete outcome needs reconciliation.", 503)
-    existing_operation = profile_operation
-    operation: VoiceProviderOperation
-    if existing_operation is not None:
-        operation = existing_operation
-        existing_profile = db.get(VoiceProfile, operation.profile_id)
-        if existing_profile is None:
-            raise invalid_state("The voice deletion record is unavailable.")
-        profile = existing_profile
-        if operation.state == "succeeded":
-            result = voice_profile_dto(profile)
-            finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-            db.commit()
-            return result
-        if operation.state in {"dispatched", "reconciling", "outcome_unknown"}:
-            _claim_provider_operation(db, operation, record.claim_token)
-            if _reconcile_delete(db, profile, operation, provider_instance):
-                result = voice_profile_dto(profile)
-                finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-                db.commit()
-                return result
-            _claim_provider_operation(db, operation, record.claim_token)
-        elif operation.state == "failed":
-            if operation.request_count != 0:
-                abandon_claim(db, record)
-                raise PlatformError(
-                    "provider_unavailable", "The delete outcome needs reconciliation.", 503
-                )
-            timestamp = now_utc()
-            operation.state = "prepared"
-            operation.attempt += 1
-            operation.claim_token = record.claim_token
-            operation.provider_deadline = timestamp + timedelta(seconds=35)
-            operation.updated_at = timestamp
-            profile.status = "deleting"
-            profile.updated_at = timestamp
-            db.commit()
-    else:
-        if profile.status == "deleted":
-            result = voice_profile_dto(profile)
-            finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-            db.commit()
-            return result
-        if profile.status in {"deleting", "outcome_unknown"}:
-            abandon_claim(db, record)
-            raise PlatformError(
-                "provider_unavailable", "The delete outcome needs reconciliation.", 503
-            )
-        timestamp = now_utc()
-        previous_status = profile.status
-        changed = db.execute(
-            update(VoiceProfile)
-            .where(
-                VoiceProfile.id == profile.id,
-                VoiceProfile.status == previous_status,
-                VoiceProfile.status.not_in(("deleting", "outcome_unknown", "deleted")),
-            )
-            .values(status="deleting", updated_at=timestamp)
-        )
-        if getattr(changed, "rowcount", 0) != 1:
-            db.rollback()
-            current = db.get(VoiceProfile, profile.id)
-            concurrent_operation = db.scalar(
-                select(VoiceProviderOperation).where(
-                    VoiceProviderOperation.profile_id == profile.id,
-                    VoiceProviderOperation.operation_type == "delete",
-                )
-            )
-            if current is not None and (
-                current.status == "deleted"
-                or (concurrent_operation is not None and concurrent_operation.state == "succeeded")
-            ):
-                result = voice_profile_dto(current)
-                finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-                db.commit()
-                return result
-            abandon_claim(db, record)
-            raise PlatformError(
-                "provider_unavailable", "The delete outcome needs reconciliation.", 503
-            )
+    if operation is not None and operation.state == "succeeded":
+        _soft_delete(db, profile, settings)
+        return finish(profile)
+    if operation is None and profile.status == "deleted":
+        return finish(profile)
+    if (
+        operation is not None
+        and operation.idempotency_record_id != record.id
+        and _owner_is_live(db, operation)
+    ):
+        # Another request is deleting this voice at the supplier right now. A
+        # repeat delete is idempotent: the card goes, and the live request
+        # keeps the single supplier command.
+        _soft_delete(db, profile, settings)
+        return finish(profile)
+
+    timestamp = now_utc()
+    if operation is None:
         operation = VoiceProviderOperation(
             id=str(uuid4()),
             profile_id=profile.id,
@@ -259,83 +282,60 @@ def delete_voice_profile(
         db.add(operation)
         try:
             db.commit()
-        except IntegrityError as exc:
+        except IntegrityError:
+            # A concurrent delete created the operation first and owns the
+            # supplier command; this one only removes the card.
             db.rollback()
-            abandon_claim(db, record)
-            raise PlatformError(
-                "provider_unavailable", "The delete outcome needs reconciliation.", 503
-            ) from exc
-    if not profile.external_id_encrypted:
-        enroll_may_exist = db.scalar(
-            select(VoiceProviderOperation.id).where(
-                VoiceProviderOperation.profile_id == profile.id,
-                VoiceProviderOperation.operation_type == "enroll",
-                VoiceProviderOperation.state.in_(
-                    ("prepared", "dispatched", "reconciling", "outcome_unknown")
-                ),
-            )
-        )
-        if enroll_may_exist is None:
-            # The enrollment was refused or failed before the supplier returned
-            # a voice, so there is nothing to delete remotely; only the card goes.
-            profile.status = "deleted"
-            profile.safe_error_code = None
-            profile.updated_at = now_utc()
-            expire_profile_previews(db, settings.resolved_data_root, profile.id)
-            _finish_operation(db, operation, state="succeeded")
-            result = voice_profile_dto(profile)
-            finish_idempotency(db, record, 200, result.model_dump(mode="json"))
-            db.commit()
-            return result
-    try:
-        external_id = _tts_external_id(profile, settings)
-    except PlatformError:
-        # No provider request was made, so this is a deterministic local
-        # mapping failure rather than an ambiguous delete.
-        profile.status = "failed"
-        profile.safe_error_code = "voice_mapping_unavailable"
-        try:
-            _finish_operation(
-                db,
-                operation,
-                state="failed",
-                safe_error_code="voice_mapping_unavailable",
-            )
-        except PlatformError:
-            db.rollback()
-        try:
-            abandon_claim(db, record)
-        except PlatformError:
-            db.rollback()
-        raise
-    try:
-        _dispatch_operation(db, operation)
-        try:
-            provider_instance.delete(external_id, target_model_key=profile.target_model_key)
-        except VoiceProviderTimeout as exc:
-            profile.status = "outcome_unknown"
-            profile.safe_error_code = "provider_unavailable"
-            _finish_operation(
-                db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
-            )
-            raise _safe_provider_error(exc) from exc
-        except VoiceProviderError as exc:
-            profile.status = "outcome_unknown"
-            profile.safe_error_code = "voice_provider_unavailable"
-            _finish_operation(
-                db, operation, state="outcome_unknown", safe_error_code="voice_provider_unavailable"
-            )
-            raise _safe_provider_error(exc) from exc
-        profile.status = "deleted"
-        profile.safe_error_code = None
-        profile.updated_at = now_utc()
-        expire_profile_previews(db, settings.resolved_data_root, profile.id)
-        _finish_operation(db, operation, state="succeeded")
-        result = voice_profile_dto(profile)
-        finish_idempotency(db, record, 200, result.model_dump(mode="json"))
+            current = db.get(VoiceProfile, profile_id)
+            if current is None:
+                raise not_found() from None
+            _soft_delete(db, current, settings)
+            return finish(current)
+    else:
+        # Take over an abandoned delete (its request died or timed out),
+        # including one stuck in outcome_unknown.
+        operation.state = "prepared"
+        operation.attempt += 1
+        operation.claim_token = record.claim_token
+        operation.idempotency_record_id = record.id
+        operation.profile_scope = profile.scope
+        operation.provider_deadline = timestamp + timedelta(seconds=35)
+        operation.safe_error_code = None
+        operation.updated_at = timestamp
         db.commit()
-        return result
-    except PlatformError:
-        raise
-    finally:
-        external_id = ""
+
+    _soft_delete(db, profile, settings)
+
+    try:
+        voice_ids, complete = _remote_voice_ids(db, profile, provider_instance, settings)
+    except VoiceProviderError:
+        LOGGER.warning(
+            "Voice delete left the supplier voice for later cleanup profile_id=%s "
+            "safe_code=voice_provider_unavailable",
+            profile.id,
+        )
+        _finish_operation(
+            db, operation, state="outcome_unknown", safe_error_code="voice_provider_unavailable"
+        )
+        return finish(profile)
+    remote_failed = False
+    if voice_ids:
+        _dispatch_operation(db, operation)
+        for voice_id in voice_ids:
+            try:
+                provider_instance.delete(voice_id, target_model_key=profile.target_model_key)
+            except VoiceProviderError:
+                remote_failed = True
+        voice_ids = []
+    if remote_failed or not complete:
+        LOGGER.warning(
+            "Voice delete left the supplier voice for later cleanup profile_id=%s "
+            "safe_code=voice_provider_unavailable",
+            profile.id,
+        )
+        _finish_operation(
+            db, operation, state="outcome_unknown", safe_error_code="voice_provider_unavailable"
+        )
+    else:
+        _finish_operation(db, operation, state="succeeded")
+    return finish(profile)

@@ -524,13 +524,72 @@ describe("Brainform workspace actions", () => {
     expect(screen.getByRole("button", { name: "Edit lesson.md" })).toBeTruthy();
   });
 
+  it("enters a RAG file only through the enter button beside its title, like a Team or Agent tile", async () => {
+    state.role = "teacher";
+    state.api.workspaceDocuments.mockResolvedValue([source]);
+    renderWorkspace("teacher");
+    const enter = (
+      await screen.findAllByRole("button", { name: "Edit lesson.md" })
+    )[0];
+    const title = screen.getByText("lesson.md");
+    // The title is plain text, and the enter button sits right beside it in
+    // the same hover target, so hovering the title is what reveals it.
+    expect(title.tagName).toBe("SPAN");
+    expect(title.closest("button")).toBeNull();
+    expect(enter.parentElement).toBe(title.parentElement);
+    expect(enter.className).toMatch(/enterButton/);
+
+    fireEvent.click(title);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
+
+    fireEvent.click(enter);
+    expect(
+      await screen.findByRole("textbox", { name: "Content" }),
+    ).toBeTruthy();
+  });
+
+  it("enters Knowledge only through its enter button and hides it while generating", async () => {
+    state.role = "teacher";
+    state.api.brainformKnowledge.mockResolvedValue([
+      {
+        canonical_set_id: "set-ready",
+        knowledge_display_name: "Ready Knowledge",
+        version_seq: 2,
+        can_edit: true,
+        content_hash: "a".repeat(64),
+        generation_state: "completed",
+        safe_error_code: null,
+      },
+      {
+        canonical_set_id: "set-running",
+        knowledge_display_name: "Running Knowledge",
+        version_seq: 1,
+        can_edit: true,
+        content_hash: "b".repeat(64),
+        generation_state: "running",
+        safe_error_code: null,
+      },
+    ]);
+    renderWorkspace("teacher");
+    const enter = await screen.findByRole("button", {
+      name: "Edit Knowledge Ready Knowledge",
+    });
+    expect(screen.getByText("Ready Knowledge").closest("button")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Edit Knowledge Running Knowledge",
+      }),
+    ).toBeNull();
+    expect(enter.className).toMatch(/enterButton/);
+  });
+
   it("renames a RAG file in place on a double-click, keeping its extension", async () => {
     state.role = "teacher";
     state.api.workspaceDocuments.mockResolvedValue([source]);
     renderWorkspace("teacher");
-    fireEvent.doubleClick(
-      (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],
-    );
+    await screen.findAllByRole("button", { name: "Edit lesson.md" });
+    fireEvent.doubleClick(screen.getByText("lesson.md"));
     const name = await screen.findByRole("textbox", { name: "RAG file name" });
     expect((name as HTMLInputElement).value).toBe("lesson");
     fireEvent.change(name, { target: { value: "renamed" } });
@@ -1630,11 +1689,8 @@ describe("Brainform workspace actions", () => {
 
     renderWorkspace("teacher");
 
-    fireEvent.doubleClick(
-      await screen.findByRole("button", {
-        name: "Edit Knowledge Socrates Knowledge",
-      }),
-    );
+    await screen.findByText("Socrates Knowledge");
+    fireEvent.doubleClick(screen.getByText("Socrates Knowledge"));
     const title = await screen.findByRole("textbox", {
       name: "Knowledge title",
     });

@@ -40,6 +40,7 @@ from app.core.models import (
     StoredFile,
     VoiceProfile,
 )
+from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.round_count import (
@@ -605,7 +606,7 @@ def _participant_row(
         slot=chr(65 + order_index),
         order_index=order_index,
         agent_name=agent.name,
-        version_label=f"V1.{version.version_seq}",
+        version_label=agent_version_label(version.version_seq),
         avatar_config_json=json.dumps(avatar, sort_keys=True, separators=(",", ":")),
         requested_voice_profile_id=requested_voice_id,
         effective_voice_kind=effective_voice_kind,

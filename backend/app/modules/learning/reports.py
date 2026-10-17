@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, idempotency_conflict, not_found, stale_revision
 from app.core.models import Course, CourseMember, Group, GroupMember, User
+from app.core.version_label import team_version_label
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role
 from app.modules.knowledge_sets.models import KnowledgeSet
@@ -178,7 +179,7 @@ def _activity_label(db: Session, activity: AssessmentActivity, team_version: Tea
         cleaned = str(name).strip()
         if cleaned and cleaned not in names:
             names.append(cleaned)
-    version = f"V1.{max(0, team_version.version_seq - 1)}"
+    version = team_version_label(team_version.version_seq)
     team = team_version.display_name.strip()
     if names:
         return f"{team} · {', '.join(names)} · {version}"
