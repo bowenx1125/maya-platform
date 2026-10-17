@@ -205,22 +205,20 @@ def test_sql_defer_restores_pending_job_and_turn_without_failing_debate(
             assert playback is not None
             playback.status = "preparing"
             playback.current_turn_id = first.id
-            job = Job(
-                id=str(uuid4()),
-                document_id=None,
-                debate_id=debate_id,
-                turn_id=first.id,
-                idempotency_key=f"{debate_id}:{first.id}",
-                claim_token=claim_token,
-                cancellation_generation=0,
-                operation="debate_turn_prepare",
-                state="running",
-                safe_error_code=None,
-                attempt=1,
-                created_at=first.created_at,
-                updated_at=first.updated_at,
+            # #106: create already inserted the head prepare job for the first
+            # turn; claim that row instead of inserting a duplicate.
+            job = db.scalar(
+                select(Job).where(
+                    Job.debate_id == debate_id,
+                    Job.operation == "debate_turn_prepare",
+                    Job.idempotency_key == f"{debate_id}:{first.id}",
+                )
             )
-            db.add(job)
+            assert job is not None
+            job.claim_token = claim_token
+            job.state = "running"
+            job.safe_error_code = None
+            job.attempt = 1
             db.flush()
             repository = SqlPlaybackRepository(session_factory=database.session_factory)
             debate_row = repository.get_debate(db, debate_id)

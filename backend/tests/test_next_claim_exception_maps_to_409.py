@@ -106,7 +106,6 @@ async def test_next_claim_integrity_error_maps_to_next_not_ready() -> None:
     assert raised.value.code == "next_not_ready"
 
 
-
 @pytest.mark.asyncio
 async def test_next_claim_false_unchanged_still_ready_is_next_not_ready_not_controller() -> None:
     """Hard rule: claim miss + unchanged CAS must never say another controller.
@@ -360,7 +359,9 @@ def test_claim_next_playback_sql_has_no_sqlite_rowid(monkeypatch: pytest.MonkeyP
 
 def test_claim_next_rejects_missing_teacher_without_sql() -> None:
     """Python gate avoids Postgres AmbiguousParameter on IS NOT NULL bind."""
-    repo = SqlPlaybackRepository(session_factory=lambda: (_ for _ in ()).throw(RuntimeError("no sql")))
+    repo = SqlPlaybackRepository(
+        session_factory=lambda: (_ for _ in ()).throw(RuntimeError("no sql"))
+    )
     assert (
         repo.claim_next_playback(
             debate_id="debate",
