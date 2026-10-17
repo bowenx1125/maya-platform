@@ -106,6 +106,92 @@
 
 .audio {
   grid-column: 1 / -1;
+  flex: 1 0 100%;
   width: 100%;
   min-width: 0;
+}
+
+/* One voice per full-width row, framed like an Agent or Team tile. */
+.voiceList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voiceRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  min-width: 0;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid #ebe5df;
+  border-radius: 12px;
+  background: #fdfaf3;
+  transition:
+    box-shadow 240ms ease,
+    border-color 200ms ease;
+}
+
+.voiceRow:hover {
+  border-color: #ddd3c4;
+  box-shadow: 0 6px 18px rgb(64 52 32 / 6%);
+}
+
+.voiceRow[data-status="failed"] .voiceName,
+.voiceRow[data-status="deleting"] .voiceName,
+.voiceRow[data-status="outcome_unknown"] .voiceName {
+  color: #8b887f;
+}
+
+.voiceName {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--display-serif);
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.voiceName {
+  cursor: pointer;
+}
+
+button.voiceName:disabled {
+  cursor: default;
+}
+
+button.voiceName:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
+
+button.voiceName[aria-pressed="true"] {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.voiceActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.voiceRow .nameInput {
+  flex: 1 1 0;
+  width: auto;
 }

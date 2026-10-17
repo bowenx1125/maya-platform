@@ -471,7 +471,7 @@ export function TeacherStudyformWorkspace({
           key={`${scope}:voices`}
           groupId={null}
           courseId={teacherCourseId ?? null}
-          embedded
+          moduleCard
         />
       </ModuleGrid>
     </>

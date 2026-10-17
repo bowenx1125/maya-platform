@@ -174,12 +174,8 @@ export const uiGuideCopy = {
     zh: "确认你已获准上传并克隆此说话者的声音。",
   },
   "voice.preview": {
-    en: "Generate a sample to preview this voice.",
-    zh: "生成试听样本，预览此音色。",
-  },
-  "voice.confirm": {
-    en: "Confirm the previewed voice for use by your Agents.",
-    zh: "确认已试听的音色，供你的 Agent 使用。",
+    en: "Play a test sample. Listening to the end makes a new voice available to your Agents.",
+    zh: "播放试听样本。完整听完一遍后，新音色即可供你的 Agent 使用。",
   },
   "voice.delete": {
     en: "Delete this voice profile.",

@@ -4,20 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PlatformApiError, type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
-import type { MessageKey } from "../../lib/i18n";
-import { useT } from "../locale";
+import { statusLabel, type MessageKey } from "../../lib/i18n";
 import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
+import { useLocale, useT } from "../locale";
 import {
   ErrorNotice,
   LoadingCard,
   Notice,
   PageIntro,
   SectionCard,
-  StatusBadge,
 } from "../ui";
-import { IconCheck, IconClose, IconPlay, IconUpload } from "../quiet-icons";
-import { ModuleCard, ModulePlus, ModuleTiles } from "../studyform-layout";
+import { IconClose, IconPlay, IconUpload } from "../quiet-icons";
+import { ModuleCard, ModulePlus } from "../studyform-layout";
 import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
 
@@ -93,6 +92,7 @@ export function VoiceLibrary({
   membershipGroupIds = [],
   listenOnly = false,
   embedded = false,
+  moduleCard = false,
   initialCreate = false,
   selectedId = null,
   disabled = false,
@@ -108,6 +108,8 @@ export function VoiceLibrary({
   /** Accounts opens a group so a teacher can play its voices. */
   listenOnly?: boolean;
   embedded?: boolean;
+  /** Studyform home: the same ModuleCard frame as the Teams panel beside it. */
+  moduleCard?: boolean;
   initialCreate?: boolean;
   selectedId?: string | null;
   disabled?: boolean;
@@ -116,6 +118,7 @@ export function VoiceLibrary({
   id?: string;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const { api } = useSession();
   const membershipKey = membershipGroupIds.join("|");
   const scopes = useMemo<string[]>(
@@ -617,18 +620,28 @@ export function VoiceLibrary({
 
   const list =
     profiles.length > 0 ? (
-      <ModuleTiles>
+      <ul className={styles.voiceList}>
         {profiles.map((profile) => {
           const name = profile.source_filename ?? t("voiceCustom");
           const editing = editingName?.id === profile.id;
           // A groupmate's voice can be chosen, but only its creator renames,
-          // previews or confirms it.
+          // previews or deletes it.
           const manageable = profile.can_manage !== false;
-          const canPlay =
-            manageable &&
-            (profile.status === "preview_ready" || profile.status === "ready");
+          const playable =
+            profile.status === "preview_ready" || profile.status === "ready";
+          // No status pill: the row stays one line. A voice that is not ready
+          // explains itself in a tooltip instead.
+          const statusHint =
+            profile.status === "ready"
+              ? undefined
+              : statusLabel(profile.status, locale);
           return (
-            <li className="agent-tile" key={profile.id}>
+            <li
+              className={styles.voiceRow}
+              key={profile.id}
+              data-status={profile.status}
+              title={statusHint}
+            >
               {editing ? (
                 <input
                   className={styles.nameInput}
@@ -657,7 +670,7 @@ export function VoiceLibrary({
                 />
               ) : onSelect ? (
                 <button
-                  className="agent-tile-name"
+                  className={styles.voiceName}
                   type="button"
                   aria-pressed={selectedId === profile.id}
                   disabled={controlsDisabled || profile.status !== "ready"}
@@ -666,10 +679,10 @@ export function VoiceLibrary({
                   {name}
                 </button>
               ) : listenOnly || !manageable ? (
-                <span className="agent-tile-name">{name}</span>
+                <span className={styles.voiceName}>{name}</span>
               ) : (
                 <button
-                  className="agent-tile-name"
+                  className={styles.voiceName}
                   type="button"
                   disabled={controlsDisabled || profile.status === "deleted"}
                   ref={(button) => {
@@ -690,59 +703,57 @@ export function VoiceLibrary({
                   {name}
                 </button>
               )}
-              {profile.status !== "ready" ? (
-                <StatusBadge status={profile.status} />
-              ) : null}
-              {canPlay ? (
-                <button
-                  className={cards.iconButton}
-                  aria-label={t("voicePreview")}
-                  data-ui-guide="voice.preview"
-                  type="button"
-                  disabled={controlsDisabled}
-                  onClick={() => void makePreview(profile.id)}
-                >
-                  <IconPlay />
-                </button>
-              ) : null}
-              {!listenOnly &&
-              manageable &&
-              profile.status === "preview_ready" ? (
-                <button
-                  className={cards.iconButton}
-                  aria-label={t("voiceConfirm")}
-                  data-ui-guide="voice.confirm"
-                  type="button"
-                  disabled={controlsDisabled || !preview[profile.id]}
-                  onClick={() => void confirm(profile.id)}
-                >
-                  <IconCheck />
-                </button>
-              ) : null}
-              {/* A delete already in flight or awaiting reconciliation is
-                  answered only by its own retry, which the failure card holds. */}
-              {!listenOnly &&
-              !onSelect &&
-              manageable &&
-              profile.status !== "deleting" &&
-              profile.status !== "outcome_unknown" ? (
-                <button
-                  className={cards.iconButton}
-                  aria-label={t("voiceDeleteNamed", { name })}
-                  data-ui-guide="voice.delete"
-                  type="button"
-                  disabled={controlsDisabled}
-                  onClick={() => void remove(profile)}
-                >
-                  <IconClose />
-                </button>
-              ) : null}
+              <div className={styles.voiceActions}>
+                {manageable ? (
+                  <button
+                    className={cards.iconButton}
+                    aria-label={t("voicePreview")}
+                    data-ui-guide="voice.preview"
+                    type="button"
+                    disabled={controlsDisabled || !playable}
+                    onClick={() => void makePreview(profile.id)}
+                  >
+                    <IconPlay />
+                  </button>
+                ) : null}
+                {/* A delete already in flight or awaiting reconciliation is
+                    answered only by its own retry, which the failure card holds. */}
+                {!listenOnly &&
+                !onSelect &&
+                manageable &&
+                profile.status !== "deleting" &&
+                profile.status !== "outcome_unknown" ? (
+                  <button
+                    className={cards.iconButton}
+                    aria-label={t("voiceDeleteNamed", { name })}
+                    data-ui-guide="voice.delete"
+                    type="button"
+                    disabled={controlsDisabled}
+                    onClick={() => void remove(profile)}
+                  >
+                    <IconClose />
+                  </button>
+                ) : null}
+              </div>
               {preview[profile.id] ? (
                 <audio
                   className={styles.audio}
                   controls
-                  preload="none"
+                  autoPlay
+                  preload="auto"
                   src={preview[profile.id].url}
+                  onEnded={() => {
+                    // Hearing the whole test sample is the confirmation: a
+                    // preview_ready voice becomes usable without a separate
+                    // check button. The server still requires a live preview.
+                    if (
+                      !listenOnly &&
+                      manageable &&
+                      profile.status === "preview_ready"
+                    ) {
+                      void confirm(profile.id);
+                    }
+                  }}
                   onError={() =>
                     invalidatePreview(profile.id, "voicePreviewFailed")
                   }
@@ -751,7 +762,7 @@ export function VoiceLibrary({
             </li>
           );
         })}
-      </ModuleTiles>
+      </ul>
     ) : null;
 
   const body = creating ? (
@@ -783,13 +794,13 @@ export function VoiceLibrary({
 
   return (
     <div className={styles.voicePanel} id={id}>
-      {embedded ? null : <PageIntro title={t("voices")} />}
+      {embedded || moduleCard ? null : <PageIntro title={t("voices")} />}
       {notice ? (
         <Notice tone="success" onClose={() => setNotice(null)}>
           {t(notice)}
         </Notice>
       ) : null}
-      {embedded ? (
+      {embedded && !moduleCard ? (
         // Match Agent Avatar / AGENT.md and Team SectionCard title metrics.
         <SectionCard title={t("voices")} action={createAction}>
           {body ?? <p className="muted-copy">{t("voiceNone")}</p>}
