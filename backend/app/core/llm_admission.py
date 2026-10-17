@@ -11,6 +11,7 @@ behind the unified adaptive queue and shares its single wait deadline.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -18,6 +19,7 @@ from app.core.adaptive_admission import adaptive_slot, shared_wait_seconds
 from app.core.concurrency_gate import ConcurrencyGate, GateRejected
 from app.core.config import Settings, get_settings
 from app.core.errors import PlatformError
+from app.core.message_timing import add_queue_wait
 
 _GATE = ConcurrencyGate()
 
@@ -58,10 +60,12 @@ def llm_admission_slot(settings: Settings | None = None) -> Iterator[None]:
     """Hold one LLM in-flight slot for the duration of the ``with`` block."""
 
     runtime = settings if settings is not None else get_settings()
+    entered = time.perf_counter()
     # Layer 1: the unified pressure queue (suspends under the danger line).
     with adaptive_slot("llm", runtime):
         limit = int(runtime.llm_admission_limit)
         if limit <= 0:
+            add_queue_wait((time.perf_counter() - entered) * 1000.0)
             yield
             return
         queue_max = int(runtime.llm_admission_queue_max)
@@ -71,6 +75,8 @@ def llm_admission_slot(settings: Settings | None = None) -> Iterator[None]:
         retry_after = int(runtime.llm_admission_retry_seconds)
         try:
             with _GATE.hold(limit=limit, queue_max=queue_max, wait_seconds=wait_seconds):
+                # Time spent in both layers before the work starts.
+                add_queue_wait((time.perf_counter() - entered) * 1000.0)
                 yield
         except GateRejected as rejected:
             raise llm_admission_busy_error(

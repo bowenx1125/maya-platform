@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
@@ -9,6 +10,7 @@ from typing import Literal, Protocol
 import httpx
 
 from app.core.llm_admission import llm_admission_slot
+from app.core.message_timing import add_model_call
 
 # Measured TLS handshakes to the fixed Beijing endpoint take 2.0-2.7s from
 # a developer network, so a 5s connect budget classified a healthy endpoint
@@ -174,54 +176,77 @@ class HttpxLLMTransport:
         json_payload: Mapping[str, object] | None = None,
         content: bytes | None = None,
     ) -> object:
-        # Take an LLM slot (unified queue, then the 12-call backstop). Host
+        # Take an LLM slot (unified queue, then the LLM_ADMISSION_LIMIT backstop). Host
         # memory/load pressure suspends the attempt until recovery; only a
         # wait timeout or full queue raises a retryable 503. PlatformError
         # propagates unchanged; the slot is always released afterwards.
         with llm_admission_slot():
-            # A caller may pass the frozen total as a float or an HTTPX timeout;
-            # either way redirects stay disabled and this method performs one call.
-            resolved_timeout: float | httpx.Timeout
-            if isinstance(timeout, httpx.Timeout):
-                resolved_timeout = timeout
-            else:
-                resolved_timeout = self.timeout()
+            started = time.perf_counter()
+            response: object = None
             try:
-                if self.client is not None:
-                    return self._dispatch(
-                        self.client,
-                        url,
-                        headers=headers,
-                        timeout=resolved_timeout,
-                        json_payload=json_payload,
-                        content=content,
-                    )
-                with httpx.Client(follow_redirects=False) as client:
-                    return self._dispatch(
-                        client,
-                        url,
-                        headers=headers,
-                        timeout=resolved_timeout,
-                        json_payload=json_payload,
-                        content=content,
-                    )
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
-                raise LLMTransportNotSent() from exc
-            except (
-                httpx.WriteError,
-                httpx.WriteTimeout,
-                httpx.ReadError,
-                httpx.ReadTimeout,
-                httpx.RemoteProtocolError,
-                httpx.NetworkError,
-                httpx.TimeoutException,
-            ) as exc:
-                # A write may have begun and read/protocol failures happen after
-                # send.  They can never authorize an automatic resend.
-                raise LLMAcceptanceUnknown() from exc
-            except httpx.HTTPError as exc:
-                # Unknown HTTPX failures are conservatively uncertain.
-                raise LLMAcceptanceUnknown() from exc
+                response = self._send_once(
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    json_payload=json_payload,
+                    content=content,
+                )
+                return response
+            finally:
+                _record_model_call(url, json_payload, content, started, response)
+
+    def _send_once(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        timeout: object,
+        json_payload: Mapping[str, object] | None,
+        content: bytes | None,
+    ) -> object:
+        # A caller may pass the frozen total as a float or an HTTPX timeout;
+        # either way redirects stay disabled and this method performs one call.
+        resolved_timeout: float | httpx.Timeout
+        if isinstance(timeout, httpx.Timeout):
+            resolved_timeout = timeout
+        else:
+            resolved_timeout = self.timeout()
+        try:
+            if self.client is not None:
+                return self._dispatch(
+                    self.client,
+                    url,
+                    headers=headers,
+                    timeout=resolved_timeout,
+                    json_payload=json_payload,
+                    content=content,
+                )
+            with httpx.Client(follow_redirects=False) as client:
+                return self._dispatch(
+                    client,
+                    url,
+                    headers=headers,
+                    timeout=resolved_timeout,
+                    json_payload=json_payload,
+                    content=content,
+                )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+            raise LLMTransportNotSent() from exc
+        except (
+            httpx.WriteError,
+            httpx.WriteTimeout,
+            httpx.ReadError,
+            httpx.ReadTimeout,
+            httpx.RemoteProtocolError,
+            httpx.NetworkError,
+            httpx.TimeoutException,
+        ) as exc:
+            # A write may have begun and read/protocol failures happen after
+            # send.  They can never authorize an automatic resend.
+            raise LLMAcceptanceUnknown() from exc
+        except httpx.HTTPError as exc:
+            # Unknown HTTPX failures are conservatively uncertain.
+            raise LLMAcceptanceUnknown() from exc
 
     @staticmethod
     def _dispatch(
@@ -251,6 +276,45 @@ class HttpxLLMTransport:
             timeout=timeout,
             follow_redirects=False,
         )
+
+
+def _model_label(url: str, json_payload: Mapping[str, object] | None, content: bytes | None) -> str:
+    """``<model>/<last path segment>``; no prompt or payload content."""
+
+    model = ""
+    if json_payload is not None and isinstance(json_payload.get("model"), str):
+        model = str(json_payload["model"])
+    elif content is not None:
+        index = content.find(b'"model"')
+        if index >= 0:
+            tail = content[index + 7 : index + 160].lstrip(b" :")
+            if tail.startswith(b'"'):
+                model = tail[1:].split(b'"', 1)[0].decode("utf-8", "replace")
+    path = url.rstrip("/").rsplit("/", 1)[-1] if url else ""
+    return f"{model or 'llm'}/{path}"[:120]
+
+
+def _record_model_call(
+    url: str,
+    json_payload: Mapping[str, object] | None,
+    content: bytes | None,
+    started: float,
+    response: object,
+) -> None:
+    try:
+        duration_ms = (time.perf_counter() - started) * 1000.0
+        status = getattr(response, "status_code", None)
+        status_code = status if isinstance(status, int) else None
+        add_model_call(
+            label=_model_label(url, json_payload, content),
+            duration_ms=duration_ms,
+            # Non-streaming: the first token arrives with the whole body.
+            ttft_ms=duration_ms if status_code is not None else None,
+            status=status_code,
+            failed=status_code != LLM_ACCEPTED_HTTP_STATUS,
+        )
+    except Exception:  # pragma: no cover - timing must never break a model call
+        pass
 
 
 # Naming aliases mirror the embedding adapter and keep imports discoverable.

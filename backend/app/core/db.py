@@ -76,6 +76,7 @@ def _time_writes(engine: Engine) -> None:
     """Feed non-SELECT statement latency to adaptive admission's DB signal."""
 
     from app.core.adaptive_admission import record_db_write_ms
+    from app.core.message_timing import add_db_write
 
     @event.listens_for(engine, "before_cursor_execute")
     def _start(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
@@ -88,7 +89,9 @@ def _time_writes(engine: Engine) -> None:
             return
         started = stack.pop()
         if not statement.lstrip()[:6].upper().startswith("SELECT"):
-            record_db_write_ms((time.perf_counter() - started) * 1000.0)
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+            record_db_write_ms(elapsed_ms)
+            add_db_write(elapsed_ms)
 
 
 class Database:

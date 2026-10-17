@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
+from app.core.message_timing import message_timing
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.sqlutil import begin_immediate
 from app.core.write_guard import write_guard_slot
@@ -3118,7 +3119,8 @@ def _formal_run_order(factory: SessionFactory, turn_id: str) -> list[str]:
 def execute_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
     if not claim.created:
         return
-    with write_guard_slot():
+    # Joins the request's collector when the HTTP handler already opened one.
+    with message_timing("team", turn_id=claim.turn_id), write_guard_slot():
         _execute_team_turn_body(factory, claim)
 
 
