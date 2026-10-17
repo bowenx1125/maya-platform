@@ -1,0 +1,180 @@
+/* A Team row carries its average score beside the name and counts. */
+.teamRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Conic fill shows the average at a glance; the number keeps it exact. */
+.ring {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#5f8a5a var(--ratio), #ebe5da 0);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.ring span {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--panel, #fdfaf3);
+  color: var(--ink, #292820);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.stats div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #e8e1d8;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+
+.stats dt {
+  color: #625e59;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.stats dd {
+  margin: 0;
+  color: var(--ink, #292820);
+  font-family: var(--display-serif);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.stats small {
+  color: #625e59;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 520px) {
+  .stats {
+    gap: 6px;
+  }
+
+  .stats div {
+    padding: 10px;
+  }
+
+  .stats dd {
+    font-size: 1.2rem;
+  }
+}
+
+.attemptRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Tones read as a band, not a grade; the exact points stay in the text. */
+.score {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1ece3;
+  color: #625e59;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.score[data-tone="high"] {
+  background: #e4efdf;
+  color: #3d6537;
+}
+
+.score[data-tone="mid"] {
+  background: #f6ecd2;
+  color: #6b5418;
+}
+
+.score[data-tone="low"] {
+  background: #f6e1dc;
+  color: #8a3b2c;
+}
+
+.score[data-tone="warn"] {
+  background: #fbeedd;
+  color: #7a5420;
+}
+
+.report {
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #6b5418;
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.report:hover,
+.report:focus-visible {
+  background: rgba(211, 167, 74, 0.14);
+}
+
+.conversation {
+  margin: 6px 0 2px;
+}
+
+/* The answer sheet scrolls sideways on its own rather than widen the panel. */
+.sheet {
+  overflow-x: auto;
+  margin: 6px 0 4px;
+  border: 1px solid #ebe5df;
+  border-radius: 10px;
+  background: #fffdf8;
+}
+
+.sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.sheet th,
+.sheet td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ebe5df;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.sheet tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.sheet th {
+  background: #f7f2ea;
+  color: #625e59;
+  font-weight: 600;
+}
+
+.sheet td:first-child,
+.sheet th:first-child {
+  width: 2ch;
+  color: #625e59;
+}

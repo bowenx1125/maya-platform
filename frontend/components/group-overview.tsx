@@ -6,7 +6,6 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   GroupOverview as GroupOverviewData,
   OverviewEvent,
-  OverviewResult,
 } from "../lib/api/platform";
 import styles from "./knowledge/brainform-workspace.module.css";
 import overview from "./group-overview.module.css";
@@ -18,8 +17,9 @@ import { UserAvatar } from "./user-avatar";
 
 /**
  * What a group is doing, for a course teacher: who is in it and what each
- * made, their test results with every answer, and what happened lately.
- * Private work is present only after Enter. Everything here is read-only.
+ * made and what happened lately. Test results live in the teacher's
+ * Brainform Record. Private work is present only after Enter. Everything
+ * here is read-only.
  */
 export function GroupOverview({ groupId }: { groupId: string }) {
   const t = useT();
@@ -57,7 +57,6 @@ export function GroupOverview({ groupId }: { groupId: string }) {
     return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   if (!data) return null;
   const members = data.members ?? [];
-  const results = data.results ?? [];
   const activity = data.activity ?? [];
 
   return (
@@ -140,15 +139,6 @@ export function GroupOverview({ groupId }: { groupId: string }) {
       </ModuleCard>
 
       <ModuleCard
-        title={t("overviewResults")}
-        count={results.length}
-        labelledBy="group-overview-results"
-        empty={results.length ? undefined : t("overviewNoResults")}
-      >
-        {results.length ? <AttemptResults attempts={results} /> : undefined}
-      </ModuleCard>
-
-      <ModuleCard
         title={t("overviewActivity")}
         labelledBy="group-overview-activity"
         empty={activity.length ? undefined : t("overviewNoActivity")}
@@ -177,93 +167,6 @@ export function GroupOverview({ groupId }: { groupId: string }) {
 
 type Translate = ReturnType<typeof useT>;
 
-export function AttemptResults({
-  attempts,
-  showGroup = false,
-}: {
-  attempts: OverviewResult[];
-  showGroup?: boolean;
-}) {
-  const t = useT();
-  const { locale } = useLocale();
-  const [open, setOpen] = useState<string | null>(null);
-  const when = (value: string) =>
-    new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  if (!attempts.length) return null;
-  return (
-    <ModuleList>
-      {attempts.map((result) => {
-        const key = `result:${result.attempt_id}`;
-        const title = [
-          showGroup ? result.group_name : null,
-          result.student_name,
-          result.test_name,
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return (
-          <li className={styles.row} key={result.attempt_id}>
-            <button
-              type="button"
-              className={styles.rowHit}
-              aria-expanded={open === key}
-              onClick={() =>
-                setOpen((current) => (current === key ? null : key))
-              }
-            >
-              <span className={styles.staticTitle}>{title}</span>
-              <span className={styles.rowMeta}>
-                {score(result, t)} · {when(result.started_at)}
-              </span>
-            </button>
-            {result.report_download_path ? (
-              <div className={styles.actions}>
-                <a
-                  className={overview.report}
-                  href={result.report_download_path}
-                  download
-                  aria-label={t("overviewReportFor", {
-                    name: result.team_name,
-                  })}
-                >
-                  {t("overviewReport")}
-                </a>
-              </div>
-            ) : null}
-            {open === key ? (
-              <div className={styles.rowExtra}>
-                {result.conversation_id ? (
-                  <p className={styles.rowMeta}>
-                    {t("overviewConversation")}{" "}
-                    <code>{result.conversation_id}</code>
-                  </p>
-                ) : null}
-                <AnswerSheet result={result} />
-              </div>
-            ) : null}
-          </li>
-        );
-      })}
-    </ModuleList>
-  );
-}
-
-function score(result: OverviewResult, t: Translate): string {
-  if (result.phase === "summary_not_saved") return t("overviewSummaryNotSaved");
-  if (result.phase === "scoring_not_saved") return t("overviewScoringNotSaved");
-  if (result.status === "in_progress") return t("overviewInProgress");
-  if (result.status === "paused") return t("overviewPaused");
-  const awarded = result.points_awarded;
-  const total = result.points_total;
-  if (awarded === null || awarded === undefined) return t("overviewNoScore");
-  return total ? `${awarded} / ${total}` : `${awarded}`;
-}
-
 function eventText(event: OverviewEvent, t: Translate): string {
   const values = { title: event.title };
   switch (event.kind) {
@@ -280,47 +183,4 @@ function eventText(event: OverviewEvent, t: Translate): string {
     case "test_completed":
       return t("overviewTestCompleted", values);
   }
-}
-
-function AnswerSheet({ result }: { result: OverviewResult }) {
-  const t = useT();
-  return (
-    <div className={overview.sheet}>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            <th scope="col">{t("overviewQuestion")}</th>
-            <th scope="col">{t("overviewAnswer")}</th>
-            <th scope="col">{t("overviewPoints")}</th>
-            <th scope="col">{t("overviewFeedback")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(result.questions ?? []).map((question) => (
-            <tr key={question.number}>
-              <td>{question.number}</td>
-              <td>{question.prompt}</td>
-              <td>
-                {question.answers?.length
-                  ? question.answers.join(" / ")
-                  : question.skipped
-                    ? t("overviewSkipped")
-                    : t("overviewNotAnswered")}
-              </td>
-              <td>
-                {question.points_awarded === null ||
-                question.points_awarded === undefined
-                  ? "—"
-                  : question.points_total
-                    ? `${question.points_awarded} / ${question.points_total}`
-                    : question.points_awarded}
-              </td>
-              <td>{question.feedback}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 }
