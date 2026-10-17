@@ -105,6 +105,107 @@ def test_expire_stale_preparation_exits_preparing_idempotently(timeout_db) -> No
         assert second == 0
 
 
+
+def test_expire_stale_preparation_without_prepare_job(timeout_db) -> None:
+    """Stuck draft turn with no debate_turn_prepare job must still exit Preparing."""
+
+    database, ids = timeout_db
+    stale = datetime.now(UTC) - timedelta(seconds=120)
+    with database.session() as db:
+        db.execute(text("DELETE FROM jobs WHERE id=:job_id"), {"job_id": ids["job"]})
+        db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='pending', "
+                "preparation_stage='generation', publication_status='unpublished', "
+                "speech=NULL, safe_error_code=NULL, updated_at=:stale WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"], "stale": stale},
+        )
+        db.commit()
+        repository = SqlPlaybackRepository()
+        first = repository.expire_stale_preparation(db, debate_id=ids["debate"])
+        db.commit()
+        assert first == 1
+        row = db.execute(
+            text(
+                "SELECT generation_status, preparation_stage, safe_error_code "
+                "FROM debate_turns WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"]},
+        ).one()
+        assert row[0] == "failed"
+        assert row[1] == "failed"
+        assert row[2] == _PREPARATION_TIMEOUT_CODE
+        second = repository.expire_stale_preparation(db, debate_id=ids["debate"])
+        db.commit()
+        assert second == 0
+
+
+def test_expire_stale_preparation_fresh_turn_not_expired(timeout_db) -> None:
+    database, ids = timeout_db
+    fresh = datetime.now(UTC)
+    with database.session() as db:
+        db.execute(text("DELETE FROM jobs WHERE id=:job_id"), {"job_id": ids["job"]})
+        db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='pending', "
+                "preparation_stage='generation', publication_status='unpublished', "
+                "speech=NULL, safe_error_code=NULL, updated_at=:fresh, created_at=:fresh "
+                "WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"], "fresh": fresh},
+        )
+        db.commit()
+        repository = SqlPlaybackRepository()
+        assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == 0
+        db.commit()
+        row = db.execute(
+            text(
+                "SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"]},
+        ).one()
+        assert row[0] == "pending"
+        assert row[1] is None
+
+
+def test_expire_stale_preparation_running_recoverable_without_job(timeout_db) -> None:
+    database, ids = timeout_db
+    stale = datetime.now(UTC) - timedelta(seconds=120)
+    with database.session() as db:
+        db.execute(text("DELETE FROM jobs WHERE id=:job_id"), {"job_id": ids["job"]})
+        db.execute(
+            text("UPDATE debates SET status='running' WHERE id=:debate_id"),
+            {"debate_id": ids["debate"]},
+        )
+        db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='pending', "
+                "preparation_stage='generation', publication_status='unpublished', "
+                "speech=NULL, safe_error_code=NULL, updated_at=:stale WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"], "stale": stale},
+        )
+        db.commit()
+        repository = SqlPlaybackRepository()
+        first = repository.expire_stale_preparation(db, debate_id=ids["debate"])
+        db.commit()
+        assert first == 1
+        row = db.execute(
+            text(
+                "SELECT generation_status, preparation_stage, safe_error_code "
+                "FROM debate_turns WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"]},
+        ).one()
+        assert row[0] == "pending"
+        assert row[1] == "generation"
+        assert row[2] == _PREPARATION_TIMEOUT_CODE
+        second = repository.expire_stale_preparation(db, debate_id=ids["debate"])
+        db.commit()
+        assert second == 0
+
+
 @pytest.mark.asyncio
 async def test_next_not_ready_does_not_advance_turn_or_create_jobs() -> None:
     repository = MemoryPlaybackRepository()
