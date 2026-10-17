@@ -68,7 +68,7 @@ def test_new_caps_and_unchanged_protection_defaults() -> None:
     assert _default("llm_admission_limit") == 20
     assert _default("adaptive_admission_max_units") == 96
     assert _default("adaptive_admission_max_in_flight") == 32
-    assert _default("adaptive_admission_initial_units") == 48
+    assert _default("adaptive_admission_initial_units") == 72
     # Protection is unchanged.
     assert _default("adaptive_admission_min_units") == 4
     assert _default("adaptive_admission_decrease_factor") == 0.7
@@ -89,10 +89,10 @@ def test_new_caps_and_unchanged_protection_defaults() -> None:
 def test_budget_starts_at_initial_and_climbs_to_new_max(probe: _Probe) -> None:
     s = _settings()
     snap = aa.adaptive_admission_snapshot(s)
-    # Starts at 48 (+2 for the first healthy adjust), not straight at 96.
-    assert snap["adaptive_limit_units"] == 50
+    # Starts at exactly 72, not straight at 96.
+    assert snap["adaptive_limit_units"] == 72
     assert snap["max_units"] == 96 and snap["max_in_flight"] == 32
-    assert snap["min_units"] == 4 and snap["initial_units"] == 48
+    assert snap["min_units"] == 4 and snap["initial_units"] == 72
     for step in range(1, 40):
         probe.now = float(step)
         aa.adaptive_admission_snapshot(s)
@@ -135,9 +135,9 @@ def test_twenty_llm_calls_fit_at_full_budget(probe: _Probe) -> None:
             thread.join()
 
 
-def test_cold_start_budget_still_limits_to_twelve(probe: _Probe) -> None:
-    s = _settings()  # initial 48 -> 12 LLM calls until AIMD earns more
-    release, threads = _hold_llm(s, 12)
+def test_cold_start_budget_limits_to_eighteen(probe: _Probe) -> None:
+    s = _settings()  # initial 72 -> 18 LLM calls until AIMD earns more
+    release, threads = _hold_llm(s, 18)
     try:
         with pytest.raises(PlatformError):
             with aa.adaptive_slot("llm", s):

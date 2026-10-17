@@ -253,8 +253,10 @@ class Settings(BaseSettings):
     )
     # One request-level queue for login / create / write / LLM (the old
     # per-op login queue folds in; LLM / write / create gates stay behind it
-    # as backstops). AIMD sizes a weighted budget from load, MemAvailable,
-    # DB write p95 and request p95. Disabling only freezes the
+    # as backstops). AIMD sizes a weighted budget from server-side signals
+    # only (load, MemAvailable, DB write p95, DB pool wait p95, thread-pool
+    # use); request p95 counts queue time, so it is reported, not acted on.
+    # Disabling only freezes the
     # budget at max; pressure queueing and the global cap always apply.
     adaptive_admission_enabled: bool = Field(
         default=True, validation_alias="ADAPTIVE_ADMISSION_ENABLED"
@@ -271,16 +273,25 @@ class Settings(BaseSettings):
     adaptive_admission_max_units: int = Field(
         default=96, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
     )
-    # Cold-start budget: the old proven ceiling (12 LLM calls). AIMD climbs to
-    # max only while every pressure signal stays healthy (+2 units / 2 s).
+    # Cold-start budget (18 LLM calls at weight 4). AIMD climbs to max while
+    # the signals stay healthy, and an idle process (30 s, healthy) returns
+    # to at least this much.
     adaptive_admission_initial_units: int = Field(
-        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_INITIAL_UNITS"
+        default=72, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_INITIAL_UNITS"
     )
     adaptive_admission_min_units: int = Field(
         default=4, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MIN_UNITS"
     )
     adaptive_admission_increase_units: float = Field(
         default=2.0, gt=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_INCREASE_UNITS"
+    )
+    # Growth step while the budget is below half of max: recover faster from
+    # a shrink that has passed.
+    adaptive_admission_fast_increase_units: float = Field(
+        default=4.0, gt=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_FAST_INCREASE_UNITS"
+    )
+    adaptive_admission_idle_seconds: float = Field(
+        default=30.0, ge=0, le=3_600, validation_alias="ADAPTIVE_ADMISSION_IDLE_SECONDS"
     )
     adaptive_admission_decrease_factor: float = Field(
         default=0.7, gt=0, lt=1, validation_alias="ADAPTIVE_ADMISSION_DECREASE_FACTOR"
@@ -297,13 +308,26 @@ class Settings(BaseSettings):
         default=4.0, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_LOAD"
     )
     adaptive_admission_soft_mem_mb: int = Field(
-        default=800, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_MEM_MB"
+        default=900, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_MEM_MB"
     )
+    # DB single-statement write p95 and pool checkout wait p95 (30 s window,
+    # at least 20 samples) above these shrink the budget.
     adaptive_admission_db_write_p95_ms: float = Field(
         default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_DB_WRITE_P95_MS"
     )
-    adaptive_admission_request_p95_ms: float = Field(
-        default=8_000.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_REQUEST_P95_MS"
+    adaptive_admission_pool_wait_p95_ms: float = Field(
+        default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_POOL_WAIT_P95_MS"
+    )
+    # Hold band (no growth, no shrink): load in [hold, soft), MemAvailable in
+    # [soft, hold) MiB, or the worker-thread pool at least this full.
+    adaptive_admission_hold_load: float = Field(
+        default=3.0, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_HOLD_LOAD"
+    )
+    adaptive_admission_hold_mem_mb: int = Field(
+        default=1100, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_HOLD_MEM_MB"
+    )
+    adaptive_admission_hold_threadpool_ratio: float = Field(
+        default=0.9, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_HOLD_THREADPOOL_RATIO"
     )
     # Layer-1 queue depth; past it callers get an immediate retryable 503.
     adaptive_admission_queue_max: int = Field(

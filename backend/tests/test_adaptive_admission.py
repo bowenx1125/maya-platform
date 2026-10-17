@@ -64,7 +64,7 @@ def test_aimd_decreases_on_pressure_and_increases_when_healthy(probe: _Probe) ->
     probe.load = 1.0
     probe.now = 10.0
     aa.adaptive_admission_snapshot(s)
-    assert _budget() == 4  # +2 additive
+    assert _budget() == 6  # +4 while below half of max
     for step in range(11, 20):
         probe.now = float(step)
         aa.adaptive_admission_snapshot(s)
@@ -351,17 +351,19 @@ def test_request_p95_window_drains_after_60s(probe: _Probe) -> None:
     assert aa.adaptive_admission_snapshot(s)["request_p95_ms"] is None
 
 
-def test_stale_request_latency_no_longer_pins_budget(probe: _Probe) -> None:
+def test_request_latency_never_shrinks_the_budget(probe: _Probe) -> None:
+    """Request p95 includes queue time; acting on it shrank the budget
+    further the longer people waited (the #101 40-student run)."""
+
     s = _settings()
     aa.adaptive_admission_snapshot(s)
-    for _ in range(20):
-        aa.record_request_ms(20_000.0)
+    for _ in range(50):
+        aa.record_request_ms(60_000.0)
     probe.now = 1.0
-    aa.adaptive_admission_snapshot(s)
-    assert _budget() == pytest.approx(5.6)  # soft pressure from request p95
-    probe.now = 62.0  # idle: window drains, budget recovers additively
-    aa.adaptive_admission_snapshot(s)
-    assert _budget() == pytest.approx(7.6)
+    snapshot = aa.adaptive_admission_snapshot(s)
+    assert snapshot["request_p95_ms"] == 60_000.0
+    assert _budget() == 8
+    assert snapshot["last_shrink_reason"] is None
 
 
 def test_llm_requests_are_excluded_from_request_p95(probe: _Probe) -> None:
@@ -411,3 +413,166 @@ def test_llm_mark_crosses_threadpool_context_copy(probe: _Probe) -> None:
     t.start()
     t.join()
     assert sample.llm is True
+
+
+# --- server-side AIMD signals (PR: AIMD shrink signals) -------------------
+
+
+def _defaults(**overrides: object) -> Settings:
+    base: dict[str, object] = {"adaptive_admission_wait_seconds": 1}
+    base.update(overrides)
+    return Settings(**base)  # type: ignore[arg-type]
+
+
+def _tick(probe: _Probe, s: Settings, seconds: float = 2.0) -> dict[str, object]:
+    probe.now += seconds
+    return aa.adaptive_admission_snapshot(s)
+
+
+def test_defaults_keep_the_danger_line_and_start_at_72(probe: _Probe) -> None:
+    s = _defaults()
+    assert (s.host_load_reject_threshold, s.host_load_resume_threshold) == (6.0, 4.0)
+    assert (s.memory_guard_min_available_mb, s.memory_guard_resume_available_mb) == (500, 550)
+    assert s.adaptive_admission_decrease_factor == 0.7
+    assert s.adaptive_admission_min_units == 4
+    assert s.adaptive_admission_queue_max == 200
+    assert s.adaptive_admission_wait_seconds == 1  # overridden here; default below
+    assert Settings().adaptive_admission_wait_seconds == 180  # type: ignore[call-arg]
+    assert aa.adaptive_admission_snapshot(s)["adaptive_limit_units"] == 72
+
+
+def test_long_queue_with_healthy_signals_does_not_shrink(probe: _Probe) -> None:
+    s = _defaults(adaptive_admission_max_in_flight=1, adaptive_admission_queue_max=200)
+    aa.adaptive_admission_snapshot(s)
+    with aa._cond:
+        aa._state.in_flight["llm"] = 1  # the one global slot is taken
+        aa._state.in_flight_units = 4
+        for _ in range(150):
+            aa._state.queues["login"].append(aa._Waiter(cls="login", weight=1))
+    for _ in range(50):
+        aa.record_request_ms(120_000.0)  # everyone has waited minutes
+    for _ in range(5):
+        snapshot = _tick(probe, s)
+    assert snapshot["queue_depth"] == 150
+    assert _budget() > 72
+    assert snapshot["last_shrink_reason"] is None
+    assert sum(snapshot["shrink_counts"].values()) == 0  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("reason", "setup"),
+    [
+        ("danger", lambda p: setattr(p, "load", 6.0)),
+        ("load", lambda p: setattr(p, "load", 4.0)),
+        ("mem", lambda p: setattr(p, "mem", 899.0)),
+        ("db_write_p95", lambda p: [aa.record_db_write_ms(600.0) for _ in range(20)]),
+        ("pool_wait_p95", lambda p: [aa.record_pool_wait_ms(600.0) for _ in range(20)]),
+    ],
+)
+def test_each_shrink_signal(probe: _Probe, reason: str, setup) -> None:  # type: ignore[no-untyped-def]
+    s = _defaults()
+    aa.adaptive_admission_snapshot(s)
+    setup(probe)
+    snapshot = _tick(probe, s)
+    assert _budget() == pytest.approx(72 * 0.7)
+    assert snapshot["last_shrink_reason"] == reason
+    assert snapshot["shrink_counts"][reason] == 1  # type: ignore[index]
+
+
+def test_db_signals_need_twenty_samples_in_thirty_seconds(probe: _Probe) -> None:
+    s = _defaults()
+    aa.adaptive_admission_snapshot(s)
+    for _ in range(19):
+        aa.record_db_write_ms(2_000.0)
+        aa.record_pool_wait_ms(2_000.0)
+    _tick(probe, s)
+    assert _budget() == 74  # 19 slow samples are not enough to judge
+    aa.record_db_write_ms(2_000.0)
+    _tick(probe, s)
+    assert _budget() == pytest.approx(74 * 0.7)
+    probe.now += 31.0  # all samples age out of the 30 s window
+    assert aa._DB_WRITE.p95() is None
+    assert aa._POOL_WAIT.p95() is None
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        lambda p: setattr(p, "load", 3.0),
+        lambda p: setattr(p, "load", 3.99),
+        lambda p: setattr(p, "mem", 900.0),
+        lambda p: setattr(p, "mem", 1099.0),
+        lambda p: aa.set_threadpool_reader(lambda: 0.9),
+    ],
+)
+def test_hold_band_neither_grows_nor_shrinks(probe: _Probe, setup) -> None:  # type: ignore[no-untyped-def]
+    s = _defaults()
+    try:
+        aa.adaptive_admission_snapshot(s)
+        setup(probe)
+        for _ in range(3):
+            snapshot = _tick(probe, s)
+        assert _budget() == 72
+        assert snapshot["last_shrink_reason"] is None
+    finally:
+        aa.set_threadpool_reader(None)
+
+
+def test_growth_is_plus_four_below_half_of_max_then_plus_two(probe: _Probe) -> None:
+    s = _defaults(adaptive_admission_initial_units=40)
+    aa.adaptive_admission_snapshot(s)
+    with aa._cond:
+        aa._state.in_flight_units = 4  # busy, so idle recovery stays out of it
+    _tick(probe, s)
+    assert _budget() == 44
+    _tick(probe, s)
+    assert _budget() == 48  # 44 < 48 (half of 96): still +4
+    _tick(probe, s)
+    assert _budget() == 50  # at half of max: +2
+    for _ in range(40):
+        _tick(probe, s)
+    assert _budget() == 96
+
+
+def test_idle_and_healthy_returns_to_the_initial_budget(probe: _Probe) -> None:
+    s = _defaults()
+    aa.adaptive_admission_snapshot(s)
+    probe.load = 5.0
+    for _ in range(6):
+        _tick(probe, s)
+    shrunk = _budget()
+    assert shrunk < 20
+    probe.load = 0.5
+    _tick(probe, s)
+    assert _budget() == pytest.approx(shrunk + 4)  # not idle long enough yet
+    probe.now += 30.0
+    _tick(probe, s)
+    assert _budget() == 72
+
+
+def test_every_budget_change_is_logged(probe: _Probe, caplog: pytest.LogCaptureFixture) -> None:
+    s = _defaults()
+    aa.adaptive_admission_snapshot(s)
+    probe.load = 4.5
+    with caplog.at_level("INFO", logger="maya.admission"):
+        _tick(probe, s)
+    assert any(
+        "adaptive_budget from=72.0 to=50.4 reason=load" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_pool_checkout_wait_is_recorded(probe: _Probe, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from app.core import db as db_module
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'pool.sqlite3'}")
+    db_module._time_pool_checkout(engine)
+    try:
+        for _ in range(20):
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+    finally:
+        engine.dispose()
+    p95 = aa._POOL_WAIT.p95()
+    assert p95 is not None and p95 < 500
