@@ -3513,8 +3513,18 @@ class SqlPlaybackRepository(PlaybackRepository):
         )
         if int(getattr(job, "rowcount", 0)) != 1:
             # Timed-out drafts that never received a prepare job (D3) still
-            # need Retry to re-queue; insert the missing pending row.
-            self._ensure_turn_job(db, debate, turn)
+            # need Retry to re-queue; insert the missing pending row.  A turn
+            # that already has a prepare job (for example one still running)
+            # keeps the losing CAS: never add a second job beside it.
+            existing_job = db.execute(
+                text(
+                    "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                    "AND operation='debate_turn_prepare'"
+                ),
+                {"debate_id": debate_id, "turn_id": turn_id},
+            ).first()
+            if existing_job is None:
+                self._ensure_turn_job(db, debate, turn)
             verified = db.execute(
                 text(
                     "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
