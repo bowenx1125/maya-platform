@@ -1232,9 +1232,11 @@ class PlaybackCore:
         stage = self._get(successor, "preparation_stage", default=None)
         if stage is not None and str(stage) != "ready":
             return False
-        if stage is not None and str(
-            self._get(successor, "generation_status", "status", default="")
-        ) != "final_ready":
+        if (
+            stage is not None
+            and str(self._get(successor, "generation_status", "status", default=""))
+            != "final_ready"
+        ):
             return False
         rule_set_id = str(self._get(debate, "rule_set_id", default=""))
         teaching_protocol = debate_teaching_protocol(debate)

@@ -1063,9 +1063,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             # SQLite has json_array_length / json_group_array; Postgres compat only
             # installs json_extract / json_valid.  Keep claim SQL dialect-portable.
             if self._dialect_name(claim_session) == "postgresql":
-                predecessor_len = (
-                    "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
-                )
+                predecessor_len = "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
                 # json_agg(...)::text inserts spaces after commas; stored rows use
                 # json.dumps(separators=(",", ":")). Compare as jsonb so prod Next
                 # is not blocked by whitespace-only inequality.
@@ -1080,9 +1078,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "OR dt.round_no < successor.round_no)"
                 )
                 predecessor_eq = (
-                    "successor.predecessor_turn_ids_json::jsonb = ("
-                    + predecessor_json
-                    + ")"
+                    "successor.predecessor_turn_ids_json::jsonb = (" + predecessor_json + ")"
                 )
             else:
                 predecessor_len = "json_array_length(successor.predecessor_turn_ids_json)"
@@ -1098,11 +1094,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "ORDER BY turn_index, id"
                     ") AS prefix_ids"
                 )
-                predecessor_eq = (
-                    "successor.predecessor_turn_ids_json = ("
-                    + predecessor_json
-                    + ")"
-                )
+                predecessor_eq = "successor.predecessor_turn_ids_json = (" + predecessor_json + ")"
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.id AS claim_id, successor.audio_file_id, "
@@ -1303,10 +1295,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             # Align with claim SELECT: null duration OR tts_voice_unavailable+0.
             or not (
                 turn.audio_duration_ms is None
-                or (
-                    turn.safe_error_code == "tts_voice_unavailable"
-                    and turn.audio_duration_ms == 0
-                )
+                or (turn.safe_error_code == "tts_voice_unavailable" and turn.audio_duration_ms == 0)
             )
         ):
             return None
@@ -1599,7 +1588,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "AND EXISTS (SELECT 1 FROM course_members cm "
                         "WHERE cm.course_id=d.course_id "
                         "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
-                        "AND (:expected_current_turn_id IS NULL OR "
+                        "AND (CAST(:expected_current_turn_id AS VARCHAR) IS NULL OR "
                         "ps.current_turn_id=:expected_current_turn_id)"
                     ),
                     {
@@ -2102,6 +2091,17 @@ class SqlPlaybackRepository(PlaybackRepository):
         expected_control_version: int,
         controller_epoch: str,
     ) -> bool:
+        # SQLite's table-valued json_each(text) has no PostgreSQL equivalent
+        # for text columns; expand the predecessor array with jsonb instead.
+        if self._dialect_name(db) == "postgresql":
+            predecessor_ids = (
+                "(SELECT p.value FROM jsonb_array_elements_text("
+                "CASE WHEN json_valid(t.predecessor_turn_ids_json) "
+                "THEN t.predecessor_turn_ids_json::jsonb ELSE '[]'::jsonb END"
+                ") AS p(value))"
+            )
+        else:
+            predecessor_ids = "(SELECT value FROM json_each(t.predecessor_turn_ids_json))"
         result = db.execute(
             text(
                 "UPDATE playback_states SET status='waiting_next', cursor_ms=0, "
@@ -2121,7 +2121,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "AND trim(COALESCE(t.speech,''))<>'' AND t.audio_file_id IS NULL "
                 "AND t.audio_duration_ms=0 AND j.state='completed' "
                 "AND j.cancellation_generation=d.cancellation_generation "
-                "AND NOT EXISTS (SELECT 1 FROM json_each(t.predecessor_turn_ids_json) AS p "
+                "AND NOT EXISTS (SELECT 1 FROM " + predecessor_ids + " AS p "
                 "LEFT JOIN debate_turns AS prior ON prior.id=p.value AND prior.debate_id=d.id "
                 "WHERE prior.id IS NULL OR prior.publication_status<>'public'))"
             ),
@@ -2841,9 +2841,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         if SqlPlaybackRepository._dialect_name(db) == "postgresql":
             db.execute(
                 text(
-                    "INSERT INTO jobs "
-                    + columns
-                    + " ON CONFLICT (operation, idempotency_key) "
+                    "INSERT INTO jobs " + columns + " ON CONFLICT (operation, idempotency_key) "
                     "WHERE idempotency_key IS NOT NULL DO NOTHING"
                 ),
                 params,

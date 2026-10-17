@@ -39,8 +39,8 @@ def _course_id_from_group(context: object) -> str | None:
     group_id = parameters.get("group_id")
     if not group_id:
         return None
-    result = context.connection.exec_driver_sql(  # type: ignore[attr-defined]
-        "SELECT course_id FROM groups WHERE id = ?", (group_id,)
+    result = context.connection.execute(  # type: ignore[attr-defined]
+        sql_text("SELECT course_id FROM groups WHERE id = :g"), {"g": group_id}
     )
     return cast(str | None, result.scalar_one_or_none())
 
