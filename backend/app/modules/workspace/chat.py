@@ -1389,6 +1389,9 @@ def create_conversation(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> ConversationSession:
+    # The sign-in check above opened a read transaction; end it so a
+    # request queued for admission holds no pooled connection while it waits.
+    db.commit()
     with create_admission_slot():
         # Freeze one coherent Team definition while another request may save a new version.
         if db.get_bind().dialect.name == "sqlite":
