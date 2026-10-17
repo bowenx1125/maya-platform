@@ -1,4 +1,4 @@
-"""Next claim: rowid→id CAS, soft-fail to 409, text path with tts_voice_unavailable."""
+"""Next claim: rowid→id CAS, soft-fail to 409, false-race→next_not_ready, text path."""
 
 from __future__ import annotations
 
@@ -104,6 +104,62 @@ async def test_next_claim_integrity_error_maps_to_next_not_ready() -> None:
 
     assert raised.value.status_code == 409
     assert raised.value.code == "next_not_ready"
+
+
+
+@pytest.mark.asyncio
+async def test_next_claim_false_unchanged_still_ready_is_next_not_ready_not_controller() -> None:
+    """Hard rule: claim miss + unchanged CAS must never say another controller.
+
+    Prod A @ 201bcff: single-tab Next got stale_control_version while successor
+    was still text-ready — claim was stricter than _next_turn_ready.
+    """
+    debate, current, _successor, service = _ready_pair()
+
+    def claim_miss(**_kwargs: Any) -> bool:
+        return False
+
+    service.repository.claim_next_playback = claim_miss  # type: ignore[method-assign]
+
+    with pytest.raises(PlatformError) as raised:
+        await service.next(
+            None,
+            debate.id,
+            expected_control_version=debate.playback.control_version,
+            expected_current_turn_id=current.id,
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.code == "next_not_ready"
+    assert raised.value.code != "stale_control_version"
+    assert "another controller" not in raised.value.message.lower()
+    assert debate.playback.current_turn_id == current.id
+    assert debate.playback.control_version == 0
+
+
+@pytest.mark.asyncio
+async def test_next_claim_false_bumped_version_is_controller_race() -> None:
+    """True race: claim miss after control_version bump → another controller."""
+    debate, current, _successor, service = _ready_pair()
+
+    def claim_miss_after_bump(**_kwargs: Any) -> bool:
+        debate.playback.control_version += 1
+        return False
+
+    service.repository.claim_next_playback = claim_miss_after_bump  # type: ignore[method-assign]
+
+    with pytest.raises(PlatformError) as raised:
+        await service.next(
+            None,
+            debate.id,
+            expected_control_version=0,
+            expected_current_turn_id=current.id,
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.code == "stale_control_version"
+    assert "another controller" in raised.value.message.lower()
+    assert debate.playback.current_turn_id == current.id
 
 
 def test_claim_next_playback_swallows_unexpected_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -294,3 +350,35 @@ def test_claim_next_playback_sql_has_no_sqlite_rowid(monkeypatch: pytest.MonkeyP
     joined = "\n".join(captured).lower()
     assert "rowid" not in joined
     assert "ps.id" in joined or " id=" in joined
+    # R1: AmbiguousParameter — never bind ``:teacher_user_id IS NOT NULL``.
+    assert "teacher_user_id is not null" not in joined
+    assert ":teacher_user_id is not null" not in joined
+    # R1 secondary: PG predecessor compare must be jsonb, not spaced json_agg::text.
+    assert "jsonb_agg" in joined
+    assert "::jsonb" in joined
+
+
+def test_claim_next_rejects_missing_teacher_without_sql() -> None:
+    """Python gate avoids Postgres AmbiguousParameter on IS NOT NULL bind."""
+    repo = SqlPlaybackRepository(session_factory=lambda: (_ for _ in ()).throw(RuntimeError("no sql")))
+    assert (
+        repo.claim_next_playback(
+            debate_id="debate",
+            expected_control_version=1,
+            expected_current_turn_id="current",
+            successor_turn_id="successor",
+            teacher_user_id=None,
+        )
+        is False
+    )
+
+
+def test_claim_next_source_has_no_teacher_is_not_null_bind() -> None:
+    source = inspect.getsource(sql_repository_module.SqlPlaybackRepository.claim_next_playback)
+    # Comment may mention the old bind; SQL string must not emit it.
+    assert '"AND :teacher_user_id IS NOT NULL "' not in source
+    assert "AND :teacher_user_id IS NOT NULL" not in source.replace(
+        "``:teacher_user_id IS NOT NULL``", ""
+    )
+    assert "jsonb_agg" in source
+    assert "predecessor_eq" in source

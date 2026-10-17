@@ -1228,7 +1228,6 @@ class PlaybackControlMixin(PlaybackCore):
                 text_events: list[EventRecord] = []
                 if not is_replay:
                     claim_kwargs["committed_events"] = text_events
-                claim_error = False
                 try:
                     claimed = bool(fresh_claim(**claim_kwargs))
                 except Exception as exc:
@@ -1242,14 +1241,16 @@ class PlaybackControlMixin(PlaybackCore):
                         exc_info=False,
                     )
                     claimed = False
-                    claim_error = True
                 if not claimed:
                     # The pre-CAS readiness check and the durable claim can
-                    # disagree (for example missing StoredFile).  Re-read once:
-                    # unchanged control version + still unready is next_not_ready
-                    # (no false advance); a bumped version is a true race.
-                    # Soft claim failures (exceptions) also map to next_not_ready
-                    # so teacher Next never surfaces as provider_unavailable.
+                    # disagree (for example missing StoredFile / job fence).
+                    # Hard rule (line C fix): unchanged control version/turn →
+                    # always next_not_ready. Never report "another controller"
+                    # when this teacher's CAS identity did not move — that was
+                    # a false race when claim was stricter than _next_turn_ready.
+                    # Soft claim failures (exceptions) also land here so Next
+                    # never surfaces as provider_unavailable. A bumped version
+                    # or current_turn_id is the only true controller race.
                     self._rollback(db)
                     debate = self._get_debate(db, debate_id)
                     state = self._state(db, debate)
@@ -1257,19 +1258,14 @@ class PlaybackControlMixin(PlaybackCore):
                         state.control_version == expected_control_version
                         and state.current_turn_id == expected_current_turn_id
                     ):
-                        if is_replay:
-                            still_ready = self._replay_next_turn_ready(db, debate, state)
-                        else:
-                            still_ready = self._next_turn_ready(db, debate, state)
-                        if claim_error or not still_ready:
-                            raise conflict(
-                                "next_not_ready",
-                                (
-                                    "The adjacent retained replay turn is not ready for playback."
-                                    if is_replay
-                                    else "The adjacent next turn is not ready for playback."
-                                ),
-                            )
+                        raise conflict(
+                            "next_not_ready",
+                            (
+                                "The adjacent retained replay turn is not ready for playback."
+                                if is_replay
+                                else "The adjacent next turn is not ready for playback."
+                            ),
+                        )
                     raise conflict(
                         "stale_control_version",
                         "The playback transition was claimed by another controller.",
