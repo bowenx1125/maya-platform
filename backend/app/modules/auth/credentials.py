@@ -31,6 +31,7 @@ import yaml
 from pwdlib import PasswordHash
 
 from app.core.config import Settings
+from app.core.hash_gate import hash_slot
 from app.core.identity import username_key
 
 # This is the frozen Wave 0 seed namespace. Keeping the canonical account
@@ -599,13 +600,15 @@ def verify_password(settings: Settings, username: str, password: str) -> str | N
             if username_key(account.username) != username_key(username):
                 continue
             if account.password_hash is not None:
-                try:
-                    if PasswordHash.recommended().verify(password, account.password_hash):
-                        return snapshot.user_id_for(account)
-                except Exception:
-                    # Invalid legacy hashes fail closed without allowing the
-                    # hash or backend exception to reach an API/log boundary.
-                    return None
+                # Gate outside the try: a busy 503 must not read as a bad password.
+                with hash_slot(settings):
+                    try:
+                        if PasswordHash.recommended().verify(password, account.password_hash):
+                            return snapshot.user_id_for(account)
+                    except Exception:
+                        # Invalid legacy hashes fail closed without allowing the
+                        # hash or backend exception to reach an API/log boundary.
+                        return None
             elif hmac.compare_digest(
                 hashlib.sha256(account.password.encode("utf-8")).digest(),
                 hashlib.sha256(password.encode("utf-8")).digest(),

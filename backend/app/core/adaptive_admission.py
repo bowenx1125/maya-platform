@@ -35,6 +35,7 @@ import time
 from collections import deque
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -101,8 +102,97 @@ class _LatencyWindow:
             self._samples.clear()
 
 
+class _TimedLatencyWindow:
+    """Durations (ms) from the last ``horizon`` seconds for a cheap p95.
+
+    Unlike a last-N ring buffer, old samples age out on the clock, so the
+    signal drains back to "unknown" when traffic stops instead of pinning the
+    budget at the floor with stale minutes-old latencies.
+    """
+
+    def __init__(self, horizon_seconds: float = 60.0, max_samples: int = 2000) -> None:
+        self._horizon = horizon_seconds
+        self._samples: deque[tuple[float, float]] = deque(maxlen=max_samples)
+        self._lock = threading.Lock()
+
+    def _expire_locked(self, now: float) -> None:
+        cutoff = now - self._horizon
+        while self._samples and self._samples[0][0] < cutoff:
+            self._samples.popleft()
+
+    def add(self, ms: float) -> None:
+        now = _clock()
+        with self._lock:
+            self._expire_locked(now)
+            self._samples.append((now, ms))
+
+    def p95(self) -> float | None:
+        now = _clock()
+        with self._lock:
+            self._expire_locked(now)
+            if len(self._samples) < 10:
+                return None  # too few samples to judge; treat as unknown
+            ordered = sorted(ms for _, ms in self._samples)
+        return ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
+
+    def clear(self) -> None:
+        with self._lock:
+            self._samples.clear()
+
+
+REQUEST_P95_WINDOW_SECONDS = 60.0
+
 _DB_WRITE = _LatencyWindow()
-_REQUEST = _LatencyWindow()
+_REQUEST = _TimedLatencyWindow(REQUEST_P95_WINDOW_SECONDS)
+
+
+class RequestSample:
+    """Per-request marker: set when the request runs model (LLM) work.
+
+    The HTTP middleware installs one per request in a ContextVar; the object
+    is shared by reference with the threadpool copy of the context, so an
+    ``adaptive_slot("llm")`` inside a sync handler can flag it.
+    """
+
+    __slots__ = ("llm",)
+
+    def __init__(self) -> None:
+        self.llm = False
+
+
+_REQUEST_SAMPLE: ContextVar[RequestSample | None] = ContextVar(
+    "adaptive_admission_request_sample", default=None
+)
+
+
+def begin_request_sample() -> RequestSample:
+    sample = RequestSample()
+    _REQUEST_SAMPLE.set(sample)
+    return sample
+
+
+def _mark_request_llm() -> None:
+    sample = _REQUEST_SAMPLE.get()
+    if sample is not None:
+        sample.llm = True
+
+
+def record_request_sample(
+    sample: RequestSample | None, ms: float, *, content_type: str | None = None
+) -> bool:
+    """Feed request p95 unless the request was LLM work or a stream.
+
+    Model calls and SSE / chat streams are slow by nature (tens of seconds),
+    so counting them made the request-p95 soft signal fire on every chat
+    burst. Returns whether the sample was recorded.
+    """
+
+    if sample is not None and sample.llm:
+        return False
+    if content_type and content_type.split(";", 1)[0].strip().lower() == "text/event-stream":
+        return False
+    _REQUEST.add(ms)
+    return True
 
 
 def record_db_write_ms(ms: float) -> None:
@@ -307,6 +397,8 @@ def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
         return
     if cls not in CLASSES:
         raise ValueError(f"unknown admission class: {cls}")
+    if cls == "llm":
+        _mark_request_llm()
     outer_deadline = getattr(_held, "deadline", None)
     # One deadline per request, started at the first layer: the per-operation
     # backstop gate waits only for whatever is left of it (no double timeout).
@@ -418,6 +510,8 @@ __all__ = [
     "CLASSES",
     "adaptive_admission_busy_error",
     "adaptive_admission_snapshot",
+    "begin_request_sample",
+    "record_request_sample",
     "adaptive_slot",
     "record_db_write_ms",
     "record_request_ms",
