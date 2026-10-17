@@ -114,7 +114,9 @@ describe("teacher debate preview", () => {
       expect(card.getByText(detail.preview_turns![0].speech)).toBeTruthy();
       expect(card.getByText("Audio Not Ready")).toBeTruthy();
       expect(card.getByText("Audio needs attention.")).toBeTruthy();
-      expect(card.getByTestId("preview-safe-error-code").textContent).toBe(code);
+      expect(card.getByTestId("preview-safe-error-code").textContent).toBe(
+        code,
+      );
       const retry = card.getByRole("button", { name: "Retry turn" });
       expect(retry).toBeTruthy();
       fireEvent.click(retry);

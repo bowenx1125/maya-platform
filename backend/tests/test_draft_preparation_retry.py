@@ -251,9 +251,7 @@ async def test_draft_retry_respects_prepared_prefix_and_control_fences(
         if prefix_kind == "retry_prefix":
             # M2: Retry on a text-fallback prefix requeues that prefix for TTS.
             assert enqueued == [ids["prefix"]]
-            prefix_after = next(
-                row for row in after["debate_turns"] if row["id"] == ids["prefix"]
-            )
+            prefix_after = next(row for row in after["debate_turns"] if row["id"] == ids["prefix"])
             assert (prefix_after["generation_status"], prefix_after["safe_error_code"]) == (
                 "pending",
                 None,
@@ -262,9 +260,9 @@ async def test_draft_retry_respects_prepared_prefix_and_control_fences(
             assert later["safe_error_code"] == provider_code
         else:
             assert enqueued == [ids["turn"]]
-            assert next(
-                row for row in after["debate_turns"] if row["id"] == ids["prefix"]
-            ) == next(row for row in before["debate_turns"] if row["id"] == ids["prefix"])
+            assert next(row for row in after["debate_turns"] if row["id"] == ids["prefix"]) == next(
+                row for row in before["debate_turns"] if row["id"] == ids["prefix"]
+            )
             target = next(row for row in after["debate_turns"] if row["id"] == ids["turn"])
             assert (target["generation_status"], target["safe_error_code"]) == ("pending", None)
             job = next(row for row in after["jobs"] if row["id"] == ids["job"])
