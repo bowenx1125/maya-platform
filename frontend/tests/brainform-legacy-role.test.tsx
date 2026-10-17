@@ -75,6 +75,7 @@ function setupActor(role: "teacher" | "student", includeJob = false) {
       ]),
     teams: vi.fn().mockResolvedValue([]),
     mayaTeams: vi.fn().mockResolvedValue([]),
+    courseAssessmentAttempts: vi.fn().mockResolvedValue([]),
     knowledgeGenerationJob: vi.fn().mockResolvedValue({
       job_id: "teacher-job",
       knowledge_set_id: "set-1",

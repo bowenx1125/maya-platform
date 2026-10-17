@@ -13,6 +13,8 @@ import socket
 import ssl
 import threading
 import time
+from base64 import b64decode
+from binascii import Error as BinasciiError
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -25,7 +27,6 @@ from app.providers.tts import (
     TTSHTTPRejectedError,
     TTSProviderError,
     TTSProviderTimeout,
-    TTSProviderUnavailableError,
     TTSResponseInvalidError,
     TTSResult,
     TTSResultDNSFailedError,
@@ -41,17 +42,20 @@ from app.providers.voice import (
     VoiceProviderTimeout,
 )
 
-DEFAULT_TARGET_MODEL_KEY = "qwen3-tts-vc-2026-01-22"
-# Supplier preset names such as "Eldric Sage" are accepted by this flash
-# snapshot. The 2025-09-18 flash snapshot is not on the list: it rejects them.
-# Explicit rollback only: keep calling this dated snapshot when an operator
-# pins it. New work uses FLASH_TTS_MODEL_KEY under the trial switch.
+# The supplier retired this clone model in October 2026. Clones enrolled on it
+# can no longer speak; their owners delete and record them again.
+LEGACY_CLONE_MODEL_KEY = "qwen3-tts-vc-2026-01-22"
+LEGACY_VOICE_ENROLLMENT_MODEL = "qwen-voice-enrollment"
+# Stored on the Eldric Sage preset row, whose encrypted envelope binds this
+# key, so the row keeps it. It is never sent: every system voice speaks
+# through FLASH_TTS_MODEL_KEY.
 PRESET_TTS_MODEL_KEY = "qwen3-tts-flash-2025-11-27"
-# Current system-voice alias documented by Model Studio for cn-beijing.
 FLASH_TTS_MODEL_KEY = "qwen3-tts-flash"
-ALLOWED_TTS_TARGET_MODELS = frozenset(
-    {DEFAULT_TARGET_MODEL_KEY, PRESET_TTS_MODEL_KEY, FLASH_TTS_MODEL_KEY}
-)
+SYSTEM_VOICE_MODEL_KEYS = frozenset({PRESET_TTS_MODEL_KEY, FLASH_TTS_MODEL_KEY})
+# Clone targets the operator may choose with VOICE_CLONE_MODEL; first is default.
+CLONE_TTS_MODEL_KEYS = ("qwen-audio-3.1-tts-flash", "qwen-audio-3.0-tts-flash")
+DEFAULT_TARGET_MODEL_KEY = CLONE_TTS_MODEL_KEYS[0]
+ALLOWED_TTS_TARGET_MODELS = SYSTEM_VOICE_MODEL_KEYS | frozenset(CLONE_TTS_MODEL_KEYS)
 # Official published system voices for qwen3-tts-flash (Model Studio list).
 # Clone / enrollment ids are never on this list; the flash path refuses them.
 FLASH_SYSTEM_VOICES = frozenset(
@@ -107,7 +111,7 @@ FLASH_SYSTEM_VOICES = frozenset(
     }
 )
 TTS_FLASH_MAX_CHARS = 600
-VOICE_ENROLLMENT_MODEL = "qwen-voice-enrollment"
+VOICE_ENROLLMENT_MODEL = "voice-enrollment"
 APPROVED_RESULT_HOST_SUFFIXES = (
     "dashscope.aliyuncs.com",
     "dashscope-result-bj.oss-cn-beijing.aliyuncs.com",
@@ -119,6 +123,12 @@ APPROVED_RESULT_HOST_SUFFIXES = (
 OFFICIAL_HTTP_RESULT_HOSTS = frozenset({"dashscope-result-bj.oss-cn-beijing.aliyuncs.com"})
 VOICE_CUSTOMIZATION_PATH = "/api/v1/services/audio/tts/customization"
 TTS_GENERATION_PATH = "/api/v1/services/aigc/multimodal-generation/generation"
+# Qwen-Audio-TTS clones speak through the SpeechSynthesizer HTTP API.
+SPEECH_SYNTHESIZER_PATH = "/api/v1/services/audio/tts/SpeechSynthesizer"
+# Voice enrollment for Qwen-Audio-TTS reads its sample from a URL, so the
+# sample goes to DashScope's temporary upload store first.
+UPLOAD_POLICY_URL = "https://dashscope.aliyuncs.com/api/v1/uploads"
+UPLOAD_HOST_SUFFIX = ".aliyuncs.com"
 TTS_GENERATION_READ_TIMEOUT_SECONDS = 120.0
 # Qwen-TTS uses the shared Beijing endpoint; the request header retains
 # the workspace that owns the enrolled voice.
@@ -166,26 +176,23 @@ def _json(response: httpx.Response) -> dict[str, Any]:
     return value
 
 
-def tts_model_for_call(
-    configured: str,
-    requested: str | None,
-    *,
-    flash_enabled: bool = False,
-) -> str:
+def tts_model_for_call(configured: str, requested: str | None) -> str:
     """Return the model for one TTS request, or refuse before any network I/O.
 
-    ``None`` keeps the adapter default, which is the clone model. A profile
-    may name an allowlisted model. ``qwen3-tts-flash`` is selectable only
-    when the trial switch is on; the dated snapshot stays an explicit
-    rollback. Anything else is not guessed into a request.
+    ``None`` keeps the adapter default, which is the clone model. System
+    voices always speak through the flash alias. A clone on the retired model
+    is unavailable rather than guessed onto a new model it was never enrolled
+    for. Anything else is not guessed into a request.
     """
 
     model = configured if requested is None else requested
-    if model == FLASH_TTS_MODEL_KEY and not flash_enabled:
-        raise TTSProviderError("unsupported tts model", safe_code="tts_response_invalid")
-    if model not in ALLOWED_TTS_TARGET_MODELS:
-        raise TTSProviderError("unsupported tts model", safe_code="tts_response_invalid")
-    return model
+    if model in SYSTEM_VOICE_MODEL_KEYS:
+        return FLASH_TTS_MODEL_KEY
+    if model in CLONE_TTS_MODEL_KEYS:
+        return model
+    if model == LEGACY_CLONE_MODEL_KEY:
+        raise TTSVoiceUnavailableError("tts voice retired")
+    raise TTSProviderError("unsupported tts model", safe_code="tts_response_invalid")
 
 
 def _tts_json(response: httpx.Response) -> dict[str, Any]:
@@ -211,14 +218,97 @@ def _request_id(response: httpx.Response, document: dict[str, Any] | None = None
     return value if all(ord(char) >= 32 and ord(char) < 127 for char in value) else None
 
 
+def _sample_bytes(audio_data_uri: str) -> bytes:
+    """Decode the normalized WAV sample the service hands to ``enroll``."""
+
+    prefix = "data:audio/wav;base64,"
+    if not audio_data_uri.startswith(prefix):
+        raise VoiceProviderError("provider request invalid")
+    try:
+        return b64decode(audio_data_uri[len(prefix) :], validate=True)
+    except (BinasciiError, ValueError) as exc:
+        raise VoiceProviderError("provider request invalid") from exc
+
+
+def _upload_policy(document: dict[str, Any]) -> dict[str, str]:
+    data = document.get("data")
+    if not isinstance(data, dict):
+        raise VoiceProviderError("provider response invalid")
+    fields = (
+        "policy",
+        "signature",
+        "upload_dir",
+        "upload_host",
+        "oss_access_key_id",
+        "x_oss_object_acl",
+        "x_oss_forbid_overwrite",
+    )
+    policy: dict[str, str] = {}
+    for field in fields:
+        value = data.get(field)
+        if not isinstance(value, str) or not value or len(value) > 4096:
+            raise VoiceProviderError("provider response invalid")
+        policy[field] = value
+    host = urlsplit(policy["upload_host"])
+    # The upload target comes from the supplier response: only its own HTTPS
+    # object store may receive the sample.
+    if (
+        host.scheme != "https"
+        or not host.hostname
+        or not host.hostname.endswith(UPLOAD_HOST_SUFFIX)
+        or host.username
+        or host.password
+        or ".." in policy["upload_dir"]
+        or policy["upload_dir"].startswith("/")
+    ):
+        raise VoiceProviderError("provider response invalid")
+    return policy
+
+
 class DashScopeVoiceCloneProvider:
-    """DashScope voice enrollment/existence/delete adapter."""
+    """DashScope voice enrollment/existence/delete adapter.
+
+    New clones enroll for a Qwen-Audio-TTS model through ``voice-enrollment``.
+    Clones on the retired model keep their old list/delete API so their owners
+    can still delete them.
+    """
 
     key = "dashscope"
 
     def __init__(self, config: DashScopeConfig) -> None:
         self.config = config
         self.target_model_key = config.target_model_key
+
+    def _upload_sample(self, client: httpx.Client, sample: bytes, recovery_name: str) -> str:
+        """Put the sample in DashScope's temporary store and return its oss:// URL."""
+
+        workspace = _safe_workspace(self.config.workspace_id)
+        response = client.get(
+            UPLOAD_POLICY_URL,
+            params={"action": "getPolicy", "model": VOICE_ENROLLMENT_MODEL},
+            headers={
+                "Authorization": f"Bearer {self.config.api_key}",
+                "X-DashScope-WorkSpace": workspace,
+            },
+        )
+        policy = _upload_policy(_json(response))
+        key = f"{policy['upload_dir']}/{recovery_name}.wav"
+        uploaded = client.post(
+            policy["upload_host"],
+            data={
+                "OSSAccessKeyId": policy["oss_access_key_id"],
+                "Signature": policy["signature"],
+                "policy": policy["policy"],
+                "x-oss-object-acl": policy["x_oss_object_acl"],
+                "x-oss-forbid-overwrite": policy["x_oss_forbid_overwrite"],
+                "key": key,
+                "success_action_status": "200",
+            },
+            files={"file": (f"{recovery_name}.wav", sample, "audio/wav")},
+        )
+        if uploaded.status_code < 200 or uploaded.status_code >= 300:
+            raise VoiceProviderError("provider request failed")
+        return f"oss://{key}"
 
     def enroll(
         self,
@@ -229,38 +319,43 @@ class DashScopeVoiceCloneProvider:
         language: str = "en",
         transcript: str | None = None,
     ) -> VoiceEnrollmentResult:
-        # The flash system-voice branch never re-registers clones against the
-        # alias model. Enrollment stays on the clone target only.
-        if target_model_key == FLASH_TTS_MODEL_KEY:
-            raise VoiceCloneRefusedError("flash model does not support enrollment")
-        payload: dict[str, Any] = {
-            "model": VOICE_ENROLLMENT_MODEL,
-            "input": {
-                "action": "create",
-                "target_model": target_model_key,
-                "preferred_name": recovery_name,
-                "audio": {"data": audio_data_uri},
-                "language": language,
-            },
-        }
-        if transcript:
-            payload["input"]["text"] = transcript
+        # System voices are supplier names and the retired clone model takes
+        # no new voices; only a Qwen-Audio-TTS target may be enrolled.
+        if target_model_key not in CLONE_TTS_MODEL_KEYS:
+            raise VoiceCloneRefusedError("model does not support enrollment")
+        # Qwen-Audio-TTS enrollment reads the sample alone.
+        del language, transcript
+        sample = _sample_bytes(audio_data_uri)
         try:
             with _client() as client:
+                audio_url = self._upload_sample(client, sample, recovery_name)
                 response = client.post(
                     f"{_base_url(self.config)}{VOICE_CUSTOMIZATION_PATH}",
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {self.config.api_key}",
+                        "X-DashScope-OssResourceResolve": "enable",
+                    },
+                    json={
+                        "model": VOICE_ENROLLMENT_MODEL,
+                        "input": {
+                            "action": "create_voice",
+                            "target_model": target_model_key,
+                            "prefix": recovery_name,
+                            "url": audio_url,
+                        },
+                    },
                 )
             document = _json(response)
         except httpx.TimeoutException as exc:
             raise VoiceProviderTimeout("provider request timed out") from exc
         except (httpx.HTTPError, OSError) as exc:
             raise VoiceProviderError("provider request failed") from exc
+        finally:
+            sample = b""
         output = document.get("output")
         if not isinstance(output, dict):
             raise VoiceProviderError("provider response invalid")
-        value = output.get("voice")
+        value = output.get("voice_id")
         if not isinstance(value, str) or not value or len(value) > 512:
             raise VoiceProviderError("provider response invalid")
         return VoiceEnrollmentResult(
@@ -268,7 +363,7 @@ class DashScopeVoiceCloneProvider:
             request_id=_request_id(response, document),
             input_bytes=len(audio_data_uri.encode("utf-8")),
             charged=True,
-            degraded=output.get("fallback_mode") is True,
+            degraded=False,
         )
 
     def exists(
@@ -277,6 +372,7 @@ class DashScopeVoiceCloneProvider:
         *,
         target_model_key: str,
     ) -> VoiceExistenceResult:
+        legacy = target_model_key == LEGACY_CLONE_MODEL_KEY
         matches: list[str] = []
         visibility_known = False
         page_size = 100
@@ -285,16 +381,24 @@ class DashScopeVoiceCloneProvider:
                 # Pagination is intentionally private to this adapter.  Only
                 # recovery-name matches leave this method.
                 for page in range(10):
+                    request_input: dict[str, Any] = (
+                        {"action": "list", "page_index": page, "page_size": page_size}
+                        if legacy
+                        else {
+                            "action": "list_voice",
+                            "prefix": recovery_name,
+                            "page_index": page,
+                            "page_size": page_size,
+                        }
+                    )
                     response = client.post(
                         f"{_base_url(self.config)}{VOICE_CUSTOMIZATION_PATH}",
                         headers={"Authorization": f"Bearer {self.config.api_key}"},
                         json={
-                            "model": VOICE_ENROLLMENT_MODEL,
-                            "input": {
-                                "action": "list",
-                                "page_index": page,
-                                "page_size": page_size,
-                            },
+                            "model": (
+                                LEGACY_VOICE_ENROLLMENT_MODEL if legacy else VOICE_ENROLLMENT_MODEL
+                            ),
+                            "input": request_input,
                         },
                     )
                     document = _json(response)
@@ -305,13 +409,17 @@ class DashScopeVoiceCloneProvider:
                     for row in rows:
                         if not isinstance(row, dict):
                             continue
-                        voice = row.get("voice")
-                        if not isinstance(voice, str) or not voice.startswith(recovery_name):
+                        voice = row.get("voice" if legacy else "voice_id")
+                        if not isinstance(voice, str) or not voice or len(voice) > 512:
+                            continue
+                        # Qwen-Audio-TTS ids read <model>-<prefix>-<suffix>.
+                        if legacy and not voice.startswith(recovery_name):
+                            continue
+                        if not legacy and f"-{recovery_name}-" not in voice:
                             continue
                         if row.get("target_model") not in {None, target_model_key}:
                             continue
-                        if isinstance(voice, str) and voice and len(voice) <= 512:
-                            matches.append(voice)
+                        matches.append(voice)
                     total_count = output.get("total_count") if isinstance(output, dict) else None
                     if len(rows) < page_size:
                         visibility_known = True
@@ -333,11 +441,17 @@ class DashScopeVoiceCloneProvider:
         )
 
     def delete(self, external_voice_id: str, *, target_model_key: str) -> None:
-        payload = {
-            "model": VOICE_ENROLLMENT_MODEL,
-            "input": {"action": "delete", "voice": external_voice_id},
-        }
-        del target_model_key
+        payload = (
+            {
+                "model": LEGACY_VOICE_ENROLLMENT_MODEL,
+                "input": {"action": "delete", "voice": external_voice_id},
+            }
+            if target_model_key == LEGACY_CLONE_MODEL_KEY
+            else {
+                "model": VOICE_ENROLLMENT_MODEL,
+                "input": {"action": "delete_voice", "voice_id": external_voice_id},
+            }
+        )
         try:
             with _client() as client:
                 response = client.post(
@@ -660,15 +774,10 @@ class DashScopeTTSProvider:
         self,
         config: DashScopeConfig,
         downloader: SupplierAudioDownloader | None = None,
-        *,
-        flash_enabled: bool = False,
-        trial_budget: object | None = None,
     ) -> None:
         self.config = config
         self.target_model_key = config.target_model_key
         self.downloader = downloader or SupplierAudioDownloader()
-        self.flash_enabled = flash_enabled
-        self.trial_budget = trial_budget
 
     def synthesize(
         self,
@@ -681,37 +790,43 @@ class DashScopeTTSProvider:
         language_type = _TTS_LANGUAGE_TYPES.get(language)
         if language_type is None:
             raise TTSProviderError("unsupported language")
-        model = tts_model_for_call(
-            self.target_model_key,
-            target_model_key,
-            flash_enabled=self.flash_enabled,
-        )
+        model = tts_model_for_call(self.target_model_key, target_model_key)
+        if self.config.region != "cn-beijing" or not self.config.api_key:
+            raise VoiceProviderError("provider is not configured")
+        workspace = _safe_workspace(self.config.workspace_id)
         if model == FLASH_TTS_MODEL_KEY:
-            # Zero outbound for illegal voice / oversize / exhausted trial.
+            # Zero outbound for a name the flash model does not publish or
+            # text over its input limit.
             if external_voice_id not in FLASH_SYSTEM_VOICES:
                 raise TTSVoiceUnavailableError("tts voice unavailable")
             if len(text) > TTS_FLASH_MAX_CHARS:
                 raise TTSProviderError("tts text too long", safe_code="tts_response_invalid")
-            budget = self.trial_budget
-            if budget is None or not hasattr(budget, "preclaim"):
-                raise TTSProviderUnavailableError("tts trial budget unavailable")
-            budget.preclaim(len(text))
-        payload = {
-            "model": model,
-            "input": {
-                "text": text,
-                "voice": external_voice_id,
-                "language_type": language_type,
-            },
-        }
-        if self.config.region != "cn-beijing" or not self.config.api_key:
-            raise VoiceProviderError("provider is not configured")
-        workspace = _safe_workspace(self.config.workspace_id)
+            url = QWEN_TTS_URL
+            payload: dict[str, Any] = {
+                "model": model,
+                "input": {
+                    "text": text,
+                    "voice": external_voice_id,
+                    "language_type": language_type,
+                },
+            }
+        else:
+            # A Qwen-Audio-TTS clone detects the language from the text.
+            url = f"{_base_url(self.config)}{SPEECH_SYNTHESIZER_PATH}"
+            payload = {
+                "model": model,
+                "input": {
+                    "text": text,
+                    "voice": external_voice_id,
+                    "format": "wav",
+                    "sample_rate": 24000,
+                },
+            }
         try:
             # Cloned synthesis can take longer than the generic provider read window.
             with _client(read_timeout=TTS_GENERATION_READ_TIMEOUT_SECONDS) as client:
                 response = client.post(
-                    QWEN_TTS_URL,
+                    url,
                     headers={
                         "Authorization": f"Bearer {self.config.api_key}",
                         "X-DashScope-WorkSpace": workspace,

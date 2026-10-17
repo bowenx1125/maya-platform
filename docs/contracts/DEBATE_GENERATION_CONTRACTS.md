@@ -59,7 +59,8 @@ Status: `FROZEN / REAL EMBEDDING 1024 DELTA`
     a separate TTS Gate using one approved sample and is not an LLM/Embedding input.
 13. **Model versions?** Chat, debate and report use `LLM_MODEL`
     (default `qwen3.8-max-2026-09-02`). Embedding stays `text-embedding-v4` at 1024
-    dimensions and `qwen3-tts-vc-2026-01-22`; no `latest` fallback.
+    dimensions; speech follows the October 17 voice revision below; no `latest`
+    fallback.
 14. **Maximum charge?** No product CNY quota. Legacy estimate fields remain for
     accounting rather than rejection. Embedding retains the supplier's supported
     item/batch shape; these transport constraints are not a total authored-RAG cap.
@@ -762,15 +763,25 @@ Status: `FROZEN / REAL EMBEDDING DIMENSION 1024 / RUNTIME GATES INCOMPLETE / FOR
 The intended local Demo supplier is Alibaba Cloud Model Studio in the existing
 `cn-beijing` workspace. Fixed identifiers are:
 
-| Operation        | Fixed resource                                        | Mode                                                                    |
-| ---------------- | ----------------------------------------------------- | ----------------------------------------------------------------------- |
-| Debate LLM       | `LLM_MODEL`, default `qwen3.8-max-2026-09-02`         | exact Chat/JSON-Schema wire in `LLM_A_RUNTIME_V1.md`                    |
-| Text embedding   | `text-embedding-v4`, dimension `1024`                 | synchronous; max 10 inputs, 8,000 tokens/item and 30,000 tokens/request |
-| Voice-clone TTS  | `qwen3-tts-vc-2026-01-22`                             | HTTP, language `English`                                                |
-| Voice enrollment | `qwen-voice-enrollment` targeting the fixed TTS model | separate TTS Gate only                                                  |
+| Operation        | Fixed resource                                          | Mode                                                                    |
+| ---------------- | ------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Debate LLM       | `LLM_MODEL`, default `qwen3.8-max-2026-09-02`           | exact Chat/JSON-Schema wire in `LLM_A_RUNTIME_V1.md`                    |
+| Text embedding   | `text-embedding-v4`, dimension `1024`                   | synchronous; max 10 inputs, 8,000 tokens/item and 30,000 tokens/request |
+| System-voice TTS | `qwen3-tts-flash`                                       | HTTP multimodal generation, published voice names                       |
+| Voice-clone TTS  | `VOICE_CLONE_MODEL`, default `qwen-audio-3.1-tts-flash` | HTTP SpeechSynthesizer, WAV 24 kHz                                      |
+| Voice enrollment | `voice-enrollment` targeting the clone model            | separate TTS Gate only; sample via DashScope temporary upload           |
 
 `latest`, unversioned fallback, automatic model upgrade and cross-region fallback are
 forbidden. Model unavailability requires a contract revision.
+
+October 17 voice revision (owner decision): the supplier retired
+`qwen3-tts-vc-2026-01-22`. System voices, including the preset row that still
+stores `qwen3-tts-flash-2025-11-27`, speak through `qwen3-tts-flash`. New clones
+enroll for `qwen-audio-3.1-tts-flash` or, when the operator sets
+`VOICE_CLONE_MODEL`, `qwen-audio-3.0-tts-flash`. These are the owner-named model
+ids, not automatic upgrades. Clones on the retired model are unavailable: Debate
+speech uses the fallback voice and owners delete them. The trial character cap is
+gone with the owner's removal of budget ceilings.
 
 October 14 transport correction: Qwen-TTS synthesis uses the documented shared
 Beijing HTTP endpoint, with the validated workspace sent in

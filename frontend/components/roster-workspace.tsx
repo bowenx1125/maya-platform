@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 
 import {
   type Group,
-  type OverviewResult,
   type RosterEntry,
   type UpdateCourseMemberRequest,
 } from "../lib/api";
-import { AttemptResults } from "./group-overview";
 import {
   beginTeacherEnter,
   endTeacherEnter,
@@ -40,7 +38,6 @@ export function RosterWorkspace() {
   const router = useRouter();
   const [entries, setEntries] = useState<RosterEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [attempts, setAttempts] = useState<OverviewResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -72,14 +69,12 @@ export function RosterWorkspace() {
         // Arriving here ends any group visit; list members once that leave
         // is done, or the caller still shows inside the group they just left.
         await teacherLeavesSettled();
-        const [roster, courseGroups, courseAttempts] = await Promise.all([
+        const [roster, courseGroups] = await Promise.all([
           api.courseRoster(courseId),
           api.groups(courseId),
-          api.courseAssessmentAttempts(courseId),
         ]);
         setEntries(roster.entries ?? []);
         setGroups(courseGroups);
-        setAttempts(courseAttempts);
       } catch (cause) {
         setError(cause);
       } finally {
@@ -432,17 +427,6 @@ export function RosterWorkspace() {
                   />
                 ))}
             </ModuleList>
-          ) : undefined}
-        </ModuleCard>
-
-        <ModuleCard
-          title={t("overviewResults")}
-          count={attempts.length}
-          labelledBy="accounts-results"
-          empty={attempts.length ? undefined : t("overviewNoResults")}
-        >
-          {attempts.length ? (
-            <AttemptResults attempts={attempts} showGroup />
           ) : undefined}
         </ModuleCard>
       </ModuleGrid>

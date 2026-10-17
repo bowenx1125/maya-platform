@@ -21,6 +21,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
 from app.core.sqlutil import begin_immediate
+from app.providers.dashscope import LEGACY_CLONE_MODEL_KEY
 from app.providers.tts import TTS_UNAVAILABLE_CODES
 
 from .audio import AudioMetadata
@@ -296,6 +297,9 @@ class SqlPlaybackRepository(PlaybackRepository):
                 return None
             model = row["target_model_key"]
             if not isinstance(model, str) or not model:
+                return None
+            # A clone on the retired model cannot speak; use the fallback.
+            if model == LEGACY_CLONE_MODEL_KEY:
                 return None
             if getattr(settings, "tts_provider", "mock") == "mock":
                 return str(profile_id), model

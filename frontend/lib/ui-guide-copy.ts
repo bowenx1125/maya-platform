@@ -133,6 +133,10 @@ export const uiGuideCopy = {
     en: "Open the saved Memory context in Chatform.",
     zh: "在 Chatform 中打开已保存的 Memory 上下文。",
   },
+  "brainform.record": {
+    en: "Formal assessment results, grouped by the Team that ran the assessment.",
+    zh: "正式测评的结果，按发起测评的 Team 分组。",
+  },
   "chat.readOnly": {
     en: "This Agent is unavailable for new messages.",
     zh: "此 Agent 暂不可接收新消息。",

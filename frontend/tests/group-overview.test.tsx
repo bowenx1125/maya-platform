@@ -80,7 +80,7 @@ const overview = {
 };
 
 describe("group overview", () => {
-  it("shows members' work, scored tests with answers, and recent activity", async () => {
+  it("shows members' work and recent activity, without test results", async () => {
     session.api.groupOverview.mockResolvedValue(overview);
     render(
       <LocaleProvider initialLocale="en">
@@ -100,22 +100,9 @@ describe("group overview", () => {
       screen.getByRole("link", { name: "Study circle" }).getAttribute("href"),
     ).toBe("/student/groups/group-1?mode=team-edit&team_id=team-1");
 
-    const result = screen.getByRole("button", {
-      name: /Ada · Keynotes · Formal diagnostic questions · V1\.0.*3 \/ 4/,
-    });
-    const report = screen.getByRole("link", {
-      name: "Download the report for Keynotes",
-    });
-    expect(report.getAttribute("href")).toBe(
-      "/api/v1/learning/reports/r/download?revision_id=v",
-    );
-    expect(report.hasAttribute("download")).toBe(true);
-    fireEvent.click(result);
-    expect(
-      screen.getByText("4afc794f-1111-4111-8111-111111111111"),
-    ).toBeTruthy();
-    expect(screen.getByRole("cell", { name: "Humaneness" })).toBeTruthy();
-    expect(screen.getByRole("cell", { name: "Right." })).toBeTruthy();
+    // Results moved to the teacher's Brainform Record.
+    expect(screen.queryByText(/Keynotes/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Report" })).toBeNull();
 
     expect(screen.getByText("published Quiet voice V1.1")).toBeTruthy();
   });
@@ -133,7 +120,7 @@ describe("group overview", () => {
       </LocaleProvider>,
     );
     expect(await screen.findByText("这个组还没有学生。")).toBeTruthy();
-    expect(screen.getByText("还没有测试成绩。")).toBeTruthy();
+    expect(screen.queryByText("还没有测试成绩。")).toBeNull();
     expect(screen.getByText("还没有动态。")).toBeTruthy();
   });
 });

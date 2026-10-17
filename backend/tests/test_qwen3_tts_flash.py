@@ -1,42 +1,49 @@
-"""Machine assertions for the qwen3-tts-flash trial path (architecture A)."""
+"""Machine assertions for system-voice flash and Qwen-Audio-TTS clone paths."""
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import httpx
 import pytest
 from app.providers.dashscope import (
     ALLOWED_TTS_TARGET_MODELS,
+    CLONE_TTS_MODEL_KEYS,
     DEFAULT_TARGET_MODEL_KEY,
     FLASH_SYSTEM_VOICES,
     FLASH_TTS_MODEL_KEY,
+    LEGACY_CLONE_MODEL_KEY,
     PRESET_TTS_MODEL_KEY,
     QWEN_TTS_URL,
+    SPEECH_SYNTHESIZER_PATH,
+    UPLOAD_POLICY_URL,
     VOICE_CUSTOMIZATION_PATH,
     DashScopeConfig,
     DashScopeTTSProvider,
     DashScopeVoiceCloneProvider,
+    _base_url,
     tts_model_for_call,
 )
-from app.providers.tts import (
-    TTSProviderError,
-    TTSProviderUnavailableError,
-    TTSVoiceUnavailableError,
-)
-from app.providers.tts_flash_budget import (
-    TTS_FLASH_TRIAL_BUDGET_CHARS,
-    FlashTrialBudget,
-)
-from app.providers.voice import VoiceProviderError
+from app.providers.tts import TTSProviderError, TTSVoiceUnavailableError
+from app.providers.voice import VoiceCloneRefusedError, VoiceProviderError
+
+SAMPLE = b"RIFF-sample-bytes"
+SAMPLE_URI = "data:audio/wav;base64," + base64.b64encode(SAMPLE).decode("ascii")
+POLICY = {
+    "policy": "policy-doc",
+    "signature": "signature",
+    "upload_dir": "dashscope-instant/abc/2026-10-17/xyz",
+    "upload_host": "https://dashscope-file-mgr.oss-cn-beijing.aliyuncs.com",
+    "oss_access_key_id": "access-id",
+    "x_oss_object_acl": "private",
+    "x_oss_forbid_overwrite": "true",
+}
 
 
 class _CaptureClient:
-    def __init__(self, payload: dict[str, object] | None = None) -> None:
-        self.payload = payload or {
-            "output": {"audio": {"url": "https://example.test/preview.wav"}},
-            "request_id": "flash-tts",
-        }
+    def __init__(self, responses: list[dict[str, object]] | None = None) -> None:
+        self.responses = list(responses or [])
         self.calls: list[dict[str, object]] = []
 
     def __enter__(self) -> _CaptureClient:
@@ -45,15 +52,24 @@ class _CaptureClient:
     def __exit__(self, *_args: object) -> None:
         return None
 
+    def _reply(self, method: str, url: str) -> httpx.Response:
+        payload = (
+            self.responses.pop(0)
+            if self.responses
+            else {
+                "output": {"audio": {"url": "https://example.test/preview.wav"}},
+                "request_id": "tts-request",
+            }
+        )
+        return httpx.Response(200, json=payload, request=httpx.Request(method, url))
+
+    def get(self, url: str, **kwargs: object) -> httpx.Response:
+        self.calls.append({"method": "GET", "url": url, **kwargs})
+        return self._reply("GET", url)
+
     def post(self, url: str, **kwargs: object) -> httpx.Response:
-        self.calls.append(
-            {"url": url, "headers": kwargs.get("headers"), "json": kwargs.get("json")}
-        )
-        return httpx.Response(
-            200,
-            json=self.payload,
-            request=httpx.Request("POST", url),
-        )
+        self.calls.append({"method": "POST", "url": url, **kwargs})
+        return self._reply("POST", url)
 
 
 class _Downloader:
@@ -61,71 +77,67 @@ class _Downloader:
         return b"RIFF" + b"\x00" * 40  # placeholder; validate_speech_audio patched
 
 
-def _config() -> DashScopeConfig:
-    return DashScopeConfig(api_key="fixture", workspace_id="workspace123")
+def _config(target: str = DEFAULT_TARGET_MODEL_KEY) -> DashScopeConfig:
+    return DashScopeConfig(api_key="fixture", workspace_id="workspace123", target_model_key=target)
 
 
-def _provider(
-    tmp_path: Path,
-    *,
-    flash_enabled: bool,
-    monkeypatch: pytest.MonkeyPatch,
-    client: _CaptureClient | None = None,
+WORKSPACE_BASE = _base_url(_config())
+
+
+def _tts(
+    monkeypatch: pytest.MonkeyPatch, *, target: str = DEFAULT_TARGET_MODEL_KEY
 ) -> tuple[DashScopeTTSProvider, _CaptureClient]:
-    capture = client or _CaptureClient()
+    capture = _CaptureClient()
     monkeypatch.setattr("app.providers.dashscope._client", lambda **_kwargs: capture)
     monkeypatch.setattr("app.providers.dashscope.validate_speech_audio", lambda _audio: None)
-    budget = FlashTrialBudget(tmp_path / "provider" / "tts_qwen3_flash_trial_chars")
     provider = DashScopeTTSProvider(
-        _config(),
+        _config(target),
         downloader=_Downloader(),  # type: ignore[arg-type]
-        flash_enabled=flash_enabled,
-        trial_budget=budget,
     )
     return provider, capture
 
 
-def test_allowlist_includes_flash_alias_and_keeps_snapshot_rollback() -> None:
+def _voice(
+    monkeypatch: pytest.MonkeyPatch, responses: list[dict[str, object]] | None = None
+) -> tuple[DashScopeVoiceCloneProvider, _CaptureClient]:
+    capture = _CaptureClient(responses)
+    monkeypatch.setattr("app.providers.dashscope._client", lambda **_kwargs: capture)
+    return DashScopeVoiceCloneProvider(_config()), capture
+
+
+def test_allowlist_holds_system_and_clone_models_but_not_the_retired_clone() -> None:
     assert FLASH_TTS_MODEL_KEY in ALLOWED_TTS_TARGET_MODELS
     assert PRESET_TTS_MODEL_KEY in ALLOWED_TTS_TARGET_MODELS
-    assert DEFAULT_TARGET_MODEL_KEY in ALLOWED_TTS_TARGET_MODELS
+    assert set(CLONE_TTS_MODEL_KEYS) == {"qwen-audio-3.1-tts-flash", "qwen-audio-3.0-tts-flash"}
+    assert DEFAULT_TARGET_MODEL_KEY == "qwen-audio-3.1-tts-flash"
+    assert set(CLONE_TTS_MODEL_KEYS) <= ALLOWED_TTS_TARGET_MODELS
+    assert LEGACY_CLONE_MODEL_KEY not in ALLOWED_TTS_TARGET_MODELS
     assert "Cherry" in FLASH_SYSTEM_VOICES
     assert "Eldric Sage" in FLASH_SYSTEM_VOICES
 
 
-def test_switch_off_refuses_flash_alias_with_zero_outbound(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=False, monkeypatch=monkeypatch)
-    with pytest.raises(TTSProviderError) as rejected:
-        provider.synthesize("Hello.", "Cherry", language="en", target_model_key=FLASH_TTS_MODEL_KEY)
-    assert rejected.value.safe_code == "tts_response_invalid"
-    assert capture.calls == []
-
-
-def test_switch_off_keeps_snapshot_and_clone_paths(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=False, monkeypatch=monkeypatch)
-    provider.synthesize(
-        "Rollback sentence.",
-        "Eldric Sage",
-        language="en",
-        target_model_key=PRESET_TTS_MODEL_KEY,
+def test_tts_model_for_call_routes_every_system_voice_to_flash() -> None:
+    assert tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, PRESET_TTS_MODEL_KEY) == FLASH_TTS_MODEL_KEY
+    assert tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, FLASH_TTS_MODEL_KEY) == FLASH_TTS_MODEL_KEY
+    assert tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, None) == DEFAULT_TARGET_MODEL_KEY
+    assert (
+        tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, "qwen-audio-3.0-tts-flash")
+        == "qwen-audio-3.0-tts-flash"
     )
-    provider.synthesize("Clone sentence.", "clone-voice-id", language="en")
-    assert len(capture.calls) == 2
-    assert capture.calls[0]["json"]["model"] == PRESET_TTS_MODEL_KEY
-    assert capture.calls[1]["json"]["model"] == DEFAULT_TARGET_MODEL_KEY
+    with pytest.raises(TTSVoiceUnavailableError):
+        tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, LEGACY_CLONE_MODEL_KEY)
+    with pytest.raises(TTSProviderError) as rejected:
+        tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, "qwen-tts-latest")
+    assert rejected.value.safe_code == "tts_response_invalid"
 
 
-def test_switch_on_flash_sends_alias_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
+def test_preset_profile_speaks_through_flash(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider, capture = _tts(monkeypatch)
     provider.synthesize(
         "A short line.",
-        "Cherry",
+        "Eldric Sage",
         language="zh",
-        target_model_key=FLASH_TTS_MODEL_KEY,
+        target_model_key=PRESET_TTS_MODEL_KEY,
     )
     assert len(capture.calls) == 1
     assert capture.calls[0]["url"] == QWEN_TTS_URL
@@ -133,15 +145,46 @@ def test_switch_on_flash_sends_alias_model(tmp_path: Path, monkeypatch: pytest.M
         "model": FLASH_TTS_MODEL_KEY,
         "input": {
             "text": "A short line.",
-            "voice": "Cherry",
+            "voice": "Eldric Sage",
             "language_type": "Chinese",
         },
     }
-    assert VOICE_CUSTOMIZATION_PATH not in capture.calls[0]["url"]
 
 
-def test_illegal_clone_voice_zero_outbound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
+def test_clone_speaks_through_the_speech_synthesizer(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider, capture = _tts(monkeypatch)
+    result = provider.synthesize("Clone sentence.", "qwen-audio-3.1-tts-flash-mabc-123")
+    assert result.request_id == "tts-request"
+    assert len(capture.calls) == 1
+    call = capture.calls[0]
+    assert call["url"] == f"{WORKSPACE_BASE}{SPEECH_SYNTHESIZER_PATH}"
+    assert call["json"] == {
+        "model": DEFAULT_TARGET_MODEL_KEY,
+        "input": {
+            "text": "Clone sentence.",
+            "voice": "qwen-audio-3.1-tts-flash-mabc-123",
+            "format": "wav",
+            "sample_rate": 24000,
+        },
+    }
+    assert call["headers"] == {
+        "Authorization": "Bearer fixture",
+        "X-DashScope-WorkSpace": "workspace123",
+    }
+
+
+def test_retired_clone_is_unavailable_with_zero_outbound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, capture = _tts(monkeypatch)
+    with pytest.raises(TTSVoiceUnavailableError) as rejected:
+        provider.synthesize("Hi.", "old-voice", target_model_key=LEGACY_CLONE_MODEL_KEY)
+    assert rejected.value.safe_code == "tts_voice_unavailable"
+    assert capture.calls == []
+
+
+def test_unpublished_system_voice_zero_outbound(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider, capture = _tts(monkeypatch)
     with pytest.raises(TTSVoiceUnavailableError) as rejected:
         provider.synthesize(
             "Hi.",
@@ -150,126 +193,158 @@ def test_illegal_clone_voice_zero_outbound(tmp_path: Path, monkeypatch: pytest.M
             target_model_key=FLASH_TTS_MODEL_KEY,
         )
     assert rejected.value.safe_code == "tts_voice_unavailable"
+    assert "fixture" not in str(rejected.value)
     assert capture.calls == []
 
 
-def test_oversize_text_zero_outbound(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
-    text = "字" * 601
+def test_oversize_system_voice_text_zero_outbound(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider, capture = _tts(monkeypatch)
     with pytest.raises(TTSProviderError) as rejected:
-        provider.synthesize(text, "Cherry", language="zh", target_model_key=FLASH_TTS_MODEL_KEY)
+        provider.synthesize(
+            "字" * 601, "Cherry", language="zh", target_model_key=FLASH_TTS_MODEL_KEY
+        )
     assert rejected.value.safe_code == "tts_response_invalid"
     assert capture.calls == []
-    assert FlashTrialBudget(tmp_path / "provider" / "tts_qwen3_flash_trial_chars").used() == 0
 
 
-def test_over_budget_zero_outbound_and_retries_count(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "target", [FLASH_TTS_MODEL_KEY, PRESET_TTS_MODEL_KEY, LEGACY_CLONE_MODEL_KEY]
+)
+def test_enroll_refuses_non_clone_targets_with_zero_outbound(
+    monkeypatch: pytest.MonkeyPatch, target: str
 ) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
-    budget_path = tmp_path / "provider" / "tts_qwen3_flash_trial_chars"
-    # Fill almost to the cap, then refuse the next claim.
-    FlashTrialBudget(budget_path).preclaim(TTS_FLASH_TRIAL_BUDGET_CHARS - 5)
-    with pytest.raises(TTSProviderUnavailableError) as rejected:
-        provider.synthesize(
-            "123456",  # 6 chars > remaining 5
-            "Cherry",
-            language="en",
-            target_model_key=FLASH_TTS_MODEL_KEY,
-        )
-    assert rejected.value.safe_code == "tts_provider_unavailable"
+    provider, capture = _voice(monkeypatch)
+    with pytest.raises(VoiceCloneRefusedError):
+        provider.enroll(SAMPLE_URI, recovery_name="mabcdef12", target_model_key=target)
     assert capture.calls == []
-    assert FlashTrialBudget(budget_path).used() == TTS_FLASH_TRIAL_BUDGET_CHARS - 5
-
-    # A successful short claim counts; a second attempt that fails still counted.
-    provider.synthesize("ab", "Cherry", language="en", target_model_key=FLASH_TTS_MODEL_KEY)
-    assert len(capture.calls) == 1
-    assert FlashTrialBudget(budget_path).used() == TTS_FLASH_TRIAL_BUDGET_CHARS - 3
 
 
-def test_budget_persists_across_restart(tmp_path: Path) -> None:
-    path = tmp_path / "provider" / "tts_qwen3_flash_trial_chars"
-    first = FlashTrialBudget(path)
-    first.preclaim(120)
-    second = FlashTrialBudget(path)
-    assert second.used() == 120
-    second.preclaim(30)
-    assert FlashTrialBudget(path).used() == 150
-
-
-def test_tts_model_for_call_gates_flash_alias() -> None:
-    assert (
-        tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, FLASH_TTS_MODEL_KEY, flash_enabled=True)
-        == FLASH_TTS_MODEL_KEY
-    )
-    with pytest.raises(TTSProviderError):
-        tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, FLASH_TTS_MODEL_KEY, flash_enabled=False)
-    assert (
-        tts_model_for_call(DEFAULT_TARGET_MODEL_KEY, PRESET_TTS_MODEL_KEY, flash_enabled=False)
-        == PRESET_TTS_MODEL_KEY
-    )
-
-
-def test_flash_enroll_refused_with_zero_customization_call(
+def test_enroll_uploads_the_sample_then_creates_the_voice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[str] = []
+    provider, capture = _voice(
+        monkeypatch,
+        [
+            {"data": POLICY, "request_id": "policy"},
+            {},
+            {"output": {"voice_id": "qwen-audio-3.1-tts-flash-mabcdef12-x1"}, "request_id": "r1"},
+        ],
+    )
+    result = provider.enroll(
+        SAMPLE_URI, recovery_name="mabcdef12", target_model_key=DEFAULT_TARGET_MODEL_KEY
+    )
+    assert result.external_voice_id == "qwen-audio-3.1-tts-flash-mabcdef12-x1"
+    assert result.request_id == "r1"
+    policy, upload, create = capture.calls
+    assert policy["method"] == "GET"
+    assert policy["url"] == UPLOAD_POLICY_URL
+    assert policy["params"] == {"action": "getPolicy", "model": "voice-enrollment"}
+    key = f"{POLICY['upload_dir']}/mabcdef12.wav"
+    assert upload["url"] == POLICY["upload_host"]
+    assert upload["data"]["key"] == key  # type: ignore[index]
+    assert upload["files"] == {"file": ("mabcdef12.wav", SAMPLE, "audio/wav")}
+    assert create["url"] == f"{WORKSPACE_BASE}{VOICE_CUSTOMIZATION_PATH}"
+    assert create["headers"]["X-DashScope-OssResourceResolve"] == "enable"  # type: ignore[index]
+    assert create["json"] == {
+        "model": "voice-enrollment",
+        "input": {
+            "action": "create_voice",
+            "target_model": DEFAULT_TARGET_MODEL_KEY,
+            "prefix": "mabcdef12",
+            "url": f"oss://{key}",
+        },
+    }
 
-    class _NoClient:
-        def __enter__(self) -> _NoClient:
-            return self
 
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def post(self, url: str, **_kwargs: object) -> httpx.Response:
-            calls.append(url)
-            raise AssertionError("enrollment must not open a network call for flash")
-
-    monkeypatch.setattr("app.providers.dashscope._client", lambda **_kwargs: _NoClient())
-    voice = DashScopeVoiceCloneProvider(_config())
+def test_enroll_never_uploads_to_a_host_outside_the_supplier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, capture = _voice(
+        monkeypatch,
+        [{"data": {**POLICY, "upload_host": "https://collector.example.test"}}],
+    )
     with pytest.raises(VoiceProviderError):
-        voice.enroll(
-            "data:audio/wav;base64,AA==",
-            recovery_name="maya123456789012",
-            target_model_key=FLASH_TTS_MODEL_KEY,
+        provider.enroll(
+            SAMPLE_URI, recovery_name="mabcdef12", target_model_key=DEFAULT_TARGET_MODEL_KEY
         )
-    assert calls == []
+    assert [call["method"] for call in capture.calls] == ["GET"]
 
 
-def test_factory_wires_switch_default_off(tmp_path: Path) -> None:
+def test_exists_lists_by_prefix_and_matches_only_that_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, capture = _voice(
+        monkeypatch,
+        [
+            {
+                "output": {
+                    "voice_list": [
+                        {"voice_id": "qwen-audio-3.1-tts-flash-mabcdef12-x1"},
+                        {"voice_id": "qwen-audio-3.1-tts-flash-mabcdef123-x2"},
+                    ]
+                }
+            }
+        ],
+    )
+    result = provider.exists("mabcdef12", target_model_key=DEFAULT_TARGET_MODEL_KEY)
+    assert result.matches == ("qwen-audio-3.1-tts-flash-mabcdef12-x1",)
+    assert result.visibility_known is True
+    assert capture.calls[0]["json"] == {
+        "model": "voice-enrollment",
+        "input": {
+            "action": "list_voice",
+            "prefix": "mabcdef12",
+            "page_index": 0,
+            "page_size": 100,
+        },
+    }
+
+
+def test_delete_uses_the_api_of_the_model_the_voice_was_enrolled_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, capture = _voice(monkeypatch, [{}, {}])
+    provider.delete("new-voice", target_model_key=DEFAULT_TARGET_MODEL_KEY)
+    provider.delete("old-voice", target_model_key=LEGACY_CLONE_MODEL_KEY)
+    assert capture.calls[0]["json"] == {
+        "model": "voice-enrollment",
+        "input": {"action": "delete_voice", "voice_id": "new-voice"},
+    }
+    assert capture.calls[1]["json"] == {
+        "model": "qwen-voice-enrollment",
+        "input": {"action": "delete", "voice": "old-voice"},
+    }
+
+
+def _settings(tmp_path: Path, **values: object) -> object:
     from app.core.config import Settings
-    from app.providers.factory import tts_provider
 
-    settings = Settings(
+    return Settings(
         maya_env="test",
         session_secret="s" * 32,
         database_url=f"sqlite:///{tmp_path / 't.sqlite3'}",
         data_root=tmp_path,
         tts_provider="dashscope",
-        voice_provider="mock",
+        voice_provider="dashscope",
         llm_provider="mock",
         embedding_provider="mock",
         dashscope_api_key="fixture",
         dashscope_workspace_id="workspace123",
         dashscope_region="cn-beijing",
+        **values,
     )
-    provider = tts_provider(settings)
-    assert isinstance(provider, DashScopeTTSProvider)
-    assert provider.flash_enabled is False
-    assert provider.trial_budget is not None
 
 
-def test_flash_errors_never_echo_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    provider, capture = _provider(tmp_path, flash_enabled=True, monkeypatch=monkeypatch)
-    with pytest.raises(TTSVoiceUnavailableError) as rejected:
-        provider.synthesize(
-            "Hi.",
-            "not-a-system-voice",
-            language="en",
-            target_model_key=FLASH_TTS_MODEL_KEY,
-        )
-    message = str(rejected.value)
-    assert "fixture" not in message
-    assert "Bearer" not in message
-    assert capture.calls == []
+def test_factory_clones_on_the_configured_model(tmp_path: Path) -> None:
+    from app.providers.factory import tts_provider, voice_provider
+
+    default = _settings(tmp_path)
+    assert voice_provider(default).target_model_key == "qwen-audio-3.1-tts-flash"  # type: ignore[arg-type]
+    assert tts_provider(default).target_model_key == "qwen-audio-3.1-tts-flash"  # type: ignore[arg-type,attr-defined]
+    chosen = _settings(tmp_path, voice_clone_model="qwen-audio-3.0-tts-flash")
+    assert voice_provider(chosen).target_model_key == "qwen-audio-3.0-tts-flash"  # type: ignore[arg-type]
+    assert _settings(tmp_path, voice_clone_model="").voice_clone_model == (  # type: ignore[attr-defined]
+        "qwen-audio-3.1-tts-flash"
+    )
+    with pytest.raises(ValueError):
+        _settings(tmp_path, voice_clone_model=LEGACY_CLONE_MODEL_KEY)

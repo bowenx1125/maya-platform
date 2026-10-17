@@ -383,36 +383,12 @@ describe("teacher account management", () => {
     expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
   });
 
-  it("lists test results on Accounts without entering a group", async () => {
+  it("leaves test results to Brainform Record", async () => {
     const api = apiForTeacher();
-    api.courseAssessmentAttempts.mockResolvedValue([
-      {
-        attempt_id: "attempt-1",
-        user_id: studentId,
-        student_name: "New Student",
-        test_name: "Team Aurora · Formal diagnostic questions · V1.0",
-        team_name: "Team Aurora",
-        status: "in_progress",
-        phase: "summary_not_saved",
-        conversation_id: "638ce7b2-2222-4222-8222-222222222222",
-        group_id: groupId,
-        group_name: "Team Aurora",
-        started_at: "2026-10-15T01:00:00Z",
-        ended_at: null,
-        points_awarded: null,
-        points_total: null,
-        questions: [],
-        report_download_path: null,
-      },
-    ]);
     mount(api, "en");
-    expect(
-      await screen.findByRole("button", {
-        name: /Team Aurora · New Student · Team Aurora · Formal diagnostic questions · V1\.0.*Summary not saved/,
-      }),
-    ).toBeTruthy();
-    expect(api.joinGroupAsTeacher).not.toHaveBeenCalled();
-    expect(api.courseAssessmentAttempts).toHaveBeenCalledWith(courseId);
+    expect(await screen.findByText("new-student")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Test results" })).toBeNull();
+    expect(api.courseAssessmentAttempts).not.toHaveBeenCalled();
   });
 
   it("renders the Chinese copy for the same surface", async () => {

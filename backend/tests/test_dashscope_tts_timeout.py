@@ -3,7 +3,7 @@ from __future__ import annotations
 import app.providers.dashscope as dashscope
 import httpx
 import pytest
-from app.providers.dashscope import QWEN_TTS_URL, DashScopeConfig, DashScopeTTSProvider
+from app.providers.dashscope import DashScopeConfig, DashScopeTTSProvider
 
 
 class _FakeDownloader:
@@ -20,7 +20,8 @@ class _FakeClient:
         return None
 
     def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
-        assert url == QWEN_TTS_URL
+        config = DashScopeConfig(api_key="fixture-key", workspace_id="workspace123")
+        assert url == f"{dashscope._base_url(config)}{dashscope.SPEECH_SYNTHESIZER_PATH}"
         assert headers == {
             "Authorization": "Bearer fixture-key",
             "X-DashScope-WorkSpace": "workspace123",

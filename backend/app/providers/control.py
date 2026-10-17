@@ -42,8 +42,8 @@ FIXED_MODELS: Mapping[str, str] = MappingProxyType(
         "llm_maya_report": "qwen3.8-max-2026-09-02",
         "llm_agent_chat": "qwen3.8-max-2026-09-02",
         "llm_knowledge_generate": "qwen3.8-max-2026-09-02",
-        "tts": "qwen3-tts-vc-2026-01-22",
-        "voice_enrollment": "qwen-voice-enrollment",
+        "tts": "qwen-audio-3.1-tts-flash",
+        "voice_enrollment": "voice-enrollment",
     }
 )
 PROVIDER_BUDGET_BUCKETS = frozenset(
