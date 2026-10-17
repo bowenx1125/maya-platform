@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import styles from "./provider-data-call-disclosure.module.css";
 
 export type ProviderDataCallDisclosure = {
@@ -235,9 +236,9 @@ export function ProviderDataCallDisclosure({
   if (error || !value) {
     return (
       <section className={styles.card} data-testid="provider-disclosure">
-        <p className={styles.error} role="alert">
+        <DismissibleAlert className={styles.error} resetKey={error}>
           The provider disclosure could not be loaded.
-        </p>
+        </DismissibleAlert>
         <button
           className={styles.retry}
           type="button"

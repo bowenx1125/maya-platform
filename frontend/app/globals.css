@@ -466,6 +466,53 @@ textarea {
   outline-offset: 2px;
 }
 
+/* Ad-hoc error, failure and warning lines close with a compact ×. */
+.dismissible-alert {
+  align-items: flex-start;
+  gap: 6px;
+}
+
+p.dismissible-alert,
+div.dismissible-alert {
+  display: flex;
+}
+
+span.dismissible-alert {
+  display: inline-flex;
+}
+
+.dismissible-alert-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.alert-dismiss {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0 -2px 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.alert-dismiss:hover {
+  background: rgba(39, 35, 61, 0.08);
+  opacity: 1;
+}
+
+.alert-dismiss:focus-visible {
+  outline: 2px solid var(--accent, #76591f);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
 /* Notices away from a conversation float above the page's bottom edge. */
 .notice-tray {
   position: fixed;

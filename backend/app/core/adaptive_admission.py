@@ -18,10 +18,12 @@ this single queue as backstops (the login queue is folded into it):
   further the longer people waited; it is reported, never acted on.
 * Cost weights (llm heavy, create/write medium, login light, read free),
   FIFO per class, served round-robin so one class cannot starve others.
-* One global in-flight hard cap per process; LLM calls, Team/Chat
-  turns and creates additionally pass ``llm_admission`` (20) / ``write_guard``
-  (12) / ``create_admission`` (4) as per-operation backstops, which wait only for the remainder of
-  this layer's deadline.
+* One global in-flight hard cap per process; LLM calls additionally pass
+  the ``llm_admission`` (20) backstop, which waits only for the remainder of
+  this layer's deadline (a call nested in an admitted operation starts a
+  fresh one). The fixed ``write_guard`` / ``create_admission`` caps are off
+  by default (limit 0) and can be switched back on from the environment.
+  Argon2 keeps its own CPU/memory cap (``AUTH_HASH_CONCURRENCY``).
 * Retryable ``adaptive_admission_busy`` 503 is raised only when the queue
   (max 200) is full or the single 180 s wait budget runs out.
 
@@ -219,7 +221,9 @@ def record_request_ms(ms: float) -> None:
     _REQUEST.add(ms)
 
 
-@dataclass
+# Identity equality: deque.remove() on a timeout must drop this waiter, not
+# the first queued one of the same class and weight.
+@dataclass(eq=False)
 class _Waiter:
     cls: str
     weight: int
@@ -238,6 +242,12 @@ class _State:
     # Last time anything was admitted or waiting; idle recovery counts from it.
     last_busy: float = float("-inf")
     danger: bool = False
+    # Danger latch history for /health/admission and the enter/release logs.
+    danger_entries: int = 0
+    danger_releases: int = 0
+    danger_since: float | None = None
+    danger_reason: str | None = None
+    danger_seconds_total: float = 0.0
     load: float | None = None
     mem: float | None = None
     threadpool: float | None = None
@@ -312,11 +322,13 @@ def _refresh_locked(settings: Settings) -> None:
     load_bad = load_reject > 0 and s.load is not None and s.load >= load_reject
     mem_bad = mem_floor > 0 and s.mem is not None and s.mem < mem_floor
     if not s.danger:
-        s.danger = load_bad or mem_bad
+        if load_bad or mem_bad:
+            _enter_danger_locked(now, load_bad=load_bad, mem_bad=mem_bad)
     else:
         load_ok = load_reject <= 0 or s.load is None or s.load <= load_resume
         mem_ok = mem_floor <= 0 or s.mem is None or s.mem >= mem_resume
-        s.danger = not (load_ok and mem_ok)
+        if load_ok and mem_ok:
+            _release_danger_locked(now)
 
     if s.in_flight_units > 0 or _waiting_total() > 0 or s.last_busy == float("-inf"):
         s.last_busy = now
@@ -360,6 +372,40 @@ def _refresh_locked(settings: Settings) -> None:
             s.in_flight_units,
             _waiting_total(),
         )
+
+
+def _enter_danger_locked(now: float, *, load_bad: bool, mem_bad: bool) -> None:
+    s = _state
+    reason = "+".join(name for name, bad in (("load", load_bad), ("mem", mem_bad)) if bad)
+    s.danger = True
+    s.danger_since = now
+    s.danger_reason = reason
+    s.danger_entries += 1
+    LOGGER.warning(
+        "admission_danger_entered reason=%s load=%s mem_mb=%s in_flight_units=%s queued=%s",
+        reason,
+        s.load,
+        s.mem,
+        s.in_flight_units,
+        _waiting_total(),
+    )
+
+
+def _release_danger_locked(now: float) -> None:
+    s = _state
+    held = max(0.0, now - s.danger_since) if s.danger_since is not None else 0.0
+    s.danger = False
+    s.danger_releases += 1
+    s.danger_seconds_total += held
+    LOGGER.warning(
+        "admission_danger_released reason=%s held_s=%.1f load=%s mem_mb=%s queued=%s",
+        s.danger_reason,
+        held,
+        s.load,
+        s.mem,
+        _waiting_total(),
+    )
+    s.danger_since = None
 
 
 def _shrink_reason(settings: Settings) -> str | None:
@@ -515,20 +561,22 @@ def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
     if cls == "llm":
         _mark_request_llm()
     outer_deadline = getattr(_held, "deadline", None)
+    depth = int(getattr(_held, "depth", 0))
     # One deadline per request, started at the first layer: the per-operation
     # backstop gate waits only for whatever is left of it (no double timeout).
-    deadline = (
-        outer_deadline
-        if outer_deadline is not None
-        else time.monotonic() + float(runtime.adaptive_admission_wait_seconds)
-    )
+    # A call nested in an admitted operation never queues here, so it starts a
+    # fresh wait: a Team turn that ran past the request's 180 s must not give
+    # its later model calls zero backstop wait.
+    if outer_deadline is None or depth > 0:
+        deadline = time.monotonic() + float(runtime.adaptive_admission_wait_seconds)
+    else:
+        deadline = outer_deadline
     weight = max(0, _weight(runtime, cls))
     reservation = Reservation(cls, weight, deadline, runtime)
     if weight == 0:
         return reservation
     retry_after = int(runtime.adaptive_admission_retry_seconds)
     waiter = _Waiter(cls=cls, weight=weight)
-    depth = int(getattr(_held, "depth", 0))
     with _cond:
         _refresh_locked(runtime)
         if depth > 0:
@@ -625,6 +673,17 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
             "in_flight": sum(s.in_flight.values()),
             "in_flight_units": s.in_flight_units,
             "danger": s.danger,
+            "danger_latch": {
+                "entries": s.danger_entries,
+                "releases": s.danger_releases,
+                "reason": s.danger_reason,
+                "active_seconds": (
+                    round(max(0.0, _clock() - s.danger_since), 1)
+                    if s.danger and s.danger_since is not None
+                    else 0.0
+                ),
+                "total_seconds": round(s.danger_seconds_total, 1),
+            },
             "load_1m": s.load,
             "mem_available_mb": s.mem,
             "db_write_p95_ms": _DB_WRITE.p95(),

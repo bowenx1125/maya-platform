@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import { useT } from "../locale";
 import type { ProviderDataCallDebateManifestListResponse } from "../../lib/api";
 import styles from "./provider-data-call-disclosure.module.css";
@@ -59,9 +60,9 @@ export function ProviderDataCallDebateList({
   if (error || !value) {
     return (
       <section className={styles.card} data-testid="debate-turn-approvals">
-        <p className={styles.error} role="alert">
+        <DismissibleAlert className={styles.error} resetKey={error}>
           {t("debateApprovalError")}
-        </p>
+        </DismissibleAlert>
         <button
           className={styles.retry}
           type="button"

@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
@@ -1439,6 +1440,47 @@ describe("Brainform workspace actions", () => {
     await waitFor(() =>
       expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-1"),
     );
+  });
+
+  it("closes a failed generation notice with its × without touching the server", async () => {
+    state.role = "teacher";
+    state.userId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    state.api.brainformKnowledge.mockResolvedValue([
+      {
+        agent_id: "agent-1",
+        canonical_set_id: "set-1",
+        source_agent_display_name: "Socrates",
+        knowledge_display_name: "Socrates",
+        can_read: true,
+        can_edit: true,
+        version_seq: null,
+        content_hash: null,
+        generation_job_id: null,
+        generation_state: "failed",
+        safe_error_code: "acceptance_unknown",
+      },
+    ]);
+    renderWorkspace("teacher");
+
+    const message = await screen.findByText(
+      "Generation did not complete: acceptance unknown.",
+    );
+    const alert = message.closest('[role="alert"]') as HTMLElement;
+    expect(alert).toBeTruthy();
+    const mutations = [
+      state.api.regenerateKnowledgeMarkdown,
+      state.api.saveKnowledgeMarkdown,
+    ].map((mock) => mock.mock.calls.length);
+    fireEvent.click(within(alert).getByRole("button", { name: "Dismiss" }));
+    expect(
+      screen.queryByText("Generation did not complete: acceptance unknown."),
+    ).toBeNull();
+    expect(
+      [
+        state.api.regenerateKnowledgeMarkdown,
+        state.api.saveKnowledgeMarkdown,
+      ].map((mock) => mock.mock.calls.length),
+    ).toEqual(mutations);
   });
 
   it("keeps a readable Knowledge version editable after a failed generation attempt", async () => {

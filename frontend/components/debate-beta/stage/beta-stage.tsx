@@ -10,6 +10,7 @@ import {
   type SyntheticEvent,
 } from "react";
 
+import { DismissibleAlert } from "../../dismissible-alert";
 import type {
   DebateDetail,
   DebatePlaybackState,
@@ -3834,9 +3835,13 @@ export function BetaDebateStage({
           </section>
         ) : null}
         {controlError ? (
-          <div className={styles.failureCard} role="alert">
-            <span>{controlError}</span>
-          </div>
+          <DismissibleAlert
+            as="div"
+            className={styles.failureCard}
+            resetKey={controlError}
+          >
+            {controlError}
+          </DismissibleAlert>
         ) : null}
       </div>
       {blockedBy ? (

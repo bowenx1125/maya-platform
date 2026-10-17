@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import { PieChart } from "../charts";
 import { statusLabel } from "../../lib/i18n";
 import { useLocale } from "../locale";
@@ -49,9 +50,9 @@ export function TeacherInteractionPanel({
       </div>
 
       {error ? (
-        <p className={styles.error} role="alert">
+        <DismissibleAlert className={styles.error} resetKey={error}>
           {error}
-        </p>
+        </DismissibleAlert>
       ) : null}
 
       {interaction.status === "closed" ? (

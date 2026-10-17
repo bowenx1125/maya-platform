@@ -231,13 +231,12 @@ class Settings(BaseSettings):
     llm_admission_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
     )
-    # Second per-operation backstop: concurrent Team/Chat turn execution
-    # (write-heavy) per process, sharing the request deadline. 20 matches the
-    # LLM backstop: every turn also holds an LLM slot, so a lower write cap
-    # left LLM capacity unused (DB write p95 stayed ~1 ms at 40 students).
-    write_guard_limit: int = Field(
-        default=20, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
-    )
+    # Optional per-operation backstop: concurrent Team/Chat turn execution
+    # per process, sharing the request deadline. Off by default (0): the
+    # weighted adaptive budget, the danger latch and the LLM backstop already
+    # bound this work, and every turn also holds an LLM slot. Set
+    # WRITE_GUARD_LIMIT (e.g. 20) to bring the fixed cap back without code.
+    write_guard_limit: int = Field(default=0, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT")
     write_guard_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
     )
@@ -247,10 +246,12 @@ class Settings(BaseSettings):
     write_guard_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
-    # Third per-operation backstop: concurrent Agent/Team/Conversation
-    # creates per process (MayaLoad n=40 create spike hit load ~13.5).
+    # Optional per-operation backstop: concurrent Agent/Team/Conversation
+    # creates per process. Off by default (0); creates still weigh 3 units in
+    # the adaptive budget and stop under the danger latch. Set
+    # CREATE_ADMISSION_LIMIT (e.g. 4) to restore the fixed cap without code.
     create_admission_limit: int = Field(
-        default=4, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
+        default=0, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
     )
     create_admission_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_QUEUE_MAX"

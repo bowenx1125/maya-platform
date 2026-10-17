@@ -11,6 +11,7 @@ import {
   type FormEvent,
 } from "react";
 
+import { DismissibleAlert } from "../../dismissible-alert";
 import {
   createIdempotencyHandle,
   isAmbiguousMutationFailure,
@@ -583,13 +584,13 @@ export function TeacherDebateCreate({
                 value={topic}
               />
               {topicError ? (
-                <span
+                <DismissibleAlert
+                  as="span"
                   className={styles.fieldError}
                   id="debate-topic-error"
-                  role="alert"
                 >
                   {topicError}
-                </span>
+                </DismissibleAlert>
               ) : null}
             </div>
           </SectionCard>
@@ -752,9 +753,9 @@ export function TeacherDebateCreate({
           onEditingChange={setRulesEditing}
         />
         {formError ? (
-          <div className="form-error" role="alert">
+          <DismissibleAlert as="div" className="form-error">
             {formError}
-          </div>
+          </DismissibleAlert>
         ) : null}
         {/* Creating mid-edit would freeze rules other than the ones on
           screen, so Done waits until the ruleset edit is saved or discarded. */}

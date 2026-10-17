@@ -195,3 +195,59 @@ def test_ensure_turn_job_on_conflict_matches_partial_unique_index(postgres_datab
         session.rollback()
     assert count == 1
     assert errors == []
+
+
+def test_playback_sql_has_no_is_param_comparison():
+    source = _REPOSITORY.read_text(encoding="utf-8")
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
+    # ``col IS :param`` is SQLite-only; PostgreSQL raises a syntax error (#122).
+    assert not re.search(r" IS :\w+", code)
+
+
+def test_reset_prewarm_turn_releases_the_claim_on_postgres(postgres_database):
+    """#122: the null-safe fence comparison must run on PostgreSQL."""
+
+    from types import SimpleNamespace
+
+    from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+    database, errors = postgres_database
+    with database.session_factory() as session:
+        # Only the release statement is under test; skip FK triggers.
+        session.execute(text("SET session_replication_role = replica"))
+        session.execute(
+            text(
+                "INSERT INTO debates (id, course_id, topic, rule_set_id, rule_snapshot_json, "
+                "output_language, status, revision, last_sequence, cancellation_generation, "
+                "created_by, created_at, updated_at) VALUES ('d-1', 'c', 't', 'r', '{}', 'zh', "
+                "'draft', 0, 0, 0, 'u', now(), now())"
+            )
+        )
+        session.execute(
+            text(
+                "INSERT INTO debate_turns (id, debate_id, participant_id, knowledge_snapshot_id, "
+                "round_no, turn_index, generation_status, publication_status, preparation_stage, "
+                "predecessor_turn_ids_json, retrieval_receipts_json, evidence_trace_json, "
+                "attempt, created_at, updated_at) VALUES ('t-1', 'd-1', 'p', 'k', 1, 0, "
+                "'running', 'unpublished', 'tts', '[]', '[]', '[]', 1, now(), now())"
+            )
+        )
+        session.execute(
+            text(
+                "INSERT INTO jobs (id, operation, state, attempt, created_at, updated_at, "
+                "debate_id, turn_id, claim_token, cancellation_generation) VALUES "
+                "('j-1', 'debate_turn_prepare', 'running', 1, now(), now(), 'd-1', 't-1', "
+                "'claim', 0)"
+            )
+        )
+        turn = SimpleNamespace(id="t-1", debate_id="d-1")
+        released = SqlPlaybackRepository(
+            session_factory=database.session_factory
+        ).reset_prewarm_turn(session, turn, claim_token="claim", cancellation_generation=0)
+        status = session.execute(
+            text("SELECT generation_status FROM debate_turns WHERE id = 't-1'")
+        ).scalar()
+        session.rollback()
+    assert errors == []
+    assert released is True
+    assert status == "pending"

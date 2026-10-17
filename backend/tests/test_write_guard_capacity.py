@@ -32,7 +32,10 @@ def healthy() -> Iterator[None]:
 
 def test_capacity_defaults_and_untouched_limits() -> None:
     s = Settings()  # type: ignore[call-arg]
-    assert s.write_guard_limit == 20
+    # Only the adaptive budget, the danger latch and the LLM backstop are on
+    # by default; the fixed write / create caps are off (0) but configurable.
+    assert s.write_guard_limit == 0
+    assert s.create_admission_limit == 0
     assert s.adaptive_admission_max_units == 128
     assert s.adaptive_admission_max_in_flight == 48
     # 20 turns x (write 2 + nested LLM 4) fit the ceiling and the global cap.
@@ -81,7 +84,8 @@ def test_twenty_concurrent_messages_are_all_admitted(healthy: None) -> None:
         assert aa._state.in_flight["write"] == 20
         assert aa._state.in_flight["llm"] == 20
         assert aa._state.in_flight_units == 120
-        assert wg._GATE.in_flight == 20
+        # The fixed write cap is off by default: no layer-2 gate slot taken.
+        assert wg._GATE.in_flight == 0
     finally:
         release.set()
         for thread in threads:
@@ -122,7 +126,7 @@ def test_ready_probe_answers_with_the_shared_pool_full(
     release = threading.Event()
     with TestClient(app) as client:
         limiter = client.portal.call(anyio.to_thread.current_default_thread_limiter)
-        assert limiter.total_tokens == 128
+        assert limiter.total_tokens == 256
 
         # 48 admitted requests plus queued ones hold every shared worker thread.
         for _ in range(128):
@@ -146,3 +150,90 @@ def test_ready_probe_answers_with_the_shared_pool_full(
         worker.join(5)
     assert result.get("status") == 200
     assert float(result["seconds"]) < 2.0  # type: ignore[arg-type]
+
+
+def test_streamed_work_is_not_capped_by_the_cpu_sized_default_executor(
+    app_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    # Streamed replies and Team runs use asyncio.to_thread. Python's default
+    # executor is cpu_count + 4 threads (6 on the 2-vCPU host); 30 must run
+    # at once, the way 20 streamed turns plus their polls do.
+    import asyncio
+
+    app, _database, _settings_ = app_factory()
+    release = threading.Event()
+    lock = threading.Lock()
+    running = [0]
+
+    def work() -> None:
+        with lock:
+            running[0] += 1
+        release.wait(5)
+
+    with TestClient(app) as client:
+        for _ in range(30):
+            client.portal.start_task_soon(asyncio.to_thread, work)
+        deadline = time.monotonic() + 5
+        while running[0] < 30 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        concurrent = running[0]
+        release.set()
+    assert concurrent == 30
+
+
+def test_turns_past_the_old_write_cap_are_admitted_by_default(healthy: None) -> None:
+    """25 > the old WRITE_GUARD 20: only the adaptive budget bounds turns now."""
+
+    s = _settings()
+    assert s.write_guard_limit == 0
+    release = threading.Event()
+    started = threading.Barrier(26)
+    errors: list[BaseException] = []
+
+    def turn() -> None:
+        try:
+            with write_guard_slot(s):
+                started.wait(5)
+                release.wait(10)
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+            started.abort()
+
+    threads = [threading.Thread(target=turn) for _ in range(25)]
+    for thread in threads:
+        thread.start()
+    try:
+        started.wait(5)
+        assert errors == []
+        assert aa._state.in_flight["write"] == 25
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join()
+
+
+def test_fixed_write_cap_can_be_restored_from_the_environment(
+    healthy: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WRITE_GUARD_LIMIT", "1")
+    monkeypatch.setenv("CREATE_ADMISSION_LIMIT", "4")
+    s = Settings(  # type: ignore[call-arg]
+        adaptive_admission_initial_units=128,
+        adaptive_admission_wait_seconds=1,
+        write_guard_wait_seconds=1,
+    )
+    assert s.write_guard_limit == 1 and s.create_admission_limit == 4
+    with write_guard_slot(s):
+        failure: list[str] = []
+
+        def second() -> None:
+            try:
+                with write_guard_slot(s):
+                    pass
+            except PlatformError as exc:
+                failure.append(exc.code)
+
+        thread = threading.Thread(target=second)
+        thread.start()
+        thread.join(5)
+    assert failure == ["write_pressure"]

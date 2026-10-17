@@ -11,6 +11,7 @@ behind the unified adaptive queue and shares its single wait deadline.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -22,6 +23,10 @@ from app.core.errors import PlatformError
 from app.core.message_timing import add_queue_wait
 
 _GATE = ConcurrencyGate()
+# Slots held by this thread. A Team model call takes its slot before it marks
+# the provider operation "sending"; the transport inside it asks again and
+# must not take a second slot (that could deadlock at the limit).
+_held = threading.local()
 
 
 def reset_llm_admission_state() -> None:
@@ -57,8 +62,37 @@ def llm_admission_busy_error(
 
 @contextmanager
 def llm_admission_slot(settings: Settings | None = None) -> Iterator[None]:
-    """Hold one LLM in-flight slot for the duration of the ``with`` block."""
+    """Hold one LLM in-flight slot for the duration of the ``with`` block.
 
+    Re-entrant per thread: a nested call while this thread already holds a
+    slot is a no-op, so the caller's slot covers the transport's request.
+    """
+
+    if int(getattr(_held, "depth", 0)) > 0:
+        yield
+        return
+    with _held_slot(settings):
+        yield
+
+
+def llm_admission_held() -> bool:
+    """Whether this thread currently holds an LLM slot."""
+
+    return int(getattr(_held, "depth", 0)) > 0
+
+
+@contextmanager
+def _held_slot(settings: Settings | None) -> Iterator[None]:
+    with _admitted(settings):
+        _held.depth = int(getattr(_held, "depth", 0)) + 1
+        try:
+            yield
+        finally:
+            _held.depth -= 1
+
+
+@contextmanager
+def _admitted(settings: Settings | None) -> Iterator[None]:
     runtime = settings if settings is not None else get_settings()
     entered = time.perf_counter()
     # Layer 1: the unified pressure queue (suspends under the danger line).
@@ -90,6 +124,7 @@ def llm_admission_slot(settings: Settings | None = None) -> Iterator[None]:
 
 __all__ = [
     "llm_admission_busy_error",
+    "llm_admission_held",
     "llm_admission_slot",
     "reset_llm_admission_state",
 ]

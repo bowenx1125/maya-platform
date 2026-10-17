@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 import secrets
 import unicodedata
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -25,6 +27,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
+from app.core.adaptive_admission import shared_wait_seconds
+from app.core.concurrency_gate import ConcurrencyGate, GateRejected
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, unprocessable
 from app.core.hash_gate import hash_slot, run_hash
@@ -152,6 +156,63 @@ def attach_to_group(db: Session, course: Course, user: User, group_name: str) ->
     return group
 
 
+# One registration transaction per process at a time. The transaction takes
+# a global Postgres advisory lock that is held until commit; without this
+# gate every concurrent registrant checked out a pooled connection just to
+# block on that lock. Waiters here hold no connection.
+_REGISTRATION_TURN = ConcurrencyGate()
+REGISTRATION_TURN_LIMIT = 1
+
+
+def reset_registration_turn_state() -> None:
+    """Clear in-flight / waiter counters (tests only)."""
+
+    _REGISTRATION_TURN.reset()
+
+
+def registration_turn_in_flight() -> int:
+    return _REGISTRATION_TURN.in_flight
+
+
+def hash_registration_password(password: str, settings: Settings) -> str:
+    """Argon2-hash a validated password under the shared hash gate."""
+
+    validate_password(password)
+    return run_hash(lambda: _hasher().hash(password), settings)
+
+
+@contextmanager
+def registration_turn(settings: Settings) -> Iterator[None]:
+    """Hold this process's registration-writer turn until the block ends.
+
+    The caller commits inside the block, so the advisory lock is released
+    before the next waiter takes a connection. A waiter waits only for what
+    is left of the request's admission deadline; past it, or when the queue
+    is full, a retryable ``adaptive_admission_busy`` 503 is returned.
+    """
+
+    wait_seconds = shared_wait_seconds(float(settings.adaptive_admission_wait_seconds))
+    try:
+        with _REGISTRATION_TURN.hold(
+            limit=REGISTRATION_TURN_LIMIT,
+            queue_max=int(settings.adaptive_admission_queue_max),
+            wait_seconds=wait_seconds,
+        ):
+            yield
+    except GateRejected as rejected:
+        raise PlatformError(
+            "adaptive_admission_busy",
+            "The server is busy. Wait a moment and try again.",
+            503,
+            {
+                "retryable": True,
+                "retry_after_seconds": max(1, int(settings.adaptive_admission_retry_seconds)),
+                "reason": f"registration_{rejected.reason}",
+                "operation": "register",
+            },
+        ) from None
+
+
 def register_student(
     db: Session,
     settings: Settings,
@@ -161,8 +222,13 @@ def register_student(
     display_name: str | None,
     group_name: str,
     course_id: str | None = None,
+    password_hash: str | None = None,
 ) -> tuple[User, Group]:
-    """Create a self-registered student, its credential and its membership."""
+    """Create a self-registered student, its credential and its membership.
+
+    ``password_hash`` is the caller's ``hash_registration_password`` result,
+    computed before it took the registration turn; omitted, it is hashed here.
+    """
 
     canonical_username = normalize_username(username)
     validate_password(password)
@@ -171,7 +237,8 @@ def register_student(
 
     # Hash before taking SQLite's writer lock; the read/claim/group/session
     # transaction must be serialized, but Argon2 work must not hold that lock.
-    password_hash = run_hash(lambda: _hasher().hash(password), settings)
+    if password_hash is None:
+        password_hash = run_hash(lambda: _hasher().hash(password), settings)
     try:
         begin_immediate(db, lock_key="maya-student-registration")
     except OperationalError:

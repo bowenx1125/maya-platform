@@ -334,6 +334,44 @@ def test_llm_backstop_shares_the_single_deadline(probe: _Probe) -> None:
     assert excinfo.value.details["reason"] == "wait_timeout"
 
 
+def test_nested_llm_call_gets_a_fresh_backstop_wait(probe: _Probe) -> None:
+    from app.core import llm_admission as la
+
+    la.reset_llm_admission_state()
+    s = _settings(
+        adaptive_admission_wait_seconds=1,
+        llm_admission_limit=1,
+        llm_admission_wait_seconds=60,
+    )
+    held = threading.Event()
+
+    def holder() -> None:
+        with la.llm_admission_slot(s):
+            held.set()
+            time.sleep(1.5)
+
+    t = threading.Thread(target=holder)
+    t.start()
+    held.wait(2)
+    with aa.adaptive_slot("write", s):
+        # The turn runs past its request deadline before its model call.
+        time.sleep(1.2)
+        assert aa.shared_wait_seconds(60.0) == 0.0
+        with la.llm_admission_slot(s):
+            pass  # waited for the holder instead of failing at once
+    t.join()
+
+
+def test_waiter_timeout_removes_only_itself(probe: _Probe) -> None:
+    from collections import deque
+
+    first = aa._Waiter(cls="write", weight=2)
+    second = aa._Waiter(cls="write", weight=2)
+    queue = deque([first, second])
+    queue.remove(second)  # what a timed-out waiter does
+    assert list(queue) == [first] and queue[0] is first
+
+
 def test_shared_wait_seconds_without_deadline_returns_cap() -> None:
     assert aa.shared_wait_seconds(60.0) == 60.0
 
@@ -576,3 +614,62 @@ def test_pool_checkout_wait_is_recorded(probe: _Probe, tmp_path) -> None:  # typ
         engine.dispose()
     p95 = aa._POOL_WAIT.p95()
     assert p95 is not None and p95 < 500
+
+
+def test_danger_latch_logs_enter_and_release_and_counts_them(
+    probe: _Probe, caplog: pytest.LogCaptureFixture
+) -> None:
+    s = _settings()
+    caplog.set_level("WARNING", logger="maya.admission")
+    aa.adaptive_admission_snapshot(s)
+    latch = aa.adaptive_admission_snapshot(s)["danger_latch"]
+    assert latch == {
+        "entries": 0,
+        "releases": 0,
+        "reason": None,
+        "active_seconds": 0.0,
+        "total_seconds": 0.0,
+    }
+
+    probe.load = 6.5
+    probe.mem = 450.0
+    probe.now = 1.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger"] is True
+    assert snap["danger_latch"]["entries"] == 1
+    assert snap["danger_latch"]["reason"] == "load+mem"
+    entered = [
+        r.getMessage() for r in caplog.records if "admission_danger_entered" in r.getMessage()
+    ]
+    assert entered == [
+        "admission_danger_entered reason=load+mem load=6.5 mem_mb=450.0 in_flight_units=0 queued=0"
+    ]
+
+    # Still latched (hysteresis): no second entry, no release.
+    probe.load = 4.5
+    probe.mem = 600.0
+    probe.now = 3.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger"] is True
+    assert snap["danger_latch"]["entries"] == 1
+    assert snap["danger_latch"]["active_seconds"] == 2.0
+
+    probe.load = 3.5
+    probe.now = 5.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger"] is False
+    assert snap["danger_latch"]["releases"] == 1
+    assert snap["danger_latch"]["total_seconds"] == 4.0
+    assert snap["danger_latch"]["active_seconds"] == 0.0
+    released = [
+        r.getMessage() for r in caplog.records if "admission_danger_released" in r.getMessage()
+    ]
+    assert released == [
+        "admission_danger_released reason=load+mem held_s=4.0 load=3.5 mem_mb=600.0 queued=0"
+    ]
+
+    probe.mem = 300.0
+    probe.now = 6.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger_latch"]["entries"] == 2
+    assert snap["danger_latch"]["reason"] == "mem"
