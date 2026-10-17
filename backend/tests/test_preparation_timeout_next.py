@@ -136,6 +136,16 @@ def test_expire_stale_preparation_without_prepare_job(timeout_db) -> None:
         assert row[0] == "failed"
         assert row[1] == "failed"
         assert row[2] == _PREPARATION_TIMEOUT_CODE
+        job = db.execute(
+            text(
+                "SELECT state, safe_error_code FROM jobs "
+                "WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                "AND operation='debate_turn_prepare'"
+            ),
+            {"debate_id": ids["debate"], "turn_id": ids["turn"]},
+        ).one()
+        assert job[0] == "failed"
+        assert job[1] == _PREPARATION_TIMEOUT_CODE
         second = repository.expire_stale_preparation(db, debate_id=ids["debate"])
         db.commit()
         assert second == 0
@@ -201,6 +211,16 @@ def test_expire_stale_preparation_running_recoverable_without_job(timeout_db) ->
         assert row[0] == "pending"
         assert row[1] == "generation"
         assert row[2] == _PREPARATION_TIMEOUT_CODE
+        job = db.execute(
+            text(
+                "SELECT state, safe_error_code FROM jobs "
+                "WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                "AND operation='debate_turn_prepare'"
+            ),
+            {"debate_id": ids["debate"], "turn_id": ids["turn"]},
+        ).one()
+        assert job[0] == "pending"
+        assert job[1] == _PREPARATION_TIMEOUT_CODE
         second = repository.expire_stale_preparation(db, debate_id=ids["debate"])
         db.commit()
         assert second == 0

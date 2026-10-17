@@ -898,6 +898,11 @@ class SqlPlaybackRepository(PlaybackRepository):
     def ensure_turn_plan(self, db: Any, debate: SqlRow) -> list[SqlRow]:
         existing = self.turns(db, debate)
         if existing or not self._has_table(db, "debate_turns"):
+            # Drafts that already have turns (prewarm plan / reopen) still need
+            # the first prepare job, or Preview ages into preparation_timeout
+            # with zero jobs rows — the D3 prod shape.
+            if existing:
+                self.ensure_turn_jobs(db, debate, existing)
             return existing
         # M10 is the sole owner of the deterministic plan and predecessor
         # prefix.  Do not duplicate that algorithm here: its helper assigns
@@ -910,7 +915,9 @@ class SqlPlaybackRepository(PlaybackRepository):
             expected_revision=int(debate.revision),
             expected_status="draft",
         )
-        return self.turns(db, debate)
+        turns = self.turns(db, debate)
+        self.ensure_turn_jobs(db, debate, turns)
+        return turns
 
     def playback_state(self, db: Any, debate: SqlRow) -> SqlRow:
         if not self._has_table(db, "playback_states"):
@@ -2772,27 +2779,46 @@ class SqlPlaybackRepository(PlaybackRepository):
 
     @staticmethod
     def _ensure_turn_job(db: Any, debate: SqlRow, turn: SqlRow) -> None:
+        """Insert the durable prepare job if missing (SQLite + Postgres).
+
+        Prod D3: ``INSERT OR IGNORE`` is SQLite-only, so Postgres never wrote
+        ``debate_turn_prepare`` rows; turns aged into ``preparation_timeout``
+        with zero jobs. Use ``ON CONFLICT (operation, idempotency_key) DO NOTHING``
+        on Postgres (full unique index from migration 0004; no postgresql_where).
+        """
+
         key = f"{debate.id}:{turn.id}"
         timestamp = _now()
-        db.execute(
-            text(
-                "INSERT OR IGNORE INTO jobs "
-                "(id, document_id, debate_id, turn_id, idempotency_key, claim_token, "
-                "cancellation_generation, operation, state, safe_error_code, attempt, "
-                "created_at, updated_at) VALUES "
-                "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
-                "'debate_turn_prepare', 'pending', NULL, 0, :created_at, :updated_at)"
-            ),
-            {
-                "id": str(uuid4()),
-                "debate_id": str(debate.id),
-                "turn_id": str(turn.id),
-                "key": key,
-                "generation": int(debate.cancellation_generation or 0),
-                "created_at": timestamp,
-                "updated_at": timestamp,
-            },
+        params = {
+            "id": str(uuid4()),
+            "debate_id": str(debate.id),
+            "turn_id": str(turn.id),
+            "key": key,
+            "generation": int(debate.cancellation_generation or 0),
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+        columns = (
+            "(id, document_id, debate_id, turn_id, idempotency_key, claim_token, "
+            "cancellation_generation, operation, state, safe_error_code, attempt, "
+            "created_at, updated_at) VALUES "
+            "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
+            "'debate_turn_prepare', 'pending', NULL, 0, :created_at, :updated_at)"
         )
+        # Migration 0004 only sets sqlite_where on uq_jobs_operation_idempotency_key;
+        # Postgres gets a full unique index, so ON CONFLICT must not use a WHERE
+        # inference predicate (that would require a matching partial index).
+        if SqlPlaybackRepository._dialect_name(db) == "postgresql":
+            db.execute(
+                text(
+                    "INSERT INTO jobs "
+                    + columns
+                    + " ON CONFLICT (operation, idempotency_key) DO NOTHING"
+                ),
+                params,
+            )
+        else:
+            db.execute(text("INSERT OR IGNORE INTO jobs " + columns), params)
 
     def ensure_turn_job(self, db: Any, debate: SqlRow, turn: SqlRow) -> None:
         """Persist an on-demand next-turn job before exposing its preparing state."""
@@ -3034,12 +3060,13 @@ class SqlPlaybackRepository(PlaybackRepository):
         """Exit stuck Preparing by marking recoverable preparation_timeout.
 
         Idempotent: already-failed / deferred-coded turns are left alone.
-        Does not advance turns, create jobs, or terminate the Debate.  A later
-        teacher Retry clears the code through the existing draft/live retry CAS.
+        Does not advance turns or terminate the Debate.  A later teacher Retry
+        clears the code through the existing draft/live retry CAS.
 
         Turns without a debate_turn_prepare job still expire by turn age
         (updated_at, else created_at) so Preview cannot spin forever when the
-        worker never enqueued work.
+        worker never enqueued work.  When that happens a matching failed /
+        pending timeout job is materialised so Retry's job CAS can succeed.
         """
 
         if not self._has_table(db, "debate_turns"):
@@ -3168,6 +3195,51 @@ class SqlPlaybackRepository(PlaybackRepository):
                 ).bindparams(bindparam("turn_ids", expanding=True)),
                 params,
             )
+            # D3 recovery: turns that timed out with never-inserted jobs still
+            # need a failed/pending row so draft Retry's job CAS can match.
+            for turn_id in stale_ids:
+                row = db.execute(
+                    text(
+                        "SELECT t.debate_id, d.status, d.cancellation_generation "
+                        "FROM debate_turns AS t JOIN debates AS d ON d.id=t.debate_id "
+                        "WHERE t.id=:turn_id"
+                    ),
+                    {"turn_id": turn_id},
+                ).first()
+                if row is None:
+                    continue
+                debate_id_value, debate_status, generation = row[0], row[1], row[2]
+                exists = db.execute(
+                    text(
+                        "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                        "AND operation='debate_turn_prepare'"
+                    ),
+                    {"debate_id": str(debate_id_value), "turn_id": turn_id},
+                ).first()
+                if exists is not None:
+                    continue
+                job_state = "failed" if str(debate_status) == "draft" else "pending"
+                db.execute(
+                    text(
+                        "INSERT INTO jobs "
+                        "(id, document_id, debate_id, turn_id, idempotency_key, claim_token, "
+                        "cancellation_generation, operation, state, safe_error_code, attempt, "
+                        "created_at, updated_at) VALUES "
+                        "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
+                        "'debate_turn_prepare', :state, :code, 0, :created_at, :updated_at)"
+                    ),
+                    {
+                        "id": str(uuid4()),
+                        "debate_id": str(debate_id_value),
+                        "turn_id": turn_id,
+                        "key": f"{debate_id_value}:{turn_id}",
+                        "generation": int(generation or 0),
+                        "state": job_state,
+                        "code": code,
+                        "created_at": params["updated_at"],
+                        "updated_at": params["updated_at"],
+                    },
+                )
         return int(getattr(draft_turned, "rowcount", 0) or 0) + int(
             getattr(running_turned, "rowcount", 0) or 0
         )
@@ -3426,10 +3498,22 @@ class SqlPlaybackRepository(PlaybackRepository):
             },
         )
         if int(getattr(job, "rowcount", 0)) != 1:
-            rollback = getattr(db, "rollback", None)
-            if callable(rollback):
-                rollback()
-            return False
+            # Timed-out drafts that never received a prepare job (D3) still
+            # need Retry to re-queue; insert the missing pending row.
+            self._ensure_turn_job(db, debate, turn)
+            verified = db.execute(
+                text(
+                    "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                    "AND operation='debate_turn_prepare' AND state='pending' "
+                    "AND claim_token IS NULL AND safe_error_code IS NULL"
+                ),
+                {"debate_id": debate_id, "turn_id": turn_id},
+            ).first()
+            if verified is None:
+                rollback = getattr(db, "rollback", None)
+                if callable(rollback):
+                    rollback()
+                return False
         return True
 
     def defer_turn_job(

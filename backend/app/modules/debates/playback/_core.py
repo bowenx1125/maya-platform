@@ -66,6 +66,15 @@ _SAFE_GENERATION_CODES = {
     "tts_result_dns_failed",
     "tts_result_download_failed",
     "tts_audio_invalid",
+    # Fail-path mirrors for codes that usually go through mark_turn_ready.
+    "tts_provider_unavailable",
+    "tts_voice_unavailable",
+    # Adapter / validation codes that must not collapse to a generic failure.
+    "turn_length_invalid",
+    "schema_invalid",
+    "llm_recovery_failed",
+    "llm_recovery_fence_stale",
+    "llm_recovery_input_unavailable",
     # Stuck pending/running prepare work past the agreed watchdog.
     "preparation_timeout",
 }
