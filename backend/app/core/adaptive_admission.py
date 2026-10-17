@@ -20,8 +20,8 @@ this single queue as backstops (the login queue is folded into it):
   FIFO per class, served round-robin so one class cannot starve others.
 * One global in-flight hard cap per process; LLM calls, Team/Chat
   turns and creates additionally pass ``llm_admission`` (20) / ``write_guard``
-  (12) / ``create_admission`` (4) as per-operation backstops, which wait only for the remainder of
-  this layer's deadline.
+  (20) / ``create_admission`` (4) as per-operation backstops, which wait only for the remainder of
+  this layer's deadline (a call nested in an admitted operation starts a fresh one).
 * Retryable ``adaptive_admission_busy`` 503 is raised only when the queue
   (max 200) is full or the single 180 s wait budget runs out.
 
@@ -219,7 +219,9 @@ def record_request_ms(ms: float) -> None:
     _REQUEST.add(ms)
 
 
-@dataclass
+# Identity equality: deque.remove() on a timeout must drop this waiter, not
+# the first queued one of the same class and weight.
+@dataclass(eq=False)
 class _Waiter:
     cls: str
     weight: int
@@ -515,20 +517,22 @@ def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
     if cls == "llm":
         _mark_request_llm()
     outer_deadline = getattr(_held, "deadline", None)
+    depth = int(getattr(_held, "depth", 0))
     # One deadline per request, started at the first layer: the per-operation
     # backstop gate waits only for whatever is left of it (no double timeout).
-    deadline = (
-        outer_deadline
-        if outer_deadline is not None
-        else time.monotonic() + float(runtime.adaptive_admission_wait_seconds)
-    )
+    # A call nested in an admitted operation never queues here, so it starts a
+    # fresh wait: a Team turn that ran past the request's 180 s must not give
+    # its later model calls zero backstop wait.
+    if outer_deadline is None or depth > 0:
+        deadline = time.monotonic() + float(runtime.adaptive_admission_wait_seconds)
+    else:
+        deadline = outer_deadline
     weight = max(0, _weight(runtime, cls))
     reservation = Reservation(cls, weight, deadline, runtime)
     if weight == 0:
         return reservation
     retry_after = int(runtime.adaptive_admission_retry_seconds)
     waiter = _Waiter(cls=cls, weight=weight)
-    depth = int(getattr(_held, "depth", 0))
     with _cond:
         _refresh_locked(runtime)
         if depth > 0:

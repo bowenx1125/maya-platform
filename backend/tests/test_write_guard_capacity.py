@@ -146,3 +146,32 @@ def test_ready_probe_answers_with_the_shared_pool_full(
         worker.join(5)
     assert result.get("status") == 200
     assert float(result["seconds"]) < 2.0  # type: ignore[arg-type]
+
+
+def test_streamed_work_is_not_capped_by_the_cpu_sized_default_executor(
+    app_factory,
+) -> None:  # type: ignore[no-untyped-def]
+    # Streamed replies and Team runs use asyncio.to_thread. Python's default
+    # executor is cpu_count + 4 threads (6 on the 2-vCPU host); 30 must run
+    # at once, the way 20 streamed turns plus their polls do.
+    import asyncio
+
+    app, _database, _settings_ = app_factory()
+    release = threading.Event()
+    lock = threading.Lock()
+    running = [0]
+
+    def work() -> None:
+        with lock:
+            running[0] += 1
+        release.wait(5)
+
+    with TestClient(app) as client:
+        for _ in range(30):
+            client.portal.start_task_soon(asyncio.to_thread, work)
+        deadline = time.monotonic() + 5
+        while running[0] < 30 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        concurrent = running[0]
+        release.set()
+    assert concurrent == 30

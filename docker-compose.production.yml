@@ -1,5 +1,6 @@
 services:
   gateway:
+    restart: unless-stopped
     ports: !override
       - "80:80"
       - "443:443"
@@ -15,10 +16,12 @@ services:
       - maya_backend
 
   frontend:
+    restart: unless-stopped
     networks: !override
       - maya_public
 
   backend:
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       MAYA_ENV: production
@@ -88,6 +91,7 @@ services:
       - ./contracts:/app/contracts:ro
 
   postgres:
+    restart: unless-stopped
     image: postgres:16.10-alpine
     command: ["postgres", "-c", "max_connections=200"]
     environment:

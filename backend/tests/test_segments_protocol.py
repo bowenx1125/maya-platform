@@ -594,6 +594,64 @@ def test_segment_runtime_stages_canonical_result_once_before_success() -> None:
     )
 
 
+def test_segment_refused_by_admission_is_not_sent_not_unknown() -> None:
+    from app.core.errors import PlatformError
+
+    snapshot = _snapshot()
+    context = replace(_context(round_no=2), turn_protocol="segments_v2", round_count=3)
+
+    class _BusyAdapter:
+        tokenizer = SimpleNamespace()
+
+        def build_request(
+            self, frozen: SegmentInputSnapshot, **kwargs: object
+        ) -> SegmentLLMRequestV2:
+            message = SegmentMessageV2(role="user", content=frozen.to_user_json())
+            return SegmentLLMRequestV2(
+                snapshot=frozen,
+                endpoint="https://offline.invalid/segments",
+                method="POST",
+                body={},
+                messages=(message, message),
+                budget=SimpleNamespace(),
+                request_hash="a" * 64,
+                schema_hash="b" * 64,
+                prompt_hash=frozen.input_hash,
+                debate_id=str(kwargs["debate_id"]),
+                turn_id=str(kwargs["turn_id"]),
+                policy_hash=str(kwargs["policy_hash"]),
+                export_manifest_hash=str(kwargs["export_manifest_hash"]),
+                build_manifest_hash=str(kwargs["build_manifest_hash"]),
+            )
+
+        def send_accepted(self, request: SegmentLLMRequestV2) -> SegmentAcceptedCandidateV2:
+            raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
+
+    ledger = InMemoryProviderOperationRepository(
+        default_budget=ProviderScopeBudgetV1(
+            max_requests=4,
+            max_total_tokens=200_000,
+            max_cost_cny=5,
+            budget_bucket="llm_debate_turn",
+        )
+    )
+    runtime = SegmentLLMRuntime(ledger=ledger, adapter=_BusyAdapter())
+    prepared = runtime.prepare(
+        snapshot,
+        debate_id="debate-1",
+        turn_id="turn-2",
+        policy_hash="d" * 64,
+        manifest_hash="e" * 64,
+        build_manifest_hash="f" * 64,
+    )
+    outcome = runtime.run(prepared, context=context, confirmed=True)
+    # Nothing left the host: retryable not_sent, never acceptance_unknown.
+    assert outcome.status == "not_sent"
+    assert outcome.safe_error_code == "provider_not_sent"
+    stored = ledger.get(cast(Any, outcome.operation).id)
+    assert stored is not None and stored.state == "not_sent"
+
+
 @pytest.mark.parametrize("state,attempt_no", [("not_sent", 1), ("failed", 2)])
 def test_segment_prepare_without_ledger_transition_fails_safely(
     state: str, attempt_no: int

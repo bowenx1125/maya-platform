@@ -334,6 +334,44 @@ def test_llm_backstop_shares_the_single_deadline(probe: _Probe) -> None:
     assert excinfo.value.details["reason"] == "wait_timeout"
 
 
+def test_nested_llm_call_gets_a_fresh_backstop_wait(probe: _Probe) -> None:
+    from app.core import llm_admission as la
+
+    la.reset_llm_admission_state()
+    s = _settings(
+        adaptive_admission_wait_seconds=1,
+        llm_admission_limit=1,
+        llm_admission_wait_seconds=60,
+    )
+    held = threading.Event()
+
+    def holder() -> None:
+        with la.llm_admission_slot(s):
+            held.set()
+            time.sleep(1.5)
+
+    t = threading.Thread(target=holder)
+    t.start()
+    held.wait(2)
+    with aa.adaptive_slot("write", s):
+        # The turn runs past its request deadline before its model call.
+        time.sleep(1.2)
+        assert aa.shared_wait_seconds(60.0) == 0.0
+        with la.llm_admission_slot(s):
+            pass  # waited for the holder instead of failing at once
+    t.join()
+
+
+def test_waiter_timeout_removes_only_itself(probe: _Probe) -> None:
+    from collections import deque
+
+    first = aa._Waiter(cls="write", weight=2)
+    second = aa._Waiter(cls="write", weight=2)
+    queue = deque([first, second])
+    queue.remove(second)  # what a timed-out waiter does
+    assert list(queue) == [first] and queue[0] is first
+
+
 def test_shared_wait_seconds_without_deadline_returns_cap() -> None:
     assert aa.shared_wait_seconds(60.0) == 60.0
 

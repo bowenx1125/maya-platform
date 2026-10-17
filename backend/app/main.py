@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from threading import RLock
 from typing import Any
@@ -123,6 +125,11 @@ logger = logging.getLogger("maya.backend")
 # requests, their queued waiters and still leaves room for health checks.
 ANYIO_THREAD_TOKENS = 128
 HEALTH_THREAD_TOKENS = 4
+# Threads behind asyncio.to_thread: streamed Chat replies, Team turn runs and
+# their event polls, Debate/report/Knowledge jobs. Python's default is
+# cpu_count + 4, only 6 on the 2-vCPU host, which would cap streamed sends
+# far below the write guard's 20.
+ASYNCIO_EXECUTOR_THREADS = 96
 
 
 def build_report_runtime(
@@ -342,6 +349,11 @@ def create_app(
         # Admission holds its budget when the pool is nearly full instead of
         # growing into it.
         set_threadpool_reader(lambda: limiter.borrowed_tokens / max(1.0, limiter.total_tokens))
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(
+                max_workers=ASYNCIO_EXECUTOR_THREADS, thread_name_prefix="maya-async"
+            )
+        )
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
         knowledge_generation_tasks.bind_running_loop()
