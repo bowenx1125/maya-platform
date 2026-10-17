@@ -524,32 +524,33 @@ describe("Brainform workspace actions", () => {
     expect(screen.getByRole("button", { name: "Edit lesson.md" })).toBeTruthy();
   });
 
-  it("enters a RAG file only through the enter button beside its title, like a Team or Agent tile", async () => {
+  it("enters a RAG file by clicking its title, which is an Agent-style title button", async () => {
     state.role = "teacher";
     state.api.workspaceDocuments.mockResolvedValue([source]);
     renderWorkspace("teacher");
-    const enter = (
+    const title = (
       await screen.findAllByRole("button", { name: "Edit lesson.md" })
     )[0];
-    const title = screen.getByText("lesson.md");
-    // The title is plain text, and the enter button sits right beside it in
-    // the same hover target, so hovering the title is what reveals it.
-    expect(title.tagName).toBe("SPAN");
-    expect(title.closest("button")).toBeNull();
-    expect(enter.parentElement).toBe(title.parentElement);
-    expect(enter.className).toMatch(/enterButton/);
+    // The title itself is the button, with the same classes as an Agent
+    // tile's title; there is no separate enter button.
+    expect(title.textContent).toBe("lesson.md");
+    expect(title.classList.contains("agent-tile-name")).toBe(true);
+    expect(title.classList.contains("text-link")).toBe(true);
+    const row = title.closest("li")!;
+    expect(row.querySelector("[class*='enterButton']")).toBeNull();
 
-    fireEvent.click(title);
+    // Clicking the row outside the title does not enter.
+    fireEvent.click(row);
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
 
-    fireEvent.click(enter);
+    fireEvent.click(title);
     expect(
       await screen.findByRole("textbox", { name: "Content" }),
     ).toBeTruthy();
   });
 
-  it("enters Knowledge only through its enter button and hides it while generating", async () => {
+  it("enters Knowledge through its title button and does not enter while generating", async () => {
     state.role = "teacher";
     state.api.brainformKnowledge.mockResolvedValue([
       {
@@ -572,16 +573,16 @@ describe("Brainform workspace actions", () => {
       },
     ]);
     renderWorkspace("teacher");
-    const enter = await screen.findByRole("button", {
+    const ready = await screen.findByRole("button", {
       name: "Edit Knowledge Ready Knowledge",
     });
-    expect(screen.getByText("Ready Knowledge").closest("button")).toBeNull();
-    expect(
-      screen.queryByRole("button", {
-        name: "Edit Knowledge Running Knowledge",
-      }),
-    ).toBeNull();
-    expect(enter.className).toMatch(/enterButton/);
+    expect(ready.textContent).toBe("Ready Knowledge");
+    expect(ready.classList.contains("text-link")).toBe(true);
+    expect(ready.getAttribute("aria-disabled")).toBeNull();
+    const running = screen.getByRole("button", {
+      name: "Edit Knowledge Running Knowledge",
+    });
+    expect(running.getAttribute("aria-disabled")).toBe("true");
   });
 
   it("renames a RAG file in place on a double-click, keeping its extension", async () => {

@@ -294,46 +294,17 @@
   cursor: default;
 }
 
-/* Like a Team or Agent tile, the title itself is not the click target: the
-   enter button beside it shows on hover over the title, on keyboard focus,
-   and always on touch screens, where there is no hover. */
-.enterTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
+/* The title is the Agent-tile title button (global .agent-tile-name
+   .text-link); only keep it inside the row and left-aligned. */
+.titleLink {
   max-width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
-.enterTitle .staticTitle {
-  min-width: 0;
-}
-
-.iconButton.enterButton {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 8px;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 160ms ease,
-    background-color 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease;
-}
-
-.enterTitle:hover .enterButton,
-.iconButton.enterButton:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-@media (hover: none) {
-  .iconButton.enterButton {
-    opacity: 1;
-    pointer-events: auto;
-  }
+.titleLink[aria-disabled="true"] {
+  cursor: default;
 }
 
 .rowMeta,
