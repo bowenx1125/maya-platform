@@ -228,6 +228,7 @@ def test_enroll_uploads_the_sample_then_creates_the_voice(
             {"data": POLICY, "request_id": "policy"},
             {},
             {"output": {"voice_id": "qwen-audio-3.1-tts-flash-mabcdef12-x1"}, "request_id": "r1"},
+            {"output": {"status": "OK"}},
         ],
     )
     result = provider.enroll(
@@ -235,7 +236,11 @@ def test_enroll_uploads_the_sample_then_creates_the_voice(
     )
     assert result.external_voice_id == "qwen-audio-3.1-tts-flash-mabcdef12-x1"
     assert result.request_id == "r1"
-    policy, upload, create = capture.calls
+    policy, upload, create, review = capture.calls
+    assert review["json"] == {
+        "model": "voice-enrollment",
+        "input": {"action": "query_voice", "voice_id": "qwen-audio-3.1-tts-flash-mabcdef12-x1"},
+    }
     assert policy["method"] == "GET"
     assert policy["url"] == UPLOAD_POLICY_URL
     assert policy["params"] == {"action": "getPolicy", "model": "voice-enrollment"}
@@ -254,6 +259,50 @@ def test_enroll_uploads_the_sample_then_creates_the_voice(
             "url": f"oss://{key}",
         },
     }
+
+
+def _created(*review: dict[str, object]) -> list[dict[str, object]]:
+    return [
+        {"data": POLICY},
+        {},
+        {"output": {"voice_id": "qwen-audio-3.1-tts-flash-mabcdef12-x1"}},
+        *review,
+    ]
+
+
+def test_enroll_refuses_and_deletes_a_voice_the_review_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.providers.dashscope.time.sleep", lambda _seconds: None)
+    provider, capture = _voice(
+        monkeypatch,
+        _created({"output": {"status": "DEPLOYING"}}, {"output": {"status": "UNDEPLOYED"}}, {}),
+    )
+    with pytest.raises(VoiceCloneRefusedError):
+        provider.enroll(
+            SAMPLE_URI, recovery_name="mabcdef12", target_model_key=DEFAULT_TARGET_MODEL_KEY
+        )
+    assert capture.calls[-1]["json"] == {
+        "model": "voice-enrollment",
+        "input": {"action": "delete_voice", "voice_id": "qwen-audio-3.1-tts-flash-mabcdef12-x1"},
+    }
+
+
+def test_enroll_returns_a_voice_still_under_review_after_the_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    clock = iter(range(0, 1000, 3))
+    monkeypatch.setattr("app.providers.dashscope.time.sleep", sleeps.append)
+    monkeypatch.setattr("app.providers.dashscope.time.monotonic", lambda: float(next(clock)))
+    provider, capture = _voice(monkeypatch, _created(*([{"output": {"status": "DEPLOYING"}}] * 20)))
+    result = provider.enroll(
+        SAMPLE_URI, recovery_name="mabcdef12", target_model_key=DEFAULT_TARGET_MODEL_KEY
+    )
+    assert result.external_voice_id == "qwen-audio-3.1-tts-flash-mabcdef12-x1"
+    reviews = [call for call in capture.calls if "query_voice" in str(call.get("json"))]
+    assert 1 < len(reviews) < 20
+    assert all(seconds == 2.0 for seconds in sleeps)
 
 
 def test_enroll_never_uploads_to_a_host_outside_the_supplier(

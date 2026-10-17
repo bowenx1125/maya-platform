@@ -265,6 +265,28 @@ def delete_voice_profile(
             raise PlatformError(
                 "provider_unavailable", "The delete outcome needs reconciliation.", 503
             ) from exc
+    if not profile.external_id_encrypted:
+        enroll_may_exist = db.scalar(
+            select(VoiceProviderOperation.id).where(
+                VoiceProviderOperation.profile_id == profile.id,
+                VoiceProviderOperation.operation_type == "enroll",
+                VoiceProviderOperation.state.in_(
+                    ("prepared", "dispatched", "reconciling", "outcome_unknown")
+                ),
+            )
+        )
+        if enroll_may_exist is None:
+            # The enrollment was refused or failed before the supplier returned
+            # a voice, so there is nothing to delete remotely; only the card goes.
+            profile.status = "deleted"
+            profile.safe_error_code = None
+            profile.updated_at = now_utc()
+            expire_profile_previews(db, settings.resolved_data_root, profile.id)
+            _finish_operation(db, operation, state="succeeded")
+            result = voice_profile_dto(profile)
+            finish_idempotency(db, record, 200, result.model_dump(mode="json"))
+            db.commit()
+            return result
     try:
         external_id = _tts_external_id(profile, settings)
     except PlatformError:

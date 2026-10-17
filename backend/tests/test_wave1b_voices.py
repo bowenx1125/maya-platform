@@ -788,6 +788,34 @@ def test_delete_same_idempotency_key_replays_without_second_provider_command(
     assert provider.delete_calls == 1
 
 
+def test_delete_removes_a_refused_voice_without_a_provider_call(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider = MockVoiceCloneProvider()
+    provider.next_enroll_error = VoiceCloneRefusedError("model does not support enrollment")
+    monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
+    monkeypatch.setattr("app.providers.factory.voice_provider", lambda _settings: provider)
+    refused = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "voice-delete-refused-enroll"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert refused.status_code == 422
+    listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
+    failed = next(item for item in listed if item["status"] == "failed")
+    deleted = client.delete(
+        f"/api/v1/voice-profiles/{failed['id']}",
+        headers=_headers(csrf, "voice-delete-refused-0001"),
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["status"] == "deleted"
+    assert provider.delete_calls == 0
+
+
 def test_delete_different_idempotency_key_cannot_cross_active_saga_fence(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
