@@ -487,6 +487,28 @@ export type PlatformApiOptions = {
   csrfToken?: string;
 };
 
+/**
+ * A send the server refused before saving anything: the admission queue was
+ * full, the 180 s wait ran out, or a backstop gate refused it. The text is
+ * the student's to send again; nothing retries it automatically.
+ */
+export const SEND_REFUSED_BUSY_CODES: ReadonlySet<string> = new Set([
+  "adaptive_admission_busy",
+  "write_pressure",
+  "llm_admission_busy",
+]);
+
+/** The conversation's previous message is still being answered. */
+export const CHAT_BUSY_CODE = "chat_busy";
+
+export function isRefusedSend(error: unknown): boolean {
+  return (
+    error instanceof PlatformApiError &&
+    (error.code === CHAT_BUSY_CODE ||
+      (error.code !== undefined && SEND_REFUSED_BUSY_CODES.has(error.code)))
+  );
+}
+
 export class PlatformApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -1336,6 +1358,10 @@ export class PlatformApi {
     hooks: ChatStreamHooks | undefined,
     failure: PlatformApiError,
   ): Promise<ChatSession> {
+    // The server refused this send before saving it. Watching another
+    // pending turn or marking the outcome uncertain would swallow the
+    // student's text; hand the refusal straight back instead.
+    if (isRefusedSend(failure)) throw failure;
     let refreshed: ChatSession | null = null;
     try {
       refreshed = await this.conversation(id);

@@ -568,6 +568,10 @@ const enMessages = {
     "The server is busy right now. Your message was kept; please try again shortly.",
   errorServerBusy:
     "Too many people are using Maya right now. Your message was kept; please try again shortly.",
+  chatSendBusyRetry:
+    "Many people are using Maya right now. Press Send again in a moment.",
+  chatSendPreviousRunning:
+    "The previous message is still being answered. Send again in a moment.",
   errorVoiceProviderUnavailable:
     "Voice provider is temporarily unavailable. Use the platform fallback voice; this is not a successful custom voice.",
   errorVoiceCloneRefused:
@@ -1386,6 +1390,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorProviderUnavailable: "平台能力暂时不可用。",
   errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
+  chatSendBusyRetry: "当前人数较多，请稍后点击重新发送",
+  chatSendPreviousRunning: "上一条消息还在处理中，请稍后重新发送",
   errorVoiceProviderUnavailable:
     "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
   errorVoiceCloneRefused: "当前音色通道不支持克隆。该样本未保存为自定义音色。",
