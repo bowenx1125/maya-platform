@@ -22,7 +22,12 @@ from tests.test_wave4_llm_p1_product import _product_service, _seed_running_prod
 
 
 def test_ensure_turn_job_postgres_uses_on_conflict_not_or_ignore() -> None:
-    """Capture SQL: Postgres path must never emit INSERT OR IGNORE."""
+    """Capture SQL: Postgres path must never emit INSERT OR IGNORE.
+
+    Prod R3 partial unique:
+    ``UNIQUE (operation, idempotency_key) WHERE idempotency_key IS NOT NULL``.
+    Conflict target must include that WHERE (bare columns → InvalidColumnReference).
+    """
 
     statements: list[str] = []
 
@@ -44,8 +49,10 @@ def test_ensure_turn_job_postgres_uses_on_conflict_not_or_ignore() -> None:
     assert statements, "expected an INSERT"
     sql = " ".join(statements).upper()
     assert "INSERT OR IGNORE" not in sql
-    assert "ON CONFLICT" in sql
+    assert "ON CONFLICT (OPERATION, IDEMPOTENCY_KEY)" in sql
+    assert "WHERE IDEMPOTENCY_KEY IS NOT NULL" in sql
     assert "DO NOTHING" in sql
+
 
 
 @pytest.mark.asyncio

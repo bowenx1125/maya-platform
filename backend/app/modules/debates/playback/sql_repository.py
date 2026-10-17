@@ -2812,12 +2812,12 @@ class SqlPlaybackRepository(PlaybackRepository):
         """Insert the durable prepare job if missing (SQLite + Postgres).
 
         Prod R3 (201bcff): ``uq_jobs_operation_idempotency_key`` is a *partial*
-        unique index ``WHERE idempotency_key IS NOT NULL``. Pinning
+        unique index ``UNIQUE (operation, idempotency_key)
+        WHERE (idempotency_key IS NOT NULL)``. Pinning
         ``ON CONFLICT (operation, idempotency_key)`` without that predicate
         raises ``InvalidColumnReference`` and aborts the prewarm transaction
-        (zero turns + zero jobs). A target-less ``ON CONFLICT DO NOTHING``
-        accepts either a partial or a full unique index. SQLite keeps
-        ``INSERT OR IGNORE``.
+        (zero turns + zero jobs). Target the partial index explicitly with
+        the matching WHERE. SQLite keeps ``INSERT OR IGNORE``.
         """
 
         key = f"{debate.id}:{turn.id}"
@@ -2840,7 +2840,12 @@ class SqlPlaybackRepository(PlaybackRepository):
         )
         if SqlPlaybackRepository._dialect_name(db) == "postgresql":
             db.execute(
-                text("INSERT INTO jobs " + columns + " ON CONFLICT DO NOTHING"),
+                text(
+                    "INSERT INTO jobs "
+                    + columns
+                    + " ON CONFLICT (operation, idempotency_key) "
+                    "WHERE idempotency_key IS NOT NULL DO NOTHING"
+                ),
                 params,
             )
         else:
