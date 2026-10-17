@@ -19,7 +19,6 @@ from app.modules.debates.round_count import (
     uses_segment_protocol,
 )
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
-
 from app.providers.tts import TTS_UNAVAILABLE_CODES
 
 from ._core import (
@@ -558,9 +557,7 @@ class PlaybackControlMixin(PlaybackCore):
                         (
                             item
                             for item in preview_turns
-                            if not (
-                                self._turn_ready(item) or self._turn_text_fallback_ready(item)
-                            )
+                            if not (self._turn_ready(item) or self._turn_text_fallback_ready(item))
                         ),
                         None,
                     )

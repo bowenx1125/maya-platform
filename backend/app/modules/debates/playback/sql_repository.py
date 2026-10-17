@@ -1063,9 +1063,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             # SQLite has json_array_length / json_group_array; Postgres compat only
             # installs json_extract / json_valid.  Keep claim SQL dialect-portable.
             if self._dialect_name(claim_session) == "postgresql":
-                predecessor_len = (
-                    "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
-                )
+                predecessor_len = "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
                 # json_agg(...)::text inserts spaces after commas; stored rows use
                 # json.dumps(separators=(",", ":")). Compare as jsonb so prod Next
                 # is not blocked by whitespace-only inequality.
@@ -1080,9 +1078,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "OR dt.round_no < successor.round_no)"
                 )
                 predecessor_eq = (
-                    "successor.predecessor_turn_ids_json::jsonb = ("
-                    + predecessor_json
-                    + ")"
+                    "successor.predecessor_turn_ids_json::jsonb = (" + predecessor_json + ")"
                 )
             else:
                 predecessor_len = "json_array_length(successor.predecessor_turn_ids_json)"
@@ -1098,11 +1094,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "ORDER BY turn_index, id"
                     ") AS prefix_ids"
                 )
-                predecessor_eq = (
-                    "successor.predecessor_turn_ids_json = ("
-                    + predecessor_json
-                    + ")"
-                )
+                predecessor_eq = "successor.predecessor_turn_ids_json = (" + predecessor_json + ")"
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.id AS claim_id, successor.audio_file_id, "
@@ -1303,10 +1295,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             # Align with claim SELECT: null duration OR tts_voice_unavailable+0.
             or not (
                 turn.audio_duration_ms is None
-                or (
-                    turn.safe_error_code == "tts_voice_unavailable"
-                    and turn.audio_duration_ms == 0
-                )
+                or (turn.safe_error_code == "tts_voice_unavailable" and turn.audio_duration_ms == 0)
             )
         ):
             return None
@@ -2841,9 +2830,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         if SqlPlaybackRepository._dialect_name(db) == "postgresql":
             db.execute(
                 text(
-                    "INSERT INTO jobs "
-                    + columns
-                    + " ON CONFLICT (operation, idempotency_key) "
+                    "INSERT INTO jobs " + columns + " ON CONFLICT (operation, idempotency_key) "
                     "WHERE idempotency_key IS NOT NULL DO NOTHING"
                 ),
                 params,
