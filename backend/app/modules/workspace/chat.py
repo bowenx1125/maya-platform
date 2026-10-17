@@ -32,6 +32,7 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.version_label import agent_version_label
 from app.core.write_guard import write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import (
@@ -129,7 +130,7 @@ def agent_view(
         version_id=UUID(version.id),
         course_id=UUID(course_id),
         name=name or agent.name,
-        version_label=f"V1.{version.version_seq}",
+        version_label=agent_version_label(version.version_seq),
         avatar_config=AvatarConfig.model_validate_json(version.avatar_config_json),
         visibility=cast(Literal["private", "public"], agent.visibility),
         available=available,

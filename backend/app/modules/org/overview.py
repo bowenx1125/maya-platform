@@ -22,6 +22,7 @@ from app.core.models import (
     User,
     VoiceProfile,
 )
+from app.core.version_label import agent_version_label
 from app.modules.auth.service import AuthContext
 from app.modules.learning.reports import read_group_results
 from app.modules.org.schemas import (
@@ -95,7 +96,7 @@ def group_overview(
                 "agent_published",
                 version.published_at,
                 agent.owner_user_id,
-                f"{agent.name} V1.{version.version_seq}",
+                f"{agent.name} {agent_version_label(version.version_seq)}",
             )
 
     teams: dict[str, list[OverviewWork]] = defaultdict(list)

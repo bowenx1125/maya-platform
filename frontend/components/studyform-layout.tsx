@@ -46,9 +46,19 @@ export function ModuleTiles({ children }: { children: ReactNode }) {
   return <ul className="agent-tile-grid module-tile-grid">{children}</ul>;
 }
 
-/** Teams count from 1 and Agents from 0, so both read V1.0 when first saved. */
+/**
+ * The nth version reads 1.0 + (n - 1) × 0.1 with one decimal: 1st V1.0,
+ * 6th V1.5, 11th V2.0, 12th V2.1. Integer math keeps it exact. The server
+ * builds Agent labels the same way (app/core/version_label.py).
+ */
+export function versionLabel(ordinal: number) {
+  const index = Math.max(0, Math.trunc(ordinal) - 1);
+  return `V${1 + Math.floor(index / 10)}.${index % 10}`;
+}
+
+/** Teams count version_seq from 1 (Agents from 0), so seq 1 is the 1st. */
 export function teamVersionLabel(seq: number) {
-  return `V1.${Math.max(0, seq - 1)}`;
+  return versionLabel(seq);
 }
 
 export function VersionTile({
