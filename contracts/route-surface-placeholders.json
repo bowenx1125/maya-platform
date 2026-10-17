@@ -11,6 +11,10 @@
     "health_ready_health_ready_get": {
       "owner": "M01",
       "reason": "Readiness probe is infrastructure-only and outside the frozen /api/v1 surface."
+    },
+    "health_admission_health_admission_get": {
+      "owner": "M01",
+      "reason": "Adaptive admission metrics probe (#101) is infrastructure-only, served on the internal port, and outside the frozen /api/v1 surface."
     }
   }
 }

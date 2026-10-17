@@ -199,6 +199,9 @@ function walk(directory) {
       relativePath === "backend/app/providers/control.py" ||
       relativePath === "backend/app/modules/knowledge/providers/adapters.py" ||
       relativePath === "backend/tests/test_wave1b_voices.py" ||
+      // Fake upload-policy fixture carries the supplier's object-store host
+      // shape so the upload-host check has something real to accept.
+      relativePath === "backend/tests/test_qwen3_tts_flash.py" ||
       relativePath === "backend/tests/test_wave4_llm_adapter.py" ||
       relativePath === "backend/tests/test_wave4_llm_runtime.py" ||
       // Fake K2b transport tests retain a reviewed-shape supplier URL but never dispatch it.

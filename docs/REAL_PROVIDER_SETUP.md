@@ -153,10 +153,13 @@ frozen Agent text and does not read this map.
 
 ### Plato preset voice
 
-Speech uses the voice profile's `target_model_key`. A cloned voice stays on
-`qwen3-tts-vc-2026-01-22`. That clone model rejects a published preset name,
-so a preset profile uses `qwen3-tts-flash-2025-11-27`. Those two models are
-the only ones TTS will send.
+Speech uses the voice profile's `target_model_key`. A preset profile stores
+`qwen3-tts-flash-2025-11-27` and speaks through `qwen3-tts-flash`, like every
+system voice. A cloned voice speaks on the model it was enrolled for: new clones
+use `VOICE_CLONE_MODEL` (`qwen-audio-3.1-tts-flash` by default, or
+`qwen-audio-3.0-tts-flash`). Clones on the retired `qwen3-tts-vc-2026-01-22`
+no longer speak; Debates use the fallback voice and owners delete them in
+Studyform Voices.
 
 Eldric Sage (沧明子, a steady wise elder, Mandarin and English) is a shared
 system profile: no group, status `ready`, provider `dashscope`, no consent

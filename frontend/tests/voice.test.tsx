@@ -104,6 +104,94 @@ describe("M08 voice library", () => {
     expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
   });
 
+  it("deletes the owner's voice after confirming and drops it from the list", async () => {
+    const own = {
+      id: "own-voice",
+      scope: "group",
+      group_id: "group-a",
+      status: "ready",
+      source_filename: "mine.wav",
+      created_at: "2026-10-12T00:00:00Z",
+      can_manage: true,
+    };
+    api.voiceProfiles
+      .mockResolvedValueOnce([own])
+      .mockResolvedValue([{ ...own, status: "deleted" }]);
+    api.deleteVoiceProfile.mockResolvedValue({ ...own, status: "deleted" });
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete mine.wav" }),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      "Delete this custom voice? New playback will use the platform fallback.",
+    );
+    await waitFor(() =>
+      expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
+        "own-voice",
+        expect.objectContaining({ idempotency: expect.anything() }),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText("mine.wav")).toBeNull());
+  });
+
+  it("keeps the voice when the delete is cancelled, and offers no delete in a picker or for a groupmate", async () => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => false),
+    );
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "own-voice",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "mine.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: true,
+      },
+      {
+        id: "peer-voice",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "peer.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: false,
+      },
+    ]);
+    const view = render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete mine.wav" }),
+    );
+    expect(api.deleteVoiceProfile).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Delete peer.wav" }),
+    ).toBeNull();
+    view.unmount();
+
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" onSelect={vi.fn()} />
+      </AppShell>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "mine.wav" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Delete mine.wav" }),
+    ).toBeNull();
+  });
+
   it("requires consent and a local file before enrollment", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     render(

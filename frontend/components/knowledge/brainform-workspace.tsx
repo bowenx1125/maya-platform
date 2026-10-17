@@ -39,6 +39,11 @@ import { WorkspaceAction } from "../workspace-actions";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { ReportMarkdown } from "../report/report-markdown";
 import {
+  RecordDetail,
+  RecordSection,
+  useAssessmentRecord,
+} from "./assessment-record";
+import {
   IconClose,
   IconDownload,
   IconRefresh,
@@ -80,7 +85,8 @@ type Pane =
   | { kind: "rag-view"; documentId: string; markdown: string; filename: string }
   | { kind: "knowledge-view"; documentId: string }
   | { kind: "knowledge-edit"; documentId: string }
-  | { kind: "knowledge-new" };
+  | { kind: "knowledge-new" }
+  | { kind: "record"; team: string };
 
 type PendingRagAction = { kind: "hide" | "reindex"; documentId: string };
 
@@ -2062,6 +2068,9 @@ function BrainformWorkspaceBody({
     [accessibleAgents, courseId, teams],
   );
 
+  // Teachers read assessment results here; students keep Memory.
+  const assessmentRecord = useAssessmentRecord(courseId, role === "teacher");
+
   function memoryHref(source: MemoryEntrySource): string {
     const params = new URLSearchParams({
       memory_action_id: createUuid(),
@@ -2529,57 +2538,73 @@ function BrainformWorkspaceBody({
             )}
           </section>
 
-          <section
-            className={styles.section}
-            aria-labelledby="brainform-memory-heading"
-          >
-            <div className={styles.sectionHeading}>
-              <div>
-                <h2
-                  id="brainform-memory-heading"
-                  data-ui-guide="brainform.memory"
-                  data-ui-guide-text={t("brainformMemoryIntro")}
-                  tabIndex={0}
-                >
-                  Memory
-                </h2>
-              </div>
-              <span className={styles.count}>{memoryItems.length}</span>
-            </div>
-            {memoryItems.length ? (
-              <ul className={styles.list}>
-                {memoryItems.map((item) => (
-                  <li
-                    className={styles.row}
-                    key={`${item.source.kind}:${item.name}:${item.detail}`}
+          {role === "teacher" ? (
+            <RecordSection
+              teams={assessmentRecord.teams}
+              loaded={assessmentRecord.loaded}
+              error={assessmentRecord.error}
+              onRetry={() => void assessmentRecord.reload()}
+              onOpen={(team) => setPane({ kind: "record", team })}
+            />
+          ) : (
+            <section
+              className={styles.section}
+              aria-labelledby="brainform-memory-heading"
+            >
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2
+                    id="brainform-memory-heading"
+                    data-ui-guide="brainform.memory"
+                    data-ui-guide-text={t("brainformMemoryIntro")}
+                    tabIndex={0}
                   >
-                    <button
-                      type="button"
-                      className={styles.rowHit}
-                      aria-label={t("brainformMemoryOpenNamed", {
-                        name: item.name,
-                      })}
-                      data-ui-guide="brainform.memory"
-                      data-ui-guide-text={t("brainformMemoryOpen")}
-                      onClick={() => router.push(memoryHref(item.source))}
+                    Memory
+                  </h2>
+                </div>
+                <span className={styles.count}>{memoryItems.length}</span>
+              </div>
+              {memoryItems.length ? (
+                <ul className={styles.list}>
+                  {memoryItems.map((item) => (
+                    <li
+                      className={styles.row}
+                      key={`${item.source.kind}:${item.name}:${item.detail}`}
                     >
-                      <span className={styles.staticTitle}>{item.name}</span>
-                      <span className={styles.rowMeta}>
-                        {t(item.label)}
-                        {item.detail ? ` · ${item.detail}` : ""}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.empty}>{t("brainformMemoryEmpty")}</p>
-            )}
-          </section>
+                      <button
+                        type="button"
+                        className={styles.rowHit}
+                        aria-label={t("brainformMemoryOpenNamed", {
+                          name: item.name,
+                        })}
+                        data-ui-guide="brainform.memory"
+                        data-ui-guide-text={t("brainformMemoryOpen")}
+                        onClick={() => router.push(memoryHref(item.source))}
+                      >
+                        <span className={styles.staticTitle}>{item.name}</span>
+                        <span className={styles.rowMeta}>
+                          {t(item.label)}
+                          {item.detail ? ` · ${item.detail}` : ""}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.empty}>{t("brainformMemoryEmpty")}</p>
+              )}
+            </section>
+          )}
         </div>
       ) : null}
 
-      {pane ? (
+      {pane?.kind === "record" ? (
+        <RecordDetail
+          team={assessmentRecord.teams.find((team) => team.name === pane.team)}
+        />
+      ) : null}
+
+      {pane && pane.kind !== "record" ? (
         <section
           className={styles.editorPanel}
           aria-labelledby="brainform-editor-heading"

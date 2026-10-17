@@ -14,6 +14,7 @@ import secrets
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -121,13 +122,17 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="DEBATES_BETA_LIVE_INTERACTION",
     )
-    # Trial switch for the qwen3-tts-flash system-voice alias. Off by default:
-    # with it off the dated snapshot and clone models behave exactly as today.
-    # Enabling it never rewrites production env by itself; an operator must
-    # set TTS_QWEN3_FLASH_ENABLED=true deliberately.
+    # Opens the fixed-script system-voice preview API only. System voices
+    # always speak through qwen3-tts-flash whatever this says.
     tts_qwen3_flash_enabled: bool = Field(
         default=False,
         validation_alias="TTS_QWEN3_FLASH_ENABLED",
+    )
+    # Clone target for new voices. A clone stays bound to the model it was
+    # enrolled for, so changing this leaves existing clones on theirs.
+    voice_clone_model: Literal["qwen-audio-3.1-tts-flash", "qwen-audio-3.0-tts-flash"] = Field(
+        default="qwen-audio-3.1-tts-flash",
+        validation_alias="VOICE_CLONE_MODEL",
     )
 
     # These server-only operational values are also part of C02/C08. They are
@@ -388,6 +393,12 @@ class Settings(BaseSettings):
     def empty_tts_qwen3_flash_enabled_is_false(cls, value: object) -> object:
         # Compose forwards an empty value when TTS_QWEN3_FLASH_ENABLED is unset.
         return False if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("voice_clone_model", mode="before")
+    @classmethod
+    def empty_voice_clone_model_is_default(cls, value: object) -> object:
+        # Compose forwards an empty value when VOICE_CLONE_MODEL is unset.
+        return "qwen-audio-3.1-tts-flash" if isinstance(value, str) and not value.strip() else value
 
     @field_validator("allow_legacy_demo_users", mode="before")
     @classmethod

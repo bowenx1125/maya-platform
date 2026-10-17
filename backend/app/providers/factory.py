@@ -30,7 +30,6 @@ from app.providers.llm import (
 )
 from app.providers.llm import llm_provider as select_llm_provider
 from app.providers.tts import MockTTSProvider, TTSProvider
-from app.providers.tts_flash_budget import FlashTrialBudget
 from app.providers.voice import MockVoiceCloneProvider, VoiceCloneProvider
 
 
@@ -45,6 +44,7 @@ def _dashscope_config(settings: Settings) -> DashScopeConfig:
         api_key=settings.dashscope_api_key,
         workspace_id=settings.dashscope_workspace_id,
         region=settings.dashscope_region,
+        target_model_key=settings.voice_clone_model,
     )
 
 
@@ -60,13 +60,8 @@ def tts_provider(settings: Settings) -> TTSProvider:
     if settings.tts_provider == "mock":
         return MockTTSProvider()
     if settings.tts_provider == "dashscope":
-        # Switch default off: flash alias stays refused until the operator
-        # enables TTS_QWEN3_FLASH_ENABLED. Hard failures never fall back to Mock.
-        return DashScopeTTSProvider(
-            _dashscope_config(settings),
-            flash_enabled=settings.tts_qwen3_flash_enabled,
-            trial_budget=FlashTrialBudget.under_data_root(settings.resolved_data_root),
-        )
+        # Hard failures never fall back to Mock.
+        return DashScopeTTSProvider(_dashscope_config(settings))
     raise RuntimeError("tts provider is not supported")
 
 

@@ -32,20 +32,6 @@
   font-size: 0.75rem;
 }
 
-.report {
-  padding: 6px 10px;
-  border-radius: 999px;
-  color: #6b5418;
-  font-size: 0.8rem;
-  font-weight: 650;
-  text-decoration: none;
-}
-
-.report:hover,
-.report:focus-visible {
-  background: rgba(211, 167, 74, 0.14);
-}
-
 .event {
   color: var(--ink, #292820);
   line-height: 1.4;
@@ -54,36 +40,4 @@
 
 .event strong {
   font-weight: 650;
-}
-
-/* The answer sheet scrolls sideways on its own rather than widen the card. */
-.sheet {
-  overflow-x: auto;
-  margin: 4px 0 8px;
-}
-
-.sheet table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-
-.sheet th,
-.sheet td {
-  padding: 6px 8px;
-  border-bottom: 1px solid #ebe5df;
-  text-align: left;
-  vertical-align: top;
-  overflow-wrap: anywhere;
-}
-
-.sheet th {
-  color: #625e59;
-  font-weight: 600;
-}
-
-.sheet td:first-child,
-.sheet th:first-child {
-  width: 2ch;
-  color: #625e59;
 }

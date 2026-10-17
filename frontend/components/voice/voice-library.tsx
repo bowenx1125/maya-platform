@@ -16,7 +16,7 @@ import {
   SectionCard,
   StatusBadge,
 } from "../ui";
-import { IconCheck, IconPlay, IconUpload } from "../quiet-icons";
+import { IconCheck, IconClose, IconPlay, IconUpload } from "../quiet-icons";
 import { ModuleCard, ModulePlus, ModuleTiles } from "../studyform-layout";
 import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
@@ -35,7 +35,7 @@ type ListedVoice = VoiceProfile;
 type RetryAction =
   | { kind: "load" }
   | { kind: "enroll"; file: File }
-  | { kind: "preview" | "confirm"; profileId: string }
+  | { kind: "preview" | "confirm" | "delete"; profileId: string }
   | {
       kind: "rename";
       profile: ListedVoice;
@@ -199,8 +199,11 @@ export function VoiceLibrary({
         }),
       );
       if (sequence !== loadSequence.current) return;
+      // A deleted voice stays on the server for its audit trail only.
       const nextProfiles = results.flatMap((result) =>
-        result.status === "denied" ? [] : result.profiles,
+        result.status === "denied"
+          ? []
+          : result.profiles.filter((profile) => profile.status !== "deleted"),
       );
       setProfiles(nextProfiles);
       onProfilesChange?.(nextProfiles);
@@ -492,6 +495,33 @@ export function VoiceLibrary({
     }
   }
 
+  // Agents bound to a deleted voice speak with the fallback voice, so
+  // deleting never blocks a Debate.
+  async function remove(profile: ListedVoice) {
+    if (controlsDisabled) return;
+    if (!window.confirm(t("voiceDeleteConfirm"))) return;
+    setBusy(true);
+    setFailure(null);
+    setNotice(null);
+    const handle = `voice-delete:${profile.id}`;
+    try {
+      await api.deleteVoiceProfile(profile.id, {
+        idempotency: idempotency.handleFor(handle),
+      });
+      idempotency.finish(handle);
+      setPreview((current) => {
+        const next = { ...current };
+        delete next[profile.id];
+        return next;
+      });
+      await load();
+    } catch (cause) {
+      setFailure({ cause, retry: { kind: "delete", profileId: profile.id } });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function clearConfirmationFailure(profileId: string) {
     setFailure((current) => {
       const retry = current?.retry;
@@ -513,7 +543,10 @@ export function VoiceLibrary({
     else if (action.kind === "enroll") void submitEnrollment(action.file);
     else if (action.kind === "preview") void makePreview(action.profileId);
     else if (action.kind === "confirm") void confirm(action.profileId, true);
-    else if (action.kind === "rename")
+    else if (action.kind === "delete") {
+      const profile = profiles.find((item) => item.id === action.profileId);
+      if (profile) void remove(profile);
+    } else if (action.kind === "rename")
       void rename(action.profile, action.name, action.restoreFocus);
   }
 
@@ -684,6 +717,18 @@ export function VoiceLibrary({
                   onClick={() => void confirm(profile.id)}
                 >
                   <IconCheck />
+                </button>
+              ) : null}
+              {!listenOnly && !onSelect && manageable ? (
+                <button
+                  className={cards.iconButton}
+                  aria-label={t("voiceDeleteNamed", { name })}
+                  data-ui-guide="voice.delete"
+                  type="button"
+                  disabled={controlsDisabled}
+                  onClick={() => void remove(profile)}
+                >
+                  <IconClose />
                 </button>
               ) : null}
               {preview[profile.id] ? (

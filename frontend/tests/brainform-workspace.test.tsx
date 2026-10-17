@@ -244,6 +244,7 @@ beforeEach(() => {
     }),
     saveKnowledgeMarkdown: vi.fn(),
     createWorkspaceKnowledge: vi.fn().mockResolvedValue({ document: source }),
+    courseAssessmentAttempts: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -839,6 +840,94 @@ describe("Brainform workspace actions", () => {
     expect(screen.getByDisplayValue("lesson.md")).toBeTruthy();
     expect(screen.queryByDisplayValue("late.md")).toBeNull();
     expect(state.api.replaceKnowledgeDocument).not.toHaveBeenCalled();
+  });
+
+  it("shows teachers Record by assessment Team, then every student's result", async () => {
+    state.role = "teacher";
+    const attempt = {
+      user_id: "student-1",
+      student_name: "Ada",
+      test_name: "Keynotes · Formal diagnostic questions · V1.0",
+      team_name: "Keynotes",
+      status: "completed",
+      phase: "completed",
+      conversation_id: "4afc794f-1111-4111-8111-111111111111",
+      group_name: "Group A",
+      started_at: "2026-10-13T08:00:00Z",
+      ended_at: "2026-10-13T08:20:00Z",
+      points_awarded: 3,
+      points_total: 4,
+      questions: [
+        {
+          number: 1,
+          prompt: "What is ren?",
+          answers: ["Humaneness"],
+          skipped: false,
+          points_awarded: 1,
+          points_total: 1,
+          feedback: "Right.",
+        },
+      ],
+      report_download_path: "/api/v1/learning/reports/r/download?revision_id=v",
+    };
+    state.api.courseAssessmentAttempts.mockResolvedValue([
+      { ...attempt, attempt_id: "attempt-1" },
+      {
+        ...attempt,
+        attempt_id: "attempt-2",
+        user_id: "student-2",
+        student_name: "Ben",
+        status: "in_progress",
+        phase: "answering",
+        points_awarded: null,
+        points_total: null,
+        questions: [],
+        report_download_path: null,
+      },
+    ]);
+    renderWithActions();
+
+    expect(await screen.findByRole("heading", { name: "Record" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Memory" })).toBeNull();
+    expect(state.api.courseAssessmentAttempts).toHaveBeenCalledWith("course-1");
+    const team = await screen.findByRole("button", {
+      name: "Open the results for Keynotes",
+    });
+    expect(team.textContent).toContain("Students 2 · Attempts 2");
+    fireEvent.click(team);
+
+    expect(
+      await screen.findByRole("heading", { name: "Keynotes" }),
+    ).toBeTruthy();
+    const ada = screen.getByRole("button", { name: /^Ada.*3 \/ 4$/ });
+    expect(ada.textContent).toContain(
+      "Group A · Formal diagnostic questions · V1.0",
+    );
+    expect(
+      screen.getByRole("button", { name: /^Ben.*In progress$/ }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Download the report for Ada" })
+        .getAttribute("href"),
+    ).toBe("/api/v1/learning/reports/r/download?revision_id=v");
+    fireEvent.click(ada);
+    expect(screen.getByRole("cell", { name: "Humaneness" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Right." })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(
+      await screen.findByRole("button", {
+        name: "Open the results for Keynotes",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("keeps Memory for students and never reads course results", async () => {
+    renderWorkspace("student");
+    expect(await screen.findByRole("heading", { name: "Memory" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Record" })).toBeNull();
+    expect(state.api.courseAssessmentAttempts).not.toHaveBeenCalled();
   });
 
   it("navigates to the current role's Agent Chat with a fresh durable Memory intent", async () => {
