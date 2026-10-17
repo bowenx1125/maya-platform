@@ -233,7 +233,7 @@ class Settings(BaseSettings):
         default=100, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_QUEUE_MAX"
     )
     create_admission_wait_seconds: int = Field(
-        default=60, ge=0, le=3_600, validation_alias="CREATE_ADMISSION_WAIT_SECONDS"
+        default=180, ge=0, le=3_600, validation_alias="CREATE_ADMISSION_WAIT_SECONDS"
     )
     create_admission_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="CREATE_ADMISSION_RETRY_SECONDS"

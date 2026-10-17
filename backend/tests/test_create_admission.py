@@ -37,7 +37,7 @@ def _settings(**overrides: object) -> Settings:
         "report_provider": "mock",
         "create_admission_limit": 4,
         "create_admission_queue_max": 100,
-        "create_admission_wait_seconds": 60,
+        "create_admission_wait_seconds": 180,
         "create_admission_retry_seconds": 5,
         "host_load_reject_threshold": 0,  # disable load guard in unit tests
     }
@@ -145,3 +145,8 @@ def test_host_load_pressure_suspends_instead_of_rejecting() -> None:
     assert raised.value.code == "adaptive_admission_busy"
     assert raised.value.status_code == 503
     assert raised.value.details["reason"] == "wait_timeout"
+
+
+def test_create_admission_default_wait_aligns_with_unified_deadline() -> None:
+    field = Settings.model_fields["create_admission_wait_seconds"]
+    assert field.default == 180
