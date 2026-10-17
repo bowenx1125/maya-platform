@@ -158,8 +158,16 @@ Speech uses the voice profile's `target_model_key`. A preset profile stores
 system voice. A cloned voice speaks on the model it was enrolled for: new clones
 use `VOICE_CLONE_MODEL` (`qwen-audio-3.1-tts-flash` by default, or
 `qwen-audio-3.0-tts-flash`). Clones on the retired `qwen3-tts-vc-2026-01-22`
-no longer speak; Debates use the fallback voice and owners delete them in
-Studyform Voices.
+no longer speak; Debates use `FALLBACK_VOICE_PROFILE_ID` when it points at a
+voice that can still speak, otherwise the turn is text-only, and owners delete
+them in Studyform Voices.
+
+A system fallback enrolled before October 17 is itself a clone on the retired
+model, and re-running `enroll_system_fallback.py` returns that same profile.
+Point `FALLBACK_VOICE_PROFILE_ID` at a ready system voice that is not on the
+retired model, for example the Eldric Sage preset
+`1591eac5-25cf-5eaf-9c79-d639f69d2263` from `scripts/seed_preset_voice.py`,
+then recreate the backend.
 
 Eldric Sage (沧明子, a steady wise elder, Mandarin and English) is a shared
 system profile: no group, status `ready`, provider `dashscope`, no consent
