@@ -27,8 +27,9 @@ _MODELS = _APP / "core/models.py"
 
 def test_playback_sql_has_no_untyped_null_binds():
     source = _REPOSITORY.read_text(encoding="utf-8")
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
     # psycopg cannot type a bare ``$n IS NULL`` parameter.
-    assert not re.search(r"[^(]:\w+ IS (NOT )?NULL", source)
+    assert not re.search(r"[^(]:\w+ IS (NOT )?NULL", code)
 
 
 def test_cleanup_uses_boolean_literals_not_integer_text():

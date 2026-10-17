@@ -54,7 +54,6 @@ def test_ensure_turn_job_postgres_uses_on_conflict_not_or_ignore() -> None:
     assert "DO NOTHING" in sql
 
 
-
 @pytest.mark.asyncio
 async def test_ensure_turn_plan_inserts_first_prepare_job(app_factory) -> None:
     """After plan materialisation, head turn must have debate_turn_prepare pending."""

@@ -195,6 +195,7 @@ def test_playback_age_does_not_create_a_stall(
     finally:
         client.__exit__(None, None, None)
 
+
 def test_create_draft_materialises_head_prepare_job_without_prewarm(
     app_factory: Callable[..., Any],
 ) -> None:
@@ -290,4 +291,3 @@ def test_aged_pending_draft_projects_preparation_timeout_for_stall_and_preview(
         assert head_preview["audio_ready"] is False
     finally:
         client.__exit__(None, None, None)
-
