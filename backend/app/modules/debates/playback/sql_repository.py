@@ -2991,10 +2991,15 @@ class SqlPlaybackRepository(PlaybackRepository):
         Idempotent: already-failed / deferred-coded turns are left alone.
         Does not advance turns, create jobs, or terminate the Debate.  A later
         teacher Retry clears the code through the existing draft/live retry CAS.
+
+        Turns without a debate_turn_prepare job still expire by turn age
+        (updated_at, else created_at) so Preview cannot spin forever when the
+        worker never enqueued work.
         """
 
-        if not self._has_table(db, "debate_turns") or not self._has_table(db, "jobs"):
+        if not self._has_table(db, "debate_turns"):
             return 0
+        has_jobs = self._has_table(db, "jobs")
         pending_cut = _now() - (pending_timeout or _PREPARATION_PENDING_TIMEOUT)
         running_cut = _now() - (running_timeout or _PREPARATION_RUNNING_TIMEOUT)
         code = _PREPARATION_TIMEOUT_CODE
@@ -3011,38 +3016,61 @@ class SqlPlaybackRepository(PlaybackRepository):
         # Only the earliest unfinished turn of a draft (or an unpublished
         # successor of a running Debate) can block Preparing.  Later pending
         # siblings stay pending so Retry on the stalled head can resume order.
-        stale_ids = [
-            str(row[0])
-            for row in db.execute(
-                text(
-                    "SELECT t.id FROM debate_turns AS t "
-                    "JOIN debates AS d ON d.id=t.debate_id "
-                    "JOIN jobs AS j ON j.turn_id=t.id AND j.debate_id=t.debate_id "
-                    "AND j.operation='debate_turn_prepare' "
-                    "WHERE t.generation_status IN ('pending','running') "
-                    "AND t.publication_status='unpublished' "
-                    "AND COALESCE(t.safe_error_code,'') = '' "
-                    "AND d.status IN ('draft','running') "
-                    "AND d.deleted_at IS NULL "
-                    + debate_filter
-                    + "AND ("
-                    "(j.state='pending' AND j.claim_token IS NULL "
-                    "AND j.updated_at<=:pending_cut) OR "
-                    "(j.state IN ('pending','running') AND j.claim_token IS NOT NULL "
-                    "AND j.updated_at<=:running_cut) OR "
-                    "(t.generation_status='running' AND t.updated_at<=:running_cut)"
-                    ") "
-                    "AND NOT EXISTS ("
-                    "SELECT 1 FROM debate_turns AS earlier "
-                    "WHERE earlier.debate_id=t.debate_id "
-                    "AND earlier.turn_index < t.turn_index "
-                    "AND earlier.generation_status NOT IN "
-                    "('final_ready','ready','completed') "
-                    "AND COALESCE(earlier.safe_error_code,'') = '')"
-                ),
-                params,
-            ).all()
-        ]
+        # LEFT JOIN jobs so a missing prepare row still ages out by turn time;
+        # turn age is also the fallback when a job row is refreshed without
+        # progressing the turn.
+        job_join = ""
+        job_age = (
+            "(t.generation_status='pending' "
+            "AND COALESCE(t.updated_at, t.created_at)<=:pending_cut) OR "
+            "(t.generation_status='running' "
+            "AND COALESCE(t.updated_at, t.created_at)<=:running_cut)"
+        )
+        if has_jobs:
+            job_join = (
+                "LEFT JOIN jobs AS j ON j.turn_id=t.id AND j.debate_id=t.debate_id "
+                "AND j.operation='debate_turn_prepare' "
+            )
+            age_clause = (
+                "("
+                "(j.id IS NOT NULL AND j.state='pending' AND j.claim_token IS NULL "
+                "AND j.updated_at<=:pending_cut) OR "
+                "(j.id IS NOT NULL AND j.state IN ('pending','running') "
+                "AND j.claim_token IS NOT NULL AND j.updated_at<=:running_cut) OR "
+                + job_age
+                + ")"
+            )
+        else:
+            age_clause = "(" + job_age + ")"
+        stale_ids = sorted(
+            {
+                str(row[0])
+                for row in db.execute(
+                    text(
+                        "SELECT t.id FROM debate_turns AS t "
+                        "JOIN debates AS d ON d.id=t.debate_id "
+                        + job_join
+                        + "WHERE t.generation_status IN ('pending','running') "
+                        "AND t.publication_status='unpublished' "
+                        "AND COALESCE(t.safe_error_code,'') = '' "
+                        "AND d.status IN ('draft','running') "
+                        "AND d.deleted_at IS NULL "
+                        + debate_filter
+                        + "AND "
+                        + age_clause
+                        + " "
+                        "AND NOT EXISTS ("
+                        "SELECT 1 FROM debate_turns AS earlier "
+                        "WHERE earlier.debate_id=t.debate_id "
+                        "AND earlier.turn_index < t.turn_index "
+                        "AND earlier.generation_status NOT IN "
+                        "('final_ready','ready','completed') "
+                        "AND COALESCE(earlier.safe_error_code,'') = '')"
+                    ),
+                    params,
+                ).all()
+            }
+        )
         if not stale_ids:
             return 0
         params["turn_ids"] = tuple(stale_ids)
@@ -3072,31 +3100,33 @@ class SqlPlaybackRepository(PlaybackRepository):
             ).bindparams(bindparam("turn_ids", expanding=True)),
             params,
         )
-        db.execute(
-            text(
-                "UPDATE jobs SET state='failed', claim_token=NULL, safe_error_code=:code, "
-                "updated_at=:updated_at WHERE turn_id IN :turn_ids "
-                "AND operation='debate_turn_prepare' "
-                "AND state IN ('pending','running') "
-                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=jobs.debate_id "
-                "AND d.status='draft')"
-            ).bindparams(bindparam("turn_ids", expanding=True)),
-            params,
-        )
-        db.execute(
-            text(
-                "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=:code, "
-                "updated_at=:updated_at WHERE turn_id IN :turn_ids "
-                "AND operation='debate_turn_prepare' "
-                "AND state IN ('pending','running') "
-                "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=jobs.debate_id "
-                "AND d.status='running')"
-            ).bindparams(bindparam("turn_ids", expanding=True)),
-            params,
-        )
+        if has_jobs:
+            db.execute(
+                text(
+                    "UPDATE jobs SET state='failed', claim_token=NULL, safe_error_code=:code, "
+                    "updated_at=:updated_at WHERE turn_id IN :turn_ids "
+                    "AND operation='debate_turn_prepare' "
+                    "AND state IN ('pending','running') "
+                    "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=jobs.debate_id "
+                    "AND d.status='draft')"
+                ).bindparams(bindparam("turn_ids", expanding=True)),
+                params,
+            )
+            db.execute(
+                text(
+                    "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=:code, "
+                    "updated_at=:updated_at WHERE turn_id IN :turn_ids "
+                    "AND operation='debate_turn_prepare' "
+                    "AND state IN ('pending','running') "
+                    "AND EXISTS (SELECT 1 FROM debates AS d WHERE d.id=jobs.debate_id "
+                    "AND d.status='running')"
+                ).bindparams(bindparam("turn_ids", expanding=True)),
+                params,
+            )
         return int(getattr(draft_turned, "rowcount", 0) or 0) + int(
             getattr(running_turned, "rowcount", 0) or 0
         )
+
 
     def fail_prewarm_turn(
         self, db: Any, turn: SqlRow, *, claim_token: str | None, code: str
