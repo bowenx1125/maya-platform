@@ -1122,6 +1122,118 @@ describe("private Agent chat", () => {
     },
   );
 
+  it.each([
+    [
+      503,
+      "adaptive_admission_busy",
+      "queue_full",
+      "Many people are using Maya right now. Press Send again in a moment.",
+    ],
+    [
+      503,
+      "adaptive_admission_busy",
+      "wait_timeout",
+      "Many people are using Maya right now. Press Send again in a moment.",
+    ],
+    [
+      409,
+      "chat_busy",
+      undefined,
+      "The previous message is still being answered. Send again in a moment.",
+    ],
+  ])(
+    "keeps the text after a refused send (%s %s %s) and only sends again when asked",
+    async (status, code, reason, hint) => {
+      state.api.conversations.mockResolvedValue([]);
+      const api = new PlatformApi({
+        baseUrl: "http://maya.test/api/v1",
+        csrfToken: "csrf-token-csrf-token-csrf-token",
+      });
+      state.api.streamConversation = vi.fn(api.streamConversation.bind(api));
+      const requests: Array<Record<string, unknown>> = [];
+      const reads: string[] = [];
+      let refuse = true;
+      const fetchMock = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url.endsWith("/messages:stream")) {
+            const body = JSON.parse(init?.body as string) as Record<
+              string,
+              unknown
+            >;
+            requests.push(body);
+            if (refuse) {
+              return new Response(
+                JSON.stringify({
+                  code,
+                  message: "busy",
+                  details: reason ? { reason, retryable: true } : {},
+                }),
+                {
+                  status,
+                  headers: { "Content-Type": "application/json" },
+                },
+              );
+            }
+            return new Response(
+              `event: text_done\ndata: ${JSON.stringify({ request_id: body.request_id })}\n\n`,
+              {
+                status: 200,
+                headers: { "Content-Type": "text/event-stream" },
+              },
+            );
+          }
+          reads.push(url);
+          return new Response(
+            JSON.stringify(
+              refuse
+                ? conversation
+                : {
+                    ...conversation,
+                    revision: 1,
+                    turns: [
+                      {
+                        id: String(requests.at(-1)?.request_id),
+                        user_text: String(requests.at(-1)?.message),
+                        assistant_text: "Answered on the second press",
+                        mode: "mock",
+                        state: "ready",
+                        sources: [],
+                        safe_error_code: null,
+                      },
+                    ],
+                  },
+            ),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      renderChat({ newChat: true });
+      const input = await chooseSocrates();
+      fireEvent.change(input, { target: { value: "A busy-minute message" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      expect(await screen.findByText(hint)).toBeTruthy();
+      expect(input).toHaveProperty("value", "A busy-minute message");
+      expect(requests).toHaveLength(1);
+      // A refused send is not checked or replayed in the background.
+      expect(reads.filter((url) => url.includes("/conversations/"))).toEqual(
+        [],
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(requests).toHaveLength(1);
+      const send = screen.getByRole("button", { name: "Send" });
+      expect(send.hasAttribute("disabled")).toBe(false);
+
+      refuse = false;
+      fireEvent.click(send);
+      await screen.findByText("Answered on the second press");
+      expect(requests).toHaveLength(2);
+      expect(requests[1].message).toBe("A busy-minute message");
+      expect(screen.queryByText(hint)).toBeNull();
+    },
+  );
+
   it("recovers a saved HTTP 502 response without restoring or resending its text", async () => {
     state.api.conversations.mockResolvedValue([]);
     const api = new PlatformApi({

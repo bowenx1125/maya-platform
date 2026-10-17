@@ -23,7 +23,7 @@ from app.core.errors import PlatformError, conflict, not_found
 from app.core.message_timing import message_timing
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.sqlutil import begin_immediate
-from app.core.write_guard import write_guard_slot
+from app.core.write_guard import WriteSlot, write_guard_slot
 from app.modules.auth.service import AuthContext
 from app.modules.learning.models import AssessmentAttempt
 from app.modules.learning.schemas import AssessmentRuntimeResult
@@ -3116,11 +3116,18 @@ def _formal_run_order(factory: SessionFactory, turn_id: str) -> list[str]:
         return [recorder_result_id, *[item for item in ids if item != recorder_result_id]]
 
 
-def execute_team_turn(factory: SessionFactory, claim: TeamClaim) -> None:
+def execute_team_turn(
+    factory: SessionFactory, claim: TeamClaim, write_slot: WriteSlot | None = None
+) -> None:
     if not claim.created:
+        if write_slot is not None:
+            write_slot.release()
         return
     # Joins the request's collector when the HTTP handler already opened one.
-    with message_timing("team", turn_id=claim.turn_id), write_guard_slot():
+    with (
+        message_timing("team", turn_id=claim.turn_id),
+        write_guard_slot(reserved=write_slot),
+    ):
         _execute_team_turn_body(factory, claim)
 
 
@@ -3264,9 +3271,25 @@ def _pending_natural_assessment_resume(
 
 
 def execute_team_turn_with_natural_assessment_resume(
-    factory: SessionFactory, claim: TeamClaim
+    factory: SessionFactory, claim: TeamClaim, write_slot: WriteSlot | None = None
 ) -> None:
-    """Run the new command, then resume only an old turn authorized by its receipt."""
+    """Run the new command, then resume only an old turn authorized by its receipt.
+
+    ``write_slot`` is the slot the send reserved before claiming; this thread
+    adopts it for the command and any resumed turn.
+    """
+
+    if write_slot is None:
+        _execute_with_natural_resume(factory, claim)
+        return
+    if not claim.created:
+        write_slot.release()
+        return
+    with write_guard_slot(reserved=write_slot):
+        _execute_with_natural_resume(factory, claim)
+
+
+def _execute_with_natural_resume(factory: SessionFactory, claim: TeamClaim) -> None:
     execute_team_turn(factory, claim)
     if claim.actor_context is None:
         return

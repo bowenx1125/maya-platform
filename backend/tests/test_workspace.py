@@ -2422,6 +2422,7 @@ async def test_chat_sse_releases_claim_before_terminal_events(
         message: str,
         _actor_context: Any | None = None,
         _generation_waker: Any | None = None,
+        _write_slot: Any | None = None,
     ) -> tuple[str, list[Any], None]:
         if message == "Terminal failure":
             raise PlatformError("chat_acceptance_unknown", "Unknown outcome.", 503)

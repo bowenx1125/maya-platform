@@ -12,7 +12,9 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
+  CHAT_BUSY_CODE,
   ChatRequestPendingError,
+  isRefusedSend,
   PlatformApiError,
   type PlatformApi,
   type ChatAgent,
@@ -79,6 +81,20 @@ const memoryRouteKeys = [
   "memory_source_kind",
   "memory_source_id",
 ] as const;
+
+/**
+ * A refused send (busy server, or the previous message still running) keeps
+ * the text in the box and asks the student, at the Send button, to send it
+ * again; nothing resends it on its own.
+ */
+function sendRefusalHint(
+  error: unknown,
+): "chatSendBusyRetry" | "chatSendPreviousRunning" | null {
+  if (!isRefusedSend(error)) return null;
+  return (error as PlatformApiError).code === CHAT_BUSY_CODE
+    ? "chatSendPreviousRunning"
+    : "chatSendBusyRetry";
+}
 
 function memoryParamsOf(search: string): string {
   const params = new URLSearchParams(search);
@@ -2080,6 +2096,9 @@ function AgentChatScope({
       }
     } catch (cause) {
       if (!(cause instanceof ChatRequestPendingError) && ownsSend()) {
+        // Nothing was saved for a refused send, so there is no outcome to
+        // check later and no request to resume: the next Send is a new one.
+        if (isRefusedSend(cause)) abandonChatRequest(undefined, scopeKey);
         setError(confirmedUnknownOutcome ? unknownChatOutcomeError() : cause);
         setDraft(message);
       }
@@ -2480,6 +2499,7 @@ function AgentChatScope({
     selected?.can_send !== false &&
     character?.available !== false;
   const teamMode = Boolean(selectedTeam);
+  const sendHint = sendRefusalHint(teamMode ? teamError : error);
   const activeSession = selectedTeam ?? selected;
   const teamIds = new Set(teamChoices.map((team) => team.id));
   const teamOptions: ChatTargetTeam[] = [
@@ -2971,7 +2991,7 @@ function AgentChatScope({
                       </div>
                     </div>
                   ) : null}
-                  {error ? (
+                  {error && !sendRefusalHint(error) ? (
                     <ErrorNotice
                       inline
                       error={error}
@@ -2995,7 +3015,7 @@ function AgentChatScope({
                       {closedNotice}
                     </Notice>
                   ) : null}
-                  {selectedTeam && teamError ? (
+                  {selectedTeam && teamError && !sendRefusalHint(teamError) ? (
                     <Notice
                       inline
                       tone="error"
@@ -3135,13 +3155,24 @@ function AgentChatScope({
                     }}
                   />
                   <div className={styles.composerBar}>
+                    {sendHint ? (
+                      <p
+                        id="chat-send-hint"
+                        className={styles.sendHint}
+                        role="status"
+                      >
+                        {t(sendHint)}
+                      </p>
+                    ) : null}
                     <button
                       type="submit"
                       className={styles.sendButton}
                       aria-describedby={
-                        !teamMode && character?.available === false
-                          ? "chat-readonly-help"
-                          : undefined
+                        sendHint
+                          ? "chat-send-hint"
+                          : !teamMode && character?.available === false
+                            ? "chat-readonly-help"
+                            : undefined
                       }
                       aria-label={
                         selectedTeam?.read_only
