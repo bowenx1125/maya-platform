@@ -15,12 +15,20 @@ import wave
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, invalid_state, not_found
-from app.core.models import CourseMember, Group, StoredFile, VoicePreview, VoiceProfile
+from app.core.models import (
+    CourseMember,
+    Group,
+    StoredFile,
+    VoicePreview,
+    VoicePreviewCounter,
+    VoiceProfile,
+)
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import contained_path, write_atomic
 from app.modules.org.access import WorkspaceMember
@@ -49,10 +57,54 @@ from app.providers.voice import VoiceProviderError
 from app.seed import COURSE_ID
 
 LOGGER = logging.getLogger("maya.voices")
-VOICE_PREVIEW_TEXT = (
-    "Should we find each other in the next life, let‘s live on a planet of our own.\n"
-    "我会将花种满山谷，为你而歌，老死方休。"
+# Preview samples rotate in the order previews are generated, across every
+# user and voice: the 1st generation reads line 1, the 5th reads line 1 again.
+VOICE_PREVIEW_LINES: tuple[str, ...] = (
+    "Should we find each other in the next life, let us live on a planet of our own. "
+    "我会将花种满山谷，为你而歌，老死方休。",
+    "No mater how long it takes, I want to see you again. 不管需要多少年，我都想要再见你一面。",
+    "If meeting you wasn't a miracle, then the souls have never whispered. "
+    "如果遇见你不是奇迹，灵魂便不曾言语。",
+    "Neverlasting paths, what comes may not be what you ask. "
+    "这⼀切...如果没有你，追求⼜有什么意义。",
 )
+# Kept for callers that want a stable sample; it is the first line.
+VOICE_PREVIEW_TEXT = VOICE_PREVIEW_LINES[0]
+_PREVIEW_COUNTER_KEY = "global"
+
+
+def next_preview_line(db: Session) -> str:
+    """Atomically advance the shared counter and return that click's line.
+
+    The increment commits on its own short transaction (never around the TTS
+    call), so concurrent clicks on any backend replica each get the next
+    line in turn.
+    """
+
+    session = Session(bind=db.get_bind(), autoflush=False, expire_on_commit=False)
+    try:
+        for _ in range(2):
+            value = session.execute(
+                update(VoicePreviewCounter)
+                .where(VoicePreviewCounter.key == _PREVIEW_COUNTER_KEY)
+                .values(value=VoicePreviewCounter.value + 1)
+                .returning(VoicePreviewCounter.value)
+            ).scalar_one_or_none()
+            if value is not None:
+                session.commit()
+                return VOICE_PREVIEW_LINES[(value - 1) % len(VOICE_PREVIEW_LINES)]
+            session.rollback()
+            # First generation ever: create the row, then increment it.
+            try:
+                session.add(VoicePreviewCounter(key=_PREVIEW_COUNTER_KEY, value=0))
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+        raise invalid_state("The preview counter is unavailable.")
+    finally:
+        session.close()
+
+
 _SAFE_PREVIEW_ERRORS = frozenset(
     {
         "tts_http_rejected",
@@ -170,9 +222,10 @@ def create_voice_preview(
             "provider_unavailable", "The voice service is temporarily unavailable.", 503
         ) from exc
     external_id = _tts_external_id(profile, settings)
+    preview_text = next_preview_line(db)
     try:
         output = tts.synthesize(
-            VOICE_PREVIEW_TEXT,
+            preview_text,
             external_id,
             language="auto",
             target_model_key=profile.target_model_key,
