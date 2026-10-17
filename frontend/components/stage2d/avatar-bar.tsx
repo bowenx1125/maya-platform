@@ -34,6 +34,7 @@ function initials(name: string, slot: string): string {
 
 /**
  * Grok-Bar-style 2D multi-avatar arena for debate beta.
+ * Bomberman-cover atmosphere (cyber grid + sticker outlines) — not gameplay.
  * Consumes the same five-state visuals map as ScholarScene — never drives
  * Next / audio. Unknown motion tokens collapse to idle.
  */
@@ -55,6 +56,10 @@ export function AvatarBar({
   const speakingState = speaking
     ? normalizeAvatarState(visuals[speaking.id])
     : "idle";
+  const vsLabel =
+    characters.length >= 2
+      ? `${characters[0]?.slot ?? "A"} vs ${characters[characters.length - 1]?.slot ?? "B"}`
+      : "VS";
 
   return (
     <div
@@ -63,6 +68,20 @@ export function AvatarBar({
       data-stage-visual="avatar-bar"
     >
       <div aria-hidden="true" className={styles.grid} />
+      <div aria-hidden="true" className={styles.floorGlow} />
+
+      <header className={styles.hud} data-avatar-bar-hud="" aria-hidden="true">
+        <span className={styles.brandChip}>
+          <span className={styles.brandBolt} />
+          AI DEBATE ARENA
+        </span>
+        <span className={styles.hudSpacer} />
+        <span className={styles.vsBadge}>{vsLabel}</span>
+        <span className={styles.liveBadge}>
+          <span className={styles.liveDot} />
+          LIVE
+        </span>
+      </header>
 
       {showUnavailableNotice && unavailableLabel ? (
         <p className={styles.notice} role="status">
@@ -72,6 +91,7 @@ export function AvatarBar({
 
       <div className={styles.stage} data-avatar-bar-stage="">
         <div className={styles.stageGlow} aria-hidden="true" />
+        <div className={styles.stageRing} aria-hidden="true" />
         {topic ? (
           <p className={styles.topic} title={topic}>
             {topic}
@@ -84,6 +104,13 @@ export function AvatarBar({
             aria-live="polite"
             className={styles.bubble}
             data-avatar-bar-bubble=""
+            style={
+              {
+                "--avatar-accent": avatarBarAccent(
+                  speaking.config.material_theme,
+                ),
+              } as CSSProperties
+            }
           >
             <span className={styles.bubbleWho}>{speaking.name}</span>
             {bubbleWindow}
@@ -114,6 +141,7 @@ export function AvatarBar({
             >
               <div className={styles.pin} aria-hidden="true">
                 <span className={styles.halo} />
+                <span className={styles.pulseRing} />
                 <span className={styles.head}>
                   <span className={styles.initials}>
                     {initials(character.name, character.slot)}

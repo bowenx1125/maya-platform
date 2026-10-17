@@ -11,10 +11,10 @@ export const AVATAR_BAR_SKIN: Record<AvatarConfig["material_theme"], string> = {
 /** High-saturation accent ring / glow per theme (arena “bomberman” pop). */
 export const AVATAR_BAR_ACCENT: Record<AvatarConfig["material_theme"], string> =
   {
-    demo: "#5b8cff",
-    warm_sand: "#ff7a3d",
-    cool_slate: "#3fd0ff",
-    civic_olive: "#b6e34a",
+    demo: "#4f9bff",
+    warm_sand: "#ff6a2a",
+    cool_slate: "#2ad8ff",
+    civic_olive: "#b8f03a",
   };
 
 export function avatarBarSkin(

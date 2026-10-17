@@ -72,6 +72,7 @@ describe("AvatarBar", () => {
       />,
     );
     expect(view.container.querySelector('[data-avatar-bar]')).toBeTruthy();
+    expect(view.container.querySelector('[data-avatar-bar-hud]')).toBeTruthy();
     expect(
       view.container.querySelector('[data-avatar-id="a"]')?.getAttribute(
         "data-state",
