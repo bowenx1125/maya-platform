@@ -132,6 +132,28 @@ def test_production_gateway_limits_only_auth_bodies_and_defers_error_headers() -
     assert ">Referrer-Policy" not in gateway
 
 
+def test_production_gateway_discovers_every_backend_replica() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    gateway = (repo_root / "infra/Caddyfile.production").read_text(encoding="utf-8")
+    compose = (repo_root / "docker-compose.yml").read_text(encoding="utf-8")
+
+    # A static `backend:8000` is one upstream to Caddy however many replicas
+    # answer behind it: the cookie cannot pin one and a single failed health
+    # check takes the whole API down.
+    assert "reverse_proxy backend:8000" not in gateway
+    assert (
+        "\t\treverse_proxy {\n\t\t\tdynamic a {\n\t\t\t\tname backend\n\t\t\t\tport 8000\n"
+    ) in gateway
+    for directive in ("lb_policy cookie", "fail_duration 10s", "max_fails 3"):
+        assert directive in gateway
+    # Active checks never run on dynamic upstreams; passive ones replace them.
+    assert "health_uri" not in gateway
+    # Busy 503s are admission answers, not a broken replica.
+    assert "unhealthy_status" not in gateway
+    # Caddy 2.10 kept routing a pinned cookie to a dead dynamic upstream.
+    assert "image: caddy:2.11." in compose
+
+
 def test_production_compose_requires_dedicated_data_and_config_roots() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     compose = (repo_root / "docker-compose.production.yml").read_text(encoding="utf-8")

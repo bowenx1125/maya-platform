@@ -122,7 +122,7 @@ def test_ready_probe_answers_with_the_shared_pool_full(
     release = threading.Event()
     with TestClient(app) as client:
         limiter = client.portal.call(anyio.to_thread.current_default_thread_limiter)
-        assert limiter.total_tokens == 128
+        assert limiter.total_tokens == 256
 
         # 48 admitted requests plus queued ones hold every shared worker thread.
         for _ in range(128):

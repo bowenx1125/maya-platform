@@ -121,9 +121,13 @@ from app.seed import COURSE_ID, seed_demo_data
 from app.tools.sqlite_import import maybe_import_postgres
 
 logger = logging.getLogger("maya.backend")
-# Worker threads for sync handlers (AnyIO default 40). Holds 48 admitted
-# requests, their queued waiters and still leaves room for health checks.
-ANYIO_THREAD_TOKENS = 128
+# Worker threads for sync handlers (AnyIO default 40). A request queued in
+# adaptive admission waits on one of these threads, so the pool must cover
+# 48 in flight + up to 200 queued (= 248) or ordinary sync reads start
+# queueing for a thread past ~80 waiters. Idle threads cost only their
+# lazily-committed stack (a few hundred KiB resident each), so 256 per
+# replica stays well inside the 3.5 GB host.
+ANYIO_THREAD_TOKENS = 256
 HEALTH_THREAD_TOKENS = 4
 # Threads behind asyncio.to_thread: streamed Chat replies, Team turn runs and
 # their event polls, Debate/report/Knowledge jobs. Python's default is

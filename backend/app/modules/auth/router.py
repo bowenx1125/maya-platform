@@ -40,7 +40,10 @@ from app.modules.auth.profile import (
     update_display_name,
 )
 from app.modules.auth.registration import (
+    hash_registration_password,
+    normalize_username,
     register_student,
+    registration_turn,
     reset_student_password,
     resolve_course,
     username_exists,
@@ -542,25 +545,41 @@ def register(
     """
 
     _require_production_auth_origin(request, settings)
-    if settings.is_production:
-        _limiter(request).consume_registration(client_key(request, settings), settings)
-    user, _group = register_student(
-        db,
-        settings,
-        username=payload.username,
-        password=payload.password,
-        display_name=payload.display_name,
-        group_name=payload.group_name,
-        course_id=str(payload.course_id) if payload.course_id else None,
-    )
-    raw_token, session_row, raw_csrf = create_rotated_session(
-        db,
-        user,
-        settings,
-        old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
-    )
+    # Same unified pressure queue as sign-in (Argon2 + a short write): under
+    # host pressure a registration waits instead of piling on.
+    with adaptive_slot("login", settings):
+        if settings.is_production:
+            _limiter(request).consume_registration(client_key(request, settings), settings)
+        # Hash outside the registration turn so only the short DB write is
+        # serialized; nothing has touched the request Session yet, so neither
+        # wait below holds a pooled connection.
+        normalize_username(payload.username)  # reject a bad name before hashing
+        password_hash = hash_registration_password(payload.password, settings)
+        with registration_turn(settings):
+            user, _group = register_student(
+                db,
+                settings,
+                username=payload.username,
+                password=payload.password,
+                display_name=payload.display_name,
+                group_name=payload.group_name,
+                course_id=str(payload.course_id) if payload.course_id else None,
+                password_hash=password_hash,
+            )
+            raw_token, session_row, raw_csrf = create_rotated_session(
+                db,
+                user,
+                settings,
+                old_raw_token=request.cookies.get(SESSION_COOKIE_NAME),
+            )
+            result = _auth_response(
+                db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf
+            )
+            # Commit inside the turn: the advisory lock ends with this
+            # transaction, before the next registrant takes a connection.
+            db.commit()
     _set_session_cookie(response, raw_token, settings, request)
-    return _auth_response(db, AuthContext(raw_token, session_row, user, raw_csrf), raw_csrf)
+    return result
 
 
 @router.post(

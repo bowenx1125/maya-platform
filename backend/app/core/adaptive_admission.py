@@ -240,6 +240,12 @@ class _State:
     # Last time anything was admitted or waiting; idle recovery counts from it.
     last_busy: float = float("-inf")
     danger: bool = False
+    # Danger latch history for /health/admission and the enter/release logs.
+    danger_entries: int = 0
+    danger_releases: int = 0
+    danger_since: float | None = None
+    danger_reason: str | None = None
+    danger_seconds_total: float = 0.0
     load: float | None = None
     mem: float | None = None
     threadpool: float | None = None
@@ -314,11 +320,13 @@ def _refresh_locked(settings: Settings) -> None:
     load_bad = load_reject > 0 and s.load is not None and s.load >= load_reject
     mem_bad = mem_floor > 0 and s.mem is not None and s.mem < mem_floor
     if not s.danger:
-        s.danger = load_bad or mem_bad
+        if load_bad or mem_bad:
+            _enter_danger_locked(now, load_bad=load_bad, mem_bad=mem_bad)
     else:
         load_ok = load_reject <= 0 or s.load is None or s.load <= load_resume
         mem_ok = mem_floor <= 0 or s.mem is None or s.mem >= mem_resume
-        s.danger = not (load_ok and mem_ok)
+        if load_ok and mem_ok:
+            _release_danger_locked(now)
 
     if s.in_flight_units > 0 or _waiting_total() > 0 or s.last_busy == float("-inf"):
         s.last_busy = now
@@ -362,6 +370,40 @@ def _refresh_locked(settings: Settings) -> None:
             s.in_flight_units,
             _waiting_total(),
         )
+
+
+def _enter_danger_locked(now: float, *, load_bad: bool, mem_bad: bool) -> None:
+    s = _state
+    reason = "+".join(name for name, bad in (("load", load_bad), ("mem", mem_bad)) if bad)
+    s.danger = True
+    s.danger_since = now
+    s.danger_reason = reason
+    s.danger_entries += 1
+    LOGGER.warning(
+        "admission_danger_entered reason=%s load=%s mem_mb=%s in_flight_units=%s queued=%s",
+        reason,
+        s.load,
+        s.mem,
+        s.in_flight_units,
+        _waiting_total(),
+    )
+
+
+def _release_danger_locked(now: float) -> None:
+    s = _state
+    held = max(0.0, now - s.danger_since) if s.danger_since is not None else 0.0
+    s.danger = False
+    s.danger_releases += 1
+    s.danger_seconds_total += held
+    LOGGER.warning(
+        "admission_danger_released reason=%s held_s=%.1f load=%s mem_mb=%s queued=%s",
+        s.danger_reason,
+        held,
+        s.load,
+        s.mem,
+        _waiting_total(),
+    )
+    s.danger_since = None
 
 
 def _shrink_reason(settings: Settings) -> str | None:
@@ -629,6 +671,17 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
             "in_flight": sum(s.in_flight.values()),
             "in_flight_units": s.in_flight_units,
             "danger": s.danger,
+            "danger_latch": {
+                "entries": s.danger_entries,
+                "releases": s.danger_releases,
+                "reason": s.danger_reason,
+                "active_seconds": (
+                    round(max(0.0, _clock() - s.danger_since), 1)
+                    if s.danger and s.danger_since is not None
+                    else 0.0
+                ),
+                "total_seconds": round(s.danger_seconds_total, 1),
+            },
             "load_1m": s.load,
             "mem_available_mb": s.mem,
             "db_write_p95_ms": _DB_WRITE.p95(),

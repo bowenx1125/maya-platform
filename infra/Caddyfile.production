@@ -28,14 +28,30 @@ https://{$MAYA_DOMAIN} {
 	# One upstream pool so the load-balancer cookie keeps a browser on the
 	# replica that owns its in-memory playback work. Sign-in state itself
 	# lives in PostgreSQL and does not require that stickiness.
+	#
+	# `backend` is a scaled compose service: Docker's DNS returns one A record
+	# per replica. A static `backend:8000` was a single upstream to Caddy, so
+	# the cookie could not pin a replica and one failed health check marked
+	# the whole service down. The dynamic A lookup lists every replica as its
+	# own upstream (needs Caddy >= 2.11: on 2.10 the cookie kept sending a
+	# pinned browser to a dead replica). Caddy runs no active health checks on
+	# dynamic upstreams; passive checks drop a replica that refuses
+	# connections (e.g. while it restarts) for 10 s, and lb_try_duration
+	# retries the other one. Busy 503s are normal admission answers and do
+	# not count as failures.
 	@platform path /api/* /ws/*
 	handle @platform {
-		reverse_proxy backend:8000 {
+		reverse_proxy {
+			dynamic a {
+				name backend
+				port 8000
+				refresh 5s
+				versions ipv4
+			}
 			lb_policy cookie
-			lb_try_duration 2s
-			health_uri /health/ready
-			health_interval 10s
-			health_timeout 3s
+			lb_try_duration 5s
+			fail_duration 10s
+			max_fails 3
 			header_up X-Forwarded-For {remote_host}
 		}
 	}
