@@ -128,7 +128,6 @@ const implemented = new Set([
   "startCardRoom",
   "actInCardRoom",
   "rebuyInCardRoom",
-  "sendConversationMessage",
   "streamConversationMessage",
   "getProviderSettings",
   "updateProviderSettings",

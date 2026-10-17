@@ -125,6 +125,44 @@ def database(app_bundle: tuple[FastAPI, Database, Settings]) -> Database:
     return app_bundle[1]
 
 
+def post_message(
+    client: TestClient,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    json: Any = None,
+    settle_seconds: float = 10.0,
+) -> Any:
+    """Send one Chat or Team message the way the app does, then read it back.
+
+    ``url`` is ``/api/v1/conversations/{id}/messages``. The message goes
+    through ``messages:stream`` (the only send route); a refusal before the
+    stream starts comes back as is. Otherwise the saved conversation is read
+    once the stream and any Team background work (a natural assessment resume)
+    have finished.
+    """
+
+    import time as _time
+
+    from app.modules.workspace.chat_stream import _TEAM_BACKGROUND_RUNS
+
+    before = set(_TEAM_BACKGROUND_RUNS)
+    response = client.post(
+        f"{url}:stream",
+        headers={**(headers or {}), "Accept": "text/event-stream"},
+        json=json,
+    )
+    if response.status_code != 200:
+        return response
+    # The stream ends with the turn; a Team turn's background run (a natural
+    # assessment resume) may still be finishing.
+    deadline = _time.monotonic() + settle_seconds
+    started = set(_TEAM_BACKGROUND_RUNS) - before
+    while any(not task.done() for task in started) and _time.monotonic() < deadline:
+        _time.sleep(0.02)
+    return client.get(url[: url.rindex("/messages")])
+
+
 def login(client: TestClient, username: str = "maya") -> tuple[dict[str, Any], str]:
     response = client.post(
         "/api/v1/auth/login",

@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.engine import Engine
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.legacy_organization import seed_legacy_organization
 from tests.test_mayaform_teams import (
     BOWEN_ID,
@@ -167,17 +167,16 @@ def test_every_chat_stays_with_its_owner_even_a_stored_legacy_public_one(
     assert client.get("/api/v1/conversations").json() == []
     for session in sessions.values():
         assert client.get(f"/api/v1/conversations/{session['id']}").status_code == 404
-        for suffix in ("messages", "messages:stream"):
-            denied = client.post(
-                f"/api/v1/conversations/{session['id']}/{suffix}",
-                headers={**_headers(csrf), "Accept": "text/event-stream"},
-                json={
-                    "request_id": str(uuid4()),
-                    "expected_revision": 0,
-                    "message": "Teacher must not send.",
-                },
-            )
-            assert denied.status_code == 404
+        denied = client.post(
+            f"/api/v1/conversations/{session['id']}/messages:stream",
+            headers={**_headers(csrf), "Accept": "text/event-stream"},
+            json={
+                "request_id": str(uuid4()),
+                "expected_revision": 0,
+                "message": "Teacher must not send.",
+            },
+        )
+        assert denied.status_code == 404
         assert (
             client.delete(
                 f"/api/v1/conversations/{session['id']}", headers=_headers(csrf)
@@ -766,7 +765,8 @@ def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
     assert saved["agent"]["deleted"] is True
     assert saved["agent"]["available"] is False
     assert [turn["user_text"] for turn in saved["turns"]] == []
-    denied = client.post(
+    denied = post_message(
+        client,
         f"/api/v1/conversations/{single['id']}/messages",
         headers=_headers(student_csrf),
         json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Hello"},

@@ -1431,15 +1431,8 @@ export class PlatformApi {
     return session as unknown as ConversationSession;
   }
 
-  sendConversation(
-    id: string,
-    body: components["schemas"]["SendChat"],
-  ): Promise<ChatSession> {
-    return this.postJson(`conversations/${id}/messages`, body);
-  }
-
   /**
-   * Stream one chat turn. The JSON messages route stays available.
+   * Stream one chat turn; this is the only way a Chat message is sent.
    * Legacy audio events are parsed for compatibility; Chats never plays them.
    */
   async streamConversation(

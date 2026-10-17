@@ -37,7 +37,7 @@ from httpx import Response
 from pydantic import ValidationError
 from sqlalchemy import func, select
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_knowledge_generation import _headers, _teacher_agent_with_source
 from tests.test_knowledge_generation_materialization import _accept_stage
 from tests.test_wave4_llm_adapter import _adapter
@@ -150,7 +150,8 @@ def _send_tool_turn(
     call_id: str,
     request_id: str | None = None,
 ) -> Response:
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
         json={

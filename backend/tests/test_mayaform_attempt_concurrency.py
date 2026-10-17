@@ -42,6 +42,7 @@ from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from tests.conftest import post_message
 from tests.test_mayaform_assessment_attempts import (
     STUDENT_ID,
     _answer_decision,
@@ -486,7 +487,8 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
         )
         old_revision = db.get(Conversation, conversations[student_ids[0]]).revision - 1
 
-    stale_response = clients[student_ids[0]].post(
+    stale_response = post_message(
+        clients[student_ids[0]],
         f"/api/v1/conversations/{conversations[student_ids[0]]}/messages",
         headers={
             "Origin": "http://testserver",

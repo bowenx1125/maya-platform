@@ -50,6 +50,7 @@ from app.modules.workspace.team_runtime import _current_run, team_history
 from app.seed import TEACHER_ID
 from sqlalchemy import func, select
 
+from tests.conftest import post_message
 from tests.test_mayaform_assessment_attempts import (
     STUDENT_ID,
     _accepted_tool_identity,
@@ -558,7 +559,8 @@ def test_teacher_canonical_save_invalidates_current_evidence_and_fences_old_team
             )
         )
         current_revision = db.get(Conversation, conversation_id).revision
-    stale_send = client.post(
+    stale_send = post_message(
+        client,
         f"/api/v1/conversations/{conversation_id}/messages",
         headers={"X-CSRF-Token": csrf, "Idempotency-Key": f"old-selection-{uuid4()}"},
         json={

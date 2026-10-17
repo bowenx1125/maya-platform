@@ -342,22 +342,21 @@ async def stream_team_events(
             after_sequence=cursor,
         )
 
-    if not claim.created and write_slot is not None:
-        write_slot.release()
-    if claim.created:
-        task = asyncio.create_task(
-            asyncio.to_thread(
-                execute_team_turn_with_natural_assessment_resume,
-                database.session_factory,
-                claim,
-                write_slot,
-            )
+    # A replay runs too: it executes nothing new but resumes an old turn whose
+    # receipt a crash left unclaimed.
+    task = asyncio.create_task(
+        asyncio.to_thread(
+            execute_team_turn_with_natural_assessment_resume,
+            database.session_factory,
+            claim,
+            write_slot,
         )
-        _TEAM_BACKGROUND_RUNS.add(task)
-        task.add_done_callback(_TEAM_BACKGROUND_RUNS.discard)
-        if on_finished is not None:
-            # Runs even if the browser left; the run itself is not tied to it.
-            task.add_done_callback(lambda _task: on_finished())
+    )
+    _TEAM_BACKGROUND_RUNS.add(task)
+    task.add_done_callback(_TEAM_BACKGROUND_RUNS.discard)
+    if on_finished is not None:
+        # Runs even if the browser left; the run itself is not tied to it.
+        task.add_done_callback(lambda _task: on_finished())
     while True:
         events, state, active = await asyncio.to_thread(poll)
         for sequence, kind, payload in events:

@@ -94,7 +94,6 @@ beforeEach(() => {
     chatAgents: vi.fn().mockResolvedValue([agent]),
     conversations: vi.fn().mockResolvedValue([]),
     createConversation: vi.fn().mockResolvedValue(conversation),
-    sendConversation: vi.fn().mockResolvedValue(completedConversation),
     streamConversation: vi.fn().mockResolvedValue({
       session: completedConversation,
       audioUrl: null,
@@ -556,7 +555,6 @@ describe("private Agent chat", () => {
     expect(requests[1]).toEqual(requests[0]);
     expect(getChatRequest()?.requestId).toBe(firstRequestId);
     expect(getChatRequest()?.status).toBe("uncertain");
-    expect(state.api.sendConversation).not.toHaveBeenCalled();
   });
 
   it("restores a saved chat_interrupted unknown turn and reuses its request ID after reload", async () => {
@@ -825,7 +823,6 @@ describe("private Agent chat", () => {
     await screen.findByText("Finished after reopen");
     expect(state.api.conversation).toHaveBeenCalledTimes(2);
     expect(state.api.streamConversation).not.toHaveBeenCalled();
-    expect(state.api.sendConversation).not.toHaveBeenCalled();
     expect(getChatRequest()).toBeNull();
   });
 

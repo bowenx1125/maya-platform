@@ -137,7 +137,6 @@ beforeEach(() => {
     createConversation: vi.fn(async () => emptyConversation),
     conversation: vi.fn(async () => emptyConversation),
     streamConversation: vi.fn(),
-    sendConversation: vi.fn(),
     deleteConversation: vi.fn(),
   };
 });

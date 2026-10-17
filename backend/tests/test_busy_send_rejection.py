@@ -83,15 +83,11 @@ def _turn_count(database: Any) -> int:
         return int(db.scalar(select(func.count()).select_from(ConversationTurn)) or 0)
 
 
-def _send(client: TestClient, chat: dict[str, Any], *, stream: bool, request_id: str) -> Any:
+def _send(client: TestClient, chat: dict[str, Any], *, request_id: str) -> Any:
     session = chat["session"]
-    suffix = ":stream" if stream else ""
-    headers = {"X-CSRF-Token": chat["csrf"]}
-    if stream:
-        headers["Accept"] = "text/event-stream"
     return client.post(
-        f"/api/v1/conversations/{session['id']}/messages{suffix}",
-        headers=headers,
+        f"/api/v1/conversations/{session['id']}/messages:stream",
+        headers={"X-CSRF-Token": chat["csrf"], "Accept": "text/event-stream"},
         json={
             "request_id": request_id,
             "expected_revision": session["revision"],
@@ -100,14 +96,13 @@ def _send(client: TestClient, chat: dict[str, Any], *, stream: bool, request_id:
     )
 
 
-@pytest.mark.parametrize("stream", [False, True])
 def test_full_queue_answers_503_queue_full_and_stores_nothing(
-    client: TestClient, agent_chat: dict[str, Any], stream: bool
+    client: TestClient, agent_chat: dict[str, Any]
 ) -> None:
     app, database = agent_chat["app"], agent_chat["database"]
     app.state.settings.adaptive_admission_queue_max = 0
     with _HeldServer(app):
-        response = _send(client, agent_chat, stream=stream, request_id=str(uuid4()))
+        response = _send(client, agent_chat, request_id=str(uuid4()))
     assert response.status_code == 503
     body = response.json()
     assert body["code"] == "adaptive_admission_busy"
@@ -121,14 +116,13 @@ def test_full_queue_answers_503_queue_full_and_stores_nothing(
         assert row.revision == agent_chat["session"]["revision"]
 
 
-@pytest.mark.parametrize("stream", [False, True])
 def test_spent_wait_answers_503_wait_timeout_and_stores_nothing(
-    client: TestClient, agent_chat: dict[str, Any], stream: bool
+    client: TestClient, agent_chat: dict[str, Any]
 ) -> None:
     app, database = agent_chat["app"], agent_chat["database"]
     app.state.settings.adaptive_admission_wait_seconds = 1
     with _HeldServer(app):
-        response = _send(client, agent_chat, stream=stream, request_id=str(uuid4()))
+        response = _send(client, agent_chat, request_id=str(uuid4()))
     assert response.status_code == 503
     assert response.json()["code"] == "adaptive_admission_busy"
     assert response.json()["details"]["reason"] == "wait_timeout"
@@ -138,9 +132,8 @@ def test_spent_wait_answers_503_wait_timeout_and_stores_nothing(
     assert _turn_count(database) == 0
 
 
-@pytest.mark.parametrize("stream", [False, True])
 def test_previous_message_still_running_answers_409_chat_busy_at_once(
-    client: TestClient, agent_chat: dict[str, Any], stream: bool
+    client: TestClient, agent_chat: dict[str, Any]
 ) -> None:
     app, database = agent_chat["app"], agent_chat["database"]
     with database.session() as db:
@@ -151,7 +144,7 @@ def test_previous_message_still_running_answers_409_chat_busy_at_once(
     # Busy server too: chat_busy must answer before queueing, not after it.
     app.state.settings.adaptive_admission_wait_seconds = 30
     with _HeldServer(app):
-        response = _send(client, agent_chat, stream=stream, request_id=str(uuid4()))
+        response = _send(client, agent_chat, request_id=str(uuid4()))
     assert response.status_code == 409
     assert response.json()["code"] == "chat_busy"
     assert _turn_count(database) == 0
@@ -160,9 +153,9 @@ def test_previous_message_still_running_answers_409_chat_busy_at_once(
 def test_one_request_id_is_stored_once(client: TestClient, agent_chat: dict[str, Any]) -> None:
     database = agent_chat["database"]
     request_id = str(uuid4())
-    first = _send(client, agent_chat, stream=False, request_id=request_id)
+    first = _send(client, agent_chat, request_id=request_id)
     assert first.status_code == 200, first.text
-    again = _send(client, agent_chat, stream=False, request_id=request_id)
+    again = _send(client, agent_chat, request_id=request_id)
     assert again.status_code == 200
     with database.session() as db:
         assert db.scalar(select(func.count()).where(ConversationTurn.id == request_id)) == 1
@@ -170,20 +163,17 @@ def test_one_request_id_is_stored_once(client: TestClient, agent_chat: dict[str,
     assert aa.adaptive_admission_snapshot(agent_chat["app"].state.settings)["in_flight"] == 0
 
 
-@pytest.mark.parametrize("path", ["messages", "messages:stream"])
 def test_team_send_on_a_full_queue_stores_nothing(
-    client: TestClient, database: Any, app_bundle: Any, healthy_host: None, path: str
+    client: TestClient, database: Any, app_bundle: Any, healthy_host: None
 ) -> None:
     app = app_bundle[0]
     session, csrf, _actor = _chat(client, database)
     before = _turn_count(database)
     app.state.settings.adaptive_admission_queue_max = 0
-    headers = _headers(csrf)
-    if path.endswith("stream"):
-        headers["Accept"] = "text/event-stream"
+    headers = {**_headers(csrf), "Accept": "text/event-stream"}
     with _HeldServer(app):
         response = client.post(
-            f"/api/v1/conversations/{session['id']}/{path}",
+            f"/api/v1/conversations/{session['id']}/messages:stream",
             headers=headers,
             json=_body(session, "all"),
         )

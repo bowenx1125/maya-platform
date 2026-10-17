@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import select
 
-from tests.conftest import login
+from tests.conftest import login, post_message
 from tests.test_wave4_llm_adapter import _adapter
 from tests.test_wave4_llm_ledger import _valid_policy
 
@@ -64,7 +64,8 @@ def test_restart_preserves_single_accepted_stage_for_explicit_resume(
         headers={"X-CSRF-Token": csrf},
         json={"version_id": BASELINE_VERSION_ID},
     ).json()
-    response = client.post(
+    response = post_message(
+        client,
         f"/api/v1/conversations/{created['id']}/messages",
         headers={"X-CSRF-Token": csrf},
         json={
