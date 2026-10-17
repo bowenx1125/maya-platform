@@ -539,6 +539,21 @@ class Settings(BaseSettings):
             or self.maya_env.strip().lower() == "production"
         )
 
+    def single_writer_production_warning(self) -> str | None:
+        """Why this production process should not carry a classroom, if it should not.
+
+        Issue #111: SQLite has one writer and a 5 s busy timeout, so about
+        forty students writing at once time out. Production Compose runs
+        PostgreSQL; SQLite there is only the ADR-010 rollback path.
+        """
+
+        if not self.is_production or not self.database_url.startswith("sqlite"):
+            return None
+        return (
+            "Production is running on SQLite (one writer, 5 s busy timeout). "
+            "Classroom load needs PostgreSQL; see ADR-010."
+        )
+
     def validate_runtime(self) -> None:
         """Reject insecure production configuration at application startup."""
 
