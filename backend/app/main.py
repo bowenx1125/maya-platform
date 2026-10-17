@@ -10,6 +10,7 @@ from threading import RLock
 from typing import Any
 from uuid import uuid4
 
+import anyio
 import anyio.to_thread
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -118,6 +119,10 @@ from app.seed import COURSE_ID, seed_demo_data
 from app.tools.sqlite_import import maybe_import_postgres
 
 logger = logging.getLogger("maya.backend")
+# Worker threads for sync handlers (AnyIO default 40). Holds 48 admitted
+# requests, their queued waiters and still leaves room for health checks.
+ANYIO_THREAD_TOKENS = 128
+HEALTH_THREAD_TOKENS = 4
 
 
 def build_report_runtime(
@@ -329,8 +334,13 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         limiter = anyio.to_thread.current_default_thread_limiter()
-        # Sync handlers and admission waits run in this pool; admission holds
-        # its budget when the pool is nearly full instead of growing into it.
+        # Sync handlers and admission waits run in this pool. AnyIO's default
+        # 40 threads would be gone at 48 admitted requests plus waiters, and
+        # /health/ready (also sync) would then time out and get the container
+        # restarted mid-class.
+        limiter.total_tokens = ANYIO_THREAD_TOKENS
+        # Admission holds its budget when the pool is nearly full instead of
+        # growing into it.
         set_threadpool_reader(lambda: limiter.borrowed_tokens / max(1.0, limiter.total_tokens))
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
@@ -596,9 +606,18 @@ def create_app(
             "message_timing": message_timing_snapshot(),
         }
 
+    health_limiter: list[anyio.CapacityLimiter] = []
+
     @app.get("/health/ready", tags=["Health"])
-    def health_ready() -> JSONResponse:
-        ready = runtime_database.check_ready()
+    async def health_ready() -> JSONResponse:
+        # Requests queued for admission each hold a sync-handler thread, so
+        # under a long queue the shared pool can be full. The probe gets its
+        # own small limiter: a busy classroom must not read as a dead container.
+        if not health_limiter:
+            health_limiter.append(anyio.CapacityLimiter(HEALTH_THREAD_TOKENS))
+        ready = await anyio.to_thread.run_sync(
+            runtime_database.check_ready, limiter=health_limiter[0]
+        )
         body = {"status": "ready" if ready else "not_ready"}
         return JSONResponse(status_code=200 if ready else 503, content=body)
 

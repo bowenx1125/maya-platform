@@ -22,8 +22,10 @@ from app.core.models import Base
 from app.core.postgres_compat import ensure_postgres_compat
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-POSTGRES_POOL_SIZE = 10
-POSTGRES_MAX_OVERFLOW = 20
+# Per backend: 15 + 25 = 40, so two replicas hold at most 80 of PostgreSQL's
+# 200 connections; 48 admitted requests rarely hold a connection at once.
+POSTGRES_POOL_SIZE = 15
+POSTGRES_MAX_OVERFLOW = 25
 
 ALEMBIC_HEAD = "0066_postgres_column_widths"
 _STARTUP_LOCK = "maya-startup"

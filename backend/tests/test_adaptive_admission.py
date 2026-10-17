@@ -519,7 +519,7 @@ def test_hold_band_neither_grows_nor_shrinks(probe: _Probe, setup) -> None:  # t
 
 
 def test_growth_is_plus_four_below_half_of_max_then_plus_two(probe: _Probe) -> None:
-    s = _defaults(adaptive_admission_initial_units=40)
+    s = _defaults(adaptive_admission_initial_units=40, adaptive_admission_max_units=96)
     aa.adaptive_admission_snapshot(s)
     with aa._cond:
         aa._state.in_flight_units = 4  # busy, so idle recovery stays out of it

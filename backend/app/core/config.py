@@ -224,9 +224,11 @@ class Settings(BaseSettings):
         default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
     )
     # Second per-operation backstop: concurrent Team/Chat turn execution
-    # (write-heavy) per process, same 12 / 100 / 180 band and shared deadline.
+    # (write-heavy) per process, sharing the request deadline. 20 matches the
+    # LLM backstop: every turn also holds an LLM slot, so a lower write cap
+    # left LLM capacity unused (DB write p95 stayed ~1 ms at 40 students).
     write_guard_limit: int = Field(
-        default=12, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
+        default=20, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
     )
     write_guard_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
@@ -262,16 +264,17 @@ class Settings(BaseSettings):
         default=True, validation_alias="ADAPTIVE_ADMISSION_ENABLED"
     )
     # Single global backstop: admitted requests per process never exceed this,
-    # whatever the budget says. 32 = 20 model calls plus room for logins,
-    # creates and writes, and stays under AnyIO's 40 sync-handler threads.
-    # (A Chat/Team turn holds a write slot and a nested LLM slot: 2 entries.)
+    # whatever the budget says. A Chat/Team turn holds a write slot and a
+    # nested LLM slot (2 entries), so 48 = 20 turns plus room for logins and
+    # creates. main.py raises AnyIO's sync-handler pool to 128 threads so 48
+    # admitted requests cannot starve /health/ready or plain reads.
     adaptive_admission_max_in_flight: int = Field(
-        default=32, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
+        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
     )
-    # Max budget 96 = 20 concurrent LLM calls at weight 4 (80) plus 16 for
-    # logins / creates / writes. Min keeps one model call moving.
+    # Max budget 128: 20 turns x 6 units (write 2 + nested LLM 4) = 120, plus
+    # room for logins and creates. Min keeps one model call moving.
     adaptive_admission_max_units: int = Field(
-        default=96, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
+        default=128, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
     )
     # Cold-start budget (18 LLM calls at weight 4). AIMD climbs to max while
     # the signals stay healthy, and an idle process (30 s, healthy) returns

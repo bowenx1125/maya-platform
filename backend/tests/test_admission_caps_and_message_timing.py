@@ -1,4 +1,4 @@
-"""LLM cap 20 / adaptive budget 96 / in-flight 32, danger still wins, and the
+"""LLM cap 20 / adaptive budget 128 / in-flight 48, danger still wins, and the
 per-message timing collector (structured log + /health/admission summary)."""
 
 from __future__ import annotations
@@ -66,8 +66,8 @@ def _settings(**overrides: object) -> Settings:
 
 def test_new_caps_and_unchanged_protection_defaults() -> None:
     assert _default("llm_admission_limit") == 20
-    assert _default("adaptive_admission_max_units") == 96
-    assert _default("adaptive_admission_max_in_flight") == 32
+    assert _default("adaptive_admission_max_units") == 128
+    assert _default("adaptive_admission_max_in_flight") == 48
     assert _default("adaptive_admission_initial_units") == 72
     # Protection is unchanged.
     assert _default("adaptive_admission_min_units") == 4
@@ -89,18 +89,18 @@ def test_new_caps_and_unchanged_protection_defaults() -> None:
 def test_budget_starts_at_initial_and_climbs_to_new_max(probe: _Probe) -> None:
     s = _settings()
     snap = aa.adaptive_admission_snapshot(s)
-    # Starts at exactly 72, not straight at 96.
+    # Starts at exactly 72, not straight at 128.
     assert snap["adaptive_limit_units"] == 72
-    assert snap["max_units"] == 96 and snap["max_in_flight"] == 32
+    assert snap["max_units"] == 128 and snap["max_in_flight"] == 48
     assert snap["min_units"] == 4 and snap["initial_units"] == 72
     for step in range(1, 40):
         probe.now = float(step)
         aa.adaptive_admission_snapshot(s)
-    assert aa._state.budget == 96  # +2 per healthy adjust, capped at max
+    assert aa._state.budget == 128  # +2 per healthy adjust, capped at max
     probe.load = 5.0  # soft pressure
     probe.now = 40.0
     aa.adaptive_admission_snapshot(s)
-    assert aa._state.budget == pytest.approx(96 * 0.7)
+    assert aa._state.budget == pytest.approx(128 * 0.7)
     for step in range(41, 60):
         probe.now = float(step)
         aa.adaptive_admission_snapshot(s)
@@ -148,17 +148,17 @@ def test_cold_start_budget_limits_to_eighteen(probe: _Probe) -> None:
             thread.join()
 
 
-def test_in_flight_cap_32_still_binds(probe: _Probe) -> None:
+def test_in_flight_cap_48_still_binds(probe: _Probe) -> None:
     s = _settings(adaptive_admission_initial_units=200, adaptive_admission_max_units=200)
     release = threading.Event()
-    started = threading.Barrier(33)
+    started = threading.Barrier(49)
 
     def hold() -> None:
         with aa.adaptive_slot("login", s):
             started.wait(5)
             release.wait(10)
 
-    threads = [threading.Thread(target=hold) for _ in range(32)]
+    threads = [threading.Thread(target=hold) for _ in range(48)]
     for thread in threads:
         thread.start()
     started.wait(5)
@@ -322,7 +322,7 @@ def test_no_collector_outside_a_message() -> None:
 
 def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ignore[no-untyped-def]
     body = client.get("/health/admission").json()
-    assert body["max_units"] == 96 and body["max_in_flight"] == 32
+    assert body["max_units"] == 128 and body["max_in_flight"] == 48
     assert body["backstops"]["llm_admission_limit"] == 20
     timing = body["message_timing"]
     assert set(timing) >= {"messages", "total_ms", "queue_wait_ms", "llm_calls_per_msg", "ttft_ms"}
