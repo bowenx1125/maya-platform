@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, unprocessable
+from app.core.hash_gate import hash_slot, run_hash
 from app.core.identity import group_name_key
 from app.core.models import CourseMember, Group, User
 from app.modules.auth.credentials import verify_password
@@ -102,10 +103,12 @@ def change_group(db: Session, user: User, raw: str) -> None:
 
 
 def _password_matches(hash_value: str, password: str) -> bool:
-    try:
-        return PasswordHash.recommended().verify(password, hash_value)
-    except Exception:
-        return False
+    # Gate outside the try so a busy 503 is not reported as a wrong password.
+    with hash_slot():
+        try:
+            return PasswordHash.recommended().verify(password, hash_value)
+        except Exception:
+            return False
 
 
 def change_password(
@@ -133,7 +136,7 @@ def change_password(
 
     password = validate_password(new_password)
     now = datetime.now(UTC)
-    password_hash = PasswordHash.recommended().hash(password)
+    password_hash = run_hash(lambda: PasswordHash.recommended().hash(password), settings)
     if credential is None:
         credential = UserCredential(
             user_id=user.id,

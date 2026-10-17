@@ -336,3 +336,78 @@ def test_llm_backstop_shares_the_single_deadline(probe: _Probe) -> None:
 
 def test_shared_wait_seconds_without_deadline_returns_cap() -> None:
     assert aa.shared_wait_seconds(60.0) == 60.0
+
+
+def test_request_p95_window_drains_after_60s(probe: _Probe) -> None:
+    for _ in range(20):
+        aa.record_request_ms(20_000.0)
+    assert aa._REQUEST.p95() == 20_000.0
+    probe.now = 59.0
+    assert aa._REQUEST.p95() == 20_000.0
+    probe.now = 61.0  # every sample is now older than 60 s
+    assert aa._REQUEST.p95() is None
+    s = _settings()
+    aa.adaptive_admission_snapshot(s)
+    assert aa.adaptive_admission_snapshot(s)["request_p95_ms"] is None
+
+
+def test_stale_request_latency_no_longer_pins_budget(probe: _Probe) -> None:
+    s = _settings()
+    aa.adaptive_admission_snapshot(s)
+    for _ in range(20):
+        aa.record_request_ms(20_000.0)
+    probe.now = 1.0
+    aa.adaptive_admission_snapshot(s)
+    assert _budget() == pytest.approx(5.6)  # soft pressure from request p95
+    probe.now = 62.0  # idle: window drains, budget recovers additively
+    aa.adaptive_admission_snapshot(s)
+    assert _budget() == pytest.approx(7.6)
+
+
+def test_llm_requests_are_excluded_from_request_p95(probe: _Probe) -> None:
+    s = _settings(adaptive_admission_max_units=48)
+    for _ in range(20):
+        sample = aa.begin_request_sample()
+        with aa.adaptive_slot("llm", s):
+            pass
+        assert sample.llm is True
+        assert aa.record_request_sample(sample, 30_000.0) is False
+    assert aa._REQUEST.p95() is None
+    for _ in range(20):
+        sample = aa.begin_request_sample()
+        with aa.adaptive_slot("write", s):
+            pass
+        assert aa.record_request_sample(sample, 100.0) is True
+    assert aa._REQUEST.p95() == 100.0
+
+
+def test_stream_responses_are_excluded_from_request_p95(probe: _Probe) -> None:
+    for _ in range(20):
+        sample = aa.begin_request_sample()
+        assert (
+            aa.record_request_sample(
+                sample, 40_000.0, content_type="text/event-stream; charset=utf-8"
+            )
+            is False
+        )
+    assert aa._REQUEST.p95() is None
+    assert aa.record_request_sample(None, 5.0, content_type="application/json") is True
+
+
+def test_llm_mark_crosses_threadpool_context_copy(probe: _Probe) -> None:
+    """Sync handlers run in a copied context; the marker is shared by reference."""
+
+    import contextvars
+
+    s = _settings(adaptive_admission_max_units=48)
+    sample = aa.begin_request_sample()
+    ctx = contextvars.copy_context()
+
+    def handler() -> None:
+        with aa.adaptive_slot("llm", s):
+            pass
+
+    t = threading.Thread(target=lambda: ctx.run(handler))
+    t.start()
+    t.join()
+    assert sample.llm is True

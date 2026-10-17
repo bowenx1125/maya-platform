@@ -176,6 +176,12 @@ class Settings(BaseSettings):
     auth_login_queue_retry_seconds: int = Field(
         default=2, ge=1, le=60, validation_alias="AUTH_LOGIN_QUEUE_RETRY_SECONDS"
     )
+    # Concurrent Argon2 hash / verify calls per process (app/core/hash_gate.py).
+    # Each call allocates memory_cost (64 MiB) at once; 2 replicas x 3 x 64 MiB
+    # = 384 MiB worst case. 0 disables the cap.
+    auth_hash_concurrency: int = Field(
+        default=3, ge=0, le=64, validation_alias="AUTH_HASH_CONCURRENCY"
+    )
     # Unified pressure signal (app/core/adaptive_admission.py). Below this
     # MemAvailable floor (MiB) or at/above the 1m load reject threshold, new
     # work only queues; it resumes once MemAvailable >= the resume floor AND

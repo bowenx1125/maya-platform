@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, unprocessable
+from app.core.hash_gate import hash_slot, run_hash
 from app.core.identity import normalize_group_name as canonical_group_name
 from app.core.identity import username_key
 from app.core.models import Course, CourseMember, Group, GroupMember, User
@@ -170,7 +171,7 @@ def register_student(
 
     # Hash before taking SQLite's writer lock; the read/claim/group/session
     # transaction must be serialized, but Argon2 work must not hold that lock.
-    password_hash = _hasher().hash(password)
+    password_hash = run_hash(lambda: _hasher().hash(password), settings)
     try:
         begin_immediate(db, lock_key="maya-student-registration")
     except OperationalError:
@@ -246,13 +247,16 @@ def verify_database_password(db: Session, username: str, password: str) -> tuple
     )
     if credential is None:
         return False, None
-    try:
-        if _hasher().verify(password, credential.password_hash):
-            return True, credential.user_id
-    except Exception:
-        # A corrupt stored hash fails closed without surfacing the hash or the
-        # backend exception at the API boundary.
-        return True, None
+    # The gate sits outside the try: a hash-gate busy 503 must surface as
+    # "busy, retry", never be swallowed into a wrong-password answer.
+    with hash_slot():
+        try:
+            if _hasher().verify(password, credential.password_hash):
+                return True, credential.user_id
+        except Exception:
+            # A corrupt stored hash fails closed without surfacing the hash or the
+            # backend exception at the API boundary.
+            return True, None
     return True, None
 
 
@@ -289,7 +293,7 @@ def reset_student_password(
             "This account is provisioned by the Demo catalog and has no resettable password.",
         )
     password = validate_password(new_password) if new_password else generate_reset_password()
-    credential.password_hash = _hasher().hash(password)
+    credential.password_hash = run_hash(lambda: _hasher().hash(password))
     credential.updated_at = datetime.now(UTC)
     # Any session opened with the old password stops being usable. A reset is
     # normally requested because the student lost control of the account.

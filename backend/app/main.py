@@ -18,7 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.adaptive_admission import adaptive_admission_snapshot, record_request_ms
+from app.core.adaptive_admission import (
+    adaptive_admission_snapshot,
+    begin_request_sample,
+    record_request_sample,
+)
 from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import (
@@ -520,11 +524,16 @@ def create_app(
     async def add_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
         request.state.request_id = str(uuid4())
         started = time.perf_counter()
+        sample = begin_request_sample()
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
-            # Time-to-headers (SSE bodies stream afterwards) feeds the
-            # adaptive admission request-p95 pressure signal.
-            record_request_ms((time.perf_counter() - started) * 1000.0)
+            # Time-to-headers feeds the adaptive admission request-p95 signal;
+            # LLM work and SSE streams are excluded (slow by nature).
+            record_request_sample(
+                sample,
+                (time.perf_counter() - started) * 1000.0,
+                content_type=response.headers.get("content-type"),
+            )
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
