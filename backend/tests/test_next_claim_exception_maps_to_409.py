@@ -198,3 +198,99 @@ def test_playback_states_claim_sql_uses_id_not_sqlite_rowid() -> None:
     assert "WHERE id=:claim_id" in source
     # Pause/resume/finish/replay claims also bind the real PK.
     assert source.count("SELECT ps.id") >= 3
+
+
+def test_tts_voice_unavailable_text_claim_advances(app_factory) -> None:
+    """Prod D2: waiting_next + final_ready + tts_voice_unavailable → claim True via id PK."""
+    from sqlalchemy import text
+
+    from tests.test_pw3_playback_sql import TEACHER_ID, _add_live_successor, _seed_one_turn
+
+    database, _settings, debate_id, first = _seed_one_turn(app_factory)
+    successor = _add_live_successor(database, debate_id, first)
+    with database.session() as db:
+        db.execute(
+            text(
+                "UPDATE debate_turns SET audio_file_id=NULL, audio_duration_ms=NULL, "
+                "predecessor_turn_ids_json='[]', cutoff_turn_index=-1, "
+                "safe_error_code='tts_voice_unavailable' WHERE id=:id"
+            ),
+            {"id": successor},
+        )
+        db.execute(
+            text(
+                "UPDATE playback_states SET status='waiting_next', mode='live', "
+                "current_turn_id=:turn_id, control_version=8, "
+                "replay_scope=NULL, replay_index=NULL WHERE debate_id=:debate_id"
+            ),
+            {"turn_id": first, "debate_id": debate_id},
+        )
+    repo = SqlPlaybackRepository(session_factory=database.session_factory)
+    assert repo.claim_next_playback(
+        debate_id=debate_id,
+        expected_control_version=8,
+        expected_current_turn_id=first,
+        successor_turn_id=successor,
+        teacher_user_id=TEACHER_ID,
+    )
+    with database.session() as db:
+        row = db.execute(
+            text(
+                "SELECT status, current_turn_id, control_version FROM playback_states "
+                "WHERE debate_id=:id"
+            ),
+            {"id": debate_id},
+        ).one()
+        assert row[0] in {"waiting_next", "ready"}
+        assert row[1] == successor
+        assert int(row[2]) >= 9
+
+
+def test_claim_next_playback_sql_has_no_sqlite_rowid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Postgres dialect path must emit ps.id, never rowid."""
+    captured: list[str] = []
+
+    class _Result:
+        def first(self) -> None:
+            return None
+
+    class _FakeBind:
+        class dialect:
+            name = "postgresql"
+
+    class _FakeSession:
+        def get_bind(self) -> _FakeBind:
+            return _FakeBind()
+
+        def execute(self, statement: Any, *_args: Any, **_kwargs: Any) -> _Result:
+            captured.append(str(getattr(statement, "text", statement)))
+            return _Result()
+
+        def rollback(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+    repo = SqlPlaybackRepository(session_factory=lambda: _FakeSession())
+    monkeypatch.setattr(
+        "app.modules.debates.playback.sql_repository.begin_immediate",
+        lambda _session, **_kwargs: None,
+    )
+    assert (
+        repo.claim_next_playback(
+            debate_id="debate",
+            expected_control_version=1,
+            expected_current_turn_id="current",
+            successor_turn_id="successor",
+            teacher_user_id="teacher",
+        )
+        is False
+    )
+    assert captured
+    joined = "\n".join(captured).lower()
+    assert "rowid" not in joined
+    assert "ps.id" in joined or " id=" in joined
