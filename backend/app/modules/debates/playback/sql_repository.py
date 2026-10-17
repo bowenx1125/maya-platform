@@ -3423,12 +3423,18 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if expected_control_version < 0:
             return False
+        # Soft-fail TTS (mark_turn_ready → final_ready + tts_*) includes voice /
+        # provider unavailable; keep deferred set unchanged for live defer paths.
+        tts_preview_retry_codes = _TTS_DEFERRED_CODES | {
+            "tts_voice_unavailable",
+            "tts_provider_unavailable",
+        }
         retry_codes = {
             "provider_confirmation_required",
             "provider_not_sent",
             "turn_generation_failed",
             _PREPARATION_TIMEOUT_CODE,
-        } | _TTS_DEFERRED_CODES
+        } | tts_preview_retry_codes
         if code not in retry_codes or not self._has_table(db, "playback_states"):
             return False
         debate_id = str(debate.id)
@@ -3443,9 +3449,14 @@ class SqlPlaybackRepository(PlaybackRepository):
             and not self.unattempted_llm_turn(db, debate_id, turn_id)
         ):
             return False
-        cached_segment = code in _TTS_DEFERRED_CODES and _has_cached_segment_fence(turn)
-        if code in _TTS_DEFERRED_CODES and not cached_segment:
+        cached_segment = code in tts_preview_retry_codes and _has_cached_segment_fence(turn)
+        if code in tts_preview_retry_codes and not cached_segment:
             return False
+        text_fallback_tts = (
+            cached_segment
+            and str(_row_value(turn, "generation_status", "") or "") == "final_ready"
+            and code in tts_preview_retry_codes
+        )
         timestamp = _now()
 
         state = db.execute(
@@ -3467,13 +3478,18 @@ class SqlPlaybackRepository(PlaybackRepository):
         if int(getattr(state, "rowcount", 0)) != 1:
             return False
 
+        status_in = (
+            "('pending','failed','turn_generation_failed','final_ready')"
+            if text_fallback_tts
+            else "('pending','failed','turn_generation_failed')"
+        )
         turn_sql = (
             "UPDATE debate_turns SET generation_status='pending', "
             "preparation_stage='generation', "
             + ("" if cached_segment else "transcript_hash=NULL, ")
             + "safe_error_code=NULL, updated_at=:updated_at "
             "WHERE id=:turn_id AND debate_id=:debate_id "
-            "AND generation_status IN ('pending','failed','turn_generation_failed') "
+            f"AND generation_status IN {status_in} "
             "AND publication_status='unpublished' AND safe_error_code=:code "
             "AND CAST(round_no AS INTEGER) < CAST(COALESCE(json_extract(("
             "SELECT rule_snapshot_json FROM debates WHERE id=:debate_id), "
@@ -3506,13 +3522,22 @@ class SqlPlaybackRepository(PlaybackRepository):
             if callable(rollback):
                 rollback()
             return False
+        # Soft-fail mark_turn_ready completes the job (often with NULL job code)
+        # while the turn keeps tts_*; re-queue completed jobs for TTS retry.
+        job_sql = (
+            "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=NULL, "
+            "updated_at=:updated_at WHERE debate_id=:debate_id AND turn_id=:turn_id "
+            "AND operation='debate_turn_prepare' AND ("
+            " (state IN ('pending','failed') AND safe_error_code=:code)"
+            + (
+                " OR (state='completed' AND (safe_error_code IS NULL OR safe_error_code=:code))"
+                if text_fallback_tts
+                else ""
+            )
+            + ")"
+        )
         job = db.execute(
-            text(
-                "UPDATE jobs SET state='pending', claim_token=NULL, safe_error_code=NULL, "
-                "updated_at=:updated_at WHERE debate_id=:debate_id AND turn_id=:turn_id "
-                "AND operation='debate_turn_prepare' AND state IN ('pending','failed') "
-                "AND safe_error_code=:code"
-            ),
+            text(job_sql),
             {
                 "updated_at": timestamp,
                 "debate_id": debate_id,
@@ -3521,8 +3546,21 @@ class SqlPlaybackRepository(PlaybackRepository):
             },
         )
         if int(getattr(job, "rowcount", 0)) != 1:
-            # Timed-out drafts that never received a prepare job (D3) still
-            # need Retry to re-queue; insert the missing pending row.
+            # D3: only mint a prepare job when this turn has none. A running /
+            # mismatched existing row must not get a second pending twin
+            # (idempotency keys can differ from the seed job id).
+            existing = db.execute(
+                text(
+                    "SELECT state FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
+                    "AND operation='debate_turn_prepare' ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"debate_id": debate_id, "turn_id": turn_id},
+            ).first()
+            if existing is not None:
+                rollback = getattr(db, "rollback", None)
+                if callable(rollback):
+                    rollback()
+                return False
             self._ensure_turn_job(db, debate, turn)
             verified = db.execute(
                 text(

@@ -89,23 +89,39 @@ describe("teacher debate preview", () => {
     "tts_result_dns_failed",
     "tts_result_download_failed",
     "tts_audio_invalid",
-  ])("preserves completed text without offering a retry for %s", (code) => {
-    renderPreview({
-      ...detail,
-      preview_turns: detail.preview_turns!.map((turn) =>
-        turn.id === "turn-a"
-          ? { ...turn, generation_status: "final_ready", safe_error_code: code }
-          : turn,
-      ),
-    });
+  ])(
+    "preserves completed text and offers Retry turn for audio soft-fail %s",
+    (code) => {
+      const onRetry = vi.fn();
+      renderPreview(
+        {
+          ...detail,
+          preview_turns: detail.preview_turns!.map((turn) =>
+            turn.id === "turn-a"
+              ? {
+                  ...turn,
+                  generation_status: "final_ready",
+                  audio_ready: false,
+                  safe_error_code: code,
+                }
+              : turn,
+          ),
+        },
+        onRetry,
+      );
 
-    const card = within(screen.getByTestId("preview-turn-turn-a"));
-    expect(card.getByText(detail.preview_turns![0].speech)).toBeTruthy();
-    expect(card.getByText("Audio Not Ready")).toBeTruthy();
-    expect(card.getByText("Audio needs attention.")).toBeTruthy();
-    expect(card.queryByRole("button", { name: "Retry turn" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
-  });
+      const card = within(screen.getByTestId("preview-turn-turn-a"));
+      expect(card.getByText(detail.preview_turns![0].speech)).toBeTruthy();
+      expect(card.getByText("Audio Not Ready")).toBeTruthy();
+      expect(card.getByText("Audio needs attention.")).toBeTruthy();
+      expect(card.getByTestId("preview-safe-error-code").textContent).toBe(code);
+      const retry = card.getByRole("button", { name: "Retry turn" });
+      expect(retry).toBeTruthy();
+      fireEvent.click(retry);
+      expect(onRetry.mock.calls).toEqual([["turn-a"]]);
+      expect(screen.getByRole("link", { name: "Immerse" })).toBeTruthy();
+    },
+  );
 
   // Unknown acceptance and invalid saved text remain blocked by the backend;
   // their error display must not imply that a retry can succeed.
@@ -173,7 +189,7 @@ describe("teacher debate preview", () => {
   );
 
   it.each(["provider_not_sent", "provider_confirmation_required"])(
-    "retries only the failed turn after completed text: %s",
+    "offers Retry on text-fallback and hard-failed turns: %s",
     (code) => {
       const onRetry = vi.fn();
       renderPreview(
@@ -191,11 +207,49 @@ describe("teacher debate preview", () => {
       );
 
       const buttons = screen.getAllByRole("button", { name: "Retry turn" });
-      expect(buttons).toHaveLength(1);
-      fireEvent.click(buttons[0]);
-      expect(onRetry.mock.calls).toEqual([["turn-b"]]);
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(
+        within(screen.getByTestId("preview-turn-turn-a")).getByRole("button", {
+          name: "Retry turn",
+        }),
+      );
+      fireEvent.click(
+        within(screen.getByTestId("preview-turn-turn-b")).getByRole("button", {
+          name: "Retry turn",
+        }),
+      );
+      expect(onRetry.mock.calls).toEqual([["turn-a"], ["turn-b"]]);
     },
   );
+
+  it("keeps preparation_timeout Retry turn visible without audio", () => {
+    const onRetry = vi.fn();
+    renderPreview(
+      {
+        ...detail,
+        preview: { prepared_turns: 1, expected_turns: 2, ready: false },
+        preview_turns: detail.preview_turns!.map((turn) =>
+          turn.id === "turn-a"
+            ? {
+                ...turn,
+                generation_status: "failed",
+                audio_ready: false,
+                safe_error_code: "preparation_timeout",
+                speech: "",
+              }
+            : turn,
+        ),
+      },
+      onRetry,
+    );
+    const card = within(screen.getByTestId("preview-turn-turn-a"));
+    expect(card.getByText("Audio Not Ready")).toBeTruthy();
+    expect(card.getByTestId("preview-safe-error-code").textContent).toBe(
+      "preparation_timeout",
+    );
+    fireEvent.click(card.getByRole("button", { name: "Retry turn" }));
+    expect(onRetry.mock.calls).toEqual([["turn-a"]]);
+  });
 
   it("keeps saved speech visible when audio failed and exposes exact RAG mapping", () => {
     renderPreview(detail);
@@ -210,7 +264,9 @@ describe("teacher debate preview", () => {
     expect(screen.getByText("Audio Ready")).toBeTruthy();
     expect(screen.queryByText("Saved", { exact: true })).toBeNull();
     expect(screen.getByText("Audio needs attention.")).toBeTruthy();
-    expect(screen.queryByText("tts_failed")).toBeNull();
+    expect(screen.getByTestId("preview-safe-error-code").textContent).toBe(
+      "tts_failed",
+    );
     expect(screen.getByRole("button", { name: "Retry turn" })).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Immerse" }).getAttribute("href"),
