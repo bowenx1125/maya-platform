@@ -64,9 +64,9 @@ VOICE_PREVIEW_LINES: tuple[str, ...] = (
     "I will plant flowers among the valleys, and sing for you into old age and death.",
     "如果遇见你不是奇迹，灵魂便不曾言语。"
     "If meeting you wasn't a miracle, then the souls have never whispered.",
-    "不管需要多少年，我都想要再见你一面。No mater how long it takes, I want to see you again.",
     "我一定会带你去看看...那我心爱的地方。"
     "Unlike your planet, the flowers there. Are always in full bloom.",
+    "不管需要多少年，我都想要再见你一面。No mater how long it takes, I want to see you again.",
 )
 # Kept for callers that want a stable sample; it is the first line.
 VOICE_PREVIEW_TEXT = VOICE_PREVIEW_LINES[0]
