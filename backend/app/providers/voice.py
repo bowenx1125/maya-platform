@@ -20,6 +20,15 @@ class VoiceProviderAmbiguous(VoiceProviderError):
     """A request may have been charged but its outcome is not yet visible."""
 
 
+class VoiceCloneRefusedError(VoiceProviderError):
+    """A deterministic refusal to clone, raised before any network I/O.
+
+    The refusal is known locally (for example the flash model key), so it can
+    never be ambiguous and must not be retried or re-routed to another
+    provider.
+    """
+
+
 @dataclass(frozen=True)
 class VoiceEnrollmentResult:
     """Internal result returned by a voice enrollment adapter."""

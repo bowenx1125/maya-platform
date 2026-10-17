@@ -60,6 +60,8 @@ from app.providers.tts import (
 )
 from app.providers.voice import (
     MockVoiceCloneProvider,
+    VoiceCloneRefusedError,
+    VoiceEnrollmentResult,
     VoiceProviderError,
     VoiceProviderTimeout,
 )
@@ -507,6 +509,140 @@ def test_voice_scope_and_upload_validation(
     assert invalid.status_code == 422
     assert invalid.json()["code"] == "audio_invalid"
     assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
+
+
+
+def test_flash_target_model_refuses_clone_before_dispatch(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Flash never clones: refuse before a charged provider call."""
+
+    client, database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider = MockVoiceCloneProvider()
+    provider.target_model_key = "qwen3-tts-flash"
+    monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
+    response = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "voice-clone-refused-flash-0001"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert body["code"] == "voice_clone_refused"
+    assert provider.enroll_calls == 0
+    with database.session() as session:
+        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
+        assert profile is not None
+        assert profile.status == "failed"
+        assert profile.safe_error_code == "voice_clone_refused"
+        operation = session.scalar(
+            select(VoiceProviderOperation).where(
+                VoiceProviderOperation.profile_id == profile.id,
+            )
+        )
+        assert operation is not None
+        assert operation.state == "failed"
+        assert operation.safe_error_code == "voice_clone_refused"
+
+
+def test_typed_clone_refusal_after_dispatch_stays_terminal(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typed VoiceCloneRefusedError is never remapped to provider_unavailable."""
+
+    client, database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider = MockVoiceCloneProvider()
+    provider.next_enroll_error = VoiceCloneRefusedError("flash model does not support enrollment")
+    monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
+    key = "voice-clone-refused-typed-0001"
+    response = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, key),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "voice_clone_refused"
+    assert provider.enroll_calls == 1
+    with database.session() as session:
+        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
+        assert profile is not None
+        assert profile.status == "failed"
+        assert profile.safe_error_code == "voice_clone_refused"
+        operation = session.scalar(
+            select(VoiceProviderOperation).where(
+                VoiceProviderOperation.profile_id == profile.id,
+            )
+        )
+        assert operation is not None
+        assert operation.state == "failed"
+        # Same-key retry must stay refused, not re-dispatch.
+        record = session.scalar(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.key == key,
+                IdempotencyRecord.operation == "enrollVoice",
+            )
+        )
+        assert record is not None
+        record.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    second = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, key),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert second.status_code == 422
+    assert second.json()["code"] == "voice_clone_refused"
+    assert provider.enroll_calls == 1
+
+
+def test_degraded_enrollment_is_not_created_success(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A degraded provider result must not return HTTP 202 / Created."""
+
+    client, database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+
+    class DegradedProvider(MockVoiceCloneProvider):
+        def enroll(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.enroll_calls += 1
+            return VoiceEnrollmentResult(
+                external_voice_id="degraded-external-id",
+                request_id="degraded-request",
+                input_bytes=12,
+                charged=True,
+                degraded=True,
+            )
+
+    provider = DegradedProvider()
+    monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
+    response = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "voice-degraded-enroll-0001"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert response.status_code == 502, response.text
+    assert response.json()["code"] == "voice_enrollment_failed"
+    with database.session() as session:
+        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
+        assert profile is not None
+        assert profile.status == "failed"
+        assert profile.safe_error_code == "voice_enrollment_failed"
+        operation = session.scalar(
+            select(VoiceProviderOperation).where(
+                VoiceProviderOperation.profile_id == profile.id,
+            )
+        )
+        assert operation is not None
+        assert operation.state == "failed"
 
 
 def test_enrollment_generic_provider_error_is_reconciled_before_retry(

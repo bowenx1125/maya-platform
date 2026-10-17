@@ -35,6 +35,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function openEnrollForm() {
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "New" }));
+  const sampleHint =
+    "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).";
+  const input = screen.getByLabelText(sampleHint) as HTMLInputElement;
+  fireEvent.change(input, {
+    target: {
+      files: [
+        new File([new Uint8Array([1, 2, 3])], "sample.wav", {
+          type: "audio/wav",
+        }),
+      ],
+    },
+  });
+  fireEvent.click(screen.getByRole("checkbox"));
+  return screen.findByRole("button", { name: "Done" });
+}
+
 describe("M08 voice library", () => {
   it("lets a groupmate choose a ready voice but not rename or preview it", async () => {
     api.voiceProfiles.mockResolvedValue([
@@ -136,7 +159,7 @@ describe("M08 voice library", () => {
       id: "voice-new",
       scope: "group",
       group_id: "group-a",
-      status: "enrolling",
+      status: "preview_ready",
       source_filename: "sample.wav",
       safe_error_code: null,
       created_at: "2026-01-01T00:00:00Z",
@@ -190,6 +213,69 @@ describe("M08 voice library", () => {
       await screen.findByRole("button", { name: "sample.wav" }),
     ).toBeTruthy();
     expect(screen.queryByText("voice-new")).toBeNull();
+    expect(await screen.findByText("Created")).toBeTruthy();
+  });
+
+
+  it("does not show Created when enroll returns a failed profile", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice.mockResolvedValue({
+      id: "voice-failed",
+      scope: "group",
+      group_id: "group-a",
+      status: "failed",
+      source_filename: "sample.wav",
+      safe_error_code: "voice_enrollment_failed",
+      created_at: "2026-01-01T00:00:00Z",
+    });
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    await openEnrollForm();
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByText("Created")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("shows refuse-clone error without Retry and without Created", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice.mockRejectedValue(
+      new PlatformApiError(422, "refused", { code: "voice_clone_refused" }),
+    );
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    await openEnrollForm();
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(
+      await screen.findByText(
+        "This voice path does not support cloning. The sample was not saved as a custom voice.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Created")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByText(/temporarily unavailable/i)).toBeNull();
+  });
+
+  it("keeps Retry for a provider outage during enroll", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice.mockRejectedValue(
+      new PlatformApiError(503, "down", { code: "provider_unavailable" }),
+    );
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    await openEnrollForm();
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.queryByText("Created")).toBeNull();
   });
 
   it("shows a platform preview URL and only confirms after preview", async () => {

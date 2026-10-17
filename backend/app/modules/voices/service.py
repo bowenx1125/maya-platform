@@ -47,10 +47,12 @@ from app.providers.audio import (
     run_ffmpeg_normalize,
     validate_source_audio,
 )
+from app.providers.dashscope import FLASH_TTS_MODEL_KEY
 from app.providers.factory import voice_provider
 from app.providers.tts import TTSProvider
 from app.providers.voice import (
     VoiceCloneProvider,
+    VoiceCloneRefusedError,
     VoiceEnrollmentResult,
     VoiceProviderError,
     VoiceProviderTimeout,
@@ -65,11 +67,21 @@ PREVIEW_TEXT = (
 PREVIEW_TTL = timedelta(minutes=10)
 SAFE_VOICE_ERRORS = {
     "audio_invalid",
+    "voice_clone_refused",
     "voice_enrollment_failed",
     "voice_provider_unavailable",
     "voice_mapping_unavailable",
     "provider_unavailable",
 }
+
+# A refusal this deterministic is decided before any charged dispatch: the
+# flash model never accepts enrollment. Retrying the same request or falling
+# back to another provider cannot change the answer.
+CLONE_REFUSED_ERROR = PlatformError(
+    "voice_clone_refused",
+    "This voice path does not support cloning a custom voice.",
+    422,
+)
 
 
 @dataclass(frozen=True)
@@ -424,7 +436,19 @@ def _new_recovery_name(profile_id: str) -> str:
 
 
 def _safe_provider_error(exc: Exception) -> PlatformError:
-    del exc
+    """Classify one provider failure without copying its message.
+
+    A typed clone refusal is deterministic and must stay distinguishable from
+    a supplier outage, so the browser can tell "this voice path cannot clone"
+    apart from "try again later". Everything ambiguous stays conservative.
+    """
+
+    if isinstance(exc, VoiceCloneRefusedError):
+        return PlatformError(
+            "voice_clone_refused",
+            "This voice path does not support cloning a custom voice.",
+            422,
+        )
     return PlatformError(
         "provider_unavailable",
         "The voice service is temporarily unavailable.",
@@ -625,19 +649,38 @@ def _store_enrollment_success(
     operation.safe_request_id = result.request_id
     operation.input_bytes = result.input_bytes
     operation.output_bytes = result.output_bytes
-    profile.external_id_encrypted = encrypt_external_voice_id(
-        result.external_voice_id,
-        settings.secret_bytes,
-        profile_id=profile.id,
-        scope=profile.scope,
-        group_id=profile.group_id,
-        provider_key=profile.provider_key,
-        target_model_key=profile.target_model_key,
-    )
-    profile.status = "failed" if result.degraded else "preview_ready"
-    profile.safe_error_code = "voice_enrollment_failed" if result.degraded else None
+    # Created means the provider returned a usable external id. A degraded
+    # result or an empty id is a failed profile, and the operation fails with
+    # it: a 202 "success" whose card says failed is exactly the lie that
+    # made a broken clone look Created.
+    valid_external_id = bool(result.external_voice_id)
+    succeeded = not result.degraded and valid_external_id
+    if valid_external_id:
+        profile.external_id_encrypted = encrypt_external_voice_id(
+            result.external_voice_id,
+            settings.secret_bytes,
+            profile_id=profile.id,
+            scope=profile.scope,
+            group_id=profile.group_id,
+            provider_key=profile.provider_key,
+            target_model_key=profile.target_model_key,
+        )
+    profile.status = "preview_ready" if succeeded else "failed"
+    profile.safe_error_code = None if succeeded else "voice_enrollment_failed"
     profile.updated_at = now_utc()
-    _finish_operation(db, operation, state="succeeded", output_bytes=result.output_bytes)
+    _finish_operation(
+        db,
+        operation,
+        state="succeeded" if succeeded else "failed",
+        safe_error_code=None if succeeded else "voice_enrollment_failed",
+        output_bytes=result.output_bytes,
+    )
+    if not succeeded:
+        raise PlatformError(
+            "voice_enrollment_failed",
+            "The voice enrollment could not be completed.",
+            502,
+        )
     return profile
 
 
@@ -845,6 +888,13 @@ def enroll_voice(
                 finish_idempotency(db, record, 202, result.model_dump(mode="json"))
                 db.commit()
                 return result
+            elif (
+                operation.state == "failed"
+                and operation.safe_error_code == "voice_clone_refused"
+            ):
+                # A refused clone never becomes retryable, not even with the
+                # same key: the answer was decided before any charged call.
+                raise CLONE_REFUSED_ERROR
             elif operation.state == "prepared":
                 _claim_provider_operation(db, operation, record.claim_token)
             else:
@@ -885,6 +935,18 @@ def enroll_voice(
             db.commit()
         assert profile is not None and operation is not None
         assert_claim_owned(db, record)
+        # A known-local refusal is decided before the durable charged
+        # dispatch, and it stays a durable failed card: the teacher must see
+        # that this upload did not become a voice, and the same key cannot
+        # re-issue it.
+        if getattr(provider_instance, "target_model_key", None) == FLASH_TTS_MODEL_KEY:
+            profile.status = "failed"
+            profile.safe_error_code = "voice_clone_refused"
+            profile.updated_at = now_utc()
+            _finish_operation(
+                db, operation, state="failed", safe_error_code="voice_clone_refused"
+            )
+            raise CLONE_REFUSED_ERROR
         _dispatch_operation(db, operation)
         assert_claim_owned(db, record)
         encoded = base64.b64encode(normalized).decode("ascii")
@@ -901,6 +963,16 @@ def enroll_voice(
             profile.safe_error_code = "provider_unavailable"
             _finish_operation(
                 db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
+            )
+            raise _safe_provider_error(exc) from exc
+        except VoiceCloneRefusedError as exc:
+            # A typed refusal is deterministic, never ambiguous: the profile
+            # fails closed and no provider fallback or automatic retry may
+            # re-issue this enrollment.
+            profile.status = "failed"
+            profile.safe_error_code = "voice_clone_refused"
+            _finish_operation(
+                db, operation, state="failed", safe_error_code="voice_clone_refused"
             )
             raise _safe_provider_error(exc) from exc
         except VoiceProviderError as exc:

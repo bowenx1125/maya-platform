@@ -43,12 +43,21 @@ type RetryAction =
       restoreFocus: boolean;
     };
 
-type VoiceFailure = { cause: unknown; retry: RetryAction };
+type VoiceFailure = { cause: unknown; retry: RetryAction | null };
+
+// A terminal voice-clone refusal must not read as a transient provider
+// outage: it gets no Retry affordance and is never remapped to the fallback
+// voice banner.
+function isCloneRefusal(cause: unknown): boolean {
+  return cause instanceof PlatformApiError && cause.code === "voice_clone_refused";
+}
 
 function voiceAwareCause(cause: unknown): unknown {
   // Only for enroll/preview: supplier outages steer to the platform fallback voice.
   // Do not remap rename/load/confirm — a 5xx there is not "provider unavailable".
+  // A refused clone is a terminal answer, not an outage, and passes through.
   if (!(cause instanceof PlatformApiError)) return cause;
+  if (isCloneRefusal(cause)) return cause;
   const providerDown =
     cause.code === "provider_unavailable" ||
     cause.code === "voice_enrollment_failed" ||
@@ -59,6 +68,16 @@ function voiceAwareCause(cause: unknown): unknown {
     details: cause.details,
     ...(cause.requestId ? { request_id: cause.requestId } : {}),
   });
+}
+
+function enrollmentCreated(profile: VoiceProfile | null | undefined): boolean {
+  return (
+    profile !== null &&
+    profile !== undefined &&
+    Boolean(profile.id) &&
+    (profile.status === "preview_ready" || profile.status === "ready") &&
+    !profile.safe_error_code
+  );
 }
 
 function previewIsCurrent(expiresAt: string): boolean {
@@ -150,7 +169,7 @@ export function VoiceLibrary({
       if (!options?.quiet) {
         setLoading(true);
         setFailure((current) =>
-          current?.retry.kind === "load" ? null : current,
+          current?.retry?.kind === "load" ? null : current,
         );
       }
       const results = await Promise.all(
@@ -194,7 +213,7 @@ export function VoiceLibrary({
       // A refused group is not an empty library. Say so when nothing else loaded.
       const cause = failure?.cause ?? (!ready && denial ? denial.cause : null);
       setFailure((current) => {
-        if (current && current.retry.kind !== "load") return current;
+        if (current && current.retry?.kind !== "load") return current;
         return cause ? { cause, retry: { kind: "load" } } : null;
       });
       setLoading(false);
@@ -286,7 +305,7 @@ export function VoiceLibrary({
     setNotice(null);
     try {
       const options = { idempotency: idempotency.handleFor("voice-enroll") };
-      await (courseId
+      const profile = await (courseId
         ? api.enrollPersonalVoice(
             courseId,
             upload,
@@ -299,6 +318,25 @@ export function VoiceLibrary({
             CONSENT_COPY_VERSION,
             options,
           ));
+      // Created is the server's confirmed terminal state, never the mere
+      // arrival of a response: a failed card and a success toast must never
+      // describe the same upload.
+      if (!enrollmentCreated(profile)) {
+        idempotency.abandon("voice-enroll");
+        setFailure({
+          cause: new PlatformApiError(
+            502,
+            t("errorVoiceEnrollmentFailed"),
+            {
+              code: profile?.safe_error_code ?? "voice_enrollment_failed",
+            },
+          ),
+          // Soft-fail responses are terminal for this upload; no auto-retry.
+          retry: null,
+        });
+        await load();
+        return;
+      }
       idempotency.finish("voice-enroll");
       setFile(null);
       setConsent(false);
@@ -308,7 +346,7 @@ export function VoiceLibrary({
     } catch (cause) {
       setFailure({
         cause: voiceAwareCause(cause),
-        retry: { kind: "enroll", file: upload },
+        retry: isCloneRefusal(cause) ? null : { kind: "enroll", file: upload },
       });
     } finally {
       setBusy(false);
@@ -383,12 +421,12 @@ export function VoiceLibrary({
           expiresAt: resource.expires_at,
         },
       }));
-      setFailure((current) =>
-        current?.retry.kind === "preview" &&
-        current.retry.profileId === profileId
+      setFailure((current) => {
+        const retry = current?.retry;
+        return retry?.kind === "preview" && retry.profileId === profileId
           ? null
-          : current,
-      );
+          : current;
+      });
     } catch (cause) {
       setFailure({
         cause: voiceAwareCause(cause),
@@ -457,18 +495,22 @@ export function VoiceLibrary({
   }
 
   function clearConfirmationFailure(profileId: string) {
-    setFailure((current) =>
-      current &&
-      (current.retry.kind === "preview" || current.retry.kind === "confirm") &&
-      current.retry.profileId === profileId
+    setFailure((current) => {
+      const retry = current?.retry;
+      return retry &&
+        (retry.kind === "preview" || retry.kind === "confirm") &&
+        retry.profileId === profileId
         ? null
-        : current,
-    );
+        : current;
+    });
   }
 
   function retryFailure() {
     if (!failure || controlsDisabled) return;
+    // A terminal refusal offers no Retry; the failure card explains and the
+    // teacher chooses a different file or path.
     const action = failure.retry;
+    if (!action) return;
     if (action.kind === "load") void load();
     else if (action.kind === "enroll") void submitEnrollment(action.file);
     else if (action.kind === "preview") void makePreview(action.profileId);
@@ -483,7 +525,9 @@ export function VoiceLibrary({
         <ErrorNotice
           inline
           error={failure.cause}
-          onRetry={controlsDisabled ? undefined : retryFailure}
+          onRetry={
+            controlsDisabled || !failure.retry ? undefined : retryFailure
+          }
         />
       ) : null}
       <div className={styles.uploadRow}>
@@ -669,7 +713,9 @@ export function VoiceLibrary({
         <ErrorNotice
           inline
           error={failure.cause}
-          onRetry={controlsDisabled ? undefined : retryFailure}
+          onRetry={
+            controlsDisabled || !failure.retry ? undefined : retryFailure
+          }
         />
       ) : null}
       {loading ? <LoadingCard /> : null}

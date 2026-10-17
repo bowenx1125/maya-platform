@@ -34,6 +34,7 @@ from app.providers.tts import (
     TTSVoiceUnavailableError,
 )
 from app.providers.voice import (
+    VoiceCloneRefusedError,
     VoiceEnrollmentResult,
     VoiceExistenceResult,
     VoiceProviderError,
@@ -231,7 +232,7 @@ class DashScopeVoiceCloneProvider:
         # The flash system-voice branch never re-registers clones against the
         # alias model. Enrollment stays on the clone target only.
         if target_model_key == FLASH_TTS_MODEL_KEY:
-            raise VoiceProviderError("flash model does not support enrollment")
+            raise VoiceCloneRefusedError("flash model does not support enrollment")
         payload: dict[str, Any] = {
             "model": VOICE_ENROLLMENT_MODEL,
             "input": {
