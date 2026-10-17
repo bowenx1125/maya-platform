@@ -199,3 +199,40 @@ def test_transport_rejects_before_http_when_admission_busy(
             )
     assert raised.value.code == "llm_admission_busy"
     assert http_calls == 0
+
+
+def test_nested_slot_on_the_same_thread_does_not_take_a_second_slot() -> None:
+    from app.core.llm_admission import _GATE, llm_admission_held
+
+    settings = _settings(llm_admission_limit=1, llm_admission_wait_seconds=1)
+    assert not llm_admission_held()
+    with llm_admission_slot(settings):
+        assert llm_admission_held()
+        assert _GATE.in_flight == 1
+        # A Team call holds its slot; the transport inside it asks again. At
+        # limit 1 a second acquire would time out (or deadlock at scale).
+        with llm_admission_slot(settings):
+            assert _GATE.in_flight == 1
+        assert llm_admission_held()
+    assert not llm_admission_held()
+    assert _GATE.in_flight == 0
+
+
+def test_slot_on_another_thread_still_waits_for_the_holder() -> None:
+    settings = _settings(
+        llm_admission_limit=1, llm_admission_queue_max=4, llm_admission_wait_seconds=1
+    )
+    errors: list[str] = []
+    with llm_admission_slot(settings):
+
+        def other() -> None:
+            try:
+                with llm_admission_slot(settings):
+                    pass
+            except PlatformError as exc:
+                errors.append(exc.code)
+
+        thread = threading.Thread(target=other)
+        thread.start()
+        thread.join(timeout=5)
+    assert errors == ["llm_admission_busy"]

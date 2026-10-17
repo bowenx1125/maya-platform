@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from threading import RLock
 from typing import Any
@@ -119,10 +121,19 @@ from app.seed import COURSE_ID, seed_demo_data
 from app.tools.sqlite_import import maybe_import_postgres
 
 logger = logging.getLogger("maya.backend")
-# Worker threads for sync handlers (AnyIO default 40). Holds 48 admitted
-# requests, their queued waiters and still leaves room for health checks.
-ANYIO_THREAD_TOKENS = 128
+# Worker threads for sync handlers (AnyIO default 40). A request queued in
+# adaptive admission waits on one of these threads, so the pool must cover
+# 48 in flight + up to 200 queued (= 248) or ordinary sync reads start
+# queueing for a thread past ~80 waiters. Idle threads cost only their
+# lazily-committed stack (a few hundred KiB resident each), so 256 per
+# replica stays well inside the 3.5 GB host.
+ANYIO_THREAD_TOKENS = 256
 HEALTH_THREAD_TOKENS = 4
+# Threads behind asyncio.to_thread: streamed Chat replies, Team turn runs and
+# their event polls, Debate/report/Knowledge jobs. Python's default is
+# cpu_count + 4, only 6 on the 2-vCPU host, which would cap streamed sends
+# far below the write guard's 20.
+ASYNCIO_EXECUTOR_THREADS = 96
 
 
 def build_report_runtime(
@@ -342,6 +353,11 @@ def create_app(
         # Admission holds its budget when the pool is nearly full instead of
         # growing into it.
         set_threadpool_reader(lambda: limiter.borrowed_tokens / max(1.0, limiter.total_tokens))
+        asyncio.get_running_loop().set_default_executor(
+            ThreadPoolExecutor(
+                max_workers=ASYNCIO_EXECUTOR_THREADS, thread_name_prefix="maya-async"
+            )
+        )
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
         knowledge_generation_tasks.bind_running_loop()
@@ -597,11 +613,19 @@ def create_app(
         settings = get_settings()
         return {
             **adaptive_admission_snapshot(settings),
+            # 0 means that backstop is off; only the adaptive budget, the
+            # danger latch and the LLM backstop are on by default.
             "backstops": {
                 "llm_admission_limit": int(settings.llm_admission_limit),
                 "write_guard_limit": int(settings.write_guard_limit),
                 "create_admission_limit": int(settings.create_admission_limit),
                 "auth_hash_concurrency": int(settings.auth_hash_concurrency),
+            },
+            "backstops_enabled": {
+                "llm_admission": int(settings.llm_admission_limit) > 0,
+                "write_guard": int(settings.write_guard_limit) > 0,
+                "create_admission": int(settings.create_admission_limit) > 0,
+                "auth_hash": int(settings.auth_hash_concurrency) > 0,
             },
             "message_timing": message_timing_snapshot(),
         }

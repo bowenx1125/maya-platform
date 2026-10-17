@@ -18,6 +18,7 @@ from typing import Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from app.core.config import configured_llm_model
+from app.core.errors import PlatformError
 from app.providers.control import LLMAcceptedStageV1, ProviderReservationRequestV1
 from app.providers.llm_adapter import LLMAdapterError
 from app.providers.llm_price_card import (
@@ -622,7 +623,9 @@ class SegmentLLMRuntime:
                 if sender is None:
                     raise SegmentRuntimeError(code="segment_adapter_unavailable")
                 candidate = cast(SegmentAcceptedCandidateV2, _invoke(sender, current.request))
-            except LLMTransportNotSent:
+            except (LLMTransportNotSent, PlatformError):
+                # PlatformError: refused before sending (admission busy, host
+                # memory pressure); nothing left the host, so it is not unknown.
                 self._transition(operation_id, "mark_not_sent", code="provider_not_sent")
                 traces.append(
                     SegmentAttempt(

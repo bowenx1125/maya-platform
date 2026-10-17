@@ -1,5 +1,6 @@
 services:
   gateway:
+    restart: unless-stopped
     ports: !override
       - "80:80"
       - "443:443"
@@ -15,10 +16,12 @@ services:
       - maya_backend
 
   frontend:
+    restart: unless-stopped
     networks: !override
       - maya_public
 
   backend:
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       MAYA_ENV: production
@@ -41,11 +44,11 @@ services:
       LLM_ADMISSION_QUEUE_MAX: ${LLM_ADMISSION_QUEUE_MAX:-100}
       LLM_ADMISSION_WAIT_SECONDS: ${LLM_ADMISSION_WAIT_SECONDS:-180}
       LLM_ADMISSION_RETRY_SECONDS: ${LLM_ADMISSION_RETRY_SECONDS:-5}
-      WRITE_GUARD_LIMIT: ${WRITE_GUARD_LIMIT:-20}
+      WRITE_GUARD_LIMIT: ${WRITE_GUARD_LIMIT:-0}
       WRITE_GUARD_QUEUE_MAX: ${WRITE_GUARD_QUEUE_MAX:-100}
       WRITE_GUARD_WAIT_SECONDS: ${WRITE_GUARD_WAIT_SECONDS:-180}
       WRITE_GUARD_RETRY_SECONDS: ${WRITE_GUARD_RETRY_SECONDS:-5}
-      CREATE_ADMISSION_LIMIT: ${CREATE_ADMISSION_LIMIT:-4}
+      CREATE_ADMISSION_LIMIT: ${CREATE_ADMISSION_LIMIT:-0}
       CREATE_ADMISSION_QUEUE_MAX: ${CREATE_ADMISSION_QUEUE_MAX:-100}
       CREATE_ADMISSION_WAIT_SECONDS: ${CREATE_ADMISSION_WAIT_SECONDS:-180}
       CREATE_ADMISSION_RETRY_SECONDS: ${CREATE_ADMISSION_RETRY_SECONDS:-5}
@@ -88,6 +91,7 @@ services:
       - ./contracts:/app/contracts:ro
 
   postgres:
+    restart: unless-stopped
     image: postgres:16.10-alpine
     command: ["postgres", "-c", "max_connections=200"]
     environment:
