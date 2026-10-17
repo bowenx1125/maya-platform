@@ -192,6 +192,27 @@ describe("M08 voice library", () => {
     ).toBeNull();
   });
 
+  it("offers no delete while a delete is in flight or awaiting reconciliation", async () => {
+    api.voiceProfiles.mockResolvedValue(
+      ["deleting", "outcome_unknown"].map((status) => ({
+        id: `voice-${status}`,
+        scope: "group",
+        group_id: "group-a",
+        status,
+        source_filename: `${status}.wav`,
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: true,
+      })),
+    );
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    expect(await screen.findByText("deleting.wav")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Delete / })).toBeNull();
+  });
+
   it("requires consent and a local file before enrollment", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     render(
