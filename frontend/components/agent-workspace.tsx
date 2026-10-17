@@ -25,7 +25,6 @@ import {
   type KnowledgeSetSummary,
   type KnowledgeSnapshot,
   type RagPreview,
-  type VoiceProfile,
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
@@ -356,7 +355,6 @@ export function AgentWorkbench({
     useState<unknown>(null);
   const [avatarTemplatesLoading, setAvatarTemplatesLoading] = useState(false);
   const avatarLoadSequence = useRef(0);
-  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfile[]>([]);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [agentMd, setAgentMd] = useState("");
@@ -1823,22 +1821,6 @@ export function AgentWorkbench({
               </SectionCard>
             ) : null}
             <div>
-              {voiceProfileId &&
-              (!agent.group_id ||
-                !voiceProfiles.some(
-                  (profile) =>
-                    profile.id === voiceProfileId && profile.status === "ready",
-                )) ? (
-                <button
-                  className="text-link"
-                  type="button"
-                  aria-pressed="true"
-                  disabled={editingLocked}
-                  onClick={() => setVoiceProfileId(null)}
-                >
-                  {t("currentVoiceBinding")}
-                </button>
-              ) : null}
               <VoiceLibrary
                 groupId={agent.group_id}
                 courseId={agent.group_id ? null : agent.course_id}
@@ -1850,14 +1832,10 @@ export function AgentWorkbench({
                 embedded
                 selectedId={voiceProfileId}
                 disabled={editingLocked}
-                onProfilesChange={setVoiceProfiles}
                 // A teacher's personal Agent picks from that teacher's own
-                // voices, as on main (owner decision 2026-10-12).
-                onSelect={(profileId) =>
-                  setVoiceProfileId((current) =>
-                    current === profileId ? null : profileId,
-                  )
-                }
+                // voices, as on main (owner decision 2026-10-12). None is a
+                // choice of its own, so the picker never toggles to empty.
+                onSelect={setVoiceProfileId}
               />
             </div>
           </div>

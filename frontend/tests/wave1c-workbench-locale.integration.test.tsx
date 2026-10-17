@@ -337,22 +337,28 @@ describe("Wave 1C real workbench locale boundary", () => {
       api.updateDraft.mockResolvedValue(saved);
       api.publish.mockResolvedValue({ ...saved, state: "published" });
       renderWorkbench(api as unknown as PlatformApi, () => undefined);
+      // The inherited binding is not listed, so it shows as the checked
+      // "Current voice" row until another row, None included, is chosen.
       expect(
-        await screen.findByRole("button", { name: "Current voice" }),
-      ).toBeTruthy();
+        (
+          (await screen.findByRole("radio", {
+            name: "Current voice",
+          })) as HTMLInputElement
+        ).checked,
+      ).toBe(true);
       // The voice list loads after the inherited binding is painted. Waiting
       // here keeps the unfinished profile from being read before it exists.
       expect(
         (
-          (await screen.findByRole("button", {
+          (await screen.findByRole("radio", {
             name: "Not confirmed",
-          })) as HTMLButtonElement
+          })) as HTMLInputElement
         ).disabled,
       ).toBe(true);
       if (choice) {
-        fireEvent.click(screen.getByRole("button", { name: "My voice" }));
+        fireEvent.click(screen.getByRole("radio", { name: "My voice" }));
       } else {
-        fireEvent.click(screen.getByRole("button", { name: "Current voice" }));
+        fireEvent.click(screen.getByRole("radio", { name: "None" }));
       }
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
       await waitFor(() =>
@@ -404,7 +410,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     ]);
     fireEvent.focus(window);
     expect(
-      await screen.findByRole("button", { name: "New voice" }),
+      await screen.findByRole("radio", { name: "New voice" }),
     ).toBeTruthy();
     expect(editor).toHaveProperty("value", "# Unsaved");
   });

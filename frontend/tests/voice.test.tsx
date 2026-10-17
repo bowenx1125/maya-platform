@@ -31,6 +31,9 @@ vi.mock("../components/session-provider", () => ({
   useSession: () => ({ api }),
 }));
 
+const CONSENT =
+  "I confirm this is my voice and authorize this course to create a reusable profile.";
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -56,12 +59,12 @@ async function openEnrollForm() {
       ],
     },
   });
-  fireEvent.click(screen.getByRole("checkbox"));
-  return screen.findByRole("button", { name: "Done" });
+  // Confirming consent is the create step; there is no sidebar Done.
+  return screen.findByRole("button", { name: CONSENT });
 }
 
 describe("M08 voice library", () => {
-  it("lets a groupmate choose a ready voice but not rename or preview it", async () => {
+  it("lets a groupmate choose and hear a ready voice but not rename or delete it", async () => {
     api.voiceProfiles.mockResolvedValue([
       {
         id: "peer-voice",
@@ -79,12 +82,16 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" onSelect={onSelect} />
       </AppShell>,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "peer.wav" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "peer.wav" }));
     expect(onSelect).toHaveBeenCalledWith("peer-voice");
-    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "peer.wav" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Preview" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Delete peer.wav" }),
+    ).toBeNull();
   });
 
-  it("shows a groupmate's voice as a plain name outside a picker", async () => {
+  it("shows a groupmate's voice as a plain, playable name outside a picker", async () => {
     api.voiceProfiles.mockResolvedValue([
       {
         id: "peer-voice",
@@ -103,7 +110,14 @@ describe("M08 voice library", () => {
     );
     expect(await screen.findByText("peer.wav")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "peer.wav" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Preview" })).toBeNull();
+    // Owner decision (2026-10-18): groupmates hear each other's voices.
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(api.createVoicePreview).toHaveBeenCalledWith("peer-voice"),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Delete peer.wav" }),
+    ).toBeNull();
   });
 
   it("deletes the owner's voice after confirming and drops it from the list", async () => {
@@ -142,7 +156,7 @@ describe("M08 voice library", () => {
     await waitFor(() => expect(screen.queryByText("mine.wav")).toBeNull());
   });
 
-  it("keeps the voice when the delete is cancelled, and offers no delete in a picker or for a groupmate", async () => {
+  it("keeps the voice when the delete is cancelled, and offers delete only to the owner, in a picker too", async () => {
     vi.stubGlobal(
       "confirm",
       vi.fn(() => false),
@@ -186,11 +200,12 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" onSelect={vi.fn()} />
       </AppShell>,
     );
+    expect(await screen.findByRole("radio", { name: "mine.wav" })).toBeTruthy();
     expect(
-      await screen.findByRole("button", { name: "mine.wav" }),
+      screen.getByRole("button", { name: "Delete mine.wav" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Delete mine.wav" }),
+      screen.queryByRole("button", { name: "Delete peer.wav" }),
     ).toBeNull();
   });
 
@@ -354,15 +369,15 @@ describe("M08 voice library", () => {
       "I confirm this is my voice and authorize this course to create a reusable profile.";
     expect(screen.getByText(consentCopy)).toBeTruthy();
     expect(screen.queryByText("Consent")).toBeNull();
-    expect(
-      screen
-        .getByRole("checkbox", { name: consentCopy })
-        .closest("[data-ui-guide]"),
-    ).toBeNull();
-    const done = screen.getByRole("button", {
-      name: "Done",
+    const confirm = screen.getByRole("button", {
+      name: consentCopy,
     }) as HTMLButtonElement;
-    expect(done.disabled).toBe(true);
+    expect(confirm.closest("[data-ui-guide]")).toBeNull();
+    expect(confirm.disabled).toBe(true);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    // Creating a voice never borrows the sidebar's Back or Done.
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
 
     const sampleHint =
@@ -373,11 +388,10 @@ describe("M08 voice library", () => {
       type: "audio/wav",
     });
     fireEvent.change(input, { target: { files: [file] } });
-    expect(done.disabled).toBe(true);
-    fireEvent.click(screen.getByRole("checkbox"));
-    await waitFor(() => expect(done.disabled).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    await waitFor(() => expect(confirm.disabled).toBe(false));
+    // The top-right back arrow cancels: nothing is uploaded.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: consentCopy })).toBeNull();
     expect(screen.queryByLabelText(sampleHint)).toBeNull();
     expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
     expect(api.enrollVoice).not.toHaveBeenCalled();
@@ -427,8 +441,7 @@ describe("M08 voice library", () => {
     });
     expect(screen.queryByLabelText("Sample language")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(await screen.findByRole("button", { name: CONSENT }));
     await waitFor(() =>
       expect(api.enrollVoice).toHaveBeenCalledWith(
         "group-a",
@@ -461,8 +474,7 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" />
       </AppShell>,
     );
-    await openEnrollForm();
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(await openEnrollForm());
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.queryByText("Created")).toBeNull();
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
@@ -478,8 +490,7 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" />
       </AppShell>,
     );
-    await openEnrollForm();
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(await openEnrollForm());
     expect(
       await screen.findByText(
         "This voice path does not support cloning. The sample was not saved as a custom voice.",
@@ -500,8 +511,7 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" />
       </AppShell>,
     );
-    await openEnrollForm();
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(await openEnrollForm());
     expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
     expect(screen.queryByText("Created")).toBeNull();
   });
@@ -681,7 +691,15 @@ describe("Voice catalog failure boundaries", () => {
       );
       expect(await screen.findByRole("alert")).toBeTruthy();
       expect(screen.queryByText("No voices yet.")).toBeNull();
-      expect(screen.queryByRole("button", { name: "sample.wav" })).toBeNull();
+      expect(screen.queryByRole("radio", { name: "sample.wav" })).toBeNull();
+      // The saved binding stays the one checked row while the list is down.
+      expect(
+        (
+          screen.getByRole("radio", {
+            name: "Current voice",
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(true);
       expect(onSelect).not.toHaveBeenCalled();
       expect(api.enrollVoice).not.toHaveBeenCalled();
       if (status === 403 || status === 404) {
@@ -704,8 +722,13 @@ describe("Voice catalog failure boundaries", () => {
         onSelect={onSelect}
       />,
     );
-    const choice = await screen.findByRole("button", { name: "sample.wav" });
-    expect((choice as HTMLButtonElement).disabled).toBe(true);
+    const choice = await screen.findByRole("radio", { name: "sample.wav" });
+    expect((choice as HTMLInputElement).disabled).toBe(true);
+    expect((choice as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByRole("radio", { name: "None" }) as HTMLInputElement)
+        .disabled,
+    ).toBe(true);
     expect(
       (screen.getByRole("button", { name: "Preview" }) as HTMLButtonElement)
         .disabled,
@@ -723,7 +746,150 @@ describe("Voice catalog failure boundaries", () => {
         onSelect={onSelect}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "sample.wav" }));
-    expect(onSelect).toHaveBeenCalledWith(profile.id);
+    fireEvent.click(screen.getByRole("radio", { name: "None" }));
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("Agent voice picker", () => {
+  const mine = {
+    id: "own-voice",
+    scope: "group",
+    group_id: "group-a",
+    status: "ready",
+    source_filename: "mine.wav",
+    created_at: "2026-10-12T00:00:00Z",
+    can_manage: true,
+  };
+  const peer = {
+    ...mine,
+    id: "peer-voice",
+    source_filename: "peer.wav",
+    can_manage: false,
+  };
+
+  function checked() {
+    return screen
+      .getAllByRole("radio")
+      .filter((radio) => (radio as HTMLInputElement).checked)
+      .map((radio) => radio.closest("label")?.textContent);
+  }
+
+  it("always checks exactly one row, None by default", async () => {
+    api.voiceProfiles.mockResolvedValue([mine, peer]);
+    const onSelect = vi.fn();
+    const view = render(
+      <VoiceLibrary
+        groupId="group-a"
+        embedded
+        selectedId={null}
+        onSelect={onSelect}
+      />,
+    );
+    await screen.findByRole("radio", { name: "peer.wav" });
+    expect(screen.getByRole("radiogroup", { name: "Voices" })).toBeTruthy();
+    expect(checked()).toEqual(["None"]);
+    fireEvent.click(screen.getByRole("radio", { name: "peer.wav" }));
+    expect(onSelect).toHaveBeenLastCalledWith("peer-voice");
+    view.rerender(
+      <VoiceLibrary
+        groupId="group-a"
+        embedded
+        selectedId="peer-voice"
+        onSelect={onSelect}
+      />,
+    );
+    expect(checked()).toEqual(["peer.wav"]);
+    fireEvent.click(screen.getByRole("radio", { name: "None" }));
+    expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+
+  it("falls back to None when the chosen voice is deleted", async () => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+    api.voiceProfiles
+      .mockResolvedValueOnce([mine])
+      .mockResolvedValue([{ ...mine, status: "deleted" }]);
+    api.deleteVoiceProfile.mockResolvedValue({ ...mine, status: "deleted" });
+    const onSelect = vi.fn();
+    render(
+      <VoiceLibrary
+        groupId="group-a"
+        embedded
+        selectedId="own-voice"
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete mine.wav" }),
+    );
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(null));
+  });
+
+  it("cancels voice creation from the top-right back arrow without touching the sidebar", async () => {
+    api.voiceProfiles.mockResolvedValue([mine]);
+    const onSelect = vi.fn();
+    render(
+      <AppShell role="student">
+        <VoiceLibrary
+          groupId="group-a"
+          embedded
+          selectedId={null}
+          onSelect={onSelect}
+        />
+      </AppShell>,
+    );
+    await screen.findByRole("radio", { name: "mine.wav" });
+    const sidebarButtons = () =>
+      within(screen.getByRole("banner"))
+        .queryAllByRole("button")
+        .map((button) => button.textContent);
+    const before = sidebarButtons();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    expect(screen.queryByRole("radio")).toBeNull();
+    fireEvent.change(screen.getByLabelText(/10–20 second/), {
+      target: {
+        files: [
+          new File([new Uint8Array([1])], "x.wav", { type: "audio/wav" }),
+        ],
+      },
+    });
+    expect(sidebarButtons()).toEqual(before);
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    // The app's back arrow, not a ×.
+    expect(cancel.querySelector("path")?.getAttribute("d")).toBe(
+      "M19 12H5m7-7-7 7 7 7",
+    );
+    fireEvent.click(cancel);
+    expect(await screen.findByRole("radio", { name: "mine.wav" })).toBeTruthy();
+    expect(checked()).toEqual(["None"]);
+    expect(api.enrollVoice).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("creates the voice as soon as consent is confirmed", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice.mockResolvedValue({
+      ...mine,
+      id: "voice-new",
+      status: "preview_ready",
+      safe_error_code: null,
+    });
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" embedded onSelect={vi.fn()} />
+      </AppShell>,
+    );
+    fireEvent.click(await openEnrollForm());
+    await waitFor(() => expect(api.enrollVoice).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Created")).toBeTruthy();
   });
 });

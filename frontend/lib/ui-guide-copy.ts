@@ -181,6 +181,10 @@ export const uiGuideCopy = {
     en: "Delete this voice profile.",
     zh: "删除此音色档案。",
   },
+  "voice.cancelCreate": {
+    en: "Cancel this new voice and return to the voice list.",
+    zh: "取消新建音色，返回音色列表。",
+  },
   "camera.scene": {
     en: "Choose a classroom scene.",
     zh: "选择课堂场景。",

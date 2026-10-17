@@ -298,9 +298,7 @@ describe("Agent optional media resilience", () => {
       expect(
         (screen.getByLabelText("Material theme") as HTMLSelectElement).value,
       ).toBe("warm_sand");
-      expect(
-        screen.getByRole("button", { name: "Current voice" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("radio", { name: "Current voice" })).toBeTruthy();
       if (resource === "voiceProfiles")
         expect(screen.queryByText("No voices yet.")).toBeNull();
       fireEvent.change(editor, { target: { value: "# Unsaved local text" } });
@@ -333,12 +331,14 @@ describe("Agent optional media resilience", () => {
       expect(api.version).toHaveBeenCalledTimes(1);
       if (resource === "voiceProfiles") {
         expect(
-          screen
-            .getByRole("button", { name: "Saved voice.wav" })
-            .getAttribute("aria-pressed"),
-        ).toBe("true");
+          (
+            screen.getByRole("radio", {
+              name: "Saved voice.wav",
+            }) as HTMLInputElement
+          ).checked,
+        ).toBe(true);
         expect(
-          screen.queryByRole("button", { name: "Current voice" }),
+          screen.queryByRole("radio", { name: "Current voice" }),
         ).toBeNull();
       }
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -375,20 +375,21 @@ describe("Agent optional media resilience", () => {
     api.publish.mockResolvedValue({ ...saved, state: "published" });
     renderWorkbench(api as unknown as PlatformApi);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Saved voice.wav" }),
+      await screen.findByRole("radio", { name: "Saved voice.wav" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(api.updateDraft).toHaveBeenCalledTimes(1));
-    const other = screen.getByRole("button", { name: "Other voice.wav" });
-    expect((other as HTMLButtonElement).disabled).toBe(true);
+    const other = screen.getByRole("radio", { name: "Other voice.wav" });
+    expect((other as HTMLInputElement).disabled).toBe(true);
+    // jsdom still toggles a disabled radio's DOM state on a synthetic click
+    // (browsers do not); what matters is that no choice reaches React state.
     fireEvent.click(other);
-    expect(
-      screen
-        .getByRole("button", { name: "Saved voice.wav" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(api.updateDraft.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ voice_profile_id: availableVoice.id }),
+    );
     await act(async () => finishSave(saved));
     await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    expect(api.updateDraft).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -421,7 +422,7 @@ describe("Published Agent media submission", () => {
     api.publish.mockResolvedValue({ ...saved, state: "published" });
     renderWorkbench(api as unknown as PlatformApi, true);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Other voice.wav" }),
+      await screen.findByRole("radio", { name: "Other voice.wav" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(api.nextVersion).toHaveBeenCalledTimes(1));
@@ -431,9 +432,9 @@ describe("Published Agent media submission", () => {
     ).toBe(true);
     expect(
       (
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "Saved voice.wav",
-        }) as HTMLButtonElement
+        }) as HTMLInputElement
       ).disabled,
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -495,22 +496,24 @@ describe("New Agent optional media", () => {
     );
     renderWorkbench(api as unknown as PlatformApi, true);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Other voice.wav" }),
+      await screen.findByRole("radio", { name: "Other voice.wav" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(
       (
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "Other voice.wav",
-        }) as HTMLButtonElement
+        }) as HTMLInputElement
       ).disabled,
     ).toBe(false);
     expect(
-      screen
-        .getByRole("button", { name: "Other voice.wav" })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+      (
+        screen.getByRole("radio", {
+          name: "Other voice.wav",
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
     expect(api.publish).not.toHaveBeenCalled();
   });
 });
@@ -693,13 +696,15 @@ describe("Agent Voice binding scope", () => {
   it("does not bind an unselected personal Voice while preserving text and Avatar edits", async () => {
     const api = await makePersonalApi(makeVersion());
     renderWorkbench(api as unknown as PlatformApi);
-    const voice = await screen.findByRole("button", {
-      name: "Saved voice.wav",
-    });
+    const voice = await screen.findByRole("radio", { name: "Saved voice.wav" });
     expect(api.personalVoiceProfiles).toHaveBeenCalledWith("course-id");
     expect(api.voiceProfiles).not.toHaveBeenCalled();
-    expect(voice.getAttribute("aria-pressed")).toBe("false");
-    expect((voice as HTMLButtonElement).disabled).toBe(false);
+    expect((voice as HTMLInputElement).checked).toBe(false);
+    expect((voice as HTMLInputElement).disabled).toBe(false);
+    // A new or unbound Agent starts on None: exactly one row is checked.
+    expect(
+      (screen.getByRole("radio", { name: "None" }) as HTMLInputElement).checked,
+    ).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() =>
@@ -733,11 +738,12 @@ describe("Agent Voice binding scope", () => {
   it("binds an explicitly selected personal Voice while preserving Avatar edits", async () => {
     const api = await makePersonalApi(makeVersion());
     renderWorkbench(api as unknown as PlatformApi);
-    const voice = await screen.findByRole("button", {
-      name: "Saved voice.wav",
-    });
+    const voice = await screen.findByRole("radio", { name: "Saved voice.wav" });
     fireEvent.click(voice);
-    expect(voice.getAttribute("aria-pressed")).toBe("true");
+    expect((voice as HTMLInputElement).checked).toBe(true);
+    expect(
+      (screen.getByRole("radio", { name: "None" }) as HTMLInputElement).checked,
+    ).toBe(false);
     expect(api.renameVoiceProfile).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole("textbox", { name: "AGENT.md editor" }), {
       target: { value: "# Personal saved text" },
@@ -756,13 +762,15 @@ describe("Agent Voice binding scope", () => {
     );
   });
 
-  it("can explicitly clear a personal binding even when its Voice is listed", async () => {
+  it("can explicitly clear a personal binding with None even when its Voice is listed", async () => {
     const api = await makePersonalApi(
       makeVersion({ voice_profile_id: personalVoice.id }),
     );
     renderWorkbench(api as unknown as PlatformApi);
-    await screen.findByRole("button", { name: "Saved voice.wav" });
-    fireEvent.click(screen.getByRole("button", { name: "Current voice" }));
+    const voice = await screen.findByRole("radio", { name: "Saved voice.wav" });
+    expect((voice as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByRole("radio", { name: "Current voice" })).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "None" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(api.updateDraft).toHaveBeenCalledTimes(1));
     expect(api.updateDraft.mock.calls[0][1]).toEqual(
@@ -780,13 +788,15 @@ describe("Agent Voice binding scope", () => {
       api.voiceProfiles.mockResolvedValue([availableVoice]);
       api.publish.mockResolvedValue({ ...stored, state: "published" });
       renderWorkbench(api as unknown as PlatformApi);
-      const voice = await screen.findByRole("button", {
+      const voice = await screen.findByRole("radio", {
         name: "Saved voice.wav",
       });
-      expect(voice.getAttribute("aria-pressed")).toBe(
-        action === "clear" ? "true" : "false",
+      expect((voice as HTMLInputElement).checked).toBe(action === "clear");
+      fireEvent.click(
+        action === "clear"
+          ? screen.getByRole("radio", { name: "None" })
+          : voice,
       );
-      fireEvent.click(voice);
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
       await waitFor(() => expect(api.updateDraft).toHaveBeenCalledTimes(1));
       expect(api.updateDraft.mock.calls[0][1]).toEqual(
