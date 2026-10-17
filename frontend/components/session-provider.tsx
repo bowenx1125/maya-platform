@@ -1,5 +1,6 @@
 "use client";
 
+import { DismissibleAlert } from "./dismissible-alert";
 import {
   clearLoginQueue,
   loadLoginQueue,
@@ -728,13 +729,13 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
         </p>
       ) : null}
       {emptyField ? (
-        <p className="form-error" role="alert">
+        <DismissibleAlert className="form-error" resetKey={emptyField}>
           {t(emptyField)}
-        </p>
+        </DismissibleAlert>
       ) : error ? (
-        <p className="form-error" role="alert">
+        <DismissibleAlert className="form-error" resetKey={error}>
           {localizeError(error, locale, errorFallback)}
-        </p>
+        </DismissibleAlert>
       ) : null}
       {hasDemoIdentities ? (
         <div className="login-divider" aria-hidden="true">

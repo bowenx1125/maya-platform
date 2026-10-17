@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
 import { useLocale } from "../locale";
 import type { AudienceInteractionApi } from "./types";
@@ -402,9 +403,13 @@ export function AudienceInteractionForm({
                 </button>
               </div>
               {barrageError ? (
-                <p id="message-error" className={styles.error} role="alert">
+                <DismissibleAlert
+                  id="message-error"
+                  className={styles.error}
+                  resetKey={barrageError}
+                >
                   {apiErrorMessage(barrageError)}
-                </p>
+                </DismissibleAlert>
               ) : null}
             </form>
             <form
@@ -467,9 +472,9 @@ export function AudienceInteractionForm({
                   : t("audienceVoteSubmit")}
               </button>
               {voteError ? (
-                <p className={styles.error} role="alert">
+                <DismissibleAlert className={styles.error} resetKey={voteError}>
                   {apiErrorMessage(voteError)}
-                </p>
+                </DismissibleAlert>
               ) : null}
             </form>
           </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import type { components } from "../../lib/api/generated/schema";
 import { apiErrorMessage, type IdempotencyHandle } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
@@ -278,9 +279,7 @@ export function ReportPanel({
 
       <div className={styles.content}>
         {error ? (
-          <p className={styles.error} role="alert">
-            {error}
-          </p>
+          <DismissibleAlert className={styles.error}>{error}</DismissibleAlert>
         ) : null}
 
         {pollTimedOut && polling ? (
@@ -292,9 +291,9 @@ export function ReportPanel({
         ) : null}
         {report?.generation_status === "failed" ||
         insight?.status === "failed" ? (
-          <p className={styles.notice} role="status">
+          <DismissibleAlert className={styles.notice} role="status">
             {copy.failed}
-          </p>
+          </DismissibleAlert>
         ) : null}
 
         {insight?.items.length ? (
@@ -339,9 +338,9 @@ export function ReportPanel({
               {displayed.english_markdown}
             </ReportMarkdown>
           ) : displayed?.status === "failed" ? (
-            <p className={styles.notice} role="status">
+            <DismissibleAlert className={styles.notice} role="status">
               {displayed.safe_error_code}
-            </p>
+            </DismissibleAlert>
           ) : report?.generation_status === "failed" ? null : (
             <p className={styles.empty} role="status">
               {copy.generating}
