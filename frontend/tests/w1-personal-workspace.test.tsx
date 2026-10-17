@@ -194,6 +194,53 @@ describe("W1 teacher personal workspace", () => {
     expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
   });
 
+  it("shows Delete on Home only for the teacher's own published Agent", async () => {
+    const tile = (id: string, name: string, authorId: string) => ({
+      agent: personalAgent({
+        id,
+        name,
+        visibility: "public",
+        can_edit: false,
+        current_published_version_id: `${id}-v`,
+      }),
+      author: { user_id: authorId, display_name: authorId, avatar: null },
+      current_version: { ...draft(privateDocument()), id: `${id}-v` },
+      group_name: "",
+    });
+    const api = {
+      courses: vi
+        .fn()
+        .mockResolvedValue([
+          { id: courseId, code: "MAYA-101", name: "Cultural exchange" },
+        ]),
+      publishedAgents: vi
+        .fn()
+        .mockResolvedValue([
+          tile("own", "Own Lens", "teacher-user"),
+          tile("other", "Colleague Lens", "colleague"),
+        ]),
+      debates: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([]),
+      deleteAgent: vi.fn(),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <TeacherDashboard />
+      </LocaleProvider>,
+    );
+    await screen.findByRole("link", { name: "Colleague Lens" });
+    const own = document.querySelector('[data-agent-row="own"]')!;
+    const other = document.querySelector('[data-agent-row="other"]')!;
+    expect(
+      within(own as HTMLElement).getByRole("button", { name: "Delete" }),
+    ).toBeTruthy();
+    expect(
+      within(other as HTMLElement).queryByRole("button", { name: "Delete" }),
+    ).toBeNull();
+    expect(within(other as HTMLElement).getByText("V1.0")).toBeTruthy();
+  });
+
   it("preserves the colleague Home without loading personal Agent lists", async () => {
     const api = {
       courses: vi

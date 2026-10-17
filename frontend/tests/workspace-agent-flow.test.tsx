@@ -344,4 +344,29 @@ describe("Workspace Agent flow", () => {
     );
     expect(api.deleteAgent).toHaveBeenCalledTimes(2);
   });
+  it("hides Delete on a groupmate's Agent the viewer can only read or use", async () => {
+    api.group.mockResolvedValue({
+      id: "group-id",
+      course_id: "course-id",
+      name: "Group",
+      members: [],
+    });
+    api.agents.mockResolvedValue([
+      agent({ id: "mine", name: "Mine", can_edit: true }),
+      agent({ id: "shared", name: "Shared", can_edit: false }),
+    ]);
+    render(
+      <AppShell role="student">
+        <GroupWorkspace groupId="group-id" />
+      </AppShell>,
+    );
+    await screen.findByRole("link", { name: /Shared/ });
+    // Exactly one × — on the viewer's own Agent, none on the shared one.
+    const buttons = screen.getAllByRole("button", { name: "Delete" });
+    expect(buttons).toHaveLength(1);
+    expect(
+      buttons[0].closest("[data-agent-row], li, div")?.textContent,
+    ).toContain("Mine");
+    expect(api.deleteAgent).not.toHaveBeenCalled();
+  });
 });

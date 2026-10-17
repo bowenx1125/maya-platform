@@ -495,7 +495,10 @@ function GroupWorkspaceSession({
                   versions={versions}
                   deleting={deleting !== null}
                   onDelete={() => void deleteAgent(agent.id)}
-                  canDelete={!teacherIdentity}
+                  // Only the publisher may delete (the API answers 404 for
+                  // everyone else), so read-only and use-only groupmates get
+                  // no × at all, the same as a public Agent.
+                  canDelete={!teacherIdentity && agent.can_edit === true}
                 />
               ))}
               {sharedAgents.map((item) => (

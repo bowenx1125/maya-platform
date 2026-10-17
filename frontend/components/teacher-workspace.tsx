@@ -208,7 +208,13 @@ export function TeacherDashboard() {
                 item={item}
                 key={item.agent.id}
                 deleting={deleting !== null}
-                onDelete={() => void deleteAgent(item.agent.id)}
+                onDelete={
+                  // Only the publisher may delete; other viewers see the
+                  // version pill without the × (the API rejects them).
+                  item.author?.user_id === user?.id
+                    ? () => void deleteAgent(item.agent.id)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -420,7 +426,11 @@ export function TeacherStudyformWorkspace({
                     visibility={agent.visibility}
                     deleting={deletingId !== null}
                     deleteLabel={t("deleteAgent")}
-                    onDelete={() => void deletePersonalAgent(agent.id)}
+                    onDelete={
+                      agent.can_edit !== false
+                        ? () => void deletePersonalAgent(agent.id)
+                        : undefined
+                    }
                   />
                 );
               })}
@@ -502,7 +512,7 @@ function PublishedAgentTile({
   item: PublishedAgentSummary;
   groupName: string;
   deleting: boolean;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   const t = useT();
   const version = item.current_version;
@@ -530,19 +540,28 @@ function PublishedAgentTile({
           <span>{item.author.display_name}</span>
         </span>
       ) : null}
-      <button
-        type="button"
-        className="agent-pill agent-pill-action"
-        data-pending={hasUnpublishedWork ? "true" : "false"}
-        disabled={deleting}
-        aria-label={t("deleteAgent")}
-        onClick={onDelete}
-      >
-        <span className="agent-pill-label">{version.version_label}</span>
-        <span className="agent-pill-x" aria-hidden="true">
-          <IconClose size={12} />
+      {onDelete ? (
+        <button
+          type="button"
+          className="agent-pill agent-pill-action"
+          data-pending={hasUnpublishedWork ? "true" : "false"}
+          disabled={deleting}
+          aria-label={t("deleteAgent")}
+          onClick={onDelete}
+        >
+          <span className="agent-pill-label">{version.version_label}</span>
+          <span className="agent-pill-x" aria-hidden="true">
+            <IconClose size={12} />
+          </span>
+        </button>
+      ) : (
+        <span
+          className="agent-pill"
+          data-pending={hasUnpublishedWork ? "true" : "false"}
+        >
+          <span className="agent-pill-label">{version.version_label}</span>
         </span>
-      </button>
+      )}
     </div>
   );
 }

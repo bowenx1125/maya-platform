@@ -475,6 +475,34 @@ def test_delete_rejects_history_teacher_and_cross_group(
     assert cross_group.status_code == 404, cross_group.text
 
 
+def test_delete_rejects_same_group_member_without_edit_rights(
+    client: TestClient, database: Database
+) -> None:
+    """A groupmate who can only read or use a shared Agent cannot delete it.
+
+    The list projection gives that groupmate ``can_edit=False`` (so the UI
+    shows no delete button), and the API must still refuse the request.
+    """
+
+    _owner, csrf = login(client, "bowen")
+    agent = _create_agent(client, csrf, "wave3-groupmate-delete-001")
+
+    _mate, mate_csrf = login(client, "kaikai")
+    listed = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents")
+    assert listed.status_code == 200, listed.text
+    shared = [row for row in listed.json() if row["id"] == agent["id"]]
+    assert shared and shared[0]["can_edit"] is False
+
+    rejected = client.delete(
+        f"/api/v1/agents/{agent['id']}",
+        headers=_headers(mate_csrf, **{"Idempotency-Key": "wave3-groupmate-delete-002"}),
+    )
+    assert rejected.status_code == 404, rejected.text
+    with database.session() as session:
+        kept = session.get(Agent, agent["id"])
+        assert kept is not None and kept.deleted_at is None
+
+
 def test_delete_removes_unreferenced_published_agent_from_both_workspaces(
     client: TestClient,
 ) -> None:
