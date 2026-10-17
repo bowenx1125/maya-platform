@@ -804,6 +804,9 @@ def create_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    # The sign-in check above opened a read transaction; end it so a
+    # request queued for admission holds no pooled connection while it waits.
+    db.commit()
     with create_admission_slot():
         scoped_student_group_role(db, context, str(group_id))
         body_hash = parse_json_payload_hash(
@@ -924,6 +927,9 @@ def create_course_workspace_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    # The sign-in check above opened a read transaction; end it so a
+    # request queued for admission holds no pooled connection while it waits.
+    db.commit()
     with create_admission_slot():
         course_key = str(course_id)
         if course_member_role(db, context.user.id, course_key) != "teacher":

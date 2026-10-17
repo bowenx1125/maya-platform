@@ -101,6 +101,9 @@ def create_team(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> TeamDetail:
+    # The sign-in check above opened a read transaction; end it so a
+    # request queued for admission holds no pooled connection while it waits.
+    db.commit()
     with create_admission_slot():
         return _idempotent_mutation(
             db,
