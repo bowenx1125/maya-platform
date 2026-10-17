@@ -10,8 +10,8 @@ import pytest
 from app.modules.debates.models import Debate, DebateTurn
 from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
 from app.modules.debates.playback.sql_repository import (
-    SqlPlaybackRepository,
     _PREPARATION_TIMEOUT_CODE,
+    SqlPlaybackRepository,
 )
 from app.modules.debates.playback.task_manager import TaskManager
 from app.providers.llm import MockLLMProvider
@@ -52,7 +52,6 @@ def test_ensure_turn_job_postgres_uses_on_conflict_not_or_ignore() -> None:
     assert "ON CONFLICT (OPERATION, IDEMPOTENCY_KEY)" in sql
     assert "WHERE IDEMPOTENCY_KEY IS NOT NULL" in sql
     assert "DO NOTHING" in sql
-
 
 
 @pytest.mark.asyncio
