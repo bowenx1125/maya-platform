@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
+import { DismissibleAlert } from "./dismissible-alert";
 import { type RegistrationOptions } from "../lib/api";
 import { localizeError, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
@@ -206,13 +207,13 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
         {step === 1 ? t("registerStepAccount") : t("registerStepGroup")}
       </p>
       {localError ? (
-        <p className="form-error" role="alert">
+        <DismissibleAlert className="form-error" resetKey={localError}>
           {t(localError)}
-        </p>
+        </DismissibleAlert>
       ) : error ? (
-        <p className="form-error" role="alert">
+        <DismissibleAlert className="form-error" resetKey={error}>
           {localizeError(error, locale, "registerFailed")}
-        </p>
+        </DismissibleAlert>
       ) : null}
       <form className="stack-form login-form" onSubmit={submit}>
         {step === 1 ? (

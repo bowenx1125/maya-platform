@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import type {
   ProviderDataCallDisclosureResponse,
   TeamDetailDto,
@@ -227,9 +228,9 @@ function TeacherChatProviderApprovalsPageForScope({
         ) : null}
         {error ? (
           <div>
-            <p className={styles.error} role="alert">
+            <DismissibleAlert className={styles.error} resetKey={error}>
               The course disclosure and published Teams could not be loaded.
-            </p>
+            </DismissibleAlert>
             <button
               className={styles.retry}
               type="button"
@@ -403,11 +404,11 @@ function TeamStandingGrant({
       ) : null}
       {error ? (
         <div>
-          <p className={styles.error} role="alert">
+          <DismissibleAlert className={styles.error} resetKey={error}>
             {preview
               ? "The Team binding could not be confirmed. Review the current binding and retry."
               : "The Team resource binding is unavailable."}
-          </p>
+          </DismissibleAlert>
           <button
             className={styles.retry}
             type="button"

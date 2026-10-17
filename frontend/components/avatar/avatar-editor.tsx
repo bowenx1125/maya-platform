@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import { avatarOptionLabel, avatarTemplateLabel } from "../../lib/i18n";
 import { useLocale, useT } from "../locale";
 import styles from "./avatar.module.css";
@@ -233,9 +234,12 @@ export function AvatarEditor({
         </div>
       </div>
       {errorMessage ? (
-        <p className={`${styles.message} ${styles.error}`} role="alert">
+        <DismissibleAlert
+          className={`${styles.message} ${styles.error}`}
+          resetKey={errorMessage}
+        >
           {errorMessage}
-        </p>
+        </DismissibleAlert>
       ) : null}
     </section>
   );

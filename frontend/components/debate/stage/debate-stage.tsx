@@ -9,6 +9,7 @@ import {
   type SyntheticEvent,
 } from "react";
 
+import { DismissibleAlert } from "../../dismissible-alert";
 import type {
   DebateDetail,
   DebatePlaybackState,
@@ -3503,9 +3504,13 @@ export function DebateStage({
 
         <div className={styles.speechColumn}>
           {failure && failure !== labels.retryReason ? (
-            <div className={styles.failureCard} role="alert">
-              <span>{failure}</span>
-            </div>
+            <DismissibleAlert
+              as="div"
+              className={styles.failureCard}
+              resetKey={failure}
+            >
+              {failure}
+            </DismissibleAlert>
           ) : null}
 
           {providerGate ? (
@@ -3570,7 +3575,11 @@ export function DebateStage({
           ) : null}
 
           {controlError ? (
-            <div className={styles.failureCard} role="alert">
+            <DismissibleAlert
+              as="div"
+              className={styles.failureCard}
+              resetKey={controlError}
+            >
               <span>{controlError}</span>
               {blockedBy ? (
                 <>
@@ -3579,12 +3588,16 @@ export function DebateStage({
                   </span>
                 </>
               ) : null}
-            </div>
+            </DismissibleAlert>
           ) : null}
           {replayAudioUnavailable ? (
-            <div className={styles.failureCard} role="status">
-              <span>{labels.audioNotRetained}</span>
-            </div>
+            <DismissibleAlert
+              as="div"
+              className={styles.failureCard}
+              role="status"
+            >
+              {labels.audioNotRetained}
+            </DismissibleAlert>
           ) : null}
           {/* The panel under the face already carries this state. A second
               wording of it at the top-left of the speeches said the same

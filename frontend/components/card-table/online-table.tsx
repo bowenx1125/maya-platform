@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import {
   PlatformApiError,
   type CardRoom,
@@ -127,9 +128,9 @@ export function OnlineLobby({ onLeave }: { onLeave: () => void }) {
         </form>
       </div>
       {error ? (
-        <p className={styles.notice} role="alert">
+        <DismissibleAlert className={styles.notice} resetKey={error}>
           {error}
-        </p>
+        </DismissibleAlert>
       ) : null}
       <button
         type="button"
@@ -377,9 +378,9 @@ export function OnlineTable({
 
       <footer className={styles.controls}>
         {error ? (
-          <p className={styles.notice} role="alert">
+          <DismissibleAlert className={styles.notice} resetKey={error}>
             {error}
-          </p>
+          </DismissibleAlert>
         ) : null}
         {yourHand ? (
           <PixelText className={styles.handName} text={yourHand} scale={3} />

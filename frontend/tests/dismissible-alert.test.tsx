@@ -1,0 +1,82 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { DismissibleAlert } from "../components/dismissible-alert";
+import { LocaleProvider } from "../components/locale";
+
+describe("dismissible alerts", () => {
+  afterEach(() => cleanup());
+
+  it("closes with a compact × button and keeps its role", () => {
+    render(
+      <DismissibleAlert className="form-error">
+        Generation did not complete: acceptance unknown.
+      </DismissibleAlert>,
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.tagName).toBe("P");
+    expect(alert.className).toContain("form-error");
+    const close = screen.getByRole("button", { name: "Dismiss" });
+    expect(close.className).toBe("alert-dismiss");
+    expect(close.getAttribute("type")).toBe("button");
+    expect(close.querySelector("svg")).toBeTruthy();
+    expect(close.textContent).toBe("");
+    fireEvent.click(close);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("renders a warning as a status line in the requested element", () => {
+    render(
+      <DismissibleAlert as="span" role="status" id="hint">
+        Audio was not retained.
+      </DismissibleAlert>,
+    );
+    const status = screen.getByRole("status");
+    expect(status.tagName).toBe("SPAN");
+    expect(status.id).toBe("hint");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("shows again when a new error arrives after an earlier one was closed", () => {
+    function Harness() {
+      const [error, setError] = useState<Error>(() => new Error("first"));
+      return (
+        <>
+          <button type="button" onClick={() => setError(new Error("first"))}>
+            fail again
+          </button>
+          <DismissibleAlert resetKey={error}>{error.message}</DismissibleAlert>
+        </>
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Same wording, but a new failure: it must not stay swallowed.
+    fireEvent.click(screen.getByRole("button", { name: "fail again" }));
+    expect(screen.getByRole("alert").textContent).toBe("first");
+  });
+
+  it("shows again when its plain-text message changes", () => {
+    const { rerender } = render(
+      <DismissibleAlert>Old failure</DismissibleAlert>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    rerender(<DismissibleAlert>Old failure</DismissibleAlert>);
+    expect(screen.queryByRole("alert")).toBeNull();
+    rerender(<DismissibleAlert>New failure</DismissibleAlert>);
+    expect(screen.getByRole("alert").textContent).toBe("New failure");
+  });
+
+  it("labels the × in Chinese under the Chinese locale", () => {
+    render(
+      <LocaleProvider initialLocale="zh">
+        <DismissibleAlert>生成未完成。</DismissibleAlert>
+      </LocaleProvider>,
+    );
+    expect(screen.getByRole("button", { name: "关闭" })).toBeTruthy();
+  });
+});

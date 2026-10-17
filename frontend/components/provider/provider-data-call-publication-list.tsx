@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import type { ProviderDataCallPublicationManifestListResponse } from "../../lib/api/platform";
 import styles from "./provider-data-call-disclosure.module.css";
 
@@ -47,9 +48,9 @@ export function ProviderDataCallPublicationList({
   if (error || !value) {
     return (
       <section className={styles.card} data-testid="provider-publication-list">
-        <p className={styles.error} role="alert">
+        <DismissibleAlert className={styles.error} resetKey={error}>
           Publication approvals could not be loaded.
-        </p>
+        </DismissibleAlert>
         <button
           className={styles.retry}
           type="button"

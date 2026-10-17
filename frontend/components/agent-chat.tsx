@@ -11,6 +11,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { DismissibleAlert } from "./dismissible-alert";
 import {
   CHAT_BUSY_CODE,
   ChatRequestPendingError,
@@ -2646,9 +2647,9 @@ function AgentChatScope({
       {/* Owner decision (2026-10-13): opening Memory shows no status line
           and no "continue" button; the Chat itself shows what happened. */}
       {invalidMemoryRoute ? (
-        <p className={styles.memoryStatus} role="alert">
+        <DismissibleAlert className={styles.memoryStatus}>
           {t("brainformMemoryInvalid")}
-        </p>
+        </DismissibleAlert>
       ) : null}
       {error && !showConversation ? (
         <ErrorNotice
@@ -2871,18 +2872,24 @@ function AgentChatScope({
                         </p>
                       ) : null}
                       {turn.state === "acceptance_unknown" ? (
-                        <p className={styles.teamWarning} role="status">
+                        <DismissibleAlert
+                          className={styles.teamWarning}
+                          role="status"
+                        >
                           {t("errorChatAcceptanceUnknown")}
-                        </p>
+                        </DismissibleAlert>
                       ) : null}
                       {visibleTeamMemberResults(turn.member_results).some(
                         (item) =>
                           item.state === "failed" ||
                           item.state === "acceptance_unknown",
                       ) ? (
-                        <p className={styles.teamWarning} role="status">
+                        <DismissibleAlert
+                          className={styles.teamWarning}
+                          role="status"
+                        >
                           {t("teamPartialResult")}
-                        </p>
+                        </DismissibleAlert>
                       ) : null}
                       <div className={styles.teamResults}>
                         {sortTeamMemberResults(
@@ -2951,16 +2958,22 @@ function AgentChatScope({
                                   {t("loading")}
                                 </p>
                               ) : result.state === "acceptance_unknown" ? (
-                                <p className={styles.teamWarning} role="status">
+                                <DismissibleAlert
+                                  className={styles.teamWarning}
+                                  role="status"
+                                >
                                   {t("errorChatAcceptanceUnknown")}
-                                </p>
+                                </DismissibleAlert>
                               ) : (
-                                <p className={styles.teamWarning} role="status">
+                                <DismissibleAlert
+                                  className={styles.teamWarning}
+                                  role="status"
+                                >
                                   {teamFailureText(
                                     result.safe_error_code,
                                     "teamMemberFailure",
                                   )}
-                                </p>
+                                </DismissibleAlert>
                               )}
                               {/* Formal progress hangs under the Summarizer line.
                                   Until that card exists, the executor card or

@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { DismissibleAlert } from "../dismissible-alert";
 import {
   isAmbiguousMutationFailure,
   isConflict,
@@ -2486,7 +2487,11 @@ function BrainformWorkspaceBody({
                         {!isGenerating &&
                         row.generation_state &&
                         row.generation_state !== "completed" ? (
-                          <span className={styles.rowStatus} role="alert">
+                          <DismissibleAlert
+                            as="span"
+                            className={styles.rowStatus}
+                            resetKey={`${row.generation_state}:${generationErrorCode ?? ""}`}
+                          >
                             {generationErrorCode &&
                             generationErrorCode !==
                               "provider_confirmation_required"
@@ -2497,7 +2502,7 @@ function BrainformWorkspaceBody({
                                   ),
                                 })
                               : t("brainformGenerationFailed")}
-                          </span>
+                          </DismissibleAlert>
                         ) : null}
                         {!currentDoc && !row.generation_state ? (
                           <span className={styles.rowStatus} role="status">

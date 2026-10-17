@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { DismissibleAlert } from "../../../../../components/dismissible-alert";
 import {
   BetaDebateStage,
   resolveBetaStageLabels,
@@ -599,7 +600,9 @@ export default function TeacherDebateControlPage() {
                   </button>
                 ) : null}
                 {interactionError ? (
-                  <span role="status">{interactionError}</span>
+                  <DismissibleAlert as="span" role="status">
+                    {interactionError}
+                  </DismissibleAlert>
                 ) : null}
                 {!segmentsProtocol &&
                 (detail.status === "debate_finished" ||
