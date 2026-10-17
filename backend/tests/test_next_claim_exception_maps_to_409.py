@@ -350,3 +350,35 @@ def test_claim_next_playback_sql_has_no_sqlite_rowid(monkeypatch: pytest.MonkeyP
     joined = "\n".join(captured).lower()
     assert "rowid" not in joined
     assert "ps.id" in joined or " id=" in joined
+    # R1: AmbiguousParameter — never bind ``:teacher_user_id IS NOT NULL``.
+    assert "teacher_user_id is not null" not in joined
+    assert ":teacher_user_id is not null" not in joined
+    # R1 secondary: PG predecessor compare must be jsonb, not spaced json_agg::text.
+    assert "jsonb_agg" in joined
+    assert "::jsonb" in joined
+
+
+def test_claim_next_rejects_missing_teacher_without_sql() -> None:
+    """Python gate avoids Postgres AmbiguousParameter on IS NOT NULL bind."""
+    repo = SqlPlaybackRepository(session_factory=lambda: (_ for _ in ()).throw(RuntimeError("no sql")))
+    assert (
+        repo.claim_next_playback(
+            debate_id="debate",
+            expected_control_version=1,
+            expected_current_turn_id="current",
+            successor_turn_id="successor",
+            teacher_user_id=None,
+        )
+        is False
+    )
+
+
+def test_claim_next_source_has_no_teacher_is_not_null_bind() -> None:
+    source = inspect.getsource(sql_repository_module.SqlPlaybackRepository.claim_next_playback)
+    # Comment may mention the old bind; SQL string must not emit it.
+    assert '"AND :teacher_user_id IS NOT NULL "' not in source
+    assert "AND :teacher_user_id IS NOT NULL" not in source.replace(
+        "``:teacher_user_id IS NOT NULL``", ""
+    )
+    assert "jsonb_agg" in source
+    assert "predecessor_eq" in source

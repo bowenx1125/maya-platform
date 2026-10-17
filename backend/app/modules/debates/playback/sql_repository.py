@@ -1041,6 +1041,10 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        # Postgres cannot infer a type for ``:teacher_user_id IS NOT NULL`` alone
+        # (AmbiguousParameter).  Gate in Python; SQL only compares the bound id.
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         params = {
             "debate_id": debate_id,
@@ -1062,15 +1066,23 @@ class SqlPlaybackRepository(PlaybackRepository):
                 predecessor_len = (
                     "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
                 )
+                # json_agg(...)::text inserts spaces after commas; stored rows use
+                # json.dumps(separators=(",", ":")). Compare as jsonb so prod Next
+                # is not blocked by whitespace-only inequality.
                 predecessor_json = (
-                    "SELECT COALESCE(json_agg(dt.id ORDER BY dt.turn_index, dt.id)"
-                    "::text, '[]') FROM debate_turns AS dt "
+                    "SELECT COALESCE(jsonb_agg(dt.id ORDER BY dt.turn_index, dt.id), "
+                    "'[]'::jsonb) FROM debate_turns AS dt "
                     "WHERE dt.debate_id=ps.debate_id "
                     "AND dt.turn_index < successor.turn_index "
                     "AND (d.rule_set_id <> :mutual_rule_set_id "
                     "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
                     "= :teaching_protocol AND successor.round_no > 1) "
                     "OR dt.round_no < successor.round_no)"
+                )
+                predecessor_eq = (
+                    "successor.predecessor_turn_ids_json::jsonb = ("
+                    + predecessor_json
+                    + ")"
                 )
             else:
                 predecessor_len = "json_array_length(successor.predecessor_turn_ids_json)"
@@ -1085,6 +1097,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "OR round_no < successor.round_no) "
                     "ORDER BY turn_index, id"
                     ") AS prefix_ids"
+                )
+                predecessor_eq = (
+                    "successor.predecessor_turn_ids_json = ("
+                    + predecessor_json
+                    + ")"
                 )
             candidate = claim_session.execute(
                 text(
@@ -1105,7 +1122,6 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND ps.control_version=:expected_control_version "
                     "AND ps.replay_scope IS NULL AND ps.replay_index IS NULL "
                     "AND d.status='running' "
-                    "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher') "
@@ -1169,12 +1185,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND prior.round_no < successor.round_no), -1) "
                     "ELSE successor.turn_index - 1 END "
                     "AND json_valid(successor.predecessor_turn_ids_json) "
-                    "AND successor.predecessor_turn_ids_json = ("
-                    + predecessor_json
-                    + ") "
+                    "AND " + predecessor_eq + " "
                     "AND EXISTS (SELECT 1 FROM jobs AS successor_job "
                     "WHERE successor_job.debate_id=ps.debate_id "
                     "AND successor_job.turn_id=successor.id "
+                    "AND successor_job.operation='debate_turn_prepare' "
                     "AND successor_job.state='completed' "
                     "AND successor_job.cancellation_generation=d.cancellation_generation)"
                 ).bindparams(bindparam("tts_codes", expanding=True)),
@@ -1282,10 +1297,17 @@ class SqlPlaybackRepository(PlaybackRepository):
             or turn.preparation_stage != "ready"
             or turn.publication_status != "unpublished"
             or turn.audio_file_id is not None
-            or turn.audio_duration_ms is not None
             or turn.safe_error_code not in TTS_UNAVAILABLE_CODES
             or not str(turn.speech or "").strip()
             or not str(turn.transcript_hash or "").strip()
+            # Align with claim SELECT: null duration OR tts_voice_unavailable+0.
+            or not (
+                turn.audio_duration_ms is None
+                or (
+                    turn.safe_error_code == "tts_voice_unavailable"
+                    and turn.audio_duration_ms == 0
+                )
+            )
         ):
             return None
         prior = [item for item in turns if int(item.turn_index) < int(turn.turn_index)]
@@ -1317,7 +1339,8 @@ class SqlPlaybackRepository(PlaybackRepository):
         job = db.execute(
             text(
                 "SELECT 1 FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id "
-                "AND state='completed' AND cancellation_generation=:generation"
+                "AND operation='debate_turn_prepare' AND state='completed' "
+                "AND cancellation_generation=:generation"
             ),
             {"debate_id": debate_id, "turn_id": turn_id, "generation": generation},
         ).first()
@@ -1402,6 +1425,8 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         try:
             begin_immediate(claim_session)
@@ -1412,7 +1437,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "WHERE ps.debate_id=:debate_id AND ps.status='playing' "
                     "AND ps.current_turn_id IS NOT NULL "
                     "AND ps.control_version=:expected_control_version "
-                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND d.status='running' "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher')"
@@ -1466,6 +1491,8 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         try:
             begin_immediate(claim_session)
@@ -1478,7 +1505,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "WHERE ps.debate_id=:debate_id AND ps.status='paused' "
                     "AND ps.current_turn_id IS NOT NULL "
                     "AND ps.control_version=:expected_control_version "
-                    "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                    "AND d.status='running' "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher') "
@@ -1548,6 +1575,8 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return None
+        if teacher_user_id is None:
+            return None
         claim_session = self.session_factory()
         try:
             begin_immediate(claim_session)
@@ -1566,7 +1595,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "AND ps.control_version=:expected_control_version "
                         "AND ps.status IN ('preparing','ready','playing','paused','waiting_next') "
                         "AND ps.mode='live' "
-                        "AND d.status='running' AND :teacher_user_id IS NOT NULL "
+                        "AND d.status='running' "
                         "AND EXISTS (SELECT 1 FROM course_members cm "
                         "WHERE cm.course_id=d.course_id "
                         "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
@@ -1704,6 +1733,8 @@ class SqlPlaybackRepository(PlaybackRepository):
 
         if self.session_factory is None:
             return False
+        if teacher_user_id is None:
+            return False
         claim_session = self.session_factory()
         params = {
             "debate_id": debate_id,
@@ -1737,7 +1768,6 @@ class SqlPlaybackRepository(PlaybackRepository):
                     "AND d.status IN ('debate_finished','completed') "
                     "AND (c.current_audio_debate_id=d.id OR "
                     "json_extract(d.rule_snapshot_json, '$.turn_protocol')='segments_v2') "
-                    "AND :teacher_user_id IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM course_members AS cm "
                     "WHERE cm.course_id=d.course_id AND cm.user_id=:teacher_user_id "
                     "AND cm.role='teacher') "
@@ -2781,10 +2811,13 @@ class SqlPlaybackRepository(PlaybackRepository):
     def _ensure_turn_job(db: Any, debate: SqlRow, turn: SqlRow) -> None:
         """Insert the durable prepare job if missing (SQLite + Postgres).
 
-        Prod D3: ``INSERT OR IGNORE`` is SQLite-only, so Postgres never wrote
-        ``debate_turn_prepare`` rows; turns aged into ``preparation_timeout``
-        with zero jobs. Use ``ON CONFLICT (operation, idempotency_key) DO NOTHING``
-        on Postgres (full unique index from migration 0004; no postgresql_where).
+        Prod R3 (201bcff): ``uq_jobs_operation_idempotency_key`` is a *partial*
+        unique index ``WHERE idempotency_key IS NOT NULL``. Pinning
+        ``ON CONFLICT (operation, idempotency_key)`` without that predicate
+        raises ``InvalidColumnReference`` and aborts the prewarm transaction
+        (zero turns + zero jobs). A target-less ``ON CONFLICT DO NOTHING``
+        accepts either a partial or a full unique index. SQLite keeps
+        ``INSERT OR IGNORE``.
         """
 
         key = f"{debate.id}:{turn.id}"
@@ -2805,16 +2838,9 @@ class SqlPlaybackRepository(PlaybackRepository):
             "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
             "'debate_turn_prepare', 'pending', NULL, 0, :created_at, :updated_at)"
         )
-        # Migration 0004 only sets sqlite_where on uq_jobs_operation_idempotency_key;
-        # Postgres gets a full unique index, so ON CONFLICT must not use a WHERE
-        # inference predicate (that would require a matching partial index).
         if SqlPlaybackRepository._dialect_name(db) == "postgresql":
             db.execute(
-                text(
-                    "INSERT INTO jobs "
-                    + columns
-                    + " ON CONFLICT (operation, idempotency_key) DO NOTHING"
-                ),
+                text("INSERT INTO jobs " + columns + " ON CONFLICT DO NOTHING"),
                 params,
             )
         else:
