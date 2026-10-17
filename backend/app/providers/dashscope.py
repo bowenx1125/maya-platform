@@ -129,6 +129,9 @@ SPEECH_SYNTHESIZER_PATH = "/api/v1/services/audio/tts/SpeechSynthesizer"
 # sample goes to DashScope's temporary upload store first.
 UPLOAD_POLICY_URL = "https://dashscope.aliyuncs.com/api/v1/uploads"
 UPLOAD_HOST_SUFFIX = ".aliyuncs.com"
+# A new clone is reviewed before it can speak; wait a bounded time for it.
+VOICE_REVIEW_WAIT_SECONDS = 20.0
+VOICE_REVIEW_POLL_SECONDS = 2.0
 TTS_GENERATION_READ_TIMEOUT_SECONDS = 120.0
 # Qwen-TTS uses the shared Beijing endpoint; the request header retains
 # the workspace that owns the enrolled voice.
@@ -358,6 +361,14 @@ class DashScopeVoiceCloneProvider:
         value = output.get("voice_id")
         if not isinstance(value, str) or not value or len(value) > 512:
             raise VoiceProviderError("provider response invalid")
+        if self._review_status(value) == "UNDEPLOYED":
+            # The supplier's review rejected the sample. Free the slot it holds
+            # in the workspace quota; the profile becomes a refused card.
+            try:
+                self.delete(value, target_model_key=target_model_key)
+            except VoiceProviderError:
+                pass
+            raise VoiceCloneRefusedError("voice rejected by supplier review")
         return VoiceEnrollmentResult(
             external_voice_id=value,
             request_id=_request_id(response, document),
@@ -365,6 +376,40 @@ class DashScopeVoiceCloneProvider:
             charged=True,
             degraded=False,
         )
+
+    def _review_status(self, voice_id: str) -> str | None:
+        """Wait briefly for the supplier's review of a new clone.
+
+        A new voice is reviewed before it can speak. ``OK`` and ``UNDEPLOYED``
+        are final. A voice still under review after the wait is returned as
+        created: its preview fails until review ends and Retry then works.
+        """
+
+        deadline = time.monotonic() + VOICE_REVIEW_WAIT_SECONDS
+        status: str | None = None
+        try:
+            with _client() as client:
+                while True:
+                    response = client.post(
+                        f"{_base_url(self.config)}{VOICE_CUSTOMIZATION_PATH}",
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json={
+                            "model": VOICE_ENROLLMENT_MODEL,
+                            "input": {"action": "query_voice", "voice_id": voice_id},
+                        },
+                    )
+                    output = _json(response).get("output")
+                    value = output.get("status") if isinstance(output, dict) else None
+                    status = value if isinstance(value, str) else None
+                    if status in {"OK", "UNDEPLOYED"}:
+                        return status
+                    if time.monotonic() + VOICE_REVIEW_POLL_SECONDS > deadline:
+                        return status
+                    time.sleep(VOICE_REVIEW_POLL_SECONDS)
+        except (httpx.HTTPError, OSError, VoiceProviderError):
+            # The voice exists either way; a failed status read must not turn
+            # a charged create into a lost one.
+            return status
 
     def exists(
         self,

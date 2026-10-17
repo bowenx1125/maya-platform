@@ -238,8 +238,9 @@ export function RecordDetail({ team }: { team: RecordTeam | undefined }) {
                     className={record.report}
                     href={attempt.report_download_path}
                     download
+                    // The report covers the whole test, not this attempt.
                     aria-label={t("recordReportFor", {
-                      name: attempt.student_name,
+                      name: attempt.test_name,
                     })}
                   >
                     {t("overviewReport")}

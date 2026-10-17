@@ -67,6 +67,14 @@ class Settings(BaseSettings):
         validation_alias="CLASSROOM_PUBLIC_BASE_URL",
     )
     dashscope_api_key: str | None = Field(default=None, validation_alias="DASHSCOPE_API_KEY")
+    # Chatform's own key: every Agent and Team chat model call and the RAG
+    # retrieval those chats make (formal assessment turns included). Unset
+    # means chats share DASHSCOPE_API_KEY. Everything else (voices and TTS,
+    # Agent / Knowledge embeddings, Knowledge generation, Debates, reports)
+    # always uses DASHSCOPE_API_KEY.
+    dashscope_chat_api_key: str | None = Field(
+        default=None, validation_alias="DASHSCOPE_CHAT_API_KEY"
+    )
     dashscope_workspace_id: str | None = Field(
         default=None,
         validation_alias="DASHSCOPE_WORKSPACE_ID",
@@ -224,9 +232,11 @@ class Settings(BaseSettings):
         default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
     )
     # Second per-operation backstop: concurrent Team/Chat turn execution
-    # (write-heavy) per process, same 12 / 100 / 180 band and shared deadline.
+    # (write-heavy) per process, sharing the request deadline. 20 matches the
+    # LLM backstop: every turn also holds an LLM slot, so a lower write cap
+    # left LLM capacity unused (DB write p95 stayed ~1 ms at 40 students).
     write_guard_limit: int = Field(
-        default=12, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
+        default=20, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT"
     )
     write_guard_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
@@ -253,34 +263,46 @@ class Settings(BaseSettings):
     )
     # One request-level queue for login / create / write / LLM (the old
     # per-op login queue folds in; LLM / write / create gates stay behind it
-    # as backstops). AIMD sizes a weighted budget from load, MemAvailable,
-    # DB write p95 and request p95. Disabling only freezes the
+    # as backstops). AIMD sizes a weighted budget from server-side signals
+    # only (load, MemAvailable, DB write p95, DB pool wait p95, thread-pool
+    # use); request p95 counts queue time, so it is reported, not acted on.
+    # Disabling only freezes the
     # budget at max; pressure queueing and the global cap always apply.
     adaptive_admission_enabled: bool = Field(
         default=True, validation_alias="ADAPTIVE_ADMISSION_ENABLED"
     )
     # Single global backstop: admitted requests per process never exceed this,
-    # whatever the budget says. 32 = 20 model calls plus room for logins,
-    # creates and writes, and stays under AnyIO's 40 sync-handler threads.
-    # (A Chat/Team turn holds a write slot and a nested LLM slot: 2 entries.)
+    # whatever the budget says. A Chat/Team turn holds a write slot and a
+    # nested LLM slot (2 entries), so 48 = 20 turns plus room for logins and
+    # creates. main.py raises AnyIO's sync-handler pool to 128 threads so 48
+    # admitted requests cannot starve /health/ready or plain reads.
     adaptive_admission_max_in_flight: int = Field(
-        default=32, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
+        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
     )
-    # Max budget 96 = 20 concurrent LLM calls at weight 4 (80) plus 16 for
-    # logins / creates / writes. Min keeps one model call moving.
+    # Max budget 128: 20 turns x 6 units (write 2 + nested LLM 4) = 120, plus
+    # room for logins and creates. Min keeps one model call moving.
     adaptive_admission_max_units: int = Field(
-        default=96, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
+        default=128, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
     )
-    # Cold-start budget: the old proven ceiling (12 LLM calls). AIMD climbs to
-    # max only while every pressure signal stays healthy (+2 units / 2 s).
+    # Cold-start budget (18 LLM calls at weight 4). AIMD climbs to max while
+    # the signals stay healthy, and an idle process (30 s, healthy) returns
+    # to at least this much.
     adaptive_admission_initial_units: int = Field(
-        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_INITIAL_UNITS"
+        default=72, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_INITIAL_UNITS"
     )
     adaptive_admission_min_units: int = Field(
         default=4, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MIN_UNITS"
     )
     adaptive_admission_increase_units: float = Field(
         default=2.0, gt=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_INCREASE_UNITS"
+    )
+    # Growth step while the budget is below half of max: recover faster from
+    # a shrink that has passed.
+    adaptive_admission_fast_increase_units: float = Field(
+        default=4.0, gt=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_FAST_INCREASE_UNITS"
+    )
+    adaptive_admission_idle_seconds: float = Field(
+        default=30.0, ge=0, le=3_600, validation_alias="ADAPTIVE_ADMISSION_IDLE_SECONDS"
     )
     adaptive_admission_decrease_factor: float = Field(
         default=0.7, gt=0, lt=1, validation_alias="ADAPTIVE_ADMISSION_DECREASE_FACTOR"
@@ -297,13 +319,26 @@ class Settings(BaseSettings):
         default=4.0, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_LOAD"
     )
     adaptive_admission_soft_mem_mb: int = Field(
-        default=800, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_MEM_MB"
+        default=900, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_SOFT_MEM_MB"
     )
+    # DB single-statement write p95 and pool checkout wait p95 (30 s window,
+    # at least 20 samples) above these shrink the budget.
     adaptive_admission_db_write_p95_ms: float = Field(
         default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_DB_WRITE_P95_MS"
     )
-    adaptive_admission_request_p95_ms: float = Field(
-        default=8_000.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_REQUEST_P95_MS"
+    adaptive_admission_pool_wait_p95_ms: float = Field(
+        default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_POOL_WAIT_P95_MS"
+    )
+    # Hold band (no growth, no shrink): load in [hold, soft), MemAvailable in
+    # [soft, hold) MiB, or the worker-thread pool at least this full.
+    adaptive_admission_hold_load: float = Field(
+        default=3.0, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_HOLD_LOAD"
+    )
+    adaptive_admission_hold_mem_mb: int = Field(
+        default=1100, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_HOLD_MEM_MB"
+    )
+    adaptive_admission_hold_threadpool_ratio: float = Field(
+        default=0.9, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_HOLD_THREADPOOL_RATIO"
     )
     # Layer-1 queue depth; past it callers get an immediate retryable 503.
     adaptive_admission_queue_max: int = Field(
@@ -699,6 +734,14 @@ class Settings(BaseSettings):
             if self.llm_provider != "dashscope" and self.embedding_provider != "dashscope":
                 return self.provider_policy_hash
         return None
+
+    def chat_settings(self) -> Settings:
+        """These settings with the Chatform key in place of the shared one."""
+
+        key = (self.dashscope_chat_api_key or "").strip()
+        if not key:
+            return self
+        return self.model_copy(update={"dashscope_api_key": key})
 
     def provider_policy_hash_for(self, slice_name: str) -> str | None:
         """Resolve an endpoint policy hash without silently crossing slices."""

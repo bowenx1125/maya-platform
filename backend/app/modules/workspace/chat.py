@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import re
+import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -32,7 +33,7 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
-from app.core.write_guard import write_guard_slot
+from app.core.write_guard import WriteSlot, reserve_write_slot, write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.dependencies import (
     get_database,
@@ -165,6 +166,23 @@ def _require_canonical_assessment_conversation(
         )
 
 
+CHAT_BUSY_MESSAGE = "The previous message is still being answered. Send again in a moment."
+
+
+def reject_if_chat_busy(db: Session, row: Conversation, request_id: str) -> None:
+    """Answer chat_busy before queueing for admission, not after the wait.
+
+    A resend of the same request (its turn exists) is not busy.
+    """
+
+    if (
+        row.active_request_id is not None
+        and row.active_request_id != request_id
+        and db.get(ConversationTurn, request_id) is None
+    ):
+        raise conflict("chat_busy", CHAT_BUSY_MESSAGE)
+
+
 def claim_chat_send(
     db: Session,
     row: Conversation,
@@ -197,7 +215,7 @@ def claim_chat_send(
         .values(active_request_id=request_id, revision=Conversation.revision + 1)
     )
     if not isinstance(claimed, CursorResult) or claimed.rowcount != 1:
-        raise conflict("chat_busy", "Refresh the conversation before sending another message.")
+        raise conflict("chat_busy", CHAT_BUSY_MESSAGE)
     turn = ConversationTurn(
         id=request_id,
         conversation_id=row.id,
@@ -672,14 +690,19 @@ def generate_reply(
     actor_context: AuthContext | None = None,
     allow_not_sent_retry: bool = False,
     generation_waker: Callable[[str], None] | None = None,
+    write_slot: WriteSlot | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
-    """Produce one full reply in memory.  This does not store assistant text."""
+    """Produce one full reply in memory.  This does not store assistant text.
+
+    ``write_slot`` is the slot a send reserved before claiming its turn; a
+    caller already holding one on this thread takes no second slot.
+    """
 
     # Joins the request's collector when the HTTP handler already opened one
     # (then storing the reply is timed too); the stream path times this part.
     with (
         message_timing("chat", conversation_id=row.id, request_id=request_id),
-        write_guard_slot(settings),
+        write_guard_slot(settings, reserved=write_slot),
     ):
         return _generate_reply_body(
             db,
@@ -1681,18 +1704,20 @@ def send_message(
     ):
         if row.entry_kind != "agent":
             _require_canonical_assessment_conversation(db, context, row)
-            claim = claim_team_turn(
-                db,
-                settings,
-                conversation_id=row.id,
-                actor_id=context.user.id,
-                request_id=str(payload.request_id),
-                expected_revision=payload.expected_revision,
-                message=payload.message,
-                routing=payload.routing,
-                actor_context=context,
-            )
-            execute_team_turn_with_natural_assessment_resume(database.session_factory, claim)
+            db.commit()  # hold no pooled connection while queued
+            with write_guard_slot(settings):
+                claim = claim_team_turn(
+                    db,
+                    settings,
+                    conversation_id=row.id,
+                    actor_id=context.user.id,
+                    request_id=str(payload.request_id),
+                    expected_revision=payload.expected_revision,
+                    message=payload.message,
+                    routing=payload.routing,
+                    actor_context=context,
+                )
+                execute_team_turn_with_natural_assessment_resume(database.session_factory, claim)
             _wake_assessment_finalizer(request, row.id)
             db.expire_all()
             return session_view(
@@ -1712,35 +1737,42 @@ def send_message(
         message = payload.message.strip()
         if not message:
             raise PlatformError("chat_message_empty", "Enter a message.", 400)
-        turn, created = claim_chat_send(
-            db,
-            row,
-            request_id=request_id,
-            expected_revision=payload.expected_revision,
-            message=message,
-            settings=settings,
-        )
-        claim_revision = turn.position
-        if not created:
-            return session_view(db, row, context, settings)
-        try:
-            reply, sources, operation_id = generate_reply(
-                db,
-                settings,
-                row,
-                request_id,
-                claim_revision,
-                message,
-                actor_context=context,
-                generation_waker=_knowledge_generation_waker(request),
-            )
-            store_assistant_text(
-                db, row.id, request_id, claim_revision, reply, sources, operation_id
-            )
-        except Exception as exc:
-            record_chat_failure(db, row.id, request_id, claim_revision, exc)
-        release_chat_request(db, row.id, request_id, claim_revision)
+        reject_if_chat_busy(db, row, request_id)
+        # Admission comes before the claim: a busy server answers 503 with
+        # nothing stored, and the student resends the text still in the box.
+        # No pooled connection is held while waiting in the queue (nothing is
+        # pending; commit only ends the read transaction, keeping the rows).
         db.commit()
+        with write_guard_slot(settings):
+            turn, created = claim_chat_send(
+                db,
+                row,
+                request_id=request_id,
+                expected_revision=payload.expected_revision,
+                message=message,
+                settings=settings,
+            )
+            claim_revision = turn.position
+            if not created:
+                return session_view(db, row, context, settings)
+            try:
+                reply, sources, operation_id = generate_reply(
+                    db,
+                    settings,
+                    row,
+                    request_id,
+                    claim_revision,
+                    message,
+                    actor_context=context,
+                    generation_waker=_knowledge_generation_waker(request),
+                )
+                store_assistant_text(
+                    db, row.id, request_id, claim_revision, reply, sources, operation_id
+                )
+            except Exception as exc:
+                record_chat_failure(db, row.id, request_id, claim_revision, exc)
+            release_chat_request(db, row.id, request_id, claim_revision)
+            db.commit()
         db.expire_all()
         return session_view(
             db, owned_conversation(db, context, str(conversation_id)), context, settings
@@ -1779,32 +1811,43 @@ def stream_message(
         actor_id = context.user.id
         actor_session_id_hash = context.session.id_hash
         owned_id = row.id
-        claim = claim_team_turn(
-            db,
-            settings,
-            conversation_id=owned_id,
-            actor_id=actor_id,
-            request_id=str(payload.request_id),
-            expected_revision=payload.expected_revision,
-            message=payload.message,
-            routing=payload.routing,
-            actor_context=context,
-        )
+        # Admission before the claim; the worker thread adopts this slot.
+        db.commit()  # hold no pooled connection while queued
+        team_slot = reserve_write_slot(settings)
+        try:
+            claim = claim_team_turn(
+                db,
+                settings,
+                conversation_id=owned_id,
+                actor_id=actor_id,
+                request_id=str(payload.request_id),
+                expected_revision=payload.expected_revision,
+                message=payload.message,
+                routing=payload.routing,
+                actor_context=context,
+            )
+        except BaseException:
+            team_slot.release()
+            raise
         # The claim rolls back this request Session before committing. Keep
         # only the authenticated identity keys available to the worker; its
         # current-session and resource checks always re-read durable state.
         set_committed_value(context.user, "id", actor_id)
         set_committed_value(context.session, "id_hash", actor_session_id_hash)
         db.close()
+        team_stream = stream_team_events(
+            database,
+            owned_id,
+            actor_id,
+            claim,
+            last_event_id,
+            on_finished=lambda: _wake_assessment_finalizer(request, owned_id),
+            write_slot=team_slot,
+        )
+        # A browser gone before the stream starts never runs the generator.
+        weakref.finalize(team_stream, team_slot.release_if_unadopted)
         return StreamingResponse(
-            stream_team_events(
-                database,
-                owned_id,
-                actor_id,
-                claim,
-                last_event_id,
-                on_finished=lambda: _wake_assessment_finalizer(request, owned_id),
-            ),
+            team_stream,
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
@@ -1824,31 +1867,44 @@ def stream_message(
     message = payload.message.strip()
     if not message:
         raise PlatformError("chat_message_empty", "Enter a message.", 400)
-    turn, created = claim_chat_send(
-        db,
-        row,
-        request_id=request_id,
-        expected_revision=payload.expected_revision,
-        message=message,
-        settings=settings,
-    )
+    reject_if_chat_busy(db, row, request_id)
+    # Admission before the claim (503 with nothing stored); the reply thread
+    # adopts this slot.
+    db.commit()  # hold no pooled connection while queued
+    slot = reserve_write_slot(settings)
+    try:
+        turn, created = claim_chat_send(
+            db,
+            row,
+            request_id=request_id,
+            expected_revision=payload.expected_revision,
+            message=message,
+            settings=settings,
+        )
+    except BaseException:
+        slot.release()
+        raise
     claim_revision = turn.position
     owned_id = row.id
     # Claim is committed.  Drop the request connection before the stream so
     # it is not held across the LLM call or TTS.
     db.close()
+    reply_stream = stream_events(
+        database,
+        settings,
+        conversation_id=owned_id,
+        created=created,
+        message=message,
+        request_id=request_id,
+        claim_revision=claim_revision,
+        actor_context=context,
+        generation_waker=_knowledge_generation_waker(request),
+        write_slot=slot,
+    )
+    # A browser gone before the stream starts never runs the generator.
+    weakref.finalize(reply_stream, slot.release_if_unadopted)
     return StreamingResponse(
-        stream_events(
-            database,
-            settings,
-            conversation_id=owned_id,
-            created=created,
-            message=message,
-            request_id=request_id,
-            claim_revision=claim_revision,
-            actor_context=context,
-            generation_waker=_knowledge_generation_waker(request),
-        ),
+        reply_stream,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )

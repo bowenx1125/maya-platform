@@ -719,7 +719,13 @@ export function VoiceLibrary({
                   <IconCheck />
                 </button>
               ) : null}
-              {!listenOnly && !onSelect && manageable ? (
+              {/* A delete already in flight or awaiting reconciliation is
+                  answered only by its own retry, which the failure card holds. */}
+              {!listenOnly &&
+              !onSelect &&
+              manageable &&
+              profile.status !== "deleting" &&
+              profile.status !== "outcome_unknown" ? (
                 <button
                   className={cards.iconButton}
                   aria-label={t("voiceDeleteNamed", { name })}

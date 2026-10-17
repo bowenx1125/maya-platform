@@ -10,9 +10,12 @@ this single queue as backstops (the login queue is folded into it):
   Mem >= 550 MiB) so the old memory and load guards cannot disagree.
   Under danger nothing new is admitted; callers suspend in the queue and
   continue automatically once the latch clears.
-* AIMD: while load, MemAvailable, DB write p95 and request p95 are healthy
-  the weighted budget grows additively; any soft-pressure signal shrinks it
-  multiplicatively, never past configured min / max.
+* AIMD on server-side signals only: danger, load, MemAvailable, DB write
+  p95 and DB pool checkout wait p95 shrink the weighted budget x0.7; a band
+  just below those (load 3-4, Mem 900-1100 MiB, thread pool >= 90%) holds
+  it; otherwise it grows (+4 below half of max, else +2). Request p95
+  includes time spent in this queue, so feeding it back shrank the budget
+  further the longer people waited; it is reported, never acted on.
 * Cost weights (llm heavy, create/write medium, login light, read free),
   FIFO per class, served round-robin so one class cannot starve others.
 * One global in-flight hard cap per process; LLM calls, Team/Chat
@@ -30,6 +33,7 @@ fail open (only the global cap then applies).
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import deque
@@ -46,9 +50,13 @@ from app.core.errors import PlatformError
 CLASSES: tuple[str, ...] = ("llm", "create", "write", "login")
 READ_CLASS = "read"
 
+LOGGER = logging.getLogger("maya.admission")
+
 SignalReader = Callable[[], float | None]
 _load_reader: SignalReader | None = None
 _mem_reader: SignalReader | None = None
+# Fraction of the AnyIO worker-thread pool in use; main.py installs it.
+_threadpool_reader: SignalReader | None = None
 _clock: Callable[[], float] = time.monotonic
 
 
@@ -66,6 +74,23 @@ def set_signal_readers(
     _clock = clock if clock is not None else time.monotonic
 
 
+def set_threadpool_reader(reader: SignalReader | None) -> None:
+    """Install the thread-pool usage probe (0..1). ``None`` removes it."""
+
+    global _threadpool_reader
+    _threadpool_reader = reader
+
+
+def _read_threadpool() -> float | None:
+    reader = _threadpool_reader
+    if reader is None:
+        return None
+    try:
+        return reader()
+    except Exception:
+        return None  # an observation must never break admission
+
+
 def _read_load() -> float | None:
     if _load_reader is not None:
         return _load_reader()
@@ -79,29 +104,6 @@ def _read_mem() -> float | None:
     return None if value is None else float(value)
 
 
-class _LatencyWindow:
-    """Small ring buffer of recent durations (ms) for a cheap p95."""
-
-    def __init__(self, size: int = 200) -> None:
-        self._samples: deque[float] = deque(maxlen=size)
-        self._lock = threading.Lock()
-
-    def add(self, ms: float) -> None:
-        with self._lock:
-            self._samples.append(ms)
-
-    def p95(self) -> float | None:
-        with self._lock:
-            if len(self._samples) < 10:
-                return None  # too few samples to judge; treat as unknown
-            ordered = sorted(self._samples)
-        return ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
-
-    def clear(self) -> None:
-        with self._lock:
-            self._samples.clear()
-
-
 class _TimedLatencyWindow:
     """Durations (ms) from the last ``horizon`` seconds for a cheap p95.
 
@@ -110,8 +112,11 @@ class _TimedLatencyWindow:
     budget at the floor with stale minutes-old latencies.
     """
 
-    def __init__(self, horizon_seconds: float = 60.0, max_samples: int = 2000) -> None:
+    def __init__(
+        self, horizon_seconds: float = 60.0, max_samples: int = 2000, min_samples: int = 10
+    ) -> None:
         self._horizon = horizon_seconds
+        self._min_samples = min_samples
         self._samples: deque[tuple[float, float]] = deque(maxlen=max_samples)
         self._lock = threading.Lock()
 
@@ -130,7 +135,7 @@ class _TimedLatencyWindow:
         now = _clock()
         with self._lock:
             self._expire_locked(now)
-            if len(self._samples) < 10:
+            if len(self._samples) < self._min_samples:
                 return None  # too few samples to judge; treat as unknown
             ordered = sorted(ms for _, ms in self._samples)
         return ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
@@ -141,8 +146,13 @@ class _TimedLatencyWindow:
 
 
 REQUEST_P95_WINDOW_SECONDS = 60.0
+# DB signals judge the last 30 s and need 20 samples, so one slow statement
+# in a quiet minute cannot shrink the budget.
+DB_P95_WINDOW_SECONDS = 30.0
+DB_P95_MIN_SAMPLES = 20
 
-_DB_WRITE = _LatencyWindow()
+_DB_WRITE = _TimedLatencyWindow(DB_P95_WINDOW_SECONDS, min_samples=DB_P95_MIN_SAMPLES)
+_POOL_WAIT = _TimedLatencyWindow(DB_P95_WINDOW_SECONDS, min_samples=DB_P95_MIN_SAMPLES)
 _REQUEST = _TimedLatencyWindow(REQUEST_P95_WINDOW_SECONDS)
 
 
@@ -199,6 +209,12 @@ def record_db_write_ms(ms: float) -> None:
     _DB_WRITE.add(ms)
 
 
+def record_pool_wait_ms(ms: float) -> None:
+    """Time a caller waited for a pooled DB connection (db.py)."""
+
+    _POOL_WAIT.add(ms)
+
+
 def record_request_ms(ms: float) -> None:
     _REQUEST.add(ms)
 
@@ -210,15 +226,23 @@ class _Waiter:
     granted: bool = False
 
 
+SHRINK_REASONS: tuple[str, ...] = ("danger", "load", "mem", "db_write_p95", "pool_wait_p95")
+
+
 @dataclass
 class _State:
     budget: float = -1.0  # <0 means "not initialised yet"
     in_flight_units: int = 0
     last_adjust: float = float("-inf")
     last_sample: float = float("-inf")
+    # Last time anything was admitted or waiting; idle recovery counts from it.
+    last_busy: float = float("-inf")
     danger: bool = False
     load: float | None = None
     mem: float | None = None
+    threadpool: float | None = None
+    last_shrink_reason: str | None = None
+    shrink_counts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(SHRINK_REASONS, 0))
     rr_index: int = 0
     queues: dict[str, deque[_Waiter]] = field(
         default_factory=lambda: {name: deque() for name in CLASSES}
@@ -245,6 +269,7 @@ def reset_adaptive_admission_state() -> None:
         _state = _State()
         _cond.notify_all()
     _DB_WRITE.clear()
+    _POOL_WAIT.clear()
     _REQUEST.clear()
 
 
@@ -265,12 +290,14 @@ def _refresh_locked(settings: Settings) -> None:
     s = _state
     max_units = float(settings.adaptive_admission_max_units)
     min_units = float(min(settings.adaptive_admission_min_units, max_units))
+    now = _clock()
     if s.budget < 0:
         # Start at the configured cold-start budget, not the ceiling: AIMD
-        # earns the rest of the headroom while signals stay healthy.
+        # earns the rest of the headroom while signals stay healthy, starting
+        # one adjust interval from now.
         initial = float(settings.adaptive_admission_initial_units)
         s.budget = max(min_units, min(max_units, initial))
-    now = _clock()
+        s.last_adjust = now
     if now - s.last_sample < float(settings.adaptive_admission_sample_seconds):
         return
     s.last_sample = now
@@ -291,27 +318,83 @@ def _refresh_locked(settings: Settings) -> None:
         mem_ok = mem_floor <= 0 or s.mem is None or s.mem >= mem_resume
         s.danger = not (load_ok and mem_ok)
 
+    if s.in_flight_units > 0 or _waiting_total() > 0 or s.last_busy == float("-inf"):
+        s.last_busy = now
     if not settings.adaptive_admission_enabled:
         s.budget = max_units  # AIMD off: budget frozen at max, danger latch still applies
         return
     if now - s.last_adjust < float(settings.adaptive_admission_adjust_seconds):
         return
     s.last_adjust = now
-    db_p95 = _DB_WRITE.p95()
-    req_p95 = _REQUEST.p95()
+    s.threadpool = _read_threadpool()
+    before = s.budget
+    reason = _shrink_reason(settings)
+    if reason is not None:
+        s.budget = max(min_units, s.budget * float(settings.adaptive_admission_decrease_factor))
+        s.last_shrink_reason = reason
+        s.shrink_counts[reason] += 1
+    elif _hold(settings):
+        pass
+    else:
+        step = (
+            float(settings.adaptive_admission_fast_increase_units)
+            if s.budget < max_units * 0.5
+            else float(settings.adaptive_admission_increase_units)
+        )
+        s.budget = min(max_units, s.budget + step)
+        idle = now - s.last_busy >= float(settings.adaptive_admission_idle_seconds)
+        if idle:
+            initial = max(
+                min_units, min(max_units, float(settings.adaptive_admission_initial_units))
+            )
+            s.budget = max(s.budget, initial)
+    if s.budget != before:
+        LOGGER.info(
+            "adaptive_budget from=%.1f to=%.1f reason=%s load=%s mem_mb=%s "
+            "in_flight_units=%s queued=%s",
+            before,
+            s.budget,
+            reason or "grow",
+            s.load,
+            s.mem,
+            s.in_flight_units,
+            _waiting_total(),
+        )
+
+
+def _shrink_reason(settings: Settings) -> str | None:
+    """First server-side pressure signal that asks the budget to shrink."""
+
+    s = _state
     soft_load = float(settings.adaptive_admission_soft_load)
     soft_mem = float(settings.adaptive_admission_soft_mem_mb)
-    pressured = (
-        s.danger
-        or (soft_load > 0 and s.load is not None and s.load >= soft_load)
-        or (soft_mem > 0 and s.mem is not None and s.mem < soft_mem)
-        or (db_p95 is not None and db_p95 > settings.adaptive_admission_db_write_p95_ms)
-        or (req_p95 is not None and req_p95 > settings.adaptive_admission_request_p95_ms)
+    db_p95 = _DB_WRITE.p95()
+    pool_p95 = _POOL_WAIT.p95()
+    if s.danger:
+        return "danger"
+    if soft_load > 0 and s.load is not None and s.load >= soft_load:
+        return "load"
+    if soft_mem > 0 and s.mem is not None and s.mem < soft_mem:
+        return "mem"
+    if db_p95 is not None and db_p95 > settings.adaptive_admission_db_write_p95_ms:
+        return "db_write_p95"
+    if pool_p95 is not None and pool_p95 > settings.adaptive_admission_pool_wait_p95_ms:
+        return "pool_wait_p95"
+    return None
+
+
+def _hold(settings: Settings) -> bool:
+    """The band just short of shrinking: keep the budget where it is."""
+
+    s = _state
+    hold_load = float(settings.adaptive_admission_hold_load)
+    hold_mem = float(settings.adaptive_admission_hold_mem_mb)
+    hold_pool = float(settings.adaptive_admission_hold_threadpool_ratio)
+    return (
+        (hold_load > 0 and s.load is not None and s.load >= hold_load)
+        or (hold_mem > 0 and s.mem is not None and s.mem < hold_mem)
+        or (hold_pool > 0 and s.threadpool is not None and s.threadpool >= hold_pool)
     )
-    if pressured:
-        s.budget = max(min_units, s.budget * float(settings.adaptive_admission_decrease_factor))
-    else:
-        s.budget = min(max_units, s.budget + float(settings.adaptive_admission_increase_units))
 
 
 def _fits(weight: int, settings: Settings) -> bool:
@@ -391,14 +474,42 @@ def adaptive_admission_busy_error(
     )
 
 
-@contextmanager
-def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
-    """Hold weighted budget for one ``cls`` operation; reads bypass entirely."""
+class Reservation:
+    """Admitted budget for one operation, releasable from any thread.
+
+    A send claims its turn only after admission, but its model work runs on
+    a worker thread; the reservation carries the slot across. ``release`` is
+    idempotent, so every exit path may call it.
+    """
+
+    __slots__ = ("cls", "weight", "deadline", "settings", "_released")
+
+    def __init__(self, cls: str, weight: int, deadline: float, settings: Settings) -> None:
+        self.cls = cls
+        self.weight = weight
+        self.deadline = deadline
+        self.settings = settings
+        self._released = weight == 0
+
+    def release(self) -> None:
+        with _cond:
+            if self._released:
+                return
+            self._released = True
+            _state.in_flight_units = max(0, _state.in_flight_units - self.weight)
+            _state.in_flight[self.cls] = max(0, _state.in_flight[self.cls] - 1)
+            _refresh_locked(self.settings)
+            _dispatch_locked(self.settings)
+
+
+def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
+    """Wait for weighted budget for one ``cls`` operation and hold it.
+
+    Raises the retryable ``adaptive_admission_busy`` 503 when the queue is
+    full or the request deadline passes; nothing is held in that case.
+    """
 
     runtime = settings if settings is not None else get_settings()
-    if cls == READ_CLASS:
-        yield
-        return
     if cls not in CLASSES:
         raise ValueError(f"unknown admission class: {cls}")
     if cls == "llm":
@@ -412,13 +523,9 @@ def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
         else time.monotonic() + float(runtime.adaptive_admission_wait_seconds)
     )
     weight = max(0, _weight(runtime, cls))
+    reservation = Reservation(cls, weight, deadline, runtime)
     if weight == 0:
-        _held.deadline = deadline
-        try:
-            yield
-        finally:
-            _held.deadline = outer_deadline
-        return
+        return reservation
     retry_after = int(runtime.adaptive_admission_retry_seconds)
     waiter = _Waiter(cls=cls, weight=weight)
     depth = int(getattr(_held, "depth", 0))
@@ -452,18 +559,40 @@ def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
                 if not waiter.granted:
                     _refresh_locked(runtime)
                     _dispatch_locked(runtime)
-    _held.depth = depth + 1
-    _held.deadline = deadline
+    return reservation
+
+
+@contextmanager
+def adopt_reservation(reservation: Reservation) -> Iterator[None]:
+    """Run the ``with`` block as the holder of ``reservation``, then release it.
+
+    Nested slots on this thread are charged without queueing behind it, and
+    layer-2 gates wait only for what is left of its deadline.
+    """
+
+    depth = int(getattr(_held, "depth", 0))
+    outer_deadline = getattr(_held, "deadline", None)
+    if reservation.weight > 0:
+        _held.depth = depth + 1
+    _held.deadline = reservation.deadline
     try:
         yield
     finally:
         _held.depth = depth
         _held.deadline = outer_deadline
-        with _cond:
-            _state.in_flight_units = max(0, _state.in_flight_units - weight)
-            _state.in_flight[cls] = max(0, _state.in_flight[cls] - 1)
-            _refresh_locked(runtime)
-            _dispatch_locked(runtime)
+        reservation.release()
+
+
+@contextmanager
+def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
+    """Hold weighted budget for one ``cls`` operation; reads bypass entirely."""
+
+    if cls == READ_CLASS:
+        yield
+        return
+    reservation = reserve_slot(cls, settings)
+    with adopt_reservation(reservation):
+        yield
 
 
 def shared_wait_seconds(cap: float) -> float:
@@ -499,7 +628,12 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
             "load_1m": s.load,
             "mem_available_mb": s.mem,
             "db_write_p95_ms": _DB_WRITE.p95(),
+            "pool_wait_p95_ms": _POOL_WAIT.p95(),
+            "threadpool_usage": s.threadpool,
+            # Observed only: it includes queue time, so it never drives AIMD.
             "request_p95_ms": _REQUEST.p95(),
+            "last_shrink_reason": s.last_shrink_reason,
+            "shrink_counts": dict(s.shrink_counts),
             "queue_depth": _waiting_total(),
             "classes": {
                 name: {
@@ -521,9 +655,14 @@ __all__ = [
     "begin_request_sample",
     "record_request_sample",
     "adaptive_slot",
+    "adopt_reservation",
+    "Reservation",
+    "reserve_slot",
     "record_db_write_ms",
+    "record_pool_wait_ms",
     "record_request_ms",
     "reset_adaptive_admission_state",
     "set_signal_readers",
+    "set_threadpool_reader",
     "shared_wait_seconds",
 ]

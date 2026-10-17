@@ -22,8 +22,10 @@ from app.core.models import Base
 from app.core.postgres_compat import ensure_postgres_compat
 
 SQLITE_BUSY_TIMEOUT_MS = 5_000
-POSTGRES_POOL_SIZE = 10
-POSTGRES_MAX_OVERFLOW = 20
+# Per backend: 15 + 25 = 40, so two replicas hold at most 80 of PostgreSQL's
+# 200 connections; 48 admitted requests rarely hold a connection at once.
+POSTGRES_POOL_SIZE = 15
+POSTGRES_MAX_OVERFLOW = 25
 
 ALEMBIC_HEAD = "0066_postgres_column_widths"
 _STARTUP_LOCK = "maya-startup"
@@ -68,6 +70,7 @@ def build_engine(database_url: str) -> Engine:
         )
         ensure_postgres_compat(engine)
         _time_writes(engine)
+        _time_pool_checkout(engine)
         return engine
     raise RuntimeError("Unsupported database backend.")
 
@@ -92,6 +95,28 @@ def _time_writes(engine: Engine) -> None:
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             record_db_write_ms(elapsed_ms)
             add_db_write(elapsed_ms)
+
+
+def _time_pool_checkout(engine: Engine) -> None:
+    """Feed how long callers wait for a pooled connection to admission.
+
+    SQLAlchemy has no "before checkout" event, so the pool's own connect is
+    wrapped. A pool that is out of connections shows up here long before
+    statement latency moves.
+    """
+
+    from app.core.adaptive_admission import record_pool_wait_ms
+
+    pool = engine.pool
+    checkout = pool.connect
+
+    def timed_connect():  # type: ignore[no-untyped-def]
+        started = time.perf_counter()
+        connection = checkout()
+        record_pool_wait_ms((time.perf_counter() - started) * 1000.0)
+        return connection
+
+    pool.connect = timed_connect  # type: ignore[method-assign]
 
 
 class Database:

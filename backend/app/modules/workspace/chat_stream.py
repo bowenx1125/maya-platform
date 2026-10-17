@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError, not_found
+from app.core.write_guard import WriteSlot
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import FileBoundaryError, contained_path
 
@@ -79,6 +80,7 @@ async def stream_events(
     claim_revision: int,
     actor_context: AuthContext | None = None,
     generation_waker: Callable[[str], None] | None = None,
+    write_slot: WriteSlot | None = None,
 ) -> AsyncIterator[bytes]:
     """Yield deltas only after the current request has committed its full reply.
 
@@ -110,6 +112,8 @@ async def stream_events(
 
     try:
         if not created:
+            if write_slot is not None:
+                write_slot.release()
             yield _replay_event(
                 database,
                 settings,
@@ -129,6 +133,7 @@ async def stream_events(
                 message,
                 actor_context,
                 generation_waker,
+                write_slot,
             )
         except Exception as exc:
             code = settle(exc)
@@ -167,6 +172,10 @@ async def stream_events(
         )
         release()
     finally:
+        # A stream closed before the reply thread adopted the reserved slot
+        # must still give it back (release is idempotent).
+        if write_slot is not None:
+            write_slot.release_if_unadopted()
         if created and not settled:
             settle(PlatformError("chat_interrupted", "This chat request was interrupted.", 503))
         release()
@@ -232,6 +241,7 @@ def _reply_segment(
     message: str,
     actor_context: AuthContext | None = None,
     generation_waker: Callable[[str], None] | None = None,
+    write_slot: WriteSlot | None = None,
 ) -> tuple[str, list[ChatSource], str | None]:
     from .chat import generate_reply
 
@@ -248,6 +258,7 @@ def _reply_segment(
             message,
             actor_context=actor_context,
             generation_waker=generation_waker,
+            write_slot=write_slot,
         )
 
 
@@ -313,6 +324,7 @@ async def stream_team_events(
     claim: TeamClaim,
     after_sequence: int = 0,
     on_finished: Callable[[], None] | None = None,
+    write_slot: WriteSlot | None = None,
 ) -> AsyncIterator[bytes]:
     from .team_runtime import (
         execute_team_turn_with_natural_assessment_resume,
@@ -330,12 +342,15 @@ async def stream_team_events(
             after_sequence=cursor,
         )
 
+    if not claim.created and write_slot is not None:
+        write_slot.release()
     if claim.created:
         task = asyncio.create_task(
             asyncio.to_thread(
                 execute_team_turn_with_natural_assessment_resume,
                 database.session_factory,
                 claim,
+                write_slot,
             )
         )
         _TEAM_BACKGROUND_RUNS.add(task)
