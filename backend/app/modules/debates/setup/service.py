@@ -817,16 +817,10 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 db.commit()
         except Exception:
             db.rollback()
-    # Line C M2: draft Preview used to stay "No saved turns yet" forever when
-    # prewarm never owned the slot — ensure plan + head prepare job on read so
-    # expire/stall/Retry have a row to attach to.
-    if str(getattr(debate, "status", "")) == "draft":
-        try:
-            from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
-
-            SqlPlaybackRepository().ensure_turn_plan(db, cast(Any, debate))
-        except Exception:
-            db.rollback()
+    # Reads never build the turn plan: the plan and head prepare job are
+    # written by create (same transaction), by the prewarm planner (its own
+    # committed transaction) and by Start.  An uncommitted plan write here held
+    # SQLite's writer lock on every polled GET and starved the prewarm worker.
     participants = db.scalars(
         select(DebateParticipant)
         .where(DebateParticipant.debate_id == debate.id)

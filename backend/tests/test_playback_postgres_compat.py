@@ -45,6 +45,27 @@ def test_course_id_default_does_not_use_qmark_driver_sql():
     assert "WHERE id = ?" not in source
 
 
+def test_json_extract_coalesce_defaults_are_text():
+    source = _REPOSITORY.read_text(encoding="utf-8")
+    code = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("#"))
+    # The PostgreSQL json_extract shim returns text, so COALESCE(json_extract(...), 2)
+    # raises DatatypeMismatch there; the default must be a text literal (#107).
+    joined = re.sub(r'"\s*\n\s*"', "", code)
+    for match in re.finditer(r"COALESCE\(json_extract\(", joined):
+        depth = 0
+        for index in range(match.start() + len("COALESCE"), len(joined)):
+            char = joined[index]
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+        call = joined[match.start() : index + 1]
+        default = call.rsplit(",", 1)[1].strip().rstrip(")").strip()
+        assert default.startswith("'"), call
+
+
 _POSTGRES_URL = os.environ.get("MAYA_TEST_POSTGRES_URL")
 
 
