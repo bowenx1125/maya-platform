@@ -2977,7 +2977,6 @@ class SqlPlaybackRepository(PlaybackRepository):
                 raise RuntimeError("turn claim lost its durable job fence")
         return accepted
 
-
     def expire_stale_preparation(
         self,
         db: Any,
@@ -3036,9 +3035,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "(j.id IS NOT NULL AND j.state='pending' AND j.claim_token IS NULL "
                 "AND j.updated_at<=:pending_cut) OR "
                 "(j.id IS NOT NULL AND j.state IN ('pending','running') "
-                "AND j.claim_token IS NOT NULL AND j.updated_at<=:running_cut) OR "
-                + job_age
-                + ")"
+                "AND j.claim_token IS NOT NULL AND j.updated_at<=:running_cut) OR " + job_age + ")"
             )
         else:
             age_clause = "(" + job_age + ")"
@@ -3054,11 +3051,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "AND t.publication_status='unpublished' "
                         "AND COALESCE(t.safe_error_code,'') = '' "
                         "AND d.status IN ('draft','running') "
-                        "AND d.deleted_at IS NULL "
-                        + debate_filter
-                        + "AND "
-                        + age_clause
-                        + " "
+                        "AND d.deleted_at IS NULL " + debate_filter + "AND " + age_clause + " "
                         "AND NOT EXISTS ("
                         "SELECT 1 FROM debate_turns AS earlier "
                         "WHERE earlier.debate_id=t.debate_id "
@@ -3126,7 +3119,6 @@ class SqlPlaybackRepository(PlaybackRepository):
         return int(getattr(draft_turned, "rowcount", 0) or 0) + int(
             getattr(running_turned, "rowcount", 0) or 0
         )
-
 
     def fail_prewarm_turn(
         self, db: Any, turn: SqlRow, *, claim_token: str | None, code: str

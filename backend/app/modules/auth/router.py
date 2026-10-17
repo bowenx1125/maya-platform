@@ -10,15 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.core.adaptive_admission import adaptive_slot
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError, forbidden, not_found
 from app.core.models import CourseMember, Group, GroupMember, User
 from app.modules.auth.abuse import AuthAbuseLimiter, client_key
 from app.modules.auth.admission import (
-    acquire_login_admission,
     login_database_overloaded,
-    release_login_admission,
-    ticket_from_header,
 )
 from app.modules.auth.credentials import (
     CredentialFileError,
@@ -205,20 +203,20 @@ def login(
     settings: Settings = Depends(get_settings),
 ) -> AuthSession:
     _require_production_auth_origin(request, settings)
-    # Queue before the abuse limiter and the password check. A full line is a
-    # wait, not a failure, and it must not spend the failed-login allowance.
-    # The ticket header is optional and undeclared so the frozen login contract
-    # stays the same; a missing or malformed value simply joins the line.
-    try:
-        admission_id = acquire_login_admission(
-            db,
-            settings,
-            ticket_from_header(request.headers.get("x-auth-admission-ticket")),
-        )
-    except OperationalError as exc:
-        if not login_database_overloaded(exc):
-            raise
-        raise _login_queue_overload(settings) from None
+    # Join the unified pressure queue before the abuse limiter and password
+    # check: under host pressure sign-in waits (not fails) and does not spend
+    # the failed-login allowance. Only timeout / full queue returns a 503.
+    with adaptive_slot("login", settings):
+        return _login_admitted(payload, request, response, db, settings)
+
+
+def _login_admitted(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session,
+    settings: Settings,
+) -> AuthSession:
     limiter = _limiter(request) if settings.is_production else None
     reservation = None
     failed = False
@@ -271,14 +269,11 @@ def login(
     finally:
         if limiter is not None and reservation is not None:
             limiter.finish_login(reservation, failed=failed)
-        # Commit the new session before releasing the slot. A failed sign-in
-        # rolls its own writes back, then the slot release commits on its own
-        # so the next person in line is not held for the lease.
+        # Commit the new session; a failed sign-in rolls its own writes back.
         if succeeded:
             db.commit()
         elif db.in_transaction():
             db.rollback()
-        release_login_admission(db, admission_id)
 
 
 def _login_queue_overload(settings: Settings) -> PlatformError:
