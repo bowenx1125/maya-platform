@@ -614,3 +614,62 @@ def test_pool_checkout_wait_is_recorded(probe: _Probe, tmp_path) -> None:  # typ
         engine.dispose()
     p95 = aa._POOL_WAIT.p95()
     assert p95 is not None and p95 < 500
+
+
+def test_danger_latch_logs_enter_and_release_and_counts_them(
+    probe: _Probe, caplog: pytest.LogCaptureFixture
+) -> None:
+    s = _settings()
+    caplog.set_level("WARNING", logger="maya.admission")
+    aa.adaptive_admission_snapshot(s)
+    latch = aa.adaptive_admission_snapshot(s)["danger_latch"]
+    assert latch == {
+        "entries": 0,
+        "releases": 0,
+        "reason": None,
+        "active_seconds": 0.0,
+        "total_seconds": 0.0,
+    }
+
+    probe.load = 6.5
+    probe.mem = 450.0
+    probe.now = 1.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger"] is True
+    assert snap["danger_latch"]["entries"] == 1
+    assert snap["danger_latch"]["reason"] == "load+mem"
+    entered = [
+        r.getMessage() for r in caplog.records if "admission_danger_entered" in r.getMessage()
+    ]
+    assert entered == [
+        "admission_danger_entered reason=load+mem load=6.5 mem_mb=450.0 in_flight_units=0 queued=0"
+    ]
+
+    # Still latched (hysteresis): no second entry, no release.
+    probe.load = 4.5
+    probe.mem = 600.0
+    probe.now = 3.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger"] is True
+    assert snap["danger_latch"]["entries"] == 1
+    assert snap["danger_latch"]["active_seconds"] == 2.0
+
+    probe.load = 3.5
+    probe.now = 5.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger"] is False
+    assert snap["danger_latch"]["releases"] == 1
+    assert snap["danger_latch"]["total_seconds"] == 4.0
+    assert snap["danger_latch"]["active_seconds"] == 0.0
+    released = [
+        r.getMessage() for r in caplog.records if "admission_danger_released" in r.getMessage()
+    ]
+    assert released == [
+        "admission_danger_released reason=load+mem held_s=4.0 load=3.5 mem_mb=600.0 queued=0"
+    ]
+
+    probe.mem = 300.0
+    probe.now = 6.0
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger_latch"]["entries"] == 2
+    assert snap["danger_latch"]["reason"] == "mem"

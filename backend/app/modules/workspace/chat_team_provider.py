@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError
+from app.core.llm_admission import llm_admission_slot
 from app.modules.auth.service import AuthContext
 from app.modules.provider_disclosure.team_standing import authorize_team_dispatch
 from app.modules.workspace.models import (
@@ -285,6 +287,13 @@ def _finish_and_usage(response_json: str) -> tuple[str | None, dict[str, Any]]:
         reason if isinstance(reason, str) else None,
         usage if isinstance(usage, dict) else {},
     )
+
+
+def _preflight_code(exc: BaseException) -> str:
+    code = getattr(exc, "code", "provider_preflight_blocked")
+    if isinstance(code, str) and code.startswith("provider_"):
+        return code
+    return "provider_preflight_blocked"
 
 
 def _model_response(response_json: str) -> ModelResponse:
@@ -695,47 +704,58 @@ def dispatch_team_model(
             binding_guard=guard,
         )
         repository.reserve(operation.id)
-        repository.transition(
-            operation.id,
-            expected="reserved",
-            state="sending",
-            sending_guard=guard,
-        )
     except ProviderDispatchRejected as exc:
         raise TeamDispatchError("team_context_changed") from exc
     except Exception as exc:
-        code = getattr(exc, "code", "provider_preflight_blocked")
-        safe_code = (
-            code
-            if isinstance(code, str) and code.startswith("provider_")
-            else "provider_preflight_blocked"
-        )
-        raise TeamDispatchError(safe_code) from None
+        raise TeamDispatchError(_preflight_code(exc)) from None
 
-    provider_transport = transport or HttpxLLMTransport()
+    # Wait for the LLM slot while the operation is still only "reserved":
+    # an admission refusal, or a crash while queued, then ends "not_sent"
+    # (retryable) instead of a "sending" row that recovery must call unknown.
+    # The transport's own slot request below is re-entrant on this thread.
+    admission = ExitStack()
     try:
-        response = provider_transport.post_bytes(
-            config.resolved_endpoint,
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
-            content=wire,
-            timeout=HttpxLLMTransport.timeout(),
-        )
+        admission.enter_context(llm_admission_slot())
     except PlatformError as exc:
-        # Pre-send refusal (e.g. host_memory_pressure): nothing left the host.
         repository.mark_not_sent(operation.id, safe_error_code=exc.code)
         raise
-    except LLMTransportError as exc:
-        if exc.acceptance == "not_sent":
-            repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)
-            raise TeamDispatchError("team_provider_not_sent") from None
-        repository.mark_acceptance_unknown(operation.id, safe_error_code=exc.safe_error_code)
-        raise TeamDispatchError("team_acceptance_unknown") from None
-    except Exception:
-        repository.mark_acceptance_unknown(operation.id)
-        raise TeamDispatchError("team_acceptance_unknown") from None
+    with admission:
+        try:
+            repository.transition(
+                operation.id,
+                expected="reserved",
+                state="sending",
+                sending_guard=guard,
+            )
+        except ProviderDispatchRejected as exc:
+            raise TeamDispatchError("team_context_changed") from exc
+        except Exception as exc:
+            raise TeamDispatchError(_preflight_code(exc)) from None
+
+        provider_transport = transport or HttpxLLMTransport()
+        try:
+            response = provider_transport.post_bytes(
+                config.resolved_endpoint,
+                headers={
+                    "Authorization": f"Bearer {config.api_key}",
+                    "Content-Type": "application/json",
+                },
+                content=wire,
+                timeout=HttpxLLMTransport.timeout(),
+            )
+        except PlatformError as exc:
+            # Pre-send refusal (e.g. host_memory_pressure): nothing left the host.
+            repository.mark_not_sent(operation.id, safe_error_code=exc.code)
+            raise
+        except LLMTransportError as exc:
+            if exc.acceptance == "not_sent":
+                repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)
+                raise TeamDispatchError("team_provider_not_sent") from None
+            repository.mark_acceptance_unknown(operation.id, safe_error_code=exc.safe_error_code)
+            raise TeamDispatchError("team_acceptance_unknown") from None
+        except Exception:
+            repository.mark_acceptance_unknown(operation.id)
+            raise TeamDispatchError("team_acceptance_unknown") from None
 
     status = getattr(response, "status_code", None)
     if status != 200:
