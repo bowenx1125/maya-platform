@@ -264,14 +264,14 @@ def create_app(
             from app.modules.debates.round_count import debate_round_count, uses_segment_protocol
 
             turns = playback_repository.turns(session, debate)
-            if not turns:
-                # A draft has no plan until something asks for one. Warming is
-                # the only asker before Start, and Start stops warming before
-                # it runs, so the two never write this at the same time.
-                ensure = getattr(playback_repository, "ensure_turn_plan", None)
-                if callable(ensure):
-                    turns = ensure(session, debate)
-                    session.commit()
+            ensure = getattr(playback_repository, "ensure_turn_plan", None)
+            if callable(ensure) and (not turns or not _has_head_prepare_job(session, turns)):
+                # Create builds the plan, but an edited or legacy draft can
+                # lack the plan or its head prepare job.  Warming backfills
+                # both in its own short, committed transaction; Start stops
+                # warming before it runs, so the two never write together.
+                turns = ensure(session, debate)
+                session.commit()
             return [
                 (
                     str(getattr(turn, "id", "")),
@@ -282,6 +282,21 @@ def create_app(
                 if not uses_segment_protocol(debate)
                 or int(getattr(turn, "round_no", 0)) < debate_round_count(debate)
             ]
+
+    def _has_head_prepare_job(session: Any, turns: Any) -> bool:
+        head = min(turns, key=lambda item: int(getattr(item, "turn_index", 0) or 0))
+        from sqlalchemy import text as sql_text
+
+        return (
+            session.execute(
+                sql_text(
+                    "SELECT 1 FROM jobs WHERE turn_id=:turn_id "
+                    "AND operation='debate_turn_prepare' LIMIT 1"
+                ),
+                {"turn_id": str(getattr(head, "id", ""))},
+            ).first()
+            is not None
+        )
 
     async def _prewarm_prepare(debate_id: str, turn_id: str) -> None:
         with runtime_database.session() as session:

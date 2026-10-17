@@ -219,11 +219,20 @@ function PreviewTurnCard({
       )}
 
       {failed ? (
-        <div className={styles.errorRow} role="status">
+        <div
+          className={styles.errorRow}
+          role="status"
+          data-text-fallback-ready={textFallbackReady ? "true" : "false"}
+        >
           <span>
             {savedSpeech ? "Audio needs attention." : "Speech needs attention."}
           </span>
-          {onRetry && !textFallbackReady ? (
+          {turn.safe_error_code ? (
+            <code data-testid="preview-safe-error-code">
+              {turn.safe_error_code}
+            </code>
+          ) : null}
+          {onRetry ? (
             <button
               className={`icon-action ${styles.retryButton}`}
               aria-label={retrying ? "Retrying…" : "Retry turn"}
