@@ -3108,7 +3108,19 @@ export function DebateStage({
                 labelsRef.current.prepared ??
                 "Next turn is not ready yet.",
             );
-          } else if (action === "next" || action === "resume") {
+          } else if (action === "next") {
+            // Any Next failure (503 host_load_pressure, provider_unavailable,
+            // etc.) must stay visible — never clear controlError and only
+            // recover. recoverPlayback can reset next_turn_ready from a
+            // stale snapshot, so force it false after sync.
+            setFailure(null);
+            await recoverPlayback();
+            applyPlayback({ next_turn_ready: false });
+            setControlError(
+              errorText(cause, labelsRef.current.connectionError),
+            );
+            setBlockedBy(blockingDebate(cause));
+          } else if (action === "resume") {
             setControlError(null);
             setFailure(null);
             await recoverPlayback();
