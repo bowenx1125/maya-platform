@@ -40,6 +40,7 @@ from app.modules.voices.service import (
     _profile_external_id,
     _utc,
     now_utc,
+    previewable_voice,
     visible_student_voice,
     voice_profile_dto,
 )
@@ -209,7 +210,7 @@ def create_voice_preview(
 ) -> PlaybackResource:
     """Generate bounded server-side preview bytes and return an opaque URL."""
 
-    profile = visible_student_voice(db, context, profile_id).profile
+    profile = previewable_voice(db, context, profile_id)
     if profile.status not in {"preview_ready", "ready"}:
         raise not_found()
     try:
@@ -384,7 +385,8 @@ def media_path_for_preview(
     System fallback previews have no group scope.  They are readable only by
     a teacher in the frozen Demo course; student and cross-course sessions
     receive the same not-found response as other out-of-scope voice media.
-    Group previews retain the existing same-group student query.
+    Group previews are playable by the uploading student and, for a ready
+    voice, by the student groupmates who may preview it.
     """
 
     scoped_group_member = aliased(WorkspaceMember)
@@ -430,6 +432,23 @@ def media_path_for_preview(
             ),
         )
     ).first()
+    if row is None:
+        # A groupmate's ready voice: the same rule that let them create it.
+        shared = db.execute(
+            select(VoicePreview, VoiceProfile)
+            .join(VoiceProfile, VoiceProfile.id == VoicePreview.profile_id)
+            .where(
+                VoicePreview.id == preview_id,
+                VoiceProfile.scope == "group",
+                VoicePreview.group_id == VoiceProfile.group_id,
+            )
+        ).first()
+        if shared is not None:
+            try:
+                previewable_voice(db, context, shared[1].id)
+            except PlatformError:
+                shared = None
+        row = shared
     if row is None:
         raise not_found()
     preview, _profile = row

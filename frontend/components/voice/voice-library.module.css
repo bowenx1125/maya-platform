@@ -49,25 +49,38 @@
   overflow-wrap: anywhere;
 }
 
+/* The consent statement is itself the create button. */
 .consent {
   display: flex;
-  max-width: 68ch;
+  width: 100%;
   min-height: 44px;
-  gap: 12px;
-  align-items: flex-start;
-  padding-top: 4px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--workspace-border, var(--line));
+  border-radius: 10px;
+  background: var(--workspace-content, var(--surface-subtle));
   color: var(--ink);
+  font: inherit;
   font-size: 0.9rem;
   line-height: 1.6;
+  text-align: left;
   cursor: pointer;
 }
 
-.consent input {
-  width: 1.1rem;
-  height: 1.1rem;
-  flex: 0 0 auto;
-  margin-top: 0.2rem;
-  accent-color: var(--ink);
+.consent:hover:not(:disabled) {
+  border-color: #d8cfbd;
+  background: #f5eddc;
+}
+
+.consent:focus-visible {
+  outline: 3px solid #967c50;
+  outline-offset: 2px;
+}
+
+.consent:disabled {
+  color: #8b887f;
+  cursor: not-allowed;
 }
 
 .nameButton,
@@ -179,9 +192,60 @@ button.voiceName:focus-visible {
   outline-offset: 4px;
 }
 
-button.voiceName[aria-pressed="true"] {
-  text-decoration: underline;
-  text-underline-offset: 4px;
+/* Single-choice picker: a hollow ring on the left fills when chosen. */
+.voiceChoice {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.voiceChoice:has(.radio:disabled) {
+  cursor: default;
+}
+
+.radio {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  place-items: center;
+  border: 1.5px solid #8b7d66;
+  border-radius: 50%;
+  background: transparent;
+  appearance: none;
+  cursor: inherit;
+}
+
+.radio::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold, #967c50);
+  content: "";
+  transform: scale(0);
+  transition: transform 120ms ease;
+}
+
+.radio:checked::before {
+  transform: scale(1);
+}
+
+.radio:checked {
+  border-color: var(--gold, #967c50);
+}
+
+.radio:disabled {
+  border-color: #cfc8bb;
+}
+
+.radio:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 
 .voiceActions {

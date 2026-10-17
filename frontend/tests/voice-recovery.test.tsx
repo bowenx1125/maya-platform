@@ -109,7 +109,7 @@ describe("Voice recovery", () => {
         [unfinished.id],
       ]);
       fireEvent.ended(document.querySelector("audio")!);
-      const choice = screen.getByRole("button", { name: "sample.wav" });
+      const choice = screen.getByRole("radio", { name: "sample.wav" });
       await waitFor(() => expect(choice).toHaveProperty("disabled", false));
       fireEvent.click(choice);
       expect(onSelect).toHaveBeenCalledWith(unfinished.id);
@@ -147,8 +147,9 @@ describe("Voice recovery", () => {
       fireEvent.change(screen.getByLabelText(/10–20 second/), {
         target: { files: [file] },
       });
-      fireEvent.click(screen.getByRole("checkbox"));
-      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /I confirm this is my voice/ }),
+      );
       expect(await screen.findByRole("alert")).toBeTruthy();
       const initial = enroll.mock.calls[0];
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -262,7 +263,7 @@ describe("Voice recovery", () => {
       });
       expect(screen.queryByRole("alert")).toBeNull();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-      expect(screen.getByRole("button", { name: "sample.wav" })).toHaveProperty(
+      expect(screen.getByRole("radio", { name: "sample.wav" })).toHaveProperty(
         "disabled",
         false,
       );
@@ -295,7 +296,7 @@ describe("Voice recovery", () => {
       );
       api.voiceProfile.mockResolvedValue(ready);
       render(<VoiceLibrary groupId="group-a" onSelect={vi.fn()} />);
-      await screen.findByRole("button", { name: "sample.wav" });
+      await screen.findByRole("radio", { name: "sample.wav" });
       const previews = screen.getAllByRole("button", { name: "Preview" });
       vi.useFakeTimers();
       await act(async () => fireEvent.click(previews[0]));
@@ -320,7 +321,7 @@ describe("Voice recovery", () => {
         }
       });
       expect(screen.getByRole("alert")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "sample.wav" })).toHaveProperty(
+      expect(screen.getByRole("radio", { name: "sample.wav" })).toHaveProperty(
         "disabled",
         false,
       );
@@ -437,8 +438,9 @@ describe("Voice recovery", () => {
     fireEvent.change(screen.getByLabelText(/10–20 second/), {
       target: { files: [file] },
     });
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /I confirm this is my voice/ }),
+    );
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toMatch(
       /platform fallback voice/i,

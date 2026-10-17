@@ -146,8 +146,9 @@ page whose Done creates a Chat only its owner reads. Brainform has no
 disclosure entry; operator `PROVIDER_STANDING_CONSENT` covers classroom/production,
 otherwise Teachers confirm at the unlinked approvals route. Teacher Accounts (read-only
 Public group visit, temporary membership removed on return) and Debates are restored.
-Sidebar New/Back/Done; Back/Done only contextual. Voice
-New is module-right exception; Home Voices Guide goes directly to its new form.
+Sidebar New/Back/Done; Back/Done only contextual. Voice New is module-right; its form
+skips the sidebar: consent creates, top-right ← cancels. Agent Voice: radio,
+None default; groupmates choose/hear ready voices, teachers never.
 Colleague Mayaform Home preserved except Components, Guide destinations and data-use
 entry moved to Brainform. All decorative heading explanations become immediate help;
 no1500ms wait. Brainform three columns, no page title/eyebrow; RAG fully reuses original
@@ -199,12 +200,11 @@ UI polish through PR #64: Teams match Agents; create Done validates; edit Done n
 
 ## October14 independent revalidation and release
 
-Earlier Oct14: Voice/Rebirth recovery, speech routing, nonvoice, Coding-A locks.
+Oct14: Voice/Rebirth recovery, speech routing, nonvoice, Coding-A locks.
 Speech models stay paused after Notice118434.
 
-Built `f007a11` (PR #69: voice enroll/preview, Set revive).
-Production backup `maya-20261014T111701Z.sqlite3` integrity ok; healthy/ready200/
-schema0064/public200. Voices upload help states the sample rules; no side copy.
+Built `f007a11` (PR #69); backup `maya-20261014T111701Z.sqlite3` ok, schema0064.
+Voices upload help states the sample rules; no side copy.
 
 Knowledge partial promote skips `provider_asset_invalid` assets and still promotes a head when something applied (`prompt_v3`, `minItems:1`). The same published version and source manifest reuses the in-flight run. Teacher Chat shows generation progress; Agent Chat appends report links.
 

@@ -1,11 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { PlatformApiError, type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import { statusLabel, type MessageKey } from "../../lib/i18n";
-import { PageAction } from "../page-action";
 import { useSession } from "../session-provider";
 import { useLocale, useT } from "../locale";
 import {
@@ -17,6 +23,7 @@ import {
 } from "../ui";
 import { IconClose, IconPlay, IconUpload } from "../quiet-icons";
 import { ModuleCard, ModulePlus } from "../studyform-layout";
+import { WorkspaceIcon } from "../workspace-icon";
 import cards from "../knowledge/brainform-workspace.module.css";
 import styles from "./voice-library.module.css";
 
@@ -111,9 +118,11 @@ export function VoiceLibrary({
   /** Studyform home: the same ModuleCard frame as the Teams panel beside it. */
   moduleCard?: boolean;
   initialCreate?: boolean;
+  /** The Agent's voice. With onSelect the list is a single-choice picker
+   * whose None row stands for "no voice", so exactly one row is checked. */
   selectedId?: string | null;
   disabled?: boolean;
-  onSelect?: (profileId: string) => void;
+  onSelect?: (profileId: string | null) => void;
   onProfilesChange?: (profiles: VoiceProfile[]) => void;
   id?: string;
 }) {
@@ -138,7 +147,6 @@ export function VoiceLibrary({
   );
   const [file, setFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(initialCreate && !listenOnly);
-  const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -155,6 +163,7 @@ export function VoiceLibrary({
   const focusName = useRef<string | null>(null);
   const loadSequence = useRef(0);
   const idempotency = useIdempotencyStore();
+  const pickerName = useId();
   const focusNameInput = useCallback((input: HTMLInputElement | null) => {
     input?.focus();
   }, []);
@@ -308,7 +317,7 @@ export function VoiceLibrary({
     Boolean(enrollmentGroupId) && !loading && !listenOnly && !controlsDisabled;
 
   async function submitEnrollment(upload = file) {
-    if (!canEnroll || !enrollmentGroupId || !upload || !consent) return;
+    if (!canEnroll || !enrollmentGroupId || !upload) return;
     setBusy(true);
     setFailure(null);
     setNotice(null);
@@ -344,7 +353,6 @@ export function VoiceLibrary({
       }
       idempotency.finish("voice-enroll");
       setFile(null);
-      setConsent(false);
       setCreating(false);
       setNotice("voiceProfileCreatedNotice");
       await load();
@@ -519,6 +527,9 @@ export function VoiceLibrary({
         delete next[profile.id];
         return next;
       });
+      // A deleted voice cannot stay the Agent's choice; the picker falls back
+      // to None rather than leaving no row checked.
+      if (onSelect && selectedId === profile.id) onSelect(null);
       await load();
     } catch (cause) {
       setFailure({ cause, retry: { kind: "delete", profileId: profile.id } });
@@ -554,6 +565,15 @@ export function VoiceLibrary({
       if (profile) void remove(profile);
     } else if (action.kind === "rename")
       void rename(action.profile, action.name, action.restoreFocus);
+  }
+
+  // Leaving the form creates nothing: the chosen file is discarded and the
+  // next upload starts a fresh idempotent request.
+  function cancelCreate() {
+    idempotency.abandon("voice-enroll");
+    setCreating(false);
+    setFailure(null);
+    setFile(null);
   }
 
   const form = (
@@ -593,42 +613,76 @@ export function VoiceLibrary({
           </span>
         ) : null}
       </div>
-      <label className={styles.consent}>
-        <input
-          type="checkbox"
-          disabled={controlsDisabled}
-          aria-label={t("voiceConsent")}
-          checked={consent}
-          onChange={(event) => setConsent(event.target.checked)}
-        />
-        <span>{t("voiceConsent")}</span>
-      </label>
-      <PageAction
-        name="back"
-        disabled={controlsDisabled}
-        onClick={() => {
-          setCreating(false);
-          setFailure(null);
-          setFile(null);
-          setConsent(false);
-        }}
-      />
-      <PageAction
-        name="done"
-        disabled={!file || !consent || controlsDisabled || !canEnroll}
+      {/* Confirming consent is the create step: no sidebar Done, and the
+          sidebar never changes while this panel is open. */}
+      <button
+        className={styles.consent}
+        type="button"
+        disabled={!file || controlsDisabled || !canEnroll}
+        aria-busy={busy || undefined}
         onClick={() => void submitEnrollment()}
-      />
+      >
+        {busy ? <span className="spinner" aria-hidden="true" /> : null}
+        <span>{t("voiceConsent")}</span>
+      </button>
     </div>
   );
 
+  const selectedListed = profiles.some(
+    (profile) => profile.id === selectedId && profile.status === "ready",
+  );
+  // The picker always has exactly one checked row: None, a listed ready voice,
+  // or, for a binding this list cannot show (deleted, or not visible to this
+  // person), the saved "Current voice" until another row is chosen.
+  const pickerRows =
+    onSelect && !loading ? (
+      <>
+        <li className={styles.voiceRow} data-choice="none">
+          <label className={styles.voiceChoice}>
+            <input
+              className={styles.radio}
+              type="radio"
+              name={pickerName}
+              checked={selectedId === null}
+              disabled={controlsDisabled}
+              onChange={() => onSelect(null)}
+            />
+            <span className={styles.voiceName}>{t("voiceNoneOption")}</span>
+          </label>
+        </li>
+        {selectedId && !selectedListed ? (
+          <li className={styles.voiceRow} data-choice="current">
+            <label className={styles.voiceChoice}>
+              <input
+                className={styles.radio}
+                type="radio"
+                name={pickerName}
+                checked
+                disabled={controlsDisabled}
+                onChange={() => undefined}
+              />
+              <span className={styles.voiceName}>
+                {t("currentVoiceBinding")}
+              </span>
+            </label>
+          </li>
+        ) : null}
+      </>
+    ) : null;
+
   const list =
-    profiles.length > 0 ? (
-      <ul className={styles.voiceList}>
+    profiles.length > 0 || pickerRows ? (
+      <ul
+        className={styles.voiceList}
+        role={onSelect ? "radiogroup" : undefined}
+        aria-label={onSelect ? t("voices") : undefined}
+      >
+        {pickerRows}
         {profiles.map((profile) => {
           const name = profile.source_filename ?? t("voiceCustom");
           const editing = editingName?.id === profile.id;
-          // A groupmate's voice can be chosen, but only its creator renames,
-          // previews or deletes it.
+          // A groupmate's ready voice can be chosen and heard, but only its
+          // creator renames, confirms or deletes it.
           const manageable = profile.can_manage !== false;
           const playable =
             profile.status === "preview_ready" || profile.status === "ready";
@@ -672,15 +726,17 @@ export function VoiceLibrary({
                   }}
                 />
               ) : onSelect ? (
-                <button
-                  className={styles.voiceName}
-                  type="button"
-                  aria-pressed={selectedId === profile.id}
-                  disabled={controlsDisabled || profile.status !== "ready"}
-                  onClick={() => onSelect(profile.id)}
-                >
-                  {name}
-                </button>
+                <label className={styles.voiceChoice}>
+                  <input
+                    className={styles.radio}
+                    type="radio"
+                    name={pickerName}
+                    checked={selectedId === profile.id}
+                    disabled={controlsDisabled || profile.status !== "ready"}
+                    onChange={() => onSelect(profile.id)}
+                  />
+                  <span className={styles.voiceName}>{name}</span>
+                </label>
               ) : listenOnly || !manageable ? (
                 <span className={styles.voiceName}>{name}</span>
               ) : (
@@ -707,7 +763,7 @@ export function VoiceLibrary({
                 </button>
               )}
               <div className={styles.voiceActions}>
-                {manageable ? (
+                {manageable || profile.status === "ready" ? (
                   <button
                     className={cards.iconButton}
                     aria-label={t("voicePreview")}
@@ -724,7 +780,7 @@ export function VoiceLibrary({
                     in progress. The server soft-deletes any of them and cleans
                     up the supplier voice on a best-effort basis. While this
                     row's delete runs, × stays visible as a disabled spinner. */}
-                {!listenOnly && !onSelect && manageable ? (
+                {!listenOnly && manageable ? (
                   <button
                     className={cards.iconButton}
                     aria-label={t("voiceDeleteNamed", { name })}
@@ -790,14 +846,26 @@ export function VoiceLibrary({
     </>
   ) : undefined;
 
-  const createAction =
-    creating || listenOnly ? null : (
-      <ModulePlus
-        label={t("voiceCreateTitle")}
-        disabled={controlsDisabled || !canEnroll}
-        onClick={() => setCreating(true)}
-      />
-    );
+  const createAction = listenOnly ? null : creating ? (
+    // Top-right, where New was: back to the list, nothing is uploaded.
+    <button
+      className={cards.iconButton}
+      type="button"
+      aria-label={t("cancel")}
+      title={t("cancel")}
+      data-ui-guide="voice.cancelCreate"
+      disabled={controlsDisabled}
+      onClick={cancelCreate}
+    >
+      <WorkspaceIcon name="back" />
+    </button>
+  ) : (
+    <ModulePlus
+      label={t("voiceCreateTitle")}
+      disabled={controlsDisabled || !canEnroll}
+      onClick={() => setCreating(true)}
+    />
+  );
 
   return (
     <div className={styles.voicePanel} id={id}>

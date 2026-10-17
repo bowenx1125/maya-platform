@@ -17,6 +17,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
 from app.core.models import (
+    AgentVersion,
     IdempotencyRecord,
     StoredFile,
     TeacherGroupAccess,
@@ -65,6 +66,7 @@ from app.providers.voice import (
     VoiceProviderError,
     VoiceProviderTimeout,
 )
+from app.seed import JADE_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select, text
@@ -2498,11 +2500,20 @@ def test_groupmates_choose_ready_voices_and_teachers_keep_personal_ones(
     )
     assert bound.status_code == 200, bound.text
     assert bound.json()["effective_voice_profile_id"] == profile_id
-    # Choosing is not managing: the creator alone previews, renames or deletes.
+    # Owner decision (2026-10-18): a groupmate may also hear the voice in
+    # Brainform. Choosing and hearing are not managing: the creator alone
+    # renames, confirms or deletes.
+    heard = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+    )
+    assert heard.status_code == 200, heard.text
+    assert client.get(heard.json()["playback_url"]).status_code == 200
     assert (
-        client.post(
-            f"/api/v1/voice-profiles/{profile_id}/preview",
+        client.patch(
+            f"/api/v1/voice-profiles/{profile_id}",
             headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+            json={"source_filename": "taken.wav"},
         ).status_code
         == 404
     )
@@ -2533,3 +2544,82 @@ def test_groupmates_choose_ready_voices_and_teachers_keep_personal_ones(
     assert client.get(f"/api/v1/voice-profiles/{personal_id}").status_code == 404
     group_listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
     assert personal_id not in [item["id"] for item in group_listed]
+
+
+def test_teachers_and_outsiders_never_hear_or_bind_a_students_voice(
+    voice_client: tuple[TestClient, Database, Settings],
+) -> None:
+    # Owner decision (2026-10-18): only students of the same group share
+    # voices. A teacher, even after entering the group, neither lists, plays
+    # nor binds a student's voice.
+    client, database, _settings = voice_client
+    csrf = login(client, "bowen")[1]
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "outsider-voice-enroll-01"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    with database.session() as session:
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None
+        profile.status = "ready"
+    own_preview = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+    )
+    assert own_preview.status_code == 200, own_preview.text
+    media_url = own_preview.json()["playback_url"]
+    agent = client.post(
+        f"/api/v1/groups/{GROUP_A}/agents",
+        headers=_headers(csrf, "outsider-voice-agent-01"),
+        json={"name": "Bowen voice agent", "description": ""},
+    )
+    assert agent.status_code == 201, agent.text
+    draft = agent.json()["versions"][0]
+
+    maya_csrf = login(client, "maya")[1]
+    entered = client.post(
+        f"/api/v1/groups/{GROUP_A}/membership",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": maya_csrf},
+    )
+    assert entered.status_code == 200, entered.text
+    listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
+    assert listed.status_code == 200
+    assert profile_id not in [item["id"] for item in listed.json()]
+    assert (
+        client.post(
+            f"/api/v1/voice-profiles/{profile_id}/preview",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": maya_csrf},
+        ).status_code
+        == 404
+    )
+    assert client.get(media_url).status_code == 404
+    teacher_bind = client.patch(
+        f"/api/v1/agent-versions/{draft['id']}",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": maya_csrf},
+        json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
+    )
+    assert teacher_bind.status_code in {403, 404, 422}, teacher_bind.text
+    with database.session() as session:
+        version = session.get(AgentVersion, draft["id"])
+        assert version is not None
+        assert version.voice_profile_id is None
+
+    # A student who has left the group loses access to its voices.
+    with database.session() as session:
+        session.execute(
+            text("DELETE FROM group_members WHERE group_id = :g AND user_id = :u"),
+            {"g": GROUP_A, "u": JADE_ID},
+        )
+    jade_csrf = login(client, "jade")[1]
+    assert (
+        client.post(
+            f"/api/v1/voice-profiles/{profile_id}/preview",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": jade_csrf},
+        ).status_code
+        == 404
+    )
+    assert client.get(media_url).status_code == 404

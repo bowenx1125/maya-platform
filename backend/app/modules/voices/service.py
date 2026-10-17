@@ -206,6 +206,56 @@ def _groupmate_owner_ids(db: Session, group_id: str) -> Any:
     )
 
 
+def _student_in_group(db: Session, context: AuthContext, group_id: str) -> bool:
+    """Whether the caller is a student member of this group, never a visiting teacher."""
+
+    return (
+        db.execute(
+            select(WorkspaceMember.user_id)
+            .join(Group, Group.id == WorkspaceMember.group_id)
+            .join(CourseMember, CourseMember.course_id == Group.course_id)
+            .where(
+                Group.id == group_id,
+                WorkspaceMember.user_id == context.user.id,
+                CourseMember.user_id == context.user.id,
+                CourseMember.role == "student",
+            )
+        ).first()
+        is not None
+    )
+
+
+def previewable_voice(db: Session, context: AuthContext, profile_id: str) -> VoiceProfile:
+    """A voice the caller may play: their own, or a groupmate's ready group voice.
+
+    Owner decision (2026-10-18): students of one group hear each other's ready
+    voices in Brainform. A teacher, even one who entered the group, is not a
+    groupmate and plays no student voice.
+    """
+
+    try:
+        return visible_student_voice(db, context, profile_id).profile
+    except PlatformError:
+        pass
+    profile = db.scalar(
+        select(VoiceProfile).where(
+            VoiceProfile.id == profile_id,
+            VoiceProfile.scope == "group",
+            VoiceProfile.status == "ready",
+        )
+    )
+    if (
+        profile is None
+        or profile.group_id is None
+        or profile.consent_actor_user_id is None
+        or not _student_in_group(db, context, profile.group_id)
+        or profile.consent_actor_user_id
+        not in set(db.scalars(_groupmate_owner_ids(db, profile.group_id)).all())
+    ):
+        raise not_found()
+    return profile
+
+
 def list_group_voices(
     db: Session, context: AuthContext, group_id: str
 ) -> list[VoiceProfileResponse]:
@@ -363,18 +413,21 @@ def validate_voice_binding(
     )
     if target_group is None:
         raise not_found()
+    # The caller's own clone or, for a student, a groupmate's; a teacher who
+    # entered the group never takes a student's voice. A missing owner fails
+    # closed.
+    shared = (
+        VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, target_group))
+        if _student_in_group(db, context, target_group)
+        else false()
+    )
     profile = db.scalar(
         select(VoiceProfile).where(
             VoiceProfile.id == voice_profile_id,
             VoiceProfile.scope == "group",
             VoiceProfile.group_id == target_group,
             VoiceProfile.status == "ready",
-            # The caller's own clone or a groupmate's; a missing owner fails
-            # closed.
-            or_(
-                VoiceProfile.consent_actor_user_id == context.user.id,
-                VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, target_group)),
-            ),
+            or_(VoiceProfile.consent_actor_user_id == context.user.id, shared),
         )
     )
     _require_bindable(profile, settings)
