@@ -57,10 +57,11 @@ def _draft_debate(app_factory: Callable[..., Any]) -> tuple[Any, Any, str]:
 
 
 def _materialise_plan(database: Any, debate_id: str) -> list[Any]:
-    """Create the turn rows warming would have made.
+    """Return plan rows (create now ensures them; this stays idempotent).
 
-    A draft has no plan until something asks for one, and warming — the only
-    asker before Start — is deliberately disabled under a test client.
+    Warming is disabled under a test client, so older tests called this to
+    invent turns. Line C M2 create/get also ask for the plan, so create already
+    leaves turns + a head prepare job; re-calling ensure is a no-op.
     """
 
     from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
@@ -193,3 +194,100 @@ def test_playback_age_does_not_create_a_stall(
         )
     finally:
         client.__exit__(None, None, None)
+
+def test_create_draft_materialises_head_prepare_job_without_prewarm(
+    app_factory: Callable[..., Any],
+) -> None:
+    """Create must not wait for prewarm to own the slot before plan/job exist."""
+
+    from sqlalchemy import text
+
+    client, database, debate_id = _draft_debate(app_factory)
+    try:
+        with database.session() as session:
+            turns = list(
+                session.scalars(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id)
+                    .order_by(DebateTurn.turn_index)
+                ).all()
+            )
+            assert turns, "create must materialise the turn plan"
+            head = turns[0]
+            job = session.execute(
+                text(
+                    "SELECT state, claim_token, safe_error_code, operation "
+                    "FROM jobs WHERE debate_id=:debate_id AND turn_id=:turn_id"
+                ),
+                {"debate_id": debate_id, "turn_id": str(head.id)},
+            ).one()
+            assert tuple(job) == ("pending", None, None, "debate_turn_prepare")
+
+        detail = client.get(f"/api/v1/debates/{debate_id}")
+        assert detail.status_code == 200, detail.text
+        body = detail.json()
+        assert body["turn_protocol"] == "segments_v2"
+        assert body["preview_turns"], "Preview must list unpublished preparing turns"
+        assert body["preview_turns"][0]["id"] == str(head.id)
+        assert body["preview_turns"][0]["generation_status"] in {
+            "pending",
+            "running",
+            "failed",
+        }
+        assert _listed(client, debate_id)["stall"] is None
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_aged_pending_draft_projects_preparation_timeout_for_stall_and_preview(
+    app_factory: Callable[..., Any],
+) -> None:
+    """After 90s, list Stalled + Preview Audio Not Ready/Retry anchors exist."""
+
+    from sqlalchemy import text
+
+    client, database, debate_id = _draft_debate(app_factory)
+    try:
+        stale = datetime.now(UTC) - timedelta(seconds=120)
+        with database.session() as session:
+            turns = list(
+                session.scalars(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id)
+                    .order_by(DebateTurn.turn_index)
+                ).all()
+            )
+            assert turns
+            head = turns[0]
+            for turn in turns:
+                turn.updated_at = stale
+                turn.created_at = stale
+            session.execute(
+                text(
+                    "UPDATE jobs SET updated_at=:stale, created_at=:stale "
+                    "WHERE debate_id=:debate_id AND operation='debate_turn_prepare'"
+                ),
+                {"stale": stale, "debate_id": debate_id},
+            )
+            session.commit()
+            head_id = str(head.id)
+            head_round = int(head.round_no)
+
+        item = _listed(client, debate_id)
+        assert item["stall"] == {
+            "turn_id": head_id,
+            "round_no": head_round,
+            "safe_error_code": "preparation_timeout",
+        }
+
+        detail = client.get(f"/api/v1/debates/{debate_id}")
+        assert detail.status_code == 200, detail.text
+        preview = detail.json()["preview_turns"]
+        assert preview
+        head_preview = next(row for row in preview if row["id"] == head_id)
+        assert head_preview["generation_status"] == "failed"
+        assert head_preview["safe_error_code"] == "preparation_timeout"
+        assert head_preview["audio_ready"] is False
+    finally:
+        client.__exit__(None, None, None)
+
