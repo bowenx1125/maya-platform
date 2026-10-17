@@ -617,22 +617,33 @@ function AgentChatScope({
     if (!finishingTeamId || typeof api.conversationSession !== "function")
       return;
     let active = true;
-    const timer = window.setInterval(() => {
-      void api
-        .conversationSession(finishingTeamId)
-        .then((next) => {
-          if (active && isTeamSession(next))
-            setSelectedTeam((current) =>
-              current?.id === next.id ? next : current,
-            );
-        })
-        .catch(() => {
-          // The next tick asks again; sending still reports a lasting failure.
-        });
-    }, 2500);
+    let delay = 2500;
+    let timer = 0;
+    // Backs off (2.5 s up to 15 s): a long scoring run is not polled flat out.
+    const tick = () => {
+      timer = window.setTimeout(() => {
+        void api
+          .conversationSession(finishingTeamId)
+          .then((next) => {
+            if (active && isTeamSession(next))
+              setSelectedTeam((current) =>
+                current?.id === next.id ? next : current,
+              );
+          })
+          .catch(() => {
+            // The next tick asks again; sending still reports a lasting failure.
+          })
+          .finally(() => {
+            if (!active) return;
+            delay = Math.min(15000, Math.round(delay * 1.5));
+            tick();
+          });
+      }, delay);
+    };
+    tick();
     return () => {
       active = false;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [api, finishingTeamId]);
   const knowledgeGenerationActive =

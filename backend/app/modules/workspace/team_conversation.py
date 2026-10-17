@@ -301,6 +301,20 @@ def frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSelection
     )
 
 
+def _finishing_stalled(db: Session, row: Conversation) -> bool:
+    """The last turn is a failed server-run executor turn and nothing runs now."""
+
+    if row.active_request_id is not None:
+        return False
+    latest = db.execute(
+        select(ConversationTurn.user_text, ConversationTurn.state)
+        .where(ConversationTurn.conversation_id == row.id)
+        .order_by(ConversationTurn.position.desc())
+        .limit(1)
+    ).first()
+    return latest is not None and latest.user_text == "" and latest.state == "failed"
+
+
 def _assessment_stage(
     db: Session, row: Conversation
 ) -> Literal["preparing", "scoring", "summarizing", "completed"] | None:
@@ -320,6 +334,11 @@ def _assessment_stage(
         return None
     if attempt.status == "in_progress":
         purpose = _next_purpose(db, attempt)
+        if purpose is not None and _finishing_stalled(db, row):
+            # Bug (2026-10-17, #121): a failed scoring/summary left the bar and
+            # the disabled Send up until a restart. While nothing runs, the
+            # chat stops waiting; the server retries, and so does a new message.
+            return None
         if purpose == "assessment_evaluate":
             from app.modules.learning.attempts import awaits_follow_up_round
 

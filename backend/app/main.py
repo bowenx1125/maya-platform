@@ -449,6 +449,7 @@ def create_app(
                 if not runtime_settings.is_test:
                     knowledge_generation_tasks.schedule_pending()
                     assessment_finalizer.recover()
+                    assessment_finalizer.start_sweeper()
             else:
                 logger.info("Background recovery is owned by another backend replica")
         try:

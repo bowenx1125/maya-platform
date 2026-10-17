@@ -31,6 +31,12 @@ LOGGER = logging.getLogger("maya.assessment")
 Purpose = Literal["assessment_evaluate", "boundary_summarize"]
 # One evaluation and one summary per round; anything more means a step failed.
 MAX_STEPS = 4
+# Bug (2026-10-17, #121): a step that did not save was given up for good, and
+# the student chat sat at 40% or 75% until a restart. A stalled chain is run
+# again after these delays; the student's next message also wakes it.
+RETRY_DELAYS_SECONDS = (30.0, 120.0, 600.0)
+# Off the startup path too: attempts still waiting are swept this often.
+SWEEP_SECONDS = 300.0
 
 
 def _in_progress_attempt(db: Session, row: Conversation) -> AssessmentAttempt | None:
@@ -66,7 +72,9 @@ def _next_purpose(db: Session, attempt: AssessmentAttempt) -> Purpose | None:
 
 def drive_assessment(
     factory: Callable[[], Session], settings: Settings, conversation_id: str
-) -> None:
+) -> bool:
+    """Run the waiting executors; True when a step ran and did not save."""
+
     from app.modules.workspace.team_runtime import (
         claim_assessment_executor_turn,
         execute_team_turn,
@@ -80,14 +88,14 @@ def drive_assessment(
         with factory() as db:
             row = db.get(Conversation, conversation_id)
             if row is None or row.entry_kind == "agent" or row.withdrawn_at is not None:
-                return
+                return False
             attempt = _in_progress_attempt(db, row)
             user = db.get(User, row.user_id)
             if attempt is None or user is None or user.status != "active":
-                return
+                return False
             purpose = _next_purpose(db, attempt)
             if purpose is None:
-                return
+                return False
             # The same step on the same attempt revision means the executor did
             # not save. Scoring is one attempt. A missed summary gets one server
             # retry; a second miss is recorded for the teacher and stays off
@@ -100,13 +108,13 @@ def drive_assessment(
                         attempt.id,
                         purpose,
                     )
-                    return
+                    return True
                 retried.add(key)
             else:
                 attempted.add(key)
             activity = db.get(AssessmentActivity, attempt.activity_id)
             if activity is None:
-                return
+                return False
             member_id, agent_version_id = _activity_executor(db, activity, purpose)
             participant = db.scalar(
                 select(ConversationParticipant).where(
@@ -116,7 +124,7 @@ def drive_assessment(
                 )
             )
             if participant is None:
-                return
+                return False
             # The student owns the attempt; the run acts as them through their
             # newest live sign-in, which every Tool call re-checks. Signed out,
             # the attempt waits and resumes on their next message.
@@ -131,7 +139,7 @@ def drive_assessment(
                 .limit(1)
             )
             if sign_in is None:
-                return
+                return False
             # The claim commits, which would expire these rows; the run reads
             # them later from other sessions, so keep their loaded values.
             db.expunge(sign_in)
@@ -145,8 +153,9 @@ def drive_assessment(
                 actor_context=actor,
             )
             if claim is None:
-                return
+                return False
         execute_team_turn(factory, claim)
+    return False
 
 
 class AssessmentFinalizer:
@@ -163,6 +172,11 @@ class AssessmentFinalizer:
         self._lock = threading.Lock()
         self._running: set[str] = set()
         self._rewake: set[str] = set()
+        # Stalled chains: how many delayed retries each conversation has used.
+        self._retries: dict[str, int] = {}
+        self._timers: dict[str, threading.Timer] = {}
+        self._sweeper: threading.Thread | None = None
+        self._stop = threading.Event()
         self._closed = False
 
     def wake(self, conversation_id: str) -> None:
@@ -179,8 +193,9 @@ class AssessmentFinalizer:
         self._executor.submit(self._run, conversation_id)
 
     def _run(self, conversation_id: str) -> None:
+        stalled = False
         try:
-            drive_assessment(self._factory, self._settings(), conversation_id)
+            stalled = drive_assessment(self._factory, self._settings(), conversation_id)
         except PlatformError as error:
             LOGGER.warning(
                 "Assessment finishing stopped conversation_id=%s code=%s",
@@ -194,10 +209,50 @@ class AssessmentFinalizer:
                 self._running.discard(conversation_id)
                 again = conversation_id in self._rewake and not self._closed
                 self._rewake.discard(conversation_id)
+                if not stalled:
+                    self._retries.pop(conversation_id, None)
             if again:
                 self.wake(conversation_id)
+            elif stalled:
+                self._schedule_retry(conversation_id)
 
-    def recover(self) -> None:
+    def _schedule_retry(self, conversation_id: str) -> None:
+        with self._lock:
+            used = self._retries.get(conversation_id, 0)
+            if self._closed or used >= len(RETRY_DELAYS_SECONDS):
+                exhausted = not self._closed
+                timer = None
+            else:
+                exhausted = False
+                self._retries[conversation_id] = used + 1
+                timer = threading.Timer(
+                    RETRY_DELAYS_SECONDS[used], self._retry_due, args=(conversation_id,)
+                )
+                timer.daemon = True
+                previous = self._timers.pop(conversation_id, None)
+                if previous is not None:
+                    previous.cancel()
+                self._timers[conversation_id] = timer
+        if timer is not None:
+            LOGGER.info(
+                "Assessment finishing retry scheduled conversation_id=%s in_seconds=%s",
+                conversation_id,
+                RETRY_DELAYS_SECONDS[used],
+            )
+            timer.start()
+        elif exhausted:
+            # The student's chat stops waiting (see _assessment_stage); their
+            # next message, or the teacher's sheet, picks it up from here.
+            LOGGER.warning(
+                "Assessment finishing retries exhausted conversation_id=%s", conversation_id
+            )
+
+    def _retry_due(self, conversation_id: str) -> None:
+        with self._lock:
+            self._timers.pop(conversation_id, None)
+        self.wake(conversation_id)
+
+    def recover(self, *, skip_exhausted: bool = False) -> None:
         """Resume attempts left waiting for an executor when the server stopped."""
 
         with self._factory() as db:
@@ -218,9 +273,40 @@ class AssessmentFinalizer:
                 if _next_purpose(db, attempt) is not None
             ]
         for conversation_id in waiting:
+            with self._lock:
+                if conversation_id in self._timers:
+                    continue  # its delayed retry is already scheduled
+                if skip_exhausted and self._retries.get(conversation_id, 0) >= len(
+                    RETRY_DELAYS_SECONDS
+                ):
+                    continue
             self.wake(conversation_id)
+
+    def start_sweeper(self, interval: float = SWEEP_SECONDS) -> None:
+        """Sweep for waiting attempts on this replica, not only at startup."""
+
+        with self._lock:
+            if self._closed or self._sweeper is not None:
+                return
+
+            def sweep() -> None:
+                while not self._stop.wait(interval):
+                    try:
+                        self.recover(skip_exhausted=True)
+                    except Exception:
+                        LOGGER.exception("Assessment finishing sweep failed")
+
+            self._sweeper = threading.Thread(
+                target=sweep, name="maya-assessment-sweep", daemon=True
+            )
+            self._sweeper.start()
 
     def close(self) -> None:
         with self._lock:
             self._closed = True
+            timers = list(self._timers.values())
+            self._timers.clear()
+        self._stop.set()
+        for timer in timers:
+            timer.cancel()
         self._executor.shutdown(wait=False, cancel_futures=True)

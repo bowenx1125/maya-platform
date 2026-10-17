@@ -1684,8 +1684,14 @@ def test_last_answer_starts_the_scorer_once_without_a_student_message(
     finalizer.drive_assessment(database.session_factory, settings, conversation_id)
     assert claims == []
     _login(client, "bowen")
-    finalizer.drive_assessment(database.session_factory, settings, conversation_id)
+    # The scorer ran and saved nothing: the chain reports the stall.
+    assert finalizer.drive_assessment(database.session_factory, settings, conversation_id)
     assert claims == [evaluator.id]
+    from app.modules.workspace.team_conversation import _assessment_stage
+
+    # #121: nothing runs now, so the chat stops showing scoring and waiting.
+    with database.session() as db:
+        assert _assessment_stage(db, db.get(Conversation, conversation_id)) is None
 
 
 def test_teacher_reads_a_private_test_window_but_not_chat_around_it(

@@ -3427,7 +3427,7 @@ def _dispatch_provider(
             and not request.assessment_source_revoked
             and request.assessment_revoked_scope is None
             and request.formal_role != "question_guide"
-        ):
+        ) or _executor_write_still_required(db, request, ordinal):
             # An assessment turn without this call is rejected as
             # assessment_action_required, so the call cannot be optional: left
             # on "auto", a short answer such as "忘了" came back as prose and
@@ -3453,6 +3453,22 @@ def _dispatch_provider(
     if isinstance(state, dict):
         state["maya_provider_call_id"] = result.call_id
     return result.response
+
+
+# Bug (2026-10-17, #121): when the scorer's Tool arguments arrived as broken
+# JSON, the retry ran on "auto" and the model answered in prose, so nothing was
+# saved. An executor's first retries keep the call required until it saves.
+EXECUTOR_FORCED_RETRY_CALLS = 2
+
+
+def _executor_write_still_required(db: Session, request: MemberRequest, ordinal: int) -> bool:
+    if request.assessment_purpose is None or not 0 < ordinal <= EXECUTOR_FORCED_RETRY_CALLS:
+        return False
+    turn = db.get(ConversationTurn, request.turn_id)
+    result = db.get(TeamTurnResult, request.result_id)
+    if turn is None or result is None:
+        return False
+    return not _assessment_executor_write_saved(db, turn, result, request.assessment_purpose)
 
 
 def _recheck_assessment_executor_context(
