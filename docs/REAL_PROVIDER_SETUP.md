@@ -112,7 +112,13 @@ belongs to an Agent a student publishes, never to a seeded one.
 
 ## Rotating `DASHSCOPE_API_KEY`
 
-LLM, Embedding, Report, TTS and voice clone share one server-side key. A cloned
+LLM, Embedding, Report, TTS and voice clone share one server-side key, except
+that Chatform may have its own: `DASHSCOPE_CHAT_API_KEY` covers every Agent and
+Team chat model call and the RAG retrieval those chats make (formal assessment
+turns included). Left empty, chats use `DASHSCOPE_API_KEY`. Voices and TTS,
+Agent and Knowledge embeddings, Knowledge generation, Debates and reports always
+use `DASHSCOPE_API_KEY`. Both keys must belong to `DASHSCOPE_WORKSPACE_ID`, and
+the chat key rotates the same way (replace it, then recreate the backend). A cloned
 voice belongs to the Alibaba Cloud workspace (`DASHSCOPE_WORKSPACE_ID` in
 `cn-beijing`), not to the key. The voice row stores an encrypted supplier
 voice id. The encryption key is derived from `SESSION_SECRET`. The API key is

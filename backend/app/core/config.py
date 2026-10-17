@@ -67,6 +67,14 @@ class Settings(BaseSettings):
         validation_alias="CLASSROOM_PUBLIC_BASE_URL",
     )
     dashscope_api_key: str | None = Field(default=None, validation_alias="DASHSCOPE_API_KEY")
+    # Chatform's own key: every Agent and Team chat model call and the RAG
+    # retrieval those chats make (formal assessment turns included). Unset
+    # means chats share DASHSCOPE_API_KEY. Everything else (voices and TTS,
+    # Agent / Knowledge embeddings, Knowledge generation, Debates, reports)
+    # always uses DASHSCOPE_API_KEY.
+    dashscope_chat_api_key: str | None = Field(
+        default=None, validation_alias="DASHSCOPE_CHAT_API_KEY"
+    )
     dashscope_workspace_id: str | None = Field(
         default=None,
         validation_alias="DASHSCOPE_WORKSPACE_ID",
@@ -699,6 +707,14 @@ class Settings(BaseSettings):
             if self.llm_provider != "dashscope" and self.embedding_provider != "dashscope":
                 return self.provider_policy_hash
         return None
+
+    def chat_settings(self) -> Settings:
+        """These settings with the Chatform key in place of the shared one."""
+
+        key = (self.dashscope_chat_api_key or "").strip()
+        if not key:
+            return self
+        return self.model_copy(update={"dashscope_api_key": key})
 
     def provider_policy_hash_for(self, slice_name: str) -> str | None:
         """Resolve an endpoint policy hash without silently crossing slices."""

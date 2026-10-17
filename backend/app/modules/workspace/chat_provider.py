@@ -256,7 +256,7 @@ def retrieve_sources(
             claim_revision=claim_revision,
         )
         confirmation = repository.get_export_confirmation(plan.manifest.manifest_hash)
-        selected = embedding_provider(settings)
+        selected = embedding_provider(settings.chat_settings())
         config = getattr(selected, "config", None)
         if getattr(config, "resolved_endpoint", None) != policy.endpoint or confirmation is None:
             raise PlatformError(
@@ -403,7 +403,9 @@ def real_reply(
     generation_waker: Callable[[str], None] | None = None,
     required_tool: str | None = None,
 ) -> tuple[str, str]:
-    selected = llm_provider(settings.model_copy(update={"llm_provider": "dashscope"}))
+    selected = llm_provider(
+        settings.chat_settings().model_copy(update={"llm_provider": "dashscope"})
+    )
     if not isinstance(selected, DashScopeLLMAdapter):
         raise PlatformError("provider_preflight_blocked", "LLM is not configured.", 409)
     config = selected.config
