@@ -207,10 +207,12 @@ class Settings(BaseSettings):
         default=4.0, ge=0, le=10_000, validation_alias="HOST_LOAD_RESUME_THRESHOLD"
     )
     # Per-operation backstop behind the unified queue: in-flight
-    # LLM HTTP attempts per process (MayaLoad: 10 stable, 20 melted; 12 is
-    # the midpoint). It waits only for what is left of the shared deadline.
+    # LLM HTTP attempts per process. Was 12 when this gate alone protected the
+    # host (MayaLoad: 10 stable, 20 melted before the adaptive queue existed);
+    # now the danger latch (load >= 6 / Mem < 500) and AIMD sit in front, so
+    # 20 per backend. It waits only for what is left of the shared deadline.
     llm_admission_limit: int = Field(
-        default=12, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
+        default=20, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
     )
     llm_admission_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="LLM_ADMISSION_QUEUE_MAX"
@@ -258,15 +260,21 @@ class Settings(BaseSettings):
         default=True, validation_alias="ADAPTIVE_ADMISSION_ENABLED"
     )
     # Single global backstop: admitted requests per process never exceed this,
-    # whatever the budget says (MayaLoad: ~10-12 model users per replica was
-    # the stable band on the 2 vCPU host).
+    # whatever the budget says. 32 = 20 model calls plus room for logins,
+    # creates and writes, and stays under AnyIO's 40 sync-handler threads.
+    # (A Chat/Team turn holds a write slot and a nested LLM slot: 2 entries.)
     adaptive_admission_max_in_flight: int = Field(
-        default=24, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
+        default=32, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_IN_FLIGHT"
     )
-    # Max budget = 12 concurrent LLM calls at weight 4. Min keeps one model
-    # call moving.
+    # Max budget 96 = 20 concurrent LLM calls at weight 4 (80) plus 16 for
+    # logins / creates / writes. Min keeps one model call moving.
     adaptive_admission_max_units: int = Field(
-        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
+        default=96, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MAX_UNITS"
+    )
+    # Cold-start budget: the old proven ceiling (12 LLM calls). AIMD climbs to
+    # max only while every pressure signal stays healthy (+2 units / 2 s).
+    adaptive_admission_initial_units: int = Field(
+        default=48, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_INITIAL_UNITS"
     )
     adaptive_admission_min_units: int = Field(
         default=4, ge=1, le=10_000, validation_alias="ADAPTIVE_ADMISSION_MIN_UNITS"

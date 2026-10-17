@@ -18,6 +18,7 @@ from app.core.config import Settings, get_settings
 from app.core.create_admission import create_admission_slot
 from app.core.db import Database
 from app.core.errors import Error, PlatformError, conflict, not_found
+from app.core.message_timing import message_timing
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -674,7 +675,12 @@ def generate_reply(
 ) -> tuple[str, list[ChatSource], str | None]:
     """Produce one full reply in memory.  This does not store assistant text."""
 
-    with write_guard_slot(settings):
+    # Joins the request's collector when the HTTP handler already opened one
+    # (then storing the reply is timed too); the stream path times this part.
+    with (
+        message_timing("chat", conversation_id=row.id, request_id=request_id),
+        write_guard_slot(settings),
+    ):
         return _generate_reply_body(
             db,
             settings,
@@ -1665,70 +1671,77 @@ def send_message(
     database: Database = Depends(get_database),
 ) -> ConversationSession:
     row = owned_conversation(db, context, str(conversation_id))
-    if row.entry_kind != "agent":
-        _require_canonical_assessment_conversation(db, context, row)
-        claim = claim_team_turn(
+    with message_timing(
+        "chat" if row.entry_kind == "agent" else "team",
+        conversation_id=row.id,
+        request_id=payload.request_id,
+    ):
+        if row.entry_kind != "agent":
+            _require_canonical_assessment_conversation(db, context, row)
+            claim = claim_team_turn(
+                db,
+                settings,
+                conversation_id=row.id,
+                actor_id=context.user.id,
+                request_id=str(payload.request_id),
+                expected_revision=payload.expected_revision,
+                message=payload.message,
+                routing=payload.routing,
+                actor_context=context,
+            )
+            execute_team_turn_with_natural_assessment_resume(database.session_factory, claim)
+            _wake_assessment_finalizer(request, row.id)
+            db.expire_all()
+            return session_view(
+                db, owned_conversation(db, context, str(conversation_id)), context, settings
+            )
+        if payload.routing is not None and payload.routing.mode != "auto":
+            raise conflict("chat_routing_invalid", "Single Chats cannot select Team participants.")
+        version = db.get(AgentVersion, row.agent_version_id)
+        agent = db.get(Agent, version.agent_id) if version else None
+        if (
+            version is None
+            or agent is None
+            or not _conversation_is_callable(db, row, version, agent, context.user.id)
+        ):
+            raise _conversation_unavailable_error(agent)
+        request_id = str(payload.request_id)
+        message = payload.message.strip()
+        if not message:
+            raise PlatformError("chat_message_empty", "Enter a message.", 400)
+        turn, created = claim_chat_send(
             db,
-            settings,
-            conversation_id=row.id,
-            actor_id=context.user.id,
-            request_id=str(payload.request_id),
+            row,
+            request_id=request_id,
             expected_revision=payload.expected_revision,
-            message=payload.message,
-            routing=payload.routing,
-            actor_context=context,
+            message=message,
+            settings=settings,
         )
-        execute_team_turn_with_natural_assessment_resume(database.session_factory, claim)
-        _wake_assessment_finalizer(request, row.id)
+        claim_revision = turn.position
+        if not created:
+            return session_view(db, row, context, settings)
+        try:
+            reply, sources, operation_id = generate_reply(
+                db,
+                settings,
+                row,
+                request_id,
+                claim_revision,
+                message,
+                actor_context=context,
+                generation_waker=_knowledge_generation_waker(request),
+            )
+            store_assistant_text(
+                db, row.id, request_id, claim_revision, reply, sources, operation_id
+            )
+        except Exception as exc:
+            record_chat_failure(db, row.id, request_id, claim_revision, exc)
+        release_chat_request(db, row.id, request_id, claim_revision)
+        db.commit()
         db.expire_all()
         return session_view(
             db, owned_conversation(db, context, str(conversation_id)), context, settings
         )
-    if payload.routing is not None and payload.routing.mode != "auto":
-        raise conflict("chat_routing_invalid", "Single Chats cannot select Team participants.")
-    version = db.get(AgentVersion, row.agent_version_id)
-    agent = db.get(Agent, version.agent_id) if version else None
-    if (
-        version is None
-        or agent is None
-        or not _conversation_is_callable(db, row, version, agent, context.user.id)
-    ):
-        raise _conversation_unavailable_error(agent)
-    request_id = str(payload.request_id)
-    message = payload.message.strip()
-    if not message:
-        raise PlatformError("chat_message_empty", "Enter a message.", 400)
-    turn, created = claim_chat_send(
-        db,
-        row,
-        request_id=request_id,
-        expected_revision=payload.expected_revision,
-        message=message,
-        settings=settings,
-    )
-    claim_revision = turn.position
-    if not created:
-        return session_view(db, row, context, settings)
-    try:
-        reply, sources, operation_id = generate_reply(
-            db,
-            settings,
-            row,
-            request_id,
-            claim_revision,
-            message,
-            actor_context=context,
-            generation_waker=_knowledge_generation_waker(request),
-        )
-        store_assistant_text(db, row.id, request_id, claim_revision, reply, sources, operation_id)
-    except Exception as exc:
-        record_chat_failure(db, row.id, request_id, claim_revision, exc)
-    release_chat_request(db, row.id, request_id, claim_revision)
-    db.commit()
-    db.expire_all()
-    return session_view(
-        db, owned_conversation(db, context, str(conversation_id)), context, settings
-    )
 
 
 @router.post(

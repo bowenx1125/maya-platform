@@ -33,6 +33,7 @@ from app.core.errors import (
     request_validation_handler,
 )
 from app.core.logging import configure_application_logging
+from app.core.message_timing import message_timing_snapshot
 from app.core.models import Course, CourseMember, ProviderOperation, User
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.abuse import AuthAbuseLimiter
@@ -575,8 +576,19 @@ def create_app(
 
     @app.get("/health/admission", tags=["Health"])
     def health_admission() -> dict[str, Any]:
-        # Queue depth / adaptive limit / per-class rejects; no secrets.
-        return adaptive_admission_snapshot()
+        # Queue depth / adaptive limit / per-class rejects, backstop limits and
+        # the rolling per-message timing summary; no secrets, ids or user data.
+        settings = get_settings()
+        return {
+            **adaptive_admission_snapshot(settings),
+            "backstops": {
+                "llm_admission_limit": int(settings.llm_admission_limit),
+                "write_guard_limit": int(settings.write_guard_limit),
+                "create_admission_limit": int(settings.create_admission_limit),
+                "auth_hash_concurrency": int(settings.auth_hash_concurrency),
+            },
+            "message_timing": message_timing_snapshot(),
+        }
 
     @app.get("/health/ready", tags=["Health"])
     def health_ready() -> JSONResponse:

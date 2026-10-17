@@ -16,7 +16,7 @@ this single queue as backstops (the login queue is folded into it):
 * Cost weights (llm heavy, create/write medium, login light, read free),
   FIFO per class, served round-robin so one class cannot starve others.
 * One global in-flight hard cap per process; LLM calls, Team/Chat
-  turns and creates additionally pass ``llm_admission`` / ``write_guard``
+  turns and creates additionally pass ``llm_admission`` (20) / ``write_guard``
   (12) / ``create_admission`` (4) as per-operation backstops, which wait only for the remainder of
   this layer's deadline.
 * Retryable ``adaptive_admission_busy`` 503 is raised only when the queue
@@ -266,7 +266,10 @@ def _refresh_locked(settings: Settings) -> None:
     max_units = float(settings.adaptive_admission_max_units)
     min_units = float(min(settings.adaptive_admission_min_units, max_units))
     if s.budget < 0:
-        s.budget = max_units  # start open; pressure will pull it down
+        # Start at the configured cold-start budget, not the ceiling: AIMD
+        # earns the rest of the headroom while signals stay healthy.
+        initial = float(settings.adaptive_admission_initial_units)
+        s.budget = max(min_units, min(max_units, initial))
     now = _clock()
     if now - s.last_sample < float(settings.adaptive_admission_sample_seconds):
         return
@@ -289,7 +292,8 @@ def _refresh_locked(settings: Settings) -> None:
         s.danger = not (load_ok and mem_ok)
 
     if not settings.adaptive_admission_enabled:
-        return  # AIMD off: budget stays at max, danger latch still applies
+        s.budget = max_units  # AIMD off: budget frozen at max, danger latch still applies
+        return
     if now - s.last_adjust < float(settings.adaptive_admission_adjust_seconds):
         return
     s.last_adjust = now
@@ -484,6 +488,10 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
             "enabled": bool(runtime.adaptive_admission_enabled),
             "adaptive_limit_units": round(max(s.budget, 0.0), 2),
             "max_units": int(runtime.adaptive_admission_max_units),
+            "min_units": int(
+                min(runtime.adaptive_admission_min_units, runtime.adaptive_admission_max_units)
+            ),
+            "initial_units": int(runtime.adaptive_admission_initial_units),
             "max_in_flight": int(runtime.adaptive_admission_max_in_flight),
             "in_flight": sum(s.in_flight.values()),
             "in_flight_units": s.in_flight_units,
