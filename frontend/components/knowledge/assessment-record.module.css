@@ -81,11 +81,14 @@
   }
 }
 
+/* Narrower than the row so the Report link stays beside the score. */
 .attemptRow {
   display: flex;
+  flex: 1 1 220px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: auto;
 }
 
 /* Tones read as a band, not a grade; the exact points stay in the text. */
@@ -150,6 +153,7 @@
 
 .sheet table {
   width: 100%;
+  min-width: 520px;
   border-collapse: collapse;
   font-size: 0.8rem;
 }

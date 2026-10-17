@@ -893,7 +893,7 @@ describe("Brainform workspace actions", () => {
     const team = await screen.findByRole("button", {
       name: "Open the results for Keynotes",
     });
-    expect(team.textContent).toContain("2 students · 2 attempts");
+    expect(team.textContent).toContain("Students 2 · Attempts 2");
     fireEvent.click(team);
 
     expect(

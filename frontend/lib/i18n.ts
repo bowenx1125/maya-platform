@@ -708,7 +708,7 @@ const enMessages = {
   recordIntro:
     "Formal assessment results, grouped by the Team that ran the assessment.",
   recordOpenNamed: "Open the results for {name}",
-  recordTeamMeta: "{students} students · {attempts} attempts",
+  recordTeamMeta: "Students {students} · Attempts {attempts}",
   recordStudents: "Students",
   recordCompleted: "Completed",
   recordAverage: "Average score",
@@ -1517,7 +1517,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   overviewMembers: "组员",
   recordIntro: "正式测评的结果，按发起测评的 Team 分组。",
   recordOpenNamed: "查看「{name}」的测评结果",
-  recordTeamMeta: "{students} 名学生 · {attempts} 次测评",
+  recordTeamMeta: "学生 {students} · 测评 {attempts}",
   recordStudents: "学生",
   recordCompleted: "已完成",
   recordAverage: "平均得分",
