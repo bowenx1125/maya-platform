@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -193,25 +194,82 @@ describe("M08 voice library", () => {
     ).toBeNull();
   });
 
-  it("offers no delete while a delete is in flight or awaiting reconciliation", async () => {
-    api.voiceProfiles.mockResolvedValue(
-      ["deleting", "outcome_unknown"].map((status) => ({
-        id: `voice-${status}`,
-        scope: "group",
-        group_id: "group-a",
-        status,
-        source_filename: `${status}.wav`,
-        created_at: "2026-10-12T00:00:00Z",
-        can_manage: true,
-      })),
+  it("shows × on every voice status and keeps it visible, disabled, while that delete runs", async () => {
+    const statuses = [
+      "enrolling",
+      "preview_ready",
+      "ready",
+      "failed",
+      "deleting",
+      "outcome_unknown",
+    ];
+    const rows = statuses.map((status) => ({
+      id: `voice-${status}`,
+      scope: "group",
+      group_id: "group-a",
+      status,
+      source_filename: `${status}.wav`,
+      created_at: "2026-10-12T00:00:00Z",
+      can_manage: true,
+    }));
+    api.voiceProfiles.mockResolvedValue(rows);
+    let finishDelete: (value: unknown) => void = () => undefined;
+    api.deleteVoiceProfile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishDelete = resolve;
+        }),
+    );
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
     );
     render(
       <AppShell role="student">
-        <VoiceLibrary groupId="group-a" />
+        <VoiceLibrary groupId="group-a" moduleCard />
       </AppShell>,
     );
-    expect(await screen.findByText("deleting.wav")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Delete / })).toBeNull();
+    for (const status of statuses) {
+      const button = await screen.findByRole("button", {
+        name: `Delete ${status}.wav`,
+      });
+      expect(button).toHaveProperty("disabled", false);
+    }
+
+    const unknown = screen.getByRole("button", {
+      name: "Delete outcome_unknown.wav",
+    });
+    fireEvent.click(unknown);
+    await waitFor(() =>
+      expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
+        "voice-outcome_unknown",
+        expect.objectContaining({ idempotency: expect.anything() }),
+      ),
+    );
+    // Mid-delete the × is still there: disabled, busy, with a spinner.
+    const busy = screen.getByRole("button", {
+      name: "Delete outcome_unknown.wav",
+    });
+    expect(busy).toHaveProperty("disabled", true);
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(busy.querySelector(".spinner")).toBeTruthy();
+    for (const status of statuses) {
+      expect(
+        screen.getByRole("button", { name: `Delete ${status}.wav` }),
+      ).toBeTruthy();
+    }
+    api.voiceProfiles.mockResolvedValue(
+      rows.filter((row) => row.status !== "outcome_unknown"),
+    );
+    await act(async () => {
+      finishDelete({ ...rows[5], status: "deleted" });
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("outcome_unknown.wav")).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Delete deleting.wav" }),
+    ).toHaveProperty("disabled", false);
   });
 
   it("lays out each voice as one row with only Preview and Delete, and deletes a failed voice", async () => {

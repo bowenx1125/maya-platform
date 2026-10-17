@@ -141,6 +141,7 @@ export function VoiceLibrary({
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(scopes.length > 0);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const controlsDisabled = busy || disabled;
   const [failure, setFailure] = useState<VoiceFailure | null>(null);
   const [notice, setNotice] = useState<MessageKey | null>(null);
@@ -507,6 +508,7 @@ export function VoiceLibrary({
     setFailure(null);
     setNotice(null);
     const handle = `voice-delete:${profile.id}`;
+    setDeletingId(profile.id);
     try {
       await api.deleteVoiceProfile(profile.id, {
         idempotency: idempotency.handleFor(handle),
@@ -521,6 +523,7 @@ export function VoiceLibrary({
     } catch (cause) {
       setFailure({ cause, retry: { kind: "delete", profileId: profile.id } });
     } finally {
+      setDeletingId(null);
       setBusy(false);
     }
   }
@@ -716,22 +719,26 @@ export function VoiceLibrary({
                     <IconPlay />
                   </button>
                 ) : null}
-                {/* A delete already in flight or awaiting reconciliation is
-                    answered only by its own retry, which the failure card holds. */}
-                {!listenOnly &&
-                !onSelect &&
-                manageable &&
-                profile.status !== "deleting" &&
-                profile.status !== "outcome_unknown" ? (
+                {/* Every row keeps its ×, whatever the status: enrolling,
+                    failed, refused, outcome unknown or an earlier delete still
+                    in progress. The server soft-deletes any of them and cleans
+                    up the supplier voice on a best-effort basis. While this
+                    row's delete runs, × stays visible as a disabled spinner. */}
+                {!listenOnly && !onSelect && manageable ? (
                   <button
                     className={cards.iconButton}
                     aria-label={t("voiceDeleteNamed", { name })}
+                    aria-busy={deletingId === profile.id || undefined}
                     data-ui-guide="voice.delete"
                     type="button"
                     disabled={controlsDisabled}
                     onClick={() => void remove(profile)}
                   >
-                    <IconClose />
+                    {deletingId === profile.id ? (
+                      <span className="spinner" aria-hidden="true" />
+                    ) : (
+                      <IconClose />
+                    )}
                   </button>
                 ) : null}
               </div>
