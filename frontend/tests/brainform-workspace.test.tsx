@@ -986,6 +986,42 @@ describe("Brainform workspace actions", () => {
     ).toBeTruthy();
   });
 
+  it("shows the last Record at once while it refreshes (#123)", async () => {
+    state.role = "teacher";
+    state.api.courseAssessmentAttempts.mockResolvedValue([
+      {
+        attempt_id: "attempt-cached",
+        user_id: "student-1",
+        student_name: "Ada",
+        test_name: "Cached · Formal diagnostic questions · V1.0",
+        team_name: "Cached",
+        status: "completed",
+        phase: "completed",
+        conversation_id: "4afc794f-2222-4222-8222-222222222222",
+        group_name: "Group A",
+        started_at: "2026-10-13T08:00:00Z",
+        ended_at: "2026-10-13T08:20:00Z",
+        points_awarded: 1,
+        points_total: 1,
+        questions: [],
+        report_download_path: null,
+      },
+    ]);
+    const first = renderWithActions();
+    await screen.findByRole("button", { name: "Open the results for Cached" });
+    first.unmount();
+
+    // The refresh never answers: the cached list is what shows.
+    state.api.courseAssessmentAttempts.mockReturnValue(new Promise(() => {}));
+    renderWithActions();
+    expect(
+      await screen.findByRole("button", {
+        name: "Open the results for Cached",
+      }),
+    ).toBeTruthy();
+    expect(state.api.courseAssessmentAttempts).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps Memory for students and never reads course results", async () => {
     renderWorkspace("student");
     expect(await screen.findByRole("heading", { name: "Memory" })).toBeTruthy();

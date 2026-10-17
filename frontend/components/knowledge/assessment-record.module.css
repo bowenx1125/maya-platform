@@ -182,3 +182,43 @@
   width: 2ch;
   color: #625e59;
 }
+
+/* Placeholder rows while the list loads, instead of an empty column. */
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.skeletonLine,
+.skeletonRing {
+  background: #ebe5da;
+  animation: recordPulse 1.2s ease-in-out infinite;
+}
+
+.skeletonLine {
+  width: 60%;
+  height: 14px;
+  border-radius: 7px;
+}
+
+.skeletonRing {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+}
+
+@keyframes recordPulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonLine,
+  .skeletonRing {
+    animation: none;
+  }
+}
