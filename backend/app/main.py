@@ -10,6 +10,7 @@ from threading import RLock
 from typing import Any
 from uuid import uuid4
 
+import anyio.to_thread
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -22,6 +23,7 @@ from app.core.adaptive_admission import (
     adaptive_admission_snapshot,
     begin_request_sample,
     record_request_sample,
+    set_threadpool_reader,
 )
 from app.core.config import Settings, get_settings
 from app.core.db import Database
@@ -326,6 +328,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        # Sync handlers and admission waits run in this pool; admission holds
+        # its budget when the pool is nearly full instead of growing into it.
+        set_threadpool_reader(lambda: limiter.borrowed_tokens / max(1.0, limiter.total_tokens))
         wave3_events.bind_running_loop()
         report_tasks.bind_running_loop()
         knowledge_generation_tasks.bind_running_loop()
