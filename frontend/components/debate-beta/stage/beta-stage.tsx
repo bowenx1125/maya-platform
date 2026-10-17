@@ -36,6 +36,8 @@ import {
 import styles from "./beta-stage.module.css";
 import { QrCode } from "../../interaction/qr-code";
 import { BarrageLane, type BarrageBullet } from "../../stage3d/barrage-lane";
+import { AvatarBar } from "../../stage2d/avatar-bar";
+import { resolveDebateStageVisual } from "../../stage2d/avatar-bar-flag";
 import { ScholarScene } from "../../stage3d/scholar-scene";
 import { bubbleProgressFrom } from "./bubble-progress";
 import type { StageCharacter } from "../../stage3d/scholar-stage";
@@ -3643,6 +3645,7 @@ export function BetaDebateStage({
           connectionIssue === "origin_mismatch"
         ? { label: labels.connectionReload ?? "", kind: "reload" }
         : null;
+  const stageVisualMode = resolveDebateStageVisual();
   const totalTurns = expectedTurnCount(detailState);
   const progressTurn = bubbleTurn ?? publicTurns[publicTurns.length - 1];
   const currentTurnNumber = progressTurn
@@ -3677,43 +3680,77 @@ export function BetaDebateStage({
         </div>
       ) : null}
 
-      <ScholarScene
-        bubbleText={bubbleText}
-        characters={stageCharacters}
-        layout="preview"
-        loadingLabel={beta.sceneLoading}
-        overlay={
-          <>
-            <BarrageLane
-              bullets={barrages}
-              label={beta.barrageLane}
-              paused={false}
-            />
-            {joinUrl && joinCodeVisible ? (
-              <div
-                className={`${stage3d.joinCard} ${styles.joinCard}`}
-                id="classroom-join-code"
-              >
-                {/* QrCode brings its own caption with the URL under it, so the
-                    card adds only the running count beside the symbol. */}
-                <QrCode label={beta.joinLabel} value={joinUrl} />
-                <span className={stage3d.joinCount}>
-                  {beta.barrageCount(barrages.length)}
-                </span>
-              </div>
-            ) : null}
-          </>
-        }
-        resting={
-          phase === "ready" ||
-          phase === "finished" ||
-          phase === "stopped" ||
-          phase === "failed"
-        }
-        speakingId={bubbleTurn?.participant_id ?? currentParticipantId}
-        unavailableLabel={beta.sceneUnavailable}
-        visuals={stageVisuals}
-      />
+      {stageVisualMode === "avatar-bar" ? (
+        <div
+          className={stage3d.scene}
+          data-layout="preview"
+          data-stage-visual="avatar-bar"
+        >
+          <AvatarBar
+            bubbleText={bubbleText}
+            characters={stageCharacters}
+            speakingId={bubbleTurn?.participant_id ?? currentParticipantId}
+            topic={detailState.topic}
+            visuals={stageVisuals}
+          />
+          <BarrageLane
+            bullets={barrages}
+            label={beta.barrageLane}
+            paused={false}
+          />
+          {joinUrl && joinCodeVisible ? (
+            <div
+              className={`${stage3d.joinCard} ${styles.joinCard}`}
+              id="classroom-join-code"
+            >
+              {/* QrCode brings its own caption with the URL under it, so the
+                  card adds only the running count beside the symbol. */}
+              <QrCode label={beta.joinLabel} value={joinUrl} />
+              <span className={stage3d.joinCount}>
+                {beta.barrageCount(barrages.length)}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <ScholarScene
+          bubbleText={bubbleText}
+          characters={stageCharacters}
+          layout="preview"
+          loadingLabel={beta.sceneLoading}
+          overlay={
+            <>
+              <BarrageLane
+                bullets={barrages}
+                label={beta.barrageLane}
+                paused={false}
+              />
+              {joinUrl && joinCodeVisible ? (
+                <div
+                  className={`${stage3d.joinCard} ${styles.joinCard}`}
+                  id="classroom-join-code"
+                >
+                  {/* QrCode brings its own caption with the URL under it, so the
+                      card adds only the running count beside the symbol. */}
+                  <QrCode label={beta.joinLabel} value={joinUrl} />
+                  <span className={stage3d.joinCount}>
+                    {beta.barrageCount(barrages.length)}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          }
+          resting={
+            phase === "ready" ||
+            phase === "finished" ||
+            phase === "stopped" ||
+            phase === "failed"
+          }
+          speakingId={bubbleTurn?.participant_id ?? currentParticipantId}
+          unavailableLabel={beta.sceneUnavailable}
+          visuals={stageVisuals}
+        />
+      )}
 
       <div
         className={styles.controlsDock}

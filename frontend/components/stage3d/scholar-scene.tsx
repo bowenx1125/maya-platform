@@ -15,6 +15,7 @@ import type {
   StageCameraCommand,
   StageCharacter,
 } from "./scholar-stage";
+import { AvatarBar } from "../stage2d/avatar-bar";
 import styles from "./stage3d.module.css";
 import { requestedStageScenePack, STAGE_SCENE_PACKS } from "./scene-packs";
 
@@ -314,19 +315,15 @@ export function ScholarScene({
         ) : null}
 
         {status === "failed" ? (
-          <div className={styles.sceneFallback}>
-            <p>{unavailableLabel}</p>
-            <ul>
-              {characters.map((character) => (
-                <li
-                  key={character.id}
-                  data-state={visuals[character.id] ?? "idle"}
-                >
-                  <span>{character.slot}</span>
-                  {character.name}
-                </li>
-              ))}
-            </ul>
+          <div className={styles.sceneFallback} data-scene-fallback="avatar-bar">
+            <AvatarBar
+              characters={characters}
+              showUnavailableNotice
+              speakingId={speakingId}
+              bubbleText={bubbleText}
+              unavailableLabel={unavailableLabel}
+              visuals={visuals}
+            />
           </div>
         ) : null}
 

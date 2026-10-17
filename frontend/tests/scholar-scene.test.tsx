@@ -471,3 +471,50 @@ describe("ScholarScene long names", () => {
     expect(css).toMatch(/\.bubble\s*\{[^}]*overflow-wrap:\s*anywhere;/);
   });
 });
+
+describe("ScholarScene WebGL failure falls back to AvatarBar", () => {
+  it("renders the 2D avatar bar instead of a plain list when the stage fails", async () => {
+    const roster = [
+      character("participant-a", "A", "River Keeper"),
+      character("participant-b", "B", "Market Steward"),
+    ];
+    const view = renderScene(roster, {
+      "participant-a": "speaking",
+      "participant-b": "listening",
+    });
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    act(() => {
+      stageMock.instances[0].options.onError?.(new Error("webgl"));
+    });
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-scene-status="failed"]'),
+      ).toBeTruthy(),
+    );
+    expect(
+      view.container.querySelector('[data-scene-fallback="avatar-bar"]'),
+    ).toBeTruthy();
+    expect(view.container.querySelector("[data-avatar-bar]")).toBeTruthy();
+    expect(
+      view.container
+        .querySelector('[data-avatar-id="participant-a"]')
+        ?.getAttribute("data-state"),
+    ).toBe("speaking");
+    expect(view.getByRole("status").textContent).toContain("Unavailable");
+    // Visual-only: no Next control inside the fallback surface.
+    expect(
+      view.container.querySelector("[data-avatar-bar] button"),
+    ).toBeNull();
+  });
+
+  it("disposes the 3D stage on unmount (close 3D releases resources)", async () => {
+    const view = renderScene(
+      [character("participant-a", "A", "River Keeper")],
+      { "participant-a": "idle" },
+    );
+    await waitFor(() => expect(stageMock.instances).toHaveLength(1));
+    const stage = stageMock.instances[0];
+    view.unmount();
+    expect(stage.disposed).toBe(true);
+  });
+});

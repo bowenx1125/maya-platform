@@ -1,0 +1,421 @@
+/* 2D multi-avatar arena — cyber dark stage + sticker roundels.
+   Atmosphere only (Bomberman cover): not gameplay. */
+
+.arena {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse 70% 55% at 50% 35%,
+      rgba(64, 92, 180, 0.35),
+      transparent 70%
+    ),
+    linear-gradient(180deg, #0b1020 0%, #12182c 45%, #1a1230 100%);
+  color: #f4f1ea;
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(90, 140, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 140, 255, 0.12) 1px, transparent 1px);
+  background-size: 36px 36px;
+  background-position: center 12%;
+  mask-image: radial-gradient(ellipse 80% 65% at 50% 40%, #000 40%, transparent 85%);
+}
+
+.notice {
+  position: relative;
+  z-index: 2;
+  margin: 10px 16px 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 196, 90, 0.35);
+  border-radius: 8px;
+  background: rgba(28, 24, 18, 0.72);
+  color: #f0d9a0;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.stage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px 20px 8px;
+}
+
+.stageGlow {
+  position: absolute;
+  inset: 18% 22% 28%;
+  border-radius: 24px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(88, 140, 255, 0.22),
+    transparent 70%
+  );
+  pointer-events: none;
+}
+
+.topic,
+.topicHint {
+  position: relative;
+  z-index: 1;
+  max-width: min(720px, 92%);
+  margin: 0;
+  padding: 8px 16px;
+  border: 1px solid rgba(120, 170, 255, 0.35);
+  border-radius: 12px;
+  background: rgba(10, 14, 28, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  font:
+    600 0.95rem/1.35 "Songti SC",
+    "Noto Serif CJK SC",
+    "Segoe UI",
+    sans-serif;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.topicHint {
+  color: rgba(220, 230, 255, 0.55);
+  font-weight: 500;
+}
+
+.bubble {
+  position: relative;
+  z-index: 2;
+  max-width: min(520px, 90%);
+  padding: 10px 16px 12px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 16px;
+  background: rgba(18, 22, 40, 0.92);
+  box-shadow:
+    0 0 0 3px var(--avatar-accent, #5b8cff),
+    0 12px 28px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  animation: bubbleIn 280ms ease-out;
+}
+
+.bubbleWho {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--avatar-accent, #8eb6ff);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px 14px;
+  margin: 0;
+  padding: 10px 16px 18px;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: clamp(64px, 12vw, 96px);
+  transition:
+    transform 280ms ease,
+    filter 280ms ease;
+}
+
+.pin {
+  position: relative;
+  width: clamp(52px, 10vw, 78px);
+  height: clamp(52px, 10vw, 78px);
+}
+
+.halo {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--avatar-accent) 55%, transparent),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+
+.head {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.35), transparent 45%),
+    var(--avatar-skin);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--avatar-accent) 70%, #111),
+    0 8px 18px rgba(0, 0, 0, 0.4);
+  transition:
+    transform 280ms ease,
+    box-shadow 280ms ease,
+    filter 280ms ease;
+}
+
+.initials {
+  color: rgba(20, 16, 12, 0.78);
+  font:
+    800 clamp(0.95rem, 2.4vw, 1.35rem) / 1 "Segoe UI",
+    "PingFang SC",
+    sans-serif;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  user-select: none;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(8, 12, 24, 0.72);
+  color: #f2f4ff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot {
+  flex: none;
+  color: var(--avatar-accent);
+  font-weight: 800;
+}
+
+/* ---- states (five-state vocabulary only) ---- */
+
+.item[data-state="idle"] .head {
+  animation: breathe 3.2s ease-in-out infinite;
+}
+
+.item[data-state="listening"] .head {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--avatar-accent) 85%, #fff),
+    0 8px 18px rgba(0, 0, 0, 0.4);
+}
+
+.item[data-state="listening"] .halo {
+  opacity: 0.45;
+}
+
+.item[data-state="thinking"] .head {
+  animation: thinkPulse 1.4s ease-in-out infinite;
+}
+
+.item[data-state="thinking"] .halo {
+  opacity: 0.55;
+}
+
+.thinkBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--avatar-accent);
+  color: #0b1020;
+  font-size: 0.7rem;
+  font-weight: 900;
+  line-height: 1;
+  animation: badgeBob 1.2s ease-in-out infinite;
+}
+
+.item[data-state="speaking"] {
+  transform: translateY(-10px) scale(1.08);
+  z-index: 2;
+}
+
+.item[data-state="speaking"] .halo {
+  opacity: 1;
+}
+
+.item[data-state="speaking"] .head {
+  transform: scale(1.06);
+  animation: speakPop 320ms ease-out;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px var(--avatar-accent),
+    0 14px 28px rgba(0, 0, 0, 0.45);
+  filter: saturate(1.15) brightness(1.05);
+}
+
+.item[data-state="speaking"] .name {
+  border-color: color-mix(in srgb, var(--avatar-accent) 70%, #fff);
+  background: color-mix(in srgb, var(--avatar-accent) 28%, #0b1020);
+}
+
+.waves {
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 14px;
+  transform: translateX(-50%);
+}
+
+.waves i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--avatar-accent);
+  animation: wave 0.7s ease-in-out infinite;
+}
+
+.waves i:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.waves i:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.item[data-state="nod_yes"] .head {
+  animation: nod 480ms ease-in-out;
+}
+
+/* ---- keyframes ---- */
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.03);
+  }
+}
+
+@keyframes thinkPulse {
+  0%,
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  50% {
+    filter: brightness(1.12);
+    transform: scale(1.04);
+  }
+}
+
+@keyframes badgeBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes speakPop {
+  0% {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  35% {
+    transform: translateY(5px) rotate(4deg);
+  }
+  70% {
+    transform: translateY(-2px) rotate(-2deg);
+  }
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item,
+  .head,
+  .halo,
+  .bubble,
+  .thinkBadge,
+  .waves i {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .item[data-state="speaking"] {
+    transform: none;
+  }
+
+  .item[data-state="speaking"] .head {
+    transform: none;
+    box-shadow:
+      0 0 0 3px #fff,
+      0 0 0 6px var(--avatar-accent),
+      0 8px 18px rgba(0, 0, 0, 0.4);
+  }
+}
