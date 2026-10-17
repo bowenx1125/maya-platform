@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -29,6 +30,7 @@ from app.modules.knowledge.services import (
     assert_claim_owned,
     claim_idempotency,
     finish_idempotency,
+    renew_idempotency_lease,
     request_hash,
 )
 from app.modules.org.access import WorkspaceMember
@@ -58,7 +60,12 @@ from app.providers.voice import (
     VoiceProviderTimeout,
 )
 
+LOGGER = logging.getLogger(__name__)
+
 CONSENT_COPY_VERSION = "voice-consent-v1"
+# Enrollment holds its idempotency claim across upload, create and the
+# supplier review wait; renew it well past the slowest observed call.
+ENROLL_LEASE_SECONDS = 120
 TARGET_MODEL_KEY = DEFAULT_TARGET_MODEL_KEY
 PREVIEW_TEXT = (
     "I will listen carefully, respond with evidence, and explain what different "
@@ -645,7 +652,15 @@ def _store_enrollment_success(
     operation: VoiceProviderOperation,
     result: VoiceEnrollmentResult,
     settings: Settings,
+    *,
+    provider: VoiceCloneProvider | None = None,
 ) -> VoiceProfile:
+    # The teacher may have deleted the card while the supplier was still
+    # creating the voice. A delete is final: keep the profile deleted and
+    # remove the new supplier voice instead of bringing the card back.
+    deleted_meanwhile = (
+        db.scalar(select(VoiceProfile.status).where(VoiceProfile.id == profile.id)) == "deleted"
+    )
     operation.safe_request_id = result.request_id
     operation.input_bytes = result.input_bytes
     operation.output_bytes = result.output_bytes
@@ -665,6 +680,26 @@ def _store_enrollment_success(
             provider_key=profile.provider_key,
             target_model_key=profile.target_model_key,
         )
+    if deleted_meanwhile:
+        profile.status = "deleted"
+        profile.safe_error_code = None
+        profile.updated_at = now_utc()
+        _finish_operation(
+            db,
+            operation,
+            state="succeeded" if succeeded else "failed",
+            safe_error_code=None if succeeded else "voice_enrollment_failed",
+            output_bytes=result.output_bytes,
+        )
+        if valid_external_id and provider is not None:
+            try:
+                provider.delete(result.external_voice_id, target_model_key=profile.target_model_key)
+            except VoiceProviderError:
+                LOGGER.warning(
+                    "Deleted voice left at the supplier for later cleanup profile_id=%s",
+                    profile.id,
+                )
+        return profile
     profile.status = "preview_ready" if succeeded else "failed"
     profile.safe_error_code = None if succeeded else "voice_enrollment_failed"
     profile.updated_at = now_utc()
@@ -720,7 +755,7 @@ def _reconcile_enrollment(
         )
     if len(result.matches) == 1:
         stored = VoiceEnrollmentResult(result.matches[0], charged=False)
-        _store_enrollment_success(db, profile, operation, stored, settings)
+        _store_enrollment_success(db, profile, operation, stored, settings, provider=provider)
         return True
     # Zero visible matches are safe to retry only after the provider deadline.
     if now_utc() < _utc(operation.provider_deadline) or operation.attempt >= 2:
@@ -839,6 +874,10 @@ def enroll_voice(
         return replay
     try:
         assert_claim_owned(db, record)
+        # Upload, create and the supplier review wait (VOICE_REVIEW_WAIT_SECONDS)
+        # take 9-35 s; the default 10 s lease would expire mid-call and turn a
+        # created voice into outcome_unknown, dropping its supplier id.
+        renew_idempotency_lease(db, record, lease_seconds=ENROLL_LEASE_SECONDS)
     except BaseException:
         upload.cleanup()
         raise
@@ -982,16 +1021,19 @@ def enroll_voice(
             raise _safe_provider_error(exc) from exc
         try:
             assert_claim_owned(db, record)
-        except PlatformError as exc:
-            profile.status = "outcome_unknown"
-            profile.safe_error_code = "provider_unavailable"
-            _finish_operation(
-                db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
-            )
-            raise _safe_provider_error(exc) from exc
-        _store_enrollment_success(db, profile, operation, provider_result, settings)
+            claim_lost = False
+        except PlatformError:
+            claim_lost = True
+        # The supplier returned a voice id, so the voice exists there whether
+        # or not this request still owns its claim (or the review wait ran
+        # out). Keep the id and treat it as created rather than unknown;
+        # dropping it would orphan a charged voice.
+        _store_enrollment_success(
+            db, profile, operation, provider_result, settings, provider=provider_instance
+        )
         result = voice_profile_dto(profile)
-        finish_idempotency(db, record, 202, result.model_dump(mode="json"))
+        if not claim_lost:
+            finish_idempotency(db, record, 202, result.model_dump(mode="json"))
         db.commit()
         return result
     except PlatformError:

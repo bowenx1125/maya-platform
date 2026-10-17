@@ -816,7 +816,7 @@ def test_delete_removes_a_refused_voice_without_a_provider_call(
     assert provider.delete_calls == 0
 
 
-def test_delete_different_idempotency_key_cannot_cross_active_saga_fence(
+def test_delete_different_idempotency_key_takes_over_an_abandoned_delete(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -852,12 +852,16 @@ def test_delete_different_idempotency_key_cannot_cross_active_saga_fence(
                 updated_at=timestamp,
             )
         )
-    blocked = client.delete(
+    # The first worker left no live claim behind (its request died), so a
+    # new key takes the delete over: the card goes and the supplier voice is
+    # deleted exactly once.
+    taken_over = client.delete(
         f"/api/v1/voice-profiles/{profile['id']}",
         headers=_headers(csrf, "voice-delete-fence-second-key"),
     )
-    assert blocked.status_code == 503
-    assert provider.delete_calls == 0
+    assert taken_over.status_code == 200, taken_over.text
+    assert taken_over.json()["status"] == "deleted"
+    assert provider.delete_calls == 1
     with database.session() as session:
         operations = session.scalars(
             select(VoiceProviderOperation).where(
@@ -866,6 +870,8 @@ def test_delete_different_idempotency_key_cannot_cross_active_saga_fence(
             )
         ).all()
         assert len(operations) == 1
+        assert operations[0].state == "succeeded"
+        assert operations[0].attempt == 2
         session.add(
             VoiceProviderOperation(
                 id="13131313-1313-4313-8313-131313131313",
@@ -951,7 +957,10 @@ def test_delete_two_live_requests_issue_exactly_one_provider_command(
 
     assert second_finished_while_first_was_dispatched
     assert first_done.is_set() and second_done.is_set()
-    assert sorted(response.status_code for response in responses.values()) == [200, 503]
+    # A repeat delete while the first is still at the supplier is idempotent:
+    # both answer deleted, and only the first issues the supplier command.
+    assert [responses["first"].status_code, responses["second"].status_code] == [200, 200]
+    assert responses["second"].json()["status"] == "deleted"
     assert provider.delete_calls == 1
     with database.session() as session:
         operations = session.scalars(

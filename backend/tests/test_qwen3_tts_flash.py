@@ -397,3 +397,26 @@ def test_factory_clones_on_the_configured_model(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError):
         _settings(tmp_path, voice_clone_model=LEGACY_CLONE_MODEL_KEY)
+
+
+def test_enroll_returns_a_created_voice_when_the_review_query_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The voice id came back from create_voice, so the voice exists. A review
+    # status read that times out must not turn it into an unknown outcome.
+    class _TimeoutOnReview(_CaptureClient):
+        def post(self, url: str, **kwargs: object) -> httpx.Response:
+            if "query_voice" in str(kwargs.get("json")):
+                self.calls.append({"method": "POST", "url": url, **kwargs})
+                raise httpx.ReadTimeout("review status timed out")
+            return super().post(url, **kwargs)
+
+    capture = _TimeoutOnReview(_created())
+    monkeypatch.setattr("app.providers.dashscope._client", lambda **_kwargs: capture)
+    provider = DashScopeVoiceCloneProvider(_config())
+    result = provider.enroll(
+        SAMPLE_URI, recovery_name="mabcdef12", target_model_key=DEFAULT_TARGET_MODEL_KEY
+    )
+    assert result.external_voice_id == "qwen-audio-3.1-tts-flash-mabcdef12-x1"
+    assert not result.degraded
+    assert any("query_voice" in str(call.get("json")) for call in capture.calls)
