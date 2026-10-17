@@ -121,6 +121,7 @@ def test_direct_preview_invalid_provider_configuration_is_logged_safely(
             raise VoiceProviderError("private-provider-workspace")
 
     monkeypatch.setattr(voice_preview, "_tts_external_id", lambda _profile, _settings: "fixture")
+    monkeypatch.setattr(voice_preview, "next_preview_line", lambda _db: "fixture line")
     with pytest.raises(PlatformError) as caught:
         voice_preview.create_voice_preview(
             None,  # type: ignore[arg-type]
