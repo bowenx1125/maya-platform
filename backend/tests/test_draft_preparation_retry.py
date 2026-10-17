@@ -161,7 +161,7 @@ def draft_retry_with_prefix(draft_retry_db):
         ("empty_speech", "provider_not_sent", "invalid_state"),
         ("blank_speech", "provider_not_sent", "invalid_state"),
         ("pending", "provider_not_sent", "invalid_state"),
-        ("retry_prefix", "provider_not_sent", "invalid_state"),
+        ("retry_prefix", "provider_not_sent", None),  # M2: text-fallback prefix may Retry TTS
         ("stale_version", "provider_not_sent", "stale_control_version"),
         ("student", "provider_not_sent", "forbidden"),
         ("running_job", "provider_not_sent", "stale_control_version"),
@@ -248,14 +248,31 @@ async def test_draft_retry_respects_prepared_prefix_and_control_fences(
             None,
             1,
         )
-        assert enqueued == [ids["turn"]]
-        assert next(row for row in after["debate_turns"] if row["id"] == ids["prefix"]) == next(
-            row for row in before["debate_turns"] if row["id"] == ids["prefix"]
-        )
-        target = next(row for row in after["debate_turns"] if row["id"] == ids["turn"])
-        assert (target["generation_status"], target["safe_error_code"]) == ("pending", None)
-        job = next(row for row in after["jobs"] if row["id"] == ids["job"])
-        assert (job["state"], job["safe_error_code"], job["claim_token"]) == ("pending", None, None)
+        if prefix_kind == "retry_prefix":
+            # M2: Retry on a text-fallback prefix requeues that prefix for TTS.
+            assert enqueued == [ids["prefix"]]
+            prefix_after = next(
+                row for row in after["debate_turns"] if row["id"] == ids["prefix"]
+            )
+            assert (prefix_after["generation_status"], prefix_after["safe_error_code"]) == (
+                "pending",
+                None,
+            )
+            later = next(row for row in after["debate_turns"] if row["id"] == ids["turn"])
+            assert later["safe_error_code"] == provider_code
+        else:
+            assert enqueued == [ids["turn"]]
+            assert next(
+                row for row in after["debate_turns"] if row["id"] == ids["prefix"]
+            ) == next(row for row in before["debate_turns"] if row["id"] == ids["prefix"])
+            target = next(row for row in after["debate_turns"] if row["id"] == ids["turn"])
+            assert (target["generation_status"], target["safe_error_code"]) == ("pending", None)
+            job = next(row for row in after["jobs"] if row["id"] == ids["job"])
+            assert (job["state"], job["safe_error_code"], job["claim_token"]) == (
+                "pending",
+                None,
+                None,
+            )
         assert all(row["publication_status"] == "unpublished" for row in after["debate_turns"])
         assert after["debate_events"] == before["debate_events"]
     finally:
@@ -356,6 +373,77 @@ async def test_draft_segment_retry_requeues_cached_tts_without_playback_or_provi
                 ),
                 {"debate_id": ids["debate"]},
             ).one() == ("preparing", None, 1)
+        assert enqueued == [(ids["debate"], ids["turn"])]
+    finally:
+        await service.task_manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "code",
+    [
+        "tts_voice_unavailable",
+        "tts_provider_unavailable",
+        "tts_timeout",
+    ],
+)
+async def test_draft_retry_requeues_final_ready_text_fallback_tts(
+    draft_retry_db,
+    monkeypatch,
+    code,
+):
+    """Preview soft-fail (final_ready + tts_* + speech, job completed) must Retry TTS."""
+
+    database, ids, speech, structured = draft_retry_db
+    with database.session() as db:
+        db.execute(
+            text(
+                "UPDATE debate_turns SET generation_status='final_ready', "
+                "preparation_stage='ready', publication_status='unpublished', "
+                "audio_file_id=NULL, audio_duration_ms=NULL, "
+                "safe_error_code=:code WHERE id=:turn_id"
+            ),
+            {"code": code, "turn_id": ids["turn"]},
+        )
+        db.execute(
+            text(
+                "UPDATE jobs SET state='completed', claim_token=NULL, "
+                "safe_error_code=NULL WHERE id=:job_id"
+            ),
+            {"job_id": ids["job"]},
+        )
+    service = _service(database, database.data_root)
+    enqueued: list[tuple[str, str]] = []
+
+    async def record_enqueue(debate, turn):
+        enqueued.append((str(debate.id), str(turn.id)))
+        return True
+
+    monkeypatch.setattr(service, "_enqueue", record_enqueue)
+    try:
+        with database.session() as db:
+            state = await service.retry_preparation(
+                db,
+                ids["debate"],
+                turn_id=ids["turn"],
+                expected_control_version=0,
+                context=_teacher(ids),
+            )
+            assert state.status == "preparing"
+            assert state.current_turn_id is None
+            assert state.control_version == 1
+        with database.session() as db:
+            assert db.execute(
+                text(
+                    "SELECT generation_status, preparation_stage, speech, "
+                    "transcript_hash, safe_error_code FROM debate_turns WHERE id=:turn_id"
+                ),
+                {"turn_id": ids["turn"]},
+            ).one() == ("pending", "generation", speech, "t" * 64, None)
+            assert db.execute(
+                text("SELECT state, safe_error_code, claim_token FROM jobs WHERE id=:job_id"),
+                {"job_id": ids["job"]},
+            ).one() == ("pending", None, None)
         assert enqueued == [(ids["debate"], ids["turn"])]
     finally:
         await service.task_manager.close()
