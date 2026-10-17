@@ -60,13 +60,13 @@ LOGGER = logging.getLogger("maya.voices")
 # Preview samples rotate in the order previews are generated, across every
 # user and voice: the 1st generation reads line 1, the 5th reads line 1 again.
 VOICE_PREVIEW_LINES: tuple[str, ...] = (
-    "Should we find each other in the next life, let us live on a planet of our own. "
-    "我会将花种满山谷，为你而歌，老死方休。",
-    "No mater how long it takes, I want to see you again. 不管需要多少年，我都想要再见你一面。",
-    "If meeting you wasn't a miracle, then the souls have never whispered. "
-    "如果遇见你不是奇迹，灵魂便不曾言语。",
-    "Neverlasting paths, what comes may not be what you ask. "
-    "这⼀切...如果没有你，追求⼜有什么意义。",
+    "若来世再遇，就找一个无人的行星生活。"
+    "I will plant flowers among the valleys, and sing for you into old age and death.",
+    "如果遇见你不是奇迹，灵魂便不曾言语。"
+    "If meeting you wasn't a miracle, then the souls have never whispered.",
+    "不管需要多少年，我都想要再见你一面。No mater how long it takes, I want to see you again.",
+    "我一定会带你去看看...那我心爱的地方。"
+    "Unlike your planet, the flowers there. Are always in full bloom.",
 )
 # Kept for callers that want a stable sample; it is the first line.
 VOICE_PREVIEW_TEXT = VOICE_PREVIEW_LINES[0]
