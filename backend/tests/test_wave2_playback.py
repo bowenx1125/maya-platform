@@ -69,7 +69,7 @@ from app.providers.llm import MockLLMProvider
 from app.providers.tts import MockTTSProvider
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from starlette.websockets import WebSocketDisconnect
 
 from tests.conftest import login
@@ -562,6 +562,17 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
                 {"topic": "\u200b", "debate_id": debate_id},
             )
 
+        # #106: create already materialises the draft turn plan and the head
+        # prepare job.  Start must still reject before adding plan rows, jobs,
+        # audio or a claim, so compare against that eager baseline.
+        with database.session() as db:
+            baseline_turn_ids = set(
+                db.scalars(select(DebateTurn.id).where(DebateTurn.debate_id == debate_id)).all()
+            )
+            baseline_job_ids = set(
+                db.scalars(select(Job.id).where(Job.debate_id == debate_id)).all()
+            )
+
         rejected = client.post(
             f"/api/v1/debates/{debate_id}/start",
             headers=_headers(csrf, **{"Idempotency-Key": "legacy-topic-start-001"}),
@@ -585,8 +596,25 @@ def test_start_rejects_legacy_invalid_draft_before_any_plan_job_audio_or_claim(
             assert playback is not None
             assert playback.status == "preparing"
             assert playback.control_version == 0
-            assert db.scalar(select(DebateTurn).where(DebateTurn.debate_id == debate_id)) is None
-            assert db.scalar(select(Job).where(Job.debate_id == debate_id)) is None
+            assert (
+                set(
+                    db.scalars(select(DebateTurn.id).where(DebateTurn.debate_id == debate_id)).all()
+                )
+                == baseline_turn_ids
+            )
+            assert (
+                set(db.scalars(select(Job.id).where(Job.debate_id == debate_id)).all())
+                == baseline_job_ids
+            )
+            assert (
+                db.scalar(
+                    select(DebateTurn).where(
+                        DebateTurn.debate_id == debate_id,
+                        DebateTurn.publication_status != "unpublished",
+                    )
+                )
+                is None
+            )
             assert (
                 db.scalar(
                     select(StoredFile).where(
@@ -3070,6 +3098,12 @@ def test_sql_restart_fails_the_turn_owned_by_an_interrupted_job(app_factory: Any
                 .order_by(DebateParticipant.order_index)
             )
             assert participant is not None
+            # #106: create already built the draft plan and head prepare job.
+            # This fixture models a different, interrupted running turn, so
+            # clear the eager rows before inserting it.
+            db.execute(delete(Job).where(Job.debate_id == debate_id))
+            db.execute(delete(DebateTurn).where(DebateTurn.debate_id == debate_id))
+            db.flush()
             debate.status = "running"
             db.add(
                 DebateTurn(
