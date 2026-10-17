@@ -687,6 +687,7 @@ const enMessages = {
   voicePreviewFailed:
     "The preview could not be played. Retry the preview before confirming.",
   voiceConfirm: "Confirm",
+  voiceDeleteNamed: "Delete {name}",
   voiceDelete: "Delete",
   voiceDeleteConfirm:
     "Delete this custom voice? New playback will use the platform fallback.",
@@ -1497,6 +1498,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voicePreviewExpired: "试听已过期，请重新试听后再确认。",
   voicePreviewFailed: "试听音频无法播放，请重试试听后再确认。",
   voiceConfirm: "确认",
+  voiceDeleteNamed: "删除「{name}」",
   voiceDelete: "删除",
   voiceDeleteConfirm: "删除这个自定义音色？新的播放将使用平台兜底音色。",
   leader: "组长",

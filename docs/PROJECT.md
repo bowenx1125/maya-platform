@@ -226,4 +226,4 @@ October 15: New Team chats stay at revision 0 with no canned opening. A course t
 
 October 17: Host memory guard — new LLM HTTP attempts are refused with `host_memory_pressure` (503, retryable) when `/proc/meminfo` MemAvailable falls below `MEMORY_GUARD_MIN_AVAILABLE_MB` (default 500). Fail-open if meminfo is unreadable; floor 0 disables. Wired in `HttpxLLMTransport` before the real POST. Model-call concurrency/queue caps are deferred until after load-test results.
 
-October 17: Teacher Brainform replaces Memory with Record: assessment Teams by name, then every student's attempt, score, answer sheet and report. Accounts and the group visit no longer show Test results. Students keep Memory.
+October 17: Teacher Brainform replaces Memory with Record: assessment Teams by name, then every student's attempt, score, answer sheet and report. Accounts and the group visit no longer show Test results. Students keep Memory. Studyform Voices has Delete for the voice's owner; Agents using a deleted voice speak with the fallback voice.
