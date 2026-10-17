@@ -908,7 +908,9 @@ describe("Brainform workspace actions", () => {
     ).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "Download the report for Ada" })
+        .getByRole("link", {
+          name: "Download the report for Keynotes · Formal diagnostic questions · V1.0",
+        })
         .getAttribute("href"),
     ).toBe("/api/v1/learning/reports/r/download?revision_id=v");
     fireEvent.click(ada);
