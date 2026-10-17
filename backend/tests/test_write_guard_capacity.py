@@ -32,7 +32,10 @@ def healthy() -> Iterator[None]:
 
 def test_capacity_defaults_and_untouched_limits() -> None:
     s = Settings()  # type: ignore[call-arg]
-    assert s.write_guard_limit == 20
+    # Only the adaptive budget, the danger latch and the LLM backstop are on
+    # by default; the fixed write / create caps are off (0) but configurable.
+    assert s.write_guard_limit == 0
+    assert s.create_admission_limit == 0
     assert s.adaptive_admission_max_units == 128
     assert s.adaptive_admission_max_in_flight == 48
     # 20 turns x (write 2 + nested LLM 4) fit the ceiling and the global cap.
@@ -81,7 +84,8 @@ def test_twenty_concurrent_messages_are_all_admitted(healthy: None) -> None:
         assert aa._state.in_flight["write"] == 20
         assert aa._state.in_flight["llm"] == 20
         assert aa._state.in_flight_units == 120
-        assert wg._GATE.in_flight == 20
+        # The fixed write cap is off by default: no layer-2 gate slot taken.
+        assert wg._GATE.in_flight == 0
     finally:
         release.set()
         for thread in threads:
@@ -175,3 +179,61 @@ def test_streamed_work_is_not_capped_by_the_cpu_sized_default_executor(
         concurrent = running[0]
         release.set()
     assert concurrent == 30
+
+
+def test_turns_past_the_old_write_cap_are_admitted_by_default(healthy: None) -> None:
+    """25 > the old WRITE_GUARD 20: only the adaptive budget bounds turns now."""
+
+    s = _settings()
+    assert s.write_guard_limit == 0
+    release = threading.Event()
+    started = threading.Barrier(26)
+    errors: list[BaseException] = []
+
+    def turn() -> None:
+        try:
+            with write_guard_slot(s):
+                started.wait(5)
+                release.wait(10)
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+            started.abort()
+
+    threads = [threading.Thread(target=turn) for _ in range(25)]
+    for thread in threads:
+        thread.start()
+    try:
+        started.wait(5)
+        assert errors == []
+        assert aa._state.in_flight["write"] == 25
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join()
+
+
+def test_fixed_write_cap_can_be_restored_from_the_environment(
+    healthy: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("WRITE_GUARD_LIMIT", "1")
+    monkeypatch.setenv("CREATE_ADMISSION_LIMIT", "4")
+    s = Settings(  # type: ignore[call-arg]
+        adaptive_admission_initial_units=128,
+        adaptive_admission_wait_seconds=1,
+        write_guard_wait_seconds=1,
+    )
+    assert s.write_guard_limit == 1 and s.create_admission_limit == 4
+    with write_guard_slot(s):
+        failure: list[str] = []
+
+        def second() -> None:
+            try:
+                with write_guard_slot(s):
+                    pass
+            except PlatformError as exc:
+                failure.append(exc.code)
+
+        thread = threading.Thread(target=second)
+        thread.start()
+        thread.join(5)
+    assert failure == ["write_pressure"]

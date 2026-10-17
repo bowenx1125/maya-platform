@@ -18,10 +18,12 @@ this single queue as backstops (the login queue is folded into it):
   further the longer people waited; it is reported, never acted on.
 * Cost weights (llm heavy, create/write medium, login light, read free),
   FIFO per class, served round-robin so one class cannot starve others.
-* One global in-flight hard cap per process; LLM calls, Team/Chat
-  turns and creates additionally pass ``llm_admission`` (20) / ``write_guard``
-  (20) / ``create_admission`` (4) as per-operation backstops, which wait only for the remainder of
-  this layer's deadline (a call nested in an admitted operation starts a fresh one).
+* One global in-flight hard cap per process; LLM calls additionally pass
+  the ``llm_admission`` (20) backstop, which waits only for the remainder of
+  this layer's deadline (a call nested in an admitted operation starts a
+  fresh one). The fixed ``write_guard`` / ``create_admission`` caps are off
+  by default (limit 0) and can be switched back on from the environment.
+  Argon2 keeps its own CPU/memory cap (``AUTH_HASH_CONCURRENCY``).
 * Retryable ``adaptive_admission_busy`` 503 is raised only when the queue
   (max 200) is full or the single 180 s wait budget runs out.
 

@@ -613,11 +613,19 @@ def create_app(
         settings = get_settings()
         return {
             **adaptive_admission_snapshot(settings),
+            # 0 means that backstop is off; only the adaptive budget, the
+            # danger latch and the LLM backstop are on by default.
             "backstops": {
                 "llm_admission_limit": int(settings.llm_admission_limit),
                 "write_guard_limit": int(settings.write_guard_limit),
                 "create_admission_limit": int(settings.create_admission_limit),
                 "auth_hash_concurrency": int(settings.auth_hash_concurrency),
+            },
+            "backstops_enabled": {
+                "llm_admission": int(settings.llm_admission_limit) > 0,
+                "write_guard": int(settings.write_guard_limit) > 0,
+                "create_admission": int(settings.create_admission_limit) > 0,
+                "auth_hash": int(settings.auth_hash_concurrency) > 0,
             },
             "message_timing": message_timing_snapshot(),
         }
