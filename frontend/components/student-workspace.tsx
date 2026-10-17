@@ -566,7 +566,7 @@ function GroupWorkspaceSession({
           key={`${scope}:voices:${initialVoiceCreate ? "new" : "list"}:${teacherIdentity ? "listen" : "own"}`}
           groupId={groupId}
           listenOnly={teacherIdentity}
-          embedded
+          moduleCard
           initialCreate={teacherIdentity ? false : initialVoiceCreate}
         />
       </ModuleGrid>

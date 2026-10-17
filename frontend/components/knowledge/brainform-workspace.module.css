@@ -294,6 +294,48 @@
   cursor: default;
 }
 
+/* Like a Team or Agent tile, the title itself is not the click target: the
+   enter button beside it shows on hover over the title, on keyboard focus,
+   and always on touch screens, where there is no hover. */
+.enterTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.enterTitle .staticTitle {
+  min-width: 0;
+}
+
+.iconButton.enterButton {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.enterTitle:hover .enterButton,
+.iconButton.enterButton:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .iconButton.enterButton {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .rowMeta,
 .rowStatus {
   color: #625e59;

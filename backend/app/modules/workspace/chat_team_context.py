@@ -73,7 +73,7 @@ def _team_query_embeddings(
     policy_hash = settings.provider_policy_hash_for("embedding")
     repository = ProviderRepository(db)
     policy = repository.get_policy_snapshot(policy_hash or "")
-    selected = embedding_provider(settings)
+    selected = embedding_provider(settings.chat_settings())
     config = getattr(selected, "config", None)
     if policy is None or getattr(config, "resolved_endpoint", None) != policy.endpoint:
         raise PlatformError("provider_preflight_blocked", "Embedding configuration changed.", 409)

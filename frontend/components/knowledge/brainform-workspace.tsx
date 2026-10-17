@@ -44,6 +44,7 @@ import {
   useAssessmentRecord,
 } from "./assessment-record";
 import {
+  IconArrowRight,
   IconClose,
   IconDownload,
   IconRefresh,
@@ -51,6 +52,45 @@ import {
 } from "../quiet-icons";
 
 import styles from "./brainform-workspace.module.css";
+
+/**
+ * A Brainform row title that enters the way a Team or Agent tile does: the
+ * enter button appears when the pointer is over the title (always on touch
+ * screens, and whenever it has keyboard focus), and only that button opens
+ * the item. A double-click on the title renames it in place.
+ */
+function EnterTitle({
+  title,
+  enterLabel,
+  onEnter,
+  onRename,
+  editable,
+}: {
+  title: string;
+  enterLabel: string;
+  onEnter?: () => void;
+  onRename?: () => void;
+  editable: boolean;
+}) {
+  return (
+    <span className={styles.enterTitle}>
+      <span className={styles.staticTitle} onDoubleClick={onRename}>
+        {title}
+      </span>
+      {onEnter ? (
+        <button
+          type="button"
+          className={`${styles.iconButton} ${styles.enterButton}`}
+          aria-label={enterLabel}
+          data-ui-guide={editable ? "knowledge.edit" : "knowledge.view"}
+          onClick={onEnter}
+        >
+          <IconArrowRight size={15} />
+        </button>
+      ) : null}
+    </span>
+  );
+}
 
 type BrainformRole = "teacher" | "student";
 
@@ -616,33 +656,6 @@ function BrainformWorkspaceBody({
   const [renameDocumentId, setRenameDocumentId] = useState<string | null>(null);
   // New opens this draft; a picked Markdown file fills it, Done saves it.
   const [newKnowledge, setNewKnowledge] = useState({ name: "", markdown: "" });
-  // One click opens the editor, which replaces this list; a double-click
-  // renames in place. The open waits out a double-click before it runs.
-  const titleClickTimer = useRef<number | null>(null);
-  function titleClick(open: () => void) {
-    if (titleClickTimer.current !== null) {
-      window.clearTimeout(titleClickTimer.current);
-    }
-    titleClickTimer.current = window.setTimeout(() => {
-      titleClickTimer.current = null;
-      open();
-    }, 220);
-  }
-  function titleDoubleClick(rename: () => void) {
-    if (titleClickTimer.current !== null) {
-      window.clearTimeout(titleClickTimer.current);
-      titleClickTimer.current = null;
-    }
-    rename();
-  }
-  useEffect(
-    () => () => {
-      if (titleClickTimer.current !== null) {
-        window.clearTimeout(titleClickTimer.current);
-      }
-    },
-    [],
-  );
   const initialKnowledgeOpened = useRef(false);
   const initialJobRead = useRef<string | null>(null);
   const latestGenerationJobs = useRef<{
@@ -2247,38 +2260,34 @@ function BrainformWorkspaceBody({
                               }}
                             />
                           ) : (
-                            <button
-                              type="button"
-                              className={styles.titleButton}
-                              onClick={() =>
-                                titleClick(
-                                  () =>
-                                    void (canEdit
-                                      ? editRag(document)
-                                      : viewRag(document)),
-                                )
-                              }
-                              onDoubleClick={() =>
-                                titleDoubleClick(() => {
-                                  if (!canEdit) return;
-                                  setRenameDocumentId(document.id);
-                                  setRenameValue(
-                                    document.source_filename.replace(
-                                      /\.[^.]+$/,
-                                      "",
-                                    ),
-                                  );
-                                })
-                              }
-                              aria-label={t(
+                            <EnterTitle
+                              title={document.source_filename}
+                              editable={canEdit}
+                              enterLabel={t(
                                 canEdit
                                   ? "brainformEditRagNamed"
                                   : "brainformViewRagNamed",
                                 { name: document.source_filename },
                               )}
-                            >
-                              {document.source_filename}
-                            </button>
+                              onEnter={() =>
+                                void (canEdit
+                                  ? editRag(document)
+                                  : viewRag(document))
+                              }
+                              onRename={
+                                canEdit
+                                  ? () => {
+                                      setRenameDocumentId(document.id);
+                                      setRenameValue(
+                                        document.source_filename.replace(
+                                          /\.[^.]+$/,
+                                          "",
+                                        ),
+                                      );
+                                    }
+                                  : undefined
+                              }
+                            />
                           )}
                           {failed ? (
                             <span
@@ -2416,48 +2425,40 @@ function BrainformWorkspaceBody({
                             }}
                           />
                         ) : (
-                          // Like a RAG row: a click opens the editor, whose
-                          // Done saves a version every user reads; a
-                          // double-click renames.
-                          <button
-                            type="button"
-                            className={styles.titleButton}
-                            aria-disabled={
-                              isGenerating ||
-                              (!currentDoc && !row.can_edit) ||
-                              undefined
-                            }
-                            onClick={() => {
-                              if (
-                                isGenerating ||
-                                (!currentDoc && !row.can_edit)
-                              )
-                                return;
-                              titleClick(
-                                () =>
-                                  void openKnowledge(
-                                    row,
-                                    row.can_edit ? "edit" : "view",
-                                  ),
-                              );
-                            }}
-                            onDoubleClick={() =>
-                              titleDoubleClick(() => {
-                                if (!row.can_edit) return;
-                                setRenameSetId(row.canonical_set_id);
-                                setRenameValue(row.knowledge_display_name);
-                              })
-                            }
-                            aria-label={
+                          // Like a RAG row and a Team or Agent tile: the
+                          // enter button shows on hover over the title and
+                          // opens the editor, whose Done saves a version
+                          // every user reads; a double-click renames.
+                          <EnterTitle
+                            title={row.knowledge_display_name}
+                            editable={row.can_edit}
+                            enterLabel={
                               row.can_edit
                                 ? t("brainformEditKnowledgeNamed", {
                                     name: row.knowledge_display_name,
                                   })
-                                : row.knowledge_display_name
+                                : t("brainformViewKnowledgeNamed", {
+                                    name: row.knowledge_display_name,
+                                  })
                             }
-                          >
-                            {row.knowledge_display_name}
-                          </button>
+                            onEnter={
+                              isGenerating || (!currentDoc && !row.can_edit)
+                                ? undefined
+                                : () =>
+                                    void openKnowledge(
+                                      row,
+                                      row.can_edit ? "edit" : "view",
+                                    )
+                            }
+                            onRename={
+                              row.can_edit
+                                ? () => {
+                                    setRenameSetId(row.canonical_set_id);
+                                    setRenameValue(row.knowledge_display_name);
+                                  }
+                                : undefined
+                            }
+                          />
                         )}
                         {!isGenerating &&
                         row.generation_state &&

@@ -39,6 +39,7 @@ from app.core.models import (
     User,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.version_label import agent_version_label
 from app.modules.agents.persona import (
     agent_name_from_markdown,
     raw_agent_md_hash,
@@ -804,6 +805,9 @@ def create_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    # The sign-in check above opened a read transaction; end it so a
+    # request queued for admission holds no pooled connection while it waits.
+    db.commit()
     with create_admission_slot():
         scoped_student_group_role(db, context, str(group_id))
         body_hash = parse_json_payload_hash(
@@ -924,6 +928,9 @@ def create_course_workspace_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    # The sign-in check above opened a read transaction; end it so a
+    # request queued for admission holds no pooled connection while it waits.
+    db.commit()
     with create_admission_slot():
         course_key = str(course_id)
         if course_member_role(db, context.user.id, course_key) != "teacher":
@@ -1606,7 +1613,7 @@ def download_agent_md(
     filename = frozen_download_filename(
         "AGENT.md",
         scoped.agent.name,
-        f"V1.{scoped.version.version_seq}",
+        agent_version_label(scoped.version.version_seq),
     )
     return Response(
         scoped.version.agent_md.encode("utf-8"),

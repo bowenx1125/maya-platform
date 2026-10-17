@@ -37,6 +37,7 @@ from app.core.models import (
     StoredFile,
 )
 from app.core.sqlutil import begin_immediate
+from app.core.version_label import agent_version_label
 from app.modules.agents.schemas import (
     AgentVersion as AgentVersionDTO,
 )
@@ -1432,7 +1433,7 @@ def download_snapshot_rag(
     filename = frozen_download_filename(
         "RAG.md",
         scoped.agent.name,
-        f"V1.{scoped.version.version_seq}",
+        agent_version_label(scoped.version.version_seq),
     )
     return Response(
         read_contained(settings.resolved_data_root, stored.relative_path),
@@ -1491,7 +1492,7 @@ def download_snapshot_document(
     filename = frozen_download_filename(
         document.source_filename,
         scoped.agent.name,
-        f"V1.{scoped.version.version_seq}",
+        agent_version_label(scoped.version.version_seq),
         ordinal=ordinal,
     )
     return Response(
