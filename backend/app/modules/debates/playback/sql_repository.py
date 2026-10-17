@@ -1588,7 +1588,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                         "AND EXISTS (SELECT 1 FROM course_members cm "
                         "WHERE cm.course_id=d.course_id "
                         "AND cm.user_id=:teacher_user_id AND cm.role='teacher') "
-                        "AND (:expected_current_turn_id IS NULL OR "
+                        "AND (CAST(:expected_current_turn_id AS VARCHAR) IS NULL OR "
                         "ps.current_turn_id=:expected_current_turn_id)"
                     ),
                     {
@@ -2091,6 +2091,17 @@ class SqlPlaybackRepository(PlaybackRepository):
         expected_control_version: int,
         controller_epoch: str,
     ) -> bool:
+        # SQLite's table-valued json_each(text) has no PostgreSQL equivalent
+        # for text columns; expand the predecessor array with jsonb instead.
+        if self._dialect_name(db) == "postgresql":
+            predecessor_ids = (
+                "(SELECT p.value FROM jsonb_array_elements_text("
+                "CASE WHEN json_valid(t.predecessor_turn_ids_json) "
+                "THEN t.predecessor_turn_ids_json::jsonb ELSE '[]'::jsonb END"
+                ") AS p(value))"
+            )
+        else:
+            predecessor_ids = "(SELECT value FROM json_each(t.predecessor_turn_ids_json))"
         result = db.execute(
             text(
                 "UPDATE playback_states SET status='waiting_next', cursor_ms=0, "
@@ -2110,7 +2121,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "AND trim(COALESCE(t.speech,''))<>'' AND t.audio_file_id IS NULL "
                 "AND t.audio_duration_ms=0 AND j.state='completed' "
                 "AND j.cancellation_generation=d.cancellation_generation "
-                "AND NOT EXISTS (SELECT 1 FROM json_each(t.predecessor_turn_ids_json) AS p "
+                "AND NOT EXISTS (SELECT 1 FROM " + predecessor_ids + " AS p "
                 "LEFT JOIN debate_turns AS prior ON prior.id=p.value AND prior.debate_id=d.id "
                 "WHERE prior.id IS NULL OR prior.publication_status<>'public'))"
             ),
@@ -3480,7 +3491,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "AND publication_status='unpublished' AND safe_error_code=:code "
             "AND CAST(round_no AS INTEGER) < CAST(COALESCE(json_extract(("
             "SELECT rule_snapshot_json FROM debates WHERE id=:debate_id), "
-            "'$.round_count'), 2) AS INTEGER) "
+            "'$.round_count'), '2') AS INTEGER) "
             "AND NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
             "WHERE earlier.debate_id=debate_turns.debate_id "
             "AND earlier.turn_index < debate_turns.turn_index "

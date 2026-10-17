@@ -38,7 +38,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, false, select, text, true, update
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import Table
 
@@ -507,7 +507,7 @@ def _narrow_media_graph(db: Session, graph: _DebateGraph, root: Path) -> None:
             select(file_operations).where(
                 file_operations.c.id.in_(tuple(graph.file_operation_ids))
                 if graph.file_operation_ids
-                else text("0"),
+                else false(),
                 file_operations.c.operation_type == "debate_audio_swap",
             )
         )
@@ -628,7 +628,7 @@ def _build_graph(
     owner_ids = graph.owner_ids
     file_operation_table = _table("file_operations")
     file_operation_predicates: list[Any] = [
-        file_operation_table.c.entity_id.in_(tuple(owner_ids)) if owner_ids else text("0"),
+        file_operation_table.c.entity_id.in_(tuple(owner_ids)) if owner_ids else false(),
         file_operation_table.c.old_audio_debate_id == graph.debate_id,
         file_operation_table.c.new_debate_id == graph.debate_id,
     ]
@@ -650,7 +650,7 @@ def _build_graph(
 
     file_reference_table = _table("file_references")
     file_reference_predicates = [
-        file_reference_table.c.owner_id.in_(tuple(owner_ids)) if owner_ids else text("0"),
+        file_reference_table.c.owner_id.in_(tuple(owner_ids)) if owner_ids else false(),
     ]
     if graph.file_operation_ids:
         file_reference_predicates.append(
@@ -672,7 +672,7 @@ def _build_graph(
         str(value)
         for value in db.scalars(
             select(turn_table.c.audio_file_id).where(
-                turn_table.c.id.in_(tuple(graph.turn_ids)) if graph.turn_ids else text("0")
+                turn_table.c.id.in_(tuple(graph.turn_ids)) if graph.turn_ids else false()
             )
         ).all()
         if value is not None
@@ -704,7 +704,7 @@ def _build_graph(
                     | (
                         operation_table.c.export_manifest_hash.in_(tuple(graph.manifest_hashes))
                         if graph.manifest_hashes
-                        else text("0")
+                        else false()
                     )
                 )
             )
@@ -812,7 +812,7 @@ def _build_graph(
 
 def _or_all(predicates: Sequence[Any]) -> Any:
     if not predicates:
-        return text("0")
+        return false()
     expression = predicates[0]
     for predicate in predicates[1:]:
         expression = expression | predicate
@@ -1155,7 +1155,7 @@ def _interrupt_jobs(
         # they are independent outputs and must continue untouched.
         predicates.append(Job.operation.not_in(("barrage_insight.generate", "report.generate")))
         values = _values(turn_ids or ())
-        predicates.append(Job.turn_id.in_(values) if values else text("0"))
+        predicates.append(Job.turn_id.in_(values) if values else false())
     changed = db.execute(
         update(Job)
         .where(*predicates)
@@ -1181,7 +1181,7 @@ def _active_other_runtime(db: Session, graph: _DebateGraph) -> bool:
             ProviderOperation.state.in_(tuple(_ACTIVE_PROVIDER_STATES)),
             ~ProviderOperation.id.in_(tuple(graph.operation_ids))
             if graph.operation_ids
-            else text("1"),
+            else true(),
         )
         .limit(1)
     ).first()
@@ -1253,9 +1253,7 @@ def _stored_file_survivor_check(db: Session, graph: _DebateGraph) -> None:
         select(refs.c.id)
         .where(
             refs.c.stored_file_id.in_(stored_ids),
-            ~refs.c.id.in_(tuple(graph.file_reference_ids))
-            if graph.file_reference_ids
-            else text("1"),
+            ~refs.c.id.in_(tuple(graph.file_reference_ids)) if graph.file_reference_ids else true(),
         )
         .limit(1)
     ).first():
@@ -1265,7 +1263,7 @@ def _stored_file_survivor_check(db: Session, graph: _DebateGraph) -> None:
         select(turns.c.id)
         .where(
             turns.c.audio_file_id.in_(stored_ids),
-            ~turns.c.id.in_(tuple(graph.turn_ids)) if graph.turn_ids else text("1"),
+            ~turns.c.id.in_(tuple(graph.turn_ids)) if graph.turn_ids else true(),
         )
         .limit(1)
     ).first():
@@ -1700,7 +1698,7 @@ def _clear_turn_audio(db: Session, graph: _DebateGraph) -> tuple[int, tuple[str,
             select(refs.c.id, refs.c.stored_file_id).where(
                 refs.c.id.in_(tuple(graph.file_reference_ids))
                 if graph.file_reference_ids
-                else text("0")
+                else false()
             )
         )
         .mappings()
@@ -1816,7 +1814,7 @@ def _detach_surviving_run_operations(db: Session, graph: _DebateGraph) -> None:
             operation_table.c.acceptance_run_id.in_(tuple(graph.run_ids)),
             ~operation_table.c.id.in_(tuple(graph.operation_ids))
             if graph.operation_ids
-            else text("1"),
+            else true(),
         )
         .values(acceptance_run_id=None, call_no=None, updated_at=datetime.now(UTC))
     )
@@ -2044,7 +2042,7 @@ async def delete_all(
         )
         recovery_table = _table("llm_recovery_inputs")
         recovery_predicate: Any = (
-            recovery_table.c.turn_id.in_(tuple(graph.turn_ids)) if graph.turn_ids else text("0")
+            recovery_table.c.turn_id.in_(tuple(graph.turn_ids)) if graph.turn_ids else false()
         )
         if graph.operation_ids:
             recovery_predicate = recovery_predicate | recovery_table.c.operation_id.in_(
