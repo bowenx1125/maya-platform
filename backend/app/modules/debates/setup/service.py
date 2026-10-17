@@ -806,6 +806,19 @@ def _assert_create_claim_owned(db: Session, record: IdempotencyRecord) -> None:
 
 
 def _detail(db: Session, debate: Debate) -> DebateDetail:
+    # Stuck Preparing must leave the spinner before the page is projected so
+    # Retry/Revocalize become visible without waiting for a process restart.
+    if str(getattr(debate, "status", "")) in {"draft", "running"}:
+        try:
+            from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+            expired = SqlPlaybackRepository().expire_stale_preparation(
+                db, debate_id=str(debate.id)
+            )
+            if expired:
+                db.commit()
+        except Exception:
+            db.rollback()
     participants = db.scalars(
         select(DebateParticipant)
         .where(DebateParticipant.debate_id == debate.id)
@@ -1262,6 +1275,19 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
     stall_by_debate: dict[str, DebateStall] = {}
     if rows:
         ids = [row.id for row in rows]
+        # Expire stuck Preparing before projecting stall badges.
+        try:
+            from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+            repo = SqlPlaybackRepository()
+            expired_any = False
+            for debate_id in ids:
+                if repo.expire_stale_preparation(db, debate_id=str(debate_id)):
+                    expired_any = True
+            if expired_any:
+                db.commit()
+        except Exception:
+            db.rollback()
         text_fallback = and_(
             DebateTurn.audio_file_id.is_(None),
             or_(
@@ -1327,6 +1353,12 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
                 or_(
                     DebateTurn.generation_status.in_(("failed", "turn_generation_failed")),
                     and_(DebateTurn.generation_status == "pending", Job.state == "failed"),
+                    # Recoverable prepare timeout parks as pending + code.
+                    and_(
+                        DebateTurn.generation_status == "pending",
+                        DebateTurn.safe_error_code.is_not(None),
+                        DebateTurn.safe_error_code != "",
+                    ),
                 ),
             )
             .order_by(DebateTurn.debate_id, DebateTurn.turn_index)

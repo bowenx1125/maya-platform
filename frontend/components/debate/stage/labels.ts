@@ -36,6 +36,7 @@ export const defaultPlaybackStageLabels: Required<PlaybackStageLabels> = {
   phaseExchange: "Exchange",
   phaseFinalIntegration: "Final integration",
   next: "Next",
+  nextNotReady: "Next turn is not ready yet. Retry or wait for preparation.",
   waitingForAudio: "Waiting for the server to prepare audio…",
   connectionWaiting: "Waiting for the server to restore playback.",
   connectionReady: "Connected",

@@ -3341,11 +3341,12 @@ export function BetaDebateStage({
         }
       } catch (cause) {
         if (controlRequestRef.current === requestToken) {
-          if (action === "next" || action === "resume") {
+          if (
+            action === "next" &&
+            isRecord(cause) &&
+            cause.code === "next_not_ready"
+          ) {
             if (
-              action === "next" &&
-              isRecord(cause) &&
-              cause.code === "next_not_ready" &&
               ["playing", "paused"].includes(playbackRef.current.status) &&
               playbackRef.current.current_turn_id === requestTurnId
             ) {
@@ -3359,6 +3360,18 @@ export function BetaDebateStage({
                 turn_id: requestTurnId,
               });
             }
+            setFailure(null);
+            await recoverPlayback(true);
+            // recoverPlayback clears control errors and may re-apply a stale
+            // next_turn_ready=true from the snapshot. Re-assert the failure
+            // after sync so Next cannot look like a silent success.
+            applyPlayback({ next_turn_ready: false });
+            setControlError(
+              labelsRef.current.nextNotReady ??
+                labelsRef.current.prepared ??
+                "Next turn is not ready yet.",
+            );
+          } else if (action === "next" || action === "resume") {
             setControlError(null);
             setFailure(null);
             await recoverPlayback(true);
@@ -3518,7 +3531,8 @@ export function BetaDebateStage({
   const finalActionLabel =
     finalBoundary && !detailState.final_input_frozen
       ? "Final"
-      : finalBoundary && !playback.next_turn_ready
+      : (playback.status === "waiting_next" && !playback.next_turn_ready) ||
+          (finalBoundary && !playback.next_turn_ready)
         ? "Preparing"
         : labels.next;
   const canAdvance =
@@ -3807,6 +3821,11 @@ export function BetaDebateStage({
               <span>{labels.providerGateEmpty}</span>
             )}
           </section>
+        ) : null}
+        {controlError ? (
+          <div className={styles.failureCard} role="alert">
+            <span>{controlError}</span>
+          </div>
         ) : null}
       </div>
       {blockedBy ? (
