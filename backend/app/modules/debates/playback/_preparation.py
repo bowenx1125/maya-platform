@@ -536,10 +536,21 @@ class PlaybackPreparationMixin(PlaybackCore):
             turns = self._turns(db, debate)
             turn = next((item for item in turns if str(getattr(item, "id", "")) == turn_id), None)
             if turn is None:
+                LOGGER.info(
+                    "prepare_skip debate_id=%s turn_id=%s reason=turn_missing",
+                    debate_id,
+                    turn_id,
+                )
                 return
             status = str(getattr(debate, "status", ""))
             prewarming = status == "draft"
             if status != "running" and not prewarming:
+                LOGGER.info(
+                    "prepare_skip debate_id=%s turn_id=%s reason=not_draft_or_running status=%s",
+                    debate_id,
+                    turn_id,
+                    status,
+                )
                 return
             if uses_segment_protocol(debate) and self._round(turn) == debate_round_count(debate):
                 if prewarming or not getattr(debate, "final_input_json", None):
@@ -554,6 +565,13 @@ class PlaybackPreparationMixin(PlaybackCore):
                     for item in turns
                     if int(self._get(item, "turn_index", default=0) or 0) < turn_index
                 ):
+                    LOGGER.info(
+                        "prepare_skip debate_id=%s turn_id=%s reason=draft_out_of_order "
+                        "turn_index=%s",
+                        debate_id,
+                        turn_id,
+                        turn_index,
+                    )
                     return
             else:
                 if state.current_turn_id is None:
@@ -650,6 +668,13 @@ class PlaybackPreparationMixin(PlaybackCore):
                     cancellation_generation=cancellation_generation,
                 )
                 if claim_token is None:
+                    LOGGER.warning(
+                        "prepare_skip debate_id=%s turn_id=%s reason=claim_unavailable "
+                        "prewarming=%s",
+                        debate_id,
+                        turn_id,
+                        prewarming,
+                    )
                     return
                 if prewarming:
                     remember_claim(debate, turn, claim_token, cancellation_generation)
@@ -668,6 +693,13 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if mark_running is None and prewarming:
                     # A repository double without the draft statement simply
                     # does not pre-warm; it must not fall back to the live one.
+                    LOGGER.warning(
+                        "prepare_skip debate_id=%s turn_id=%s reason=mark_prewarming_missing "
+                        "claim=%s",
+                        debate_id,
+                        turn_id,
+                        claim_token,
+                    )
                     self._release_claim(
                         db,
                         debate,
@@ -677,6 +709,11 @@ class PlaybackPreparationMixin(PlaybackCore):
                     )
                     return
                 if not callable(mark_running):
+                    LOGGER.warning(
+                        "prepare_skip debate_id=%s turn_id=%s reason=mark_running_missing",
+                        debate_id,
+                        turn_id,
+                    )
                     return
                 mark_kwargs: dict[str, Any] = {
                     "cancellation_generation": cancellation_generation,
@@ -696,6 +733,14 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if accepts_fence:
                     mark_kwargs["fence"] = generation_fence
                 if not mark_running(db, turn, **mark_kwargs):
+                    LOGGER.warning(
+                        "prepare_skip debate_id=%s turn_id=%s reason=mark_running_rejected "
+                        "claim=%s prewarming=%s",
+                        debate_id,
+                        turn_id,
+                        claim_token,
+                        prewarming,
+                    )
                     self._release_claim(
                         db,
                         debate,

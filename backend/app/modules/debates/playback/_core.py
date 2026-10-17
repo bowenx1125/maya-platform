@@ -66,6 +66,15 @@ _SAFE_GENERATION_CODES = {
     "tts_result_dns_failed",
     "tts_result_download_failed",
     "tts_audio_invalid",
+    # Fail-path mirrors for codes that usually go through mark_turn_ready.
+    "tts_provider_unavailable",
+    "tts_voice_unavailable",
+    # Adapter / validation codes that must not collapse to a generic failure.
+    "turn_length_invalid",
+    "schema_invalid",
+    "llm_recovery_failed",
+    "llm_recovery_fence_stale",
+    "llm_recovery_input_unavailable",
     # Stuck pending/running prepare work past the agreed watchdog.
     "preparation_timeout",
 }
@@ -1216,6 +1225,16 @@ class PlaybackCore:
         if successor is None or not unique:
             return False
         if self._turn_public(successor):
+            return False
+        # Align with claim_next_playback when SQL columns are populated: stage
+        # must be ready and generation must be final_ready.  Memory doubles that
+        # leave preparation_stage=None keep the looser playback boundary.
+        stage = self._get(successor, "preparation_stage", default=None)
+        if stage is not None and str(stage) != "ready":
+            return False
+        if stage is not None and str(
+            self._get(successor, "generation_status", "status", default="")
+        ) != "final_ready":
             return False
         rule_set_id = str(self._get(debate, "rule_set_id", default=""))
         teaching_protocol = debate_teaching_protocol(debate)
