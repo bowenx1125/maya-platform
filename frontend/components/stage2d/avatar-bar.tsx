@@ -5,6 +5,10 @@ import type { CSSProperties, ReactNode } from "react";
 import type { AvatarState } from "../avatar";
 import type { StageCharacter } from "../stage3d/scholar-stage";
 import styles from "./avatar-bar.module.css";
+import {
+  resolveArenaIntensity,
+  type ArenaIntensity,
+} from "./avatar-bar-flag";
 import { normalizeAvatarState } from "./normalize-avatar-state";
 import { avatarBarAccent, avatarBarSkin } from "./theme";
 
@@ -19,6 +23,11 @@ export type AvatarBarProps = {
   unavailableLabel?: string;
   /** When shown as WebGL fallback, surface the notice above the bar. */
   showUnavailableNotice?: boolean;
+  /**
+   * Atmosphere intensity (low|med|high). Prop wins; else URL
+   * `?arenaIntensity=…`; default med. Visual-only — no audio.
+   */
+  intensity?: ArenaIntensity | string | null;
   className?: string;
   children?: ReactNode;
 };
@@ -46,9 +55,11 @@ export function AvatarBar({
   topic,
   unavailableLabel,
   showUnavailableNotice = false,
+  intensity: intensityProp,
   className,
   children,
 }: AvatarBarProps) {
+  const intensity = resolveArenaIntensity(undefined, intensityProp);
   const bubbleWindow = Array.from(bubbleText ?? "")
     .slice(-72)
     .join("");
@@ -65,6 +76,8 @@ export function AvatarBar({
     <div
       className={`${styles.arena}${className ? ` ${className}` : ""}`}
       data-avatar-bar=""
+      data-intensity={intensity}
+      data-motion="grok"
       data-stage-visual="avatar-bar"
     >
       <div aria-hidden="true" className={styles.grid} />
@@ -142,6 +155,7 @@ export function AvatarBar({
               <div className={styles.pin} aria-hidden="true">
                 <span className={styles.halo} />
                 <span className={styles.pulseRing} />
+                <span className={styles.listenRing} />
                 <span className={styles.head}>
                   <span className={styles.initials}>
                     {initials(character.name, character.slot)}

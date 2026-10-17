@@ -2,7 +2,9 @@ export { AvatarBar, type AvatarBarProps } from "./avatar-bar";
 export {
   isDebateAvatarBarEnabled,
   isExperimentalStage3dEnabled,
+  resolveArenaIntensity,
   resolveDebateStageVisual,
+  type ArenaIntensity,
   type DebateStageVisual,
 } from "./avatar-bar-flag";
 export { normalizeAvatarState } from "./normalize-avatar-state";

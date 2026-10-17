@@ -1,7 +1,17 @@
-/* 2D multi-avatar arena — Bomberman-cover atmosphere (cyber grid + sticker
-   roundels). Atmosphere only: not gameplay. */
+/* 2D multi-avatar arena — Grok-motion + Bomberman-cover atmosphere
+   (cyber grid + sticker roundels). Atmosphere only: not gameplay.
+   Zero third-party Bomberman asset links. */
 
 .arena {
+  --arena-grid-opacity: 0.42;
+  --arena-glow-opacity: 1;
+  --arena-pulse-scale: 1;
+  --arena-speak-lift: -12px;
+  --arena-speak-scale: 1.1;
+  --arena-breathe-amp: -2px;
+  --arena-breathe-scale: 1.02;
+  --arena-transition-ms: 280ms;
+
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -24,12 +34,43 @@
   color: #f4f1ea;
 }
 
+/* Intensity tiers (M3): grid / pulse / glow strength */
+.arena[data-intensity="low"] {
+  --arena-grid-opacity: 0.22;
+  --arena-glow-opacity: 0.55;
+  --arena-pulse-scale: 0.85;
+  --arena-speak-lift: -6px;
+  --arena-speak-scale: 1.05;
+  --arena-breathe-amp: -1px;
+  --arena-breathe-scale: 1.012;
+}
+
+.arena[data-intensity="med"] {
+  --arena-grid-opacity: 0.42;
+  --arena-glow-opacity: 1;
+  --arena-pulse-scale: 1;
+  --arena-speak-lift: -12px;
+  --arena-speak-scale: 1.1;
+  --arena-breathe-amp: -2px;
+  --arena-breathe-scale: 1.02;
+}
+
+.arena[data-intensity="high"] {
+  --arena-grid-opacity: 0.62;
+  --arena-glow-opacity: 1.35;
+  --arena-pulse-scale: 1.18;
+  --arena-speak-lift: -16px;
+  --arena-speak-scale: 1.16;
+  --arena-breathe-amp: -3px;
+  --arena-breathe-scale: 1.028;
+}
+
 .grid {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.42;
+  opacity: var(--arena-grid-opacity);
   background-image:
     linear-gradient(rgba(255, 176, 64, 0.1) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 176, 64, 0.1) 1px, transparent 1px),
@@ -56,6 +97,7 @@
   z-index: 0;
   height: 28%;
   pointer-events: none;
+  opacity: var(--arena-glow-opacity);
   background: radial-gradient(
     ellipse at center,
     rgba(255, 168, 48, 0.16),
@@ -179,6 +221,7 @@
   position: absolute;
   inset: 14% 18% 24%;
   border-radius: 28px;
+  opacity: var(--arena-glow-opacity);
   background: radial-gradient(
     ellipse at center,
     rgba(88, 140, 255, 0.26),
@@ -199,6 +242,7 @@
     0 0 0 1px rgba(90, 140, 255, 0.12) inset,
     0 0 40px rgba(255, 160, 48, 0.08);
   pointer-events: none;
+  opacity: var(--arena-glow-opacity);
 }
 
 .topic,
@@ -245,7 +289,7 @@
   color: #fff;
   font-size: 0.95rem;
   line-height: 1.45;
-  animation: bubbleIn 280ms ease-out;
+  animation: bubbleIn var(--arena-transition-ms) ease-out;
 }
 
 .bubbleWho {
@@ -276,8 +320,9 @@
   gap: 7px;
   width: clamp(68px, 12vw, 100px);
   transition:
-    transform 280ms ease,
-    filter 280ms ease;
+    transform var(--arena-transition-ms) ease,
+    filter var(--arena-transition-ms) ease,
+    z-index 0s;
 }
 
 .pin {
@@ -296,7 +341,7 @@
     transparent 72%
   );
   opacity: 0;
-  transition: opacity 280ms ease;
+  transition: opacity var(--arena-transition-ms) ease;
 }
 
 .pulseRing {
@@ -306,6 +351,17 @@
   border: 2px solid var(--avatar-accent);
   opacity: 0;
   pointer-events: none;
+}
+
+/* Weak attention ring for listening (Grok-Bar notice) */
+.listenRing {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--avatar-accent) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--arena-transition-ms) ease;
 }
 
 .head {
@@ -324,9 +380,9 @@
     0 10px 22px rgba(0, 0, 0, 0.48);
   filter: saturate(1.12);
   transition:
-    transform 280ms ease,
-    box-shadow 280ms ease,
-    filter 280ms ease;
+    transform var(--arena-transition-ms) ease,
+    box-shadow var(--arena-transition-ms) ease,
+    filter var(--arena-transition-ms) ease;
 }
 
 .initials {
@@ -358,6 +414,9 @@
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--avatar-accent) 55%, #111),
     2px 3px 0 rgba(0, 0, 0, 0.35);
+  transition:
+    background var(--arena-transition-ms) ease,
+    box-shadow var(--arena-transition-ms) ease;
 }
 
 .slot {
@@ -366,12 +425,14 @@
   font-weight: 900;
 }
 
-/* ---- states (five-state vocabulary only) ---- */
+/* ---- states (five-state vocabulary only; Grok-motion polish) ---- */
 
+/* idle: lighter Grok-Bar breathe (small amplitude) */
 .item[data-state="idle"] .head {
-  animation: breathe 3.2s ease-in-out infinite;
+  animation: breathe 3.6s ease-in-out infinite;
 }
 
+/* listening: weak attention ring */
 .item[data-state="listening"] .head {
   transform: translateY(-2px) scale(1.03);
   box-shadow:
@@ -380,15 +441,21 @@
 }
 
 .item[data-state="listening"] .halo {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
+.item[data-state="listening"] .listenRing {
+  opacity: 0.7;
+  animation: listenPulse 2s ease-in-out infinite;
+}
+
+/* thinking: stronger rhythm pulse + badge bob */
 .item[data-state="thinking"] .head {
-  animation: thinkPulse 1.35s ease-in-out infinite;
+  animation: thinkPulse 1.15s ease-in-out infinite;
 }
 
 .item[data-state="thinking"] .halo {
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
 .thinkBadge {
@@ -408,12 +475,14 @@
   font-weight: 900;
   line-height: 1;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
-  animation: badgeBob 1.15s ease-in-out infinite;
+  animation: badgeBob 0.95s ease-in-out infinite;
 }
 
+/* speaking: scale + z-index + glow; ~200–400ms switch */
 .item[data-state="speaking"] {
-  transform: translateY(-12px) scale(1.1);
-  z-index: 2;
+  transform: translateY(var(--arena-speak-lift)) scale(var(--arena-speak-scale));
+  z-index: 4;
+  filter: drop-shadow(0 0 calc(10px * var(--arena-pulse-scale)) color-mix(in srgb, var(--avatar-accent) 55%, transparent));
 }
 
 .item[data-state="speaking"] .halo {
@@ -422,16 +491,18 @@
 
 .item[data-state="speaking"] .pulseRing {
   animation: speakRing 1.1s ease-out infinite;
+  transform: scale(var(--arena-pulse-scale));
 }
 
 .item[data-state="speaking"] .head {
-  transform: scale(1.07);
-  animation: speakPop 340ms ease-out;
+  transform: scale(1.08);
+  animation: speakPop var(--arena-transition-ms) ease-out;
   box-shadow:
     0 0 0 3px #fff,
     0 0 0 7px var(--avatar-accent),
+    0 0 calc(18px * var(--arena-glow-opacity)) color-mix(in srgb, var(--avatar-accent) 45%, transparent),
     0 16px 32px rgba(0, 0, 0, 0.5);
-  filter: saturate(1.25) brightness(1.06);
+  filter: saturate(1.28) brightness(1.08);
 }
 
 .item[data-state="speaking"] .name {
@@ -472,8 +543,9 @@
   animation-delay: 0.22s;
 }
 
+/* nod_yes: single-shot nod (not infinite) */
 .item[data-state="nod_yes"] .head {
-  animation: nod 480ms ease-in-out;
+  animation: nod 480ms ease-in-out 1;
 }
 
 /* ---- keyframes ---- */
@@ -484,7 +556,19 @@
     transform: translateY(0) scale(1);
   }
   50% {
-    transform: translateY(-3px) scale(1.035);
+    transform: translateY(var(--arena-breathe-amp)) scale(var(--arena-breathe-scale));
+  }
+}
+
+@keyframes listenPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.04);
   }
 }
 
@@ -495,30 +579,30 @@
     transform: scale(1);
   }
   50% {
-    filter: brightness(1.14) saturate(1.2);
-    transform: scale(1.045);
+    filter: brightness(1.16) saturate(1.22);
+    transform: scale(1.05);
   }
 }
 
 @keyframes badgeBob {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
   50% {
-    transform: translateY(-3px);
+    transform: translateY(-4px) scale(1.06);
   }
 }
 
 @keyframes speakPop {
   0% {
-    transform: scale(0.9);
+    transform: scale(0.92);
   }
   55% {
-    transform: scale(1.12);
+    transform: scale(1.14);
   }
   100% {
-    transform: scale(1.07);
+    transform: scale(1.08);
   }
 }
 
@@ -577,6 +661,7 @@
   }
 }
 
+/* reduced-motion: kill loops + transitions; keep static highlight */
 @media (prefers-reduced-motion: reduce) {
   .item,
   .head,
@@ -585,13 +670,17 @@
   .thinkBadge,
   .waves i,
   .pulseRing,
-  .liveDot {
+  .listenRing,
+  .liveDot,
+  .name {
     animation: none !important;
     transition: none !important;
   }
 
   .item[data-state="speaking"] {
     transform: none;
+    filter: none;
+    z-index: 4;
   }
 
   .item[data-state="speaking"] .head {
@@ -605,6 +694,16 @@
   .item[data-state="speaking"] .pulseRing {
     opacity: 0.55;
     transform: scale(1.05);
+  }
+
+  .item[data-state="listening"] .listenRing {
+    opacity: 0.55;
+    transform: none;
+  }
+
+  .item[data-state="listening"] .halo,
+  .item[data-state="thinking"] .halo {
+    opacity: 0.5;
   }
 
   .liveDot {

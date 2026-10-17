@@ -1,28 +1,48 @@
 /**
- * Beta gate for the 2D multi-avatar bar as the default debate stage.
+ * Beta gate for the 2D multi-avatar / Grok-motion bar as the debate stage.
  *
- * Precedence: URL `avatarBar=1` wins when present; otherwise
- * `NEXT_PUBLIC_DEBATE_AVATAR_BAR=1`. Flag off → keep ScholarScene (prod 3D).
+ * Precedence for the bar flag:
+ * - URL explicit values win over env.
+ * - Aliases: `avatarBar` and `grokBar` (same effect).
+ * - Conflict: any explicit 0/false → off; else any explicit 1/true → on;
+ *   else `NEXT_PUBLIC_DEBATE_AVATAR_BAR`.
+ * Flag off → keep ScholarScene (prod 3D).
  * Experimental 3D while the bar is default: `stage3d=1` remounts ScholarScene.
  */
+function parseSearch(
+  search: string | URLSearchParams | null | undefined,
+): URLSearchParams {
+  if (search instanceof URLSearchParams) return search;
+  if (typeof search === "string") {
+    return new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  }
+  if (typeof window !== "undefined") {
+    return new URLSearchParams(window.location.search);
+  }
+  return new URLSearchParams();
+}
+
+function isTruthyFlag(value: string | null): boolean {
+  return value === "1" || value === "true";
+}
+
+function isFalsyFlag(value: string | null): boolean {
+  return value === "0" || value === "false";
+}
+
 export function isDebateAvatarBarEnabled(
   search: string | URLSearchParams | null | undefined = undefined,
   envValue: string | undefined = undefined,
 ): boolean {
-  const params =
-    search instanceof URLSearchParams
-      ? search
-      : typeof search === "string"
-        ? new URLSearchParams(
-            search.startsWith("?") ? search.slice(1) : search,
-          )
-        : typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search)
-          : new URLSearchParams();
+  const params = parseSearch(search);
 
-  const fromUrl = params.get("avatarBar");
-  if (fromUrl === "1" || fromUrl === "true") return true;
-  if (fromUrl === "0" || fromUrl === "false") return false;
+  const avatarBar = params.get("avatarBar");
+  const grokBar = params.get("grokBar");
+
+  // Explicit URL off wins (either alias).
+  if (isFalsyFlag(avatarBar) || isFalsyFlag(grokBar)) return false;
+  // Explicit URL on (either alias).
+  if (isTruthyFlag(avatarBar) || isTruthyFlag(grokBar)) return true;
 
   const env =
     envValue ??
@@ -36,18 +56,9 @@ export function isDebateAvatarBarEnabled(
 export function isExperimentalStage3dEnabled(
   search: string | URLSearchParams | null | undefined = undefined,
 ): boolean {
-  const params =
-    search instanceof URLSearchParams
-      ? search
-      : typeof search === "string"
-        ? new URLSearchParams(
-            search.startsWith("?") ? search.slice(1) : search,
-          )
-        : typeof window !== "undefined"
-          ? new URLSearchParams(window.location.search)
-          : new URLSearchParams();
+  const params = parseSearch(search);
   const value = params.get("stage3d");
-  return value === "1" || value === "true";
+  return isTruthyFlag(value);
 }
 
 export type DebateStageVisual = "avatar-bar" | "scholar3d";
@@ -62,4 +73,25 @@ export function resolveDebateStageVisual(
   if (!isDebateAvatarBarEnabled(search, envValue)) return "scholar3d";
   if (isExperimentalStage3dEnabled(search)) return "scholar3d";
   return "avatar-bar";
+}
+
+export type ArenaIntensity = "low" | "med" | "high";
+
+/**
+ * Arena atmosphere intensity (Bomberman-style rhythm, not third-party art).
+ * URL `?arenaIntensity=low|med|high`; default med. Invalid → med.
+ */
+export function resolveArenaIntensity(
+  search: string | URLSearchParams | null | undefined = undefined,
+  propValue: ArenaIntensity | string | null | undefined = undefined,
+): ArenaIntensity {
+  if (propValue === "low" || propValue === "med" || propValue === "high") {
+    return propValue;
+  }
+  const params = parseSearch(search);
+  const fromUrl = params.get("arenaIntensity");
+  if (fromUrl === "low" || fromUrl === "med" || fromUrl === "high") {
+    return fromUrl;
+  }
+  return "med";
 }

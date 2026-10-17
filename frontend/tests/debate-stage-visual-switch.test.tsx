@@ -37,6 +37,7 @@ describe("debate stage visual switch (line B)", () => {
     expect(resolveDebateStageVisual("?avatarBar=1", undefined)).toBe(
       "avatar-bar",
     );
+    expect(resolveDebateStageVisual("?grokBar=1", undefined)).toBe("avatar-bar");
     const audio = { playing: true, turnId: "t1" };
     const view = render(
       <AvatarBar
@@ -49,6 +50,11 @@ describe("debate stage visual switch (line B)", () => {
     audio.playing = false;
     expect(audio.playing).toBe(false);
     expect(view.container.querySelector("[data-avatar-bar]")).toBeTruthy();
+    expect(
+      view.container
+        .querySelector("[data-avatar-bar]")
+        ?.getAttribute("data-motion"),
+    ).toBe("grok");
     expect(view.container.querySelector("audio")).toBeNull();
     expect(view.container.querySelector("button")).toBeNull();
   });
