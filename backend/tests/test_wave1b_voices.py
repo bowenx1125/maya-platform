@@ -492,6 +492,49 @@ def test_group_voice_is_owner_private_within_the_same_group(
     assert profile_id in [item["id"] for item in listed]
 
 
+def test_groupmate_preview_does_not_cut_off_other_previews(
+    voice_client: tuple[TestClient, Database, Settings],
+) -> None:
+    """#141: a groupmate previewing a ready voice leaves the owner's audio playing."""
+
+    client, database, _settings = voice_client
+    csrf = login(client, "bowen")[1]
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "shared-preview-enroll-1"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    with database.session() as session:
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None
+        profile.status = "ready"
+    owner_preview = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
+    )
+    assert owner_preview.status_code == 200, owner_preview.text
+    owner_url = owner_preview.json()["playback_url"]
+
+    kaikai_csrf = login(client, "kaikai")[1]
+    first = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+    )
+    second = client.post(
+        f"/api/v1/voice-profiles/{profile_id}/preview",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+    )
+    assert first.status_code == 200 and second.status_code == 200
+    assert client.get(first.json()["playback_url"]).status_code == 200
+    assert client.get(second.json()["playback_url"]).status_code == 200
+
+    login(client, "bowen")
+    assert client.get(owner_url).status_code == 200
+
+
 def test_voice_scope_and_upload_validation(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:

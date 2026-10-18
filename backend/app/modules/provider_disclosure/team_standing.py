@@ -1077,37 +1077,43 @@ def authorize_team_dispatch(
     )
     if policy is None or policy_id is None:
         raise PlatformError("provider_preflight_blocked", "Provider policy is unavailable.", 409)
-    repository.ensure_export_manifest(
-        manifest,
-        policy_snapshot_id=str(policy_id),
-        course_id=conversation.course_id,
-        group_id=agent_group_id,
-        agent_version_id=agent_version_id,
-    )
-    confirmation = repository.get_export_confirmation(manifest.manifest_hash)
-    if confirmation is None:
-        confirmation = confirm_export_manifest(
+    # The manifest and its confirmation commit together (one transaction).
+    with repository.one_transaction():
+        repository.ensure_export_manifest(
             manifest,
-            policy,
-            confirmed_at=datetime.now(UTC).isoformat(),
-            expected_manifest_hash=manifest.manifest_hash,
-            expected_policy_hash=policy.policy_hash,
+            policy_snapshot_id=str(policy_id),
+            course_id=conversation.course_id,
+            group_id=agent_group_id,
+            agent_version_id=agent_version_id,
         )
-        manifest_id = repository.get_export_manifest_id(manifest.manifest_hash)
-        if manifest_id is None:
-            raise conflict("provider_preflight_blocked", "Provider authorization is unavailable.")
-        confirmation_id = repository.save_export_confirmation(manifest_id, confirmation)
-    else:
-        if (
-            confirmation.manifest_hash != manifest.manifest_hash
-            or confirmation.policy_hash != manifest.policy_hash
-            or confirmation.confirmation_revision != manifest.operation_revision
-        ):
-            raise conflict("provider_preflight_stale", "Provider authorization changed.")
-        confirmation_row_id = repository.get_export_confirmation_id(manifest.manifest_hash)
-        if confirmation_row_id is None:
-            raise conflict("provider_preflight_blocked", "Provider authorization is unavailable.")
-        confirmation_id = str(confirmation_row_id)
+        confirmation = repository.get_export_confirmation(manifest.manifest_hash)
+        if confirmation is None:
+            confirmation = confirm_export_manifest(
+                manifest,
+                policy,
+                confirmed_at=datetime.now(UTC).isoformat(),
+                expected_manifest_hash=manifest.manifest_hash,
+                expected_policy_hash=policy.policy_hash,
+            )
+            manifest_id = repository.get_export_manifest_id(manifest.manifest_hash)
+            if manifest_id is None:
+                raise conflict(
+                    "provider_preflight_blocked", "Provider authorization is unavailable."
+                )
+            confirmation_id = repository.save_export_confirmation(manifest_id, confirmation)
+        else:
+            if (
+                confirmation.manifest_hash != manifest.manifest_hash
+                or confirmation.policy_hash != manifest.policy_hash
+                or confirmation.confirmation_revision != manifest.operation_revision
+            ):
+                raise conflict("provider_preflight_stale", "Provider authorization changed.")
+            confirmation_row_id = repository.get_export_confirmation_id(manifest.manifest_hash)
+            if confirmation_row_id is None:
+                raise conflict(
+                    "provider_preflight_blocked", "Provider authorization is unavailable."
+                )
+            confirmation_id = str(confirmation_row_id)
 
     expected_binding = {
         "confirmation_id": confirmation_id,

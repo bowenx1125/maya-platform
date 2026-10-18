@@ -660,15 +660,6 @@ def dispatch_team_model(
         return TeamProviderDispatch(resumed_response, previous.call_id)
 
     scope_id = manifest.scope_id
-    repository.save_scope_budget(
-        scope_id,
-        ProviderScopeBudgetV1(
-            max_requests=CONTROL_UNBOUNDED_REQUESTS,
-            max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
-            max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
-            budget_bucket=LLM_DEBATE_TURN_BUCKET,
-        ),
-    )
     request_record = ProviderReservationRequestV1(
         scope_id=scope_id,
         provider_operation="llm_agent_chat",
@@ -695,15 +686,27 @@ def dispatch_team_model(
     # repository opens a second connection for BEGIN IMMEDIATE.
     db.rollback()
     try:
-        operation = repository.create_team_prepared(
-            request_record,
-            result_id=request.result_id,
-            ordinal=ordinal,
-            request_json=wire_text,
-            claim_token=request.claim_token,
-            binding_guard=guard,
-        )
-        repository.reserve(operation.id)
+        # Budget, prepared operation, call binding and reservation commit
+        # together (one transaction instead of three).
+        with repository.one_transaction():
+            repository.save_scope_budget(
+                scope_id,
+                ProviderScopeBudgetV1(
+                    max_requests=CONTROL_UNBOUNDED_REQUESTS,
+                    max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
+                    max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
+                    budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                ),
+            )
+            operation = repository.create_team_prepared(
+                request_record,
+                result_id=request.result_id,
+                ordinal=ordinal,
+                request_json=wire_text,
+                claim_token=request.claim_token,
+                binding_guard=guard,
+            )
+            repository.reserve(operation.id)
     except ProviderDispatchRejected as exc:
         raise TeamDispatchError("team_context_changed") from exc
     except Exception as exc:
@@ -791,15 +794,24 @@ def dispatch_team_model(
         repository.mark_failed(operation.id, safe_error_code="team_response_truncated")
         raise TeamDispatchError("team_response_truncated")
     try:
-        repository.stage_team_accepted(operation.id, response_json=response_json)
         result = _model_response(response_json)
     except TeamDispatchError:
+        # The exact body stays staged for audit, then the call fails.
+        try:
+            repository.stage_team_accepted(operation.id, response_json=response_json)
+        except ProviderRepositoryError:
+            pass
         repository.mark_failed(operation.id, safe_error_code="team_response_invalid")
         raise
+    try:
+        # Parsed first (no I/O), so the accepted stage and success commit
+        # together (one transaction instead of two).
+        with repository.one_transaction():
+            repository.stage_team_accepted(operation.id, response_json=response_json)
+            repository.mark_succeeded(operation.id)
     except ProviderRepositoryError:
         repository.mark_failed(operation.id, safe_error_code="team_response_invalid")
         raise TeamDispatchError("team_response_invalid") from None
-    repository.mark_succeeded(operation.id)
     stage = repository.get_team_provider_call_stage(request.result_id, ordinal)
     if stage is None:
         raise TeamDispatchError("team_response_unavailable")

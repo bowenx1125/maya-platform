@@ -55,7 +55,7 @@ from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 from tests.conftest import post_message
 from tests.test_mayaform_assessment_attempts import (
@@ -720,7 +720,28 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     monkeypatch.setattr(
         "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
     )
-    runtime.execute_team_turn(database.session_factory, claim)
+    write_commits: list[int] = []
+    wrote: set[int] = set()
+
+    def note_write(conn, _cursor, statement, *_args):  # type: ignore[no-untyped-def]
+        if not statement.lstrip()[:6].upper().startswith("SELECT"):
+            wrote.add(id(conn))
+
+    def note_commit(conn):  # type: ignore[no-untyped-def]
+        if id(conn) in wrote:
+            wrote.discard(id(conn))
+            write_commits.append(1)
+
+    event.listen(database.engine, "after_cursor_execute", note_write)
+    event.listen(database.engine, "commit", note_commit)
+    try:
+        runtime.execute_team_turn(database.session_factory, claim)
+    finally:
+        event.remove(database.engine, "after_cursor_execute", note_write)
+        event.remove(database.engine, "commit", note_commit)
+    # 2026-10-18: one answer turn with one model call committed 14 write
+    # transactions; the ledger steps between network points now share one (10).
+    assert len(write_commits) <= 10, len(write_commits)
     # The student turn dispatches the scorer. The Guide and Summarizer are
     # server text, so they have no model wire on this turn.
     assert wires[leader.id] == [] and wires[boundary.id] == []
