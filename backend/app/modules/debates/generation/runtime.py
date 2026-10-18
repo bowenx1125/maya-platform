@@ -16,11 +16,14 @@ import inspect
 import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal, Protocol, cast
 
 from app.core.config import configured_llm_model
+from app.core.errors import PlatformError
+from app.core.llm_admission import llm_admission_slot
 from app.providers.control import (
     REPAIR_FEEDBACK_POLICY_HASH,
     ExportFieldV1,
@@ -375,6 +378,14 @@ def _safe_code(value: object, default: str = "llm_provider_failed") -> str:
         and all(char.isascii() and (char.isalnum() or char in "_.:-") for char in text)
         else default
     )
+
+
+class _AdmissionRefused(Exception):
+    """The LLM slot was refused before the call was marked sending."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 def _transport_decision(error: object) -> tuple[str, str, bool]:
@@ -1654,6 +1665,7 @@ class LLMTurnRuntime:
         while current.attempt_no <= max_attempts:
             operation: object | None = current.operation
             operation_id = current.operation_id
+            admission = ExitStack()
             try:
                 operation = current.operation
                 reserve = _method(self.ledger, "reserve")
@@ -1664,6 +1676,14 @@ class LLMTurnRuntime:
                         _invoke(reserve, operation_id, budget_bucket=LLM_DEBATE_BUCKET)
                     except Exception as exc:
                         raise LLMRuntimeError(code="llm_reservation_failed") from exc
+                    # Wait for the LLM slot while the call is only "reserved":
+                    # a refusal, or a crash while queued, then ends not_sent
+                    # rather than a "sending" row recovery must call unknown.
+                    # The transport's own slot request is re-entrant here.
+                    try:
+                        admission.enter_context(llm_admission_slot())
+                    except PlatformError as exc:
+                        raise _AdmissionRefused(exc.code) from exc
                     sending = _method(self.ledger, "mark_sending")
                     if sending is not None:
                         try:
@@ -1693,6 +1713,30 @@ class LLMTurnRuntime:
                     outbound_manifest=current.outbound_manifest,
                 )
                 response = self._send(current)
+            except _AdmissionRefused:
+                # Nothing was sent and no adapter was called.
+                if operation_id is not None:
+                    operation = self._transition(
+                        operation_id,
+                        "mark_not_sent",
+                        code="provider_not_sent",
+                    )
+                traces.append(
+                    LLMAttemptTraceV1(
+                        current.attempt_no,
+                        current.request_hash,
+                        operation_id,
+                        False,
+                        "not_sent",
+                        "provider_not_sent",
+                    )
+                )
+                return LLMRunOutcomeV1(
+                    "not_sent",
+                    tuple(traces),
+                    operation,
+                    safe_error_code="provider_not_sent",
+                )
             except LLMRuntimeError as exc:
                 # Reservation/sending failures happen before any adapter
                 # boundary and therefore are terminal zero-call failures.
@@ -1834,6 +1878,8 @@ class LLMTurnRuntime:
                     operation,
                     safe_error_code="acceptance_unknown",
                 )
+            finally:
+                admission.close()
             response_acceptance = str(
                 _result_value(response, "acceptance", "acceptance_state", default="accepted")
             )

@@ -884,3 +884,93 @@ def test_fixed_adapter_acceptance_unknown_is_one_charged_nonterminal_attempt(mon
     assert transport.calls == 1
     assert len(ledger.operations()) == 1
     assert ledger.operations()[0].state == "acceptance_unknown"
+
+
+def _admission_runtime(monkeypatch, slot) -> tuple[object, object, object, object]:
+    from app.modules.debates.generation import runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "scan_llm_outbound_messages", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runtime_module, "llm_admission_slot", slot)
+    people = _participants()
+    plan = MutualLearningPolicy().plan(people, round_count=2)[0]
+    prompt = build_provider_prompt(
+        GenerationContext(
+            debate_id="debate-runtime",
+            topic="A safe topic",
+            turn=plan,
+            participant=people[0],
+            participants=people,
+        ),
+        persona=people[0].persona,
+    )
+    ledger = InMemoryProviderOperationRepository(
+        default_budget=ProviderScopeBudgetV1(
+            max_requests=8,
+            max_total_tokens=200_000,
+            max_cost_cny=5,
+            budget_bucket=LLM_DEBATE_TURN_BUCKET,
+        )
+    )
+    adapter = _FakeAdapter()
+    runtime = LLMTurnRuntime(ledger=ledger, adapter=adapter)
+    prepared = runtime.prepare(
+        prompt,
+        policy_hash=_hash("policy"),
+        manifest_hash=_hash("manifest"),
+        build_manifest_hash=_hash("build"),
+    )
+    return runtime, prepared, ledger, adapter
+
+
+def test_debate_call_takes_its_llm_slot_before_it_is_marked_sending(monkeypatch) -> None:
+    """#141: a crash while queued for a slot must not leave a "sending" call."""
+
+    from contextlib import contextmanager
+
+    seen: dict[str, object] = {"held": False}
+    holder: dict[str, object] = {}
+
+    @contextmanager
+    def slot():
+        seen["at_admission"] = [item.state for item in holder["ledger"].operations()]
+        seen["held"] = True
+        try:
+            yield
+        finally:
+            seen["held"] = False
+
+    runtime, prepared, ledger, adapter = _admission_runtime(monkeypatch, slot)
+    holder["ledger"] = ledger
+    original = adapter.execute
+
+    def execute(prompt: object, **metadata: object) -> object:
+        assert seen["held"], "the model call must run inside the LLM slot"
+        return original(prompt, **metadata)
+
+    monkeypatch.setattr(adapter, "execute", execute)
+    outcome = runtime.run(prepared, confirmed=True)
+
+    assert outcome.status == "succeeded"
+    assert seen["at_admission"] == ["reserved"]
+    assert seen["held"] is False
+
+
+def test_debate_admission_refusal_is_not_sent_not_acceptance_unknown(monkeypatch) -> None:
+    """#141: a refused slot used to fall into the transport classifier as unknown."""
+
+    from contextlib import contextmanager
+
+    from app.core.errors import PlatformError
+
+    @contextmanager
+    def busy():
+        raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
+        yield  # pragma: no cover
+
+    runtime, prepared, ledger, adapter = _admission_runtime(monkeypatch, busy)
+    outcome = runtime.run(prepared, confirmed=True)
+
+    assert outcome.status == "not_sent"
+    assert outcome.safe_error_code == "provider_not_sent"
+    assert adapter.calls == 0
+    assert [item.state for item in ledger.operations()] == ["not_sent"]
