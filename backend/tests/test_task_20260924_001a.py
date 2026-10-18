@@ -583,14 +583,16 @@ def test_baseline_voices_remain_for_debates_but_chat_ignores_them(
         ensure_demo_baseline(session, settings.resolved_data_root)
     _user, csrf = login(client, "bowen")
     socrates_voice = _ready_profile(client, csrf, "task-001a-base-socrates1")
-    laozi_pending = client.post(
+    # Upload alone makes a voice selectable; no confirm-by-listening step.
+    laozi_uploaded = client.post(
         f"/api/v1/groups/{GROUP_A}/voice-profiles",
         headers=_headers(csrf, "task-001a-base-laozi001"),
         data={"consent_accepted": "true", "consent_copy_version": "voice-consent-v1"},
         files={"file": ("sample.wav", _wav(), "audio/wav")},
     )
-    assert laozi_pending.status_code == 202, laozi_pending.text
-    laozi_voice = laozi_pending.json()["id"]
+    assert laozi_uploaded.status_code == 202, laozi_uploaded.text
+    assert laozi_uploaded.json()["status"] == "ready"
+    laozi_voice = laozi_uploaded.json()["id"]
     fallback_voice = _system_profile(database, settings, "system-fallback-voice")
     foreign_voice = _foreign_profile(database, settings, "foreign-group-voice")
     client.app.state.settings = settings.model_copy(
@@ -620,7 +622,8 @@ def test_baseline_voices_remain_for_debates_but_chat_ignores_them(
     assert plato[6] == fallback_voice
     assert plato[8] is True
     assert laozi[5] == laozi_voice
-    assert laozi[6] == fallback_voice
+    assert laozi[6] == laozi_voice
+    assert laozi[8] is False
 
     recorder = _RecordingTTS()
     monkeypatch.setattr("app.providers.tts.MockTTSProvider.synthesize", recorder.synthesize)
