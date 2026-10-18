@@ -809,6 +809,13 @@ def test_student_teams_list_chat_with_teacher_public_team_can_send(
     assert sent.status_code == 200, sent.text
     turns = sent.json()["turns"]
     assert len(turns) == 1 and turns[0]["state"] in {"ready", "partial"}, turns
+    # The Chat page sends over the stream endpoint; it must not 404 either.
+    streamed = client.post(
+        f"/api/v1/conversations/{session['id']}/messages:stream",
+        headers={**_headers(student_csrf), "Accept": "text/event-stream"},
+        json={"request_id": str(uuid4()), "expected_revision": 1, "message": "Hello again"},
+    )
+    assert streamed.status_code == 200, streamed.text
 
     # Revoking the publication (the teacher makes the Team private again by
     # deleting it) still closes the Chat: access follows the live publication.
