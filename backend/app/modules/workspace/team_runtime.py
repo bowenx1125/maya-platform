@@ -1068,11 +1068,16 @@ def claim_assessment_executor_turn(
             {"conversation_id": row.id, "assessment_executor": participant.id, "id": request_id}
         ).encode()
     ).hexdigest()
+    # Read the revision before the update: the ORM update synchronizes
+    # ``row.revision`` to the bumped value, so ``row.revision + 1`` afterwards
+    # skipped one position and the student's next turn reused it (prod
+    # 2026-10-19: the summary and the next message both sat at position 35).
+    claimed_revision = int(row.revision)
     changed = db.execute(
         update(Conversation)
         .where(
             Conversation.id == row.id,
-            Conversation.revision == row.revision,
+            Conversation.revision == claimed_revision,
             Conversation.active_request_id.is_(None),
         )
         .values(active_request_id=request_id, revision=Conversation.revision + 1)
@@ -1085,7 +1090,7 @@ def claim_assessment_executor_turn(
     turn = ConversationTurn(
         id=request_id,
         conversation_id=row.id,
-        position=row.revision + 1,
+        position=claimed_revision + 1,
         user_text="",
         assistant_text=None,
         sources_json="[]",
