@@ -324,12 +324,12 @@ def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ig
     body = client.get("/health/admission").json()
     assert body["max_units"] == 128 and body["max_in_flight"] == 48
     assert body["backstops"]["llm_admission_limit"] == 20
-    assert body["backstops"]["write_guard_limit"] == 0
+    assert body["backstops"]["write_guard_limit"] == 8
     assert body["backstops"]["create_admission_limit"] == 0
     assert body["backstops"]["auth_hash_concurrency"] == 3
     assert body["backstops_enabled"] == {
         "llm_admission": True,
-        "write_guard": False,
+        "write_guard": True,
         "create_admission": False,
         "auth_hash": True,
     }
