@@ -297,6 +297,21 @@ def _failure_code(
         return "chat_failed"
 
 
+# A waiting stream polls quickly right after an event and backs off while
+# nothing changes: 20 polls a second per waiting student was the largest
+# database load of a class, most of them finding nothing new.
+POLL_MIN_SECONDS = 0.05
+POLL_MAX_SECONDS = 0.5
+
+
+def next_poll_delay(previous: float, got_events: bool) -> float:
+    """Back to the minimum after an event; otherwise double, up to the cap."""
+
+    if got_events:
+        return POLL_MIN_SECONDS
+    return min(POLL_MAX_SECONDS, previous * 2)
+
+
 async def stream_team_events(
     database: Database,
     conversation_id: str,
@@ -337,6 +352,7 @@ async def stream_team_events(
     if on_finished is not None:
         # Runs even if the browser left; the run itself is not tied to it.
         task.add_done_callback(lambda _task: on_finished())
+    delay = POLL_MIN_SECONDS
     while True:
         events, state, active = await asyncio.to_thread(poll)
         for sequence, kind, payload in events:
@@ -344,4 +360,10 @@ async def stream_team_events(
             yield f"id: {sequence}\n".encode() + sse(kind, payload)
         if not active or state != "pending":
             return
-        await asyncio.sleep(0.05)
+        delay = next_poll_delay(delay, bool(events))
+        if task.done():
+            await asyncio.sleep(delay)
+        else:
+            # Wake at once when the run finishes, so the last result is not
+            # held back by an idle interval.
+            await asyncio.wait({task}, timeout=delay)
