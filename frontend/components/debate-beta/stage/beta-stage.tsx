@@ -520,6 +520,10 @@ export type BetaStageProps = Omit<DebateStageProps, "headerActions"> & {
  * the opening sentences and the speech column keeps the argument.
  */
 const BUBBLE_LIMIT = 116;
+// Automatic re-entry after a lost or out-of-order socket: at most three tries
+// per minute, then the stage stays disconnected (Back and re-entry).
+const AUTO_RECOVERY_DELAYS_MS = [300, 1500, 4000] as const;
+const AUTO_RECOVERY_WINDOW_MS = 60_000;
 
 export function bubbleLineFrom(speech: string): string {
   const text = String(speech || "")
@@ -1103,13 +1107,51 @@ export function BetaDebateStage({
     scheduleControllerAcquire,
   ]);
 
+  // Automatic re-entry. The backend runs more than one replica and keeps the
+  // live event fan-out and the media tickets in process memory, so the socket
+  // must sit on the same replica as the REST and audio requests. On a first
+  // entry (no or stale load-balancer cookie, e.g. after a redeploy) the
+  // page's parallel requests can be pinned to different replicas: Start/Next
+  // events never reach the socket and the audio ticket is unknown where the
+  // bytes are fetched, so the stage stalls on "Next" with no speech until the
+  // teacher goes Back and re-enters. By then the browser holds one settled
+  // cookie, so doing that re-entry here (fresh snapshot + fresh socket) puts
+  // everything back on one replica. Bounded so a persistent fault still
+  // settles on the disconnected state instead of looping.
+  const connectRef = useRef<((refresh: boolean) => Promise<void>) | null>(null);
+  const autoRecoveryRef = useRef<{ attempts: number[]; timer: number | null }>({
+    attempts: [],
+    timer: null,
+  });
+  const scheduleAutoRecovery = useCallback(() => {
+    if (!mountedRef.current || closingRef.current) return;
+    const recovery = autoRecoveryRef.current;
+    const now = Date.now();
+    recovery.attempts = recovery.attempts.filter(
+      (at) => now - at < AUTO_RECOVERY_WINDOW_MS,
+    );
+    if (
+      recovery.timer !== null ||
+      recovery.attempts.length >= AUTO_RECOVERY_DELAYS_MS.length
+    )
+      return;
+    const delay = AUTO_RECOVERY_DELAYS_MS[recovery.attempts.length];
+    recovery.attempts.push(now);
+    recovery.timer = window.setTimeout(() => {
+      recovery.timer = null;
+      if (!mountedRef.current || closingRef.current) return;
+      if (controllerAcquireBlockedRef.current) return;
+      void connectRef.current?.(true);
+    }, delay);
+  }, []);
+
   const requestReconnect = useCallback(() => {
     if (!mountedRef.current || closingRef.current) return;
     connectAttemptRef.current += 1;
     pauseAudio(false);
     // A sequence gap/state-consistency failure is surfaced separately from a
-    // network close. Recovery is an explicit teacher action; there is no timer
-    // or background reconnect that can change the page behind them.
+    // network close. Recovery is one bounded automatic re-entry (see
+    // scheduleAutoRecovery); there is no open-ended background reconnect.
     markConnection("disconnected");
     markConnectionIssue("sequence_gap");
     markControllerReady(false);
@@ -1128,11 +1170,13 @@ export function BetaDebateStage({
     } catch {
       // The close callback will still schedule recovery for normal sockets.
     }
+    scheduleAutoRecovery();
   }, [
     markConnection,
     markConnectionIssue,
     markControllerReady,
     pauseAudio,
+    scheduleAutoRecovery,
     settlePendingReplayAcquire,
   ]);
 
@@ -2771,6 +2815,8 @@ export function BetaDebateStage({
         pauseAudio(preciseIssue !== "network");
         if (preciseIssue !== "network") {
           setAvatars([]);
+        } else {
+          scheduleAutoRecovery();
         }
       };
       if (socket.addEventListener) {
@@ -2805,6 +2851,7 @@ export function BetaDebateStage({
       markControllerReady,
       pauseAudio,
       readOnly,
+      scheduleAutoRecovery,
       sendControllerAcquire,
       settlePendingReplayAcquire,
       setAvatars,
@@ -2911,11 +2958,18 @@ export function BetaDebateStage({
   }, [detail, syncRefreshedSnapshot]);
 
   useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+
+  useEffect(() => {
     mountedRef.current = true;
     closingRef.current = false;
     const timer = window.setTimeout(() => void connect(false), 0);
+    const recovery = autoRecoveryRef.current;
     return () => {
       window.clearTimeout(timer);
+      if (recovery.timer !== null) window.clearTimeout(recovery.timer);
+      recovery.timer = null;
       mountedRef.current = false;
       closingRef.current = true;
       settlePendingReplayAcquire(new Error("Replay controller unavailable."));
