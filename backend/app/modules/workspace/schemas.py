@@ -236,6 +236,16 @@ class StreamChat(ClosedModel):
     routing: TeamRouting | None = None
 
 
+class ChatAttachment(ClosedModel):
+    id: UUID
+    conversation_id: UUID
+    filename: str
+    media_type: str
+    size_bytes: int = Field(ge=0)
+    text_chars: int = Field(ge=0)
+    created_at: datetime
+
+
 class ComponentStatus(ClosedModel):
     key: ComponentKey
     mode: ComponentMode

@@ -797,6 +797,21 @@ const enMessages = {
   chatHistoryEmpty: "No chats yet.",
   chatNewTitle: "New chat",
   chatMessagePlaceholder: "Message",
+  chatAttach: "Attach a file",
+  chatAttachHelp:
+    "Attach a chat log to this chat only. Only you can see it. .txt, .md, .json, .csv or .html, up to 2 MB.",
+  chatAttachmentRemove: "Remove {name}",
+  chatAttachmentUploading: "Attaching…",
+  errorChatAttachmentType: "Attach a .txt, .md, .json, .csv or .html file.",
+  errorChatAttachmentTooLarge: "Attach a file of at most 2 MB.",
+  errorChatAttachmentLimit:
+    "This chat already has 5 attachments. Remove one first.",
+  errorChatAttachmentTextTooLong:
+    "These files together are too long for one chat. Attach a shorter export.",
+  errorChatAttachmentEncoding:
+    "Save the file as UTF-8 text and attach it again.",
+  errorChatAttachmentInvalid:
+    "This file cannot be read. Check that it is a valid text or JSON export.",
   chatTargetTeams: "Teams",
   mayaTeam: "Maya Team",
   mayaTeams: "Maya Teams",
@@ -1612,6 +1627,18 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   chatHistoryEmpty: "还没有对话。",
   chatNewTitle: "新对话",
   chatMessagePlaceholder: "输入消息",
+  chatAttach: "添加附件",
+  chatAttachHelp:
+    "上传聊天记录，只在当前聊天中使用，只有你能看到。支持 .txt、.md、.json、.csv、.html，最大 2 MB。",
+  chatAttachmentRemove: "移除 {name}",
+  chatAttachmentUploading: "正在上传…",
+  errorChatAttachmentType: "请上传 .txt、.md、.json、.csv 或 .html 文件。",
+  errorChatAttachmentTooLarge: "文件不能超过 2 MB。",
+  errorChatAttachmentLimit: "当前聊天已有 5 个附件，请先移除一个。",
+  errorChatAttachmentTextTooLong: "附件内容加起来太长，请上传更短的导出文件。",
+  errorChatAttachmentEncoding: "请把文件另存为 UTF-8 文本后重新上传。",
+  errorChatAttachmentInvalid:
+    "无法读取这个文件，请确认它是有效的文本或 JSON 导出。",
   chatTargetTeams: "Team",
   mayaTeam: "Maya Team",
   mayaTeams: "Maya Teams",
@@ -1877,6 +1904,13 @@ const errorCodeKeys: Record<string, MessageKey> = {
   chat_transport_uncertain: "errorChatTransportUncertain",
   chat_history_refresh_failed: "errorChatHistoryRefreshFailed",
   file_operation_failed: "errorFileOperationFailed",
+  chat_attachment_type_unsupported: "errorChatAttachmentType",
+  chat_attachment_too_large: "errorChatAttachmentTooLarge",
+  chat_attachment_limit: "errorChatAttachmentLimit",
+  chat_attachment_text_too_long: "errorChatAttachmentTextTooLong",
+  chat_attachment_encoding_unsupported: "errorChatAttachmentEncoding",
+  chat_attachment_invalid: "errorChatAttachmentInvalid",
+  chat_attachment_empty: "errorChatAttachmentInvalid",
   malformed_request: "errorMalformedRequest",
 };
 

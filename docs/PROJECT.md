@@ -221,6 +221,6 @@ October 17: One adaptive admission queue fronts login/create/write/LLM. Danger (
 
 October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; it opens cached and reads each test once (0068 index). Accounts/group visits drop Test results. Student Record: own answers only. A Voice owner can Delete it in Studyform; its Agents use the fallback voice. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones use the fallback voice. Unverified on the real supplier. A 40/60-student run (sign in, Team create/chat, answers) passes on PostgreSQL; queued creates hold no pooled connection; ledger: 6 commits per model call (was 9).
 
-October 17: last_sequence RETURNING; votes 40/40.
-
 October 17: Barrage sequences use `UPDATE … RETURNING` (`0069_barrage_sequence`); 40 concurrent `submit_barrage` calls on Postgres stored 1–40; a collision is retried, not `idempotency_conflict`.
+
+October 18: Team Chat `+` text files (2 MiB, 5/Chat, `0070`) are owner-only per Chat; members see them as data

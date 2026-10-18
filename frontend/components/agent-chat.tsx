@@ -11,6 +11,7 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { ChatAttachments } from "./chats/chat-attachments";
 import { DismissibleAlert } from "./dismissible-alert";
 import {
   CHAT_BUSY_CODE,
@@ -3178,6 +3179,13 @@ function AgentChatScope({
                       // longer composing. Only the Send button submits.
                     }}
                   />
+                  {selectedTeam && !selectedTeam.read_only ? (
+                    <ChatAttachments
+                      key={selectedTeam.id}
+                      conversationId={selectedTeam.id}
+                      disabled={teamBusy || teamWorking}
+                    />
+                  ) : null}
                   <div className={styles.composerBar}>
                     {sendHint ? (
                       <p

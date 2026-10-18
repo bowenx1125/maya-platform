@@ -107,6 +107,7 @@ from app.modules.runtime_tools.recovery import (
 from app.modules.teams.router import router as teams_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
+from app.modules.workspace.attachments import router as chat_attachments_router
 from app.modules.workspace.chat import router as chat_router
 from app.modules.workspace.live import router as live_router
 from app.modules.workspace.models import ProviderPreferences
@@ -670,6 +671,7 @@ def create_app(
     app.include_router(reports_router, prefix="/api/v1")
     app.include_router(provider_disclosure_router, prefix="/api/v1")
     app.include_router(chat_router, prefix="/api/v1")
+    app.include_router(chat_attachments_router, prefix="/api/v1")
     app.include_router(live_router, prefix="/api/v1")
     app.include_router(cardroom_router, prefix="/api/v1")
     app.include_router(provider_settings_router, prefix="/api/v1")
