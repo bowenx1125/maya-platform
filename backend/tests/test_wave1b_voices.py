@@ -492,10 +492,14 @@ def test_group_voice_is_owner_private_within_the_same_group(
     assert profile_id in [item["id"] for item in listed]
 
 
-def test_owner_leaving_the_group_stops_their_voice_and_keeps_their_delete(
+def test_clone_stops_speaking_once_its_owner_is_not_a_groupmate(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
-    """#141: a groupmate's Agent stops speaking with a clone once its owner leaves."""
+    """#141: resolution itself requires the owner to still be a groupmate.
+
+    A real move also deletes the clone (tests/test_voice_withdraw_on_move.py);
+    this pins the check that holds even without that deletion.
+    """
 
     client, database, _settings = voice_client
     csrf = login(client, "bowen")[1]
@@ -541,18 +545,6 @@ def test_owner_leaving_the_group_stops_their_voice_and_keeps_their_delete(
     assert detail["voice_profile_id"] == profile_id
     assert detail["effective_voice_profile_id"] != profile_id
     assert detail["voice_fallback_active"] is True
-
-    # Bowen can still withdraw his own clone (reading and renaming it keep
-    # requiring current membership).
-    csrf = login(client, "bowen")[1]
-    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
-    deleted = client.delete(
-        f"/api/v1/voice-profiles/{profile_id}", headers=_headers(csrf, "left-owner-delete-01")
-    )
-    assert deleted.status_code in {200, 202}, deleted.text
-    with database.session() as session:
-        profile = session.get(VoiceProfile, profile_id)
-        assert profile is not None and profile.status == "deleted"
 
 
 def test_groupmate_preview_does_not_cut_off_other_previews(

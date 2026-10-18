@@ -14,6 +14,7 @@ from fastapi import APIRouter, Body, Depends, Header, status
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.core.errors import Error, forbidden, not_found
 from app.core.models import Course, CourseMember, Group, GroupMember, TeacherGroupAccess, User
 from app.core.sqlutil import dialect_insert
@@ -39,6 +40,7 @@ from app.modules.org.schemas import (
     UpdateCourseMemberRequest,
 )
 from app.modules.org.schemas import Group as GroupDTO
+from app.modules.voices.withdrawal import finish_withdrawn_voices
 
 router = APIRouter(tags=["Organization"])
 
@@ -413,6 +415,7 @@ def update_course_member(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> RosterEntry:
     """Rename a member, move them between groups or deactivate the account.
 
@@ -431,4 +434,10 @@ def update_course_member(
         group_name=payload.group_name,
         status=payload.status,
     )
-    return _roster_entry(row)
+    entry = _roster_entry(row)
+    if payload.group_name is not None:
+        # The move (and the withdrawal of the student's old-group voices)
+        # commits first; the supplier delete runs after it, best effort.
+        db.commit()
+        finish_withdrawn_voices(db, settings, str(user_id))
+    return entry

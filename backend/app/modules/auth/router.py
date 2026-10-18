@@ -73,6 +73,7 @@ from app.modules.auth.service import (
     revoke_cookie_session,
 )
 from app.modules.org.access import WorkspaceMember
+from app.modules.voices.withdrawal import finish_withdrawn_voices
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -324,6 +325,7 @@ def update_current_user(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> AuthSession:
     if "avatar" in payload.model_fields_set:
         update_avatar(context.user, payload.avatar)
@@ -331,6 +333,10 @@ def update_current_user(
         update_display_name(db, context.user, payload.display_name)
     if payload.group_name is not None:
         change_group(db, context.user, payload.group_name)
+        # The move withdraws this student's old-group voices; commit it, then
+        # finish their supplier delete (best effort).
+        db.commit()
+        finish_withdrawn_voices(db, settings, context.user.id)
     db.flush()
     return _auth_response(db, context)
 
