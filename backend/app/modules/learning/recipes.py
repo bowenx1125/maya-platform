@@ -11,11 +11,11 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, not_found
 from app.core.models import AgentVersion, CourseMember, KnowledgeDocument, StoredFile
+from app.core.sqlutil import dialect_insert
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.models import (
     KnowledgeAsset,
@@ -569,24 +569,30 @@ def ensure_assessment_activity(
             "Formal assessment needs a complete # Team Ruleset section naming the roster.",
         )
 
-    existing = db.scalar(
-        select(AssessmentActivity).where(
-            AssessmentActivity.publication_id == conversation.publication_id,
-            AssessmentActivity.team_version_id == conversation.team_version_id,
-            AssessmentActivity.recipe_id == recipe_id,
-            AssessmentActivity.recipe_version_id == leader_version.id,
-        )
-    )
-    if existing is not None:
+    def same_roles(activity: AssessmentActivity) -> AssessmentActivity:
         if (
-            existing.evaluator_team_member_id != roles.scorer_id
-            or existing.boundary_team_member_id != roles.summarizer_id
+            activity.evaluator_team_member_id != roles.scorer_id
+            or activity.boundary_team_member_id != roles.summarizer_id
         ):
             raise conflict(
                 "assessment_ruleset_incomplete",
                 "Formal assessment needs a complete # Team Ruleset section naming the roster.",
             )
-        return existing
+        return activity
+
+    def stored() -> AssessmentActivity | None:
+        return db.scalar(
+            select(AssessmentActivity).where(
+                AssessmentActivity.publication_id == conversation.publication_id,
+                AssessmentActivity.team_version_id == conversation.team_version_id,
+                AssessmentActivity.recipe_id == recipe_id,
+                AssessmentActivity.recipe_version_id == leader_version.id,
+            )
+        )
+
+    existing = stored()
+    if existing is not None:
+        return same_roles(existing)
 
     selection = resolve_chat_entry(
         db,
@@ -640,59 +646,59 @@ def ensure_assessment_activity(
         }
         for set_id, asset_id, authorization_epoch, question_version_id in questions
     ]
-    activity = AssessmentActivity(
-        id=activity_id,
-        course_id=conversation.course_id,
-        team_id=conversation.team_id,
-        team_version_id=conversation.team_version_id,
-        publication_id=conversation.publication_id,
-        recipe_id=recipe_id,
-        recipe_version_id=leader_version.id,
-        evaluator_team_member_id=scorer.id,
-        evaluator_agent_version_id=scorer.agent_version_id,
-        boundary_team_member_id=summarizer.id,
-        boundary_agent_version_id=summarizer.agent_version_id,
-        publisher_user_id=conversation.team_owner_user_id or "",
-        questions_hash=_hash(_canonical(manifest)),
-        question_selection_revision=1,
-        created_at=datetime.now(UTC),
-    )
-    try:
-        with db.begin_nested():
-            db.add(activity)
-            db.flush()
-            for ordinal, (
-                set_id,
-                asset_id,
-                authorization_epoch,
-                question_version_id,
-            ) in enumerate(questions):
-                db.add(
-                    AssessmentActivityQuestion(
-                        id=str(uuid4()),
-                        activity_id=activity.id,
-                        selection_revision=1,
-                        knowledge_set_id=set_id,
-                        asset_id=asset_id,
-                        question_version_id=question_version_id,
-                        authorization_epoch=authorization_epoch,
-                        ordinal=ordinal,
-                        required=True,
-                    )
-                )
-            db.flush()
-    except IntegrityError:
-        existing = db.scalar(
-            select(AssessmentActivity).where(
-                AssessmentActivity.publication_id == conversation.publication_id,
-                AssessmentActivity.team_version_id == conversation.team_version_id,
-                AssessmentActivity.recipe_id == recipe_id,
-                AssessmentActivity.recipe_version_id == leader_version.id,
+    # Many students open the same published Team at once and each may get
+    # here first. The activity row is shared: insert it only if it is not
+    # there yet (no unique-violation error, no rolled-back savepoint) and
+    # whoever loses reads the winner's row.
+    inserted = db.execute(
+        dialect_insert(db, AssessmentActivity.__table__)
+        .values(
+            id=activity_id,
+            course_id=conversation.course_id,
+            team_id=conversation.team_id,
+            team_version_id=conversation.team_version_id,
+            publication_id=conversation.publication_id,
+            recipe_id=recipe_id,
+            recipe_version_id=leader_version.id,
+            evaluator_team_member_id=scorer.id,
+            evaluator_agent_version_id=scorer.agent_version_id,
+            boundary_team_member_id=summarizer.id,
+            boundary_agent_version_id=summarizer.agent_version_id,
+            publisher_user_id=conversation.team_owner_user_id or "",
+            questions_hash=_hash(_canonical(manifest)),
+            question_selection_revision=1,
+            created_at=datetime.now(UTC),
+        )
+        .on_conflict_do_nothing(index_elements=["publication_id", "recipe_id", "recipe_version_id"])
+        .returning(AssessmentActivity.__table__.c.id)
+    ).scalar_one_or_none()
+    if inserted is None:
+        existing = stored()
+        if existing is None:
+            raise conflict(
+                "assessment_activity_unavailable",
+                "The assessment is being prepared. Send again.",
+            )
+        return same_roles(existing)
+    for ordinal, (set_id, asset_id, authorization_epoch, question_version_id) in enumerate(
+        questions
+    ):
+        db.add(
+            AssessmentActivityQuestion(
+                id=str(uuid4()),
+                activity_id=activity_id,
+                selection_revision=1,
+                knowledge_set_id=set_id,
+                asset_id=asset_id,
+                question_version_id=question_version_id,
+                authorization_epoch=authorization_epoch,
+                ordinal=ordinal,
+                required=True,
             )
         )
-        if existing is None:
-            raise
-        return existing
+    db.flush()
+    activity = db.get(AssessmentActivity, activity_id)
+    assert activity is not None
     return activity
 
 
