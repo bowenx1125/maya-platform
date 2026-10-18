@@ -1978,23 +1978,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/teams/{team_id}/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Team Versions */
-        get: operations["listTeamVersions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/conversations/memory-entry": {
         parameters: {
             query?: never;
@@ -2135,23 +2118,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/learning/activities/{activity_id}/reports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Assessment Report Route */
-        post: operations["createAssessmentCourseReport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/learning/attempts/{attempt_id}/actions": {
         parameters: {
             query?: never;
@@ -2201,23 +2167,6 @@ export interface paths {
          * @description The signed-in student's own formal attempts, for the student's Record.
          */
         get: operations["listMyAssessmentAttempts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/learning/courses/{course_id}/assessment-activities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Assessment Activities Route */
-        get: operations["listAuthorizedAssessmentActivities"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4898,39 +4847,6 @@ export interface components {
             /** Can Edit */
             can_edit: boolean;
         };
-        /** TeamVersionDTO */
-        TeamVersionDTO: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Team Id
-             * Format: uuid
-             */
-            team_id: string;
-            /** Version Seq */
-            version_seq: number;
-            /** Display Name */
-            display_name: string;
-            /**
-             * Visibility
-             * @enum {string}
-             */
-            visibility: "private" | "public";
-            /** Authorization Epoch */
-            authorization_epoch: number;
-            /** Members */
-            members: components["schemas"]["TeamMemberDTO"][];
-            /** Shared Knowledge Set Ids */
-            shared_knowledge_set_ids: string[];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
         /** PublishedAgentAuthor */
         PublishedAgentAuthor: {
             /** Avatar */
@@ -4980,27 +4896,6 @@ export interface components {
              * Format: uuid
              */
             version_id: string;
-        };
-        /** AssessmentActivityListItem */
-        AssessmentActivityListItem: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /** Team Name */
-            team_name: string;
-        };
-        /** AssessmentCourseReportReceipt */
-        AssessmentCourseReportReceipt: {
-            report: components["schemas"]["AssessmentCourseReportDTO"];
         };
         /** AssessmentLifecycleActionRequest */
         AssessmentLifecycleActionRequest: {
@@ -5067,14 +4962,6 @@ export interface components {
             source_agent_display_name: string;
             /** Version Seq */
             version_seq?: number | null;
-        };
-        /** CreateAssessmentReportRequest */
-        CreateAssessmentReportRequest: {
-            /**
-             * Client Event Id
-             * Format: uuid
-             */
-            client_event_id: string;
         };
         /** KnowledgeMarkdownDocument */
         KnowledgeMarkdownDocument: {
@@ -5397,39 +5284,6 @@ export interface components {
              */
             question_version_id: string;
         };
-        /** AssessmentCourseReportDTO */
-        AssessmentCourseReportDTO: {
-            /**
-             * Activity Id
-             * Format: uuid
-             */
-            activity_id: string;
-            content: components["schemas"]["AssessmentReportContent"];
-            /**
-             * Course Id
-             * Format: uuid
-             */
-            course_id: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Revision Id
-             * Format: uuid
-             */
-            revision_id: string;
-            /** Revision Seq */
-            revision_seq: number;
-            /** Source Hash */
-            source_hash: string;
-        };
         /** AssessmentRuntimeContext */
         AssessmentRuntimeContext: {
             attempt: components["schemas"]["AssessmentAttemptSummary"];
@@ -5614,40 +5468,6 @@ export interface components {
              */
             status: "in_progress" | "paused" | "completed" | "abandoned";
         };
-        /** AssessmentReportContent */
-        AssessmentReportContent: {
-            /** Abandoned Count */
-            abandoned_count: number;
-            /** Activity Name */
-            activity_name: string;
-            /** Actors */
-            actors: components["schemas"]["AssessmentActorReport"][];
-            /** Attempt Count */
-            attempt_count: number;
-            /** Completed Count */
-            completed_count: number;
-            /** Course Name */
-            course_name: string;
-            /** Effective Answer Count */
-            effective_answer_count: number;
-            /**
-             * Generated At
-             * Format: date-time
-             */
-            generated_at: string;
-            /** In Progress Count */
-            in_progress_count: number;
-            /** Paused Count */
-            paused_count: number;
-            /** Raw Answer Count */
-            raw_answer_count: number;
-            /** Skipped Count */
-            skipped_count: number;
-            /** Student Count */
-            student_count: number;
-            /** Team Name */
-            team_name: string;
-        };
         /**
          * AssessmentRuntimeQuestion
          * @description The visible question projection intentionally omits Rubric and reference answer.
@@ -5715,37 +5535,6 @@ export interface components {
              * @enum {string}
              */
             state: "pending" | "running" | "ready" | "failed" | "acceptance_unknown";
-        };
-        /** AssessmentActorReport */
-        AssessmentActorReport: {
-            /** Abandoned Count */
-            abandoned_count: number;
-            /** Attempt Count */
-            attempt_count: number;
-            /** Boundary Summary */
-            boundary_summary?: string | null;
-            /** Completed Count */
-            completed_count: number;
-            /** Effective Answer Count */
-            effective_answer_count: number;
-            /** In Progress Count */
-            in_progress_count: number;
-            /** Learner Ref */
-            learner_ref: string;
-            /** Mastery Evidence */
-            mastery_evidence?: string[];
-            /** Not Yet Verified */
-            not_yet_verified?: string[];
-            /** Paused Count */
-            paused_count: number;
-            /** Raw Answer Count */
-            raw_answer_count: number;
-            /** Skipped Count */
-            skipped_count: number;
-            /** Student Name */
-            student_name: string;
-            /** Weak Points */
-            weak_points?: string[];
         };
         /** AssessmentOwnerAnswerDTO */
         AssessmentOwnerAnswerDTO: {
@@ -11160,37 +10949,6 @@ export interface operations {
             };
         };
     };
-    listTeamVersions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamVersionDTO"][];
-                };
-            };
-            /** @description Team not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     createMemoryEntryAction: {
         parameters: {
             query?: never;
@@ -11631,50 +11389,6 @@ export interface operations {
             };
         };
     };
-    createAssessmentCourseReport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                activity_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateAssessmentReportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssessmentCourseReportReceipt"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     applyAssessmentLifecycleAction: {
         parameters: {
             query?: never;
@@ -11772,37 +11486,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverviewResult"][];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listAuthorizedAssessmentActivities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssessmentActivityListItem"][];
                 };
             };
             /** @description Not Found */

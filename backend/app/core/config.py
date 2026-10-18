@@ -130,12 +130,6 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="DEBATES_BETA_LIVE_INTERACTION",
     )
-    # Opens the fixed-script system-voice preview API only. System voices
-    # always speak through qwen3-tts-flash whatever this says.
-    tts_qwen3_flash_enabled: bool = Field(
-        default=False,
-        validation_alias="TTS_QWEN3_FLASH_ENABLED",
-    )
     # Clone target for new voices. A clone stays bound to the model it was
     # enrolled for, so changing this leaves existing clones on theirs.
     voice_clone_model: Literal["qwen-audio-3.1-tts-flash", "qwen-audio-3.0-tts-flash"] = Field(
@@ -465,12 +459,6 @@ class Settings(BaseSettings):
     @classmethod
     def empty_demo_quick_login_is_false(cls, value: object) -> object:
         # Compose forwards an empty value when DEMO_QUICK_LOGIN is unset.
-        return False if isinstance(value, str) and not value.strip() else value
-
-    @field_validator("tts_qwen3_flash_enabled", mode="before")
-    @classmethod
-    def empty_tts_qwen3_flash_enabled_is_false(cls, value: object) -> object:
-        # Compose forwards an empty value when TTS_QWEN3_FLASH_ENABLED is unset.
         return False if isinstance(value, str) and not value.strip() else value
 
     @field_validator("voice_clone_model", mode="before")

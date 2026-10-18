@@ -14,20 +14,14 @@ from app.modules.auth.service import AuthContext
 from app.modules.org.schemas import OverviewResult
 
 from .attempts import apply_attempt_lifecycle_action
-from .models import AssessmentActivity
 from .reports import (
-    create_assessment_course_report,
     download_assessment_course_report,
-    list_authorized_assessment_activities,
     list_course_assessment_attempts,
     list_my_assessment_attempts,
 )
 from .schemas import (
-    AssessmentActivityListItem,
-    AssessmentCourseReportReceipt,
     AssessmentLifecycleActionRequest,
     AssessmentRuntimeResult,
-    CreateAssessmentReportRequest,
 )
 
 router = APIRouter(prefix="/learning", tags=["learning"])
@@ -55,20 +49,6 @@ def apply_assessment_lifecycle_action_route(
     if result is None:
         raise not_found()
     return result
-
-
-@router.get(
-    "/courses/{course_id}/assessment-activities",
-    response_model=list[AssessmentActivityListItem],
-    operation_id="listAuthorizedAssessmentActivities",
-    responses={404: {"model": Error}},
-)
-def list_assessment_activities_route(
-    course_id: UUID,
-    actor: AuthContext = Depends(require_auth),
-    db: Session = Depends(get_db),
-) -> list[AssessmentActivityListItem]:
-    return list_authorized_assessment_activities(db, actor, course_id=str(course_id))
 
 
 @router.get(
@@ -117,31 +97,6 @@ def list_my_assessment_attempts_route(
         OverviewResult.model_validate(row)
         for row in list_my_assessment_attempts(db, actor, course_id=str(course_id))
     ]
-
-
-@router.post(
-    "/activities/{activity_id}/reports",
-    response_model=AssessmentCourseReportReceipt,
-    status_code=201,
-    operation_id="createAssessmentCourseReport",
-    responses={404: {"model": Error}, 409: {"model": Error}},
-)
-def create_assessment_report_route(
-    activity_id: UUID,
-    payload: CreateAssessmentReportRequest,
-    actor: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> AssessmentCourseReportReceipt:
-    activity = db.get(AssessmentActivity, str(activity_id))
-    if activity is None:
-        raise not_found()
-    return create_assessment_course_report(
-        db,
-        actor,
-        course_id=activity.course_id,
-        activity_id=activity.id,
-        client_event_id=payload.client_event_id,
-    )
 
 
 @router.get(
