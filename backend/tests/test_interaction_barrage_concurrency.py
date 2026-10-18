@@ -8,6 +8,7 @@ for a client id that was never stored.
 from __future__ import annotations
 
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from typing import Any
@@ -21,8 +22,8 @@ from app.core.errors import PlatformError
 from app.main import create_app
 from app.modules.debates.models import DebateEvent
 from app.modules.interactions import service as interaction_service
-from app.modules.interactions.models import BarrageMessage, ClassroomInteractionWindow
-from app.modules.interactions.schemas import BarrageRequest
+from app.modules.interactions.models import BarrageMessage, ClassroomInteractionWindow, Vote
+from app.modules.interactions.schemas import BarrageRequest, VoteRequest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.pool import NullPool
@@ -251,3 +252,110 @@ def test_postgres_concurrent_barrages_commit_every_row(postgres_interaction: Any
     assert sequences == list(range(1, _WORKERS + 1))
     assert events == list(range(1, len(events) + 1))
     assert len(events) == _WORKERS + 1
+
+
+def _close_while_submission_is_inside(
+    database: Database,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    pause_at: str,
+    submit: Any,
+) -> tuple[Any, ClassroomInteractionWindow, int, int]:
+    """Pause a submission after it saw the window open, then close the window."""
+
+    debate_id, participant_ids = _seed_finished_debate(database)
+    settings.classroom_public_base_url = "http://192.168.1.25:8080"
+    service, _collector = _service(database, settings)
+    opened = service.open_interaction(
+        actor_user_id=TEACHER_ID, debate_id=debate_id, idempotency_key=f"close-race-{uuid4()}"
+    )
+    token = opened.public_url.rsplit("/", 1)[-1]
+    reached, release = threading.Event(), threading.Event()
+    original = getattr(interaction_service, pause_at)
+
+    def paused(*args: Any, **kwargs: Any) -> Any:
+        if threading.current_thread().name == "student":
+            reached.set()
+            release.wait(10)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(interaction_service, pause_at, paused)
+    outcome: dict[str, Any] = {}
+
+    def student() -> None:
+        try:
+            outcome["submitted"] = submit(service, token, participant_ids)
+        except PlatformError as exc:
+            outcome["submitted"] = exc
+
+    def teacher() -> None:
+        service.close_interaction(
+            actor_user_id=TEACHER_ID, debate_id=debate_id, idempotency_key=str(uuid4())
+        )
+
+    student_thread = threading.Thread(target=student, name="student")
+    student_thread.start()
+    assert reached.wait(10)
+    teacher_thread = threading.Thread(target=teacher, name="teacher")
+    teacher_thread.start()
+    # Without a fence the close finishes here, before the submission commits.
+    teacher_thread.join(0.5)
+    release.set()
+    student_thread.join(20)
+    teacher_thread.join(20)
+    assert not student_thread.is_alive() and not teacher_thread.is_alive()
+    with database.session() as session:
+        window = session.scalar(
+            select(ClassroomInteractionWindow).where(
+                ClassroomInteractionWindow.debate_id == debate_id
+            )
+        )
+        assert window is not None
+        session.expunge(window)
+        votes = len(session.scalars(select(Vote).where(Vote.window_id == window.id)).all())
+        barrages = len(
+            session.scalars(
+                select(BarrageMessage).where(BarrageMessage.window_id == window.id)
+            ).all()
+        )
+    return outcome["submitted"], window, votes, barrages
+
+
+def test_postgres_vote_racing_close_is_frozen_or_refused(
+    postgres_interaction: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#141: a vote committed after close would be stored but missing from the freeze."""
+
+    database, settings = postgres_interaction
+    submitted, window, votes, _barrages = _close_while_submission_is_inside(
+        database,
+        settings,
+        monkeypatch,
+        "_event",
+        lambda service, token, participants: service.submit_vote(
+            access_token=token,
+            payload=VoteRequest(participant_id=participants[0], client_submission_id=uuid4()),
+        ),
+    )
+    assert window.status == "finalized"
+    assert votes == window.frozen_vote_count
+    assert getattr(submitted, "vote_submitted", False) == (votes == 1)
+
+
+def test_postgres_barrage_racing_close_is_frozen_or_refused(
+    postgres_interaction: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, settings = postgres_interaction
+    submitted, window, _votes, barrages = _close_while_submission_is_inside(
+        database,
+        settings,
+        monkeypatch,
+        "_allocate_barrage_sequence",
+        lambda service, token, _participants: service.submit_barrage(
+            access_token=token,
+            payload=BarrageRequest(nickname="n", raw_text="hi", client_submission_id=uuid4()),
+        ),
+    )
+    assert window.status == "finalized"
+    assert barrages == window.frozen_barrage_count
+    assert getattr(submitted, "barrage_submitted", False) == (barrages == 1)
