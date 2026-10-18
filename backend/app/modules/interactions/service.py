@@ -19,8 +19,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import and_, select, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -80,6 +80,9 @@ IDEMPOTENCY_LEASE = timedelta(seconds=30)
 # A unique event sequence is a lost race, not a reused client submission.
 # The vote transaction rolls back with it and is attempted again.
 _EVENT_SEQUENCE_ATTEMPTS = 8
+# A sequence collision is two students arriving together, not one client id
+# reused for a different barrage. Roll back and take the next sequence.
+_BARRAGE_SEQUENCE_ATTEMPTS = 8
 OPEN_OPERATION = "interaction.open"
 CLOSE_OPERATION = "interaction.close"
 _SAFE_WINDOW_STATUSES = {"closed", "open", "finalized"}
@@ -189,6 +192,7 @@ def ensure_closed_window(
         status="closed",
         token_nonce=None,
         revision=0,
+        barrage_sequence=0,
         opened_by=None,
         opened_at=None,
         finalized_by=None,
@@ -769,6 +773,71 @@ def _open_eligibility(session: Session, debate: Debate, *, allow_live: bool = Fa
             raise conflict("invalid_state", "The debate playback still has active authority.")
 
 
+def _barrage_integrity_detail(exc: IntegrityError) -> str:
+    orig = exc.orig
+    parts = [str(orig)]
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None) if diag is not None else None
+    if constraint_name:
+        parts.append(str(constraint_name))
+    return " ".join(parts).lower()
+
+
+def _is_barrage_sequence_integrity(exc: IntegrityError) -> bool:
+    """True for a watermark collision, which must not look like idempotency."""
+
+    detail = _barrage_integrity_detail(exc)
+    return any(
+        token in detail
+        for token in (
+            "uq_barrage_messages_window_sequence",
+            "barrage_messages.sequence",
+            "uq_debate_events_debate_sequence",
+            "debate_events.sequence",
+        )
+    )
+
+
+def _barrage_matches(row: BarrageMessage, payload: BarrageRequest) -> bool:
+    turn_id = str(payload.turn_id) if payload.turn_id else None
+    return (
+        row.nickname == payload.nickname
+        and row.raw_text == payload.raw_text
+        and row.turn_id == turn_id
+    )
+
+
+def _allocate_barrage_sequence(session: Session, window: ClassroomInteractionWindow) -> int:
+    """Return the next per-window sequence from the window row itself.
+
+    ``MAX(sequence)+1`` is not atomic: two transactions read the same max and
+    the loser hits ``uq_barrage_messages_window_sequence``. That unique error
+    used to be reported as ``idempotency_conflict`` even when the client ids
+    differed. The counter update returns the value it stored.
+    """
+
+    allocated = session.execute(
+        update(ClassroomInteractionWindow)
+        .where(ClassroomInteractionWindow.id == window.id)
+        .values(barrage_sequence=ClassroomInteractionWindow.barrage_sequence + 1)
+        .returning(ClassroomInteractionWindow.barrage_sequence)
+        .execution_options(synchronize_session=False)
+    ).scalar_one_or_none()
+    if allocated is None:
+        raise conflict("stale_interaction", "The classroom interaction state is stale.")
+    sequence = int(allocated)
+    # Assign the RETURNING value so a later flush cannot write a stale counter.
+    window.barrage_sequence = sequence
+    return sequence
+
+
+def _sqlite_write_conflict(exc: OperationalError) -> bool:
+    """SQLite invalidates a read snapshot when another writer commits first."""
+
+    detail = str(exc.orig).lower()
+    return "database is locked" in detail or "snapshot" in detail or "busy" in detail
+
+
 def _begin_writer(session_factory: Callable[[], Session]) -> Session:
     session = session_factory()
     try:
@@ -1256,133 +1325,145 @@ class InteractionService:
         payload: BarrageRequest,
     ) -> BarrageSubmitted:
         parsed = _window_token(self.settings, access_token)
+        submission_id = str(payload.client_submission_id)
         session = _begin_writer(self.session_factory)
         event: PostCommitInteractionEvent | None = None
         try:
-            window = session.scalar(
-                select(ClassroomInteractionWindow).where(
-                    ClassroomInteractionWindow.id == str(parsed.window_id),
-                    ClassroomInteractionWindow.token_nonce == parsed.nonce,
-                )
-            )
-            if window is None:
-                raise not_found()
-            existing = session.scalar(
-                select(BarrageMessage).where(
-                    BarrageMessage.window_id == window.id,
-                    BarrageMessage.client_submission_id == str(payload.client_submission_id),
-                )
-            )
-            if existing is not None:
-                if (
-                    existing.nickname != payload.nickname
-                    or existing.raw_text != payload.raw_text
-                    or existing.turn_id != (str(payload.turn_id) if payload.turn_id else None)
-                ):
-                    raise idempotency_conflict()
-                session.commit()
-                session.close()
-                return BarrageSubmitted(barrage_submitted=True)
-            if window.status == "finalized":
-                raise PlatformError(
-                    "interaction_finalized",
-                    "Classroom interaction collection has ended.",
-                    410,
-                )
-            if window.status != "open":
-                raise not_found()
-            if not payload.nickname.strip() or not payload.raw_text.strip():
-                raise unprocessable("barrage_blank", "Nickname and barrage text must not be blank.")
-            debate = session.get(Debate, window.debate_id)
-            if debate is None:
-                raise not_found()
-            turn_id = None
-            if uses_segment_protocol(debate):
-                if debate.final_input_json is not None:
-                    raise PlatformError(
-                        "barrage_collection_closed", "Barrage collection has ended.", 410
-                    )
-                playback = session.scalar(
-                    select(PlaybackState).where(PlaybackState.debate_id == debate.id)
-                )
-                current = (
-                    session.get(DebateTurn, playback.current_turn_id)
-                    if (playback is not None and playback.current_turn_id is not None)
-                    else None
-                )
-                if (
-                    debate.status != "running"
-                    or current is None
-                    or current.round_no >= planned_round_count(debate)
-                    or str(payload.turn_id or "") != current.id
-                ):
-                    raise conflict(
-                        "barrage_turn_changed",
-                        "The current turn has changed. Refresh and send again.",
-                    )
-                if len(payload.raw_text) > 300:
-                    raise unprocessable("barrage_too_long", "Use at most 300 characters.")
-                turn_id = current.id
-            elif payload.turn_id is not None:
-                raise unprocessable(
-                    "barrage_turn_unavailable", "This lesson has no turn-bound collection."
-                )
-            next_sequence = (
-                int(
-                    session.scalar(
-                        select(func.coalesce(func.max(BarrageMessage.sequence), 0)).where(
-                            BarrageMessage.window_id == window.id
+            for attempt in range(_BARRAGE_SEQUENCE_ATTEMPTS):
+                try:
+                    window = session.scalar(
+                        select(ClassroomInteractionWindow).where(
+                            ClassroomInteractionWindow.id == str(parsed.window_id),
+                            ClassroomInteractionWindow.token_nonce == parsed.nonce,
                         )
                     )
-                    or 0
-                )
-                + 1
-            )
-            barrage = BarrageMessage(
-                id=str(uuid4()),
-                window_id=window.id,
-                debate_id=window.debate_id,
-                turn_id=turn_id,
-                nickname=payload.nickname,
-                raw_text=payload.raw_text,
-                client_submission_id=str(payload.client_submission_id),
-                sequence=next_sequence,
-                submitted_at=_now(),
-            )
-            session.add(barrage)
-            session.flush()
-            debate = session.get(Debate, window.debate_id)
-            if debate is None:
-                raise not_found()
-            event = _event(
-                session,
-                debate,
-                "interaction.barrage_created",
-                {
-                    "message_id": barrage.id,
-                    "nickname": barrage.nickname,
-                    "raw_text": barrage.raw_text,
-                    "sequence": barrage.sequence,
-                },
-            )
-            session.commit()
-        except IntegrityError:
-            _abort(session)
-            with self.session_factory() as retry:
-                row = retry.scalar(
-                    select(BarrageMessage).where(
-                        BarrageMessage.window_id == str(parsed.window_id),
-                        BarrageMessage.client_submission_id == str(payload.client_submission_id),
+                    if window is None:
+                        raise not_found()
+                    existing = session.scalar(
+                        select(BarrageMessage).where(
+                            BarrageMessage.window_id == window.id,
+                            BarrageMessage.client_submission_id == submission_id,
+                        )
                     )
-                )
-                if (
-                    row is not None
-                    and row.nickname == payload.nickname
-                    and row.raw_text == payload.raw_text
-                    and row.turn_id == (str(payload.turn_id) if payload.turn_id else None)
-                ):
-                    return BarrageSubmitted(barrage_submitted=True)
-            raise idempotency_conflict() from None
+                    if existing is not None:
+                        if not _barrage_matches(existing, payload):
+                            raise idempotency_conflict()
+                        session.commit()
+                        session.close()
+                        return BarrageSubmitted(barrage_submitted=True)
+                    if window.status == "finalized":
+                        raise PlatformError(
+                            "interaction_finalized",
+                            "Classroom interaction collection has ended.",
+                            410,
+                        )
+                    if window.status != "open":
+                        raise not_found()
+                    if not payload.nickname.strip() or not payload.raw_text.strip():
+                        raise unprocessable(
+                            "barrage_blank", "Nickname and barrage text must not be blank."
+                        )
+                    debate = session.get(Debate, window.debate_id)
+                    if debate is None:
+                        raise not_found()
+                    turn_id = None
+                    if uses_segment_protocol(debate):
+                        if debate.final_input_json is not None:
+                            raise PlatformError(
+                                "barrage_collection_closed", "Barrage collection has ended.", 410
+                            )
+                        playback = session.scalar(
+                            select(PlaybackState).where(PlaybackState.debate_id == debate.id)
+                        )
+                        current = (
+                            session.get(DebateTurn, playback.current_turn_id)
+                            if (playback is not None and playback.current_turn_id is not None)
+                            else None
+                        )
+                        if (
+                            debate.status != "running"
+                            or current is None
+                            or current.round_no >= planned_round_count(debate)
+                            or str(payload.turn_id or "") != current.id
+                        ):
+                            raise conflict(
+                                "barrage_turn_changed",
+                                "The current turn has changed. Refresh and send again.",
+                            )
+                        if len(payload.raw_text) > 300:
+                            raise unprocessable("barrage_too_long", "Use at most 300 characters.")
+                        turn_id = current.id
+                    elif payload.turn_id is not None:
+                        raise unprocessable(
+                            "barrage_turn_unavailable", "This lesson has no turn-bound collection."
+                        )
+                    next_sequence = _allocate_barrage_sequence(session, window)
+                    # The debate row may have been loaded before this window lock.
+                    # Refresh it so the event allocator sees sequences already
+                    # committed by barrages that waited on the same counter.
+                    session.refresh(debate)
+                    barrage = BarrageMessage(
+                        id=str(uuid4()),
+                        window_id=window.id,
+                        debate_id=window.debate_id,
+                        turn_id=turn_id,
+                        nickname=payload.nickname,
+                        raw_text=payload.raw_text,
+                        client_submission_id=str(payload.client_submission_id),
+                        sequence=next_sequence,
+                        submitted_at=_now(),
+                    )
+                    session.add(barrage)
+                    session.flush()
+                    event = _event(
+                        session,
+                        debate,
+                        "interaction.barrage_created",
+                        {
+                            "message_id": barrage.id,
+                            "nickname": barrage.nickname,
+                            "raw_text": barrage.raw_text,
+                            "sequence": barrage.sequence,
+                        },
+                    )
+                    session.commit()
+                    break
+                except IntegrityError as exc:
+                    session.rollback()
+                    with self.session_factory() as retry:
+                        row = retry.scalar(
+                            select(BarrageMessage).where(
+                                BarrageMessage.window_id == str(parsed.window_id),
+                                BarrageMessage.client_submission_id == submission_id,
+                            )
+                        )
+                        if row is not None and _barrage_matches(row, payload):
+                            session.close()
+                            return BarrageSubmitted(barrage_submitted=True)
+                        if row is not None:
+                            raise idempotency_conflict() from exc
+                    # The client id was not stored, so this is not a replay.
+                    # Sequence collisions used to be reported as idempotency.
+                    if not _is_barrage_sequence_integrity(exc):
+                        raise conflict("stale_sequence", "The barrage sequence is stale.") from exc
+                    if attempt + 1 < _BARRAGE_SEQUENCE_ATTEMPTS:
+                        begin_immediate(session)
+                        continue
+                    raise conflict("stale_sequence", "The barrage sequence is stale.") from exc
+                except PlatformError as exc:
+                    if exc.code == "stale_sequence" and attempt + 1 < _BARRAGE_SEQUENCE_ATTEMPTS:
+                        session.rollback()
+                        begin_immediate(session)
+                        continue
+                    raise
+                except OperationalError as exc:
+                    if _sqlite_write_conflict(exc) and attempt + 1 < _BARRAGE_SEQUENCE_ATTEMPTS:
+                        session.rollback()
+                        begin_immediate(session)
+                        continue
+                    raise
+            else:
+                raise conflict("stale_sequence", "The barrage sequence is stale.")
         except Exception:
             _abort(session)
             raise

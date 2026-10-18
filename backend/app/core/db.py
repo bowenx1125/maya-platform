@@ -27,7 +27,7 @@ SQLITE_BUSY_TIMEOUT_MS = 5_000
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0068_attempt_activity_index"
+ALEMBIC_HEAD = "0069_barrage_sequence"
 _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 

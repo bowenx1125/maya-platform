@@ -221,4 +221,6 @@ October 17: One adaptive admission queue (`core/adaptive_admission.py`) fronts l
 
 October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; it opens cached and reads each test once (0068 index). Accounts/group visits drop Test results. Students keep Memory. A Voice owner can Delete it in Studyform; its Agents use the fallback voice. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones use the fallback voice. Unverified on the real supplier. A 40/60-student run (sign in, Team create/chat, formal answers) passes on PostgreSQL; queued creates hold no pooled connection.
 
-October 17: Concurrent votes allocate `debates.last_sequence` with `UPDATE … RETURNING`. On Postgres, 40 simultaneous `submit_vote` calls stored 40 votes and a gap-free event sequence; a lost compare-and-swap is no longer `stale_sequence`.
+October 17: last_sequence RETURNING; votes 40/40.
+
+October 17: Barrage sequences use `UPDATE … RETURNING` (`0069_barrage_sequence`). Postgres: 40 `submit_barrage` calls stored sequences 1–40. A sequence collision is retried, not `idempotency_conflict`.
