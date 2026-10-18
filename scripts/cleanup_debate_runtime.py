@@ -33,7 +33,7 @@ K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
 K3B1_SCHEMA_HEAD = "0041_team_conversations"
 K3B2_SCHEMA_HEAD = "0042_team_turn_results"
 K4A_SCHEMA_HEAD = "0043_learning_evidence"
-SCHEMA_HEAD = "0071_chat_reports"
+SCHEMA_HEAD = "0072_attempt_teacher_hidden"
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
@@ -100,6 +100,7 @@ V14_PRESERVED_BY_HEAD = {
     "0069_barrage_sequence": (),
     "0070_conversation_attachments": ("conversation_attachments",),
     "0071_chat_reports": ("chat_reports",),
+    "0072_attempt_teacher_hidden": (),
 }
 SUPPORTED_SCHEMA_HEADS.update(V14_PRESERVED_BY_HEAD)
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"

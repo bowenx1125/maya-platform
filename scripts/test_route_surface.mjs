@@ -76,8 +76,9 @@ try {
   // online card rooms add seven; renaming or pinning a Chat adds one; a
   // teacher's personal voices add two; the JSON send route is gone (Chats send
   // only through messages:stream); a student's own Record adds one; Team
-  // Chat attachments add three; a Team Chat HTML report download adds one.
-  if (platformOperationCount !== 169 || placeholderCount !== 0) {
+  // Chat attachments add three; a Team Chat HTML report download adds one; a
+  // teacher deleting a Record attempt adds one.
+  if (platformOperationCount !== 170 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

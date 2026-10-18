@@ -5766,6 +5766,46 @@ paths:
       summary: List Course Assessment Attempts Route
       tags:
       - learning
+  /learning/courses/{course_id}/assessment-attempts/{attempt_id}:
+    delete:
+      description: A course teacher deletes an attempt from Record. It is only hidden.
+      operationId: deleteCourseAssessmentAttempt
+      parameters:
+      - in: path
+        name: course_id
+        required: true
+        schema:
+          format: uuid
+          title: Course Id
+          type: string
+      - in: path
+        name: attempt_id
+        required: true
+        schema:
+          format: uuid
+          title: Attempt Id
+          type: string
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          minLength: 32
+          title: X-Csrf-Token
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Not Found
+      security:
+      - sessionCookie: []
+      summary: Delete Course Assessment Attempt Route
+      tags:
+      - learning
   /learning/courses/{course_id}/my-assessment-attempts:
     get:
       description: The signed-in student's own formal attempts, for the student's
@@ -7578,6 +7618,19 @@ components:
           items:
             $ref: '#/components/schemas/OverviewQuestion'
         report_download_path:
+          type:
+          - string
+          - 'null'
+        publication_state:
+          type:
+          - string
+          - 'null'
+          enum:
+          - published
+          - retained
+          - revoked
+          - null
+        version_label:
           type:
           - string
           - 'null'

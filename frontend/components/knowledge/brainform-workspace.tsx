@@ -2612,6 +2612,17 @@ function BrainformWorkspaceBody({
         <RecordDetail
           scope={recordScope}
           team={assessmentRecord.teams.find((team) => team.name === pane.team)}
+          onDelete={
+            role === "teacher"
+              ? async (attempt) => {
+                  await api.deleteCourseAssessmentAttempt(
+                    courseId,
+                    attempt.attempt_id,
+                  );
+                  await assessmentRecord.reload();
+                }
+              : undefined
+          }
         />
       ) : null}
 
