@@ -136,7 +136,7 @@ class AuthAbuseLimiter:
                     client_bucket.failures.append(now)
                 self._client_failures.move_to_end(reservation.client_key)
 
-    def consume_registration(self, client_key: str, settings: Settings) -> None:
+    def consume_registration(self, client_key: str, settings: Settings) -> float:
         now = self._clock()
         with self._lock:
             self._cleanup(now, settings)
@@ -165,6 +165,19 @@ class AuthAbuseLimiter:
                 raise _rate_limited(retry_after)
             bucket.failures.append(now)
             self._registrations.move_to_end(client_key)
+            return now
+
+    def refund_registration(self, client_key: str, attempt: float) -> None:
+        """Give back one registration attempt that a retryable refusal undid."""
+
+        with self._lock:
+            bucket = self._registrations.get(client_key)
+            if bucket is None:
+                return
+            try:
+                bucket.failures.remove(attempt)
+            except ValueError:
+                pass
 
     def bucket_count(self) -> int:
         """Expose bounded storage to focused tests without exposing account keys."""
