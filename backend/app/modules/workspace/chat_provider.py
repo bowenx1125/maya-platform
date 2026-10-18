@@ -623,15 +623,6 @@ def real_reply(
             if previous is not None and not retry_not_sent:
                 raise TeamDispatchError("chat_call_unavailable")
 
-            repository.save_scope_budget(
-                scope_id,
-                ProviderScopeBudgetV1(
-                    max_requests=CONTROL_UNBOUNDED_REQUESTS,
-                    max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
-                    max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
-                    budget_bucket=LLM_DEBATE_TURN_BUCKET,
-                ),
-            )
             request_record = ProviderReservationRequestV1(
                 scope_id=scope_id,
                 provider_operation="llm_agent_chat",
@@ -665,17 +656,29 @@ def real_reply(
 
                 effective_sending_guard = guarded_sending
 
-            operation = repository.create_runtime_model_call_prepared(
-                request_record,
-                conversation_id=scope_id,
-                turn_id=request_id,
-                executor_agent_version_id=participant_id,
-                ordinal=ordinal,
-                dispatch_ordinal=dispatch_ordinal,
-                request_json=wire_text,
-                binding_guard=effective_sending_guard or (lambda _connection, _operation: True),
-            )
-            repository.reserve(operation.id)
+            # Budget, prepared operation, call binding and reservation commit
+            # together (one transaction instead of three).
+            with repository.one_transaction():
+                repository.save_scope_budget(
+                    scope_id,
+                    ProviderScopeBudgetV1(
+                        max_requests=CONTROL_UNBOUNDED_REQUESTS,
+                        max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
+                        max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
+                        budget_bucket=LLM_DEBATE_TURN_BUCKET,
+                    ),
+                )
+                operation = repository.create_runtime_model_call_prepared(
+                    request_record,
+                    conversation_id=scope_id,
+                    turn_id=request_id,
+                    executor_agent_version_id=participant_id,
+                    ordinal=ordinal,
+                    dispatch_ordinal=dispatch_ordinal,
+                    request_json=wire_text,
+                    binding_guard=effective_sending_guard or (lambda _connection, _operation: True),
+                )
+                repository.reserve(operation.id)
             # Wait for the LLM slot while the operation is still only
             # "reserved", as Team does: an admission refusal, or a crash while
             # queued, then ends "not_sent" instead of a "sending" row that
@@ -746,13 +749,21 @@ def real_reply(
                     "chat_provider_rejected", "The Provider rejected the request.", 503
                 )
             response_json = _raw_chat_response(response)
-            repository.stage_runtime_model_call_accepted(operation.id, response_json=response_json)
             try:
                 model_response = _chat_model_response(response_json)
             except PlatformError as exc:
+                repository.stage_runtime_model_call_accepted(
+                    operation.id, response_json=response_json
+                )
                 repository.mark_failed(operation.id, safe_error_code=exc.code)
                 raise
-            repository.mark_succeeded(operation.id)
+            # Parsed first (no I/O): the accepted stage and success commit
+            # together (one transaction instead of two).
+            with repository.one_transaction():
+                repository.stage_runtime_model_call_accepted(
+                    operation.id, response_json=response_json
+                )
+                repository.mark_succeeded(operation.id)
             return model_response
         except PlatformError:
             raise

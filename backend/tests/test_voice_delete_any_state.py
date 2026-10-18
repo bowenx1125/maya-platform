@@ -203,6 +203,29 @@ def test_outcome_unknown_voice_with_nothing_at_the_supplier_just_goes(
     assert _status(database, profile_id) == "deleted"
 
 
+def test_ambiguous_recovery_name_matches_delete_no_supplier_voice(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#141: two supplier voices share the recovery name; neither is deleted."""
+
+    client, database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider = MockVoiceCloneProvider()
+    _use(monkeypatch, provider)
+    profile_id = _enroll(client, csrf, "enroll-unknown-ambiguous").json()["id"]
+    recovery_name = _lose_enrollment_outcome(database, profile_id)
+    provider.set_reconciliation_matches(recovery_name, ("supplier-voice-a", "supplier-voice-b"))
+
+    deleted = _delete(client, csrf, profile_id, "delete-unknown-ambiguous")
+
+    assert deleted.status_code == 200, deleted.text
+    assert _status(database, profile_id) == "deleted"
+    assert provider.delete_calls == 0
+    operation = _delete_operation(database, profile_id)
+    assert operation is not None and operation.state == "outcome_unknown"
+
+
 @pytest.mark.parametrize("failure", ["exists", "delete"])
 def test_supplier_failure_still_deletes_the_card_and_a_later_delete_finishes_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
@@ -375,3 +398,105 @@ def test_voice_deleted_during_enrollment_stays_deleted_and_is_removed_remotely(
     assert provider.delete_calls == 1
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
     assert all(item["status"] == "deleted" for item in listed if item["id"] == created.json()["id"])
+
+
+def _deleting_provider(
+    database: Database, settings: Settings, outcome: str
+) -> tuple[MockVoiceCloneProvider, dict[str, Any]]:
+    """A supplier whose enroll is overtaken by a delete from another replica."""
+
+    from app.core.models import User
+    from app.modules.auth.service import AuthContext
+    from app.modules.voices.deletion import delete_voice_profile
+    from app.providers.voice import VoiceCloneRefusedError
+
+    seen: dict[str, Any] = {}
+
+    class OvertakenProvider(MockVoiceCloneProvider):
+        def enroll(self, audio_data_uri: str, **kwargs: Any) -> VoiceEnrollmentResult:
+            with database.session() as session:
+                profile = session.scalar(
+                    select(VoiceProfile).where(
+                        VoiceProfile.recovery_name == kwargs["recovery_name"]
+                    )
+                )
+                assert profile is not None
+                seen["profile_id"] = profile.id
+                user = session.get(User, profile.consent_actor_user_id)
+                context = AuthContext(
+                    raw_session_token="x", session=None, user=user, csrf_token="x"
+                )
+                # The supplier has not created the voice yet: nothing to find.
+                delete_voice_profile(
+                    session,
+                    context,
+                    profile.id,
+                    settings,
+                    idempotency_key="overtaking-delete-0001",
+                    provider=self,
+                )
+            if outcome == "refused":
+                raise VoiceCloneRefusedError("refused")
+            created = super().enroll(audio_data_uri, **kwargs)
+            if outcome == "timeout":
+                raise VoiceProviderTimeout("late")
+            if outcome == "generic":
+                raise VoiceProviderError("late")
+            return created
+
+    return OvertakenProvider(), seen
+
+
+@pytest.mark.parametrize("outcome", ["timeout", "generic", "refused", "created"])
+def test_delete_during_enrollment_stays_deleted_and_leaves_no_supplier_voice(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: str,
+) -> None:
+    """#141: a late supplier answer never brings a deleted card back."""
+
+    client, database, settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider, seen = _deleting_provider(database, settings, outcome)
+    _use(monkeypatch, provider)
+
+    _enroll(client, csrf, f"overtaken-enroll-{outcome}")
+    profile_id = seen["profile_id"]
+
+    assert _status(database, profile_id) == "deleted"
+    assert provider._voices == {}
+
+
+def test_a_later_delete_rechecks_an_enrollment_whose_outcome_is_unknown(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the inline cleanup cannot reach the supplier, a second delete looks again."""
+
+    client, database, settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider, seen = _deleting_provider(database, settings, "timeout")
+    _use(monkeypatch, provider)
+    real_exists = provider.exists
+    calls = {"n": 0}
+
+    def flaky_exists(recovery_name: str, *, target_model_key: str) -> Any:
+        calls["n"] += 1
+        # 1: the overtaking delete (nothing yet); 2: the inline cleanup fails.
+        if calls["n"] == 2:
+            raise VoiceProviderError("unavailable")
+        return real_exists(recovery_name, target_model_key=target_model_key)
+
+    monkeypatch.setattr(provider, "exists", flaky_exists)
+    _enroll(client, csrf, "overtaken-enroll-flaky")
+    profile_id = seen["profile_id"]
+    assert _status(database, profile_id) == "deleted"
+    assert len(provider._voices) == 1
+    delete_operation = _delete_operation(database, profile_id)
+    assert delete_operation is not None and delete_operation.state == "succeeded"
+
+    again = _delete(client, csrf, profile_id, "overtaken-delete-again")
+
+    assert again.status_code == 200, again.text
+    assert _status(database, profile_id) == "deleted"
+    assert provider._voices == {}

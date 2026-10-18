@@ -695,6 +695,54 @@ def _claim_provider_operation(
     db.refresh(operation)
 
 
+def _settle_profile_status(
+    db: Session, profile: VoiceProfile, status: str, safe_error_code: str | None
+) -> bool:
+    """Write an enrollment outcome unless the card was deleted meanwhile.
+
+    A delete may commit on another replica while the supplier call runs. A
+    delete is final, so the write is conditional on the stored row; when it
+    finds the profile deleted, the in-memory profile is left deleted too and
+    False is returned.
+    """
+
+    changed = db.execute(
+        update(VoiceProfile)
+        .where(VoiceProfile.id == profile.id, VoiceProfile.status != "deleted")
+        .values(status=status, safe_error_code=safe_error_code, updated_at=now_utc())
+        .execution_options(synchronize_session=False)
+    )
+    if getattr(changed, "rowcount", 0) == 1:
+        profile.status = status
+        profile.safe_error_code = safe_error_code
+        return True
+    profile.status = "deleted"
+    profile.safe_error_code = None
+    return False
+
+
+def _cleanup_deleted_enrollment(profile: VoiceProfile, provider: VoiceCloneProvider | None) -> None:
+    """Best effort: remove a voice the supplier may have created for a deleted card."""
+
+    if provider is None:
+        return
+    try:
+        found = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
+        # More than one match is ambiguous; never delete a voice that may
+        # belong to another profile.
+        if found.visibility_known and len(found.matches) == 1:
+            provider.delete(found.matches[0], target_model_key=profile.target_model_key)
+            return
+        if not found.matches and found.visibility_known:
+            return
+    except VoiceProviderError:
+        pass
+    LOGGER.warning(
+        "Deleted voice may be left at the supplier for later cleanup profile_id=%s",
+        profile.id,
+    )
+
+
 def _store_enrollment_success(
     db: Session,
     profile: VoiceProfile,
@@ -704,12 +752,6 @@ def _store_enrollment_success(
     *,
     provider: VoiceCloneProvider | None = None,
 ) -> VoiceProfile:
-    # The teacher may have deleted the card while the supplier was still
-    # creating the voice. A delete is final: keep the profile deleted and
-    # remove the new supplier voice instead of bringing the card back.
-    deleted_meanwhile = (
-        db.scalar(select(VoiceProfile.status).where(VoiceProfile.id == profile.id)) == "deleted"
-    )
     operation.safe_request_id = result.request_id
     operation.input_bytes = result.input_bytes
     operation.output_bytes = result.output_bytes
@@ -729,9 +771,17 @@ def _store_enrollment_success(
             provider_key=profile.provider_key,
             target_model_key=profile.target_model_key,
         )
-    if deleted_meanwhile:
-        profile.status = "deleted"
-        profile.safe_error_code = None
+    # The teacher may have deleted the card while the supplier was still
+    # creating the voice. A delete is final: keep the profile deleted and
+    # remove the new supplier voice instead of bringing the card back. The
+    # status write is conditional, so a delete that commits after any read
+    # here is still honoured.
+    if not _settle_profile_status(
+        db,
+        profile,
+        "preview_ready" if succeeded else "failed",
+        None if succeeded else "voice_enrollment_failed",
+    ):
         profile.updated_at = now_utc()
         _finish_operation(
             db,
@@ -749,8 +799,6 @@ def _store_enrollment_success(
                     profile.id,
                 )
         return profile
-    profile.status = "preview_ready" if succeeded else "failed"
-    profile.safe_error_code = None if succeeded else "voice_enrollment_failed"
     profile.updated_at = now_utc()
     _finish_operation(
         db,
@@ -785,15 +833,13 @@ def _reconcile_enrollment(
     try:
         result = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
     except VoiceProviderError as exc:
-        profile.status = "outcome_unknown"
-        profile.safe_error_code = "provider_unavailable"
+        _settle_profile_status(db, profile, "outcome_unknown", "provider_unavailable")
         _finish_operation(
             db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
         )
         raise _safe_provider_error(exc) from exc
     if not result.visibility_known or len(result.matches) > 1:
-        profile.status = "outcome_unknown"
-        profile.safe_error_code = "voice_enrollment_failed"
+        _settle_profile_status(db, profile, "outcome_unknown", "voice_enrollment_failed")
         _finish_operation(
             db, operation, state="outcome_unknown", safe_error_code="voice_enrollment_failed"
         )
@@ -808,8 +854,7 @@ def _reconcile_enrollment(
         return True
     # Zero visible matches are safe to retry only after the provider deadline.
     if now_utc() < _utc(operation.provider_deadline) or operation.attempt >= 2:
-        profile.status = "outcome_unknown"
-        profile.safe_error_code = "voice_enrollment_failed"
+        _settle_profile_status(db, profile, "outcome_unknown", "voice_enrollment_failed")
         _finish_operation(
             db, operation, state="outcome_unknown", safe_error_code="voice_enrollment_failed"
         )
@@ -818,9 +863,11 @@ def _reconcile_enrollment(
             "The voice enrollment outcome needs reconciliation.",
             503,
         )
+    if not _settle_profile_status(db, profile, "enrolling", None):
+        # A deleted card is never enrolled again, not even by a same-key retry.
+        _finish_operation(db, operation, state="failed", safe_error_code="voice_enrollment_failed")
+        raise not_found()
     operation.state = "prepared"
-    profile.status = "enrolling"
-    profile.safe_error_code = None
     profile.updated_at = now_utc()
     operation.attempt += 1
     operation.claim_token = secrets.token_urlsafe(32)
@@ -1042,8 +1089,8 @@ def enroll_voice(
                 language=provider_language,
             )
         except VoiceProviderTimeout as exc:
-            profile.status = "outcome_unknown"
-            profile.safe_error_code = "provider_unavailable"
+            if not _settle_profile_status(db, profile, "outcome_unknown", "provider_unavailable"):
+                _cleanup_deleted_enrollment(profile, provider_instance)
             _finish_operation(
                 db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
             )
@@ -1052,8 +1099,7 @@ def enroll_voice(
             # A typed refusal is deterministic, never ambiguous: the profile
             # fails closed and no provider fallback or automatic retry may
             # re-issue this enrollment.
-            profile.status = "failed"
-            profile.safe_error_code = "voice_clone_refused"
+            _settle_profile_status(db, profile, "failed", "voice_clone_refused")
             _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
             raise _safe_provider_error(exc) from exc
         except VoiceProviderError as exc:
@@ -1062,8 +1108,8 @@ def enroll_voice(
             # accepted/charged even when the client saw an error.  Keep the
             # operation in reconciliation rather than allowing a same-key
             # retry to issue a second create blindly.
-            profile.status = "outcome_unknown"
-            profile.safe_error_code = "provider_unavailable"
+            if not _settle_profile_status(db, profile, "outcome_unknown", "provider_unavailable"):
+                _cleanup_deleted_enrollment(profile, provider_instance)
             _finish_operation(
                 db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
             )
@@ -1089,8 +1135,7 @@ def enroll_voice(
         raise
     except VoiceEncryptionError as exc:
         if profile is not None:
-            profile.status = "failed"
-            profile.safe_error_code = "voice_mapping_unavailable"
+            _settle_profile_status(db, profile, "failed", "voice_mapping_unavailable")
             if operation is not None:
                 _finish_operation(
                     db, operation, state="failed", safe_error_code="voice_mapping_unavailable"
