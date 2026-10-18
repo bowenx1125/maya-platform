@@ -44,6 +44,8 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [localError, setLocalError] = useState<MessageKey | null>(null);
+  // Bumped on every submit, so a closed message shows again on a repeat.
+  const [attempt, setAttempt] = useState(0);
   const [groupName, setGroupName] = useState("");
   const [options, setOptions] = useState<RegistrationOptions | null>(null);
   const [busy, setBusy] = useState(false);
@@ -150,6 +152,7 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAttempt((value) => value + 1);
     // The group step is the last one; the first only advances the form.
     if (step === 1) {
       // Checked here rather than through the server so the student is told
@@ -207,7 +210,10 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
         {step === 1 ? t("registerStepAccount") : t("registerStepGroup")}
       </p>
       {localError ? (
-        <DismissibleAlert className="form-error" resetKey={localError}>
+        <DismissibleAlert
+          className="form-error"
+          resetKey={`${attempt}:${localError}`}
+        >
           {t(localError)}
         </DismissibleAlert>
       ) : error ? (

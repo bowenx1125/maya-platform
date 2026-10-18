@@ -317,6 +317,26 @@ describe("registration guards the password before the group step", () => {
     expect(screen.queryByLabelText("Group name")).toBeNull();
   });
 
+  it("shows the password message again after it was closed (#141)", async () => {
+    mount();
+    fireEvent.change(await screen.findByLabelText("Username"), {
+      target: { value: "tiny" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "abc" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "abc" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText(/password is too short/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText(/password is too short/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText(/password is too short/i)).toBeTruthy();
+  });
+
   it("refuses two passwords that do not match", async () => {
     mount();
     fireEvent.change(await screen.findByLabelText("Username"), {

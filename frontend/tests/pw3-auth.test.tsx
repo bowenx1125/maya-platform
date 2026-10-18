@@ -166,6 +166,43 @@ describe("PW3-A anonymous Demo login", () => {
   });
 });
 
+describe("login form validation", () => {
+  afterEach(() => cleanup());
+
+  it("names the missing username again after its message was closed (#141)", async () => {
+    const api = {
+      me: vi.fn(async () => {
+        throw new PlatformApiError(401, "Authentication is required.");
+      }),
+      demoIdentities: vi.fn(async () => {
+        throw new PlatformApiError(404, "Not found.");
+      }),
+      login: vi.fn(),
+      getCsrfToken: vi.fn(() => undefined),
+    } as unknown as PlatformApi;
+    render(
+      <LocaleProvider initialLocale="en">
+        <SessionProvider api={api}>
+          <LoginForm />
+        </SessionProvider>
+      </LocaleProvider>,
+    );
+    await waitFor(() => expect(api.demoIdentities).toHaveBeenCalledTimes(1));
+    const password = screen.getByLabelText("Password");
+    fireEvent.change(password, { target: { value: "secret" } });
+    const form = password.closest("form") as HTMLFormElement;
+
+    fireEvent.submit(form);
+    expect(await screen.findByText("Enter your username.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText("Enter your username.")).toBeNull();
+
+    fireEvent.submit(form);
+    expect(await screen.findByText("Enter your username.")).toBeTruthy();
+    expect(api.login).not.toHaveBeenCalled();
+  });
+});
+
 describe("PW3-A post-login next target", () => {
   it("returns only a same-origin pathname, search and hash", () => {
     expect(sanitizeNextPath("/teacher?tab=history#reports")).toBe(
