@@ -565,6 +565,24 @@ def test_hold_band_neither_grows_nor_shrinks(probe: _Probe, setup) -> None:  # t
         aa.set_threadpool_reader(None)
 
 
+@pytest.mark.parametrize(("borrowed", "grows"), [(100, True), (120, False)])
+def test_threadpool_hold_trips_near_115_of_256_threads(
+    probe: _Probe, borrowed: int, grows: bool
+) -> None:
+    """#141: with the 256-thread pool, 0.9 only tripped at 231 borrowed threads."""
+
+    from app.main import ANYIO_THREAD_TOKENS
+
+    s = _defaults()
+    try:
+        aa.adaptive_admission_snapshot(s)
+        aa.set_threadpool_reader(lambda: borrowed / ANYIO_THREAD_TOKENS)
+        _tick(probe, s)
+        assert (_budget() > 72) is grows
+    finally:
+        aa.set_threadpool_reader(None)
+
+
 def test_growth_is_plus_four_below_half_of_max_then_plus_two(probe: _Probe) -> None:
     s = _defaults(adaptive_admission_initial_units=40, adaptive_admission_max_units=96)
     aa.adaptive_admission_snapshot(s)
