@@ -132,10 +132,6 @@ work, only abandon/redo deletes that attempt's learning records (accounting kept
 Boundary and reports separate mastery/weak/not-yet-verified; server replies follow the
 student's majority language; off-topic/progress questions get help, never answers.
 
-Integrated PDF eb7e142 and selected colleague UI 817282e via b648efc/8987cf8; UI03/04/05 preserved.
-Components UI removed1d92a2f; maintenance APIs stay. October 9 pushed the v14
-line, including the colleague merges below; `main` is that same line.
-
 October5 build30db274/schema0053: ready/integrity/FK passed, Agno3.0.11 public SDK; backups20261005T110321Z and130151Z healthy. Sending/pending0; historical unknown3 retained. Synthetic RAG: 1 charged Embedding, 2 accepted charged Knowledge calls; Gen2/seq3 replaced seq2 with history. Consent-denied sends: 0 calls. Cleanup withdrew exact synthetic fixtures only; runtime ledger 457 operations/457 charged requests unchanged. October7 authorizes a fresh dedicated synthetic four-Agent Team and multi-student workflow. Synthetic reads stay scoped; never real learner data or unrelated Private Chat bodies.
 
 [Current UI contract](contracts/MAYAFORM_FINAL_UI_POLISH_SPEC_V2.md) overrides prior UI
@@ -224,3 +220,5 @@ October 15: New Team chats stay at revision 0 with no canned opening. A course t
 October 17: One adaptive admission queue (`core/adaptive_admission.py`) fronts login/create/write/LLM. Danger (load >= 6 or Mem < 500 MiB; clears at <= 4 and >= 550) admits nothing. AIMD uses server signals only: x0.7 on danger, load >= 4, Mem < 900, 30 s DB write or pool-wait p95 > 500 ms; hold at load 3-4, Mem 900-1100 or thread pool >= 90%; else +4 below half of max, +2 above; starts/idles at 72. Request p95: report only. Refused sends (queue full, 180 s wait, chat_busy) store nothing; the box keeps the text. Chats send only via `messages:stream`. Per process: backstops: LLM 20, write/create off, max 128, in-flight 48, 256 sync + 96 asyncio threads, pool 15+25; ready probe has its own limiter. Nested calls get a fresh backstop wait; admission-refused Debate segments are not_sent; prod restarts unless-stopped.
 
 October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; it opens cached and reads each test once (0068 index). Accounts/group visits drop Test results. Students keep Memory. A Voice owner can Delete it in Studyform; its Agents use the fallback voice. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones use the fallback voice. Unverified on the real supplier. A 40/60-student run (sign in, Team create/chat, formal answers) passes on PostgreSQL; queued creates hold no pooled connection.
+
+October 17: Concurrent votes allocate `debates.last_sequence` with `UPDATE … RETURNING`. On Postgres, 40 simultaneous `submit_vote` calls stored 40 votes and a gap-free event sequence; a lost compare-and-swap is no longer `stale_sequence`.

@@ -77,6 +77,9 @@ from .schemas import (
 from .tokens import ClassroomToken, issue_token, parse_token
 
 IDEMPOTENCY_LEASE = timedelta(seconds=30)
+# A unique event sequence is a lost race, not a reused client submission.
+# The vote transaction rolls back with it and is attempted again.
+_EVENT_SEQUENCE_ATTEMPTS = 8
 OPEN_OPERATION = "interaction.open"
 CLOSE_OPERATION = "interaction.close"
 _SAFE_WINDOW_STATUSES = {"closed", "open", "finalized"}
@@ -578,28 +581,50 @@ def _finish_idempotency(
         raise invalid_state("The idempotency claim is no longer owned by this request.")
 
 
+def _integrity_detail(exc: IntegrityError) -> str:
+    orig = exc.orig
+    parts = [str(orig)]
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None) if diag is not None else None
+    if constraint_name:
+        parts.append(str(constraint_name))
+    return " ".join(parts).lower()
+
+
+def _is_event_sequence_integrity(exc: IntegrityError) -> bool:
+    """True when the failure is the debate event watermark, not a client id."""
+
+    detail = _integrity_detail(exc)
+    return "uq_debate_events_debate_sequence" in detail or "debate_events.sequence" in detail
+
+
 def _event(
     session: Session,
     debate: Debate,
     event_type: str,
     payload: Mapping[str, Any],
 ) -> PostCommitInteractionEvent:
-    previous_sequence = int(debate.last_sequence)
-    sequence = previous_sequence + 1
     occurred_at = _now()
     payload_dict = dict(payload)
     event_id = str(uuid4())
-    # BEGIN IMMEDIATE already serializes writers, while this explicit CAS
-    # keeps the invariant visible to SQLite and protects a future caller that
-    # accidentally reuses a stale Debate identity map.
-    changed = session.execute(
+    # A compare-and-swap against the identity map loses on Postgres: two
+    # transactions can both observe last_sequence=n, and SQLite's writer lock
+    # is what used to hide that. Increment the row and read the stored value
+    # in the same statement so each caller gets a distinct sequence.
+    allocated = session.execute(
         update(Debate)
-        .where(Debate.id == debate.id, Debate.last_sequence == previous_sequence)
-        .values(last_sequence=sequence, updated_at=occurred_at)
-    )
-    if int(getattr(changed, "rowcount", 0)) != 1:
+        .where(Debate.id == debate.id)
+        .values(last_sequence=Debate.last_sequence + 1, updated_at=occurred_at)
+        .returning(Debate.last_sequence)
+        .execution_options(synchronize_session=False)
+    ).scalar_one_or_none()
+    if allocated is None:
         raise conflict("stale_sequence", "The debate event sequence is stale.")
+    sequence = int(allocated)
+    # Keep the identity map aligned with the RETURNING value before flush.
+    # A dirty Debate would otherwise write the stale in-memory sequence back.
     debate.last_sequence = sequence
+    debate.updated_at = occurred_at
     session.add(
         DebateEvent(
             id=event_id,
@@ -1109,91 +1134,112 @@ class InteractionService:
         session = _begin_writer(self.session_factory)
         event: PostCommitInteractionEvent | None = None
         try:
-            window = session.scalar(
-                select(ClassroomInteractionWindow).where(
-                    ClassroomInteractionWindow.id == str(parsed.window_id),
-                    ClassroomInteractionWindow.token_nonce == parsed.nonce,
-                )
-            )
-            if window is None:
-                raise not_found()
-            existing = session.scalar(
-                select(Vote).where(
-                    Vote.window_id == window.id,
-                    Vote.client_submission_id == str(payload.client_submission_id),
-                )
-            )
-            if existing is not None:
-                if existing.participant_id != str(payload.participant_id):
-                    raise idempotency_conflict()
-                session.commit()
-                session.close()
-                return VoteSubmitted(vote_submitted=True)
-            if window.status == "finalized":
-                raise PlatformError(
-                    "interaction_finalized",
-                    "Classroom interaction collection has ended.",
-                    410,
-                )
-            if window.status != "open":
-                raise not_found()
-            participant = session.scalar(
-                select(DebateParticipant).where(
-                    DebateParticipant.id == str(payload.participant_id),
-                    DebateParticipant.debate_id == window.debate_id,
-                )
-            )
-            if participant is None:
-                raise unprocessable(
-                    "participant_not_in_debate",
-                    "The selected participant is not part of this debate.",
-                )
-            vote = Vote(
-                id=str(uuid4()),
-                window_id=window.id,
-                debate_id=window.debate_id,
-                participant_id=str(payload.participant_id),
-                client_submission_id=str(payload.client_submission_id),
-                submitted_at=_now(),
-            )
-            session.add(vote)
-            session.flush()
-            debate = session.get(Debate, window.debate_id)
-            if debate is None:
-                raise not_found()
-            aggregate = next(
-                row
-                for row in _aggregates(session, window.debate_id, window.id)
-                if str(row.participant_id) == str(participant.id)
-            )
-            event = _event(
-                session,
-                debate,
-                "interaction.vote_created",
-                {
-                    "participant_id": str(participant.id),
-                    "slot": participant.slot,
-                    "new_count": aggregate.count,
-                    "percentage": aggregate.percentage,
-                    "total_votes": len(_votes(session, window.id)),
-                },
-            )
-            session.commit()
-        except IntegrityError:
-            _abort(session)
-            # A concurrent duplicate can only occur if a different process
-            # ignored the writer lock; expose the same deterministic replay
-            # semantics after reopening a short read.
-            with self.session_factory() as retry:
-                row = retry.scalar(
-                    select(Vote).where(
-                        Vote.window_id == str(parsed.window_id),
-                        Vote.client_submission_id == str(payload.client_submission_id),
+            for attempt in range(_EVENT_SEQUENCE_ATTEMPTS):
+                try:
+                    window = session.scalar(
+                        select(ClassroomInteractionWindow).where(
+                            ClassroomInteractionWindow.id == str(parsed.window_id),
+                            ClassroomInteractionWindow.token_nonce == parsed.nonce,
+                        )
                     )
-                )
-                if row is not None and row.participant_id == str(payload.participant_id):
-                    return VoteSubmitted(vote_submitted=True)
-            raise idempotency_conflict() from None
+                    if window is None:
+                        raise not_found()
+                    existing = session.scalar(
+                        select(Vote).where(
+                            Vote.window_id == window.id,
+                            Vote.client_submission_id == str(payload.client_submission_id),
+                        )
+                    )
+                    if existing is not None:
+                        if existing.participant_id != str(payload.participant_id):
+                            raise idempotency_conflict()
+                        session.commit()
+                        session.close()
+                        return VoteSubmitted(vote_submitted=True)
+                    if window.status == "finalized":
+                        raise PlatformError(
+                            "interaction_finalized",
+                            "Classroom interaction collection has ended.",
+                            410,
+                        )
+                    if window.status != "open":
+                        raise not_found()
+                    participant = session.scalar(
+                        select(DebateParticipant).where(
+                            DebateParticipant.id == str(payload.participant_id),
+                            DebateParticipant.debate_id == window.debate_id,
+                        )
+                    )
+                    if participant is None:
+                        raise unprocessable(
+                            "participant_not_in_debate",
+                            "The selected participant is not part of this debate.",
+                        )
+                    vote = Vote(
+                        id=str(uuid4()),
+                        window_id=window.id,
+                        debate_id=window.debate_id,
+                        participant_id=str(payload.participant_id),
+                        client_submission_id=str(payload.client_submission_id),
+                        submitted_at=_now(),
+                    )
+                    session.add(vote)
+                    session.flush()
+                    debate = session.get(Debate, window.debate_id)
+                    if debate is None:
+                        raise not_found()
+                    aggregate = next(
+                        row
+                        for row in _aggregates(session, window.debate_id, window.id)
+                        if str(row.participant_id) == str(participant.id)
+                    )
+                    event = _event(
+                        session,
+                        debate,
+                        "interaction.vote_created",
+                        {
+                            "participant_id": str(participant.id),
+                            "slot": participant.slot,
+                            "new_count": aggregate.count,
+                            "percentage": aggregate.percentage,
+                            "total_votes": len(_votes(session, window.id)),
+                        },
+                    )
+                    session.commit()
+                    break
+                except IntegrityError as exc:
+                    session.rollback()
+                    # A concurrent duplicate can only occur if a different process
+                    # ignored the writer lock; expose the same deterministic replay
+                    # semantics after reopening a short read. A sequence collision
+                    # rolls this vote back, so the client id is absent and must
+                    # be retried rather than reported as idempotency.
+                    with self.session_factory() as retry:
+                        row = retry.scalar(
+                            select(Vote).where(
+                                Vote.window_id == str(parsed.window_id),
+                                Vote.client_submission_id == str(payload.client_submission_id),
+                            )
+                        )
+                        if row is not None and row.participant_id == str(payload.participant_id):
+                            session.close()
+                            return VoteSubmitted(vote_submitted=True)
+                    if _is_event_sequence_integrity(exc) and attempt + 1 < _EVENT_SEQUENCE_ATTEMPTS:
+                        begin_immediate(session)
+                        continue
+                    if _is_event_sequence_integrity(exc):
+                        raise conflict(
+                            "stale_sequence", "The debate event sequence is stale."
+                        ) from exc
+                    raise idempotency_conflict() from exc
+                except PlatformError as exc:
+                    if exc.code == "stale_sequence" and attempt + 1 < _EVENT_SEQUENCE_ATTEMPTS:
+                        session.rollback()
+                        begin_immediate(session)
+                        continue
+                    raise
+            else:
+                raise conflict("stale_sequence", "The debate event sequence is stale.")
         except Exception:
             _abort(session)
             raise
