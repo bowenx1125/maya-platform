@@ -619,6 +619,8 @@ class AssessmentAttempt(Base):
             name="fk_assessment_attempt_conversation",
         ),
         UniqueConstraint("id", "activity_id", name="uq_assessment_attempt_activity_scope"),
+        # The teacher's Record reads each activity's attempts in start order.
+        Index("ix_assessment_attempts_activity_started", "activity_id", "started_at"),
         Index(
             "ix_assessment_attempts_actor_activity",
             "actor_user_id",
