@@ -169,6 +169,43 @@ reachable backend or another proxy without equivalent isolation and sanitization
 Validate DNS/certificates, redirects, secure cookies, QR, SSE/WebSocket and the actual
 site after deployment; offline config checks cannot verify a public certificate.
 
+### Automatic restart
+
+Every service uses `restart: unless-stopped`, which restarts a container only
+when its process exits. A backend that hangs keeps running and is only marked
+`unhealthy` by its healthcheck (`/health/ready`, six failures 10 s apart). The
+`autoheal` service restarts such a backend: it polls Docker every 20 s for
+containers labelled `com.maya.autoheal=true` (only `backend`) that Docker
+reports unhealthy. It restarts one after three such checks in a row, with a
+30 s graceful stop, and does not restart the same container again within
+5 minutes. A hang is therefore cleared after roughly 100 s. The watcher
+uses the official `docker` CLI image with the Docker socket mounted and no
+network; its logic is `infra/autoheal.sh`. `AUTOHEAL_*` variables change the
+timings, and `AUTOHEAL_DRY_RUN=true` logs a decision instead of restarting.
+
+Verify it outside class, with both replicas running so the other one keeps
+serving:
+
+1. Confirm the watcher runs and sees the label:
+   `docker compose ... logs autoheal` shows `watching label=com.maya.autoheal=true`,
+   and `docker ps --filter label=com.maya.autoheal=true` lists only the
+   backend replicas.
+2. Optionally deploy once with `AUTOHEAL_DRY_RUN=true` in the operator
+   environment file and run step 3; the log then says `dry-run would restart`
+   and nothing restarts.
+3. Freeze one replica without stopping it: `docker exec <backend-1> kill -STOP 1`
+   (`<backend-1>` from `docker ps`). Watch `docker ps` show it `unhealthy` after
+   about 60 s and the autoheal log count `check=1/3`, `2/3`, then
+   `restarting name=...`. The frozen process ignores SIGTERM, so Docker stops
+   it after the 30 s grace and starts it again.
+4. Within about 3 minutes the replica is `healthy`. Check `/health/ready` inside
+   it and that the site answered throughout (Caddy routes to the healthy
+   replica). Remove `AUTOHEAL_DRY_RUN` if you set it.
+
+If the watcher should be paused (for example during a manual investigation of a
+hung replica), stop it with `docker compose ... stop autoheal`; a later
+`up -d` starts it again.
+
 Production authentication defaults are 10 failed sign-ins per account/client in
 15 minutes, 240 failed sign-ins per client in 15 minutes, and 120 registrations per
 client in an hour. Successful sign-ins do not consume failure allowances. Operators

@@ -22,6 +22,9 @@ services:
 
   backend:
     restart: unless-stopped
+    # Opt-in for the autoheal service below: restarted when it stays unhealthy.
+    labels:
+      com.maya.autoheal: "true"
     environment:
       NODE_ENV: production
       MAYA_ENV: production
@@ -89,6 +92,25 @@ services:
       - ${MAYA_PRODUCTION_DATA_DIR:?Set a dedicated production data directory}:/app/data
       - ${MAYA_PRODUCTION_CONFIG_DIR:?Set a dedicated production config directory}:/app/config:ro
       - ./contracts:/app/contracts:ro
+
+  # Docker restarts a container whose process exits, not one that hangs and is
+  # only marked unhealthy. This watcher restarts a backend that stays unhealthy
+  # (see infra/autoheal.sh and docs/RELEASE_POLICY.md "Automatic restart").
+  autoheal:
+    image: docker:29.9.1-cli
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/autoheal.sh"]
+    environment:
+      AUTOHEAL_LABEL: com.maya.autoheal=true
+      AUTOHEAL_INTERVAL_SECONDS: ${AUTOHEAL_INTERVAL_SECONDS:-20}
+      AUTOHEAL_CONFIRM_CHECKS: ${AUTOHEAL_CONFIRM_CHECKS:-3}
+      AUTOHEAL_COOLDOWN_SECONDS: ${AUTOHEAL_COOLDOWN_SECONDS:-300}
+      AUTOHEAL_STOP_TIMEOUT_SECONDS: ${AUTOHEAL_STOP_TIMEOUT_SECONDS:-30}
+      AUTOHEAL_DRY_RUN: ${AUTOHEAL_DRY_RUN:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./infra/autoheal.sh:/autoheal.sh:ro
+    network_mode: none
 
   postgres:
     restart: unless-stopped
