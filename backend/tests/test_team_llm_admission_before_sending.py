@@ -201,3 +201,42 @@ def test_admission_refusal_leaves_the_call_not_sent_and_never_sending(
     assert transport.call_count == 0
     assert ("reserved", "sending") not in transitions
     assert _states(database) == ["not_sent"]
+
+
+def test_failed_sending_transition_leaves_the_call_not_sent_and_frees_the_slot(
+    client: TestClient, app_bundle: Any, monkeypatch: Any
+) -> None:
+    """#141: a transition error after the slot wait used to strand a "reserved" row."""
+
+    from app.modules.workspace.chat_team_provider import TeamDispatchError
+
+    _app, database, settings = app_bundle
+    request, bindings = _ready_request(client, database, settings)
+    original_transition = ProviderRepository.transition
+    held = {"now": False}
+
+    def transition(self: Any, operation_id: str, **kwargs: Any) -> Any:
+        if kwargs.get("expected") == "reserved" and kwargs.get("state") == "sending":
+            raise RuntimeError("database went away")
+        return original_transition(self, operation_id, **kwargs)
+
+    @contextmanager
+    def slot(*_args: Any, **_kwargs: Any) -> Iterator[None]:
+        held["now"] = True
+        try:
+            yield
+        finally:
+            held["now"] = False
+
+    transport = _ok_transport()
+    monkeypatch.setattr(ProviderRepository, "transition", transition)
+    monkeypatch.setattr("app.modules.workspace.chat_team_provider.llm_admission_slot", slot)
+    monkeypatch.setattr(
+        "app.modules.workspace.chat_team_provider.HttpxLLMTransport.post_bytes", transport
+    )
+    with pytest.raises(TeamDispatchError):
+        _dispatch(database, settings, request, bindings)
+
+    assert transport.call_count == 0
+    assert held["now"] is False
+    assert _states(database) == ["not_sent"]
