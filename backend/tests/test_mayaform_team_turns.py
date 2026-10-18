@@ -694,7 +694,17 @@ def test_extract_team_ruleset_only_from_guide_heading() -> None:
     )
     assert "You are Bowen." in leader
     assert "saying 正式测评" in leader
-    assert "not on every reply" in leader
+    # Before a test starts the Guide invites every reply (2026-10-19 owner decision).
+    assert "not on every reply" not in leader
+    closed = runtime._member_system(
+        "# Member\n\nSpeak.",
+        "{}",
+        team_ruleset=body,
+        speaker_name="Bowen",
+        is_leader=True,
+        attempt_closed=True,
+    )
+    assert "not on every reply" in closed
     assert "scorer: Jade" not in leader
     active = runtime._member_system(
         "# Member\n\nSpeak.",
