@@ -151,6 +151,26 @@ def _enrollment_may_have_reached_provider(db: Session, profile: VoiceProfile) ->
     )
 
 
+def _enrollment_unresolved(db: Session, profile: VoiceProfile) -> bool:
+    """An enrollment whose supplier outcome is still unknown.
+
+    A delete that ran while the supplier was still creating the voice can
+    succeed with nothing to find; the voice may appear afterwards. While the
+    enrollment stays unresolved, a later delete must look again.
+    """
+
+    return (
+        db.scalar(
+            select(VoiceProviderOperation.id).where(
+                VoiceProviderOperation.profile_id == profile.id,
+                VoiceProviderOperation.operation_type == "enroll",
+                VoiceProviderOperation.state.in_(("dispatched", "reconciling", "outcome_unknown")),
+            )
+        )
+        is not None
+    )
+
+
 def _remote_voice_ids(
     db: Session,
     profile: VoiceProfile,
@@ -174,6 +194,11 @@ def _remote_voice_ids(
         # exists remotely, only the card goes.
         return [], True
     result = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
+    if len(result.matches) > 1:
+        # The recovery name is a short prefix of the profile id and the
+        # supplier matches it as a substring, so several matches may include
+        # another profile's voice. Delete none and leave the outcome unknown.
+        return [], False
     return list(result.matches), result.visibility_known
 
 
@@ -248,7 +273,11 @@ def delete_voice_profile(
         )
         .order_by(VoiceProviderOperation.created_at)
     )
-    if operation is not None and operation.state == "succeeded":
+    if (
+        operation is not None
+        and operation.state == "succeeded"
+        and not _enrollment_unresolved(db, profile)
+    ):
         _soft_delete(db, profile, settings)
         return finish(profile)
     if operation is None and profile.status == "deleted":

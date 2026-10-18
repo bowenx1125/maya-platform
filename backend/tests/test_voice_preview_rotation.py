@@ -23,13 +23,29 @@ from tests.conftest import login
 GROUP_A = "7813f937-902c-5534-bfb2-ad773a43aeda"
 
 EXPECTED_LINES = (
+    "龙脉长歌是罗登家族搜集大量考古数据后，杜撰的神明爱情歌剧。"
+    "The first act describes the birth of Helius from the fires of Ignis.",
+    "他为烛龙授命，于虚空看望群山，漂泊亿万年为孤独折磨。"
+    "One day, he was drawn in by a mysterious voice.",
+    "有歌的地方，你就会找到我。"
+    "Terra, one of the gods, gazed at Helius from afar, hoping to save him with her song.",
+    "终于乙皇为她降世，彼此相恋。Together they established the Myrian Empire.",
+    "由于后土的歌声使龙脉不灭，众道不死，破坏了烛龙的法则。"
+    "In fear of divine retribution, six gods rebelled, "
+    "sacrificing Terra to Ignis and sparking the holy war.",
+    "我记得艾妲看完后，始终呢喃着后土死前对乙皇的话语。"
+    "Should we find each other in the next life, let us live on a planet of our own.",
     "若来世再遇，就找一个无人的行星生活。"
     "I will plant flowers among the valleys, and sing for you into old age and death.",
+    "而我只记得艾妲的侧脸。At the end of the story, Helius slays the gods who killed Terra.",
+    "他试图用龙脉生长的花卉让后土复活，然而烛龙却警告他。"
+    "If Terra were resurrected, the fires of heaven would destroy Thousand Peaks.",
+    "乙皇不允，反将爱人的尸首藏于大荒，目送后土于虚空离去。"
+    "His last words before sending his lover into the void were these.",
+    "花开有时，来世再遇。"
+    "The heavens erupted and Helius was blown away by wind storms, scattered among the stars.",
     "如果遇见你不是奇迹，灵魂便不曾言语。"
     "If meeting you wasn't a miracle, then the souls have never whispered.",
-    "我一定会带你去看看...那我心爱的地方。"
-    "Unlike your planet, the flowers there. Are always in full bloom.",
-    "不管需要多少年，我都想要再见你一面。No mater how long it takes, I want to see you again.",
 )
 
 
@@ -63,11 +79,16 @@ def _enroll(client: TestClient, csrf: str, key: str) -> str:
     return str(response.json()["id"])
 
 
-def test_the_four_lines_are_exactly_as_specified() -> None:
+def test_the_twelve_lines_are_exactly_as_specified() -> None:
+    assert len(EXPECTED_LINES) == 12
     assert voice_preview.VOICE_PREVIEW_LINES == EXPECTED_LINES
+    assert voice_preview.VOICE_PREVIEW_LINES[6] == (
+        "若来世再遇，就找一个无人的行星生活。"
+        "I will plant flowers among the valleys, and sing for you into old age and death."
+    )
 
 
-def test_previews_rotate_through_four_lines_in_global_click_order(
+def test_previews_rotate_through_twelve_lines_in_global_click_order(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -89,7 +110,8 @@ def test_previews_rotate_through_four_lines_in_global_click_order(
 
     monkeypatch.setattr(provider, "synthesize", capture)
     monkeypatch.setattr(voice_preview, "tts_provider", lambda _settings: provider)
-    order = [first_voice, second_voice, first_voice, first_voice, second_voice, first_voice]
+    # 14 clicks alternating voices: lines 1..12, then wrap to lines 1 and 2.
+    order = [first_voice if index % 3 else second_voice for index in range(14)]
     for profile_id in order:
         response = client.post(
             f"/api/v1/voice-profiles/{profile_id}/preview",
@@ -97,14 +119,7 @@ def test_previews_rotate_through_four_lines_in_global_click_order(
         )
         assert response.status_code == 200, response.text
 
-    assert spoken == [
-        EXPECTED_LINES[0],
-        EXPECTED_LINES[1],
-        EXPECTED_LINES[2],
-        EXPECTED_LINES[3],
-        EXPECTED_LINES[0],
-        EXPECTED_LINES[1],
-    ]
+    assert spoken == [*EXPECTED_LINES, EXPECTED_LINES[0], EXPECTED_LINES[1]]
 
 
 def test_counter_is_persisted_and_atomic_under_concurrent_clicks(
@@ -131,5 +146,7 @@ def test_counter_is_persisted_and_atomic_under_concurrent_clicks(
     with database.session() as session:
         counter = session.get(VoicePreviewCounter, "global")
         assert counter is not None and counter.value == 1 + workers
-    # Clicks 2..9 cover lines 2,3,4,1,2,3,4,1: each line exactly twice.
-    assert sorted(picked) == sorted(EXPECTED_LINES[index % 4] for index in range(1, 1 + workers))
+    # Clicks 2..9 each get a distinct line (2..9): no click is lost or doubled.
+    assert sorted(picked) == sorted(
+        EXPECTED_LINES[index % len(EXPECTED_LINES)] for index in range(1, 1 + workers)
+    )
