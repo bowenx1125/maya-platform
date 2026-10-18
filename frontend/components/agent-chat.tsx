@@ -53,7 +53,14 @@ import {
   settleChatRequest,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
-import { applyMentionInsert, placeMentionCaret } from "../lib/mention-insert";
+import {
+  applyMentionInsert,
+  collapseMentionOnBackspace,
+  insertedMentionAt,
+  placeMentionCaret,
+  type InsertedMention,
+} from "../lib/mention-insert";
+import { mentionedMembers } from "../lib/mention-parse";
 import {
   ChatTargetPicker,
   type ChatTargetTeam,
@@ -173,27 +180,19 @@ function newRequestId(): string {
     .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
-function mentionLabel(text: string): string | null {
-  const visible = text.replace(/```[\s\S]*?```/g, " ");
-  const labels = [...visible.matchAll(/@([^\s@]+)/g)].map((match) => match[1]);
-  return labels.at(-1) ?? null;
-}
-
 function routingForMention(
   session: TeamChatSession,
   message: string,
 ): TeamRouting {
-  // Bare sends: every member reads and replies (length by relevance). An
-  // empty reply is omitted and is not a failure. @Name is explicit; typed
-  // @All still routes to everyone (picker no longer offers All).
+  // Bare sends: every member reads; the leader replies first and the rest
+  // reply by relevance (an empty reply is not a failure). @Name matches the
+  // longest member name (no space needed). An @ naming no available member,
+  // or typed @All, is ignored and the default rules apply.
   const all: TeamRouting = { mode: "all", participant_ids: [] };
-  const label = mentionLabel(message);
-  if (!label) return all;
-  if (label === "All") return all;
-  const member = session.team.members.find(
-    (item) => item.name === label && item.available !== false,
-  );
-  return member ? { mode: "selected", participant_ids: [member.id] } : all;
+  const named = mentionedMembers(message, session.team.members);
+  return named.length
+    ? { mode: "selected", participant_ids: named.map((member) => member.id) }
+    : all;
 }
 
 function isAgentSession(
@@ -610,6 +609,7 @@ function AgentChatScope({
   const [teamDraft, setTeamDraft] = useState("");
   const [teamRecipientMenu, setTeamRecipientMenu] = useState(false);
   const teamRecipientMenuRef = useRef<HTMLDivElement>(null);
+  const insertedMention = useRef<InsertedMention | null>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
   // The server scores and summarizes after the last answer, with no message
@@ -2633,6 +2633,7 @@ function AgentChatScope({
 
   function insertMention(label: string) {
     const { next, caret } = applyMentionInsert(teamDraft, label);
+    insertedMention.current = insertedMentionAt(teamDraft, label);
     flushSync(() => {
       setTeamDraft(next);
       setTeamRecipientMenu(false);
@@ -3178,6 +3179,31 @@ function AgentChatScope({
                       if (event.key === "Escape") {
                         setTeamRecipientMenu(false);
                         return;
+                      }
+                      if (
+                        teamMode &&
+                        event.key === "Backspace" &&
+                        !event.nativeEvent.isComposing
+                      ) {
+                        const el = event.currentTarget;
+                        const collapsed =
+                          el.selectionStart === el.selectionEnd
+                            ? collapseMentionOnBackspace(
+                                teamDraft,
+                                el.selectionStart,
+                                insertedMention.current,
+                              )
+                            : null;
+                        insertedMention.current = null;
+                        if (collapsed) {
+                          event.preventDefault();
+                          flushSync(() => {
+                            setTeamDraft(collapsed.next);
+                            if (canMention) setTeamRecipientMenu(true);
+                          });
+                          placeMentionCaret(el, collapsed.caret);
+                          return;
+                        }
                       }
                       if (
                         canMention &&

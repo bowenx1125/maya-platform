@@ -1894,6 +1894,51 @@ describe("Chatform", () => {
     });
   });
 
+  it("Backspace after a picked @Name drops the name, keeps @ and reopens the picker; wrong @ falls back to all", async () => {
+    renderChats();
+    await startMayaTeamChat("Start the Team Chat");
+    await waitFor(() =>
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1),
+    );
+    const message = (await screen.findByRole("textbox", {
+      name: "Message",
+    })) as HTMLTextAreaElement;
+    await waitFor(() => expect(message.value).toBe(""));
+
+    fireEvent.change(message, { target: { value: "hi @" } });
+    fireEvent.keyDown(message, { key: "@", shiftKey: true });
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "Recipients" })).getByRole(
+        "menuitem",
+        { name: "Jade" },
+      ),
+    );
+    expect(message.value).toBe("hi @Jade ");
+    expect(message.selectionStart).toBe("hi @Jade ".length);
+
+    fireEvent.keyDown(message, { key: "Backspace" });
+    expect(message.value).toBe("hi @");
+    expect(message.selectionStart).toBe("hi @".length);
+    expect(screen.getByRole("menu", { name: "Recipients" })).toBeTruthy();
+
+    // Ordinary typed text is not collapsed (default Backspace handling).
+    fireEvent.keyDown(message, { key: "Escape" });
+    fireEvent.change(message, { target: { value: "plain text " } });
+    message.setSelectionRange(11, 11);
+    fireEvent.keyDown(message, { key: "Backspace" });
+    expect(message.value).toBe("plain text ");
+    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
+
+    fireEvent.change(message, { target: { value: "@Nobody 你好" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(2),
+    );
+    expect(state.api.streamTeamConversation.mock.calls[1][1]).toMatchObject({
+      routing: { mode: "all", participant_ids: [] },
+    });
+  });
+
   it("shows participant-named partial results without claiming a full reply", async () => {
     const requestId = "team-request-1";
     const partialSession = {
