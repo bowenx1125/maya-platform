@@ -36,3 +36,32 @@ export function placeMentionCaret(
   el.focus();
   el.setSelectionRange(caret, caret);
 }
+
+/** Where the picker last inserted `@Name ` (its auto space included). */
+export type InsertedMention = { at: number; label: string };
+
+export function insertedMentionAt(
+  draft: string,
+  label: string,
+): InsertedMention {
+  const { caret } = applyMentionInsert(draft, label);
+  return { at: caret - label.length - 2, label };
+}
+
+/**
+ * Backspace with the caret right after a picker-inserted `@Name `: remove
+ * the space and the name together, keeping the "@" so the picker can reopen.
+ * Returns null for anything else, so ordinary text deletes char by char.
+ */
+export function collapseMentionOnBackspace(
+  draft: string,
+  caret: number,
+  inserted: InsertedMention | null,
+): MentionInsertResult | null {
+  if (!inserted) return null;
+  const token = `@${inserted.label} `;
+  const end = inserted.at + token.length;
+  if (caret !== end || draft.slice(inserted.at, end) !== token) return null;
+  const next = `${draft.slice(0, inserted.at + 1)}${draft.slice(end)}`;
+  return { next, caret: inserted.at + 1 };
+}

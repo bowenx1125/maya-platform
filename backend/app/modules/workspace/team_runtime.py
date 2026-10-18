@@ -16,7 +16,7 @@ from uuid import UUID, uuid4, uuid5
 from agno.models.message import Message
 from agno.models.response import ModelResponse
 from sqlalchemy import func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
@@ -30,6 +30,7 @@ from app.modules.learning.schemas import AssessmentRuntimeResult
 from app.modules.runtime_tools.models import RuntimeToolReceipt
 from app.modules.teams.models import TeamMemberInvokeGrant, TeamVersionMember
 from app.modules.teams.service import resolve_frozen_chat_selection
+from app.modules.workspace.mention_parse import mentioned_names
 
 from .formal_assessment import FormalRoles
 from .models import (
@@ -1724,8 +1725,23 @@ def _mentioned(turn: ConversationTurn, participant: ConversationParticipant) -> 
     return (
         routing.mode == "selected"
         and UUID(participant.id) in routing.participant_ids
-        and f"@{participant.display_name}" in turn.user_text
+        and participant.display_name
+        in mentioned_names(turn.user_text or "", _member_names(participant))
     )
+
+
+def _member_names(participant: ConversationParticipant) -> list[str]:
+    """Display names of this Team chat's members, for longest-name @ matching."""
+
+    db = object_session(participant)
+    if db is None:
+        return [participant.display_name]
+    names = db.scalars(
+        select(ConversationParticipant.display_name).where(
+            ConversationParticipant.conversation_id == participant.conversation_id
+        )
+    )
+    return [name for name in names if name]
 
 
 def _member_system(
