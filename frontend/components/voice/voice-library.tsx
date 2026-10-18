@@ -47,7 +47,7 @@ type ListedVoice = VoiceProfile;
 type RetryAction =
   | { kind: "load" }
   | { kind: "enroll"; file: File }
-  | { kind: "preview" | "confirm" | "delete"; profileId: string }
+  | { kind: "preview" | "delete"; profileId: string }
   | {
       kind: "rename";
       profile: ListedVoice;
@@ -68,7 +68,7 @@ function isCloneRefusal(cause: unknown): boolean {
 
 function voiceAwareCause(cause: unknown): unknown {
   // Only for enroll/preview: supplier outages steer to the platform fallback voice.
-  // Do not remap rename/load/confirm — a 5xx there is not "provider unavailable".
+  // Do not remap rename/load — a 5xx there is not "provider unavailable".
   // A refused clone is a terminal answer, not an outage, and passes through.
   if (!(cause instanceof PlatformApiError)) return cause;
   if (isCloneRefusal(cause)) return cause;
@@ -492,63 +492,6 @@ export function VoiceLibrary({
     }
   }
 
-  async function confirm(profileId: string, retry = false) {
-    if (controlsDisabled) return;
-    setBusy(true);
-    setFailure(null);
-    try {
-      // A lost confirmation response may already have promoted the profile.
-      const current = retry ? await api.voiceProfile(profileId) : null;
-      if (current?.status !== "ready") {
-        if (
-          !preview[profileId] ||
-          !previewIsCurrent(preview[profileId].expiresAt)
-        ) {
-          invalidatePreview(profileId, "voicePreviewExpired");
-          return;
-        }
-        await api.confirmVoiceProfile(profileId);
-      }
-      setPreview((current) => {
-        const next = { ...current };
-        delete next[profileId];
-        return next;
-      });
-      clearConfirmationFailure(profileId);
-      await load();
-    } catch (cause) {
-      if (
-        cause instanceof PlatformApiError &&
-        cause.status === 409 &&
-        cause.code === "invalid_state"
-      ) {
-        try {
-          const current = await api.voiceProfile(profileId);
-          if (current.status === "ready") {
-            setPreview((resources) => {
-              const next = { ...resources };
-              delete next[profileId];
-              return next;
-            });
-            clearConfirmationFailure(profileId);
-            await load();
-          } else {
-            invalidatePreview(profileId, "voicePreviewExpired");
-          }
-        } catch (lookupFailure) {
-          setFailure({
-            cause: lookupFailure,
-            retry: { kind: "confirm", profileId },
-          });
-        }
-      } else {
-        setFailure({ cause, retry: { kind: "confirm", profileId } });
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
   // Agents bound to a deleted voice speak with the fallback voice, so
   // deleting never blocks a Debate.
   async function remove(profile: ListedVoice) {
@@ -581,17 +524,6 @@ export function VoiceLibrary({
     }
   }
 
-  function clearConfirmationFailure(profileId: string) {
-    setFailure((current) => {
-      const retry = current?.retry;
-      return retry &&
-        (retry.kind === "preview" || retry.kind === "confirm") &&
-        retry.profileId === profileId
-        ? null
-        : current;
-    });
-  }
-
   function retryFailure() {
     if (!failure || controlsDisabled) return;
     // A terminal refusal offers no Retry; the failure card explains and the
@@ -601,7 +533,6 @@ export function VoiceLibrary({
     if (action.kind === "load") void load();
     else if (action.kind === "enroll") void submitEnrollment(action.file);
     else if (action.kind === "preview") void makePreview(action.profileId);
-    else if (action.kind === "confirm") void confirm(action.profileId, true);
     else if (action.kind === "delete") {
       const profile = profiles.find((item) => item.id === action.profileId);
       if (profile) void remove(profile);
@@ -724,7 +655,7 @@ export function VoiceLibrary({
           const name = profile.source_filename ?? t("voiceCustom");
           const editing = editingName?.id === profile.id;
           // A groupmate's ready voice can be chosen and heard, but only its
-          // creator renames, confirms or deletes it.
+          // creator renames or deletes it.
           const manageable = profile.can_manage !== false;
           const playable =
             profile.status === "preview_ready" || profile.status === "ready";
@@ -847,18 +778,6 @@ export function VoiceLibrary({
                   autoPlay
                   preload="auto"
                   src={preview[profile.id].url}
-                  onEnded={() => {
-                    // Hearing the whole test sample is the confirmation: a
-                    // preview_ready voice becomes usable without a separate
-                    // check button. The server still requires a live preview.
-                    if (
-                      !listenOnly &&
-                      manageable &&
-                      profile.status === "preview_ready"
-                    ) {
-                      void confirm(profile.id);
-                    }
-                  }}
                   onError={() =>
                     invalidatePreview(profile.id, "voicePreviewFailed")
                   }

@@ -174,8 +174,8 @@ export const uiGuideCopy = {
     zh: "确认你已获准上传并克隆此说话者的声音。",
   },
   "voice.preview": {
-    en: "Play a test sample. Listening to the end makes a new voice available to your Agents.",
-    zh: "播放试听样本。完整听完一遍后，新音色即可供你的 Agent 使用。",
+    en: "Play a test sample to hear how the voice sounds.",
+    zh: "播放试听样本，听听这个音色的效果。",
   },
   "voice.delete": {
     en: "Delete this voice profile.",

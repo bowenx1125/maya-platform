@@ -692,9 +692,9 @@ const enMessages = {
   voiceName: "Voice name",
   voicePreview: "Preview",
   voicePreviewExpired:
-    "This preview has expired. Play the voice again to finish setting it up.",
+    "This preview has expired. Play the voice again to listen.",
   voicePreviewFailed:
-    "The preview could not be played. Play the voice again to finish setting it up.",
+    "The preview could not be played. Play the voice again to listen.",
   voiceDeleteNamed: "Delete {name}",
   voiceDelete: "Delete",
   voiceDeleteConfirm:
@@ -1537,8 +1537,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voiceCustom: "自定义音色",
   voiceName: "音色名称",
   voicePreview: "试听",
-  voicePreviewExpired: "试听已过期，请重新试听一遍以完成设置。",
-  voicePreviewFailed: "试听音频无法播放，请重新试听一遍以完成设置。",
+  voicePreviewExpired: "试听已过期，请再点一次播放。",
+  voicePreviewFailed: "试听音频无法播放，请再点一次播放。",
   voiceDeleteNamed: "删除「{name}」",
   voiceDelete: "删除",
   voiceDeleteConfirm: "删除这个自定义音色？新的播放将使用平台兜底音色。",

@@ -36,7 +36,7 @@ const unfinished = {
   id: "voice-1",
   scope: "group" as const,
   group_id: "group-a",
-  status: "preview_ready" as const,
+  status: "ready" as const,
   source_filename: "sample.wav",
   safe_error_code: null,
   can_manage: true,
@@ -82,11 +82,6 @@ describe("Voice recovery", () => {
       };
       const list = personal ? api.personalVoiceProfiles : api.voiceProfiles;
       list.mockResolvedValue([profile]);
-      api.confirmVoiceProfile.mockImplementation(async () => {
-        const ready = { ...profile, status: "ready" };
-        list.mockResolvedValue([ready]);
-        return ready;
-      });
       render(
         <VoiceLibrary
           groupId={personal ? null : "group-a"}
@@ -108,9 +103,11 @@ describe("Voice recovery", () => {
         [unfinished.id],
         [unfinished.id],
       ]);
+      // Listening is only listening: the voice was selectable all along.
       fireEvent.ended(document.querySelector("audio")!);
+      expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
       const choice = screen.getByRole("radio", { name: "sample.wav" });
-      await waitFor(() => expect(choice).toHaveProperty("disabled", false));
+      expect(choice).toHaveProperty("disabled", false);
       fireEvent.click(choice);
       expect(onSelect).toHaveBeenCalledWith(unfinished.id);
       expect(onProfilesChange).toHaveBeenLastCalledWith([
@@ -173,7 +170,7 @@ describe("Voice recovery", () => {
     });
     expect(
       screen.getByText(
-        "This preview has expired. Play the voice again to finish setting it up.",
+        "This preview has expired. Play the voice again to listen.",
       ),
     ).toBeTruthy();
     expect(document.querySelector("audio")).toBeNull();
@@ -193,7 +190,7 @@ describe("Voice recovery", () => {
     fireEvent.error(document.querySelector("audio")!);
     expect(
       screen.getByText(
-        "The preview could not be played. Play the voice again to finish setting it up.",
+        "The preview could not be played. Play the voice again to listen.",
       ),
     ).toBeTruthy();
     expect(document.querySelector("audio")).toBeNull();
@@ -205,163 +202,56 @@ describe("Voice recovery", () => {
     await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
   });
 
-  it("recovers a lost confirmation response without confirming or synthesizing again", async () => {
-    const ready = { ...unfinished, status: "ready" };
-    api.confirmVoiceProfile.mockRejectedValueOnce(
-      new TypeError("Network interrupted"),
-    );
-    api.voiceProfile.mockResolvedValue(ready);
-    render(<VoiceLibrary groupId="group-a" />);
+  it("never confirms a voice when its preview plays to the end", async () => {
+    render(<VoiceLibrary groupId="group-a" onSelect={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
     await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
-    fireEvent.ended(document.querySelector("audio")!);
-    expect(await screen.findByRole("alert")).toBeTruthy();
-    api.voiceProfiles.mockResolvedValue([ready]);
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(document.querySelector("audio")).toBeNull());
-    expect(api.voiceProfile).toHaveBeenCalledWith(unfinished.id);
-    expect(api.confirmVoiceProfile).toHaveBeenCalledTimes(1);
-    expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
-    expect(document.querySelector("audio")).toBeNull();
+    await act(async () => fireEvent.ended(document.querySelector("audio")!));
+    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
+    expect(api.voiceProfile).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("radio", { name: "sample.wav" })).toHaveProperty(
+      "disabled",
+      false,
+    );
   });
 
-  it.each([false, true])(
-    "clears a preview expiry after delayed confirmation reaches ready (conflict=%s)",
-    async (conflict) => {
-      const ready = { ...unfinished, status: "ready" };
-      let resolveConfirmation!: (profile: typeof ready) => void;
-      let rejectConfirmation!: (cause: Error) => void;
-      api.confirmVoiceProfile.mockImplementation(
-        () =>
-          new Promise<typeof ready>((resolve, reject) => {
-            resolveConfirmation = resolve;
-            rejectConfirmation = reject;
-          }),
-      );
-      api.createVoicePreview.mockImplementation(async () => previewResource(1));
-      api.voiceProfile.mockResolvedValue(ready);
-      render(<VoiceLibrary groupId="group-a" onSelect={vi.fn()} />);
-      const preview = await screen.findByRole("button", { name: "Preview" });
-      vi.useFakeTimers();
-      await act(async () => fireEvent.click(preview));
-      await act(async () => fireEvent.ended(document.querySelector("audio")!));
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1001);
-      });
-      expect(screen.getByRole("alert")).toBeTruthy();
-      api.voiceProfiles.mockResolvedValue([ready]);
-      await act(async () => {
-        if (conflict) {
-          rejectConfirmation(
-            new PlatformApiError(409, "Invalid state", {
-              code: "invalid_state",
-            }),
-          );
-        } else {
-          resolveConfirmation(ready);
-        }
-      });
-      expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-      expect(screen.getByRole("radio", { name: "sample.wav" })).toHaveProperty(
-        "disabled",
-        false,
-      );
-      expect(api.confirmVoiceProfile).toHaveBeenCalledTimes(1);
-      expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
-    },
-  );
+  it("selects a freshly uploaded voice at once, without playing it", async () => {
+    const onSelect = vi.fn();
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice.mockImplementation(async () => {
+      api.voiceProfiles.mockResolvedValue([unfinished]);
+      return unfinished;
+    });
+    render(<VoiceLibrary groupId="group-a" onSelect={onSelect} />);
+    const newButton = await screen.findByRole("button", { name: "New" });
+    await waitFor(() => expect(newButton).toHaveProperty("disabled", false));
+    fireEvent.click(newButton);
+    const file = new File([new Uint8Array([1, 2, 3])], "sample.wav", {
+      type: "audio/wav",
+    });
+    fireEvent.change(screen.getByLabelText(/10–20 second/), {
+      target: { files: [file] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /I confirm this is my voice/ }),
+    );
+    const choice = await screen.findByRole("radio", { name: "sample.wav" });
+    await waitFor(() => expect(choice).toHaveProperty("disabled", false));
+    fireEvent.click(choice);
+    expect(onSelect).toHaveBeenCalledWith(unfinished.id);
+    expect(api.createVoicePreview).not.toHaveBeenCalled();
+    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
+  });
 
-  it.each([false, true])(
-    "preserves another Voice's expiry after delayed confirmation reaches ready (conflict=%s)",
-    async (conflict) => {
-      const other = {
-        ...unfinished,
-        id: "voice-2",
-        source_filename: "other.wav",
-      };
-      const ready = { ...unfinished, status: "ready" };
-      let resolveConfirmation!: (profile: typeof ready) => void;
-      let rejectConfirmation!: (cause: Error) => void;
-      api.voiceProfiles.mockResolvedValue([unfinished, other]);
-      api.confirmVoiceProfile.mockImplementation(
-        () =>
-          new Promise<typeof ready>((resolve, reject) => {
-            resolveConfirmation = resolve;
-            rejectConfirmation = reject;
-          }),
-      );
-      api.createVoicePreview.mockImplementation(async (profileId: string) =>
-        previewResource(profileId === other.id ? 1 : 60),
-      );
-      api.voiceProfile.mockResolvedValue(ready);
-      render(<VoiceLibrary groupId="group-a" onSelect={vi.fn()} />);
-      await screen.findByRole("radio", { name: "sample.wav" });
-      const previews = screen.getAllByRole("button", { name: "Preview" });
-      vi.useFakeTimers();
-      await act(async () => fireEvent.click(previews[0]));
-      await act(async () => fireEvent.click(previews[1]));
-      await act(async () =>
-        fireEvent.ended(document.querySelectorAll("audio")[0]),
-      );
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1001);
-      });
-      expect(screen.getByRole("alert")).toBeTruthy();
-      api.voiceProfiles.mockResolvedValue([ready, other]);
-      await act(async () => {
-        if (conflict) {
-          rejectConfirmation(
-            new PlatformApiError(409, "Invalid state", {
-              code: "invalid_state",
-            }),
-          );
-        } else {
-          resolveConfirmation(ready);
-        }
-      });
-      expect(screen.getByRole("alert")).toBeTruthy();
-      expect(screen.getByRole("radio", { name: "sample.wav" })).toHaveProperty(
-        "disabled",
-        false,
-      );
-      await act(async () =>
-        fireEvent.click(screen.getByRole("button", { name: "Retry" })),
-      );
-      expect(api.createVoicePreview).toHaveBeenCalledTimes(3);
-      expect(api.createVoicePreview).toHaveBeenLastCalledWith(other.id);
-      expect(api.confirmVoiceProfile).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each(["ready", "preview_ready"])(
-    "reconciles an invalid confirmation against the current %s status",
+  it.each(["enrolling", "failed", "outcome_unknown"])(
+    "keeps a %s voice unselectable",
     async (status) => {
-      api.confirmVoiceProfile.mockRejectedValueOnce(
-        new PlatformApiError(409, "Invalid state", { code: "invalid_state" }),
-      );
-      api.voiceProfile.mockResolvedValue({ ...unfinished, status });
-      render(<VoiceLibrary groupId="group-a" />);
-      fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
-      await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
       api.voiceProfiles.mockResolvedValue([{ ...unfinished, status }]);
-      fireEvent.ended(document.querySelector("audio")!);
-      await waitFor(() =>
-        expect(api.voiceProfile).toHaveBeenCalledWith(unfinished.id),
-      );
-      if (status === "ready") {
-        await waitFor(() => expect(document.querySelector("audio")).toBeNull());
-        expect(screen.queryByRole("alert")).toBeNull();
-      } else {
-        expect(
-          await screen.findByText(
-            "This preview has expired. Play the voice again to finish setting it up.",
-          ),
-        ).toBeTruthy();
-        expect(document.querySelector("audio")).toBeNull();
-      }
-      expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
-      expect(api.confirmVoiceProfile).toHaveBeenCalledTimes(1);
+      render(<VoiceLibrary groupId="group-a" onSelect={vi.fn()} />);
+      expect(
+        await screen.findByRole("radio", { name: "sample.wav" }),
+      ).toHaveProperty("disabled", true);
     },
   );
 

@@ -517,6 +517,9 @@ def confirm_voice_profile(
 
     scoped = visible_student_voice(db, context, profile_id)
     profile = scoped.profile
+    if profile.status == "ready":
+        # Uploads are ready at once now; an older client's confirm is a no-op.
+        return voice_profile_dto(profile)
     if profile.status != "preview_ready":
         raise invalid_state("Only a preview-ready voice profile can be confirmed.")
     preview = db.scalar(
