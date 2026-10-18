@@ -565,6 +565,7 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorInternal: "Something went wrong on the server. Please try again.",
   errorHostMemoryPressure:
     "The server is busy right now. Your message was kept; please try again shortly.",
   errorServerBusy:
@@ -1419,6 +1420,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
+  errorInternal: "服务器出错，请稍后重试。",
   errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
   chatSendBusyRetry: "当前人数较多，请稍后点击重新发送",
@@ -1908,6 +1910,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  internal_error: "errorInternal",
   host_memory_pressure: "errorHostMemoryPressure",
   host_load_pressure: "errorServerBusy",
   llm_admission_busy: "errorServerBusy",
@@ -1989,7 +1992,9 @@ export function localizeError(
       if (candidate.status === 401) return t("errorUnauthenticated", locale);
       if (candidate.status === 403) return t("errorForbidden", locale);
       if (candidate.status === 404) return t("errorNotFound", locale);
-      if (candidate.status >= 500) return t("errorProviderUnavailable", locale);
+      // A plain 500 is a server bug (internal_error), not a provider outage.
+      if (candidate.status === 500) return t("errorInternal", locale);
+      if (candidate.status > 500) return t("errorProviderUnavailable", locale);
     }
   }
   // fetch rejects with a TypeError when the connection itself fails; its
