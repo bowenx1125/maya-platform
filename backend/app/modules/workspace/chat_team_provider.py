@@ -515,6 +515,16 @@ def _current_claim_guard(
     return guard
 
 
+def _settle_unsent(repository: ProviderRepository, operation_id: str) -> None:
+    """Best effort: end an operation that never reached the transport as not_sent."""
+
+    try:
+        if repository.operation(operation_id).state in {"reserved", "sending"}:
+            repository.mark_not_sent(operation_id)
+    except Exception:
+        LOGGER.warning("Team operation left for recovery operation_id=%s", operation_id)
+
+
 def dispatch_team_model(
     db: Session,
     settings: Settings,
@@ -730,6 +740,11 @@ def dispatch_team_model(
         except ProviderDispatchRejected as exc:
             raise TeamDispatchError("team_context_changed") from exc
         except Exception as exc:
+            # Nothing has been sent. Since the slot wait sits between reserve
+            # and this transition, a failure here is no longer a millisecond
+            # window; a row left "reserved" would block resume and Provider
+            # settings until the next recovery pass.
+            _settle_unsent(repository, operation.id)
             raise TeamDispatchError(_preflight_code(exc)) from None
 
         provider_transport = transport or HttpxLLMTransport()
