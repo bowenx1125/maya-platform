@@ -13,6 +13,7 @@ import json
 import re
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -169,11 +170,41 @@ class ProviderRepository:
         else:
             raise TypeError("ProviderRepository requires Database, Engine or Session")
         self.require_export_confirmation = require_export_confirmation
+        # Set inside one_transaction(): every write and read joins it.
+        self._shared: ContextVar[Connection | None] = ContextVar(
+            f"provider_repository_tx_{id(self)}", default=None
+        )
+
+    @contextmanager
+    def one_transaction(self) -> Iterator[None]:
+        """Run several ledger steps as one durable transaction (one commit).
+
+        Bug (2026-10-18): each model call committed nine separate ledger
+        transactions; under 20 concurrent assessment turns the commits alone
+        kept the 2 vCPU database busy. Steps between two network points
+        (budget, prepared operation and its binding, reservation; or the
+        accepted stage and success) now commit together. Any failure rolls
+        every step back, so a crash or refusal leaves no half-written call.
+        """
+
+        if self._shared.get() is not None:
+            yield
+            return
+        with self._write_connection() as connection:
+            token = self._shared.set(connection)
+            try:
+                yield
+            finally:
+                self._shared.reset(token)
 
     @contextmanager
     def _write_connection(self) -> Iterator[Connection]:
         """Open one independent transaction, serializing SQLite writers."""
 
+        shared = self._shared.get()
+        if shared is not None:
+            yield shared  # one_transaction() commits or rolls back
+            return
         connection = self.engine.connect()
         committed = False
         try:
@@ -193,11 +224,17 @@ class ProviderRepository:
             connection.close()
 
     def _read_one(self, statement: Executable) -> Mapping[str, object] | None:
+        shared = self._shared.get()
+        if shared is not None:
+            return cast(Mapping[str, object] | None, shared.execute(statement).mappings().first())
         with self.engine.connect() as connection:
             row = connection.execute(statement).mappings().first()
             return cast(Mapping[str, object] | None, row)
 
     def _read_all(self, statement: Executable) -> list[Mapping[str, object]]:
+        shared = self._shared.get()
+        if shared is not None:
+            return [cast(Mapping[str, object], row) for row in shared.execute(statement).mappings()]
         with self.engine.connect() as connection:
             return [
                 cast(Mapping[str, object], row) for row in connection.execute(statement).mappings()

@@ -208,9 +208,9 @@ Formal micro-rounds need Guide `# Team Ruleset` → `## Formal assessment` namin
 
 Built `2c62871` (PR #72 with #71: the items above). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200.
 
-October 16: Production can move to PostgreSQL (ADR-010) without rewriting `maya.sqlite3`. A Postgres 16 database stamped `0065_auth_login_admission`
-accepted a read-only SQLite head import (111 tables, receipt written). Compose runs `BACKEND_REPLICAS` backends
-on that database with `max_connections=200`. Sign-in DB overload returns
+October 16: Production can move to PostgreSQL (ADR-010) without rewriting `maya.sqlite3`. Postgres 16 stamped `0065_auth_login_admission`
+accepted a read-only SQLite head import (111 tables, receipt). Compose runs `BACKEND_REPLICAS` backends
+on it (`max_connections=200`). Sign-in DB overload returns
 `auth_login_queued` (排队等待入列), not the outage copy.
 Formal turns still use `chat_busy`. Real classroom load and the cutover are
 not yet accepted.
@@ -219,8 +219,8 @@ October 15: New Team chats stay at revision 0 with no canned opening. A course t
 
 October 17: One adaptive admission queue (`core/adaptive_admission.py`) fronts login/create/write/LLM. Danger (load >= 6 or Mem < 500 MiB; clears at <= 4 and >= 550) admits nothing. AIMD uses server signals only: x0.7 on danger, load >= 4, Mem < 900, 30 s DB write or pool-wait p95 > 500 ms; hold at load 3-4, Mem 900-1100 or thread pool >= 90%; else +4 below half of max, +2 above; starts/idles at 72. Request p95: report only. Refused sends (queue full, 180 s wait, chat_busy) store nothing; the box keeps the text. Chats send only via `messages:stream`. Per process: backstops: LLM 20, write/create off, max 128, in-flight 48, 256 sync + 96 asyncio threads, pool 15+25; ready probe has its own limiter. Nested calls get a fresh backstop wait; admission-refused Debate segments are not_sent; prod restarts unless-stopped.
 
-October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; it opens cached and reads each test once (0068 index). Accounts/group visits drop Test results. Students keep Memory. A Voice owner can Delete it in Studyform; its Agents use the fallback voice. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones use the fallback voice. Unverified on the real supplier. A 40/60-student run (sign in, Team create/chat, formal answers) passes on PostgreSQL; queued creates hold no pooled connection.
+October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; it opens cached and reads each test once (0068 index). Accounts/group visits drop Test results. Students keep Memory. A Voice owner can Delete it in Studyform; its Agents use the fallback voice. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones use the fallback voice. Unverified on the real supplier. A 40/60-student run (sign in, Team create/chat, answers) passes on PostgreSQL; queued creates hold no pooled connection; ledger: 6 commits per model call (was 9).
 
 October 17: last_sequence RETURNING; votes 40/40.
 
-October 17: Barrage sequences use `UPDATE … RETURNING` (`0069_barrage_sequence`). Postgres: 40 `submit_barrage` calls stored sequences 1–40. A sequence collision is retried, not `idempotency_conflict`.
+October 17: Barrage sequences use `UPDATE … RETURNING` (`0069_barrage_sequence`); 40 concurrent `submit_barrage` calls on Postgres stored 1–40; a collision is retried, not `idempotency_conflict`.
