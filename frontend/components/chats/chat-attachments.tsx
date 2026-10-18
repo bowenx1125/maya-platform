@@ -13,7 +13,8 @@ const ACCEPT = ".txt,.md,.json,.csv,.html,.htm";
 
 /**
  * The "+" at the composer's lower left and the files above the text box.
- * Files belong to this one Team Chat and are read only by its owner; the
+ * Files belong to this one Chat (Team or single Agent) and are read only by
+ * its owner; the
  * server enforces both, this only lists what it returns. Callers key it by
  * the Chat id so switching Chats starts from an empty list.
  */
@@ -34,7 +35,7 @@ export function ChatAttachments({
 
   useEffect(() => {
     let active = true;
-    // A refused list (no access, not a Team Chat) shows no files.
+    // A refused list (no access, no longer this user's Chat) shows no files.
     Promise.resolve()
       .then(() => api.conversationAttachments(conversationId))
       .then((rows) => {

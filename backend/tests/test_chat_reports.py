@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -58,10 +59,10 @@ def _save(database: Database, conversation_id: str, event_id: str | None = None)
     return result
 
 
-def test_the_tool_is_public_and_only_mounted_in_team_chats() -> None:
+def test_the_tool_is_public_and_mounted_in_team_and_agent_chats() -> None:
     spec = runtime_registry()[CHAT_REPORT_TOOL]
     assert spec.authorization_class == "Public"
-    assert spec.entry_kinds == frozenset({"team", "maya_team"})
+    assert spec.entry_kinds == frozenset({"agent", "team", "maya_team"})
     assert "Do not write a download link" in spec.description
 
 
@@ -99,7 +100,7 @@ def test_owner_downloads_escaped_html_and_others_get_404(
     assert client.get(saved["download_path"]).status_code == 404
 
 
-def test_a_single_agent_chat_or_another_user_cannot_save(
+def test_another_user_or_a_withdrawn_chat_cannot_save(
     client: TestClient, database: Database
 ) -> None:
     session, _csrf = _team_chat(client, database)
@@ -111,10 +112,17 @@ def test_a_single_agent_chat_or_another_user_cannot_save(
         with pytest.raises(Exception) as stranger:
             spec.authorize(db, _actor(str(uuid4())), row, payload)
         assert getattr(stranger.value, "code", None) == "not_found"
+        # A single-Agent Chat's owner may save one too (see
+        # test_agent_chat_attachments_reports.py); a stranger still may not.
         row.entry_kind = "agent"
-        with pytest.raises(Exception) as single:
+        spec.authorize(db, _actor(row.user_id), row, payload)
+        with pytest.raises(Exception) as stranger_agent:
+            spec.authorize(db, _actor(str(uuid4())), row, payload)
+        assert getattr(stranger_agent.value, "code", None) == "not_found"
+        row.withdrawn_at = datetime.now(UTC)
+        with pytest.raises(Exception) as withdrawn:
             spec.authorize(db, _actor(row.user_id), row, payload)
-        assert getattr(single.value, "code", None) == "not_found"
+        assert getattr(withdrawn.value, "code", None) == "not_found"
         db.rollback()
 
 

@@ -1,10 +1,10 @@
-"""Files a Chat owner attaches to one Team conversation.
+"""Files a Chat owner attaches to one conversation (Team or single Agent).
 
 An attachment belongs to exactly one conversation and its owner. Every read
 goes through ``owned_conversation`` so another user, or the same user from a
-different Chat, gets the same 404 as a missing file. Members of that Team read
-the decoded text as context on every later turn; a live formal assessment does
-not (its context is fixed by the assessment ledger).
+different Chat, gets the same 404 as a missing file. The Team members, or the
+single Agent, read the decoded text as context on every later turn; a live
+formal assessment does not (its context is fixed by the assessment ledger).
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ _MEDIA_TYPES = {
     ".html": "text/html",
     ".htm": "text/html",
 }
-_ENTRY_KINDS = frozenset({"team", "maya_team"})
+_ENTRY_KINDS = frozenset({"agent", "team", "maya_team"})
 
 _UPLOAD_BODY = {
     "required": True,
@@ -163,14 +163,16 @@ def _display_name(filename: str) -> str:
     return cleaned[:200]
 
 
-def _owned_team_conversation(
+def _owned_chat_conversation(
     db: Session, context: AuthContext, conversation_id: str
 ) -> Conversation:
     from .chat import owned_conversation
 
     row = owned_conversation(db, context, conversation_id)
     if row.entry_kind not in _ENTRY_KINDS:
-        raise conflict("chat_attachments_unavailable", "Attachments are available in Team chats.")
+        raise conflict(
+            "chat_attachments_unavailable", "Attachments are not available in this chat."
+        )
     return row
 
 
@@ -243,7 +245,7 @@ def list_conversation_attachments(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[ChatAttachment]:
-    row = _owned_team_conversation(db, context, str(conversation_id))
+    row = _owned_chat_conversation(db, context, str(conversation_id))
     rows = db.scalars(
         select(ConversationAttachment)
         .where(
@@ -275,7 +277,7 @@ async def upload_conversation_attachment(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> ChatAttachment:
-    _owned_team_conversation(db, context, str(conversation_id))
+    _owned_chat_conversation(db, context, str(conversation_id))
     # Do not hold a pooled connection while the body streams in.
     db.commit()
     try:
@@ -301,7 +303,7 @@ async def upload_conversation_attachment(
         db.execute(
             select(Conversation.id).where(Conversation.id == str(conversation_id)).with_for_update()
         )
-    row = _owned_team_conversation(db, context, str(conversation_id))
+    row = _owned_chat_conversation(db, context, str(conversation_id))
     count, used = db.execute(
         select(
             func.count(ConversationAttachment.id),
@@ -361,7 +363,7 @@ def delete_conversation_attachment(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> Response:
-    row = _owned_team_conversation(db, context, str(conversation_id))
+    row = _owned_chat_conversation(db, context, str(conversation_id))
     attachment = db.get(ConversationAttachment, str(attachment_id))
     if (
         attachment is None

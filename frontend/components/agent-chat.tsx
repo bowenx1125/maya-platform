@@ -3223,6 +3223,17 @@ function AgentChatScope({
                       conversationId={selectedTeam.id}
                       disabled={teamBusy || teamWorking}
                     />
+                  ) : !selectedTeam &&
+                    selected &&
+                    isAgentSession(selected) &&
+                    agentCanSend ? (
+                    // Same "+" for a one-to-one Agent Chat: the files belong
+                    // to this Chat and its owner only (server-enforced).
+                    <ChatAttachments
+                      key={selected.id}
+                      conversationId={selected.id}
+                      disabled={busy}
+                    />
                   ) : null}
                   <div className={styles.composerBar}>
                     {sendHint ? (
