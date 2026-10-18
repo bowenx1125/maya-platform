@@ -170,12 +170,9 @@ async def rebirth_debate(
 
         # Retain immutable cost operations, but discard output/recovery payloads
         # for the old final so they can never be replayed into a fresh classroom.
-        recovery_ids = cleanup._children(db, "llm_recovery_inputs", "turn_id", "turn_id", final_ids)
-        if recovery_ids:
-            triggers = cleanup._capture_recovery_triggers(db)
-            cleanup._drop_recovery_triggers(db, triggers)
-            remove("llm_recovery_inputs", "turn_id", final_ids)
-            cleanup._restore_recovery_triggers(db, triggers)
+        recovery_count = cleanup._delete_recovery_inputs(db, "turn_id", final_ids)
+        if recovery_count:
+            counts["llm_recovery_inputs"] = recovery_count
         remove("llm_accepted_stages", "turn_id", final_ids)
         manifests = cleanup._children(db, "provider_export_manifests", "id", "turn_id", final_ids)
         remove("provider_export_confirmations", "manifest_id", manifests)
@@ -513,14 +510,7 @@ async def remake_debate(
                 # Explicit Remake starts a new bounded turn identity. The old
                 # cost operations stay in the ledger and cannot be retried.
                 old_id = target.id
-                recovery_ids = cleanup._children(
-                    db, "llm_recovery_inputs", "turn_id", "turn_id", {old_id}
-                )
-                if recovery_ids:
-                    triggers = cleanup._capture_recovery_triggers(db)
-                    cleanup._drop_recovery_triggers(db, triggers)
-                    cleanup._delete_rows(db, "llm_recovery_inputs", "turn_id", {old_id})
-                    cleanup._restore_recovery_triggers(db, triggers)
+                cleanup._delete_recovery_inputs(db, "turn_id", {old_id})
                 cleanup._delete_rows(db, "llm_accepted_stages", "turn_id", {old_id})
                 manifests = cleanup._children(
                     db, "provider_export_manifests", "id", "turn_id", {old_id}

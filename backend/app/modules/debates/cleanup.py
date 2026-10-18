@@ -1204,6 +1204,35 @@ def _restore_recovery_triggers(db: Session, captured: Mapping[str, str]) -> None
         raise DebateCleanupError("recovery_trigger_restore_failed")
 
 
+def _delete_recovery_inputs(db: Session, column_name: str, values: Iterable[str]) -> int:
+    """Delete scoped LLM recovery inputs on either supported database.
+
+    SQLite migrations guard the table with an immutability trigger, so the
+    scoped delete briefly drops and restores it inside the caller's writer
+    transaction.  PostgreSQL has no such trigger (``sqlite_master`` does not
+    exist there); the rows are deleted under foreign keys alone.  Skipping the
+    delete on PostgreSQL left ``provider_operations`` rows referenced and made
+    Delete All fail with a foreign key violation.
+    """
+
+    values_tuple = _values(values)
+    if not values_tuple:
+        return 0
+    if db.get_bind().dialect.name != "sqlite":
+        return _delete_rows(db, "llm_recovery_inputs", column_name, values_tuple)
+    table = _table("llm_recovery_inputs")
+    present = db.scalar(
+        select(text("count(*)")).select_from(table).where(table.c[column_name].in_(values_tuple))
+    )
+    if not int(present or 0):
+        return 0
+    triggers = _capture_recovery_triggers(db)
+    _drop_recovery_triggers(db, triggers)
+    count = _delete_rows(db, "llm_recovery_inputs", column_name, values_tuple)
+    _restore_recovery_triggers(db, triggers)
+    return count
+
+
 def _stored_file_survivor_check(db: Session, graph: _DebateGraph) -> None:
     if not graph.stored_file_ids:
         return
@@ -1730,11 +1759,13 @@ def _delete_graph(
         remove("provider_reservations", "operation_id", graph.operation_ids)
     if graph.turn_ids:
         remove("llm_accepted_stages", "turn_id", graph.turn_ids)
-    if captured_triggers is not None:
-        if graph.turn_ids:
-            remove("llm_recovery_inputs", "turn_id", graph.turn_ids)
-        if graph.operation_ids:
-            remove("llm_recovery_inputs", "operation_id", graph.operation_ids)
+    # Recovery inputs restrict both provider_operations and debate_turns. They
+    # must go on every dialect; only SQLite needs its trigger lifted (done by
+    # the caller, which passes captured_triggers when it did so).
+    if graph.turn_ids:
+        remove("llm_recovery_inputs", "turn_id", graph.turn_ids)
+    if graph.operation_ids:
+        remove("llm_recovery_inputs", "operation_id", graph.operation_ids)
     remove("provider_operations", "id", graph.operation_ids)
     remove("demo_acceptance_runs", "id", graph.run_ids)
     # Export manifests retain RESTRICT references to both Debate and turn;
