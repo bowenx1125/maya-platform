@@ -216,11 +216,12 @@ class Settings(BaseSettings):
     )
     # Per-operation backstop behind the unified queue: in-flight
     # LLM HTTP attempts per process. Was 12 when this gate alone protected the
-    # host (MayaLoad: 10 stable, 20 melted before the adaptive queue existed);
-    # now the danger latch (load >= 6 / Mem < 500) and AIMD sit in front, so
-    # 20 per backend. It waits only for what is left of the shared deadline.
+    # host (MayaLoad: 10 stable, 20 melted before the adaptive queue existed).
+    # #140 sweep (2026-10-18, 40 students, all three backstops 17/14/11/8/5):
+    # 8 per backend gave the best throughput and the lowest load. It waits
+    # only for what is left of the shared deadline.
     llm_admission_limit: int = Field(
-        default=20, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
+        default=8, ge=0, le=10_000, validation_alias="LLM_ADMISSION_LIMIT"
     )
     llm_admission_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="LLM_ADMISSION_QUEUE_MAX"
@@ -248,13 +249,12 @@ class Settings(BaseSettings):
     write_guard_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
-    # Optional per-operation backstop: concurrent Agent/Team/Conversation
-    # creates per process. Off by default (0): a create is one short request
-    # (a Team create is about 10 writes, no model call), so its 3 adaptive
-    # units match its cost, and it stops under the danger latch. Set
-    # CREATE_ADMISSION_LIMIT (e.g. 4) to restore the fixed cap without code.
+    # Per-operation backstop: concurrent Agent/Team/Conversation creates per
+    # process. 8 per backend (#140 sweep, 2026-10-18): a class opening its
+    # chats at once peaked at 8 here and waited briefly instead of reaching
+    # the database together. 0 disables.
     create_admission_limit: int = Field(
-        default=0, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
+        default=8, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
     )
     create_admission_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_QUEUE_MAX"

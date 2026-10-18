@@ -32,19 +32,19 @@ def healthy() -> Iterator[None]:
 
 def test_capacity_defaults_and_untouched_limits() -> None:
     s = Settings()  # type: ignore[call-arg]
-    # The write guard is a required backstop again (8 turns per process); the
-    # create cap stays off (0) but configurable.
+    # #140 sweep (2026-10-18): write, create and LLM backstops are all 8 per
+    # process.
     assert s.write_guard_limit == 8
-    assert s.create_admission_limit == 0
+    assert s.create_admission_limit == 8
     assert s.adaptive_admission_max_units == 128
     assert s.adaptive_admission_max_in_flight == 48
     # 20 turns x (write 2 + nested LLM 4) fit the ceiling and the global cap.
     per_turn = s.adaptive_admission_weight_write + s.adaptive_admission_weight_llm
     assert 20 * per_turn <= s.adaptive_admission_max_units
     assert 20 * 2 <= s.adaptive_admission_max_in_flight
+    assert s.llm_admission_limit == 8
     # Explicitly unchanged.
     assert s.auth_hash_concurrency == 3
-    assert s.llm_admission_limit == 20
     assert (POSTGRES_POOL_SIZE, POSTGRES_MAX_OVERFLOW) == (15, 25)
     assert 2 * (POSTGRES_POOL_SIZE + POSTGRES_MAX_OVERFLOW) <= 200 - 100
 

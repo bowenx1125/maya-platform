@@ -65,7 +65,7 @@ def _settings(**overrides: object) -> Settings:
 
 
 def test_new_caps_and_unchanged_protection_defaults() -> None:
-    assert _default("llm_admission_limit") == 20
+    assert _default("llm_admission_limit") == 8
     assert _default("adaptive_admission_max_units") == 128
     assert _default("adaptive_admission_max_in_flight") == 48
     assert _default("adaptive_admission_initial_units") == 72
@@ -200,16 +200,16 @@ def test_danger_still_suspends_at_new_caps(
         pass
 
 
-def test_llm_backstop_admits_twenty() -> None:
+def test_llm_backstop_admits_eight() -> None:
     s = _settings(
         adaptive_admission_initial_units=96,
         memory_guard_min_available_mb=0,
         host_load_reject_threshold=0,
         llm_admission_wait_seconds=1,
     )
-    assert s.llm_admission_limit == 20
+    assert s.llm_admission_limit == 8
     release = threading.Event()
-    started = threading.Barrier(21)
+    started = threading.Barrier(9)
 
     def hold() -> None:
         with llm_admission_slot(s):
@@ -217,14 +217,14 @@ def test_llm_backstop_admits_twenty() -> None:
             release.wait(10)
 
     aa.reset_adaptive_admission_state()
-    threads = [threading.Thread(target=hold) for _ in range(20)]
+    threads = [threading.Thread(target=hold) for _ in range(8)]
     for thread in threads:
         thread.start()
     started.wait(5)
     try:
         from app.core import llm_admission as la
 
-        assert la._GATE.in_flight == 20  # noqa: SLF001
+        assert la._GATE.in_flight == 8  # noqa: SLF001
     finally:
         release.set()
         for thread in threads:
@@ -323,14 +323,14 @@ def test_no_collector_outside_a_message() -> None:
 def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ignore[no-untyped-def]
     body = client.get("/health/admission").json()
     assert body["max_units"] == 128 and body["max_in_flight"] == 48
-    assert body["backstops"]["llm_admission_limit"] == 20
+    assert body["backstops"]["llm_admission_limit"] == 8
     assert body["backstops"]["write_guard_limit"] == 8
-    assert body["backstops"]["create_admission_limit"] == 0
+    assert body["backstops"]["create_admission_limit"] == 8
     assert body["backstops"]["auth_hash_concurrency"] == 3
     assert body["backstops_enabled"] == {
         "llm_admission": True,
         "write_guard": True,
-        "create_admission": False,
+        "create_admission": True,
         "auth_hash": True,
     }
     assert set(body["danger_latch"]) == {
