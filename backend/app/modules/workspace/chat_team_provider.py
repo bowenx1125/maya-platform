@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import PlatformError
 from app.core.llm_admission import llm_admission_slot
+from app.core.read_memo import forget_request_reads
 from app.modules.auth.service import AuthContext
 from app.modules.provider_disclosure.team_standing import authorize_team_dispatch
 from app.modules.workspace.models import (
@@ -751,6 +752,9 @@ def dispatch_team_model(
             raise TeamDispatchError(_preflight_code(exc)) from None
 
         provider_transport = transport or HttpxLLMTransport()
+        # The model call takes time: every check after it reads the database
+        # again (the request's read memo starts over).
+        forget_request_reads()
         try:
             response = provider_transport.post_bytes(
                 config.resolved_endpoint,

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, idempotency_conflict, not_found, stale_revision, unprocessable
 from app.core.models import CourseMember
+from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role, scoped_group_role_for_user
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion
@@ -61,6 +62,24 @@ def _hash(value: Any) -> str:
 
 
 def _authorized_provenance(
+    db: Session,
+    actor: AuthContext,
+    conversation_id: str | UUID,
+) -> tuple[Conversation, LearningProvenance]:
+    def check() -> tuple[str, LearningProvenance]:
+        conversation, provenance = _read_authorized_provenance(db, actor, conversation_id)
+        return conversation.id, provenance
+
+    key = ("authorized_provenance", str(actor.user.id), actor.user.status, str(conversation_id))
+    checked_id, provenance = memoized(db, key, check, across_sessions=True)
+    # The check is shared by the request; the row is always this Session's own.
+    conversation = db.get(Conversation, checked_id)
+    if conversation is None:
+        return _read_authorized_provenance(db, actor, conversation_id)
+    return conversation, provenance.model_copy()
+
+
+def _read_authorized_provenance(
     db: Session,
     actor: AuthContext,
     conversation_id: str | UUID,

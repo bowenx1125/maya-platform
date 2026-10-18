@@ -23,6 +23,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     _agent_workspace_role,
@@ -1500,6 +1501,21 @@ def resolve_frozen_chat_selection(
 ) -> None:
     """Recheck an existing frozen Team selection without selecting its new head."""
 
+    targets = None if target_binding_ids is None else frozenset(target_binding_ids)
+    memoized(
+        db,
+        ("frozen_chat_selection_valid", _actor_id(actor), repr(frozen_selection), targets),
+        lambda: _resolve_frozen_chat_selection(db, actor, frozen_selection, target_binding_ids),
+        across_sessions=True,
+    )
+
+
+def _resolve_frozen_chat_selection(
+    db: Session,
+    actor: AuthContext | str,
+    frozen_selection: FrozenTeamSelection,
+    target_binding_ids: set[str] | None,
+) -> None:
     user_id = _actor_id(actor)
     targets = (
         set(frozen_selection.invokable_binding_ids)

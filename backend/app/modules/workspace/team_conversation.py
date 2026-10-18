@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, not_found
 from app.core.models import Agent, AgentVersion, CourseMember
+from app.core.read_memo import memoized
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.auth.service import AuthContext
 from app.modules.teams.models import Team
@@ -243,6 +244,15 @@ def _participants(db: Session, conversation_id: str) -> list[ConversationPartici
 
 
 def frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSelection:
+    return memoized(
+        db,
+        ("frozen_team_selection", row.id),
+        lambda: _read_frozen_team_selection(db, row),
+        across_sessions=True,
+    )
+
+
+def _read_frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSelection:
     if (
         row.entry_kind == "agent"
         or row.team_id is None
