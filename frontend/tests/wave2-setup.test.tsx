@@ -250,8 +250,13 @@ describe("Wave 2 teacher debate setup", () => {
         expect(confirmed).toHaveBeenCalledTimes(1);
         expect(screen.queryByText("Completed")).toBeNull();
         expect(screen.queryByRole("button", { name: "Rebirth" })).toBeNull();
+        // The row itself opens Preview; there is no separate Preview button.
+        expect(screen.queryByRole("link", { name: "Preview" })).toBeNull();
         expect(
-          screen.getByRole("link", { name: "Preview" }).getAttribute("href"),
+          screen
+            .getByRole("heading", { name: completed.topic })
+            .closest("a")
+            ?.getAttribute("href"),
         ).toBe(`/teacher/debates/${completed.id}/control`);
       } finally {
         confirmed.mockRestore();
@@ -483,14 +488,14 @@ describe("Wave 2 teacher debate setup", () => {
           }}
         />,
       );
-      await screen.findByRole("heading", { name: /Stage entry/ });
-      if (status === "draft" && ready !== null) {
-        expect(
-          screen.getByRole("link", { name: "Preview" }).getAttribute("href"),
-        ).toBe("/teacher/debates/stage-entry/control");
-      } else {
-        expect(screen.queryByRole("link", { name: "Preview" })).toBeNull();
-      }
+      const heading = await screen.findByRole("heading", {
+        name: /Stage entry/,
+      });
+      // Clicking the row is Preview, for every status; no extra button.
+      expect(heading.closest("a")?.getAttribute("href")).toBe(
+        "/teacher/debates/stage-entry/control",
+      );
+      expect(screen.queryByRole("link", { name: "Preview" })).toBeNull();
       if (enabled) {
         const entry = screen.getByRole("link", { name: "Immerse" });
         expect(entry.getAttribute("href")).toBe(
@@ -546,13 +551,84 @@ describe("Wave 2 teacher debate setup", () => {
     await screen.findByRole("heading", { name: "A stalled preview" });
     expect(screen.getByText("Stalled")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Preview" }).getAttribute("href"),
+      screen
+        .getByRole("heading", { name: "A stalled preview" })
+        .closest("a")
+        ?.getAttribute("href"),
     ).toBe("/teacher/debates/stalled-preview/control");
+    expect(screen.queryByRole("link", { name: "Preview" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Immerse" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "Immerse" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("shows list actions as labelled icons: enter, recycle, bell / bell-off, X", async () => {
+    useSessionMock.mockReturnValue(teacherSession());
+    const row = (id: string, restore: boolean): DebateSummary => ({
+      id,
+      course_id: courseId,
+      topic: `Topic ${id}`,
+      status: "running",
+      round_count: 4,
+      created_at: "2026-09-08T00:00:00Z",
+      audio_restore_needed: restore,
+      prepared_turns: 6,
+      expected_turns: 8,
+      preview: { prepared_turns: 6, expected_turns: 6, ready: true },
+      stall: null,
+    });
+    render(
+      <TeacherDebateList
+        controller={{
+          load: vi
+            .fn()
+            .mockResolvedValue([
+              row("voiced", false),
+              row("silent", true),
+              { ...row("finished", false), status: "debate_finished" },
+            ]),
+        }}
+      />,
+    );
+    const voiced = (
+      await screen.findByRole("heading", { name: "Topic voiced" })
+    ).closest("a")!.parentElement as HTMLElement;
+    const silent = screen
+      .getByRole("heading", { name: "Topic silent" })
+      .closest("a")!.parentElement as HTMLElement;
+    const finished = screen
+      .getByRole("heading", { name: "Topic finished" })
+      .closest("a")!.parentElement as HTMLElement;
+    for (const scope of [voiced, silent]) {
+      const enter = within(scope).getByRole("link", { name: "Immerse" });
+      const remove = within(scope).getByRole("button", { name: "Delete" });
+      for (const control of [enter, remove]) {
+        expect(control.getAttribute("title")).toBe(
+          control.getAttribute("aria-label"),
+        );
+        expect(control.textContent).toBe("");
+        expect(control.querySelector("svg[aria-hidden='true']")).toBeTruthy();
+      }
+      expect(within(scope).queryByText("Preview")).toBeNull();
+    }
+    // Rebirth is a recycle icon, still named Rebirth.
+    const rebirth = within(finished).getByRole("button", { name: "Rebirth" });
+    expect(rebirth.getAttribute("title")).toBe("Rebirth");
+    expect(rebirth.textContent).toBe("");
+    expect(rebirth.querySelector("svg[aria-hidden='true']")).toBeTruthy();
+    // Audio present: a bell; clicking it devocalizes.
+    const bell = within(voiced).getByRole("button", { name: "Devocalize" });
+    expect(bell.getAttribute("data-vocalized")).toBe("true");
+    expect(bell.getAttribute("title")).toBe("Devocalize");
+    // Audio removed: the bell is struck through; clicking it revocalizes.
+    const bellOff = within(silent).getByRole("button", { name: "Revocalize" });
+    expect(bellOff.getAttribute("data-vocalized")).toBe("false");
+    expect(bellOff.getAttribute("title")).toBe("Revocalize");
+    expect(bellOff.querySelectorAll("path").length).toBe(
+      bell.querySelectorAll("path").length + 1,
+    );
   });
 
   it("uses separate Topic and Background cards with bidirectional height synchronization", async () => {
