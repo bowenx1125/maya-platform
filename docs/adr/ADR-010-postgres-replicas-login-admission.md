@@ -96,6 +96,6 @@ need more replicas or a larger host, not a shared quota.
 | `BACKEND_REPLICAS`                 | `2`                       | Backend processes behind Caddy  |
 | `AUTH_LOGIN_QUEUE_RETRY_SECONDS`   | `2`                       | Client wait between tries       |
 | `AUTH_HASH_CONCURRENCY`            | `3`                       | Argon2 checks per process       |
-| `LLM_ADMISSION_LIMIT`              | `20`                      | Model calls per process         |
+| `LLM_ADMISSION_LIMIT`              | `8`                       | Model calls per process         |
 | `ADAPTIVE_ADMISSION_MAX_IN_FLIGHT` | `48`                      | Admitted requests per process   |
 | `ADAPTIVE_ADMISSION_QUEUE_MAX`     | `200`                     | Waiters per process             |
