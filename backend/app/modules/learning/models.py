@@ -572,6 +572,12 @@ class AssessmentAttempt(Base):
     actor_display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Set when the learner ends early; no further follow-up round may be added.
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Owner request (2026-10-18): a course teacher can delete an attempt from
+    # Record. It is only hidden; answers, chat and ledger rows stay.
+    teacher_hidden_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    teacher_hidden_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (
         CheckConstraint(

@@ -723,6 +723,11 @@ const enMessages = {
   recordOwnOpenNamed: "Open your answers for {name}",
   recordOwnMeta: "Attempts {attempts}",
   recordAttempts: "Attempts",
+  recordRevokedVersion: "Revoked version",
+  recordUnfinished: "Unfinished",
+  recordDeleteNamed: "Delete {name}'s attempt",
+  recordDeleteConfirm:
+    "Delete this attempt from Record? Its answers and chat are kept and can be restored.",
   overviewActivity: "Recent activity",
   overviewNoMembers: "No students in this group yet.",
   overviewNoResults: "No test results yet.",
@@ -1539,6 +1544,11 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   recordOwnOpenNamed: "查看你在「{name}」的作答记录",
   recordOwnMeta: "测评 {attempts}",
   recordAttempts: "测评次数",
+  recordRevokedVersion: "已撤销版本",
+  recordUnfinished: "未完成",
+  recordDeleteNamed: "删除 {name} 的这次测评",
+  recordDeleteConfirm:
+    "从 Record 删除这次测评？作答和聊天记录会保留，可以恢复。",
   overviewActivity: "最近动态",
   overviewNoMembers: "这个组还没有学生。",
   overviewNoResults: "还没有测试成绩。",

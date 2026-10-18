@@ -1720,6 +1720,16 @@ export class PlatformApi {
     );
   }
 
+  /** A course teacher deletes an attempt from Record; the server only hides it. */
+  deleteCourseAssessmentAttempt(
+    courseId: string,
+    attemptId: string,
+  ): Promise<void> {
+    return this.deleteJson(
+      `learning/courses/${courseId}/assessment-attempts/${attemptId}`,
+    );
+  }
+
   async courseRoster(courseId: string): Promise<CourseRoster> {
     return unwrap(
       await this.client.GET("/courses/{course_id}/roster", {

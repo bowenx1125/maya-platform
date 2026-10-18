@@ -2189,6 +2189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/learning/courses/{course_id}/assessment-attempts/{attempt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Course Assessment Attempt Route
+         * @description A course teacher deletes an attempt from Record. It is only hidden.
+         */
+        delete: operations["deleteCourseAssessmentAttempt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/learning/courses/{course_id}/my-assessment-attempts": {
         parameters: {
             query?: never;
@@ -2906,6 +2926,9 @@ export interface components {
             points_total?: number | null;
             questions?: components["schemas"]["OverviewQuestion"][];
             report_download_path?: string | null;
+            /** @enum {string|null} */
+            publication_state?: "published" | "retained" | "revoked" | null;
+            version_label?: string | null;
         };
         OverviewEvent: {
             /** @enum {string} */
@@ -11742,6 +11765,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["OverviewResult"][];
                 };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteCourseAssessmentAttempt: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                course_id: string;
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not Found */
             404: {
