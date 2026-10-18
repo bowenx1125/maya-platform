@@ -573,6 +573,8 @@ const enMessages = {
     "Many people are using Maya right now. Press Send again in a moment.",
   chatSendPreviousRunning:
     "The previous message is still being answered. Send again in a moment.",
+  chatSendScoringBusy: "Scoring in progress, please try again shortly",
+  chatScoringNotice: "Scoring…",
   errorVoiceProviderUnavailable:
     "Voice provider is temporarily unavailable. Use the platform fallback voice; this is not a successful custom voice.",
   errorVoiceCloneRefused:
@@ -1421,6 +1423,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
   chatSendBusyRetry: "当前人数较多，请稍后点击重新发送",
   chatSendPreviousRunning: "上一条消息还在处理中，请稍后重新发送",
+  chatSendScoringBusy: "正在评分，请稍后再试",
+  chatScoringNotice: "评分中…",
   errorVoiceProviderUnavailable:
     "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
   errorVoiceCloneRefused: "当前音色通道不支持克隆。该样本未保存为自定义音色。",
