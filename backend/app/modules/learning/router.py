@@ -20,6 +20,7 @@ from .reports import (
     download_assessment_course_report,
     list_authorized_assessment_activities,
     list_course_assessment_attempts,
+    list_my_assessment_attempts,
 )
 from .schemas import (
     AssessmentActivityListItem,
@@ -96,6 +97,25 @@ def list_course_assessment_attempts_route(
             attempt_id=str(attempt_id) if attempt_id is not None else None,
             conversation_id=str(conversation_id) if conversation_id is not None else None,
         )
+    ]
+
+
+@router.get(
+    "/courses/{course_id}/my-assessment-attempts",
+    response_model=list[OverviewResult],
+    operation_id="listMyAssessmentAttempts",
+    responses={404: {"model": Error}},
+)
+def list_my_assessment_attempts_route(
+    course_id: UUID,
+    actor: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[OverviewResult]:
+    """The signed-in student's own formal attempts, for the student's Record."""
+
+    return [
+        OverviewResult.model_validate(row)
+        for row in list_my_assessment_attempts(db, actor, course_id=str(course_id))
     ]
 
 

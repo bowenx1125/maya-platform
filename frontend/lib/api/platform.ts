@@ -1742,6 +1742,16 @@ export class PlatformApi {
     );
   }
 
+  /** The signed-in student's own formal attempts in the course. */
+  async myAssessmentAttempts(courseId: string): Promise<OverviewResult[]> {
+    return unwrap(
+      await this.client.GET(
+        "/learning/courses/{course_id}/my-assessment-attempts",
+        { params: { path: { course_id: courseId } } },
+      ),
+    );
+  }
+
   async courseRoster(courseId: string): Promise<CourseRoster> {
     return unwrap(
       await this.client.GET("/courses/{course_id}/roster", {

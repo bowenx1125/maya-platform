@@ -17,6 +17,12 @@ import record from "./assessment-record.module.css";
 
 type Translate = ReturnType<typeof useT>;
 
+/**
+ * Whose attempts Record reads: a teacher reads the whole course, a student
+ * only their own, which the server enforces from the session.
+ */
+export type RecordScope = "course" | "own";
+
 /** One assessment Team and every attempt the course has made on it. */
 export type RecordTeam = {
   name: string;
@@ -32,11 +38,17 @@ const lastAttempts = new Map<string, OverviewResult[]>();
 /**
  * Every formal attempt in the course, grouped by the assessment Team's name,
  * most recently active Team first. Attempts inside a Team read by student.
+ * A student's Record reads only the student's own attempts.
  */
-export function useAssessmentRecord(courseId: string, enabled: boolean) {
+export function useAssessmentRecord(
+  courseId: string,
+  enabled: boolean,
+  scope: RecordScope = "course",
+) {
   const { api, user } = useSession();
-  // Per signed-in teacher: report links are each teacher's own.
-  const cacheKey = `${user?.id ?? ""}:${courseId}`;
+  // Per signed-in user: report links are each teacher's own, answers each
+  // student's own.
+  const cacheKey = `${scope}:${user?.id ?? ""}:${courseId}`;
   const [attempts, setAttempts] = useState<OverviewResult[] | null>(
     () => lastAttempts.get(cacheKey) ?? null,
   );
@@ -46,13 +58,16 @@ export function useAssessmentRecord(courseId: string, enabled: boolean) {
     if (!enabled || !courseId) return;
     setError(null);
     try {
-      const next = await api.courseAssessmentAttempts(courseId);
+      const next =
+        scope === "own"
+          ? await api.myAssessmentAttempts(courseId)
+          : await api.courseAssessmentAttempts(courseId);
       lastAttempts.set(cacheKey, next);
       setAttempts(next);
     } catch (cause) {
       setError(cause);
     }
-  }, [api, cacheKey, courseId, enabled]);
+  }, [api, cacheKey, courseId, enabled, scope]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -71,7 +86,9 @@ export function useAssessmentRecord(courseId: string, enabled: boolean) {
         name,
         attempts: [...rows].sort(
           (left, right) =>
-            left.student_name.localeCompare(right.student_name) ||
+            (scope === "own"
+              ? 0
+              : left.student_name.localeCompare(right.student_name)) ||
             right.started_at.localeCompare(left.started_at),
         ),
         students: new Set(rows.map((row) => row.user_id)).size,
@@ -81,7 +98,7 @@ export function useAssessmentRecord(courseId: string, enabled: boolean) {
         }, ""),
       }))
       .sort((left, right) => right.latest.localeCompare(left.latest));
-  }, [attempts]);
+  }, [attempts, scope]);
 
   return { teams, loaded: attempts !== null, error, reload: load };
 }
@@ -104,7 +121,9 @@ export function RecordSection({
   error,
   onRetry,
   onOpen,
+  scope = "course",
 }: {
+  scope?: RecordScope;
   teams: RecordTeam[];
   loaded: boolean;
   error: unknown;
@@ -123,7 +142,9 @@ export function RecordSection({
           <h2
             id="brainform-record-heading"
             data-ui-guide="brainform.record"
-            data-ui-guide-text={t("recordIntro")}
+            data-ui-guide-text={t(
+              scope === "own" ? "recordOwnIntro" : "recordIntro",
+            )}
             tabIndex={0}
           >
             Record
@@ -149,20 +170,27 @@ export function RecordSection({
               <button
                 type="button"
                 className={`${styles.rowHit} ${record.teamRow}`}
-                aria-label={t("recordOpenNamed", { name: team.name })}
+                aria-label={t(
+                  scope === "own" ? "recordOwnOpenNamed" : "recordOpenNamed",
+                  { name: team.name },
+                )}
                 onClick={() => onOpen(team.name)}
               >
                 <span className={styles.rowCopy}>
                   <span className={styles.staticTitle}>{team.name}</span>
                   <span className={styles.rowMeta}>
-                    {t("recordTeamMeta", {
-                      students: team.students,
-                      attempts: team.attempts.length,
-                    })}
+                    {scope === "own"
+                      ? t("recordOwnMeta", { attempts: team.attempts.length })
+                      : t("recordTeamMeta", {
+                          students: team.students,
+                          attempts: team.attempts.length,
+                        })}
                     {team.latest ? ` · ${when(team.latest)}` : ""}
                   </span>
                 </span>
-                <ScoreRing ratio={averageRatio(team.attempts)} />
+                {scope === "own" ? null : (
+                  <ScoreRing ratio={averageRatio(team.attempts)} />
+                )}
               </button>
             </li>
           ))}
@@ -175,7 +203,14 @@ export function RecordSection({
 }
 
 /** The opened Team: a short summary, then each student's attempt. */
-export function RecordDetail({ team }: { team: RecordTeam | undefined }) {
+export function RecordDetail({
+  team,
+  scope = "course",
+}: {
+  team: RecordTeam | undefined;
+  scope?: RecordScope;
+}) {
+  const own = scope === "own";
   const t = useT();
   const when = useWhen();
   const [open, setOpen] = useState<string | null>(null);
@@ -203,10 +238,17 @@ export function RecordDetail({ team }: { team: RecordTeam | undefined }) {
       </div>
 
       <dl className={record.stats}>
-        <div>
-          <dt>{t("recordStudents")}</dt>
-          <dd>{team.students}</dd>
-        </div>
+        {own ? (
+          <div>
+            <dt>{t("recordAttempts")}</dt>
+            <dd>{team.attempts.length}</dd>
+          </div>
+        ) : (
+          <div>
+            <dt>{t("recordStudents")}</dt>
+            <dd>{team.students}</dd>
+          </div>
+        )}
         <div>
           <dt>{t("recordCompleted")}</dt>
           <dd>
@@ -214,10 +256,12 @@ export function RecordDetail({ team }: { team: RecordTeam | undefined }) {
             <small> / {team.attempts.length}</small>
           </dd>
         </div>
-        <div>
-          <dt>{t("recordAverage")}</dt>
-          <dd>{average === null ? "—" : `${Math.round(average * 100)}%`}</dd>
-        </div>
+        {own ? null : (
+          <div>
+            <dt>{t("recordAverage")}</dt>
+            <dd>{average === null ? "—" : `${Math.round(average * 100)}%`}</dd>
+          </div>
+        )}
       </dl>
 
       <ul className={styles.list}>
@@ -239,19 +283,25 @@ export function RecordDetail({ team }: { team: RecordTeam | undefined }) {
               >
                 <span className={styles.rowCopy}>
                   <span className={styles.staticTitle}>
-                    {attempt.student_name}
+                    {own ? version : attempt.student_name}
                   </span>
                   <span className={styles.rowMeta}>
-                    {[attempt.group_name, version, when(attempt.started_at)]
+                    {(own
+                      ? [when(attempt.started_at)]
+                      : [attempt.group_name, version, when(attempt.started_at)]
+                    )
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
                 </span>
-                <span className={record.score} data-tone={tone(attempt, ratio)}>
-                  {score(attempt, t)}
+                <span
+                  className={record.score}
+                  data-tone={own ? "muted" : tone(attempt, ratio)}
+                >
+                  {own ? progress(attempt, t) : score(attempt, t)}
                 </span>
               </button>
-              {attempt.report_download_path ? (
+              {!own && attempt.report_download_path ? (
                 <div className={styles.actions}>
                   <a
                     className={record.report}
@@ -268,8 +318,8 @@ export function RecordDetail({ team }: { team: RecordTeam | undefined }) {
               ) : null}
               {open === key ? (
                 <div className={styles.rowExtra}>
-                  <AnswerSheet result={attempt} />
-                  {attempt.conversation_id ? (
+                  <AnswerSheet result={attempt} own={own} />
+                  {!own && attempt.conversation_id ? (
                     <p className={`${styles.rowMeta} ${record.conversation}`}>
                       {t("overviewConversation")}{" "}
                       <code>{attempt.conversation_id}</code>
@@ -339,7 +389,20 @@ function score(result: OverviewResult, t: Translate): string {
   return total ? `${awarded} / ${total}` : `${awarded}`;
 }
 
-function AnswerSheet({ result }: { result: OverviewResult }) {
+/** A student's own attempt: where it stands, never a score. */
+function progress(result: OverviewResult, t: Translate): string {
+  if (result.status === "completed") return t("recordCompleted");
+  if (result.status === "paused") return t("overviewPaused");
+  return t("overviewInProgress");
+}
+
+function AnswerSheet({
+  result,
+  own = false,
+}: {
+  result: OverviewResult;
+  own?: boolean;
+}) {
   const t = useT();
   return (
     <div className={record.sheet}>
@@ -349,8 +412,12 @@ function AnswerSheet({ result }: { result: OverviewResult }) {
             <th scope="col">#</th>
             <th scope="col">{t("overviewQuestion")}</th>
             <th scope="col">{t("overviewAnswer")}</th>
-            <th scope="col">{t("overviewPoints")}</th>
-            <th scope="col">{t("overviewFeedback")}</th>
+            {own ? null : (
+              <>
+                <th scope="col">{t("overviewPoints")}</th>
+                <th scope="col">{t("overviewFeedback")}</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -365,15 +432,19 @@ function AnswerSheet({ result }: { result: OverviewResult }) {
                     ? t("overviewSkipped")
                     : t("overviewNotAnswered")}
               </td>
-              <td>
-                {question.points_awarded === null ||
-                question.points_awarded === undefined
-                  ? "—"
-                  : question.points_total
-                    ? `${question.points_awarded} / ${question.points_total}`
-                    : question.points_awarded}
-              </td>
-              <td>{question.feedback}</td>
+              {own ? null : (
+                <>
+                  <td>
+                    {question.points_awarded === null ||
+                    question.points_awarded === undefined
+                      ? "—"
+                      : question.points_total
+                        ? `${question.points_awarded} / ${question.points_total}`
+                        : question.points_awarded}
+                  </td>
+                  <td>{question.feedback}</td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>

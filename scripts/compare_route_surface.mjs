@@ -133,6 +133,7 @@ const implementedOperationIds = new Set([
   "getKnowledgeMarkdown",
   "listAuthorizedAssessmentActivities",
   "listCourseAssessmentAttempts",
+  "listMyAssessmentAttempts",
   "listBrainformKnowledge",
   "pauseTeamConversationTurn",
   "previewTeamProviderStandingGrant",

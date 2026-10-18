@@ -3769,3 +3769,57 @@ def test_ending_early_submits_answered_work_and_closes_follow_ups(
                 [unasked_ref],
             )
         assert closed.value.code == "assessment_follow_up_invalid"
+
+
+# Owner request (2026-10-18): the student's Brainform shows Record, each
+# student reading only their own answers, enforced on the server.
+def test_a_student_record_lists_only_the_students_own_attempts(attempt_env: Any) -> None:
+    _app, database, settings, client = attempt_env
+    url = f"/api/v1/learning/courses/{COURSE_ID}/my-assessment-attempts"
+    attempts: dict[str, str] = {}
+    for username, user_id in (("bowen", STUDENT_ID), ("kaikai", OTHER_STUDENT_ID)):
+        token, _csrf = _login(client, username)
+        with database.session() as db:
+            conversation_id, *_rest = _create_formal_conversation(
+                db, actor_user_id=user_id, prompts=("Q1", "Q2")
+            )
+            actor = _context(db, settings, token)
+            started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+            assert started is not None
+            _answer_current(db, actor, conversation_id, f"{username} secret answer")
+            attempts[username] = str(started.attempt.id)
+
+    for username, other in (("kaikai", "bowen"), ("bowen", "kaikai")):
+        _login(client, username)
+        response = client.get(url)
+        assert response.status_code == 200, response.text
+        [row] = response.json()
+        assert row["attempt_id"] == attempts[username]
+        assert row["status"] == "in_progress" and row["phase"] == "answering"
+        assert row["team_name"] and row["test_name"].startswith(f"{row['team_name']} · ")
+        assert [question["answers"] for question in row["questions"]] == [
+            [f"{username} secret answer"],
+            [],
+        ]
+        # Scores and feedback stay with the teacher.
+        assert row["points_awarded"] is None and row["report_download_path"] is None
+        assert {question["feedback"] for question in row["questions"]} == {""}
+        # Nothing of the other student's attempt, whatever the query says.
+        assert f"{other} secret answer" not in response.text
+        assert attempts[other] not in response.text
+        sneaky = client.get(f"{url}?attempt_id={attempts[other]}&user_id={other}")
+        assert sneaky.status_code == 200
+        assert [item["attempt_id"] for item in sneaky.json()] == [attempts[username]]
+
+    # The teacher's own Record read is unchanged; this list is per student.
+    _login(client, "maya")
+    assert client.get(url).json() == []
+    teacher_rows = client.get(f"/api/v1/learning/courses/{COURSE_ID}/assessment-attempts")
+    assert teacher_rows.status_code == 200
+    assert {row["attempt_id"] for row in teacher_rows.json()} == set(attempts.values())
+
+    missing_course = f"/api/v1/learning/courses/{uuid4()}/my-assessment-attempts"
+    _login(client, "bowen")
+    assert client.get(missing_course).status_code == 404
+    client.cookies.clear()
+    assert client.get(url).status_code in {401, 403}

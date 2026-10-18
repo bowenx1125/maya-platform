@@ -75,8 +75,8 @@ try {
   // Teams add immutable definitions, versions, and the scoped Maya directory;
   // online card rooms add seven; renaming or pinning a Chat adds one; a
   // teacher's personal voices add two; the JSON send route is gone (Chats send
-  // only through messages:stream).
-  if (platformOperationCount !== 164 || placeholderCount !== 0) {
+  // only through messages:stream); a student's own Record adds one.
+  if (platformOperationCount !== 165 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );
