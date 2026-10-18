@@ -36,22 +36,18 @@ def _begin() -> None:
 def upgrade() -> None:
     _begin()
     bind = op.get_bind()
+    # No CHECK on this column. SQLite refuses DROP COLUMN when a table-level
+    # CHECK still names the column, and downgrade has to support both the
+    # Alembic shape and a create_all database stamped at head.
     if bind.dialect.name == "sqlite":
-        # Inline CHECK keeps a migrated SQLite file aligned with create_all.
         bind.exec_driver_sql(
             "ALTER TABLE classroom_interaction_windows ADD COLUMN "
-            "barrage_sequence INTEGER NOT NULL DEFAULT 0 "
-            "CHECK (barrage_sequence >= 0)"
+            "barrage_sequence INTEGER NOT NULL DEFAULT 0"
         )
     else:
         op.add_column(
             "classroom_interaction_windows",
             sa.Column("barrage_sequence", sa.Integer(), nullable=False, server_default="0"),
-        )
-        op.create_check_constraint(
-            "ck_interaction_windows_barrage_sequence",
-            "classroom_interaction_windows",
-            "barrage_sequence >= 0",
         )
     op.execute(_BACKFILL)
 
@@ -64,9 +60,4 @@ def downgrade() -> None:
             "ALTER TABLE classroom_interaction_windows DROP COLUMN barrage_sequence"
         )
         return
-    op.drop_constraint(
-        "ck_interaction_windows_barrage_sequence",
-        "classroom_interaction_windows",
-        type_="check",
-    )
     op.drop_column("classroom_interaction_windows", "barrage_sequence")

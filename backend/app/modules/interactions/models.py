@@ -79,7 +79,6 @@ class ClassroomInteractionWindow(Base):
             name="ck_interaction_windows_status",
         ),
         CheckConstraint("revision >= 0", name="ck_interaction_windows_revision"),
-        CheckConstraint("barrage_sequence >= 0", name="ck_interaction_windows_barrage_sequence"),
         CheckConstraint(
             "token_nonce IS NULL OR length(token_nonce) = 32",
             name="ck_interaction_windows_nonce_shape",
