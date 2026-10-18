@@ -25,6 +25,7 @@ from app.core.models import (
     ProviderPolicySnapshot,
     User,
 )
+from app.core.sqlutil import dialect_insert
 from app.modules.agents.markdown import markdown_hash
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.providers.sql_query import (
@@ -388,8 +389,9 @@ def confirm_team_standing_grant(
         or plan.publication_epoch != expected_publication_epoch
     ):
         raise stale_revision()
-    existing = db.scalar(
-        select(TeamProviderStandingGrant).where(
+    current = (
+        select(TeamProviderStandingGrant)
+        .where(
             TeamProviderStandingGrant.team_version_id == plan.team_version_id,
             TeamProviderStandingGrant.publication_id == plan.publication_id,
             TeamProviderStandingGrant.provider_operation == plan.provider_operation,
@@ -398,28 +400,51 @@ def confirm_team_standing_grant(
             TeamProviderStandingGrant.publisher_user_id == plan.publisher_user_id,
             TeamProviderStandingGrant.revoked_at.is_(None),
         )
+        .execution_options(populate_existing=True)
     )
+    existing = db.scalar(current)
     if existing is not None:
         return existing
-    grant = TeamProviderStandingGrant(
-        id=str(uuid4()),
-        team_id=plan.team_id,
-        team_version_id=plan.team_version_id,
-        publication_id=plan.publication_id,
-        course_id=plan.course_id,
-        publisher_user_id=plan.publisher_user_id,
-        provider_operation=plan.provider_operation,
-        policy_hash=plan.policy_hash,
-        resource_manifest_json=plan.resource_manifest_json,
-        resource_hash=plan.resource_hash,
-        team_epoch=plan.team_epoch,
-        publication_epoch=plan.publication_epoch,
-        disclosure_revision=1,
-        confirmed_at=datetime.now(UTC),
-        revoked_at=None,
+    # Load test (2026-10-19, 40 students, one published Team): the first
+    # messages all found no grant and each recorded the operator's standing
+    # consent. The losers hit uq_team_provider_standing_scope and the member
+    # failed with IntegrityError. One grant per scope: a concurrent insert is
+    # skipped and its row read back once the winner commits.
+    table = TeamProviderStandingGrant.__table__
+    db.execute(
+        dialect_insert(db, table)
+        .values(
+            id=str(uuid4()),
+            team_id=plan.team_id,
+            team_version_id=plan.team_version_id,
+            publication_id=plan.publication_id,
+            course_id=plan.course_id,
+            publisher_user_id=plan.publisher_user_id,
+            provider_operation=plan.provider_operation,
+            policy_hash=plan.policy_hash,
+            resource_manifest_json=plan.resource_manifest_json,
+            resource_hash=plan.resource_hash,
+            team_epoch=plan.team_epoch,
+            publication_epoch=plan.publication_epoch,
+            disclosure_revision=1,
+            confirmed_at=datetime.now(UTC),
+            revoked_at=None,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[
+                table.c.team_version_id,
+                table.c.publication_id,
+                table.c.provider_operation,
+                table.c.policy_hash,
+                table.c.resource_hash,
+                table.c.publisher_user_id,
+            ],
+            index_where=table.c.revoked_at.is_(None),
+        )
     )
-    db.add(grant)
-    db.flush()
+    grant = db.scalar(current)
+    if grant is None:  # revoked between the insert and this read
+        raise stale_revision()
     return grant
 
 

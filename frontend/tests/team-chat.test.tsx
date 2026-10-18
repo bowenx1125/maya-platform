@@ -247,7 +247,7 @@ async function openNewChat() {
   fireEvent.click(create);
 }
 
-// New lists Teams and Agents as tiles; the sidebar Done creates the Chat.
+// New lists Agents and Teams as tiles; the sidebar Done creates the Chat.
 async function chooseTarget(tileName: string | RegExp) {
   await openNewChat();
   fireEvent.click(await screen.findByRole("button", { name: tileName }));
@@ -821,7 +821,7 @@ describe("Chatform", () => {
     },
   );
 
-  it("lists Teams and Agents on the New page and creates nothing until Done", async () => {
+  it("lists Agents then Teams on the New page and creates nothing until Done", async () => {
     state.api.teams.mockResolvedValue([
       { ...team, can_edit: false, visibility: "public" },
     ]);
@@ -829,8 +829,24 @@ describe("Chatform", () => {
     await openNewChat();
     const page = within(screen.getByRole("main"));
     const socrates = await page.findByRole("button", { name: /Socrates/ });
-    expect(page.getByRole("heading", { name: "Teams" })).toBeTruthy();
-    expect(page.getByRole("heading", { name: "Agents" })).toBeTruthy();
+    // Agents is the first card (left column on desktop, top when stacked).
+    expect(
+      page
+        .getAllByRole("heading", { name: /^(Agents|Teams)$/ })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Agents", "Teams"]);
+    const agentsCard = page.getByRole("heading", { name: "Agents" });
+    const teamsCard = page.getByRole("heading", { name: "Teams" });
+    expect(
+      agentsCard.compareDocumentPosition(teamsCard) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const socratesFirst = page.getByRole("button", { name: /Socrates/ });
+    const teamTile = page.getByRole("button", { name: /Reasoning circle/ });
+    expect(
+      socratesFirst.compareDocumentPosition(teamTile) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(page.getByRole("button", { name: /Mencius/ })).toBeTruthy();
     expect(page.getByRole("button", { name: /Reasoning circle/ })).toBeTruthy();
     expect(

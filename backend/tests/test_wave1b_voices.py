@@ -217,6 +217,16 @@ def test_voice_envelope_rejects_every_tampered_component_and_context_swap() -> N
             )
 
 
+def _demote_to_preview_ready(database: Database, profile_id: str) -> None:
+    """Uploads are ready at once; recreate a not-ready (preview) profile."""
+
+    with database.session() as session:
+        row = session.get(VoiceProfile, profile_id)
+        assert row is not None and row.status == "ready"
+        row.status = "preview_ready"
+        session.commit()
+
+
 def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
@@ -232,7 +242,8 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     )
     assert response.status_code == 202, response.text
     profile = response.json()
-    assert profile["status"] == "preview_ready"
+    # A successful upload is selectable at once; no listen-to-confirm step.
+    assert profile["status"] == "ready"
     assert "provider" not in response.text.lower()
     assert "external" not in response.text.lower()
     with database.session() as session:
@@ -284,9 +295,11 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
         f"/api/v1/voice-profiles/{profile['id']}/confirm",
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
     )
+    # An older client's confirm of a ready voice is a harmless no-op that
+    # leaves the preview playable.
     assert confirmed.status_code == 200
     assert confirmed.json()["status"] == "ready"
-    assert client.get(preview.json()["playback_url"]).status_code == 404
+    assert client.get(preview.json()["playback_url"]).status_code == 200
 
     deleted = client.delete(
         f"/api/v1/voice-profiles/{profile['id']}",
@@ -403,6 +416,7 @@ def test_group_voice_is_owner_private_within_the_same_group(
     )
     assert enrolled.status_code == 202, enrolled.text
     profile_id = enrolled.json()["id"]
+    _demote_to_preview_ready(database, profile_id)
     preview = client.post(
         f"/api/v1/voice-profiles/{profile_id}/preview",
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
@@ -786,7 +800,7 @@ def test_enrollment_generic_provider_error_is_reconciled_before_retry(
         files={"file": ("sample.wav", _wav(), "audio/wav")},
     )
     assert second.status_code == 202, second.text
-    assert second.json()["status"] == "preview_ready"
+    assert second.json()["status"] == "ready"
     assert provider.enroll_calls == 1
     assert provider.exists_calls == 1
 
@@ -1244,6 +1258,7 @@ def test_voice_permissions_are_same_group_students_only(
     )
     assert create.status_code == 202
     profile_id = create.json()["id"]
+    _demote_to_preview_ready(database, profile_id)
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 200
 

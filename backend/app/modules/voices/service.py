@@ -763,7 +763,9 @@ def _store_enrollment_success(
     if not _settle_profile_status(
         db,
         profile,
-        "preview_ready" if succeeded else "failed",
+        # A successful upload is selectable at once (owner decision
+        # 2026-10-19): no listen-to-the-end confirmation step.
+        "ready" if succeeded else "failed",
         None if succeeded else "voice_enrollment_failed",
     ):
         profile.updated_at = now_utc()

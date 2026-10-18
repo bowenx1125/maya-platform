@@ -336,7 +336,7 @@ def test_enrollment_longer_than_the_default_lease_is_created(
     created = _enroll(client, csrf, "enroll-slow-supplier-01")
 
     assert created.status_code == 202, created.text
-    assert created.json()["status"] == "preview_ready"
+    assert created.json()["status"] == "ready"
     with database.session() as session:
         profile = session.get(VoiceProfile, created.json()["id"])
         assert profile is not None and profile.external_id_encrypted
@@ -360,11 +360,11 @@ def test_enrollment_that_loses_its_claim_still_keeps_the_supplier_voice(
     created = _enroll(client, csrf, "enroll-lost-claim-0001")
 
     assert created.status_code == 202, created.text
-    assert created.json()["status"] == "preview_ready"
+    assert created.json()["status"] == "ready"
     with database.session() as session:
         profile = session.get(VoiceProfile, created.json()["id"])
         assert profile is not None
-        assert profile.status == "preview_ready"
+        assert profile.status == "ready"
         assert profile.external_id_encrypted
 
 
