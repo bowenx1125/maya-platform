@@ -190,6 +190,10 @@ def _targets(
         selected = [member for member in members if member.id in requested]
     else:
         selected = members
+    if routing.mode != "auto":
+        # Ordinary chat: the leader answers first, then the rest by position.
+        # Results run in this order, so later members follow the leader.
+        selected = sorted(selected, key=lambda member: not member.is_leader)
     normalized = TeamRouting(
         mode=routing.mode,
         participant_ids=[UUID(member.id) for member in selected] if routing.mode != "auto" else [],
@@ -1479,6 +1483,7 @@ def _start_member(
             is_leader=participant.is_leader,
             viewer_is_teacher=_viewer_is_teacher(db, row, actor_context),
             attempt_closed=_closed_formal_attempt(db, row),
+            mentioned=_mentioned(turn, participant),
         )
         if assessment_purpose is None and saved_protocol:
             if "<active_assessment_action_protocol>" not in system_message:
@@ -1685,6 +1690,17 @@ def _speaker_identity(speaker_name: str | None, *, viewer_is_teacher: bool = Fal
     )
 
 
+def _mentioned(turn: ConversationTurn, participant: ConversationParticipant) -> bool:
+    """Whether the user @-named this member and routed the turn to it."""
+
+    routing = TeamRouting.model_validate_json(turn.routing_json or "{}")
+    return (
+        routing.mode == "selected"
+        and UUID(participant.id) in routing.participant_ids
+        and f"@{participant.display_name}" in turn.user_text
+    )
+
+
 def _member_system(
     agent_md: str,
     knowledge_json: str,
@@ -1698,6 +1714,7 @@ def _member_system(
     is_leader: bool = False,
     viewer_is_teacher: bool = False,
     attempt_closed: bool = False,
+    mentioned: bool = False,
 ) -> str:
     if assessment_source_revoked:
         from .assessment_protocol import ASSESSMENT_SOURCE_REVOKED_OWNER_ACTIONS_PROTOCOL
@@ -1813,6 +1830,12 @@ def _member_system(
             "If you have nothing to add, leave the reply empty. The server omits "
             "an empty reply and does not treat that member as failed.\n"
         )
+        if mentioned:
+            # An @-mention is the user's request for this member: no silence.
+            message += (
+                "The user @-mentioned you by name in this message. You must reply "
+                "to it with substance; do not leave the reply empty.\n"
+            )
         if attempt_closed:
             # The model still calls assessment_action for a status question.
             # Ending the turn on that call left every member with nothing to say.
