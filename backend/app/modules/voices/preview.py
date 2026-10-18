@@ -232,8 +232,10 @@ def create_voice_preview(
     # the caller owns no such voice.
     try:
         profile = visible_student_voice(db, context, profile_id).profile
+        owner_preview = True
     except PlatformError:
         profile = groupmate_ready_voice(db, context, profile_id)
+        owner_preview = False
     if profile.status not in {"preview_ready", "ready"}:
         raise not_found()
     try:
@@ -282,7 +284,11 @@ def create_voice_preview(
     try:
         digest, size = write_atomic(data_root, relative_path, raw)
         timestamp = now_utc()
-        expire_profile_previews(db, data_root, profile.id)
+        # The owner's new preview replaces their earlier one (confirmation
+        # uses the latest). A groupmate's preview replaces nothing, so it
+        # never cuts off audio someone else is playing; it expires on its TTL.
+        if owner_preview:
+            expire_profile_previews(db, data_root, profile.id)
         stored = StoredFile(
             id=str(uuid4()),
             kind="voice_preview",
