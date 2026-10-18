@@ -1,4 +1,4 @@
-"""HTML reports a Team member saves for the Chat owner.
+"""HTML reports a Team member or single Agent saves for the Chat owner.
 
 The model sends structured text through ``create_chat_html_report``; it never
 writes HTML. The server stores that text with the Chat and its owner, renders
@@ -31,7 +31,7 @@ router = APIRouter(tags=["Chat"])
 
 CHAT_REPORT_TOOL = "create_chat_html_report"
 CHAT_REPORT_PATH_PREFIX = "/api/v1/conversations/"
-_ENTRY_KINDS = frozenset({"team", "maya_team"})
+_ENTRY_KINDS = frozenset({"agent", "team", "maya_team"})
 
 
 class ReportEvidence(BaseModel):
@@ -128,7 +128,7 @@ def chat_report_tools() -> dict[str, ToolSpec]:
         CHAT_REPORT_TOOL: ToolSpec(
             CHAT_REPORT_TOOL,
             "Public",
-            "Save a downloadable HTML report for the user of this Team Chat. Call it only "
+            "Save a downloadable HTML report for the user of this Chat. Call it only "
             "when the user asks you for a report, and only after you have the analysis: "
             "title, a short summary, optional 0-10 metrics with notes, and sections whose "
             "evidence quotes the chat or attachments word for word with their time. Write "

@@ -784,6 +784,12 @@ def _generate_reply_body(
         sending_guard=sending_guard,
     )
     history = _saved_chat_history(db, row.id, current_turn.position)
+    if not assessment_active:
+        from .attachments import attachment_history
+
+        # Same context as Team members: the owner's files attached to this
+        # Chat before this turn. A live formal attempt keeps its fixed context.
+        history.extend(attachment_history(db, row.id, current_turn.created_at))
     history.append({"role": "user", "content": message})
     require_current_chat_claim(db, row.id, request_id, claim_revision)
     canonical_knowledge: list[dict[str, Any]] = []
@@ -1175,6 +1181,7 @@ def _agent_knowledge_generation_progress(
 def _agent_report_download_suffix(db: Session, conversation_id: str, turn_id: str) -> str:
     """Append server-authored report links; models must not invent download paths."""
 
+    from app.modules.workspace.chat_reports import CHAT_REPORT_TOOL
     from app.modules.workspace.team_runtime import report_paths
 
     raw = db.scalars(
@@ -1182,7 +1189,9 @@ def _agent_report_download_suffix(db: Session, conversation_id: str, turn_id: st
         .where(
             RuntimeToolReceipt.conversation_id == conversation_id,
             RuntimeToolReceipt.turn_id == turn_id,
-            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+            RuntimeToolReceipt.tool_name.in_(
+                ("create_course_report", "list_course_reports", CHAT_REPORT_TOOL)
+            ),
         )
         .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
     ).all()

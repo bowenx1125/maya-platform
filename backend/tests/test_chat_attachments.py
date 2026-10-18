@@ -1,4 +1,7 @@
-"""Chatform attachments: owner- and conversation-scoped, read by Team members."""
+"""Chatform attachments: owner- and conversation-scoped, read by Team members.
+
+Single-Agent Chats use the same routes; see test_agent_chat_attachments_reports.py.
+"""
 
 from __future__ import annotations
 
@@ -130,14 +133,6 @@ def test_another_user_cannot_list_upload_or_delete(client: TestClient, database:
     with database.session() as db:
         rows = db.scalars(select(ConversationAttachment)).all()
         assert [row.id for row in rows] == [attachment_id]
-
-
-def test_single_agent_chats_have_no_attachments(client: TestClient, database: Database) -> None:
-    _team_row, versions, csrf = _team(client, database)
-    session = _create(client, csrf, {"kind": "agent", "version_id": versions[0]})
-    response = _upload(client, csrf, session["id"])
-    assert response.status_code == 409
-    assert response.json()["code"] == "chat_attachments_unavailable"
 
 
 @pytest.mark.parametrize(
