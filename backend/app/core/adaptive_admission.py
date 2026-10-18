@@ -24,6 +24,10 @@ this single queue as backstops (the login queue is folded into it):
   fresh one). The fixed ``write_guard`` / ``create_admission`` caps are off
   by default (limit 0) and can be switched back on from the environment.
   Argon2 keeps its own CPU/memory cap (``AUTH_HASH_CONCURRENCY``).
+* Fast brake, checked every sample: a 10 s DB write p95 or pool-wait p95,
+  write statements running now, or host CPU busy (``/proc/stat``) halves
+  the budget and clamps it to what is in flight, seconds before load1
+  (a one-minute average) moves.
 * Retryable ``adaptive_admission_busy`` 503 is raised only when the queue
   (max 200) is full or the single 180 s wait budget runs out.
 
@@ -59,7 +63,10 @@ _load_reader: SignalReader | None = None
 _mem_reader: SignalReader | None = None
 # Fraction of the AnyIO worker-thread pool in use; main.py installs it.
 _threadpool_reader: SignalReader | None = None
+_cpu_reader: SignalReader | None = None
 _clock: Callable[[], float] = time.monotonic
+_PROC_STAT = "/proc/stat"
+_cpu_last: tuple[float, float] | None = None  # (busy, total) jiffies
 
 
 def set_signal_readers(
@@ -67,13 +74,54 @@ def set_signal_readers(
     load: SignalReader | None = None,
     mem: SignalReader | None = None,
     clock: Callable[[], float] | None = None,
+    cpu: SignalReader | None = None,
 ) -> None:
-    """Override host probes / clock (tests only). ``None`` restores defaults."""
+    """Override host probes / clock (tests only). ``None`` restores defaults.
 
-    global _load_reader, _mem_reader, _clock
+    Faking load or memory also silences the real CPU probe unless ``cpu`` is
+    given, so a busy test machine cannot brake a scripted scenario.
+    """
+
+    global _load_reader, _mem_reader, _clock, _cpu_reader, _cpu_last
     _load_reader = load
     _mem_reader = mem
     _clock = clock if clock is not None else time.monotonic
+    faked = load is not None or mem is not None
+    _cpu_reader = cpu if cpu is not None else ((lambda: None) if faked else None)
+    _cpu_last = None
+
+
+def set_cpu_reader(reader: SignalReader | None) -> None:
+    """Override the host CPU busy probe (0..1; tests only). ``None`` restores it."""
+
+    global _cpu_reader, _cpu_last
+    _cpu_reader = reader
+    _cpu_last = None
+
+
+def _read_cpu() -> float | None:
+    """Host CPU busy since the previous sample, from ``/proc/stat`` (host-wide)."""
+
+    global _cpu_last
+    if _cpu_reader is not None:
+        return _cpu_reader()
+    try:
+        with open(_PROC_STAT, encoding="ascii") as stat:
+            fields = stat.readline().split()
+    except OSError:
+        return None
+    if not fields or fields[0] != "cpu":
+        return None
+    try:
+        values = [float(value) for value in fields[1:9]]
+    except ValueError:
+        return None
+    idle = values[3] + (values[4] if len(values) > 4 else 0.0)  # idle + iowait
+    total = sum(values)
+    previous, _cpu_last = _cpu_last, (total - idle, total)
+    if previous is None or total <= previous[1]:
+        return None
+    return max(0.0, min(1.0, (total - idle - previous[0]) / (total - previous[1])))
 
 
 def set_threadpool_reader(reader: SignalReader | None) -> None:
@@ -156,6 +204,13 @@ DB_P95_MIN_SAMPLES = 20
 _DB_WRITE = _TimedLatencyWindow(DB_P95_WINDOW_SECONDS, min_samples=DB_P95_MIN_SAMPLES)
 _POOL_WAIT = _TimedLatencyWindow(DB_P95_WINDOW_SECONDS, min_samples=DB_P95_MIN_SAMPLES)
 _REQUEST = _TimedLatencyWindow(REQUEST_P95_WINDOW_SECONDS)
+# Brake windows: the last 10 s with fewer samples, so a sudden slowdown
+# counts within seconds.
+_DB_WRITE_FAST = _TimedLatencyWindow(10.0, min_samples=8)
+_POOL_WAIT_FAST = _TimedLatencyWindow(10.0, min_samples=5)
+# Write statements executing right now in this process (db.py counts them).
+_writes_in_flight = 0
+_writes_lock = threading.Lock()
 
 
 class RequestSample:
@@ -209,12 +264,35 @@ def record_request_sample(
 
 def record_db_write_ms(ms: float) -> None:
     _DB_WRITE.add(ms)
+    _DB_WRITE_FAST.add(ms)
 
 
 def record_pool_wait_ms(ms: float) -> None:
     """Time a caller waited for a pooled DB connection (db.py)."""
 
     _POOL_WAIT.add(ms)
+    _POOL_WAIT_FAST.add(ms)
+
+
+def db_write_started() -> None:
+    """A write statement began executing (db.py)."""
+
+    global _writes_in_flight
+    with _writes_lock:
+        _writes_in_flight += 1
+
+
+def db_write_finished() -> None:
+    """A write statement finished or failed (db.py)."""
+
+    global _writes_in_flight
+    with _writes_lock:
+        _writes_in_flight = max(0, _writes_in_flight - 1)
+
+
+def db_writes_in_flight() -> int:
+    with _writes_lock:
+        return _writes_in_flight
 
 
 def record_request_ms(ms: float) -> None:
@@ -231,6 +309,12 @@ class _Waiter:
 
 
 SHRINK_REASONS: tuple[str, ...] = ("danger", "load", "mem", "db_write_p95", "pool_wait_p95")
+BRAKE_REASONS: tuple[str, ...] = (
+    "brake_db_write_p95",
+    "brake_pool_wait_p95",
+    "brake_writes_in_flight",
+    "brake_cpu",
+)
 
 
 @dataclass
@@ -251,6 +335,12 @@ class _State:
     load: float | None = None
     mem: float | None = None
     threadpool: float | None = None
+    cpu: float | None = None
+    cpu_hot_samples: int = 0
+    last_brake: float = float("-inf")
+    last_brake_reason: str | None = None
+    brake_reason: str | None = None  # the brake signal bad at the last sample
+    brake_counts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(BRAKE_REASONS, 0))
     last_shrink_reason: str | None = None
     shrink_counts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(SHRINK_REASONS, 0))
     rr_index: int = 0
@@ -281,6 +371,12 @@ def reset_adaptive_admission_state() -> None:
     _DB_WRITE.clear()
     _POOL_WAIT.clear()
     _REQUEST.clear()
+    _DB_WRITE_FAST.clear()
+    _POOL_WAIT_FAST.clear()
+    global _writes_in_flight, _cpu_last
+    with _writes_lock:
+        _writes_in_flight = 0
+    _cpu_last = None
 
 
 def _weight(settings: Settings, cls: str) -> int:
@@ -332,9 +428,11 @@ def _refresh_locked(settings: Settings) -> None:
 
     if s.in_flight_units > 0 or _waiting_total() > 0 or s.last_busy == float("-inf"):
         s.last_busy = now
+    s.cpu = _read_cpu()
     if not settings.adaptive_admission_enabled:
         s.budget = max_units  # AIMD off: budget frozen at max, danger latch still applies
         return
+    _brake_locked(settings, now, min_units)
     if now - s.last_adjust < float(settings.adaptive_admission_adjust_seconds):
         return
     s.last_adjust = now
@@ -345,8 +443,8 @@ def _refresh_locked(settings: Settings) -> None:
         s.budget = max(min_units, s.budget * float(settings.adaptive_admission_decrease_factor))
         s.last_shrink_reason = reason
         s.shrink_counts[reason] += 1
-    elif _hold(settings):
-        pass
+    elif s.brake_reason is not None or _hold(settings):
+        pass  # no growth while a brake signal is still bad
     else:
         step = (
             float(settings.adaptive_admission_fast_increase_units)
@@ -369,6 +467,65 @@ def _refresh_locked(settings: Settings) -> None:
             reason or "grow",
             s.load,
             s.mem,
+            s.in_flight_units,
+            _waiting_total(),
+        )
+
+
+def _brake_reason(settings: Settings) -> str | None:
+    """First fast signal that says the host is saturating right now."""
+
+    s = _state
+    db_limit = float(settings.adaptive_admission_brake_db_write_p95_ms)
+    pool_limit = float(settings.adaptive_admission_brake_pool_wait_p95_ms)
+    writes_limit = int(settings.adaptive_admission_brake_writes_in_flight)
+    cpu_limit = float(settings.adaptive_admission_brake_cpu_ratio)
+    if cpu_limit > 0 and s.cpu is not None and s.cpu >= cpu_limit:
+        s.cpu_hot_samples += 1
+    else:
+        s.cpu_hot_samples = 0
+    db_p95 = _DB_WRITE_FAST.p95()
+    pool_p95 = _POOL_WAIT_FAST.p95()
+    if db_limit > 0 and db_p95 is not None and db_p95 >= db_limit:
+        return "brake_db_write_p95"
+    if pool_limit > 0 and pool_p95 is not None and pool_p95 >= pool_limit:
+        return "brake_pool_wait_p95"
+    if writes_limit > 0 and db_writes_in_flight() >= writes_limit:
+        return "brake_writes_in_flight"
+    if s.cpu_hot_samples >= int(settings.adaptive_admission_brake_cpu_samples):
+        return "brake_cpu"
+    return None
+
+
+def _brake_locked(settings: Settings, now: float, min_units: float) -> None:
+    """Cut the budget now when a fast signal is bad; AIMD regrows it later."""
+
+    s = _state
+    reason = _brake_reason(settings)
+    s.brake_reason = reason
+    if reason is None:
+        return
+    before = s.budget
+    target = s.budget
+    if now - s.last_brake >= float(settings.adaptive_admission_brake_cooldown_seconds):
+        target = s.budget * 0.5
+        s.last_brake = now
+        s.last_brake_reason = reason
+        s.brake_counts[reason] += 1
+    # Admit nothing new beyond what already runs until a turn finishes.
+    target = min(target, max(float(s.in_flight_units), min_units))
+    s.budget = max(min_units, target)
+    if s.budget < before:
+        LOGGER.warning(
+            "adaptive_budget from=%.1f to=%.1f reason=%s db_write_p95_10s=%s "
+            "pool_wait_p95_10s=%s writes_in_flight=%s cpu=%s in_flight_units=%s queued=%s",
+            before,
+            s.budget,
+            reason,
+            _DB_WRITE_FAST.p95(),
+            _POOL_WAIT_FAST.p95(),
+            db_writes_in_flight(),
+            s.cpu,
             s.in_flight_units,
             _waiting_total(),
         )
@@ -689,6 +846,15 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
             "db_write_p95_ms": _DB_WRITE.p95(),
             "pool_wait_p95_ms": _POOL_WAIT.p95(),
             "threadpool_usage": s.threadpool,
+            "brake": {
+                "active_reason": s.brake_reason,
+                "last_reason": s.last_brake_reason,
+                "counts": dict(s.brake_counts),
+                "db_write_p95_10s_ms": _DB_WRITE_FAST.p95(),
+                "pool_wait_p95_10s_ms": _POOL_WAIT_FAST.p95(),
+                "writes_in_flight": db_writes_in_flight(),
+                "cpu_busy": s.cpu,
+            },
             # Observed only: it includes queue time, so it never drives AIMD.
             "request_p95_ms": _REQUEST.p95(),
             "last_shrink_reason": s.last_shrink_reason,
@@ -717,7 +883,11 @@ __all__ = [
     "adopt_reservation",
     "Reservation",
     "reserve_slot",
+    "db_write_finished",
+    "db_write_started",
+    "db_writes_in_flight",
     "record_db_write_ms",
+    "set_cpu_reader",
     "record_pool_wait_ms",
     "record_request_ms",
     "reset_adaptive_admission_state",

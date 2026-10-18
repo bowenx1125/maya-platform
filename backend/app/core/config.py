@@ -333,6 +333,35 @@ class Settings(BaseSettings):
     adaptive_admission_pool_wait_p95_ms: float = Field(
         default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_POOL_WAIT_P95_MS"
     )
+    # Fast brake (#141 follow-up, 2026-10-18): load1 is a one-minute average,
+    # so a burst of turns saturated the 2 vCPU host before load said so.
+    # These faster signals are checked on every sample (1 s), not every adjust:
+    # a 10 s DB write p95 or pool-wait p95, the write statements running now,
+    # or host CPU busy (/proc/stat) for N samples in a row. A brake halves the
+    # budget (once per cooldown) and clamps it to what is already in flight,
+    # so nothing new starts until a turn finishes; growth waits while any
+    # brake signal is bad. 0 turns a signal off.
+    adaptive_admission_brake_db_write_p95_ms: float = Field(
+        default=800.0, ge=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_BRAKE_DB_WRITE_P95_MS"
+    )
+    adaptive_admission_brake_pool_wait_p95_ms: float = Field(
+        default=250.0,
+        ge=0,
+        le=600_000,
+        validation_alias="ADAPTIVE_ADMISSION_BRAKE_POOL_WAIT_P95_MS",
+    )
+    adaptive_admission_brake_writes_in_flight: int = Field(
+        default=10, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_BRAKE_WRITES_IN_FLIGHT"
+    )
+    adaptive_admission_brake_cpu_ratio: float = Field(
+        default=0.95, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_BRAKE_CPU_RATIO"
+    )
+    adaptive_admission_brake_cpu_samples: int = Field(
+        default=3, ge=1, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_CPU_SAMPLES"
+    )
+    adaptive_admission_brake_cooldown_seconds: float = Field(
+        default=5.0, ge=0, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_COOLDOWN_SECONDS"
+    )
     # Hold band (no growth, no shrink): load in [hold, soft), MemAvailable in
     # [soft, hold) MiB, or the worker-thread pool at least this full.
     adaptive_admission_hold_load: float = Field(

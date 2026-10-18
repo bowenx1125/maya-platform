@@ -78,23 +78,41 @@ def build_engine(database_url: str) -> Engine:
 def _time_writes(engine: Engine) -> None:
     """Feed non-SELECT statement latency to adaptive admission's DB signal."""
 
-    from app.core.adaptive_admission import record_db_write_ms
+    from app.core.adaptive_admission import (
+        db_write_finished,
+        db_write_started,
+        record_db_write_ms,
+    )
     from app.core.message_timing import add_db_write
 
     @event.listens_for(engine, "before_cursor_execute")
     def _start(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
-        conn.info.setdefault("_adaptive_t0", []).append(time.perf_counter())
+        is_write = not statement.lstrip()[:6].upper().startswith("SELECT")
+        if is_write:
+            db_write_started()
+        conn.info.setdefault("_adaptive_t0", []).append((time.perf_counter(), is_write))
 
     @event.listens_for(engine, "after_cursor_execute")
     def _end(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
         stack = conn.info.get("_adaptive_t0")
         if not stack:
             return
-        started = stack.pop()
-        if not statement.lstrip()[:6].upper().startswith("SELECT"):
+        started, is_write = stack.pop()
+        if is_write:
+            db_write_finished()
             elapsed_ms = (time.perf_counter() - started) * 1000.0
             record_db_write_ms(elapsed_ms)
             add_db_write(elapsed_ms)
+
+    @event.listens_for(engine, "handle_error")
+    def _failed(context):  # type: ignore[no-untyped-def]
+        # A failed statement never reaches after_cursor_execute.
+        connection = context.connection
+        stack = connection.info.get("_adaptive_t0") if connection is not None else None
+        if stack:
+            _started, is_write = stack.pop()
+            if is_write:
+                db_write_finished()
 
 
 def _time_pool_checkout(engine: Engine) -> None:
