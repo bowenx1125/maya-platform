@@ -38,3 +38,34 @@ def live_teacher_publication(
             CourseTeamPublication.state.in_(("published", "retained")),
         )
     )
+
+
+def chat_team_is_live_teacher_public(
+    db: Session,
+    *,
+    team_id: str | None,
+    team_version_id: str | None,
+    team_authorization_epoch: int | None,
+) -> bool:
+    """True when an ordinary Team Chat's frozen Team version is still a
+    teacher's live public Team, so a student who is not the owner may send.
+
+    Bug (2026-10-19): #186 let the recheck and the send through, but the
+    Provider dispatch checks still required the Team owner, so every member
+    of a student's Chat failed with team_context_changed before any model call.
+    """
+
+    if team_id is None or team_version_id is None or team_authorization_epoch is None:
+        return False
+    team = db.get(Team, team_id)
+    version = db.get(TeamVersion, team_version_id)
+    if (
+        team is None
+        or version is None
+        or team.deleted_at is not None
+        or version.team_id != team.id
+        or team.authorization_epoch != team_authorization_epoch
+        or version.authorization_epoch != team_authorization_epoch
+    ):
+        return False
+    return live_teacher_publication(db, team, version) is not None
