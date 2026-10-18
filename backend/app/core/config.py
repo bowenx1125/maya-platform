@@ -231,12 +231,14 @@ class Settings(BaseSettings):
     llm_admission_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
     )
-    # Optional per-operation backstop: concurrent Team/Chat turn execution
-    # per process, sharing the request deadline. Off by default (0): the
-    # weighted adaptive budget, the danger latch and the LLM backstop already
-    # bound this work, and every turn also holds an LLM slot. Set
-    # WRITE_GUARD_LIMIT (e.g. 20) to bring the fixed cap back without code.
-    write_guard_limit: int = Field(default=0, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT")
+    # Required backstop: concurrent Team/Chat turns per process (2 replicas:
+    # 16 on the host). The adaptive budget charges a turn once, but a formal
+    # turn writes the database 50-90 times over 10-30 s, and the load signal
+    # lags. With this off (#133), 20 simultaneous assessment turns drove a
+    # 2 vCPU host to load 10 in 29 s (2026-10-18); with a cap they waited in
+    # this queue instead. Later turns wait (FIFO, the shared 180 s budget);
+    # only a full queue or a spent wait answers write_pressure. 0 disables.
+    write_guard_limit: int = Field(default=8, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT")
     write_guard_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
     )
@@ -247,8 +249,9 @@ class Settings(BaseSettings):
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
     # Optional per-operation backstop: concurrent Agent/Team/Conversation
-    # creates per process. Off by default (0); creates still weigh 3 units in
-    # the adaptive budget and stop under the danger latch. Set
+    # creates per process. Off by default (0): a create is one short request
+    # (a Team create is about 10 writes, no model call), so its 3 adaptive
+    # units match its cost, and it stops under the danger latch. Set
     # CREATE_ADMISSION_LIMIT (e.g. 4) to restore the fixed cap without code.
     create_admission_limit: int = Field(
         default=0, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"
@@ -329,6 +332,35 @@ class Settings(BaseSettings):
     )
     adaptive_admission_pool_wait_p95_ms: float = Field(
         default=500.0, gt=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_POOL_WAIT_P95_MS"
+    )
+    # Fast brake (#141 follow-up, 2026-10-18): load1 is a one-minute average,
+    # so a burst of turns saturated the 2 vCPU host before load said so.
+    # These faster signals are checked on every sample (1 s), not every adjust:
+    # a 10 s DB write p95 or pool-wait p95, the write statements running now,
+    # or host CPU busy (/proc/stat) for N samples in a row. A brake halves the
+    # budget (once per cooldown) and clamps it to what is already in flight,
+    # so nothing new starts until a turn finishes; growth waits while any
+    # brake signal is bad. 0 turns a signal off.
+    adaptive_admission_brake_db_write_p95_ms: float = Field(
+        default=800.0, ge=0, le=600_000, validation_alias="ADAPTIVE_ADMISSION_BRAKE_DB_WRITE_P95_MS"
+    )
+    adaptive_admission_brake_pool_wait_p95_ms: float = Field(
+        default=250.0,
+        ge=0,
+        le=600_000,
+        validation_alias="ADAPTIVE_ADMISSION_BRAKE_POOL_WAIT_P95_MS",
+    )
+    adaptive_admission_brake_writes_in_flight: int = Field(
+        default=10, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_BRAKE_WRITES_IN_FLIGHT"
+    )
+    adaptive_admission_brake_cpu_ratio: float = Field(
+        default=0.95, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_BRAKE_CPU_RATIO"
+    )
+    adaptive_admission_brake_cpu_samples: int = Field(
+        default=3, ge=1, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_CPU_SAMPLES"
+    )
+    adaptive_admission_brake_cooldown_seconds: float = Field(
+        default=5.0, ge=0, le=600, validation_alias="ADAPTIVE_ADMISSION_BRAKE_COOLDOWN_SECONDS"
     )
     # Hold band (no growth, no shrink): load in [hold, soft), MemAvailable in
     # [soft, hold) MiB, or the worker-thread pool at least this full.

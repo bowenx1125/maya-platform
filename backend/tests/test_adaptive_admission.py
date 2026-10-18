@@ -456,6 +456,15 @@ def test_llm_mark_crosses_threadpool_context_copy(probe: _Probe) -> None:
 # --- server-side AIMD signals (PR: AIMD shrink signals) -------------------
 
 
+# The fast brake (tests/test_admission_brake.py) off, to test AIMD alone.
+_NO_BRAKE: dict[str, object] = {
+    "adaptive_admission_brake_db_write_p95_ms": 0,
+    "adaptive_admission_brake_pool_wait_p95_ms": 0,
+    "adaptive_admission_brake_writes_in_flight": 0,
+    "adaptive_admission_brake_cpu_ratio": 0,
+}
+
+
 def _defaults(**overrides: object) -> Settings:
     base: dict[str, object] = {"adaptive_admission_wait_seconds": 1}
     base.update(overrides)
@@ -508,7 +517,7 @@ def test_long_queue_with_healthy_signals_does_not_shrink(probe: _Probe) -> None:
     ],
 )
 def test_each_shrink_signal(probe: _Probe, reason: str, setup) -> None:  # type: ignore[no-untyped-def]
-    s = _defaults()
+    s = _defaults(**_NO_BRAKE)  # the slow AIMD signals alone
     aa.adaptive_admission_snapshot(s)
     setup(probe)
     snapshot = _tick(probe, s)
@@ -518,7 +527,7 @@ def test_each_shrink_signal(probe: _Probe, reason: str, setup) -> None:  # type:
 
 
 def test_db_signals_need_twenty_samples_in_thirty_seconds(probe: _Probe) -> None:
-    s = _defaults()
+    s = _defaults(**_NO_BRAKE)
     aa.adaptive_admission_snapshot(s)
     for _ in range(19):
         aa.record_db_write_ms(2_000.0)

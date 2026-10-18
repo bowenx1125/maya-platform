@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from agno.models.response import ModelResponse
+from app.core.errors import PlatformError
 from app.core.models import AgentVersion, SessionRecord
 from app.modules.auth.service import get_auth_context
 from app.modules.demo_baseline.service import ensure_demo_baseline
@@ -1606,7 +1607,9 @@ def test_last_answer_starts_the_scorer_once_without_a_student_message(
     conversation_id = _create(client, csrf, {"kind": "maya_team", "team_id": team_id})["id"]
     claims: list[str] = []
 
-    def run_without_saving(factory: Any, claim: runtime.TeamClaim) -> None:
+    def run_without_saving(factory: Any, claim: runtime.TeamClaim, write_slot: Any = None) -> None:
+        if write_slot is not None:
+            write_slot.release()
         from app.modules.runtime_tools.builtin import runtime_registry
         from app.modules.runtime_tools.registry import exposed_tools
 
@@ -1692,6 +1695,37 @@ def test_last_answer_starts_the_scorer_once_without_a_student_message(
     # #121: nothing runs now, so the chat stops showing scoring and waiting.
     with database.session() as db:
         assert _assessment_stage(db, db.get(Conversation, conversation_id)) is None
+        turns_before = db.scalar(
+            select(func.count())
+            .select_from(ConversationTurn)
+            .where(ConversationTurn.conversation_id == conversation_id)
+        )
+
+    # The write guard is full: the finalizer claims nothing, so no executor
+    # turn is left holding the conversation, and the refusal surfaces.
+    from app.core import write_guard
+
+    def refuse(_settings: Any = None) -> Any:
+        raise write_guard.write_pressure_error(
+            reason="queue_full", limit=8, retry_after_seconds=5, in_flight=8, waiters=100
+        )
+
+    monkeypatch.setattr(write_guard, "reserve_write_slot", refuse)
+    with pytest.raises(PlatformError) as refused:
+        finalizer.drive_assessment(database.session_factory, settings, conversation_id)
+    assert refused.value.code == "write_pressure"
+    assert claims == [evaluator.id]
+    with database.session() as db:
+        row = db.get(Conversation, conversation_id)
+        assert row is not None and row.active_request_id is None
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(ConversationTurn)
+                .where(ConversationTurn.conversation_id == conversation_id)
+            )
+            == turns_before
+        )
 
 
 def test_teacher_reads_a_private_test_window_but_not_chat_around_it(

@@ -1,4 +1,4 @@
-"""Write guard 20, budget 128, in-flight 48, and a probe that stays answerable."""
+"""Write guard 8 (required), budget 128, in-flight 48, and a probe that stays answerable."""
 
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ def healthy() -> Iterator[None]:
 
 def test_capacity_defaults_and_untouched_limits() -> None:
     s = Settings()  # type: ignore[call-arg]
-    # Only the adaptive budget, the danger latch and the LLM backstop are on
-    # by default; the fixed write / create caps are off (0) but configurable.
-    assert s.write_guard_limit == 0
+    # The write guard is a required backstop again (8 turns per process); the
+    # create cap stays off (0) but configurable.
+    assert s.write_guard_limit == 8
     assert s.create_admission_limit == 0
     assert s.adaptive_admission_max_units == 128
     assert s.adaptive_admission_max_in_flight == 48
@@ -60,10 +60,14 @@ def _settings(**overrides: object) -> Settings:
     return Settings(**base)  # type: ignore[arg-type]
 
 
-def test_twenty_concurrent_messages_are_all_admitted(healthy: None) -> None:
-    s = _settings()
+def test_eight_turns_run_and_the_ninth_waits_for_a_slot(healthy: None) -> None:
+    """2026-10-18: 20 simultaneous assessment turns with no write cap drove
+    the 2 vCPU host to load 10. Turns past 8 wait in the queue, then run."""
+
+    s = _settings(write_guard_wait_seconds=10, adaptive_admission_wait_seconds=10)
+    assert s.write_guard_limit == 8
     release = threading.Event()
-    started = threading.Barrier(21)
+    started = threading.Barrier(9)
     errors: list[BaseException] = []
 
     def message() -> None:
@@ -75,21 +79,33 @@ def test_twenty_concurrent_messages_are_all_admitted(healthy: None) -> None:
             errors.append(exc)
             started.abort()
 
-    threads = [threading.Thread(target=message) for _ in range(20)]
+    threads = [threading.Thread(target=message) for _ in range(8)]
     for thread in threads:
         thread.start()
+    ninth_done = threading.Event()
+
+    def ninth() -> None:
+        with write_guard_slot(s):
+            ninth_done.set()
+
+    late = threading.Thread(target=ninth)
     try:
         started.wait(5)
         assert errors == []
-        assert aa._state.in_flight["write"] == 20
-        assert aa._state.in_flight["llm"] == 20
-        assert aa._state.in_flight_units == 120
-        # The fixed write cap is off by default: no layer-2 gate slot taken.
-        assert wg._GATE.in_flight == 0
+        assert wg._GATE.in_flight == 8
+        late.start()
+        deadline = time.monotonic() + 5
+        while wg._GATE.waiters < 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert wg._GATE.waiters == 1  # queued, not refused
+        assert not ninth_done.is_set()
     finally:
         release.set()
         for thread in threads:
             thread.join()
+    late.join(5)
+    assert ninth_done.is_set()
+    assert wg._GATE.in_flight == 0
     assert aa._state.in_flight_units == 0
 
 
@@ -181,31 +197,23 @@ def test_streamed_work_is_not_capped_by_the_cpu_sized_default_executor(
     assert concurrent == 30
 
 
-def test_turns_past_the_old_write_cap_are_admitted_by_default(healthy: None) -> None:
-    """25 > the old WRITE_GUARD 20: only the adaptive budget bounds turns now."""
-
-    s = _settings()
-    assert s.write_guard_limit == 0
+def test_write_cap_zero_still_disables_the_gate(healthy: None) -> None:
+    s = _settings(write_guard_limit=0)
     release = threading.Event()
     started = threading.Barrier(26)
-    errors: list[BaseException] = []
 
     def turn() -> None:
-        try:
-            with write_guard_slot(s):
-                started.wait(5)
-                release.wait(10)
-        except BaseException as exc:  # noqa: BLE001
-            errors.append(exc)
-            started.abort()
+        with write_guard_slot(s):
+            started.wait(5)
+            release.wait(10)
 
     threads = [threading.Thread(target=turn) for _ in range(25)]
     for thread in threads:
         thread.start()
     try:
         started.wait(5)
-        assert errors == []
         assert aa._state.in_flight["write"] == 25
+        assert wg._GATE.in_flight == 0
     finally:
         release.set()
         for thread in threads:
