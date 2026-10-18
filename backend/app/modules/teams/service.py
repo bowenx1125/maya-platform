@@ -32,6 +32,7 @@ from app.modules.knowledge.services import (
     course_member_role,
     observes_group,
     scoped_group_role_for_user,
+    teacher_public_agent_hidden_from,
 )
 from app.modules.knowledge_sets import service as knowledge_set_service
 from app.modules.knowledge_sets.models import (
@@ -200,7 +201,11 @@ def _validate_members(
             raise unprocessable("duplicate_team_agent", "An Agent can only appear once in a Team.")
         seen_agent_ids.add(agent.id)
         role = _agent_workspace_role(db, actor, agent)
-        if role is None or not can_read_version(db, version, agent, role, context=actor):
+        if (
+            role is None
+            or not can_read_version(db, version, agent, role, context=actor)
+            or teacher_public_agent_hidden_from(db, actor, agent)
+        ):
             raise not_found("An Agent version is not available to the current user.")
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")

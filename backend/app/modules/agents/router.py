@@ -113,6 +113,7 @@ from app.modules.knowledge.services import (
     saga_checkpoint,
     scoped_group_role,
     scoped_student_group_role,
+    teacher_public_agent_hidden_from,
     version_dto,
     version_is_currently_public,
     visible_student_agent,
@@ -758,6 +759,8 @@ def list_group_agents(
     agents = []
     for agent in listed:
         if not include_archived and agent.status != "active":
+            continue
+        if teacher_public_agent_hidden_from(db, context, agent):
             continue
         if agent.visibility != "public" and agent.owner_user_id != context.user.id:
             agents.append((agent, "observer"))
@@ -1880,6 +1883,7 @@ def list_published_agents_for_teacher(
         (agent, version, group_name or "")
         for agent, version, group_name in rows
         if can_invoke_version(db, context, version, agent)
+        and not teacher_public_agent_hidden_from(db, context, agent)
     ]
     return [
         PublishedAgentSummary(

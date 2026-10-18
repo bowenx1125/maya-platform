@@ -262,6 +262,22 @@ def _publisher_is_teacher(db: Session, agent: Agent) -> bool:
     return course_member_role(db, agent.owner_user_id, agent.course_id) == "teacher"
 
 
+def teacher_public_agent_hidden_from(db: Session, actor: AuthContext | str, agent: Agent) -> bool:
+    """Studyform: a teacher's public Agent is not a student-facing Agent.
+
+    Students may still meet it as a member of a teacher's public Team (the Team
+    runs it server-side), but they cannot list it, open its detail/prompt, or
+    start a single-Agent chat with it. Owners and teachers are unaffected.
+    """
+
+    user_id = _actor_user_id(actor)
+    if agent.owner_user_id == user_id or agent.visibility != "public":
+        return False
+    if course_member_role(db, user_id, agent.course_id) != "student":
+        return False
+    return _publisher_is_teacher(db, agent)
+
+
 def can_use_agent(db: Session, actor: AuthContext | str, agent: Agent) -> bool:
     """Public is who may use the Agent. Private stays on the owner account.
 
@@ -555,7 +571,7 @@ def version_sources_are_readable(
 
 def visible_agent(db: Session, context: AuthContext, agent_id: str) -> ScopedAgent:
     agent = db.get(Agent, agent_id)
-    if agent is None:
+    if agent is None or teacher_public_agent_hidden_from(db, context, agent):
         raise not_found()
     role = _agent_workspace_role(db, context, agent)
     if role == "owner":
@@ -607,6 +623,8 @@ def visible_version(db: Session, context: AuthContext, version_id: str) -> Scope
     if row is None:
         raise not_found()
     version, agent = row
+    if teacher_public_agent_hidden_from(db, context, agent):
+        raise not_found()
     role = _agent_workspace_role(db, context, agent)
     if can_read_version(db, version, agent, role, context=context):
         return ScopedVersion(version, agent, cast(str, role))
@@ -623,6 +641,8 @@ def visible_snapshot(db: Session, context: AuthContext, snapshot_id: str) -> Sco
     if row is None:
         raise not_found()
     snapshot, version, agent = row
+    if teacher_public_agent_hidden_from(db, context, agent):
+        raise not_found()
     if observes_private_agent(db, context, agent):
         if version.state not in {"published", "superseded"}:
             raise not_found()

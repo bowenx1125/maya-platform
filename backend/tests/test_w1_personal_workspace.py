@@ -752,42 +752,47 @@ def test_personal_public_agent_is_visible_to_the_course(
     )
     assert published.status_code == 200, published.text
 
+    # Studyform (2026-10-18): a teacher's public Agent is usable by the
+    # course only through a Team; students do not list, open or single-chat it.
     _student, student_csrf = login(client, "bowen")
     directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
-    assert any(row["agent_id"] == agent_id for row in directory.json())
-    student_detail = client.get(f"/api/v1/agents/{agent_id}")
-    assert student_detail.status_code == 200
-    assert student_detail.json()["can_edit"] is False
-    assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 200
+    assert not any(row["agent_id"] == agent_id for row in directory.json())
+    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
+    assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
     opened = client.post(
         "/api/v1/conversations", headers=_headers(student_csrf), json={"version_id": version_id}
     )
-    assert opened.status_code == 200, opened.text
+    assert opened.status_code == 404, opened.text
     published_list = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
     assert published_list.status_code == 200
-    assert any(row["agent"]["id"] == agent_id for row in published_list.json())
+    assert not any(row["agent"]["id"] == agent_id for row in published_list.json())
     denied_next = client.post(
         f"/api/v1/agents/{agent_id}/versions",
         headers=_headers(student_csrf, **{"Idempotency-Key": "w1-personal-public-next-denied"}),
     )
     assert denied_next.status_code == 404
 
-    # A teacher-published public Agent is usable by the course, including a
-    # student who is not in the teacher's groups.
+    # The same holds for a student outside the teacher's groups.
     other = register(client, username="w1-teacher-public-outsider", group_name="W1 Outside")
     assert other.status_code == 201, other.text
     other_csrf = other.json()["csrf_token"]
     other_directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
-    assert any(row["agent_id"] == agent_id for row in other_directory.json())
-    other_detail = client.get(f"/api/v1/agents/{agent_id}")
-    assert other_detail.status_code == 200
-    assert other_detail.json()["can_edit"] is False
+    assert not any(row["agent_id"] == agent_id for row in other_directory.json())
+    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
     other_published = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
-    assert any(row["agent"]["id"] == agent_id for row in other_published.json())
+    assert not any(row["agent"]["id"] == agent_id for row in other_published.json())
     other_chat = client.post(
         "/api/v1/conversations", headers=_headers(other_csrf), json={"version_id": version_id}
     )
-    assert other_chat.status_code == 200, other_chat.text
+    assert other_chat.status_code == 404, other_chat.text
+
+    # Its teacher still sees and chats with it.
+    _owner, owner_csrf = login(client, "maya")
+    assert client.get(f"/api/v1/agents/{agent_id}").status_code == 200
+    teacher_chat = client.post(
+        "/api/v1/conversations", headers=_headers(owner_csrf), json={"version_id": version_id}
+    )
+    assert teacher_chat.status_code == 200, teacher_chat.text
 
 
 def test_teacher_public_group_source_is_usable_outside_that_group(
@@ -838,12 +843,13 @@ def test_teacher_public_group_source_is_usable_outside_that_group(
     other = register(client, username="w1-teacher-source-outsider", group_name="W1 Source Outside")
     assert other.status_code == 201, other.text
     other_csrf = other.json()["csrf_token"]
+    # Studyform: students reach a teacher's public Agent only through a Team.
     published_list = client.get(f"/api/v1/courses/{COURSE_ID}/published-agents")
-    assert any(row["agent"]["id"] == agent_id for row in published_list.json())
+    assert not any(row["agent"]["id"] == agent_id for row in published_list.json())
     opened = client.post(
         "/api/v1/conversations", headers=_headers(other_csrf), json={"version_id": version_id}
     )
-    assert opened.status_code == 200, opened.text
+    assert opened.status_code == 404, opened.text
     assert client.get(f"/api/v1/knowledge-documents/{document_id}").status_code == 404
     denied_download = client.get(f"/api/v1/knowledge-documents/{document_id}/download")
     assert denied_download.status_code == 404

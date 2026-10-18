@@ -741,8 +741,13 @@ def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
     agent_id, version_id = _make_agent_version(
         database, owner_id=MAYA_ID, name="Shared tutor", visibility="public"
     )
+    # Students no longer open single chats with a teacher's public Agent (#182);
+    # this is a chat opened before that rule.
+    from tests.test_studyform_teacher_public_agents import _legacy_single_chat
+
+    single_id = _legacy_single_chat(database, version_id, BOWEN_ID)
     _, student_csrf = login(client, "bowen")
-    single = _create(client, student_csrf, {"kind": "agent", "version_id": version_id})
+    single = client.get(f"/api/v1/conversations/{single_id}").json()
     assert single["agent"]["deleted"] is False
     assert single["agent"]["visibility"] == "public"
     team_chat = _create(client, student_csrf, {"kind": "maya_team", "team_id": team["id"]})
