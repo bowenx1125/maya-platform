@@ -13,7 +13,11 @@ export type ChatTargetTeam = {
   visibility?: "private" | "public";
 };
 
-/** The New page: one Studyform-style list of Teams and Agents to chat with. */
+/**
+ * The New page: one Studyform-style list of Agents and Teams to chat with.
+ * Agents come first (the left column on wide screens, the top card when the
+ * grid stacks), Teams second.
+ */
 export function ChatTargetPicker({
   teams,
   agents,
@@ -63,6 +67,25 @@ export function ChatTargetPicker({
   return (
     <ModuleGrid>
       <ModuleCard
+        title={t("agents")}
+        labelledBy="chat-pick-agents"
+        empty={agents.length ? undefined : t("noAgents")}
+      >
+        {agents.length ? (
+          <ul className="agent-tile-grid module-tile-grid">
+            {agents.map((agent) =>
+              tile(
+                `agent:${agent.version_id}`,
+                agent.name,
+                agent.version_label,
+                agent.visibility,
+                agent.available === false,
+              ),
+            )}
+          </ul>
+        ) : undefined}
+      </ModuleCard>
+      <ModuleCard
         title={t("chatTargetTeams")}
         labelledBy="chat-pick-teams"
         empty={teams.length ? undefined : t("teamNoneYet")}
@@ -77,25 +100,6 @@ export function ChatTargetPicker({
                   ? teamVersionLabel(team.current_version_seq)
                   : null,
                 team.visibility,
-              ),
-            )}
-          </ul>
-        ) : undefined}
-      </ModuleCard>
-      <ModuleCard
-        title={t("agents")}
-        labelledBy="chat-pick-agents"
-        empty={agents.length ? undefined : t("noAgents")}
-      >
-        {agents.length ? (
-          <ul className="agent-tile-grid module-tile-grid">
-            {agents.map((agent) =>
-              tile(
-                `agent:${agent.version_id}`,
-                agent.name,
-                agent.version_label,
-                agent.visibility,
-                agent.available === false,
               ),
             )}
           </ul>
