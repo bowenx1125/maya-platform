@@ -121,6 +121,7 @@ const implemented = new Set([
   "deleteConversation",
   "updateConversation",
   "listConversationAttachments",
+  "downloadConversationReport",
   "uploadConversationAttachment",
   "deleteConversationAttachment",
   "deleteTeam",

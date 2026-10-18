@@ -214,6 +214,27 @@ class ConversationAttachment(Base):
     )
 
 
+class ChatReport(Base):
+    """An HTML report a Team member saved for the Chat owner, one per Tool call."""
+
+    __tablename__ = "chat_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # The Tool call's stable event id: a replayed call returns the same report.
+    client_event_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    # Structured content only; the server renders and escapes HTML on download.
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (Index("ix_chat_reports_conversation", "conversation_id", "created_at"),)
+
+
 class ConversationTurn(Base):
     __tablename__ = "agent_conversation_turns"
 
