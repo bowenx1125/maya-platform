@@ -3636,7 +3636,7 @@ def _dispatch_provider(
     *,
     allow_no_progress_once: bool = False,
 ) -> ModelResponse:
-    from .chat_team_provider import dispatch_team_model
+    from .chat_team_provider import dispatch_team_model, without_repeatedly_malformed_tool
 
     if member_id != request.participant_id:
         raise PlatformError("team_context_changed", "This Team target changed.", 409)
@@ -3668,6 +3668,17 @@ def _dispatch_provider(
                 "type": "function",
                 "function": {"name": _assessment_tool_name(request)},
             }
+        forced = (
+            tool_choice.get("function", {}).get("name") if isinstance(tool_choice, dict) else None
+        )
+        if not request.assessment_active and request.assessment_purpose is None:
+            # Assessment calls keep their own forced-retry rule (#121).
+            offered = dispatch_tools
+            dispatch_tools = without_repeatedly_malformed_tool(
+                messages, dispatch_tools, keep=forced if isinstance(forced, str) else None
+            )
+            if offered and dispatch_tools is None:
+                tool_choice = None  # no Tools left to choose from
         result = dispatch_team_model(
             db,
             claim.settings,
