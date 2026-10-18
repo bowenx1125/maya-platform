@@ -78,6 +78,27 @@ def test_a_saved_step_resets_the_retry_budget(monkeypatch: pytest.MonkeyPatch) -
         runner.close()
 
 
+def test_a_busy_refusal_is_retried_like_a_stall(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.errors import PlatformError
+
+    calls: list[str] = []
+
+    def busy(_factory: Any, _settings: Any, conversation_id: str) -> bool:
+        calls.append(conversation_id)
+        raise PlatformError("write_pressure", "busy", 503, {"retryable": True})
+
+    monkeypatch.setattr(finalizer, "drive_assessment", busy)
+    monkeypatch.setattr(finalizer, "RETRY_DELAYS_SECONDS", (0.01,))
+    runner = _finalizer()
+    try:
+        runner.wake("c-4")
+        _wait_for(lambda: len(calls) >= 2)
+        time.sleep(0.1)
+        assert calls == ["c-4", "c-4"]
+    finally:
+        runner.close()
+
+
 def test_close_cancels_a_pending_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(

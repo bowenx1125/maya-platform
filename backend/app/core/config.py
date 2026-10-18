@@ -231,12 +231,14 @@ class Settings(BaseSettings):
     llm_admission_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="LLM_ADMISSION_RETRY_SECONDS"
     )
-    # Optional per-operation backstop: concurrent Team/Chat turn execution
-    # per process, sharing the request deadline. Off by default (0): the
-    # weighted adaptive budget, the danger latch and the LLM backstop already
-    # bound this work, and every turn also holds an LLM slot. Set
-    # WRITE_GUARD_LIMIT (e.g. 20) to bring the fixed cap back without code.
-    write_guard_limit: int = Field(default=0, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT")
+    # Required backstop: concurrent Team/Chat turns per process (2 replicas:
+    # 16 on the host). The adaptive budget charges a turn once, but a formal
+    # turn writes the database 50-90 times over 10-30 s, and the load signal
+    # lags. With this off (#133), 20 simultaneous assessment turns drove a
+    # 2 vCPU host to load 10 in 29 s (2026-10-18); with a cap they waited in
+    # this queue instead. Later turns wait (FIFO, the shared 180 s budget);
+    # only a full queue or a spent wait answers write_pressure. 0 disables.
+    write_guard_limit: int = Field(default=8, ge=0, le=10_000, validation_alias="WRITE_GUARD_LIMIT")
     write_guard_queue_max: int = Field(
         default=100, ge=0, le=10_000, validation_alias="WRITE_GUARD_QUEUE_MAX"
     )
@@ -247,8 +249,9 @@ class Settings(BaseSettings):
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
     # Optional per-operation backstop: concurrent Agent/Team/Conversation
-    # creates per process. Off by default (0); creates still weigh 3 units in
-    # the adaptive budget and stop under the danger latch. Set
+    # creates per process. Off by default (0): a create is one short request
+    # (a Team create is about 10 writes, no model call), so its 3 adaptive
+    # units match its cost, and it stops under the danger latch. Set
     # CREATE_ADMISSION_LIMIT (e.g. 4) to restore the fixed cap without code.
     create_admission_limit: int = Field(
         default=0, ge=0, le=10_000, validation_alias="CREATE_ADMISSION_LIMIT"

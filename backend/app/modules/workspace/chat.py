@@ -1933,15 +1933,22 @@ def resume_team_conversation_turn(
         db.expire_all()
         return session_view(db, owned_conversation(db, context, row.id), context, settings)
     _require_canonical_assessment_conversation(db, context, row)
-    claim = resume_team_turn(
-        db,
-        settings,
-        conversation_id=row.id,
-        actor_id=context.user.id,
-        turn_id=str(turn_id),
-        actor_context=context,
-    )
-    execute_team_turn(database.session_factory, claim)
+    # Slot before the claim, as on send: a busy refusal leaves the turn paused.
+    db.commit()  # hold no pooled connection while queued
+    resume_slot = reserve_write_slot(settings)
+    try:
+        claim = resume_team_turn(
+            db,
+            settings,
+            conversation_id=row.id,
+            actor_id=context.user.id,
+            turn_id=str(turn_id),
+            actor_context=context,
+        )
+    except BaseException:
+        resume_slot.release()
+        raise
+    execute_team_turn(database.session_factory, claim, resume_slot)
     _wake_assessment_finalizer(request, row.id)
     db.expire_all()
     return session_view(db, owned_conversation(db, context, row.id), context, settings)
