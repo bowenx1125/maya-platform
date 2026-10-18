@@ -28,6 +28,7 @@ from app.core.adaptive_admission import (
     record_request_sample,
     set_threadpool_reader,
 )
+from app.core.backstops import backstop_usage
 from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.errors import (
@@ -631,6 +632,9 @@ def create_app(
                 "create_admission": int(settings.create_admission_limit) > 0,
                 "auth_hash": int(settings.auth_hash_concurrency) > 0,
             },
+            # Live occupancy of each per-operation gate in this process (#140):
+            # how many hold a slot now and how many wait for one.
+            "backstop_usage": backstop_usage(settings),
             "message_timing": message_timing_snapshot(),
         }
 
