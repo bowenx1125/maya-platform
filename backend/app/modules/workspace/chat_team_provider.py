@@ -102,9 +102,11 @@ def team_request_bytes(
         "messages": [_wire_message(message) for message in messages],
         "stream": False,
         "enable_thinking": False,
-        # The output the budget reserves per call. Without it the provider's
-        # own default applies, and replies came back cut mid-sentence.
-        "max_tokens": LLM_RESERVED_OUTPUT_TOKEN_CAP,
+        # No max_tokens (2026-10-18): the 1,510-token value sent here since
+        # 2026-10-13 cut long member replies and HTML reports mid-answer. With
+        # it omitted DashScope applies the model's own maximum output
+        # (qwen3.8-max: 131,072 tokens), so a reply ends when the model is done.
+        # LLM_RESERVED_OUTPUT_TOKEN_CAP stays an accounting estimate only.
     }
     if tools is not None:
         body["tools"] = tools
@@ -925,6 +927,7 @@ def dispatch_team_model(
     ):
         # A cut reply would show half a question or lose a half-written
         # answer; it fails visibly instead, so the student can send again.
+        # With no max_tokens sent this only happens at the model's own maximum.
         repository.mark_failed(operation.id, safe_error_code="team_response_truncated")
         raise TeamDispatchError("team_response_truncated")
     try:

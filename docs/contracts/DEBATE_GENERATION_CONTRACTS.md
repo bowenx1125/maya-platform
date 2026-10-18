@@ -675,8 +675,8 @@ For `llm_debate_turn_v1`:
 
 - maximum serialized input: 32,000 model tokens before send;
 - maximum canonical request bytes: 96 KiB before send;
-- maximum requested output: 1,500 model tokens, with 1,510 reserved to cover the
-  supplier's documented ten-token completion tolerance;
+- output: no cap is sent (no `max_tokens`); 1,500/1,510 output tokens remain the
+  accounting estimate used to size reservations, not a limit on the reply;
 - maximum attempts per turn: 2;
 - maximum LLM calls for a 5-Agent × 2-round debate: 20;
 - maximum estimated charge: CNY 0.15 per request and CNY 3.00 per debate;
@@ -1256,11 +1256,10 @@ buckets are:
 For W4-LLM-A, a 2-Agent × 2-round Gate fixture has at most 8 charged attempts and CNY
 1.20. The general 5-Agent × 2-round limit remains 20 charged attempts and CNY 3.00.
 Each request retains the PromptBudgetV1 32,000-input-token, 96-KiB canonical-user and
-CNY 0.15 ceilings. The request asks for 1,500 output tokens, but the official API permits
-up to ten tokens of overshoot, so pre-send reserves 1,510 output tokens. The corresponding
-worst-case token buckets are 268,080 for the 8-attempt fixture and 670,200 for the
-20-attempt fixture. A response over 1,510 output tokens is `provider_usage_overrun`,
-never publishes and is not retried.
+CNY 0.15 ceilings. Pre-send reserves an estimated 1,510 output tokens per request; the corresponding
+estimate buckets are 268,080 for the 8-attempt fixture and 670,200 for the 20-attempt
+fixture. These are accounting estimates only: no output cap is sent and a longer
+response is not rejected (the model's own maximum output applies).
 
 Supplier price cards are not loaded and do not block a request. Historical ledger
 columns for price-card version and cost stay in the database and are written as

@@ -1,4 +1,9 @@
-"""Legacy accounting estimates; no request, token or cost ceiling is enforced."""
+"""Legacy accounting estimates; no request, token or cost ceiling is enforced.
+
+The output figures below size ledger reservations only. No model request sends
+``max_tokens``/``max_completion_tokens``: DashScope then applies the model's own
+maximum output (qwen3.8-max: 131,072 tokens), so a reply is never cut at 1,510.
+"""
 
 from __future__ import annotations
 
