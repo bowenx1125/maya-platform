@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.sqlutil import begin_immediate
@@ -71,21 +71,22 @@ class Wave3EventPublisher:
         session = self.session_factory()
         try:
             begin_immediate(session)
-            debate = session.scalar(select(Debate).where(Debate.id == debate_id))
-            if debate is None:
-                session.rollback()
-                return False
-            previous = int(debate.last_sequence)
-            sequence = previous + 1
             occurred_at = datetime.now(UTC)
-            changed = session.execute(
+            # Increment and read in one statement, like every other event
+            # writer. A read-then-CAS lost (and silently dropped the event)
+            # whenever a vote, barrage or playback event committed between
+            # the read and the update; on PostgreSQL begin_immediate does
+            # not serialize writers.
+            allocated = session.execute(
                 update(Debate)
-                .where(Debate.id == debate_id, Debate.last_sequence == previous)
-                .values(last_sequence=sequence, updated_at=occurred_at)
-            )
-            if int(getattr(changed, "rowcount", 0)) != 1:
+                .where(Debate.id == debate_id)
+                .values(last_sequence=Debate.last_sequence + 1, updated_at=occurred_at)
+                .returning(Debate.last_sequence)
+            ).scalar_one_or_none()
+            if allocated is None:
                 session.rollback()
                 return False
+            sequence = int(allocated)
             event_id = str(uuid4())
             session.add(
                 DebateEvent(
