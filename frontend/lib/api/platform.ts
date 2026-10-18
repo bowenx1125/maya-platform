@@ -384,15 +384,10 @@ export type MayaTeamDirectoryDto =
 
 export type ChatStreamResult = {
   session: ChatSession;
-  audioUrl: string | null;
-  voiceProfileId: string | null;
-  contentType: string | null;
-  /** Set when TTS fails after text_done. The assistant text stays. */
-  ttsErrorCode: string | null;
 };
 
 export type ChatStreamHooks = {
-  /** Fired when text_done is parsed, before later TTS events are read. */
+  /** Fired when text_done is parsed, before the stream closes. */
   onTextDone?: (session: ChatSession) => void;
   /** Fired while the request's persisted turn is still pending. */
   onPending?: (session: ChatSession, pendingTurnId: string) => void;
@@ -1173,11 +1168,6 @@ export class PlatformApi {
     return unwrap(await this.client.GET("/courses"));
   }
 
-  /** Read the safe composition badge used by the authenticated Demo shell. */
-  async demoStatus(): Promise<DemoRuntimeStatus> {
-    return this.getJson<DemoRuntimeStatus>("demo/status");
-  }
-
   chatAgents(courseId: string): Promise<ChatAgent[]> {
     return this.getJson(`courses/${courseId}/chat-agents`);
   }
@@ -1433,7 +1423,7 @@ export class PlatformApi {
 
   /**
    * Stream one chat turn; this is the only way a Chat message is sent.
-   * Legacy audio events are parsed for compatibility; Chats never plays them.
+   * An error after text_done leaves the saved assistant text in place.
    */
   async streamConversation(
     id: string,
@@ -1446,16 +1436,8 @@ export class PlatformApi {
   ): Promise<ChatStreamResult> {
     let sawText = false;
     let session: ChatSession | null = null;
-    let audioUrl: string | null = null;
-    let voiceProfileId: string | null = null;
-    let contentType: string | null = null;
-    let ttsErrorCode: string | null = null;
     const resultFor = (saved: ChatSession): ChatStreamResult => ({
       session: saved,
-      audioUrl,
-      voiceProfileId,
-      contentType,
-      ttsErrorCode,
     });
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     let response: Response;
@@ -1527,9 +1509,7 @@ export class PlatformApi {
               failure,
             );
             sawText = true;
-            return;
           }
-          ttsErrorCode = code;
           return;
         }
         if (event.event === "pending") {
@@ -1554,18 +1534,6 @@ export class PlatformApi {
           sawText = true;
           session = await this.conversation(id);
           hooks?.onTextDone?.(session);
-        }
-        if (
-          event.event === "tts_ready" &&
-          typeof event.audio_url === "string"
-        ) {
-          audioUrl = event.audio_url;
-          voiceProfileId =
-            typeof event.voice_profile_id === "string"
-              ? event.voice_profile_id
-              : null;
-          contentType =
-            typeof event.content_type === "string" ? event.content_type : null;
         }
       });
     } catch (error) {
@@ -1882,21 +1850,6 @@ export class PlatformApi {
     );
   }
 
-  async updateAgentMetadata(
-    agentId: string,
-    body: components["schemas"]["UpdateAgentMetadataRequest"],
-  ): Promise<AgentDetail> {
-    return unwrap(
-      await this.client.PATCH("/agents/{agent_id}", {
-        params: {
-          path: { agent_id: agentId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-        body,
-      }),
-    );
-  }
-
   async deleteAgent(
     agentId: string,
     options: IdempotentMutationOptions = {},
@@ -2080,16 +2033,6 @@ export class PlatformApi {
           params: { path: { agent_version_id: agentVersionId } },
         },
       ),
-    );
-  }
-
-  async listProviderDataCallReportManifests(
-    debateId: string,
-  ): Promise<ProviderDataCallReportManifestListResponse> {
-    return unwrap(
-      await this.client.GET("/provider/data-call/pending/reports/{debate_id}", {
-        params: { path: { debate_id: debateId } },
-      }),
     );
   }
 
@@ -2487,21 +2430,6 @@ export class PlatformApi {
     );
   }
 
-  async updateKnowledgeVisibility(
-    documentId: string,
-    body: components["schemas"]["UpdateKnowledgeDocumentVisibility"],
-  ): Promise<KnowledgeDocument> {
-    return unwrap(
-      await this.client.PATCH("/knowledge-documents/{document_id}", {
-        params: {
-          path: { document_id: documentId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-        body,
-      }),
-    );
-  }
-
   async uploadWorkspaceKnowledge(
     courseId: string,
     versionId: string,
@@ -2573,36 +2501,6 @@ export class PlatformApi {
     });
   }
 
-  async createLibraryKnowledge(
-    groupId: string,
-    file: File,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeDocumentMutation> {
-    return commitMutation(options.idempotency, (key) =>
-      this.multipart<KnowledgeDocumentMutation>(
-        `/groups/${groupId}/knowledge-documents`,
-        file,
-        {},
-        key,
-      ),
-    );
-  }
-
-  async createWorkspaceKnowledge(
-    courseId: string,
-    file: File,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeDocumentMutation> {
-    return commitMutation(options.idempotency, (key) =>
-      this.multipart<KnowledgeDocumentMutation>(
-        `/courses/${encodeURIComponent(courseId)}/workspace-documents`,
-        file,
-        {},
-        key,
-      ),
-    );
-  }
-
   async replaceKnowledgeDocument(
     documentId: string,
     file: File,
@@ -2635,22 +2533,6 @@ export class PlatformApi {
         body,
         key,
       ),
-    );
-  }
-
-  async replaceKnowledge(
-    documentId: string,
-    file: File,
-    expectedContentHash: string,
-    expectedIndexRevision: number,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeDocument> {
-    return this.replaceKnowledgeDocument(
-      documentId,
-      file,
-      expectedContentHash,
-      expectedIndexRevision,
-      options,
     );
   }
 
@@ -2922,26 +2804,6 @@ export class PlatformApi {
     return unwrap(
       await this.client.GET("/debates/{debate_id}", {
         params: { path: { debate_id: debateId } },
-      }),
-    );
-  }
-
-  async updateDebateDraft(
-    debateId: string,
-    body: DebateDraftUpdateRequest,
-  ): Promise<DebateDetail> {
-    const {
-      total_duration_seconds: _totalDuration,
-      turn_duration_seconds: _turnDuration,
-      ...requestBody
-    } = body;
-    return unwrap(
-      await this.client.PATCH("/debates/{debate_id}", {
-        params: {
-          path: { debate_id: debateId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-        body: requestBody,
       }),
     );
   }

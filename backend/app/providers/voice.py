@@ -16,10 +16,6 @@ class VoiceProviderTimeout(VoiceProviderError):
     """A provider request exceeded its bounded deadline."""
 
 
-class VoiceProviderAmbiguous(VoiceProviderError):
-    """A request may have been charged but its outcome is not yet visible."""
-
-
 class VoiceCloneRefusedError(VoiceProviderError):
     """A deterministic refusal to clone, raised before any network I/O.
 

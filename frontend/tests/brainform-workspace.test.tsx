@@ -244,7 +244,6 @@ beforeEach(() => {
       created_at: "2026-10-04T00:00:00Z",
     }),
     saveKnowledgeMarkdown: vi.fn(),
-    createWorkspaceKnowledge: vi.fn().mockResolvedValue({ document: source }),
     courseAssessmentAttempts: vi.fn().mockResolvedValue([]),
   };
 });
@@ -292,7 +291,6 @@ describe("Brainform workspace actions", () => {
     await screen.findByRole("button", { name: "Back" });
     expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
     expect(screen.queryByLabelText("Import a file")).toBeNull();
-    expect(state.api.createWorkspaceKnowledge).not.toHaveBeenCalled();
   });
 
   it("deletes a Knowledge with its current revisions after confirming", async () => {

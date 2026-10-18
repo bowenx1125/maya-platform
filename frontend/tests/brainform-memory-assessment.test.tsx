@@ -185,10 +185,6 @@ beforeEach(() => {
         ],
         1,
       ),
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
-      ttsErrorCode: null,
     }),
     conversationSession: vi.fn().mockResolvedValue(session()),
     streamTeamConversation: vi.fn(),
@@ -324,10 +320,6 @@ describe("Brainform Memory and Assessment Chat path", () => {
     state.api.conversationSessions.mockResolvedValueOnce([paused]);
     state.api.streamConversation.mockResolvedValueOnce({
       session: continued,
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
-      ttsErrorCode: null,
     });
     renderChat();
 
@@ -400,10 +392,6 @@ describe("Brainform Memory and Assessment Chat path", () => {
     state.api.conversationSessions.mockResolvedValueOnce([active]);
     state.api.streamConversation.mockResolvedValueOnce({
       session: paused,
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
-      ttsErrorCode: null,
     });
     renderChat();
 

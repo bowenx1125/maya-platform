@@ -102,8 +102,7 @@ describe("chat SSE parsing", () => {
     releaseRest();
     const result = await pending;
     expect(result.session).toMatchObject({ id: "conversation" });
-    expect(result.ttsErrorCode).toBe("tts_failed");
-    expect(result.audioUrl).toBeNull();
+    expect(Object.keys(result)).toEqual(["session"]);
   });
 
   it("refreshes the saved session on a terminal chat error before rejecting", async () => {

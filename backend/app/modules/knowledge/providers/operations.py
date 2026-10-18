@@ -384,9 +384,6 @@ class InMemoryEmbeddingLedger(ProviderOperationStore, ReservationStore):
                 )
             )
 
-    def export_confirm(self, operation_id: str) -> EmbeddingOperationV1:
-        return self.transition(operation_id, expected="prepared", state="export_confirmed")
-
     def _scope_totals(self, scope_id: str) -> tuple[int, int, float]:
         # ``not_sent`` is the only state that releases its reservation.  A
         # failed validation remains consumed, and acceptance-unknown remains
@@ -557,16 +554,6 @@ class InMemoryEmbeddingLedger(ProviderOperationStore, ReservationStore):
             return self.mark_acceptance_unknown(
                 operation_id, safe_error_code="recovered_acceptance_unknown"
             )
-
-    def recover_all(self) -> tuple[EmbeddingOperationV1, ...]:
-        with self._lock:
-            ids = tuple(
-                operation.id
-                for operation in self._operations.values()
-                if operation.state
-                in {"prepared", "export_confirmed", "reserved", "sending", "accepted"}
-            )
-            return tuple(self.recover(operation_id) for operation_id in ids)
 
     def operations(self, *, scope_id: str | None = None) -> tuple[EmbeddingOperationV1, ...]:
         with self._lock:

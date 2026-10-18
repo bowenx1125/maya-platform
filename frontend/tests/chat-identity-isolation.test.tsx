@@ -187,13 +187,7 @@ async function sendAndLeave(message: string) {
 
 describe("Chat data follows the accepted account and course scope", () => {
   it("drops A's background settled answer before B reopens Chat in the same course", async () => {
-    let finish!: (value: {
-      session: ChatSession;
-      audioUrl: null;
-      voiceProfileId: null;
-      contentType: null;
-      ttsErrorCode: null;
-    }) => void;
+    let finish!: (value: { session: ChatSession }) => void;
     api.streamConversation.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -208,10 +202,6 @@ describe("Chat data follows the accepted account and course scope", () => {
     await act(async () =>
       finish({
         session: privateReadySession,
-        audioUrl: null,
-        voiceProfileId: null,
-        contentType: null,
-        ttsErrorCode: null,
       }),
     );
     await waitFor(() =>

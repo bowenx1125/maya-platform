@@ -22,7 +22,7 @@ from app.modules.demo_baseline.service import (
 from app.modules.voices.crypto import decrypt_external_voice_id, encrypt_external_voice_id
 from app.modules.voices.schemas import VoiceProfile as VoiceProfileDTO
 from app.modules.workspace.chat import store_assistant_text
-from app.modules.workspace.chat_stream import chat_audio_relative, sse
+from app.modules.workspace.chat_stream import sse
 from app.modules.workspace.models import Conversation, ConversationTurn
 from app.modules.workspace.schemas import ChatSession, ProviderSettings
 from app.providers.dashscope import DEFAULT_TARGET_MODEL_KEY
@@ -328,8 +328,7 @@ def test_chat_with_bound_voice_is_text_only(
     assert recorder.calls == []
     done = events[-1][1]
     request_id = str(done["request_id"])
-    audio = settings.resolved_data_root / chat_audio_relative(conversation_id, request_id)
-    assert not audio.exists()
+    assert not (settings.resolved_data_root / "chat-audio").exists()
     with database.session() as session:
         row = session.get(Conversation, conversation_id)
         turn = session.get(ConversationTurn, request_id)
@@ -345,13 +344,9 @@ def test_chat_with_bound_voice_is_text_only(
     assert _parse_sse(replay.text) == [("text_done", done)]
     assert recorder.calls == []
 
-    # Retained historical media remains readable without generating any speech.
-    audio.parent.mkdir(parents=True, exist_ok=True)
-    audio.write_bytes(_wav(1))
+    # Chats never had a player for stored speech; the old media route is gone.
     media = client.get(f"/api/v1/conversations/{conversation_id}/audio/{request_id}")
-    assert media.status_code == 200
-    assert media.headers["content-type"].startswith("audio/wav")
-    assert media.content == audio.read_bytes()
+    assert media.status_code == 404
     assert recorder.calls == []
 
 

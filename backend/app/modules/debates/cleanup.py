@@ -49,7 +49,6 @@ from app.core.models import (
     FileReference,
     IdempotencyRecord,
     Job,
-    ProviderOperation,
     StoredFile,
 )
 from app.core.sqlutil import foreign_keys_ok
@@ -1162,30 +1161,6 @@ def _interrupt_jobs(
         .values(state="interrupted", safe_error_code=code, updated_at=datetime.now(UTC))
     )
     return max(0, int(getattr(changed, "rowcount", 0) or 0))
-
-
-def _active_other_runtime(db: Session, graph: _DebateGraph) -> bool:
-    other_debate = db.execute(
-        select(Debate.id)
-        .where(
-            Debate.id != graph.debate_id,
-            Debate.status.in_(("running", "paused")),
-        )
-        .limit(1)
-    ).first()
-    if other_debate is not None:
-        return True
-    operation = db.execute(
-        select(ProviderOperation.id)
-        .where(
-            ProviderOperation.state.in_(tuple(_ACTIVE_PROVIDER_STATES)),
-            ~ProviderOperation.id.in_(tuple(graph.operation_ids))
-            if graph.operation_ids
-            else true(),
-        )
-        .limit(1)
-    ).first()
-    return operation is not None
 
 
 def _capture_recovery_triggers(db: Session) -> dict[str, str]:

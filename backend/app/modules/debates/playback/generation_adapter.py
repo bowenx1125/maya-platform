@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, configured_llm_model
@@ -71,7 +71,7 @@ from app.modules.debates.generation.segments import (
 from app.modules.debates.generation.segments_runtime import SegmentLLMRuntime
 from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
-from app.modules.debates.models import AuditLog, DebateParticipant, DebateTurn
+from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
 from app.modules.debates.round_count import (
     debate_teaching_protocol,
@@ -101,8 +101,6 @@ from app.modules.knowledge.providers.query_manifest import (
 )
 from app.modules.knowledge.providers.snapshot_build import REAL_EMBEDDING_PROVIDER
 from app.modules.knowledge.providers.sql_query import (
-    REAL_CORE_DEMO_QUERY_MAX_REQUESTS,
-    SQL_QUERY_MAX_REQUESTS,
     SqlAlchemyQueryControlAdapter,
     SqlQueryError,
     controlled_query_provider,
@@ -221,56 +219,6 @@ def _dual_real(settings: object | None) -> bool:
         getattr(settings, "llm_provider", "mock") == "dashscope"
         and getattr(settings, "embedding_provider", "mock") == "dashscope"
     )
-
-
-def _query_request_cap(
-    settings: object | None,
-    debate: object,
-    *,
-    participant_count: int,
-) -> int:
-    """Choose the query scope cap for the protocol and frozen Debate shape.
-
-    The legacy Real-Core demo deliberately kept a two-request cap.  A
-    ``segments_v2`` Debate performs one query batch for each participant in
-    each round, so reusing that cap would make a valid multi-round Debate run
-    out of budget before generation finishes.
-    """
-
-    if not _dual_real(settings):
-        return SQL_QUERY_MAX_REQUESTS
-    if not uses_segment_protocol(debate):
-        return REAL_CORE_DEMO_QUERY_MAX_REQUESTS
-    if isinstance(participant_count, bool) or participant_count < 1:
-        raise ValueError("segment query participant count is invalid")
-    return participant_count * _debate_round_count(debate)
-
-
-def _authorized_extra_turns(db: Session, debate_id: str, participant_count: int) -> int:
-    cycles = int(
-        db.scalar(
-            select(func.count())
-            .select_from(AuditLog)
-            .where(
-                AuditLog.debate_id == debate_id,
-                AuditLog.event_type == "debate.rebirth",
-            )
-        )
-        or 0
-    )
-    remakes = int(
-        db.scalar(
-            select(func.count())
-            .select_from(AuditLog)
-            .where(
-                AuditLog.debate_id == debate_id,
-                AuditLog.event_type == "debate.remake",
-                AuditLog.details_json == '{"regenerated":true}',
-            )
-        )
-        or 0
-    )
-    return cycles * participant_count + remakes
 
 
 def _assert_llm_provider_endpoint(
