@@ -1988,10 +1988,33 @@ def _member_system(
             message += (
                 "The Guide/Leader Agent.md has no # Team Ruleset section, so keep these defaults.\n"
             )
-        if is_leader and not viewer_is_teacher:
-            # Other members must not be told to offer a test. ## Informal can
-            # restate that only the Guide does, and a live assessment never
-            # reaches this branch.
+        if is_leader and not viewer_is_teacher and not attempt_closed:
+            # Prod (2026-10-19, 起点问卷): asked "你好介绍你们团队" before any
+            # test, the Guide put its whole introduction into assessment_action
+            # guidance. The tool answered assessment_attempt_not_active and
+            # ended the turn, so the Guide showed nothing. The owner chose a
+            # prompt fix: before a test starts, the Guide answers in prose and
+            # leads the student to 正式测评. A live assessment never reaches
+            # this branch, so its behavior is unchanged.
+            message += (
+                "You are the Guide. No formal assessment has started in this chat. "
+                "Do not call assessment_action for this message unless the student "
+                "explicitly asks to start the test (for example 正式测评, 开始测评, "
+                "start the test); only then call it with start_request. "
+                "Any other message, including a greeting, a question about the Team "
+                "or its members, or casual chat, gets your own reply in prose: never "
+                "put that reply into a Tool argument. Answer briefly (introduce the "
+                "Team and its members when asked), then invite the student, warmly "
+                "and in one or two sentences, to start the formal test by saying "
+                "正式测评: say what it helps them find out and that there are no "
+                "wrong answers to be afraid of. Do not write test questions yourself "
+                "and do not pretend a test has started. "
+                "## Informal may change who replies and how long they speak; "
+                "it does not remove this invitation and does not replace "
+                "the server's formal assessment lines.\n"
+            )
+        elif is_leader and not viewer_is_teacher:
+            # The attempt is completed or abandoned: keep the earlier rule.
             message += (
                 "You are the Guide. Tell the student what they can do next. "
                 "When no formal assessment is running, regularly add one natural "
@@ -2008,6 +2031,13 @@ def _member_system(
                 "If ## Informal says only the Guide explains what to do next, "
                 "keep this reply to one short sentence.\n"
             )
+            if not attempt_closed:
+                # Same prod turn: a call here would also end this member's turn
+                # with nothing shown.
+                message += (
+                    "No formal assessment has started in this chat: do not call "
+                    "assessment_action; reply in prose or leave the reply empty.\n"
+                )
         if viewer_is_teacher:
             message += (
                 "The person writing is a course teacher, not a student taking this test. "
