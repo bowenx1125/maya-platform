@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, not_found
+from app.core.llm_admission import llm_admission_slot
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -677,50 +679,64 @@ def real_reply(
                     binding_guard=effective_sending_guard or (lambda _connection, _operation: True),
                 )
                 repository.reserve(operation.id)
+            # Wait for the LLM slot while the operation is still only
+            # "reserved", as Team does: an admission refusal, or a crash while
+            # queued, then ends "not_sent" instead of a "sending" row that
+            # recovery must call unknown. The transport's own slot request
+            # below is re-entrant on this thread.
+            admission = ExitStack()
             try:
-                repository.transition(
-                    operation.id,
-                    expected="reserved",
-                    state="sending",
-                    sending_guard=effective_sending_guard,
-                )
-            except ProviderDispatchRejected as exc:
-                raise PlatformError(
-                    "chat_request_stale", "This request is no longer active.", 409
-                ) from exc
-            latest_operation = operation.id
-            try:
-                response = HttpxLLMTransport().post_bytes(
-                    config.resolved_endpoint,
-                    headers={
-                        "Authorization": f"Bearer {config.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    content=wire,
-                    timeout=HttpxLLMTransport.timeout(),
-                )
+                admission.enter_context(llm_admission_slot())
             except PlatformError as exc:
-                # Memory pressure (and any future pre-send PlatformError) means
-                # bytes never left the host — treat as not_sent, preserve code.
                 repository.mark_not_sent(operation.id, safe_error_code=exc.code)
                 raise
-            except LLMTransportError as exc:
-                if exc.acceptance == "not_sent":
-                    repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)
+            with admission:
+                try:
+                    repository.transition(
+                        operation.id,
+                        expected="reserved",
+                        state="sending",
+                        sending_guard=effective_sending_guard,
+                    )
+                except ProviderDispatchRejected as exc:
                     raise PlatformError(
-                        "chat_provider_not_sent", "The Provider did not receive this request.", 503
+                        "chat_request_stale", "This request is no longer active.", 409
+                    ) from exc
+                latest_operation = operation.id
+                try:
+                    response = HttpxLLMTransport().post_bytes(
+                        config.resolved_endpoint,
+                        headers={
+                            "Authorization": f"Bearer {config.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        content=wire,
+                        timeout=HttpxLLMTransport.timeout(),
+                    )
+                except PlatformError as exc:
+                    # Memory pressure (and any future pre-send PlatformError)
+                    # means bytes never left the host: not_sent, code kept.
+                    repository.mark_not_sent(operation.id, safe_error_code=exc.code)
+                    raise
+                except LLMTransportError as exc:
+                    if exc.acceptance == "not_sent":
+                        repository.mark_not_sent(operation.id, safe_error_code=exc.safe_error_code)
+                        raise PlatformError(
+                            "chat_provider_not_sent",
+                            "The Provider did not receive this request.",
+                            503,
+                        ) from None
+                    repository.mark_acceptance_unknown(
+                        operation.id, safe_error_code=exc.safe_error_code
+                    )
+                    raise PlatformError(
+                        "chat_acceptance_unknown", "The request outcome is unknown.", 503
                     ) from None
-                repository.mark_acceptance_unknown(
-                    operation.id, safe_error_code=exc.safe_error_code
-                )
-                raise PlatformError(
-                    "chat_acceptance_unknown", "The request outcome is unknown.", 503
-                ) from None
-            except Exception:
-                repository.mark_acceptance_unknown(operation.id)
-                raise PlatformError(
-                    "chat_acceptance_unknown", "The request outcome is unknown.", 503
-                ) from None
+                except Exception:
+                    repository.mark_acceptance_unknown(operation.id)
+                    raise PlatformError(
+                        "chat_acceptance_unknown", "The request outcome is unknown.", 503
+                    ) from None
             status = getattr(response, "status_code", None)
             if status in {401, 403}:
                 repository.mark_failed(operation.id, safe_error_code="provider_auth_failed")
