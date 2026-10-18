@@ -535,6 +535,17 @@ def _active_attempt(db: Session, row: Conversation) -> AssessmentAttempt | None:
 
 
 def _formal_roles_for_conversation(db: Session, row: Conversation) -> FormalRoles | None:
+    # The Guide and roster of a Team version never change: read once per
+    # request phase (2026-10-19: 6 times per member call in ordinary chat).
+    return memoized(
+        db,
+        ("formal_roles", row.id, row.team_version_id),
+        lambda: _read_formal_roles(db, row),
+        across_sessions=True,
+    )
+
+
+def _read_formal_roles(db: Session, row: Conversation) -> FormalRoles | None:
     from .formal_assessment import resolve_formal_assessment
 
     guide = db.scalar(
@@ -571,14 +582,25 @@ def team_assessment_capable(db: Session, row: Conversation) -> bool:
         .limit(1)
     ):
         return True
-    guide = db.scalar(
-        select(ConversationParticipant).where(
-            ConversationParticipant.conversation_id == row.id,
-            ConversationParticipant.is_leader.is_(True),
+
+    def guide_declares() -> bool:
+        guide = db.scalar(
+            select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == row.id,
+                ConversationParticipant.is_leader.is_(True),
+            )
         )
+        version = db.get(AgentVersion, guide.agent_version_id) if guide is not None else None
+        return version is not None and declares_assessment(version.agent_md)
+
+    # The Guide of a Team version never changes; an attempt can appear any
+    # time, so only this half is read once per request phase.
+    return memoized(
+        db,
+        ("guide_declares_assessment", row.id, row.team_version_id),
+        guide_declares,
+        across_sessions=True,
     )
-    version = db.get(AgentVersion, guide.agent_version_id) if guide is not None else None
-    return version is not None and declares_assessment(version.agent_md)
 
 
 def _attempt_question_presented(db: Session, attempt_id: str) -> bool:

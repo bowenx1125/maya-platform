@@ -20,6 +20,7 @@ from app.core.models import (
     ProviderOperation,
     User,
 )
+from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role
 from app.modules.knowledge_sets.models import (
@@ -198,6 +199,22 @@ def _activity_executor(
     activity: AssessmentActivity,
     purpose: ExecutionPurpose,
 ) -> tuple[str, str]:
+    # Load test 2026-10-19: the executor check ran ~96 times per finished
+    # test. It reads only the published roster and Guide, so once per request
+    # phase (until the next model call) is enough.
+    return memoized(
+        db,
+        ("activity_executor", activity.id, purpose),
+        lambda: _read_activity_executor(db, activity, purpose),
+        across_sessions=True,
+    )
+
+
+def _read_activity_executor(
+    db: Session,
+    activity: AssessmentActivity,
+    purpose: ExecutionPurpose,
+) -> tuple[str, str]:
     if purpose == "assessment_evaluate":
         member_id = activity.evaluator_team_member_id
         agent_version_id = activity.evaluator_agent_version_id
@@ -245,6 +262,29 @@ def _activity_executor(
 
 
 def _assert_live_activity(
+    db: Session,
+    actor: AuthContext,
+    conversation: Conversation,
+    activity: AssessmentActivity,
+) -> None:
+    memoized(
+        db,
+        (
+            "live_activity",
+            str(actor.user.id),
+            actor.user.status,
+            conversation.id,
+            conversation.withdrawn_at is None,
+            conversation.team_authorization_epoch,
+            conversation.publication_epoch,
+            activity.id,
+        ),
+        lambda: _read_assert_live_activity(db, actor, conversation, activity),
+        across_sessions=True,
+    )
+
+
+def _read_assert_live_activity(
     db: Session,
     actor: AuthContext,
     conversation: Conversation,
@@ -445,6 +485,23 @@ def _authorize_practice_assessment_edit(
 
 
 def _pinned_question_currently_readable(
+    db: Session,
+    attempt_question: AssessmentAttemptQuestion,
+) -> tuple[str, str]:
+    return memoized(
+        db,
+        (
+            "pinned_question",
+            attempt_question.id,
+            attempt_question.question_version_id,
+            attempt_question.content_hash,
+        ),
+        lambda: _read_pinned_question(db, attempt_question),
+        across_sessions=True,
+    )
+
+
+def _read_pinned_question(
     db: Session,
     attempt_question: AssessmentAttemptQuestion,
 ) -> tuple[str, str]:
