@@ -33,7 +33,7 @@ K3A_SCHEMA_HEAD = "0040_teams_publication_grants"
 K3B1_SCHEMA_HEAD = "0041_team_conversations"
 K3B2_SCHEMA_HEAD = "0042_team_turn_results"
 K4A_SCHEMA_HEAD = "0043_learning_evidence"
-SCHEMA_HEAD = "0072_attempt_teacher_hidden"
+SCHEMA_HEAD = "0073_voice_ready_on_upload"
 KNOWLEDGE_SETS_SCHEMA_HEAD = "0036_knowledge_sets_assets"
 SUPPORTED_SCHEMA_HEADS = {
     "0035_w1_resource_ownership",
@@ -101,6 +101,7 @@ V14_PRESERVED_BY_HEAD = {
     "0070_conversation_attachments": ("conversation_attachments",),
     "0071_chat_reports": ("chat_reports",),
     "0072_attempt_teacher_hidden": (),
+    "0073_voice_ready_on_upload": (),
 }
 SUPPORTED_SCHEMA_HEADS.update(V14_PRESERVED_BY_HEAD)
 AUDIT_SCHEMA_VERSION = "debate_runtime_cleanup_audit_v1"
@@ -200,9 +201,7 @@ PRESERVED_TABLES = (
     "learning_assessment_revisions",
     "learning_assessment_mutations",
 )
-PRESERVED_TABLES += tuple(
-    table for tables in V14_PRESERVED_BY_HEAD.values() for table in tables
-)
+PRESERVED_TABLES += tuple(table for tables in V14_PRESERVED_BY_HEAD.values() for table in tables)
 K1_PRESERVED_TABLES = frozenset(
     {
         "knowledge_sets",
@@ -317,18 +316,10 @@ def _normalise_sql(value: str) -> str:
 def _safe_relative_file(root: Path, relative_path: str) -> Path:
     """Resolve one exact data file while rejecting traversal and symlinks."""
 
-    if (
-        not isinstance(relative_path, str)
-        or not relative_path
-        or "\x00" in relative_path
-    ):
+    if not isinstance(relative_path, str) or not relative_path or "\x00" in relative_path:
         raise CleanupError("stored_file_path_invalid")
     pure = PurePosixPath(relative_path)
-    if (
-        pure.is_absolute()
-        or not pure.parts
-        or any(part in {"", ".", ".."} for part in pure.parts)
-    ):
+    if pure.is_absolute() or not pure.parts or any(part in {"", ".", ".."} for part in pure.parts):
         raise CleanupError("stored_file_path_invalid")
     root = root.resolve(strict=True)
     current = root
@@ -350,21 +341,13 @@ def _validate_paths(database_path: Path, data_root: Path) -> tuple[Path, Path]:
     """Validate the exact DB and data-root boundary before opening SQLite."""
 
     supplied_root = data_root.expanduser()
-    if (
-        supplied_root.is_symlink()
-        or not supplied_root.exists()
-        or not supplied_root.is_dir()
-    ):
+    if supplied_root.is_symlink() or not supplied_root.exists() or not supplied_root.is_dir():
         raise CleanupError("data_root_invalid")
     root = supplied_root.resolve(strict=True)
     supplied_db = database_path.expanduser()
     if not supplied_db.is_absolute():
         supplied_db = root / supplied_db
-    if (
-        supplied_db.is_symlink()
-        or not supplied_db.exists()
-        or not supplied_db.is_file()
-    ):
+    if supplied_db.is_symlink() or not supplied_db.exists() or not supplied_db.is_file():
         raise CleanupError("database_path_invalid")
     db = supplied_db.resolve(strict=True)
     try:
@@ -430,9 +413,7 @@ def _select_rows_by_any(
         return []
     predicate = " OR ".join(f"{column} IN ({clause})" for column in columns)
     repeated = params * len(columns)
-    return list(
-        connection.execute(f"SELECT * FROM {table} WHERE {predicate}", repeated)
-    )
+    return list(connection.execute(f"SELECT * FROM {table} WHERE {predicate}", repeated))
 
 
 def _count(
@@ -465,10 +446,7 @@ def _validate_schema(connection: sqlite3.Connection) -> str:
     tables = _table_names(connection)
     if "alembic_version" not in tables:
         raise CleanupError("schema_tables_missing")
-    heads = {
-        str(row[0])
-        for row in connection.execute("SELECT version_num FROM alembic_version")
-    }
+    heads = {str(row[0]) for row in connection.execute("SELECT version_num FROM alembic_version")}
     if len(heads) != 1 or not heads.issubset(SUPPORTED_SCHEMA_HEADS):
         raise CleanupError("schema_head_invalid")
     schema_head = next(iter(heads))
@@ -525,9 +503,7 @@ def _validate_schema(connection: sqlite3.Connection) -> str:
         raise CleanupError("foreign_key_violations_before")
     triggers = {
         str(row[0]): str(row[1])
-        for row in connection.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
-        )
+        for row in connection.execute("SELECT name, sql FROM sqlite_master WHERE type='trigger'")
     }
     for name, expected in _TRIGGER_EXPECTATIONS.items():
         actual = triggers.get(name)
@@ -577,27 +553,17 @@ class CleanupPlan:
     @property
     def has_targets(self) -> bool:
         return (
-            any(self.table_counts.values())
-            or bool(self.file_paths)
-            or bool(self.directory_paths)
+            any(self.table_counts.values()) or bool(self.file_paths) or bool(self.directory_paths)
         )
 
 
 def _safe_relative_dir(root: Path, relative_path: str) -> Path:
     """Resolve one exact runtime directory while rejecting traversal/symlinks."""
 
-    if (
-        not isinstance(relative_path, str)
-        or not relative_path
-        or "\x00" in relative_path
-    ):
+    if not isinstance(relative_path, str) or not relative_path or "\x00" in relative_path:
         raise CleanupError("runtime_path_invalid")
     pure = PurePosixPath(relative_path)
-    if (
-        pure.is_absolute()
-        or not pure.parts
-        or any(part in {"", ".", ".."} for part in pure.parts)
-    ):
+    if pure.is_absolute() or not pure.parts or any(part in {"", ".", ".."} for part in pure.parts):
         raise CleanupError("runtime_path_invalid")
     root = root.resolve(strict=True)
     current = root
@@ -760,9 +726,7 @@ def _stored_file_survivor_check(
             raise CleanupError("stored_file_shared")
 
 
-def _build_plan(
-    connection: sqlite3.Connection, data_root: Path, schema_head: str
-) -> CleanupPlan:
+def _build_plan(connection: sqlite3.Connection, data_root: Path, schema_head: str) -> CleanupPlan:
     debate_ids = _select_all(connection, "debates", "id")
     debate_course_ids = {
         str(row["id"]): str(row["course_id"])
@@ -771,15 +735,11 @@ def _build_plan(
     participant_ids = _select_child_set(
         connection, "debate_participants", "id", "debate_id", debate_ids
     )
-    turn_ids = _select_child_set(
-        connection, "debate_turns", "id", "debate_id", debate_ids
-    )
+    turn_ids = _select_child_set(connection, "debate_turns", "id", "debate_id", debate_ids)
     window_ids = _select_child_set(
         connection, "classroom_interaction_windows", "id", "debate_id", debate_ids
     )
-    barrage_ids = _select_child_set(
-        connection, "barrage_messages", "id", "debate_id", debate_ids
-    )
+    barrage_ids = _select_child_set(connection, "barrage_messages", "id", "debate_id", debate_ids)
     report_ids = _select_child_set(
         connection, "civilization_reports", "id", "debate_id", debate_ids
     )
@@ -878,14 +838,10 @@ def _build_plan(
     )
     file_reference_ids = {str(row["id"]) for row in file_reference_rows}
     stored_file_ids = {
-        str(row["stored_file_id"])
-        for row in file_reference_rows
-        if row["stored_file_id"]
+        str(row["stored_file_id"]) for row in file_reference_rows if row["stored_file_id"]
     }
     stored_file_ids.update(
-        _select_child_set(
-            connection, "debate_turns", "audio_file_id", "debate_id", debate_ids
-        )
+        _select_child_set(connection, "debate_turns", "audio_file_id", "debate_id", debate_ids)
     )
 
     file_paths_by_string: dict[str, Path] = {}
@@ -940,19 +896,13 @@ def _build_plan(
         file_reference_ids=file_reference_ids,
         turn_ids=turn_ids,
     )
-    stored_sizes = {
-        str(row["relative_path"]): max(0, int(row["size"] or 0)) for row in stored_rows
-    }
+    stored_sizes = {str(row["relative_path"]): max(0, int(row["size"] or 0)) for row in stored_rows}
     file_bytes = sum(
-        max(0, int(path.stat().st_size))
-        if path.exists()
-        else stored_sizes.get(relative_path, 0)
+        max(0, int(path.stat().st_size)) if path.exists() else stored_sizes.get(relative_path, 0)
         for relative_path, path in file_paths_by_string.items()
     )
 
-    scope_ids = (
-        debate_ids | turn_ids | window_ids | report_ids | revision_ids | insight_ids
-    )
+    scope_ids = debate_ids | turn_ids | window_ids | report_ids | revision_ids | insight_ids
     operation_rows: list[sqlite3.Row] = []
     predicates: list[str] = []
     params: list[str] = []
@@ -978,9 +928,7 @@ def _build_plan(
             )
         )
     operation_ids = {str(row["id"]) for row in operation_rows}
-    operation_scopes = {
-        str(row["scope_id"]) for row in operation_rows if row["scope_id"]
-    }
+    operation_scopes = {str(row["scope_id"]) for row in operation_rows if row["scope_id"]}
     budget_scopes = scope_ids | operation_scopes
     idempotency_rows: list[sqlite3.Row] = []
     operation_clause, operation_values = _in(IDEMPOTENCY_OPERATIONS)
@@ -1002,9 +950,7 @@ def _build_plan(
         )
     )
     idempotency_ids = (
-        {str(row["id"]) for row in idempotency_rows}
-        | file_idem_ids
-        | cleanup_idempotency_ids
+        {str(row["id"]) for row in idempotency_rows} | file_idem_ids | cleanup_idempotency_ids
     )
     cleanup_debate_ids = debate_ids | {
         str(row["entity_id"]) for row in cleanup_rows if row["entity_id"]
@@ -1046,12 +992,8 @@ def _build_plan(
             ("turn_id", "participant_id"),
             turn_ids | participant_ids,
         ),
-        "playback_states": _count(
-            connection, "playback_states", ("debate_id",), debate_ids
-        ),
-        "debate_events": _count(
-            connection, "debate_events", ("debate_id",), debate_ids
-        ),
+        "playback_states": _count(connection, "playback_states", ("debate_id",), debate_ids),
+        "debate_events": _count(connection, "debate_events", ("debate_id",), debate_ids),
         "classroom_interaction_windows": _count(
             connection,
             "classroom_interaction_windows",
@@ -1130,9 +1072,7 @@ def _build_plan(
         "provider_export_manifests": _count(
             connection, "provider_export_manifests", ("id",), manifest_ids
         ),
-        "provider_operations": _count(
-            connection, "provider_operations", ("id",), operation_ids
-        ),
+        "provider_operations": _count(connection, "provider_operations", ("id",), operation_ids),
         "provider_reservations": _count(
             connection, "provider_reservations", ("operation_id",), operation_ids
         ),
@@ -1157,13 +1097,9 @@ def _build_plan(
             ("operation_id", "turn_id"),
             operation_ids | turn_ids,
         ),
-        "demo_acceptance_runs": _count(
-            connection, "demo_acceptance_runs", ("id",), run_ids
-        ),
+        "demo_acceptance_runs": _count(connection, "demo_acceptance_runs", ("id",), run_ids),
         "audit_logs": _count(connection, "audit_logs", ("id",), audit_log_ids),
-        "idempotency_records": _count(
-            connection, "idempotency_records", ("id",), idempotency_ids
-        ),
+        "idempotency_records": _count(connection, "idempotency_records", ("id",), idempotency_ids),
         "file_references": _count(
             connection,
             "file_references",
@@ -1234,9 +1170,7 @@ def _delete_any(
     if not params:
         return 0
     predicate = " OR ".join(f"{column} IN ({clause})" for column in columns)
-    cursor = connection.execute(
-        f"DELETE FROM {table} WHERE {predicate}", params * len(columns)
-    )
+    cursor = connection.execute(f"DELETE FROM {table} WHERE {predicate}", params * len(columns))
     return max(0, cursor.rowcount)
 
 
@@ -1263,9 +1197,7 @@ def _restore_guard(connection: sqlite3.Connection, original_sql: str) -> None:
         raise CleanupError("trigger_restore_failed")
 
 
-def _remaining_target_counts(
-    connection: sqlite3.Connection, plan: CleanupPlan
-) -> dict[str, int]:
+def _remaining_target_counts(connection: sqlite3.Connection, plan: CleanupPlan) -> dict[str, int]:
     values = {
         "debates": (("id",), plan.debate_ids),
         "debate_participants": (
@@ -1450,9 +1382,7 @@ def _apply_plan(connection: sqlite3.Connection, plan: CleanupPlan) -> None:
             ("operation_id",),
             plan.operation_ids,
         )
-        _delete_any(
-            connection, "provider_reservations", ("operation_id",), plan.operation_ids
-        )
+        _delete_any(connection, "provider_reservations", ("operation_id",), plan.operation_ids)
         _delete_any(connection, "provider_operations", ("id",), plan.operation_ids)
         if plan.run_ids:
             clause, params = _in(plan.run_ids)
@@ -1608,9 +1538,7 @@ def _apply_plan(connection: sqlite3.Connection, plan: CleanupPlan) -> None:
         raise
 
 
-def _move_files(
-    plan: CleanupPlan, data_root: Path
-) -> tuple[Path | None, list[tuple[Path, Path]]]:
+def _move_files(plan: CleanupPlan, data_root: Path) -> tuple[Path | None, list[tuple[Path, Path]]]:
     existing = [path for path in plan.file_paths if path.exists()]
     if not existing:
         return None, []
@@ -1632,9 +1560,7 @@ def _move_files(
     return quarantine, moved
 
 
-def _finish_file_quarantine(
-    quarantine: Path | None, moved: Sequence[tuple[Path, Path]]
-) -> None:
+def _finish_file_quarantine(quarantine: Path | None, moved: Sequence[tuple[Path, Path]]) -> None:
     if quarantine is None:
         return
     for _source, destination in moved:
@@ -1670,9 +1596,7 @@ def _restore_files(quarantine: Path | None, moved: Sequence[tuple[Path, Path]]) 
         quarantine.rmdir()
 
 
-def apply_cleanup(
-    database_path: Path, data_root: Path, *, offline: bool = False
-) -> CleanupPlan:
+def apply_cleanup(database_path: Path, data_root: Path, *, offline: bool = False) -> CleanupPlan:
     """Apply one bounded cleanup transaction after an explicit offline gate."""
 
     if not offline:
@@ -1742,16 +1666,10 @@ def _error_payload(code: str, *, mode: str) -> dict[str, object]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--root", type=Path, default=Path(__file__).resolve().parents[1]
-    )
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--data-root", type=Path, help="exact runtime data directory")
-    parser.add_argument(
-        "--database", type=Path, help="SQLite DB path; required with --apply"
-    )
-    parser.add_argument(
-        "--apply", action="store_true", help="apply the bounded cleanup"
-    )
+    parser.add_argument("--database", type=Path, help="SQLite DB path; required with --apply")
+    parser.add_argument("--apply", action="store_true", help="apply the bounded cleanup")
     parser.add_argument(
         "--offline",
         action="store_true",
@@ -1768,11 +1686,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     if args.apply and args.database is None:
-        print(
-            json.dumps(
-                _error_payload("database_path_required", mode=mode), sort_keys=True
-            )
-        )
+        print(json.dumps(_error_payload("database_path_required", mode=mode), sort_keys=True))
         return 2
     root = args.root.resolve()
     data_root = args.data_root or root / "data"

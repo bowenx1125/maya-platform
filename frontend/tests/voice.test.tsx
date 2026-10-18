@@ -516,13 +516,13 @@ describe("M08 voice library", () => {
     expect(screen.queryByText("Created")).toBeNull();
   });
 
-  it("shows a platform preview URL and confirms only after the sample plays to the end", async () => {
+  it("shows a platform preview URL and plays it without any confirm step", async () => {
     api.voiceProfiles.mockResolvedValue([
       {
         id: "voice-1",
         scope: "group",
         group_id: "group-a",
-        status: "preview_ready",
+        status: "ready",
         source_filename: "sample.wav",
         safe_error_code: null,
         created_at: "2026-01-01T00:00:00Z",
@@ -532,19 +532,10 @@ describe("M08 voice library", () => {
       playback_url: "/api/v1/voice-previews/preview-1/media",
       expires_at: new Date(Date.now() + 60_000).toISOString(),
     });
-    api.confirmVoiceProfile.mockResolvedValue({
-      id: "voice-1",
-      scope: "group",
-      group_id: "group-a",
-      status: "ready",
-      source_filename: "sample.wav",
-      safe_error_code: null,
-      created_at: "2026-01-01T00:00:00Z",
-    });
     render(<VoiceLibrary groupId="group-a" />);
     await waitFor(() => expect(screen.getByText("sample.wav")).toBeTruthy());
     expect(screen.queryByText("voice-1")).toBeNull();
-    // No separate check button and no status pill on the row.
+    // No check button and no status pill on the row.
     expect(screen.queryByRole("button", { name: /^confirm$/i })).toBeNull();
     expect(screen.queryByText(/preview ready/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
@@ -552,11 +543,8 @@ describe("M08 voice library", () => {
     expect((document.querySelector("audio") as HTMLAudioElement).src).toContain(
       "/api/v1/voice-previews/preview-1/media",
     );
-    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
     fireEvent.ended(document.querySelector("audio")!);
-    await waitFor(() =>
-      expect(api.confirmVoiceProfile).toHaveBeenCalledWith("voice-1"),
-    );
+    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
   });
 });
 
