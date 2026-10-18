@@ -871,6 +871,7 @@ class ProviderRepository:
         request: ProviderReservationRequestV1,
         *,
         _binding_writer: Callable[[Connection, str], None] | None = None,
+        _reserve_budget: ProviderScopeBudgetV1 | None = None,
     ) -> ProviderOperationV1:
         if request.provider_operation == "llm_debate":
             raise ProviderRepositoryError(
@@ -893,9 +894,9 @@ class ProviderRepository:
             "export_manifest_hash": request.export_manifest_hash,
             "build_manifest_hash": request.build_manifest_hash,
             "model_key": request.model_key,
-            "state": "prepared",
-            "request_count": 0,
-            "charged_request_count": 0,
+            "state": "prepared" if _reserve_budget is None else "reserved",
+            "request_count": 0 if _reserve_budget is None else 1,
+            "charged_request_count": 0 if _reserve_budget is None else 1,
             "staged_response_hash": None,
             "safe_error_code": None,
             "acceptance_run_id": None,
@@ -911,9 +912,86 @@ class ProviderRepository:
                 connection.execute(_OPERATION_TABLE.insert().values(**values))
                 if _binding_writer is not None:
                     _binding_writer(connection, operation_id)
+                if _reserve_budget is not None:
+                    self._reserve_new(connection, request, operation_id, _reserve_budget, now)
         except IntegrityError as exc:
             raise DuplicateOperation("provider attempt already exists") from exc
         return self.operation(operation_id)
+
+    def _reserve_new(
+        self,
+        connection: Connection,
+        request: ProviderReservationRequestV1,
+        operation_id: str,
+        budget: ProviderScopeBudgetV1,
+        now: datetime,
+    ) -> None:
+        """What save_scope_budget + reserve write for a new operation, in fewer rows.
+
+        Load test 2026-10-19: every Team model call wrote its scope budget
+        (insert, then +1 update), its operation (insert as prepared, then
+        update to reserved) and its reservation. Here the budget is inserted
+        already allocated (or allocated once if it exists) and the operation
+        was inserted reserved: the same rows and end state, two writes fewer.
+        """
+
+        bucket = budget_bucket_for_operation(request.provider_operation)
+        validate_budget_bucket(bucket)
+        if budget.budget_bucket != bucket and budget.budget_bucket != EMBEDDING_SNAPSHOT_BUCKET:
+            raise ProviderRepositoryError("scope budget bucket does not match its value")
+        table = _BUDGET_TABLE
+        existing = (
+            connection.execute(
+                select(table).where(
+                    table.c.scope_id == request.scope_id, table.c.budget_bucket == bucket
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if existing is None:
+            connection.execute(
+                table.insert().values(
+                    scope_id=request.scope_id,
+                    budget_bucket=bucket,
+                    max_requests=budget.max_requests,
+                    max_total_tokens=budget.max_total_tokens,
+                    max_cost_cny=budget.max_cost_cny,
+                    allocated_requests=1,
+                    allocated_total_tokens=_as_int(request.max_tokens),
+                    allocated_cost_cny=_as_float(request.max_cost_cny),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        else:
+            connection.execute(
+                update(table)
+                .where(table.c.scope_id == request.scope_id, table.c.budget_bucket == bucket)
+                .values(
+                    allocated_requests=_as_int(existing["allocated_requests"] or 0) + 1,
+                    allocated_total_tokens=_as_int(existing["allocated_total_tokens"] or 0)
+                    + _as_int(request.max_tokens),
+                    allocated_cost_cny=_as_float(existing["allocated_cost_cny"] or 0)
+                    + _as_float(request.max_cost_cny),
+                    updated_at=now,
+                )
+            )
+        connection.execute(
+            _RESERVATION_TABLE.insert().values(
+                id=str(uuid4()),
+                operation_id=operation_id,
+                scope_id=request.scope_id,
+                provider_operation=request.provider_operation,
+                logical_item_id=request.logical_item_id,
+                attempt_no=request.attempt_no,
+                max_tokens=request.max_tokens,
+                max_cost_cny=request.max_cost_cny,
+                state="reserved",
+                created_at=now,
+                updated_at=now,
+            )
+        )
 
     create = create_prepared
 
@@ -926,8 +1004,13 @@ class ProviderRepository:
         request_json: str,
         claim_token: str,
         binding_guard: ProviderSendingGuard,
+        reserve_budget: ProviderScopeBudgetV1 | None = None,
     ) -> ProviderOperationV1:
-        """Bind one actual Team SDK dispatch atomically to the shared operation."""
+        """Bind one actual Team SDK dispatch atomically to the shared operation.
+
+        With ``reserve_budget`` the operation is created already reserved
+        against that scope budget (what save_scope_budget + reserve do).
+        """
         from app.modules.workspace.models import (
             Conversation,
             ConversationParticipant,
@@ -1061,7 +1144,7 @@ class ProviderRepository:
                 )
             )
 
-        return self.create_prepared(request, _binding_writer=bind)
+        return self.create_prepared(request, _binding_writer=bind, _reserve_budget=reserve_budget)
 
     def create_runtime_model_call_prepared(
         self,
@@ -1411,6 +1494,84 @@ class ProviderRepository:
                     .where(_RESERVATION_TABLE.c.operation_id == operation_id)
                     .values(state="accepted", updated_at=now)
                 )
+        return self.operation(operation_id)
+
+    def accept_team_succeeded(
+        self, operation_id: str, *, response_json: str
+    ) -> ProviderOperationV1:
+        """``stage_team_accepted`` then ``mark_succeeded``, one write per row.
+
+        Both always committed together; writing ``accepted`` and then
+        ``succeeded`` to the operation and the reservation cost two extra
+        UPDATEs per Team model call (load test 2026-10-19). A call already
+        accepted (a replayed stage) still goes through both steps.
+        """
+        from app.modules.workspace.models import TeamProviderCall
+
+        call_table = cast(Table, TeamProviderCall.__table__)
+        if not isinstance(response_json, str):
+            raise ProviderRepositoryError("Team response stage is invalid")
+        response_hash = sha256_hex(response_json.encode())
+        state = self._read_one(
+            select(_OPERATION_TABLE.c.state).where(_OPERATION_TABLE.c.id == operation_id)
+        )
+        if state is None or state["state"] != "sending":
+            # Not the plain path (a replay, or a state to report): the two
+            # original steps keep their checks and errors.
+            with self.one_transaction():
+                self.stage_team_accepted(operation_id, response_json=response_json)
+                return self.mark_succeeded(operation_id)
+        with self._write_connection() as connection:
+            operation = (
+                connection.execute(
+                    select(_OPERATION_TABLE).where(_OPERATION_TABLE.c.id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if operation is None or operation["state"] != "sending":
+                raise OperationStateError("Team acceptance CAS fence failed")
+            stage = (
+                connection.execute(
+                    select(call_table).where(call_table.c.operation_id == operation_id)
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                stage is None
+                or str(operation["scope_id"]) != f"team-result:{stage['result_id']}"
+                or operation["request_hash"] != stage["request_hash"]
+                or operation["export_manifest_hash"] != stage["manifest_hash"]
+            ):
+                raise ProviderRepositoryError("Team response stage identity is invalid")
+            if stage["accepted_response_json"] is not None:
+                raise OperationStateError("Team acceptance CAS fence failed")
+            now = self._now()
+            connection.execute(
+                update(call_table)
+                .where(call_table.c.operation_id == operation_id)
+                .values(
+                    accepted_response_json=response_json,
+                    accepted_response_hash=response_hash,
+                    accepted_at=now,
+                )
+            )
+            changed = connection.execute(
+                update(_OPERATION_TABLE)
+                .where(
+                    _OPERATION_TABLE.c.id == operation_id,
+                    _OPERATION_TABLE.c.state == "sending",
+                )
+                .values(state="succeeded", staged_response_hash=response_hash, updated_at=now)
+            )
+            if changed.rowcount != 1:
+                raise OperationStateError("Team acceptance CAS fence failed")
+            connection.execute(
+                update(_RESERVATION_TABLE)
+                .where(_RESERVATION_TABLE.c.operation_id == operation_id)
+                .values(state="succeeded", updated_at=now)
+            )
         return self.operation(operation_id)
 
     def get_team_provider_call_stage(

@@ -830,27 +830,23 @@ def dispatch_team_model(
     # repository opens a second connection for BEGIN IMMEDIATE.
     db.rollback()
     try:
-        # Budget, prepared operation, call binding and reservation commit
-        # together (one transaction instead of three).
-        with repository.one_transaction():
-            repository.save_scope_budget(
-                scope_id,
-                ProviderScopeBudgetV1(
-                    max_requests=CONTROL_UNBOUNDED_REQUESTS,
-                    max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
-                    max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
-                    budget_bucket=LLM_DEBATE_TURN_BUCKET,
-                ),
-            )
-            operation = repository.create_team_prepared(
-                request_record,
-                result_id=request.result_id,
-                ordinal=ordinal,
-                request_json=wire_text,
-                claim_token=request.claim_token,
-                binding_guard=guard,
-            )
-            repository.reserve(operation.id)
+        # Budget, operation, call binding and reservation: one transaction,
+        # with the operation created already reserved and the budget inserted
+        # already allocated (2026-10-19: two writes fewer per model call).
+        operation = repository.create_team_prepared(
+            request_record,
+            result_id=request.result_id,
+            ordinal=ordinal,
+            request_json=wire_text,
+            claim_token=request.claim_token,
+            binding_guard=guard,
+            reserve_budget=ProviderScopeBudgetV1(
+                max_requests=CONTROL_UNBOUNDED_REQUESTS,
+                max_total_tokens=CONTROL_UNBOUNDED_TOKENS,
+                max_cost_cny=CONTROL_UNBOUNDED_COST_CNY,
+                budget_bucket=LLM_DEBATE_TURN_BUCKET,
+            ),
+        )
     except ProviderDispatchRejected as exc:
         raise TeamDispatchError("team_context_changed") from exc
     except Exception as exc:
@@ -965,10 +961,8 @@ def dispatch_team_model(
         raise
     try:
         # Parsed first (no I/O), so the accepted stage and success commit
-        # together (one transaction instead of two).
-        with repository.one_transaction():
-            repository.stage_team_accepted(operation.id, response_json=response_json)
-            repository.mark_succeeded(operation.id)
+        # together, one write per row (2026-10-19: two writes fewer per call).
+        repository.accept_team_succeeded(operation.id, response_json=response_json)
     except ProviderRepositoryError:
         repository.mark_failed(operation.id, safe_error_code="team_response_invalid")
         raise TeamDispatchError("team_response_invalid") from None

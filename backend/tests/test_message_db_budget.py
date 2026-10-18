@@ -54,23 +54,25 @@ from tests.test_wave4_provider_preflight import _digest, _policy
 
 _POSTGRES_URL = os.environ.get("MAYA_TEST_POSTGRES_URL")
 
-# Measured on PostgreSQL at main 8efc2bd (2026-10-19). Lower them when a
-# change saves work; never raise them without saying why in the PR.
+# Measured on PostgreSQL (2026-10-19): main 8efc2bd, then the ledger merges
+# and read memos below. Lower them when a change saves work; never raise them
+# without saying why in the PR. (main: ordinary turn 60 writes / 677 reads;
+# assessment turn 32 / 454, finalize 78 / 1139, retried turn 47 / 595.)
 ORDINARY_BUDGET = {
     "claim": {"dml": 4, "commit": 1, "select": 55},
-    "turn": {"dml": 60, "commit": 24, "select": 690},
+    "turn": {"dml": 48, "commit": 24, "select": 645},
 }
 ASSESSMENT_BUDGET = {
     "clean": {
         "claim": {"dml": 4, "commit": 1, "select": 110},
-        "turn": {"dml": 32, "commit": 11, "select": 465},
-        "finalize": {"dml": 78, "commit": 28, "select": 1150},
+        "turn": {"dml": 28, "commit": 11, "select": 445},
+        "finalize": {"dml": 67, "commit": 28, "select": 935},
     },
     # The Scorer's arguments arrive cut once and the call is retried (#187).
     "truncated_once": {
         "claim": {"dml": 4, "commit": 1, "select": 110},
-        "turn": {"dml": 47, "commit": 17, "select": 600},
-        "finalize": {"dml": 78, "commit": 28, "select": 1150},
+        "turn": {"dml": 40, "commit": 17, "select": 575},
+        "finalize": {"dml": 67, "commit": 28, "select": 935},
     },
 }
 

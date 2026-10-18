@@ -183,14 +183,13 @@ October 9: Debates on Brainform/Chatform/Studyform. Private `read_memory` can pa
 `team_no_progress`; Tool ACL by role; publisher edits Agent.md/Brainform/Avatar/Voice.
 Card room `0058`; production `1f34fea` (schema `0057`).
 
-October 11: PR #50 → `556fdc5`. Version pills green Public / gray Private. Chat pin
+October 11: PR #50 → `556fdc5`. Pills: green Public, gray Private. Chat pin
 `0059`. RAG fixed Private/Public at creation; Accounts visits read Private. `0060`
 soft-retires prior work (Demo keeps Laozi/Plato/Socrates). Agent notes must quote user.
 
 October 12–13: 0061 nullable personal debaters; Public Teams take only Public Agents. 0062 personal voices are owner-managed; 我不知道/忘了 scores. Scorer then summarizer run as the live sign-in; every Question is asked. Brainform .md edit/rename; rubric follow-ups rerun; 0063 stores names; answers must match the Question form. Leaders carry report links.
 
-PR #52: text playback, Live recovery, Avatar,0064 archived-slot release.
-Interact UI 26/26 passed; production clicks unverified.
+PR #52: text playback, Live recovery, Avatar, 0064 slot release; Interact UI 26/26.
 
 UI polish: Teams match Agents; create Done validates; edit Done needs a dirty form; RAG/Knowledge save returns to the library; withdrawn RAG is not selectable; Team create names unavailable members. Accounts visits read public RAG/Knowledge only (publisher edits); Members/Recent activity come from the group overview; members sort by name; Profile moves students only into existing groups and old-group work becomes inaccessible. Below 880px, sideways/upright/sideways within 6s opens the card room. Hidden published RAG fails as knowledge_generation_sources_unavailable. Soft-deleted Agent Knowledge Sets revive on the next authorized generate/publish. PRs #56/#58/#59/#60/#64.
 
@@ -220,4 +219,4 @@ October 17: One adaptive admission queue fronts login/create/write/LLM. Danger (
 
 October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; cached, one read per test (0068 index). Accounts/group visits drop Test results. Student Record: own answers only. Revoked/unfinished attempts show; teacher delete hides (0072). A Voice owner can Delete it in Studyform (Agents fall back). Studyform Voices opens with this sign-in's last list, then refreshes. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones fall back. A 40/60-student Postgres run passes; queued creates hold no pooled connection; ledger: 6 commits per model call (was 9). Vote/barrage sequences (`0069`) use `UPDATE … RETURNING`; 40 concurrent submits stored 1–40; collisions retry.
 
-October 18: A picked @mention adds a space; no All in the picker, but `@All`/bare sends reach everyone. Studyform/Brainform/Chat/Voices reads share one per-sign-in cache (6 at once, 10 s reuse, 429/503 back-off; changes clear it). Owner-only per-Chat Team `+` files (`0070`). Team turns memoize access checks per model-call phase: 812→448 SELECTs/turn. Students use teachers' public Agents only in Teams (roster); no list, detail, single chat; old ones read-only.
+October 18: A picked @mention adds a space; no All in the picker, but `@All`/bare sends reach everyone. Studyform/Brainform/Chat/Voices reads share one per-sign-in cache (6 at once, 10 s reuse, 429/503 back-off; changes clear it). Owner-only per-Chat Team `+` files (`0070`). Team turns memoize access checks per model-call phase (812→448 SELECTs/turn); Oct 19: a Team model call writes 12 rows, not 16. Students use teachers' public Agents only in Teams (roster); no list, detail, single chat; old ones read-only.
