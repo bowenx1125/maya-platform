@@ -9,7 +9,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
@@ -64,7 +64,7 @@ from .chat_provider import (
     reply_language_from_projection,
     retrieve_sources,
 )
-from .chat_stream import accepts_event_stream, chat_audio_path, stream_events, stream_team_events
+from .chat_stream import accepts_event_stream, stream_events, stream_team_events
 from .models import (
     ChatMemoryEntryAction,
     Conversation,
@@ -1952,30 +1952,3 @@ def resume_team_conversation_turn(
     _wake_assessment_finalizer(request, row.id)
     db.expire_all()
     return session_view(db, owned_conversation(db, context, row.id), context, settings)
-
-
-@router.get(
-    "/conversations/{conversation_id}/audio/{request_id}",
-    include_in_schema=False,
-    name="conversationAudio",
-)
-def conversation_audio(
-    conversation_id: UUID,
-    request_id: UUID,
-    context: AuthContext = Depends(require_auth),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-) -> FileResponse:
-    row = owned_conversation(db, context, str(conversation_id))
-    turn = db.get(ConversationTurn, str(request_id))
-    if turn is None or turn.conversation_id != row.id:
-        raise not_found()
-    return FileResponse(
-        chat_audio_path(settings, conversation_id, request_id),
-        media_type="audio/wav",
-        headers={
-            "Cache-Control": "no-store, max-age=0",
-            "Pragma": "no-cache",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )

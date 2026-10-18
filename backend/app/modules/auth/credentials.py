@@ -118,12 +118,6 @@ class DemoAccountSnapshot:
                 return user_id
         return account.user_id
 
-    def account_for_user_id(self, user_id: str) -> DemoAccount | None:
-        return next(
-            (account for account in self.accounts if self.user_id_for(account) == user_id),
-            None,
-        )
-
 
 @dataclass(frozen=True)
 class DemoCredential:

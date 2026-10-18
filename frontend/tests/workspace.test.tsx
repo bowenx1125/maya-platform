@@ -96,9 +96,6 @@ beforeEach(() => {
     createConversation: vi.fn().mockResolvedValue(conversation),
     streamConversation: vi.fn().mockResolvedValue({
       session: completedConversation,
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
     }),
     conversation: vi.fn().mockResolvedValue(conversation),
     deleteConversation: vi.fn().mockResolvedValue(undefined),
@@ -110,7 +107,6 @@ beforeEach(() => {
     providerSettings: vi.fn(),
     updateProviderSettings: vi.fn(),
     checkProvider: vi.fn(),
-    demoStatus: vi.fn(),
     classroomLive: vi.fn().mockResolvedValue({
       debate_id: "debate",
       course_id: "course",
@@ -269,9 +265,6 @@ describe("private Agent chat", () => {
           },
         ],
       },
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), {
       target: { value: "Why?" },
@@ -290,8 +283,6 @@ describe("private Agent chat", () => {
   it("uses the selected Agent, renders the response, and preserves history on reentry without Refresh", async () => {
     state.api.streamConversation.mockResolvedValue({
       session: completedConversation,
-      audioUrl: "/api/v1/conversations/conversation/audio/legacy",
-      ttsErrorCode: "tts_failed",
     });
     const view = renderChat({ newChat: true });
     await chooseSocrates();
@@ -476,9 +467,6 @@ describe("private Agent chat", () => {
           },
         ],
       },
-      audioUrl: null,
-      voiceProfileId: null,
-      contentType: null,
     });
     renderChat({ newChat: true });
     const input = await chooseSocrates();
@@ -600,13 +588,7 @@ describe("private Agent chat", () => {
   it("ignores an old ready callback after retrying the same request ID", async () => {
     let firstHooks!: ChatStreamHooks;
     let retryHooks!: ChatStreamHooks;
-    let finishRetry!: (value: {
-      session: ChatSession;
-      audioUrl: null;
-      voiceProfileId: null;
-      contentType: null;
-      ttsErrorCode: null;
-    }) => void;
+    let finishRetry!: (value: { session: ChatSession }) => void;
     state.api.streamConversation.mockImplementationOnce((_id, _body, hooks) => {
       firstHooks = hooks;
       return Promise.reject(new Error("The first response was lost"));
@@ -667,10 +649,6 @@ describe("private Agent chat", () => {
     await act(async () =>
       finishRetry({
         session: oldReady,
-        audioUrl: null,
-        voiceProfileId: null,
-        contentType: null,
-        ttsErrorCode: null,
       }),
     );
     expect(retryHooks).toBeDefined();
@@ -947,10 +925,6 @@ describe("private Agent chat", () => {
     await act(async () =>
       finish({
         session: completedConversation,
-        audioUrl: null,
-        voiceProfileId: null,
-        contentType: null,
-        ttsErrorCode: null,
       }),
     );
     expect(input).toHaveProperty("value", "My next draft must survive");
@@ -966,13 +940,7 @@ describe("private Agent chat", () => {
     "ignores a late %s callback after New while preserving the new draft",
     async (callback) => {
       let hooks!: ChatStreamHooks;
-      let finish!: (value: {
-        session: ChatSession;
-        audioUrl: null;
-        voiceProfileId: null;
-        contentType: null;
-        ttsErrorCode: null;
-      }) => void;
+      let finish!: (value: { session: ChatSession }) => void;
       let oldRequestId = "";
       const oldReady = {
         ...conversation,
@@ -1025,10 +993,6 @@ describe("private Agent chat", () => {
       await act(async () =>
         finish({
           session: oldReady,
-          audioUrl: null,
-          voiceProfileId: null,
-          contentType: null,
-          ttsErrorCode: null,
         }),
       );
       expect(newInput).toHaveProperty("value", "My new-chat draft");
@@ -1048,13 +1012,7 @@ describe("private Agent chat", () => {
     "preserves a newer request when an old %s callback and finally arrive",
     async (callback) => {
       let oldHooks!: ChatStreamHooks;
-      let finishOld!: (value: {
-        session: ChatSession;
-        audioUrl: null;
-        voiceProfileId: null;
-        contentType: null;
-        ttsErrorCode: null;
-      }) => void;
+      let finishOld!: (value: { session: ChatSession }) => void;
       state.api.streamConversation
         .mockImplementationOnce((_id, _body, hooks) => {
           oldHooks = hooks;
@@ -1103,10 +1061,6 @@ describe("private Agent chat", () => {
         }
         finishOld({
           session: completedConversation as unknown as ChatSession,
-          audioUrl: null,
-          voiceProfileId: null,
-          contentType: null,
-          ttsErrorCode: null,
         });
       });
       expect(getChatRequest()?.requestId).toBe(newRequestId);
@@ -1334,9 +1288,6 @@ describe("private Agent chat", () => {
     await act(async () =>
       resolve({
         session: saved,
-        audioUrl: null,
-        voiceProfileId: null,
-        contentType: null,
       }),
     );
     expect(within(screen.getByRole("log")).getAllByText("Hello")).toHaveLength(
@@ -1559,7 +1510,6 @@ describe("teacher workspace access", () => {
     expect(screen.queryByRole("button", { name: "Check" })).toBeNull();
     expect(screen.queryByLabelText("DashScope API Key")).toBeNull();
     expect(screen.queryByRole("combobox", { name: /mode/i })).toBeNull();
-    expect(state.api.demoStatus).not.toHaveBeenCalled();
     expect(state.api.providerSettings).not.toHaveBeenCalled();
     expect(state.api.updateProviderSettings).not.toHaveBeenCalled();
     expect(state.api.checkProvider).not.toHaveBeenCalled();

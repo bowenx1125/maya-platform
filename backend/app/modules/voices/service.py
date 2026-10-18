@@ -339,22 +339,6 @@ def baseline_configured_voice_id(settings: Settings, agent_id: str) -> str | Non
     return mapping.get(key)
 
 
-def ready_chat_voice(db: Session, profile_id: str, settings: Settings) -> str | None:
-    """Return the decrypted external id for one ready profile.
-
-    A missing, unfinished or undecryptable profile returns None.  The caller
-    turns that into a safe TTS error and does not guess an id.
-    """
-
-    profile = db.get(VoiceProfile, profile_id)
-    if profile is None or profile.status != "ready":
-        return None
-    try:
-        return _profile_external_id(profile, settings)
-    except VoiceEncryptionError:
-        return None
-
-
 def _profile_external_id(profile: VoiceProfile, settings: Settings) -> str:
     if not profile.external_id_encrypted:
         raise VoiceEncryptionError("voice mapping unavailable")

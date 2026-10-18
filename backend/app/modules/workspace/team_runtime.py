@@ -4453,21 +4453,3 @@ def poll_team_events(
                 }
             replayed.append((event.sequence, event.kind, payload))
         return replayed, turn.state, row.active_request_id == turn.id
-
-
-def replay_team_events(
-    factory: SessionFactory,
-    conversation_id: str,
-    turn_id: str,
-    actor_id: str,
-    *,
-    after_sequence: int = 0,
-) -> list[tuple[int, str, dict[str, Any]]]:
-    events, _state, _active = poll_team_events(
-        factory,
-        conversation_id,
-        turn_id,
-        actor_id,
-        after_sequence=after_sequence,
-    )
-    return events

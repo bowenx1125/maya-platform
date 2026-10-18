@@ -66,7 +66,6 @@ const api = {
   chatAgents: vi.fn().mockResolvedValue([]),
   knowledgeSets: vi.fn().mockResolvedValue([]),
   voiceProfiles: vi.fn(),
-  updateAgentMetadata: vi.fn(),
   version: vi.fn(),
   ragPreview: vi.fn().mockResolvedValue(null),
   avatarTemplates: vi.fn().mockResolvedValue([]),
@@ -139,7 +138,6 @@ describe("Workspace Agent flow", () => {
       true,
     );
     expect(api.nextVersion).not.toHaveBeenCalled();
-    expect(api.updateAgentMetadata).not.toHaveBeenCalled();
   });
 
   it("opens a published Agent in the editor and does not save a draft before Done", async () => {
@@ -287,7 +285,6 @@ describe("Workspace Agent flow", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByText("Mutable description")).toBeNull();
     expect(api.knowledge).not.toHaveBeenCalled();
-    expect(api.updateAgentMetadata).not.toHaveBeenCalled();
     expect(api.versions).toHaveBeenCalledWith("agent-id");
   });
 

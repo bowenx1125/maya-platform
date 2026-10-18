@@ -487,23 +487,6 @@ describe("W1 teacher personal workspace", () => {
         combined_markdown: "# Private notes",
       }),
       avatarTemplates: vi.fn().mockResolvedValue([]),
-      updateAgentMetadata: vi.fn().mockImplementation(async (_id, body) => {
-        agent = personalAgent({
-          visibility: body.visibility,
-          metadata_revision: agent.metadata_revision + 1,
-        });
-        return agent;
-      }),
-      updateKnowledgeVisibility: vi
-        .fn()
-        .mockImplementation(async (_id, body) => {
-          document = {
-            ...document,
-            visibility: body.visibility,
-            authorization_epoch: document.authorization_epoch + 1,
-          };
-          return document;
-        }),
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
@@ -529,7 +512,5 @@ describe("W1 teacher personal workspace", () => {
     expect(
       screen.queryByText("Shareable; students need an explicit grant"),
     ).toBeNull();
-    expect(api.updateAgentMetadata).not.toHaveBeenCalled();
-    expect(api.updateKnowledgeVisibility).not.toHaveBeenCalled();
   });
 });

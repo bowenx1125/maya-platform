@@ -1450,53 +1450,6 @@ class DashScopeLLMAdapter:
     call = execute
     generate = execute
 
-    def _failed_response(
-        self,
-        request: LLMRequestV1,
-        status_code: int,
-        safe_code: str,
-        *,
-        finish_reason: str | None = None,
-        usage: LLMUsageV1 | None = None,
-    ) -> LLMValidatedResultV1:
-        result = _make_result(
-            request,
-            status="failed",
-            acceptance="accepted",
-            failure_kind=(
-                "provider_usage_unknown"
-                if safe_code == "provider_usage_unknown"
-                else "provider_usage_overrun"
-                if safe_code == "provider_usage_overrun"
-                else "provider_terminal"
-            ),
-            safe_error_code=safe_code,
-            http_status=status_code,
-            finish_reason=finish_reason,
-            usage=usage,
-        )
-        return result
-
-    def _failed_response_with_card(
-        self,
-        request: LLMRequestV1,
-        status_code: int,
-        safe_code: str,
-        *,
-        finish_reason: str | None = None,
-        usage: LLMUsageV1 | None = None,
-    ) -> LLMValidatedResultV1:
-        return _make_result(
-            request,
-            status="failed",
-            acceptance="accepted",
-            failure_kind="provider_terminal",
-            safe_error_code=safe_code,
-            http_status=status_code,
-            finish_reason=finish_reason,
-            usage=usage,
-        )
-
     def generate_turn(
         self,
         prompt: MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot,

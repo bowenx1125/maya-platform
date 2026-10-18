@@ -6,9 +6,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -17,7 +15,6 @@ from app.core.db import Database
 from app.core.errors import PlatformError, not_found
 from app.core.write_guard import WriteSlot
 from app.modules.auth.service import AuthContext
-from app.modules.knowledge.files import FileBoundaryError, contained_path
 
 from .models import Conversation, ConversationTurn
 from .schemas import ChatSource
@@ -47,10 +44,6 @@ def text_deltas(text: str) -> list[str]:
 def sse(event: str, payload: dict[str, object]) -> bytes:
     line = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     return f"event: {event}\ndata: {line}\n\n".encode()
-
-
-def chat_audio_relative(conversation_id: str, request_id: str) -> str:
-    return f"chat-audio/{conversation_id}/{request_id}.wav"
 
 
 @contextmanager
@@ -302,19 +295,6 @@ def _failure_code(
             return record_chat_failure(db, conversation_id, request_id, claim_revision, exc)
     except PlatformError:
         return "chat_failed"
-
-
-def chat_audio_path(settings: Settings, conversation_id: UUID, request_id: UUID) -> Path:
-    try:
-        path = contained_path(
-            settings.resolved_data_root,
-            chat_audio_relative(str(conversation_id), str(request_id)),
-        )
-    except FileBoundaryError:
-        raise not_found() from None
-    if path.is_symlink() or not path.is_file():
-        raise not_found()
-    return path
 
 
 async def stream_team_events(
