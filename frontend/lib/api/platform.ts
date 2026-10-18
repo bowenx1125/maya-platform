@@ -310,6 +310,7 @@ export type AgentChatSession = ChatSession & {
   can_send?: boolean;
 };
 export type ConversationSession = AgentChatSession | TeamChatSession;
+export type ChatAttachment = components["schemas"]["ChatAttachment"];
 export type TeamChatEntry =
   | { kind: "team"; team_id: string; team_version_id?: string | null }
   | { kind: "maya_team"; team_id: string };
@@ -1430,6 +1431,42 @@ export class PlatformApi {
 
   deleteConversation(id: string): Promise<void> {
     return this.deleteJson(`conversations/${id}`);
+  }
+
+  /** Files attached to one Team Chat. Only that Chat's owner reads them. */
+  async conversationAttachments(id: string): Promise<ChatAttachment[]> {
+    return unwrap(
+      await this.client.GET("/conversations/{conversation_id}/attachments", {
+        params: { path: { conversation_id: id } },
+      }),
+    );
+  }
+
+  async uploadConversationAttachment(
+    id: string,
+    file: File,
+  ): Promise<ChatAttachment> {
+    const form = new FormData();
+    form.append("file", file);
+    return unwrap(
+      await this.client.POST("/conversations/{conversation_id}/attachments", {
+        params: {
+          path: { conversation_id: id },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        // The real FormData keeps the browser's multipart boundary.
+        body: form as unknown as never,
+      }),
+    );
+  }
+
+  deleteConversationAttachment(
+    id: string,
+    attachmentId: string,
+  ): Promise<void> {
+    return this.deleteJson(
+      `conversations/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`,
+    );
   }
 
   /** Rename or pin a Chat; a field left out keeps its value. */

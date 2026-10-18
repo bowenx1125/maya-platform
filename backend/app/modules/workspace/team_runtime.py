@@ -1519,6 +1519,11 @@ def _start_member(
             return None
         if assessment_source_revoked:
             history = ()
+        elif not assessment_active:
+            from .attachments import attachment_history
+
+            # A live formal attempt keeps its ledger-fixed context.
+            history = (*history, *attachment_history(db, row.id, turn.created_at))
         return MemberRequest(
             actor_id=actor_id,
             conversation_id=conversation_id,

@@ -117,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0069_barrage_sequence"
+    assert ALEMBIC_HEAD == "0070_conversation_attachments"
     _assert_foreign_keys(database)
 
 
