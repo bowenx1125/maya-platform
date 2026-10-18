@@ -9304,6 +9304,59 @@
         ]
       }
     },
+    "/api/v1/learning/courses/{course_id}/my-assessment-attempts": {
+      "get": {
+        "description": "The signed-in student's own formal attempts, for the student's Record.",
+        "operationId": "listMyAssessmentAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OverviewResult"
+                  },
+                  "title": "Response Listmyassessmentattempts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List My Assessment Attempts Route",
+        "tags": [
+          "learning"
+        ]
+      }
+    },
     "/api/v1/learning/courses/{course_id}/assessment-activities": {
       "get": {
         "operationId": "listAuthorizedAssessmentActivities",

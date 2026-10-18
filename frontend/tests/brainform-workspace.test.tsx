@@ -246,6 +246,7 @@ beforeEach(() => {
     saveKnowledgeMarkdown: vi.fn(),
     createWorkspaceKnowledge: vi.fn().mockResolvedValue({ document: source }),
     courseAssessmentAttempts: vi.fn().mockResolvedValue([]),
+    myAssessmentAttempts: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -1022,34 +1023,73 @@ describe("Brainform workspace actions", () => {
     expect(state.api.courseAssessmentAttempts).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps Memory for students and never reads course results", async () => {
+  // Owner request (2026-10-18): a student's Memory became Record, listing
+  // only the student's own answers per assessment Team.
+  it("shows a student's own Record and never reads course results", async () => {
+    state.api.myAssessmentAttempts.mockResolvedValue([
+      {
+        attempt_id: "own-attempt-1",
+        user_id: state.userId,
+        student_name: "Bowen",
+        test_name: "Keynotes · Formal diagnostic questions · V1.0",
+        team_name: "Keynotes",
+        status: "in_progress",
+        phase: "answering",
+        conversation_id: "4afc794f-3333-4333-8333-333333333333",
+        group_name: "Group A",
+        started_at: "2026-10-16T02:25:00Z",
+        ended_at: null,
+        points_awarded: null,
+        points_total: null,
+        questions: [
+          {
+            number: 1,
+            prompt: "What is ren?",
+            answers: ["Humaneness"],
+            skipped: false,
+            points_awarded: null,
+            points_total: null,
+            feedback: "",
+          },
+          {
+            number: 2,
+            prompt: "What is li?",
+            answers: [],
+            skipped: false,
+            points_awarded: null,
+            points_total: null,
+            feedback: "",
+          },
+        ],
+        report_download_path: null,
+      },
+    ]);
     renderWorkspace("student");
-    expect(await screen.findByRole("heading", { name: "Memory" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Record" })).toBeNull();
+
+    expect(await screen.findByRole("heading", { name: "Record" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Memory" })).toBeNull();
+    expect(state.api.myAssessmentAttempts).toHaveBeenCalledWith("course-1");
     expect(state.api.courseAssessmentAttempts).not.toHaveBeenCalled();
-  });
+    const team = await screen.findByRole("button", {
+      name: "Open your answers for Keynotes",
+    });
+    expect(team.textContent).toContain("Attempts 1");
+    expect(team.textContent).not.toContain("Students");
+    fireEvent.click(team);
 
-  it("navigates to the current role's Agent Chat with a fresh durable Memory intent", async () => {
-    renderWorkspace();
-
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Open Socrates memory in Chatform",
-      }),
-    );
-    expect(state.routerPush).toHaveBeenCalledTimes(1);
-    const destination = new URL(
-      String(state.routerPush.mock.calls[0][0]),
-      "https://maya.test",
-    );
-    expect(destination.pathname).toBe("/student/chat");
-    expect(destination.searchParams.get("memory_actor_id")).toBe(state.userId);
-    expect(destination.searchParams.get("memory_course_id")).toBe("course-1");
-    expect(destination.searchParams.get("memory_source_kind")).toBe("agent");
-    expect(destination.searchParams.get("memory_source_id")).toBe("agent-1");
-    expect(destination.searchParams.get("memory_action_id")).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
+    expect(
+      await screen.findByRole("heading", { name: "Keynotes" }),
+    ).toBeTruthy();
+    const attempt = screen.getByRole("button", {
+      name: /^Formal diagnostic questions · V1\.0.*In progress$/,
+    });
+    expect(screen.queryByText("Average score")).toBeNull();
+    fireEvent.click(attempt);
+    expect(screen.getByRole("cell", { name: "Humaneness" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "(not answered)" })).toBeTruthy();
+    // Scores and feedback stay with the teacher.
+    expect(screen.queryByRole("columnheader", { name: "Points" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Feedback" })).toBeNull();
   });
 
   it("uses metadata rename for a filename-only edit and leaves source replacement untouched", async () => {

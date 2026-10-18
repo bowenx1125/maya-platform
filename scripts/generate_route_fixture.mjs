@@ -170,6 +170,7 @@ const implemented = new Set([
   "getKnowledgeMarkdown",
   "listAuthorizedAssessmentActivities",
   "listCourseAssessmentAttempts",
+  "listMyAssessmentAttempts",
   "listBrainformKnowledge",
   "pauseTeamConversationTurn",
   "previewTeamProviderStandingGrant",

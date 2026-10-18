@@ -2189,6 +2189,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/learning/courses/{course_id}/my-assessment-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Assessment Attempts Route
+         * @description The signed-in student's own formal attempts, for the student's Record.
+         */
+        get: operations["listMyAssessmentAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/learning/courses/{course_id}/assessment-activities": {
         parameters: {
             query?: never;
@@ -11706,6 +11726,37 @@ export interface operations {
                 attempt_id?: string | null;
                 conversation_id?: string | null;
             };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewResult"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyAssessmentAttempts: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 course_id: string;

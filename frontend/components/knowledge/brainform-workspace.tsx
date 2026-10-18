@@ -22,8 +22,6 @@ import {
   type KnowledgeDocument,
   type KnowledgeGenerationStatus,
   type KnowledgeMarkdown,
-  type MemoryEntrySource,
-  type TeamSummaryDto,
 } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import {
@@ -134,14 +132,6 @@ type StagedRagFile = { file: File; fingerprint: string };
 type KnowledgeDraft = { markdown: string; expectedVersionSeq: number };
 type BrainformKnowledgeAssetRow = BrainformKnowledge & {
   agent_ids: string[];
-};
-
-type BrainformMemoryItem = {
-  source: MemoryEntrySource;
-  name: string;
-  detail: string;
-  label:
-    "brainformMemoryAgent" | "brainformMemoryTeam" | "brainformMemoryMayaTeam";
 };
 
 type Pane =
@@ -338,30 +328,6 @@ const knowledgeDraftsByScope = new Map<
   Record<string, KnowledgeDraft>
 >();
 const generationJobsByScope = new Map<string, Record<string, string>>();
-
-function createUuid(): string {
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-  const bytes = new Uint8Array(16);
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.getRandomValues === "function"
-  ) {
-    crypto.getRandomValues(bytes);
-  } else {
-    bytes.forEach((_, index) => {
-      bytes[index] = Math.floor(Math.random() * 256);
-    });
-  }
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
-  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
-}
 
 function getRagDrafts(scope: string): Record<string, RagDraft> {
   return ragDraftsByScope.get(scope) ?? {};
@@ -625,7 +591,6 @@ function BrainformWorkspaceBody({
   const [ragDocuments, setRagDocuments] = useState<KnowledgeDocument[]>([]);
   const [knowledgeRows, setKnowledgeRows] = useState<BrainformKnowledge[]>([]);
   const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
-  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -828,27 +793,18 @@ function BrainformWorkspaceBody({
         setLoadError(null);
       }
       try {
-        const [
-          courseRows,
-          nextRag,
-          nextKnowledge,
-          nextAgents,
-          nextGroups,
-          nextTeams,
-        ] = await Promise.all([
-          api.courses(),
-          // A private Agent's files live only inside that Agent; Brainform is
-          // the group's shared library of public Agents' RAG.
-          loadRagDocuments(courseId).then((documents) =>
-            documents.filter((document) => document.visibility !== "private"),
-          ),
-          api.brainformKnowledge(courseId),
-          api.chatAgents(courseId),
-          loadGroups(courseId),
-          typeof api.teams === "function"
-            ? api.teams(courseId).catch(() => [])
-            : Promise.resolve([]),
-        ]);
+        const [courseRows, nextRag, nextKnowledge, nextAgents, nextGroups] =
+          await Promise.all([
+            api.courses(),
+            // A private Agent's files live only inside that Agent; Brainform is
+            // the group's shared library of public Agents' RAG.
+            loadRagDocuments(courseId).then((documents) =>
+              documents.filter((document) => document.visibility !== "private"),
+            ),
+            api.brainformKnowledge(courseId),
+            api.chatAgents(courseId),
+            loadGroups(courseId),
+          ]);
         if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
         const accessibleCourseNames = Object.fromEntries(
           courseRows
@@ -860,7 +816,6 @@ function BrainformWorkspaceBody({
         setKnowledgeRows(nextKnowledge);
         setChatAgents(nextAgents);
         setGroups(nextGroups);
-        setTeams(nextTeams);
         const latestJobs: Record<string, string | null> = {};
         for (const row of nextKnowledge) {
           const setId = row.canonical_set_id;
@@ -2027,21 +1982,6 @@ function BrainformWorkspaceBody({
     (knowledgeNameDraft.trim() !== markdown.knowledge_display_name ||
       markdownDraft !== markdown.markdown),
   );
-  const accessibleAgents = useMemo(() => {
-    const agentIds = new Set(
-      knowledgeRows.flatMap((row) => (row.agent_id ? [row.agent_id] : [])),
-    );
-    const rows = chatAgents.filter((agent) =>
-      agentIds.size ? agentIds.has(agent.agent_id) : true,
-    );
-    return initialAgentId
-      ? [...rows].sort(
-          (left, right) =>
-            Number(right.agent_id === initialAgentId) -
-            Number(left.agent_id === initialAgentId),
-        )
-      : rows;
-  }, [chatAgents, initialAgentId, knowledgeRows]);
   const displayedKnowledgeRows = useMemo(() => {
     const bySet = new Map<string, BrainformKnowledge[]>();
     for (const row of knowledgeRows) {
@@ -2085,48 +2025,10 @@ function BrainformWorkspaceBody({
         Number(left.agent_ids.includes(initialAgentId)),
     );
   }, [initialAgentId, knowledgeRows]);
-  const memoryItems = useMemo<BrainformMemoryItem[]>(
-    () => [
-      ...accessibleAgents.map((agent) => ({
-        source: { kind: "agent" as const, agent_id: agent.agent_id },
-        name: agent.name,
-        detail: agent.version_label,
-        label: "brainformMemoryAgent" as const,
-      })),
-      ...teams
-        .filter((team) => team.course_id === courseId)
-        .map((team) => ({
-          source: { kind: "team" as const, team_id: team.id },
-          name: team.display_name,
-          detail: "",
-          label: "brainformMemoryTeam" as const,
-        })),
-    ],
-    [accessibleAgents, courseId, teams],
-  );
-
-  // Teachers read assessment results here; students keep Memory.
-  const assessmentRecord = useAssessmentRecord(courseId, role === "teacher");
-
-  function memoryHref(source: MemoryEntrySource): string {
-    const params = new URLSearchParams({
-      memory_action_id: createUuid(),
-      memory_actor_id: user?.id ?? "",
-      memory_course_id: courseId,
-      memory_source_kind: source.kind,
-    });
-    const sourceId =
-      source.kind === "agent"
-        ? source.agent_id
-        : source.kind === "conversation"
-          ? source.id
-          : source.team_id;
-    params.set("memory_source_id", sourceId);
-    // A teacher visiting the group keeps the visit open in Chatform.
-    if (role === "teacher" && initialGroupId)
-      params.set("group_id", initialGroupId);
-    return `/${role}/chat?${params.toString()}`;
-  }
+  // Teachers read the course's assessment results here; a student reads
+  // only their own answers (owner request, 2026-10-18: Memory became Record).
+  const recordScope = role === "teacher" ? "course" : "own";
+  const assessmentRecord = useAssessmentRecord(courseId, true, recordScope);
 
   return (
     <main className={styles.page}>
@@ -2567,68 +2469,20 @@ function BrainformWorkspaceBody({
             )}
           </section>
 
-          {role === "teacher" ? (
-            <RecordSection
-              teams={assessmentRecord.teams}
-              loaded={assessmentRecord.loaded}
-              error={assessmentRecord.error}
-              onRetry={() => void assessmentRecord.reload()}
-              onOpen={(team) => setPane({ kind: "record", team })}
-            />
-          ) : (
-            <section
-              className={styles.section}
-              aria-labelledby="brainform-memory-heading"
-            >
-              <div className={styles.sectionHeading}>
-                <div>
-                  <h2
-                    id="brainform-memory-heading"
-                    data-ui-guide="brainform.memory"
-                    data-ui-guide-text={t("brainformMemoryIntro")}
-                    tabIndex={0}
-                  >
-                    Memory
-                  </h2>
-                </div>
-                <span className={styles.count}>{memoryItems.length}</span>
-              </div>
-              {memoryItems.length ? (
-                <ul className={styles.list}>
-                  {memoryItems.map((item) => (
-                    <li
-                      className={styles.row}
-                      key={`${item.source.kind}:${item.name}:${item.detail}`}
-                    >
-                      <button
-                        type="button"
-                        className={styles.rowHit}
-                        aria-label={t("brainformMemoryOpenNamed", {
-                          name: item.name,
-                        })}
-                        data-ui-guide="brainform.memory"
-                        data-ui-guide-text={t("brainformMemoryOpen")}
-                        onClick={() => router.push(memoryHref(item.source))}
-                      >
-                        <span className={styles.staticTitle}>{item.name}</span>
-                        <span className={styles.rowMeta}>
-                          {t(item.label)}
-                          {item.detail ? ` · ${item.detail}` : ""}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={styles.empty}>{t("brainformMemoryEmpty")}</p>
-              )}
-            </section>
-          )}
+          <RecordSection
+            scope={recordScope}
+            teams={assessmentRecord.teams}
+            loaded={assessmentRecord.loaded}
+            error={assessmentRecord.error}
+            onRetry={() => void assessmentRecord.reload()}
+            onOpen={(team) => setPane({ kind: "record", team })}
+          />
         </div>
       ) : null}
 
       {pane?.kind === "record" ? (
         <RecordDetail
+          scope={recordScope}
           team={assessmentRecord.teams.find((team) => team.name === pane.team)}
         />
       ) : null}

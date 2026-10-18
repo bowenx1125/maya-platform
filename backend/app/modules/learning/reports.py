@@ -971,6 +971,84 @@ def list_course_assessment_attempts(
     return rows
 
 
+def list_my_assessment_attempts(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+) -> list[dict[str, Any]]:
+    """The signed-in student's own formal attempts in a course, newest first.
+
+    Owner request (2026-10-18): the student's Brainform shows Record, like
+    the teacher's, listing the assessment Teams the student took. Every row
+    is read by ``actor_user_id`` from the session, so no request can name
+    another student. Abandoned attempts and withdrawn chats stay out. A
+    revoked or superseded publication does not hide a student's own answers.
+    Scores and feedback stay with the teacher.
+    """
+
+    if (
+        actor.user.status != "active"
+        or course_member_role(db, str(actor.user.id), course_id) is None
+    ):
+        raise not_found()
+    own_id = str(actor.user.id)
+    attempts = db.scalars(
+        select(AssessmentAttempt)
+        .join(AssessmentActivity, AssessmentActivity.id == AssessmentAttempt.activity_id)
+        .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
+        .where(
+            AssessmentAttempt.actor_user_id == own_id,
+            AssessmentAttempt.status.in_(("in_progress", "paused", "completed")),
+            AssessmentActivity.course_id == course_id,
+            Conversation.user_id == own_id,
+            Conversation.course_id == course_id,
+            Conversation.withdrawn_at.is_(None),
+        )
+        .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id)
+    ).all()
+    group = db.execute(
+        select(Group.id, Group.name)
+        .join(GroupMember, GroupMember.group_id == Group.id)
+        .where(Group.course_id == course_id, GroupMember.user_id == own_id)
+        .order_by(Group.name, Group.id)
+        .limit(1)
+    ).first()
+    results: list[dict[str, Any]] = []
+    for attempt in attempts:
+        activity = db.get(AssessmentActivity, attempt.activity_id)
+        team_version = db.get(TeamVersion, activity.team_version_id) if activity else None
+        if activity is None or team_version is None:
+            continue
+        sheet = attempt_answer_sheet(db, attempt)
+        if sheet["phase"] not in _TEACHER_PHASES:
+            continue
+        results.append(
+            {
+                "attempt_id": attempt.id,
+                "user_id": attempt.actor_user_id,
+                "student_name": sheet["student_name"],
+                "test_name": _activity_label(db, activity, team_version),
+                "team_name": team_version.display_name,
+                "status": attempt.status,
+                "phase": sheet["phase"],
+                "conversation_id": attempt.source_conversation_id,
+                "group_id": group[0] if group else None,
+                "group_name": group[1] if group else None,
+                "started_at": attempt.started_at,
+                "ended_at": attempt.completed_at,
+                "points_awarded": None,
+                "points_total": None,
+                "questions": [
+                    {**question, "points_awarded": None, "points_total": None, "feedback": ""}
+                    for question in sheet["questions"]
+                ],
+                "report_download_path": None,
+            }
+        )
+    return results
+
+
 def _latest_report_path(db: Session, actor: AuthContext, *, activity_id: str) -> str | None:
     report = db.scalar(
         select(AssessmentCourseReport)
@@ -1078,6 +1156,7 @@ __all__ = [
     "download_assessment_course_report",
     "list_authorized_assessment_activities",
     "list_course_assessment_attempts",
+    "list_my_assessment_attempts",
     "read_assessment_activity_aggregate",
 ]
 
