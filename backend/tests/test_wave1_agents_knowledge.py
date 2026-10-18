@@ -424,7 +424,7 @@ def test_wave1_upload_crash_journal_recovers_exact_tree(
             data={"target_agent_version_id": version_id, "expected_revision": "0"},
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
         )
-        assert response.status_code == 503
+        assert response.status_code == 500
     monkeypatch.setattr(knowledge_router, "saga_checkpoint", original)
 
     with database.session() as session:

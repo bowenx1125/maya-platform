@@ -472,7 +472,7 @@ def test_replacement_staged_journal_recovers_after_crash(
             data={"expected_content_hash": old_hash, "expected_index_revision": "1"},
             files={"file": ("new.md", b"# New", "text/markdown")},
         )
-        assert response.status_code == 503
+        assert response.status_code == 500
     monkeypatch.setattr(knowledge_router, "saga_checkpoint", original)
 
     with database.session() as session:
@@ -1059,7 +1059,7 @@ def test_replacement_faults_recover_without_active_orphans(
             },
             files={"file": ("replacement.md", b"# Fault replacement", "text/markdown")},
         )
-        assert failed.status_code in {409, 503}, failed.text
+        assert failed.status_code in {409, 500, 503}, failed.text
 
         if fault == "commit":
             cast(Any, database).session_factory = original_factory
@@ -1111,7 +1111,7 @@ def test_replacement_checkpoint_faults_recover_after_restart(
             },
             files={"file": ("replacement.md", b"# Checkpoint replacement", "text/markdown")},
         )
-        assert failed.status_code == 503, failed.text
+        assert failed.status_code == 500, failed.text
 
     restarted_app, restarted_database, _restarted_settings = app_factory()
     with TestClient(restarted_app, raise_server_exceptions=False):

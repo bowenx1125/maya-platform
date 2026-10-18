@@ -34,6 +34,7 @@ from app.core.db import Database
 from app.core.errors import (
     PlatformError,
     error_body,
+    is_transient_infrastructure_error,
     platform_error_handler,
     request_id_for,
     request_validation_handler,
@@ -555,20 +556,34 @@ def create_app(
         # Keep response text and details frozen/safe.  Log only the exception
         # type and request ID; exception messages can contain provider data or
         # user input and therefore must not be copied to logs or the envelope.
+        #
+        # Only transient infrastructure failures (network/timeouts, a lost or
+        # exhausted database connection) keep the retryable 503
+        # provider_unavailable answer.  Every other unexpected exception is a
+        # server bug and answers 500 internal_error, so it no longer reads as
+        # "a platform capability is temporarily unavailable".
         request_id = request_id_for(request)
+        transient = is_transient_infrastructure_error(_exc)
         logger.error(
             "Unhandled request failure request_id=%s error_type=%s",
             request_id,
             type(_exc).__name__,
             exc_info=False,
         )
-        error = PlatformError(
-            "provider_unavailable",
-            "The service is temporarily unavailable.",
-            503,
-        )
+        if transient:
+            error = PlatformError(
+                "provider_unavailable",
+                "The service is temporarily unavailable.",
+                503,
+            )
+        else:
+            error = PlatformError(
+                "internal_error",
+                "Something went wrong on the server.",
+                500,
+            )
         return JSONResponse(
-            status_code=503,
+            status_code=error.status_code,
             content=error_body(request, error),
             headers={"X-Request-ID": request_id},
         )
