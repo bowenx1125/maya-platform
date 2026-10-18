@@ -291,12 +291,15 @@ def _require_teacher(
     return debate
 
 
-def _window_for_debate(session: Session, debate_id: str) -> ClassroomInteractionWindow:
-    window = session.scalar(
-        select(ClassroomInteractionWindow).where(
-            ClassroomInteractionWindow.debate_id == debate_id,
-        )
+def _window_for_debate(
+    session: Session, debate_id: str, *, lock: bool = False
+) -> ClassroomInteractionWindow:
+    query = select(ClassroomInteractionWindow).where(
+        ClassroomInteractionWindow.debate_id == debate_id,
     )
+    if lock:
+        query = _locked(query)
+    window = session.scalar(query)
     if window is None:
         # Migration 0007 and Debate creation own window creation.  A route
         # must never silently create a second source of truth.
@@ -304,6 +307,19 @@ def _window_for_debate(session: Session, debate_id: str) -> ClassroomInteraction
     if window.status not in _SAFE_WINDOW_STATUSES:
         raise invalid_state("The classroom interaction window has an invalid state.")
     return window
+
+
+def _locked(query: Any) -> Any:
+    """Lock the interaction window row for the rest of the transaction.
+
+    The window row is the one fence between collection and close: a vote or
+    barrage and the close that freezes them all take this lock before they
+    read the window status, so a submission either lands before the freeze
+    or sees the window finalized. SQLite renders no FOR UPDATE; its BEGIN
+    IMMEDIATE writer lock already serializes these transactions.
+    """
+
+    return query.with_for_update().execution_options(populate_existing=True)
 
 
 def _participants(session: Session, debate_id: str) -> list[DebateParticipant]:
@@ -818,13 +834,20 @@ def _allocate_barrage_sequence(session: Session, window: ClassroomInteractionWin
 
     allocated = session.execute(
         update(ClassroomInteractionWindow)
-        .where(ClassroomInteractionWindow.id == window.id)
+        .where(
+            ClassroomInteractionWindow.id == window.id,
+            ClassroomInteractionWindow.token_nonce == window.token_nonce,
+            # Never number a barrage for a window that has already frozen.
+            ClassroomInteractionWindow.status == "open",
+        )
         .values(barrage_sequence=ClassroomInteractionWindow.barrage_sequence + 1)
         .returning(ClassroomInteractionWindow.barrage_sequence)
         .execution_options(synchronize_session=False)
     ).scalar_one_or_none()
     if allocated is None:
-        raise conflict("stale_interaction", "The classroom interaction state is stale.")
+        raise PlatformError(
+            "interaction_finalized", "Classroom interaction collection has ended.", 410
+        )
     sequence = int(allocated)
     # Assign the RETURNING value so a later flush cannot write a stale counter.
     window.barrage_sequence = sequence
@@ -984,7 +1007,7 @@ class InteractionService:
                 key=idempotency_key,
                 request_hash=request_hash,
             )
-            window = _window_for_debate(session, debate_id)
+            window = _window_for_debate(session, debate_id, lock=True)
             if replay is not None:
                 result = _teacher_projection(session, self.settings, window)
                 session.commit()
@@ -1206,9 +1229,11 @@ class InteractionService:
             for attempt in range(_EVENT_SEQUENCE_ATTEMPTS):
                 try:
                     window = session.scalar(
-                        select(ClassroomInteractionWindow).where(
-                            ClassroomInteractionWindow.id == str(parsed.window_id),
-                            ClassroomInteractionWindow.token_nonce == parsed.nonce,
+                        _locked(
+                            select(ClassroomInteractionWindow).where(
+                                ClassroomInteractionWindow.id == str(parsed.window_id),
+                                ClassroomInteractionWindow.token_nonce == parsed.nonce,
+                            )
                         )
                     )
                     if window is None:
@@ -1332,9 +1357,11 @@ class InteractionService:
             for attempt in range(_BARRAGE_SEQUENCE_ATTEMPTS):
                 try:
                     window = session.scalar(
-                        select(ClassroomInteractionWindow).where(
-                            ClassroomInteractionWindow.id == str(parsed.window_id),
-                            ClassroomInteractionWindow.token_nonce == parsed.nonce,
+                        _locked(
+                            select(ClassroomInteractionWindow).where(
+                                ClassroomInteractionWindow.id == str(parsed.window_id),
+                                ClassroomInteractionWindow.token_nonce == parsed.nonce,
+                            )
                         )
                     )
                     if window is None:
