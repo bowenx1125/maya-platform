@@ -33,6 +33,7 @@ import {
   type TeamMemberResult,
   type TeamSummaryDto,
 } from "../lib/api";
+import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import {
   abandonChatRequest,
   adoptPendingChatRequest,
@@ -426,6 +427,7 @@ function upsertTeamResult(
 
 export function AgentChat() {
   const { api, identityGeneration, user } = useSession();
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const role = pathname.startsWith("/teacher/") ? "teacher" : "student";
@@ -456,6 +458,7 @@ export function AgentChat() {
       courseId={courseId}
       actorId={user?.id ?? ""}
       scopeKey={scopeKey}
+      cacheIdentity={cacheIdentity}
       role={role}
     />
   );
@@ -466,12 +469,15 @@ function AgentChatScope({
   courseId,
   actorId,
   scopeKey,
+  cacheIdentity,
   role,
 }: {
   api: PlatformApi;
   courseId: string;
   actorId: string;
   scopeKey: string;
+  /** Shared page-load cache identity (user id + session generation). */
+  cacheIdentity: string | null;
   role: "teacher" | "student";
 }) {
   const t = useT();
@@ -848,7 +854,14 @@ function AgentChatScope({
       : typeof api.conversationSessions === "function"
         ? api.conversationSessions()
         : api.conversations();
-    void Promise.all([api.chatAgents(courseId), historyRequest])
+    // The catalog is a shared, briefly cached read; history is always read
+    // fresh because pending sends are reconciled against it.
+    void Promise.all([
+      cachedCall(api, cacheIdentity, "chatAgents", [courseId], () =>
+        api.chatAgents(courseId),
+      ),
+      historyRequest,
+    ])
       .then(([catalog, allHistory]) => {
         if (!active || !isChatRequestScopeActive(scopeKey)) return;
         setAgents(catalog);
@@ -1024,6 +1037,7 @@ function AgentChatScope({
     };
   }, [
     api,
+    cacheIdentity,
     courseId,
     invalidMemoryRoute,
     newChatRoute,
@@ -1034,22 +1048,27 @@ function AgentChatScope({
   const loadTeamChoices = useCallback(async () => {
     const [teams, mayaTeams] = await Promise.all([
       typeof api.teams === "function"
-        ? api.teams(courseId).catch(() => [])
+        ? cachedCall(api, cacheIdentity, "teams", [courseId, undefined], () =>
+            api.teams(courseId),
+          ).catch(() => [])
         : Promise.resolve([]),
       typeof api.mayaTeams === "function"
-        ? api.mayaTeams(courseId).catch(() => [])
+        ? cachedCall(api, cacheIdentity, "mayaTeams", [courseId], () =>
+            api.mayaTeams(courseId),
+          ).catch(() => [])
         : Promise.resolve([]),
     ]);
     if (!isChatRequestScopeActive(scopeKey)) return;
     setTeamChoices(teams);
     setMayaChoices(mayaTeams);
-  }, [api, courseId, scopeKey]);
+  }, [api, cacheIdentity, courseId, scopeKey]);
 
+  // Read beside the catalog and history, not after them: one round trip.
   useEffect(() => {
-    if (loadedScope !== scopeKey) return;
+    if (!scopeKey) return;
     const timer = window.setTimeout(() => void loadTeamChoices(), 0);
     return () => window.clearTimeout(timer);
-  }, [loadTeamChoices, loadedScope, newChatRoute, scopeKey]);
+  }, [loadTeamChoices, newChatRoute, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || loadedScope !== scopeKey) return;
