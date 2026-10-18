@@ -189,3 +189,25 @@ def test_an_ordinary_busy_chat_has_no_scoring_reason(
             assert "reason" not in error.details
         else:
             raise AssertionError("expected chat_busy")
+
+
+def test_executor_turn_position_matches_the_revision_it_claims(
+    client: TestClient, database: Any, app_bundle: Any
+) -> None:
+    """The server-run turn takes revision + 1, so the next student turn cannot reuse it."""
+
+    settings = app_bundle[2]
+    conversation_id, scoring_turn = _scoring_chat(database, settings)
+    with database.session() as db:
+        row = db.get(Conversation, conversation_id)
+        turn = db.get(ConversationTurn, scoring_turn)
+        assert row is not None and turn is not None
+        assert turn.position == row.revision
+        positions = list(
+            db.scalars(
+                select(ConversationTurn.position).where(
+                    ConversationTurn.conversation_id == conversation_id
+                )
+            )
+        )
+        assert len(positions) == len(set(positions))
