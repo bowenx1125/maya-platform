@@ -370,8 +370,11 @@ class Settings(BaseSettings):
     adaptive_admission_hold_mem_mb: int = Field(
         default=1100, ge=0, le=1_000_000, validation_alias="ADAPTIVE_ADMISSION_HOLD_MEM_MB"
     )
+    # Of the 256-thread sync pool (main.ANYIO_THREAD_TOKENS): 0.45 holds at
+    # ~115 borrowed threads, where 0.9 of the old 128-thread pool did. At 0.9
+    # of 256 it would only trip once the 200-place queue was nearly full.
     adaptive_admission_hold_threadpool_ratio: float = Field(
-        default=0.9, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_HOLD_THREADPOOL_RATIO"
+        default=0.45, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_HOLD_THREADPOOL_RATIO"
     )
     # Layer-1 queue depth; past it callers get an immediate retryable 503.
     adaptive_admission_queue_max: int = Field(
