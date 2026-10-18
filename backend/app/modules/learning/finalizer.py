@@ -35,6 +35,8 @@ MAX_STEPS = 4
 # the student chat sat at 40% or 75% until a restart. A stalled chain is run
 # again after these delays; the student's next message also wakes it.
 RETRY_DELAYS_SECONDS = (30.0, 120.0, 600.0)
+# Refusals that ran nothing; the chain is retried like a stalled step.
+BUSY_CODES = frozenset({"write_pressure", "adaptive_admission_busy", "llm_admission_busy"})
 # Off the startup path too: attempts still waiting are swept this often.
 SWEEP_SECONDS = 300.0
 
@@ -75,6 +77,7 @@ def drive_assessment(
 ) -> bool:
     """Run the waiting executors; True when a step ran and did not save."""
 
+    from app.core.write_guard import reserve_write_slot
     from app.modules.workspace.team_runtime import (
         claim_assessment_executor_turn,
         execute_team_turn,
@@ -145,16 +148,25 @@ def drive_assessment(
             db.expunge(sign_in)
             db.expunge(user)
             actor = AuthContext("", sign_in, user, "")
-            claim = claim_assessment_executor_turn(
-                db,
-                settings,
-                conversation_id=row.id,
-                participant_id=participant.id,
-                actor_context=actor,
-            )
+            # The write slot comes before the claim: a busy refusal must not
+            # leave a claimed executor turn holding the conversation.
+            db.commit()  # hold no pooled connection while queued
+            slot = reserve_write_slot(settings)
+            try:
+                claim = claim_assessment_executor_turn(
+                    db,
+                    settings,
+                    conversation_id=row.id,
+                    participant_id=participant.id,
+                    actor_context=actor,
+                )
+            except BaseException:
+                slot.release()
+                raise
             if claim is None:
+                slot.release()
                 return False
-        execute_team_turn(factory, claim)
+        execute_team_turn(factory, claim, slot)
     return False
 
 
@@ -197,6 +209,9 @@ class AssessmentFinalizer:
         try:
             stalled = drive_assessment(self._factory, self._settings(), conversation_id)
         except PlatformError as error:
+            # A busy refusal (the write guard's queue, admission) ran nothing:
+            # retry later like a step that did not save.
+            stalled = error.code in BUSY_CODES
             LOGGER.warning(
                 "Assessment finishing stopped conversation_id=%s code=%s",
                 conversation_id,
