@@ -53,6 +53,7 @@ def _validated_activity(
     *,
     course_id: str,
     activity_id: str,
+    allow_revoked: bool = False,
 ) -> AssessmentActivity:
     if (
         actor.user.status != "active"
@@ -84,7 +85,11 @@ def _validated_activity(
             # RAG edit, a Team edit) retains its old publication, and its
             # students' results vanished from every teacher read. A retained
             # version's results stay readable; only a revoked one is gone.
-            CourseTeamPublication.state.in_(("published", "retained")),
+            # Owner request (2026-10-18): publishing V3 revoked V1/V2 and
+            # hid their attempts from Record. Record reads them as revoked.
+            CourseTeamPublication.state.in_(
+                ("published", "retained", "revoked") if allow_revoked else ("published", "retained")
+            ),
             CourseTeamPublication.publisher_user_id == activity.publisher_user_id,
             Team.id == activity.team_id,
             Team.course_id == course_id,
@@ -200,6 +205,7 @@ def _authorized_activities(
     actor: AuthContext,
     *,
     course_id: str,
+    include_revoked: bool = False,
 ) -> list[tuple[AssessmentActivityListItem, AssessmentActivity]]:
     """Each current published activity, validated once, with its list item."""
 
@@ -217,6 +223,7 @@ def _authorized_activities(
                 actor,
                 course_id=course_id,
                 activity_id=row.id,
+                allow_revoked=include_revoked,
             )
         except PlatformError:
             continue
@@ -846,11 +853,16 @@ def _attempt_rows(
     """
 
     results: list[dict[str, Any]] = []
-    for item, activity in _authorized_activities(db, actor, course_id=course_id):
+    for item, activity in _authorized_activities(
+        db, actor, course_id=course_id, include_revoked=True
+    ):
         report_path: str | None = None
         report_read = False
+        publication = db.get(CourseTeamPublication, activity.publication_id)
+        team_version = db.get(TeamVersion, activity.team_version_id)
         for attempt in _eligible_attempts(db, activity):
-            if attempt.status == "abandoned":
+            # A deleted chat abandons its attempt; a teacher's delete hides it.
+            if attempt.status == "abandoned" or attempt.teacher_hidden_at is not None:
                 continue
             group = group_of(attempt.actor_user_id)
             if group is None or (wanted is not None and not wanted(attempt)):
@@ -889,6 +901,10 @@ def _attempt_rows(
                     "points_total": sum(totals) if totals else None,
                     "questions": sheet["questions"],
                     "report_download_path": report_path,
+                    "publication_state": publication.state if publication else None,
+                    "version_label": (
+                        team_version_label(team_version.version_seq) if team_version else None
+                    ),
                 }
             )
     results.sort(key=lambda row: row["started_at"], reverse=True)
@@ -999,6 +1015,8 @@ def list_my_assessment_attempts(
         .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
         .where(
             AssessmentAttempt.actor_user_id == own_id,
+            # A teacher's Record delete hides the attempt here too.
+            AssessmentAttempt.teacher_hidden_at.is_(None),
             AssessmentAttempt.status.in_(("in_progress", "paused", "completed")),
             AssessmentActivity.course_id == course_id,
             Conversation.user_id == own_id,
@@ -1047,6 +1065,43 @@ def list_my_assessment_attempts(
             }
         )
     return results
+
+
+def hide_course_assessment_attempt(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+    attempt_id: str,
+) -> None:
+    """A course teacher deletes an attempt from Record: a soft delete.
+
+    Owner request (2026-10-18). Only the attempt is marked; its answers,
+    chat, ledger and learning records stay, so it can be restored. Only a
+    teacher of the attempt's course, on a student of that course, may do it.
+    Repeating the delete changes nothing.
+    """
+
+    _require_course_teacher(db, actor, course_id)
+    attempt = db.get(AssessmentAttempt, attempt_id)
+    activity = db.get(AssessmentActivity, attempt.activity_id) if attempt else None
+    if (
+        attempt is None
+        or activity is None
+        or activity.course_id != course_id
+        or course_member_role(db, attempt.actor_user_id, course_id) != "student"
+    ):
+        raise not_found()
+    if attempt.teacher_hidden_at is None:
+        db.execute(
+            update(AssessmentAttempt)
+            .where(
+                AssessmentAttempt.id == attempt.id,
+                AssessmentAttempt.teacher_hidden_at.is_(None),
+            )
+            .values(teacher_hidden_at=_now(), teacher_hidden_by_user_id=str(actor.user.id))
+        )
+        db.commit()
 
 
 def _latest_report_path(db: Session, actor: AuthContext, *, activity_id: str) -> str | None:
@@ -1155,6 +1210,7 @@ __all__ = [
     "create_assessment_course_report",
     "download_assessment_course_report",
     "list_authorized_assessment_activities",
+    "hide_course_assessment_attempt",
     "list_course_assessment_attempts",
     "list_my_assessment_attempts",
     "read_assessment_activity_aggregate",

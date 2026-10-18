@@ -140,6 +140,10 @@ class OverviewResult(BaseModel):
     points_total: float | None = None
     questions: list[OverviewQuestion] = Field(default_factory=list)
     report_download_path: str | None = None
+    # The Team version the attempt ran on, and whether that version is still
+    # published, retained after a newer one, or revoked.
+    publication_state: Literal["published", "retained", "revoked"] | None = None
+    version_label: str | None = None
 
 
 class OverviewEvent(BaseModel):

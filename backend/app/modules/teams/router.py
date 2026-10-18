@@ -26,7 +26,6 @@ from app.modules.teams.schemas import (
     SaveTeamVersionRequest,
     TeamDetail,
     TeamSummary,
-    TeamVersionDTO,
 )
 from fastapi import APIRouter, Depends, Header, Query, Response
 from pydantic import BaseModel
@@ -212,20 +211,6 @@ def get_team(
     db: Session = Depends(get_db),
 ) -> TeamDetail:
     return service.get_team_detail(db, context, str(team_id))
-
-
-@router.get(
-    "/teams/{team_id}/versions",
-    response_model=list[TeamVersionDTO],
-    operation_id="listTeamVersions",
-    responses={404: {"model": Error, "description": "Team not found."}},
-)
-def list_team_versions(
-    team_id: UUID,
-    context: AuthContext = Depends(require_auth),
-    db: Session = Depends(get_db),
-) -> list[TeamVersionDTO]:
-    return service.get_team_versions(db, context, str(team_id))
 
 
 @router.put(

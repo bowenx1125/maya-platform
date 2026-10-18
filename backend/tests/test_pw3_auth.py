@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -158,13 +159,26 @@ def test_private_catalog_secure_read_detects_same_size_rewrite(
     target = tmp_path / "private.md"
     target.write_text(ACCOUNT_TABLE, encoding="utf-8")
     target.chmod(0o600)
+    # A same-size rewrite is only visible through mtime/ctime. On filesystems
+    # with coarse timestamps a rewrite in the same tick as this write looks
+    # unchanged, so the original carries an older mtime, as a real catalog does.
+    os.utime(target, ns=(1_700_000_000_000_000_000, 1_700_000_000_000_000_000))
+    catalog_inode = target.stat().st_ino
+    reader = threading.get_ident()
     original_read = os.read
     changed = False
 
     def read_and_rewrite(descriptor: int, size: int) -> bytes:
         nonlocal changed
         content = original_read(descriptor, size)
-        if content and not changed:
+        # os.read is patched process-wide: rewrite only on the catalog read
+        # itself, never on another thread's or another file's read.
+        if (
+            content
+            and not changed
+            and threading.get_ident() == reader
+            and os.fstat(descriptor).st_ino == catalog_inode
+        ):
             changed = True
             replacement = ACCOUNT_TABLE.replace("Demo Teacher", "Demo Scholar", 1)
             assert len(replacement) == len(ACCOUNT_TABLE)

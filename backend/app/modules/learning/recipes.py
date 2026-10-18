@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, not_found
 from app.core.models import AgentVersion, CourseMember, KnowledgeDocument, StoredFile
+from app.core.read_memo import memoized
 from app.core.sqlutil import dialect_insert
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.models import (
@@ -519,6 +520,26 @@ def ensure_assessment_activity(
     student request never chooses any of those identities.
     """
 
+    def check() -> str | None:
+        activity = _ensure_assessment_activity(db, actor, conversation_id)
+        return activity.id if activity is not None else None
+
+    key = ("assessment_activity", str(actor.user.id), actor.user.status, str(conversation_id))
+    activity_id = memoized(db, key, check, across_sessions=True)
+    if activity_id is None:
+        return None
+    # The check is shared by the request; the row is always this Session's own.
+    activity = db.get(AssessmentActivity, activity_id)
+    if activity is None:
+        return _ensure_assessment_activity(db, actor, conversation_id)
+    return activity
+
+
+def _ensure_assessment_activity(
+    db: Session,
+    actor: AuthContext,
+    conversation_id: str,
+) -> AssessmentActivity | None:
     conversation, _provenance = _authorized_provenance(db, actor, conversation_id)
     if (
         conversation.entry_kind != "maya_team"

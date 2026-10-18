@@ -471,6 +471,292 @@
         ]
       }
     },
+    "/api/v1/conversations/{conversation_id}/attachments": {
+      "get": {
+        "operationId": "listConversationAttachments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatAttachment"
+                  },
+                  "title": "Response Listconversationattachments",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List Conversation Attachments",
+        "tags": [
+          "Chat"
+        ]
+      },
+      "post": {
+        "operationId": "uploadConversationAttachment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatAttachment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Upload Conversation Attachment",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/attachments/{attachment_id}": {
+      "delete": {
+        "operationId": "deleteConversationAttachment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attachment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Delete Conversation Attachment",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/reports/{report_id}": {
+      "get": {
+        "operationId": "downloadConversationReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Download Conversation Report",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
     "/api/v1/conversations/{conversation_id}/messages:stream": {
       "post": {
         "operationId": "streamConversationMessage",
@@ -8261,58 +8547,6 @@
         }
       }
     },
-    "/api/v1/teams/{team_id}/versions": {
-      "get": {
-        "tags": [
-          "teams"
-        ],
-        "summary": "List Team Versions",
-        "operationId": "listTeamVersions",
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "team_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Team Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TeamVersionDTO"
-                  },
-                  "title": "Response Listteamversions"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Team not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/conversations/memory-entry": {
       "post": {
         "description": "Resolve one durable Brainform navigation intent; sending remains explicit Chat work.",
@@ -9064,74 +9298,6 @@
         ]
       }
     },
-    "/api/v1/learning/activities/{activity_id}/reports": {
-      "post": {
-        "operationId": "createAssessmentCourseReport",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "activity_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Activity Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAssessmentReportRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssessmentCourseReportReceipt"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          }
-        },
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Create Assessment Report Route",
-        "tags": [
-          "learning"
-        ]
-      }
-    },
     "/api/v1/learning/attempts/{attempt_id}/actions": {
       "post": {
         "operationId": "applyAssessmentLifecycleAction",
@@ -9304,6 +9470,68 @@
         ]
       }
     },
+    "/api/v1/learning/courses/{course_id}/assessment-attempts/{attempt_id}": {
+      "delete": {
+        "description": "A course teacher deletes an attempt from Record. It is only hidden.",
+        "operationId": "deleteCourseAssessmentAttempt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attempt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attempt Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "minLength": 32,
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Delete Course Assessment Attempt Route",
+        "tags": [
+          "learning"
+        ]
+      }
+    },
     "/api/v1/learning/courses/{course_id}/my-assessment-attempts": {
       "get": {
         "description": "The signed-in student's own formal attempts, for the student's Record.",
@@ -9352,58 +9580,6 @@
           }
         ],
         "summary": "List My Assessment Attempts Route",
-        "tags": [
-          "learning"
-        ]
-      }
-    },
-    "/api/v1/learning/courses/{course_id}/assessment-activities": {
-      "get": {
-        "operationId": "listAuthorizedAssessmentActivities",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "course_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Course Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/AssessmentActivityListItem"
-                  },
-                  "title": "Response Listauthorizedassessmentactivities",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          }
-        },
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "List Assessment Activities Route",
         "tags": [
           "learning"
         ]
@@ -10245,6 +10421,55 @@
           }
         },
         "title": "UpdateChat",
+        "type": "object"
+      },
+      "ChatAttachment": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0,
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "text_chars": {
+            "minimum": 0,
+            "title": "Text Chars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "filename",
+          "media_type",
+          "size_bytes",
+          "text_chars",
+          "created_at"
+        ],
+        "title": "ChatAttachment",
         "type": "object"
       },
       "ChatSource": {
@@ -11912,6 +12137,24 @@
             }
           },
           "report_download_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publication_state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "published",
+              "retained",
+              "revoked",
+              null
+            ]
+          },
+          "version_label": {
             "type": [
               "string",
               "null"
@@ -17965,76 +18208,6 @@
         ],
         "title": "TeamSummary"
       },
-      "TeamVersionDTO": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
-          "team_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Team Id"
-          },
-          "version_seq": {
-            "type": "integer",
-            "minimum": 1,
-            "title": "Version Seq"
-          },
-          "display_name": {
-            "type": "string",
-            "title": "Display Name"
-          },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "private",
-              "public"
-            ],
-            "title": "Visibility"
-          },
-          "authorization_epoch": {
-            "type": "integer",
-            "minimum": 0,
-            "title": "Authorization Epoch"
-          },
-          "members": {
-            "items": {
-              "$ref": "#/components/schemas/TeamMemberDTO"
-            },
-            "type": "array",
-            "title": "Members"
-          },
-          "shared_knowledge_set_ids": {
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "type": "array",
-            "title": "Shared Knowledge Set Ids"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "team_id",
-          "version_seq",
-          "display_name",
-          "visibility",
-          "authorization_epoch",
-          "members",
-          "shared_knowledge_set_ids",
-          "created_at"
-        ],
-        "title": "TeamVersionDTO"
-      },
       "PublishedAgentAuthor": {
         "properties": {
           "avatar": {
@@ -18133,52 +18306,6 @@
           "version_id"
         ],
         "title": "AgentChatEntry",
-        "type": "object"
-      },
-      "AssessmentActivityListItem": {
-        "additionalProperties": false,
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "team_name": {
-            "minLength": 1,
-            "title": "Team Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "team_name",
-          "created_at"
-        ],
-        "title": "AssessmentActivityListItem",
-        "type": "object"
-      },
-      "AssessmentCourseReportReceipt": {
-        "additionalProperties": false,
-        "properties": {
-          "report": {
-            "$ref": "#/components/schemas/AssessmentCourseReportDTO"
-          }
-        },
-        "required": [
-          "report"
-        ],
-        "title": "AssessmentCourseReportReceipt",
         "type": "object"
       },
       "AssessmentLifecycleActionRequest": {
@@ -18365,21 +18492,6 @@
           "can_edit"
         ],
         "title": "BrainformKnowledgeSummary",
-        "type": "object"
-      },
-      "CreateAssessmentReportRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "client_event_id": {
-            "format": "uuid",
-            "title": "Client Event Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "client_event_id"
-        ],
-        "title": "CreateAssessmentReportRequest",
         "type": "object"
       },
       "KnowledgeMarkdownDocument": {
@@ -19102,60 +19214,6 @@
         "title": "AssessmentAnswerDTO",
         "type": "object"
       },
-      "AssessmentCourseReportDTO": {
-        "additionalProperties": false,
-        "properties": {
-          "activity_id": {
-            "format": "uuid",
-            "title": "Activity Id",
-            "type": "string"
-          },
-          "content": {
-            "$ref": "#/components/schemas/AssessmentReportContent"
-          },
-          "course_id": {
-            "format": "uuid",
-            "title": "Course Id",
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "revision_id": {
-            "format": "uuid",
-            "title": "Revision Id",
-            "type": "string"
-          },
-          "revision_seq": {
-            "minimum": 1,
-            "title": "Revision Seq",
-            "type": "integer"
-          },
-          "source_hash": {
-            "title": "Source Hash",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "course_id",
-          "activity_id",
-          "revision_id",
-          "revision_seq",
-          "source_hash",
-          "content",
-          "created_at"
-        ],
-        "title": "AssessmentCourseReportDTO",
-        "type": "object"
-      },
       "AssessmentRuntimeContext": {
         "additionalProperties": false,
         "properties": {
@@ -19551,101 +19609,6 @@
         "title": "AssessmentProgressProjection",
         "type": "object"
       },
-      "AssessmentReportContent": {
-        "additionalProperties": false,
-        "properties": {
-          "abandoned_count": {
-            "minimum": 0,
-            "title": "Abandoned Count",
-            "type": "integer"
-          },
-          "activity_name": {
-            "minLength": 1,
-            "title": "Activity Name",
-            "type": "string"
-          },
-          "actors": {
-            "items": {
-              "$ref": "#/components/schemas/AssessmentActorReport"
-            },
-            "title": "Actors",
-            "type": "array"
-          },
-          "attempt_count": {
-            "minimum": 0,
-            "title": "Attempt Count",
-            "type": "integer"
-          },
-          "completed_count": {
-            "minimum": 0,
-            "title": "Completed Count",
-            "type": "integer"
-          },
-          "course_name": {
-            "minLength": 1,
-            "title": "Course Name",
-            "type": "string"
-          },
-          "effective_answer_count": {
-            "minimum": 0,
-            "title": "Effective Answer Count",
-            "type": "integer"
-          },
-          "generated_at": {
-            "format": "date-time",
-            "title": "Generated At",
-            "type": "string"
-          },
-          "in_progress_count": {
-            "minimum": 0,
-            "title": "In Progress Count",
-            "type": "integer"
-          },
-          "paused_count": {
-            "minimum": 0,
-            "title": "Paused Count",
-            "type": "integer"
-          },
-          "raw_answer_count": {
-            "minimum": 0,
-            "title": "Raw Answer Count",
-            "type": "integer"
-          },
-          "skipped_count": {
-            "minimum": 0,
-            "title": "Skipped Count",
-            "type": "integer"
-          },
-          "student_count": {
-            "minimum": 0,
-            "title": "Student Count",
-            "type": "integer"
-          },
-          "team_name": {
-            "minLength": 1,
-            "title": "Team Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "course_name",
-          "team_name",
-          "activity_name",
-          "generated_at",
-          "student_count",
-          "attempt_count",
-          "completed_count",
-          "abandoned_count",
-          "in_progress_count",
-          "paused_count",
-          "effective_answer_count",
-          "raw_answer_count",
-          "skipped_count",
-          "actors"
-        ],
-        "title": "AssessmentReportContent",
-        "type": "object"
-      },
       "AssessmentRuntimeQuestion": {
         "additionalProperties": false,
         "description": "The visible question projection intentionally omits Rubric and reference answer.",
@@ -19783,103 +19746,6 @@
           "safe_error_code"
         ],
         "title": "TeamMemberResult",
-        "type": "object"
-      },
-      "AssessmentActorReport": {
-        "additionalProperties": false,
-        "properties": {
-          "abandoned_count": {
-            "minimum": 0,
-            "title": "Abandoned Count",
-            "type": "integer"
-          },
-          "attempt_count": {
-            "minimum": 0,
-            "title": "Attempt Count",
-            "type": "integer"
-          },
-          "boundary_summary": {
-            "title": "Boundary Summary",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "completed_count": {
-            "minimum": 0,
-            "title": "Completed Count",
-            "type": "integer"
-          },
-          "effective_answer_count": {
-            "minimum": 0,
-            "title": "Effective Answer Count",
-            "type": "integer"
-          },
-          "in_progress_count": {
-            "minimum": 0,
-            "title": "In Progress Count",
-            "type": "integer"
-          },
-          "learner_ref": {
-            "minLength": 1,
-            "title": "Learner Ref",
-            "type": "string"
-          },
-          "mastery_evidence": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Mastery Evidence",
-            "type": "array"
-          },
-          "not_yet_verified": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Not Yet Verified",
-            "type": "array"
-          },
-          "paused_count": {
-            "minimum": 0,
-            "title": "Paused Count",
-            "type": "integer"
-          },
-          "raw_answer_count": {
-            "minimum": 0,
-            "title": "Raw Answer Count",
-            "type": "integer"
-          },
-          "skipped_count": {
-            "minimum": 0,
-            "title": "Skipped Count",
-            "type": "integer"
-          },
-          "student_name": {
-            "minLength": 1,
-            "title": "Student Name",
-            "type": "string"
-          },
-          "weak_points": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Weak Points",
-            "type": "array"
-          }
-        },
-        "required": [
-          "student_name",
-          "learner_ref",
-          "attempt_count",
-          "completed_count",
-          "abandoned_count",
-          "in_progress_count",
-          "paused_count",
-          "effective_answer_count",
-          "raw_answer_count",
-          "skipped_count"
-        ],
-        "title": "AssessmentActorReport",
         "type": "object"
       },
       "AssessmentOwnerAnswerDTO": {

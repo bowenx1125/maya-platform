@@ -49,6 +49,7 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.core.read_memo import memoized
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
 from app.modules.agents.markdown import markdown_hash
@@ -238,11 +239,16 @@ def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) 
 
 
 def course_member_role(db: Session, user_id: str, course_id: str) -> str | None:
-    return db.scalar(
-        select(CourseMember.role).where(
-            CourseMember.user_id == user_id,
-            CourseMember.course_id == course_id,
-        )
+    return memoized(
+        db,
+        ("course_member_role", str(user_id), str(course_id)),
+        lambda: db.scalar(
+            select(CourseMember.role).where(
+                CourseMember.user_id == user_id,
+                CourseMember.course_id == course_id,
+            )
+        ),
+        across_sessions=True,
     )
 
 

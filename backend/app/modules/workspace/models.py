@@ -185,6 +185,56 @@ class ConversationSharedSet(Base):
     )
 
 
+class ConversationAttachment(Base):
+    """A file the Chat owner attached. Only that owner and that Chat use it."""
+
+    __tablename__ = "conversation_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    relative_path: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
+    # Decoded once at upload so every member call reads the same text.
+    text_content: Mapped[str] = mapped_column(Text, nullable=False)
+    text_chars: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "size_bytes >= 0 AND text_chars >= 0", name="ck_conversation_attachment_sizes"
+        ),
+        Index("ix_conversation_attachments_conversation", "conversation_id", "created_at"),
+    )
+
+
+class ChatReport(Base):
+    """An HTML report a Team member saved for the Chat owner, one per Tool call."""
+
+    __tablename__ = "chat_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # The Tool call's stable event id: a replayed call returns the same report.
+    client_event_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    # Structured content only; the server renders and escapes HTML on download.
+    content_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (Index("ix_chat_reports_conversation", "conversation_id", "created_at"),)
+
+
 class ConversationTurn(Base):
     __tablename__ = "agent_conversation_turns"
 

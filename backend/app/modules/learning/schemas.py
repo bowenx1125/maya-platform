@@ -301,10 +301,6 @@ class AssessmentActivityListItem(StrictModel):
     created_at: datetime
 
 
-class CreateAssessmentReportRequest(StrictModel):
-    client_event_id: UUID
-
-
 class AssessmentReportDownload(StrictModel):
     filename: str
     content_type: Literal["text/markdown; charset=utf-8"]
@@ -323,7 +319,6 @@ __all__ = [
     "BoundarySummaryContent",
     "AssessmentCourseReportDTO",
     "AssessmentCourseReportReceipt",
-    "CreateAssessmentReportRequest",
     "AssessmentReportContent",
     "AssessmentReportDownload",
     "AssessmentClassification",

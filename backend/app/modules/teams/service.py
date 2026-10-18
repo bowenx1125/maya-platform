@@ -23,6 +23,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     _agent_workspace_role,
@@ -57,7 +58,6 @@ from app.modules.teams.schemas import (
     TeamMemberDTO,
     TeamMemberInput,
     TeamSummary,
-    TeamVersionDTO,
 )
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -811,31 +811,6 @@ def get_team_detail(db: Session, actor: AuthContext | str, team_id: str) -> Team
     )
 
 
-def get_team_versions(db: Session, actor: AuthContext | str, team_id: str) -> list[TeamVersionDTO]:
-    team = _get_team_for_owner(db, actor, team_id)
-    versions = db.scalars(
-        select(TeamVersion)
-        .where(TeamVersion.team_id == team.id)
-        .order_by(TeamVersion.version_seq.desc())
-    ).all()
-    return [
-        TeamVersionDTO(
-            id=_uid(version.id),
-            team_id=_uid(team.id),
-            version_seq=version.version_seq,
-            display_name=version.display_name,
-            visibility=version.visibility,  # type: ignore[arg-type]
-            authorization_epoch=version.authorization_epoch,
-            members=[_team_member_dto(row) for row in _member_rows(db, version.id)],
-            shared_knowledge_set_ids=[
-                _uid(row.knowledge_set_id) for row in _set_rows(db, version.id)
-            ],
-            created_at=version.created_at,
-        )
-        for version in versions
-    ]
-
-
 def _create_version_rows(
     db: Session,
     *,
@@ -1526,6 +1501,21 @@ def resolve_frozen_chat_selection(
 ) -> None:
     """Recheck an existing frozen Team selection without selecting its new head."""
 
+    targets = None if target_binding_ids is None else frozenset(target_binding_ids)
+    memoized(
+        db,
+        ("frozen_chat_selection_valid", _actor_id(actor), repr(frozen_selection), targets),
+        lambda: _resolve_frozen_chat_selection(db, actor, frozen_selection, target_binding_ids),
+        across_sessions=True,
+    )
+
+
+def _resolve_frozen_chat_selection(
+    db: Session,
+    actor: AuthContext | str,
+    frozen_selection: FrozenTeamSelection,
+    target_binding_ids: set[str] | None,
+) -> None:
     user_id = _actor_id(actor)
     targets = (
         set(frozen_selection.invokable_binding_ids)

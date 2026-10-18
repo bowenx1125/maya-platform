@@ -151,10 +151,13 @@ def read_memory(
 
 
 def runtime_registry() -> dict[str, ToolSpec]:
+    from app.modules.workspace.chat_reports import chat_report_tools
+
     from .agent_memory import agent_memory_tools
 
     return {
         **teacher_tools(),
+        **chat_report_tools(),
         **knowledge_tools(),
         **learning_tools(),
         **agent_memory_tools(),
