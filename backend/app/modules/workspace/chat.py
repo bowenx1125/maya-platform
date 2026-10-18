@@ -46,6 +46,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     can_invoke_version,
     snapshot_sources_are_readable,
+    teacher_public_agent_hidden_from,
 )
 from app.modules.knowledge_sets.generation import get_generation_status
 from app.modules.knowledge_sets.models import KnowledgeGenerationRun
@@ -1075,6 +1076,10 @@ def _conversation_is_callable(
     is_owner = agent.owner_user_id == conversation.user_id
     if not is_owner and conversation.agent_authorization_epoch != agent.authorization_epoch:
         return False
+    # An existing student chat with a teacher's public Agent stays readable
+    # but becomes read-only: the Agent is now reachable only through a Team.
+    if teacher_public_agent_hidden_from(db, actor_user_id, agent):
+        return False
     return can_invoke_version(db, actor_user_id, version, agent)
 
 
@@ -1089,7 +1094,10 @@ def _conversation_unavailable_error(agent: Agent | None) -> PlatformError:
 def _version_chat_allowed(
     db: Session, context: AuthContext, version: AgentVersion, agent: Agent
 ) -> bool:
-    return can_invoke_version(db, context, version, agent)
+    # A teacher's public Agent only reaches students through a Team.
+    return not teacher_public_agent_hidden_from(db, context, agent) and can_invoke_version(
+        db, context, version, agent
+    )
 
 
 def _version_chat_available(

@@ -388,6 +388,41 @@ describe("Studyform Teams", () => {
     ).toBeNull();
   });
 
+  it("lists a teacher's public Team members by name without links to their Agent pages", async () => {
+    // Studyform (2026-10-18): students never receive a teacher's public
+    // Agents, so the reader view must stand on the Team roster alone.
+    state.api.team.mockResolvedValue({
+      ...publicTeam,
+      owner_user_id: "teacher",
+      can_edit: false,
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="student">
+          <TeamEntryFlow
+            api={state.api as never}
+            courseId="course"
+            agents={[]}
+            standalone
+            backHref="/student/groups/group-1"
+            initialRouteMode="team-edit"
+            initialTeamId="team-1"
+          />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    expect(
+      await screen.findByRole("checkbox", { name: /Socrates/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: /Mencius/ })).toBeTruthy();
+    const main = document.querySelector("form") as HTMLElement;
+    expect(
+      [...main.querySelectorAll("a")].filter((link) =>
+        (link.getAttribute("href") ?? "").includes("/agents/"),
+      ),
+    ).toEqual([]);
+  });
+
   it("shows members, the Leader and selected Brainform names without letting a reader change them", async () => {
     state.api.team.mockResolvedValue({
       ...publicTeam,
