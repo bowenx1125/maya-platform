@@ -154,6 +154,23 @@ def _writer(factory: SessionFactory) -> Iterator[Session]:
             raise
 
 
+def _locked(statement: Any) -> Any:
+    """Lock the member results a writer is about to change, and re-read them.
+
+    On PostgreSQL nothing else serializes Team writers, so a result read as
+    pending/running could commit as ready (with its text) before this writer
+    changed it, leaving a failed/pending row that still carries text
+    (ck_team_result_body). FOR UPDATE waits for that commit and returns the
+    current row; SQLite renders nothing and its writer lock already holds.
+    """
+
+    return (
+        statement.order_by(TeamTurnResult.id)
+        .with_for_update(of=TeamTurnResult)
+        .execution_options(populate_existing=True)
+    )
+
+
 def _owner(db: Session, conversation_id: str, actor_id: str) -> Conversation:
     row = db.get(Conversation, conversation_id)
     actor = db.get(User, actor_id)
@@ -400,9 +417,11 @@ def persist_assessment_knowledge_update_notice(
     ).all()
     for stale_turn in stale_turns:
         stale_results = db.scalars(
-            select(TeamTurnResult).where(
-                TeamTurnResult.turn_id == stale_turn.id,
-                TeamTurnResult.state.in_(("pending", "running")),
+            _locked(
+                select(TeamTurnResult).where(
+                    TeamTurnResult.turn_id == stale_turn.id,
+                    TeamTurnResult.state.in_(("pending", "running")),
+                )
             )
         ).all()
         for result in stale_results:
@@ -773,7 +792,9 @@ def _release_unstarted_executor_turn(db: Session, row: Conversation) -> bool:
     turn = db.get(ConversationTurn, active_id)
     if turn is None or (turn.user_text or "").strip() or turn.state != "pending":
         return False
-    results = list(db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id)))
+    results = list(
+        db.scalars(_locked(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id)))
+    )
     if not results or any(result.state != "pending" for result in results):
         return False
     called = db.scalar(
@@ -1141,10 +1162,12 @@ def resume_team_turn(
     _, participants = _targets(db, row, routing)
     _validate_members(db, row, participants)
     operations = db.execute(
-        select(TeamTurnResult, TeamProviderCall, ProviderOperation)
-        .join(TeamProviderCall, TeamProviderCall.result_id == TeamTurnResult.id)
-        .join(ProviderOperation, ProviderOperation.id == TeamProviderCall.operation_id)
-        .where(TeamTurnResult.turn_id == turn.id)
+        _locked(
+            select(TeamTurnResult, TeamProviderCall, ProviderOperation)
+            .join(TeamProviderCall, TeamProviderCall.result_id == TeamTurnResult.id)
+            .join(ProviderOperation, ProviderOperation.id == TeamProviderCall.operation_id)
+            .where(TeamTurnResult.turn_id == turn.id)
+        )
     ).all()
     waiting = [
         operation.state
@@ -1194,9 +1217,11 @@ def resume_team_turn(
         )
         if leader is None or leader.state in {"failed", "acceptance_unknown"}:
             for result in db.scalars(
-                select(TeamTurnResult).where(
-                    TeamTurnResult.turn_id == turn.id,
-                    TeamTurnResult.state.in_(("pending", "running")),
+                _locked(
+                    select(TeamTurnResult).where(
+                        TeamTurnResult.turn_id == turn.id,
+                        TeamTurnResult.state.in_(("pending", "running")),
+                    )
                 )
             ):
                 result.state = "failed"
@@ -1210,7 +1235,9 @@ def resume_team_turn(
                 "The previous coordinator call did not reach the Provider; send a new message.",
             )
     known_result_ids = {result.id for result, _call, _operation in operations}
-    for result in db.scalars(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id)):
+    for result in db.scalars(
+        _locked(select(TeamTurnResult).where(TeamTurnResult.turn_id == turn.id))
+    ):
         if result.state == "running" and result.id not in known_result_ids:
             result.state = "pending"
             result.safe_error_code = None
@@ -1367,7 +1394,7 @@ def _start_member(
 ) -> MemberRequest | None:
     with _writer(factory) as db:
         current = _current_run(db, turn_id, token)
-        result = db.get(TeamTurnResult, result_id)
+        result = db.get(TeamTurnResult, result_id, with_for_update=True, populate_existing=True)
         if (
             current is None
             or result is None
@@ -2300,7 +2327,9 @@ def settle_member(
 ) -> bool:
     with _writer(factory) as db:
         current = _current_run(db, turn_id, token)
-        result = db.get(TeamTurnResult, result_id)
+        # Locked: a concurrent Boundary write or interrupt commits first and
+        # this settle then sees the result as it really is.
+        result = db.get(TeamTurnResult, result_id, with_for_update=True, populate_existing=True)
         if current is None or result is None or result.turn_id != turn_id:
             return False
         row, turn = current
@@ -2924,10 +2953,12 @@ def settle_completed_boundary_tool_call(
     if current is None or current[0].id != row.id or row.user_id != actor.user.id:
         raise conflict("tool_run_superseded", "Continue through the current run.")
     result = db.scalar(
-        select(TeamTurnResult).where(
-            TeamTurnResult.turn_id == identity.turn_id,
-            TeamTurnResult.conversation_id == row.id,
-            TeamTurnResult.participant_id == identity.participant_id,
+        _locked(
+            select(TeamTurnResult).where(
+                TeamTurnResult.turn_id == identity.turn_id,
+                TeamTurnResult.conversation_id == row.id,
+                TeamTurnResult.participant_id == identity.participant_id,
+            )
         )
     )
     if result is None:
@@ -3588,9 +3619,11 @@ def pause_team_for_no_progress(factory: SessionFactory, claim: TeamClaim) -> Non
             return
         row, turn = current
         for result in db.scalars(
-            select(TeamTurnResult).where(
-                TeamTurnResult.turn_id == turn.id,
-                TeamTurnResult.state == "running",
+            _locked(
+                select(TeamTurnResult).where(
+                    TeamTurnResult.turn_id == turn.id,
+                    TeamTurnResult.state == "running",
+                )
             )
         ):
             result.state = "pending"
@@ -4084,9 +4117,11 @@ def execute_coordinate_turn(factory: SessionFactory, claim: TeamClaim) -> None:
 
 def _interrupt(db: Session, row: Conversation, turn: ConversationTurn) -> None:
     for result in db.scalars(
-        select(TeamTurnResult).where(
-            TeamTurnResult.turn_id == turn.id,
-            TeamTurnResult.state.in_(("pending", "running")),
+        _locked(
+            select(TeamTurnResult).where(
+                TeamTurnResult.turn_id == turn.id,
+                TeamTurnResult.state.in_(("pending", "running")),
+            )
         )
     ):
         result.state = (
@@ -4132,9 +4167,11 @@ def recover_team_runs(db: Session) -> int:
                 turn.state = "failed"
                 turn.safe_error_code = "chat_withdrawn"
                 for result in db.scalars(
-                    select(TeamTurnResult).where(
-                        TeamTurnResult.turn_id == turn.id,
-                        TeamTurnResult.state.in_(("pending", "running")),
+                    _locked(
+                        select(TeamTurnResult).where(
+                            TeamTurnResult.turn_id == turn.id,
+                            TeamTurnResult.state.in_(("pending", "running")),
+                        )
                     )
                 ):
                     result.state = "failed"
@@ -4146,10 +4183,12 @@ def recover_team_runs(db: Session) -> int:
                 continue
 
             operations = db.execute(
-                select(TeamTurnResult, ProviderOperation)
-                .join(TeamProviderCall, TeamProviderCall.result_id == TeamTurnResult.id)
-                .join(ProviderOperation, ProviderOperation.id == TeamProviderCall.operation_id)
-                .where(TeamTurnResult.turn_id == turn.id)
+                _locked(
+                    select(TeamTurnResult, ProviderOperation)
+                    .join(TeamProviderCall, TeamProviderCall.result_id == TeamTurnResult.id)
+                    .join(ProviderOperation, ProviderOperation.id == TeamProviderCall.operation_id)
+                    .where(TeamTurnResult.turn_id == turn.id)
+                )
             ).all()
             has_unknown = False
             for result, operation in operations:
@@ -4190,9 +4229,11 @@ def recover_team_runs(db: Session) -> int:
                 _append_event(db, turn, "turn_done")
             else:
                 for result in db.scalars(
-                    select(TeamTurnResult).where(
-                        TeamTurnResult.turn_id == turn.id,
-                        TeamTurnResult.state == "running",
+                    _locked(
+                        select(TeamTurnResult).where(
+                            TeamTurnResult.turn_id == turn.id,
+                            TeamTurnResult.state == "running",
+                        )
                     )
                 ):
                     # Accepted TeamProviderCall rows remain immutable and are
