@@ -448,6 +448,26 @@ def _model_response(response_json: str) -> ModelResponse:
         raise TeamDispatchError("team_response_invalid") from None
 
 
+def _live_teacher_public(connection: Any, current: Any) -> bool:
+    from app.modules.teams.publication_access import chat_team_is_live_teacher_public
+
+    try:
+        with Session(
+            bind=connection,
+            autoflush=False,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        ) as db:
+            return chat_team_is_live_teacher_public(
+                db,
+                team_id=current["team_id"],
+                team_version_id=current["team_version_id"],
+                team_authorization_epoch=current["team_authorization_epoch"],
+            )
+    except Exception:
+        return False
+
+
 def _current_claim_guard(
     *,
     actor_user_id: str,
@@ -517,10 +537,13 @@ def _current_claim_guard(
         if current is None:
             return False
         if current["entry_kind"] == "team":
-            if (
-                current["origin"] != "custom_team"
-                or current["team_owner_user_id"] != actor_user_id
-                or current["publication_id"] is not None
+            if current["origin"] != "custom_team" or current["publication_id"] is not None:
+                return False
+            # A student continues a teacher's public Team opened from the Teams
+            # list; the live publication of this exact version stands in for
+            # ownership, as in the Team recheck (#186).
+            if current["team_owner_user_id"] != actor_user_id and not _live_teacher_public(
+                connection, current
             ):
                 return False
         elif current["entry_kind"] == "maya_team":
