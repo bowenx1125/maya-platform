@@ -1593,8 +1593,10 @@ def test_revoked_question_source_allows_natural_chat_abandon_without_disclosing_
         strict=True,
     ):
         provider_wire = json.loads(wire)
-        # max_tokens (2026-10-13): every Team call states its output cap.
-        base_keys = {"model", "messages", "stream", "enable_thinking", "tools", "max_tokens"}
+        # No output cap (2026-10-18): the model's own maximum applies.
+        base_keys = {"model", "messages", "stream", "enable_thinking", "tools"}
+        assert "max_tokens" not in provider_wire
+        assert "max_completion_tokens" not in provider_wire
         assert set(provider_wire) in {frozenset(base_keys), frozenset(base_keys | {"tool_choice"})}
         assert provider_wire.get("tool_choice", "auto") == "auto"
         assert provider_wire["messages"] == [
