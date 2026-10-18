@@ -15,6 +15,21 @@ import {
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
+import {
+  cachedCall,
+  forgetRequestCache,
+  invalidateRequestCache,
+  isBusyResponse,
+  peekRequestCache,
+  rememberRequestCache,
+  requestCacheGeneration,
+  requestCacheIdentity,
+} from "../lib/request-cache";
+import {
+  fetchVoiceList,
+  prefetchVoiceList,
+  voiceListIdentity,
+} from "../lib/voice-list-cache";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { GroupOverview } from "./group-overview";
@@ -54,9 +69,18 @@ type AgentListItem = {
   versions: AgentVersion[];
 };
 
+type StudyformGroupSnapshot = {
+  group: GroupDetail;
+  items: AgentListItem[];
+  courseAgents: PublishedAgentSummary[];
+  chatAgents: ChatAgent[];
+  teams: TeamSummaryDto[];
+};
+
 async function loadGroups(
   api: PlatformApi,
   groupIds: string[],
+  voiceIdentity: string | null,
 ): Promise<GroupOverview[]> {
   return Promise.all(
     groupIds.map(async (groupId) => {
@@ -64,7 +88,8 @@ async function loadGroups(
         api.group(groupId),
         api.agents(groupId, true),
         api.knowledge(groupId),
-        api.voiceProfiles(groupId),
+        // Also warms the Studyform voice list for this group.
+        fetchVoiceList(api, voiceIdentity, "group", groupId, { reuse: true }),
       ]);
       return {
         group,
@@ -94,7 +119,8 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
 export function StudentDashboard() {
   const t = useT();
   const { locale } = useLocale();
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -111,7 +137,7 @@ export function StudentDashboard() {
     try {
       const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
       const [overviews, nextPublished] = await Promise.all([
-        loadGroups(api, groupIds),
+        loadGroups(api, groupIds, voiceIdentity),
         courseId && typeof api.publishedAgents === "function"
           ? api.publishedAgents(courseId)
           : Promise.resolve([]),
@@ -123,7 +149,7 @@ export function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [api, courseId, groupIdsKey, hasUser]);
+  }, [api, courseId, groupIdsKey, hasUser, voiceIdentity]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -286,14 +312,26 @@ function GroupWorkspaceSession({
   scope: string;
 }) {
   const t = useT();
-  const { api, user } = useSession();
-  const [group, setGroup] = useState<GroupDetail | null>(null);
-  const [items, setItems] = useState<AgentListItem[]>([]);
-  const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>([]);
-  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
-  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
+  const { api, identityGeneration, user } = useSession();
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
+  const snapshotKey = `page:studyform-group:${groupId}`;
+  // A return visit paints the last page this identity saw, then refreshes.
+  const [snapshot] = useState(() =>
+    peekRequestCache<StudyformGroupSnapshot>(api, cacheIdentity, snapshotKey),
+  );
+  const [group, setGroup] = useState<GroupDetail | null>(
+    snapshot?.group ?? null,
+  );
+  const [items, setItems] = useState<AgentListItem[]>(snapshot?.items ?? []);
+  const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>(
+    snapshot?.courseAgents ?? [],
+  );
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>(
+    snapshot?.chatAgents ?? [],
+  );
+  const [teams, setTeams] = useState<TeamSummaryDto[]>(snapshot?.teams ?? []);
   const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!snapshot);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [retryDelete, setRetryDelete] = useState<string | null>(null);
   const mutations = useIdempotencyStore();
@@ -314,60 +352,122 @@ function GroupWorkspaceSession({
     ),
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const nextGroup = await api.group(groupId);
-      const [nextAgents, nextTeams, nextChatAgents] = await Promise.all([
-        api.agents(groupId, true),
-        typeof api.teams === "function"
-          ? // A teacher looking round the group asks for this group's Teams,
-            // its members' private ones included.
-            api.teams(
-              nextGroup.course_id,
-              teacherCourseIds.includes(nextGroup.course_id)
-                ? groupId
-                : undefined,
-            )
-          : Promise.resolve([]),
-        typeof api.chatAgents === "function"
-          ? api.chatAgents(nextGroup.course_id)
-          : Promise.resolve([]),
-      ]);
-      const versions = await Promise.all(
-        nextAgents.map((agent) => api.versions(agent.id)),
-      );
-      const listedIds = new Set(nextAgents.map((agent) => agent.id));
-      const nextCourseAgents =
-        typeof api.publishedAgents === "function"
-          ? await api.publishedAgents(nextGroup.course_id)
-          : [];
-      setGroup(nextGroup);
-      setCourseAgents(
-        nextCourseAgents.filter((item) => !listedIds.has(item.agent.id)),
-      );
-
-      setTeams(Array.isArray(nextTeams) ? nextTeams : []);
-      setChatAgents(Array.isArray(nextChatAgents) ? nextChatAgents : []);
-      setItems(
-        nextAgents.map((agent, index) => ({
-          agent,
-          versions: versions[index] ?? [],
-        })),
-      );
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, groupId, teacherCourseIds]);
+  const load = useCallback(
+    async (background = false) => {
+      if (!background) {
+        setLoading(true);
+        setError(null);
+      }
+      // The Voices panel mounts only after this page loads; start its list
+      // now so it is not a second wait after the first.
+      prefetchVoiceList(api, cacheIdentity, "group", groupId);
+      const generation = requestCacheGeneration(api);
+      const read = <T,>(
+        name: string,
+        args: unknown[],
+        run: () => Promise<T>,
+      ): Promise<T> => cachedCall(api, cacheIdentity, name, args, run);
+      try {
+        // Two round trips, not four: the group and its Agents together, then
+        // the course reads (which need the group's course) beside each
+        // Agent's versions.
+        const groupRequest = read("group", [groupId], () => api.group(groupId));
+        const agentsRequest = read("agents", [groupId, true], () =>
+          api.agents(groupId, true),
+        );
+        const courseRequest = groupRequest.then((nextGroup) =>
+          Promise.all([
+            typeof api.teams === "function"
+              ? // A teacher looking round the group asks for this group's
+                // Teams, its members' private ones included.
+                (() => {
+                  const teamGroup = teacherCourseIds.includes(
+                    nextGroup.course_id,
+                  )
+                    ? groupId
+                    : undefined;
+                  return read("teams", [nextGroup.course_id, teamGroup], () =>
+                    api.teams(nextGroup.course_id, teamGroup),
+                  );
+                })()
+              : Promise.resolve([]),
+            typeof api.chatAgents === "function"
+              ? read("chatAgents", [nextGroup.course_id], () =>
+                  api.chatAgents(nextGroup.course_id),
+                )
+              : Promise.resolve([]),
+            typeof api.publishedAgents === "function"
+              ? read("publishedAgents", [nextGroup.course_id], () =>
+                  api.publishedAgents(nextGroup.course_id),
+                )
+              : Promise.resolve([]),
+          ]),
+        );
+        const versionsRequest = agentsRequest.then((nextAgents) =>
+          Promise.all(
+            nextAgents.map((agent) =>
+              read("versions", [agent.id], () => api.versions(agent.id)),
+            ),
+          ),
+        );
+        const settled = await Promise.allSettled([
+          groupRequest,
+          agentsRequest,
+          courseRequest,
+          versionsRequest,
+        ]);
+        // The group's own answer decides first, as when it was read alone.
+        const failed = settled.find((result) => result.status === "rejected");
+        if (failed) throw (failed as PromiseRejectedResult).reason;
+        const nextGroup = await groupRequest;
+        const nextAgents = await agentsRequest;
+        const [nextTeams, nextChatAgents, nextPublished] = await courseRequest;
+        const versions = await versionsRequest;
+        const listedIds = new Set(nextAgents.map((agent) => agent.id));
+        const next: StudyformGroupSnapshot = {
+          group: nextGroup,
+          courseAgents: nextPublished.filter(
+            (item) => !listedIds.has(item.agent.id),
+          ),
+          teams: Array.isArray(nextTeams) ? nextTeams : [],
+          chatAgents: Array.isArray(nextChatAgents) ? nextChatAgents : [],
+          items: nextAgents.map((agent, index) => ({
+            agent,
+            versions: versions[index] ?? [],
+          })),
+        };
+        setGroup(next.group);
+        setCourseAgents(next.courseAgents);
+        setTeams(next.teams);
+        setChatAgents(next.chatAgents);
+        setItems(next.items);
+        rememberRequestCache(api, cacheIdentity, snapshotKey, next, generation);
+      } catch (cause) {
+        // Busy server during a quiet refresh: keep the page we are showing.
+        if (background && isBusyResponse(cause)) return;
+        forgetRequestCache(api, cacheIdentity, snapshotKey);
+        if (background) {
+          // A refusal now (left the group, signed out) must not leave the
+          // old page on screen.
+          setGroup(null);
+          setItems([]);
+          setCourseAgents([]);
+          setTeams([]);
+          setChatAgents([]);
+        }
+        setError(cause);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, cacheIdentity, groupId, snapshotKey, teacherCourseIds],
+  );
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void load();
+      void load(Boolean(snapshot));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [load, snapshot]);
 
   useEffect(() => {
     if (loading || !(initialVoiceCreate || focusVoices)) return;
@@ -388,6 +488,7 @@ function GroupWorkspaceSession({
     try {
       await api.deleteAgent(agentId, { idempotency: handle });
       mutations.finish(intent, handle);
+      invalidateRequestCache(api);
       setItems((current) =>
         current.filter((item) => item.agent.id !== agentId),
       );
@@ -412,6 +513,7 @@ function GroupWorkspaceSession({
     setError(null);
     try {
       await api.deleteTeam(teamId);
+      invalidateRequestCache(api);
       setTeams((current) => current.filter((team) => team.id !== teamId));
     } catch (cause) {
       setError(cause);

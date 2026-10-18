@@ -4462,6 +4462,10 @@ def poll_team_events(
                 .order_by(TeamChatEvent.sequence)
             )
         )
+        if not events:
+            # Most polls find nothing new; rebuilding the turn view for them
+            # cost ~35 queries each, 20 times a second per waiting student.
+            return [], turn.state, row.active_request_id == turn.id
         projected = project_team_turn(db, turn, read_only=False)
         results = {str(result.id): result for result in projected.member_results}
         replayed = []
