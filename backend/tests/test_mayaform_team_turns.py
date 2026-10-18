@@ -724,3 +724,78 @@ def test_history_speaker_name_keeps_ascii_and_sanitizes_the_rest() -> None:
     assert runtime.history_speaker_name("Scorer", participant_id) == "Scorer"
     assert runtime.history_speaker_name("评分员", participant_id) == "aaaaaaaa"
     assert runtime.history_speaker_name("Jade Li", participant_id) == "Jade_Li_aaaaaaaa"
+
+
+def test_ordinary_turn_runs_the_leader_first_and_an_at_mention_must_reply(
+    client: TestClient, database: Any, monkeypatch: Any
+) -> None:
+    # The leader sits last by position; ordinary chat still asks it first.
+    _, csrf = login(client, "maya")
+    versions = [
+        _make_agent_version(
+            database, owner_id=MAYA_ID, name=f"Member {index}", visibility="public"
+        )[1]
+        for index in range(3)
+    ]
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, f"b2-team-{uuid4()}"),
+        json={
+            "display_name": "Leader last",
+            "visibility": "public",
+            "members": [
+                {"agent_version_id": version_id, "position": index, "is_leader": index == 2}
+                for index, version_id in enumerate(versions)
+            ],
+        },
+    )
+    assert created.status_code == 201, created.text
+    _, csrf = login(client, "bowen")
+    session = _create(client, csrf, {"kind": "maya_team", "team_id": created.json()["id"]})
+    members = session["team"]["members"]
+    leader = next(member for member in members if member["is_leader"])
+    others = [member["id"] for member in members if not member["is_leader"]]
+    seen: list[runtime.MemberRequest] = []
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        seen.append(request)
+        return runtime.MemberReply(f"Reply {request.speaker_name}")
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    url = f"/api/v1/conversations/{session['id']}/messages"
+    body = {**_body(session, "all"), "message": "Hello everyone"}
+    response = post_message(client, url, headers=_headers(csrf), json=body)
+    assert response.status_code == 200, response.text
+    turn = [item for item in response.json()["turns"] if item["user_text"]][-1]
+    assert [request.participant_id for request in seen] == [leader["id"], *others]
+    assert [result["participant_id"] for result in turn["member_results"]] == [
+        leader["id"],
+        *others,
+    ]
+    assert all("@-mentioned you" not in request.system_message for request in seen)
+
+    target = next(member for member in members if member["id"] == others[1])
+    seen.clear()
+    mention = {
+        "request_id": str(uuid4()),
+        "expected_revision": response.json()["revision"],
+        "message": f"@{target['name']} 你怎么看",
+        "routing": {"mode": "selected", "participant_ids": [target["id"]]},
+    }
+    response = post_message(client, url, headers=_headers(csrf), json=mention)
+    assert response.status_code == 200, response.text
+    assert [request.participant_id for request in seen] == [target["id"]]
+    assert "You must reply" in seen[0].system_message
+    assert "do not leave the reply empty" in seen[0].system_message
+
+
+def test_member_system_marks_only_an_at_mentioned_member() -> None:
+    plain = runtime._member_system("# Member\n\nSpeak.", "{}", speaker_name="Ada")
+    named = runtime._member_system("# Member\n\nSpeak.", "{}", speaker_name="Ada", mentioned=True)
+    assert "leave the reply empty" in plain and "You must reply" not in plain
+    assert "You must reply" in named
+    # A live assessment ledger chooses speakers; the mention line never applies.
+    active = runtime._member_system(
+        "# Member\n\nSpeak.", "{}", assessment_active=True, speaker_name="Ada", mentioned=True
+    )
+    assert "You must reply" not in active
