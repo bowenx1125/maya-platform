@@ -170,7 +170,13 @@ def move_to_group(db: Session, course_id: str, user: User, group_name: str) -> N
     use of a name creates the group and every later use joins that row, so a
     teacher moving a student into "Team Aurora" lands them beside the
     students who typed the same name themselves.
+
+    The student's cloned voices in a group they leave are withdrawn in the
+    same transaction; the caller finishes the supplier delete after commit
+    (``finish_withdrawn_voices``).
     """
+
+    from app.modules.voices.withdrawal import withdraw_group_voices
 
     now = datetime.now(UTC)
     group = resolve_named_group(db, course_id, group_name)
@@ -179,9 +185,11 @@ def move_to_group(db: Session, course_id: str, user: User, group_name: str) -> N
         .join(Group, Group.id == GroupMember.group_id)
         .where(Group.course_id == course_id, GroupMember.user_id == user.id)
     ).all()
+    left = [membership.group_id for membership in current if membership.group_id != group.id]
     for membership in current:
         if membership.group_id != group.id:
             db.delete(membership)
+    withdraw_group_voices(db, user.id, left)
     if not any(membership.group_id == group.id for membership in current):
         db.add(
             GroupMember(

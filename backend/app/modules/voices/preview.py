@@ -37,6 +37,7 @@ from app.modules.voices.schemas import PlaybackResource, VoiceProfileResponse
 from app.modules.voices.service import (
     PREVIEW_TTL,
     EffectiveVoice,
+    _groupmate_owner_ids,
     _profile_external_id,
     _utc,
     groupmate_ready_voice,
@@ -178,6 +179,9 @@ def resolve_effective_voice_profile(
             and_(
                 VoiceProfile.scope == "group",
                 VoiceProfile.group_id == group_id,
+                # A clone speaks only while its owner is still a student of
+                # this group; once they leave, the Agent falls back.
+                VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, group_id)),
             )
             if group_id is not None
             else and_(
