@@ -24,6 +24,7 @@ import {
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
+import { prefetchVoiceList, voiceListIdentity } from "../lib/voice-list-cache";
 import { useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
@@ -240,6 +241,7 @@ export function TeacherStudyformWorkspace({
     (membership) => membership.role === "teacher",
   )?.course_id;
   const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${initialMode ?? ""}:${initialTeamId ?? ""}:${identityGeneration}`;
+  const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [personalAgents, setPersonalAgents] = useState<PublishedAgentSummary[]>(
     [],
   );
@@ -264,6 +266,9 @@ export function TeacherStudyformWorkspace({
         setLoadedScope(requestScope);
         return;
       }
+      // The Voices panel mounts only after this page loads; start its list
+      // now so it is not a second wait after the first.
+      prefetchVoiceList(api, voiceIdentity, "personal", teacherCourseId);
       void Promise.all([
         typeof api.publishedAgents === "function"
           ? api.publishedAgents(teacherCourseId)
@@ -300,7 +305,7 @@ export function TeacherStudyformWorkspace({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [api, initialGroupId, scope, teacherCourseId]);
+  }, [api, initialGroupId, scope, teacherCourseId, voiceIdentity]);
 
   async function deletePersonalAgent(agentId: string) {
     if (deletingId || !window.confirm(t("deleteAgentConfirm"))) return;

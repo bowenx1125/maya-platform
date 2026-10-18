@@ -15,6 +15,11 @@ import {
 } from "../lib/api";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { roleLabel } from "../lib/i18n";
+import {
+  fetchVoiceList,
+  prefetchVoiceList,
+  voiceListIdentity,
+} from "../lib/voice-list-cache";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { GroupOverview } from "./group-overview";
@@ -57,6 +62,7 @@ type AgentListItem = {
 async function loadGroups(
   api: PlatformApi,
   groupIds: string[],
+  voiceIdentity: string | null,
 ): Promise<GroupOverview[]> {
   return Promise.all(
     groupIds.map(async (groupId) => {
@@ -64,7 +70,8 @@ async function loadGroups(
         api.group(groupId),
         api.agents(groupId, true),
         api.knowledge(groupId),
-        api.voiceProfiles(groupId),
+        // Also warms the Studyform voice list for this group.
+        fetchVoiceList(api, voiceIdentity, "group", groupId, { reuse: true }),
       ]);
       return {
         group,
@@ -94,7 +101,8 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
 export function StudentDashboard() {
   const t = useT();
   const { locale } = useLocale();
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -111,7 +119,7 @@ export function StudentDashboard() {
     try {
       const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
       const [overviews, nextPublished] = await Promise.all([
-        loadGroups(api, groupIds),
+        loadGroups(api, groupIds, voiceIdentity),
         courseId && typeof api.publishedAgents === "function"
           ? api.publishedAgents(courseId)
           : Promise.resolve([]),
@@ -123,7 +131,7 @@ export function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [api, courseId, groupIdsKey, hasUser]);
+  }, [api, courseId, groupIdsKey, hasUser, voiceIdentity]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -286,7 +294,8 @@ function GroupWorkspaceSession({
   scope: string;
 }) {
   const t = useT();
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [items, setItems] = useState<AgentListItem[]>([]);
   const [courseAgents, setCourseAgents] = useState<PublishedAgentSummary[]>([]);
@@ -317,6 +326,9 @@ function GroupWorkspaceSession({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // The Voices panel mounts only after this page loads; start its list now
+    // so it is not a second wait after the first.
+    prefetchVoiceList(api, voiceIdentity, "group", groupId);
     try {
       const nextGroup = await api.group(groupId);
       const [nextAgents, nextTeams, nextChatAgents] = await Promise.all([
@@ -361,7 +373,7 @@ function GroupWorkspaceSession({
     } finally {
       setLoading(false);
     }
-  }, [api, groupId, teacherCourseIds]);
+  }, [api, groupId, teacherCourseIds, voiceIdentity]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
