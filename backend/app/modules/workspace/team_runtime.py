@@ -43,7 +43,7 @@ from .models import (
     TeamTurnResult,
 )
 from .schemas import ChatSource, TeamChatTurn, TeamMemberResult, TeamRouting
-from .team_conversation import frozen_team_selection
+from .team_conversation import _assessment_stage, frozen_team_selection
 
 SessionFactory = Callable[[], Session]
 LOGGER = logging.getLogger("maya.workspace")
@@ -949,7 +949,16 @@ def claim_team_turn(
                 .values(active_request_id=request_id, revision=Conversation.revision + 1)
             )
     if getattr(changed, "rowcount", 0) != 1:
-        raise conflict("chat_busy", "Refresh the conversation before sending another message.")
+        # While the Scorer marks a finished test the student waits; the client
+        # shows "scoring, try again shortly" instead of an error (2026-10-18).
+        details = (
+            {"reason": "assessment_scoring", "retryable": True}
+            if _assessment_stage(db, row) == "scoring"
+            else None
+        )
+        raise conflict(
+            "chat_busy", "Refresh the conversation before sending another message.", details
+        )
     now = datetime.now(UTC)
     token = str(uuid4())
     turn = ConversationTurn(
