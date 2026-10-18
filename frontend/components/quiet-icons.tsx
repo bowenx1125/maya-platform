@@ -224,13 +224,28 @@ function OutlineIcon({
   );
 }
 
-/** Enter: an arrow going into a doorway (step into the room). */
+/** Enter: an arrow in a circle (step into the room). Shape after lucide
+ * circle-arrow-right (ISC). */
 export function IconEnter({ size = 16 }: { size?: number }) {
   return (
     <OutlineIcon size={size}>
-      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-      <path d="m10 17 5-5-5-5" />
-      <path d="M15 12H3" />
+      <circle cx="12" cy="12" r="9.25" />
+      <path d="M8 12h8" />
+      <path d="m12 8 4 4-4 4" />
+    </OutlineIcon>
+  );
+}
+
+/** Rebirth: three chasing arrows, like ♻️. Shape after lucide recycle (ISC). */
+export function IconRecycle({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5" />
+      <path d="M11 19h8.203a1.83 1.83 0 0 0 1.556-.89 1.784 1.784 0 0 0 0-1.775l-1.226-2.12" />
+      <path d="m14 16-3 3 3 3" />
+      <path d="M8.293 13.596 7.196 9.5 3.1 10.598" />
+      <path d="m9.344 5.811 1.093-1.892A1.83 1.83 0 0 1 11.985 3a1.784 1.784 0 0 1 1.546.888l3.943 6.843" />
+      <path d="m13.378 9.633 4.096 1.098 1.097-4.096" />
     </OutlineIcon>
   );
 }

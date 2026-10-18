@@ -564,7 +564,7 @@ describe("Wave 2 teacher debate setup", () => {
     ).toBe(true);
   });
 
-  it("shows list actions as labelled icons: enter, bell / bell-off, X", async () => {
+  it("shows list actions as labelled icons: enter, recycle, bell / bell-off, X", async () => {
     useSessionMock.mockReturnValue(teacherSession());
     const row = (id: string, restore: boolean): DebateSummary => ({
       id,
@@ -584,7 +584,11 @@ describe("Wave 2 teacher debate setup", () => {
         controller={{
           load: vi
             .fn()
-            .mockResolvedValue([row("voiced", false), row("silent", true)]),
+            .mockResolvedValue([
+              row("voiced", false),
+              row("silent", true),
+              { ...row("finished", false), status: "debate_finished" },
+            ]),
         }}
       />,
     );
@@ -593,6 +597,9 @@ describe("Wave 2 teacher debate setup", () => {
     ).closest("a")!.parentElement as HTMLElement;
     const silent = screen
       .getByRole("heading", { name: "Topic silent" })
+      .closest("a")!.parentElement as HTMLElement;
+    const finished = screen
+      .getByRole("heading", { name: "Topic finished" })
       .closest("a")!.parentElement as HTMLElement;
     for (const scope of [voiced, silent]) {
       const enter = within(scope).getByRole("link", { name: "Immerse" });
@@ -606,6 +613,11 @@ describe("Wave 2 teacher debate setup", () => {
       }
       expect(within(scope).queryByText("Preview")).toBeNull();
     }
+    // Rebirth is a recycle icon, still named Rebirth.
+    const rebirth = within(finished).getByRole("button", { name: "Rebirth" });
+    expect(rebirth.getAttribute("title")).toBe("Rebirth");
+    expect(rebirth.textContent).toBe("");
+    expect(rebirth.querySelector("svg[aria-hidden='true']")).toBeTruthy();
     // Audio present: a bell; clicking it devocalizes.
     const bell = within(voiced).getByRole("button", { name: "Devocalize" });
     expect(bell.getAttribute("data-vocalized")).toBe("true");

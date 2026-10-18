@@ -30,7 +30,7 @@ import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";
-import { IconEnter } from "../../quiet-icons";
+import { IconEnter, IconRecycle } from "../../quiet-icons";
 
 import {
   EmptyCard,
@@ -311,12 +311,14 @@ function ClassroomResetButton({
         <ErrorNotice error={error} onRetry={() => void reset()} />
       ) : null}
       <button
-        className="secondary-action"
+        className={`icon-action ${styles.iconAction}`}
         disabled={busy || resetCommitted}
         type="button"
+        aria-label="Rebirth"
+        title="Rebirth"
         onClick={() => void reset()}
       >
-        Rebirth
+        <IconRecycle size={18} />
       </button>
     </>
   );
