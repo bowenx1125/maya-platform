@@ -194,6 +194,11 @@ def _remote_voice_ids(
         # exists remotely, only the card goes.
         return [], True
     result = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
+    if len(result.matches) > 1:
+        # The recovery name is a short prefix of the profile id and the
+        # supplier matches it as a substring, so several matches may include
+        # another profile's voice. Delete none and leave the outcome unknown.
+        return [], False
     return list(result.matches), result.visibility_known
 
 

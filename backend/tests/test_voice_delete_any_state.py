@@ -203,6 +203,29 @@ def test_outcome_unknown_voice_with_nothing_at_the_supplier_just_goes(
     assert _status(database, profile_id) == "deleted"
 
 
+def test_ambiguous_recovery_name_matches_delete_no_supplier_voice(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#141: two supplier voices share the recovery name; neither is deleted."""
+
+    client, database, _settings = voice_client
+    _user, csrf = login(client, "bowen")
+    provider = MockVoiceCloneProvider()
+    _use(monkeypatch, provider)
+    profile_id = _enroll(client, csrf, "enroll-unknown-ambiguous").json()["id"]
+    recovery_name = _lose_enrollment_outcome(database, profile_id)
+    provider.set_reconciliation_matches(recovery_name, ("supplier-voice-a", "supplier-voice-b"))
+
+    deleted = _delete(client, csrf, profile_id, "delete-unknown-ambiguous")
+
+    assert deleted.status_code == 200, deleted.text
+    assert _status(database, profile_id) == "deleted"
+    assert provider.delete_calls == 0
+    operation = _delete_operation(database, profile_id)
+    assert operation is not None and operation.state == "outcome_unknown"
+
+
 @pytest.mark.parametrize("failure", ["exists", "delete"])
 def test_supplier_failure_still_deletes_the_card_and_a_later_delete_finishes_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
