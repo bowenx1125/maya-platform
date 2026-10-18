@@ -96,18 +96,6 @@ class TeamDetail(TeamSummary):
     publication_state: TeamPublicationState
 
 
-class TeamVersionDTO(StrictModel):
-    id: UUID
-    team_id: UUID
-    version_seq: int = Field(ge=1)
-    display_name: str
-    visibility: TeamVisibility
-    authorization_epoch: int = Field(ge=0)
-    members: list[TeamMemberDTO]
-    shared_knowledge_set_ids: list[UUID]
-    created_at: datetime
-
-
 class DirectoryMemberDTO(StrictModel):
     display_name: str
     avatar_config: dict[str, object]
