@@ -363,6 +363,9 @@ def create_app(
         knowledge_generation_tasks.bind_running_loop()
         prewarm.bind_running_loop()
         runtime_settings.validate_runtime()
+        single_writer = runtime_settings.single_writer_production_warning()
+        if single_writer is not None:
+            logger.warning(single_writer)
         runtime_settings.ensure_data_root()
         if initialize_database:
             with runtime_database.startup_lock():
