@@ -23,7 +23,14 @@ from app.modules.workspace.models import (
 )
 
 from .models import RuntimeModelCallStage
-from .registry import ToolCallIdentity, ToolPostCommit, ToolSpec, execute_tool, exposed_tools
+from .registry import (
+    ToolCallIdentity,
+    ToolPostCommit,
+    ToolSpec,
+    execute_tool,
+    exposed_tools,
+    merged_tool_arguments,
+)
 
 SessionFactory = Callable[[], Session]
 LOGGER = logging.getLogger(__name__)
@@ -154,6 +161,11 @@ def _bind_one(
         arguments = fc.arguments
         if arguments is None or (isinstance(arguments, dict) and "arguments" not in arguments):
             fc.arguments = {"arguments": dict(arguments or {})}
+        elif isinstance(arguments, dict) and len(arguments) > 1:
+            # A field sent beside "arguments" (prod: reply_language='zh') is
+            # part of the same payload; left there it reached invoke() as an
+            # unexpected keyword and failed the call.
+            fc.arguments = {"arguments": merged_tool_arguments(arguments)}
         current_call.set(fc)
 
     def invoke(arguments: dict[str, Any]) -> dict[str, Any]:

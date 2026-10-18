@@ -113,8 +113,15 @@ def find_active_assessment_conversation(
     team_id: str,
     recipe_id: str,
 ) -> Conversation | None:
-    """Find the owner's live formal source Chat without reading its private content."""
-    return db.scalar(
+    """Find the owner's live formal source Chat without reading its private content.
+
+    A Chat that can no longer be sent to is skipped. Bug (2026-10-18): the
+    teacher republished mid-test, which revoked the Chat's publication; the
+    student was sent back to it and every send was 404. Skipping it gives the
+    student a new Chat on the current version. The unfinished attempt on the
+    revoked version stays as it is (Record lists it as a revoked version).
+    """
+    candidates = db.scalars(
         select(Conversation)
         .join(AssessmentAttempt, AssessmentAttempt.source_conversation_id == Conversation.id)
         .join(AssessmentActivity, AssessmentActivity.id == AssessmentAttempt.activity_id)
@@ -131,8 +138,24 @@ def find_active_assessment_conversation(
             Conversation.withdrawn_at.is_(None),
         )
         .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id.desc())
-        .limit(1)
     )
+    for conversation in candidates:
+        if _chat_still_sendable(db, actor_user_id, conversation):
+            return conversation
+    return None
+
+
+def _chat_still_sendable(db: Session, actor_user_id: str, conversation: Conversation) -> bool:
+    """The same Team/publication check a send runs (``resolve_frozen_chat_selection``)."""
+
+    from app.modules.teams.service import resolve_frozen_chat_selection
+    from app.modules.workspace.team_conversation import frozen_team_selection
+
+    try:
+        resolve_frozen_chat_selection(db, actor_user_id, frozen_team_selection(db, conversation))
+    except PlatformError:
+        return False
+    return True
 
 
 def _attempt_question_rows(db: Session, attempt_id: str) -> list[AssessmentAttemptQuestion]:

@@ -640,6 +640,13 @@
   color: var(--warning-ink, #7a5420);
   font-size: 0.82rem;
 }
+/* Above the composer while the Scorer marks a finished test. */
+.scoringNotice {
+  margin: 0 0 6px;
+  color: var(--muted, #706b82);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
 /* Beside the Send button: the student is asked to press it again. */
 .sendHint {
   margin: 0;

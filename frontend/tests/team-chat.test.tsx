@@ -1115,6 +1115,46 @@ describe("Chatform", () => {
     ).toBeNull();
   });
 
+  it("says the members are unavailable, not the runtime, when none can be reached", async () => {
+    const history = {
+      ...teamSession,
+      can_send: false,
+      team: {
+        ...teamSession.team,
+        available: false,
+        members: teamSession.team.members.map((member) => ({
+          ...member,
+          available: false,
+        })),
+      },
+      turns: [
+        {
+          id: "closed-turn",
+          user_text: "A closed Team question",
+          state: "ready",
+          member_results: [],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([history]);
+    state.api.conversationSession.mockResolvedValue(history);
+    renderChats();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "A closed Team question" }),
+    );
+    const log = await screen.findByRole("log");
+    expect(
+      await within(log).findByText(
+        "This Team Chat can't continue: its members are no longer available to you. Start a new Chat with the Team.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Team Chat sending is unavailable in the current runtime.",
+      ),
+    ).toBeNull();
+  });
+
   it("tells the student an unrecorded answer must be sent again", async () => {
     state.api.streamTeamConversation.mockResolvedValue({
       ...teamSession,
@@ -1493,6 +1533,96 @@ describe("Chatform", () => {
     expect(
       screen.getByText("Scoring finished · the test is complete · 100%"),
     ).toBeTruthy();
+  });
+
+  // Owner request (2026-10-18): after the last answer, "Scoring…" sits above
+  // the composer and sending is closed until the Scorer is done.
+  it("shows Scoring… above the composer and closes sending until scoring ends", async () => {
+    const scoring = {
+      ...teamSession,
+      assessment_stage: "scoring",
+      can_send: false,
+      turns: [
+        {
+          id: "last-answer",
+          user_text: "C",
+          state: "ready",
+          member_results: [],
+        },
+      ],
+    };
+    // Scoring failed on the server: nothing runs and the Chat goes on.
+    const done = { ...scoring, assessment_stage: null, can_send: true };
+    state.api.conversationSessions.mockResolvedValue([scoring]);
+    state.api.conversationSession
+      .mockResolvedValueOnce(scoring)
+      .mockResolvedValue(done);
+    renderChats();
+    fireEvent.click(await screen.findByRole("button", { name: "C" }));
+    expect(await screen.findByText("Scoring…")).toBeTruthy();
+    const box = screen.getByRole("textbox", {
+      name: "Message",
+    }) as HTMLTextAreaElement;
+    expect(box.disabled).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+    ).toBe(true);
+    await waitFor(() => expect(screen.queryByText("Scoring…")).toBeNull(), {
+      timeout: 4000,
+    });
+    expect(box.disabled).toBe(false);
+  });
+
+  it("shows a chat_busy during scoring as a gentle note, not an error, and does not resend", async () => {
+    const scoring = {
+      ...teamSession,
+      assessment_stage: "scoring",
+      can_send: false,
+    };
+    state.api.streamTeamConversation.mockRejectedValue(
+      new PlatformApiError(409, "busy", {
+        code: "chat_busy",
+        message: "busy",
+        details: { reason: "assessment_scoring", retryable: true },
+      }),
+    );
+    state.api.conversationSession
+      .mockResolvedValueOnce(scoring)
+      .mockResolvedValue({
+        ...scoring,
+        assessment_stage: "completed",
+        can_send: true,
+      });
+    renderChats();
+    await startMayaTeamChat("我的最后一个答案");
+    expect(
+      await screen.findByText("Scoring in progress, please try again shortly"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "The previous message is still being answered. Send again in a moment.",
+      ),
+    ).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // The message stays in the box; nothing is retried behind the student.
+    const box = screen.getByRole("textbox", {
+      name: "Message",
+    }) as HTMLTextAreaElement;
+    expect(box.value).toBe("我的最后一个答案");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
+    // Scoring ends: the note goes and the student can send again.
+    await waitFor(
+      () =>
+        expect(
+          screen.queryByText("Scoring in progress, please try again shortly"),
+        ).toBeNull(),
+      { timeout: 4000 },
+    );
+    expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+    ).toBe(false);
   });
 
   // Bug (2026-10-13): while the server picked the follow-ups the student

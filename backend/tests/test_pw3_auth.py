@@ -133,10 +133,10 @@ def test_unhandled_auth_request_logs_only_request_id_and_exception_type(
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/auth-test-unhandled")
 
-    assert response.status_code == 503
+    assert response.status_code == 500
     body = response.json()
-    assert body["code"] == "provider_unavailable"
-    assert body["message"] == "The service is temporarily unavailable."
+    assert body["code"] == "internal_error"
+    assert body["message"] == "Something went wrong on the server."
     assert all(sentinel not in response.text for sentinel in sentinels)
     records = [
         record

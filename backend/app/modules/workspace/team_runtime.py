@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session, object_session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
-from app.core.message_timing import message_timing
+from app.core.message_timing import message_timing, set_outcome
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.read_memo import forget_request_reads, memoized, request_read_memo
 from app.core.sqlutil import begin_immediate
@@ -43,7 +43,7 @@ from .models import (
     TeamTurnResult,
 )
 from .schemas import ChatSource, TeamChatTurn, TeamMemberResult, TeamRouting
-from .team_conversation import frozen_team_selection
+from .team_conversation import _assessment_stage, frozen_team_selection
 
 SessionFactory = Callable[[], Session]
 LOGGER = logging.getLogger("maya.workspace")
@@ -976,7 +976,16 @@ def claim_team_turn(
                 .values(active_request_id=request_id, revision=Conversation.revision + 1)
             )
     if getattr(changed, "rowcount", 0) != 1:
-        raise conflict("chat_busy", "Refresh the conversation before sending another message.")
+        # While the Scorer marks a finished test the student waits; the client
+        # shows "scoring, try again shortly" instead of an error (2026-10-18).
+        details = (
+            {"reason": "assessment_scoring", "retryable": True}
+            if _assessment_stage(db, row) == "scoring"
+            else None
+        )
+        raise conflict(
+            "chat_busy", "Refresh the conversation before sending another message.", details
+        )
     now = datetime.now(UTC)
     token = str(uuid4())
     turn = ConversationTurn(
@@ -2157,6 +2166,8 @@ def _finish_run(db: Session, row: Conversation, turn: ConversationTurn) -> None:
         turn.state, turn.safe_error_code = "failed", "team_failed"
     row.active_request_id = None
     _append_event(db, turn, "turn_done")
+    if turn.state != "ready":
+        set_outcome(turn.state)
     _log_turn_timing(db, turn)
 
 
@@ -2236,10 +2247,18 @@ def _scorer_micro_reply(
         assessment_safe_reply_text,
         conversation_user_texts,
     )
-    from .formal_assessment import ABANDON_SCORER, RECORDED_FACT
+    from .formal_assessment import ABANDON_SCORER, RECORDED_FACT, UNSAVED_RETRY_LINE
 
     del reply
     if assessment_result is None:
+        attempt = _active_attempt(db, row)
+        if attempt is not None and attempt.status == "in_progress":
+            # The Tool call failed even after its retry. Nothing new was
+            # saved and nothing saved is touched: ask for the answer again
+            # instead of failing the turn.
+            user_texts = conversation_user_texts(db, row.id)
+            chinese = assessment_reply_chinese(db, row.id, user_texts)
+            return MemberReply(UNSAVED_RETRY_LINE["zh" if chinese else "en"]), None
         return None, PlatformError(
             "assessment_action_required",
             "Continue the current assessment action or pause this attempt.",
@@ -2340,7 +2359,19 @@ def _guide_micro_script(
                 is not None
             )
         if scorer_on_turn:
-            return None
+            from .formal_assessment import SILENT_MEMBER_LINE, UNSAVED_RETRY_LINE
+
+            asked_again = db.scalar(
+                select(TeamTurnResult.id)
+                .where(
+                    TeamTurnResult.turn_id == turn.id,
+                    TeamTurnResult.state == "ready",
+                    TeamTurnResult.assistant_text.in_(list(UNSAVED_RETRY_LINE.values())),
+                )
+                .limit(1)
+            )
+            # The Scorer already asked for the answer again: nothing to add.
+            return SILENT_MEMBER_LINE if asked_again is not None else None
         context = (
             get_assessment_runtime_context(db, actor_context, row.id)
             if actor_context is not None
@@ -3651,14 +3682,30 @@ def _dispatch_provider(
         if selected != selected_binding_ids:
             raise PlatformError("team_context_changed", "This Team target changed.", 409)
         _recheck_assessment_executor_context(db, claim, request)
+        action_unsaved = ordinal > 0 and _assessment_action_unsaved(db, request)
+        if action_unsaved and ordinal > ACTION_FORCED_RETRY_CALLS:
+            # The one retry already went through admission and still saved
+            # nothing. Another call would only repeat it; settle hands the
+            # student a friendly "send it again" line instead.
+            LOGGER.warning(
+                "Assessment action retry unsaved turn_id=%s result_id=%s ordinal=%s",
+                request.turn_id,
+                request.result_id,
+                ordinal,
+            )
+            return ModelResponse(role="assistant", content="")
         dispatch_tools = _assessment_scoped_tool_schemas(tools, request)
         if (
-            ordinal == 0
-            and request.assessment_active
-            and not request.assessment_source_revoked
-            and request.assessment_revoked_scope is None
-            and request.formal_role != "question_guide"
-        ) or _executor_write_still_required(db, request, ordinal):
+            (
+                ordinal == 0
+                and request.assessment_active
+                and not request.assessment_source_revoked
+                and request.assessment_revoked_scope is None
+                and request.formal_role != "question_guide"
+            )
+            or action_unsaved
+            or _executor_write_still_required(db, request, ordinal)
+        ):
             # An assessment turn without this call is rejected as
             # assessment_action_required, so the call cannot be optional: left
             # on "auto", a short answer such as "忘了" came back as prose and
@@ -3701,6 +3748,32 @@ def _dispatch_provider(
 # JSON, the retry ran on "auto" and the model answered in prose, so nothing was
 # saved. An executor's first retries keep the call required until it saves.
 EXECUTOR_FORCED_RETRY_CALLS = 2
+
+
+# Prod (2026-10-18): assessment_action arguments arrived truncated ("'{' was
+# never closed"). The SDK hands the parse error back and the model is asked
+# again; that retry ran on "auto", the model answered in prose and the member
+# failed with assessment_action_required. The call stays required for one
+# retry, which is an ordinary dispatch through admission like the first.
+ACTION_FORCED_RETRY_CALLS = 1
+
+
+def _assessment_action_unsaved(db: Session, request: MemberRequest) -> bool:
+    """The student-facing assessment_action this member owes has no receipt yet."""
+
+    if (
+        not request.assessment_active
+        or request.assessment_source_revoked
+        or request.assessment_revoked_scope is not None
+        or request.assessment_purpose is not None
+        or request.formal_role == "question_guide"
+    ):
+        return False
+    turn = db.get(ConversationTurn, request.turn_id)
+    result = db.get(TeamTurnResult, request.result_id)
+    if turn is None or result is None:
+        return False
+    return _assessment_result_for_result(db, turn, result) is None
 
 
 def _executor_write_still_required(db: Session, request: MemberRequest, ordinal: int) -> bool:

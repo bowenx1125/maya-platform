@@ -49,6 +49,9 @@ class MessageTiming:
         self.call_count = 0
         self.retry = False
         self.inner_error = False
+        # A handled failure (a Team turn that settles failed or partial) the
+        # code below never sees as an exception.
+        self.outcome: str | None = None
         self._last_failed = False
         self._lock = threading.Lock()
 
@@ -165,7 +168,7 @@ def message_timing(kind: str, **ids: object) -> Iterator[MessageTiming]:
     outcome = "error"
     try:
         yield timing
-        outcome = "error" if timing.inner_error else "ok"
+        outcome = timing.outcome or ("error" if timing.inner_error else "ok")
     finally:
         _CURRENT.reset(token)
         record = timing.record(outcome)
@@ -174,6 +177,18 @@ def message_timing(kind: str, **ids: object) -> Iterator[MessageTiming]:
             logger.info(json.dumps(record, separators=(",", ":"), sort_keys=False))
         except Exception:  # pragma: no cover - logging must never break a reply
             pass
+
+
+def set_outcome(outcome: str) -> None:
+    """Record how the message ended when that is not an exception.
+
+    Prod (2026-10-18): Team turns that failed were logged as outcome "ok",
+    because member failures settle as rows rather than raise.
+    """
+
+    timing = _CURRENT.get()
+    if timing is not None:
+        timing.outcome = outcome
 
 
 def add_queue_wait(ms: float) -> None:

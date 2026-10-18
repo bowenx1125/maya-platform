@@ -47,6 +47,7 @@ from app.modules.teams.models import (
     TeamVersion,
     TeamVersionMember,
 )
+from app.modules.teams.publication_access import chat_team_is_live_teacher_public
 from app.modules.teams.service import (
     FrozenTeamSelection,
     resolve_chat_entry,
@@ -1474,7 +1475,15 @@ def _current_team_dispatch_is_authorized(
     if conversation.entry_kind == "team":
         if (
             conversation.origin != "custom_team"
-            or conversation.team_owner_user_id != actor_user_id
+            or (
+                conversation.team_owner_user_id != actor_user_id
+                and not chat_team_is_live_teacher_public(
+                    db,
+                    team_id=conversation.team_id,
+                    team_version_id=conversation.team_version_id,
+                    team_authorization_epoch=conversation.team_authorization_epoch,
+                )
+            )
             or conversation.publication_id is not None
             or conversation.publication_epoch is not None
             or any(item.invoke_grant_id is not None for item in selected_participants)

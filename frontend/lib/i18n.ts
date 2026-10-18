@@ -565,6 +565,7 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorInternal: "Something went wrong on the server. Please try again.",
   errorHostMemoryPressure:
     "The server is busy right now. Your message was kept; please try again shortly.",
   errorServerBusy:
@@ -573,6 +574,8 @@ const enMessages = {
     "Many people are using Maya right now. Press Send again in a moment.",
   chatSendPreviousRunning:
     "The previous message is still being answered. Send again in a moment.",
+  chatSendScoringBusy: "Scoring in progress, please try again shortly",
+  chatScoringNotice: "Scoring…",
   errorVoiceProviderUnavailable:
     "Voice provider is temporarily unavailable. Use the platform fallback voice; this is not a successful custom voice.",
   errorVoiceCloneRefused:
@@ -854,6 +857,8 @@ const enMessages = {
   teamSavedWaitingForChat: "Team saved. You can now start a Team Chat.",
   teamChatUnavailable:
     "Team Chat sending is unavailable in the current runtime.",
+  teamChatMembersUnavailable:
+    "This Team Chat can't continue: its members are no longer available to you. Start a new Chat with the Team.",
   teamRequestFailure: "The Team Chat request could not be completed.",
   teamMemberFailure: "This Team member could not reply.",
   teamSummaryNotSaved:
@@ -1415,10 +1420,13 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
+  errorInternal: "服务器出错，请稍后重试。",
   errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
   chatSendBusyRetry: "当前人数较多，请稍后点击重新发送",
   chatSendPreviousRunning: "上一条消息还在处理中，请稍后重新发送",
+  chatSendScoringBusy: "正在评分，请稍后再试",
+  chatScoringNotice: "评分中…",
   errorVoiceProviderUnavailable:
     "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
   errorVoiceCloneRefused: "当前音色通道不支持克隆。该样本未保存为自定义音色。",
@@ -1680,6 +1688,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamNotEditable: "你已没有权限编辑此 Team。",
   teamSavedWaitingForChat: "Team 已保存，现在可以开始 Team 聊天。",
   teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
+  teamChatMembersUnavailable:
+    "这个 Team 聊天不能继续：你已经无法使用它的成员。请重新和这个 Team 开一个聊天。",
   teamRequestFailure: "Team 聊天请求无法完成。",
   teamMemberFailure: "这位 Team 成员未能回复。",
   teamSummaryNotSaved: "这位成员没能保存总结。再发一条消息即可重试。",
@@ -1900,6 +1910,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  internal_error: "errorInternal",
   host_memory_pressure: "errorHostMemoryPressure",
   host_load_pressure: "errorServerBusy",
   llm_admission_busy: "errorServerBusy",
@@ -1981,7 +1992,9 @@ export function localizeError(
       if (candidate.status === 401) return t("errorUnauthenticated", locale);
       if (candidate.status === 403) return t("errorForbidden", locale);
       if (candidate.status === 404) return t("errorNotFound", locale);
-      if (candidate.status >= 500) return t("errorProviderUnavailable", locale);
+      // A plain 500 is a server bug (internal_error), not a provider outage.
+      if (candidate.status === 500) return t("errorInternal", locale);
+      if (candidate.status > 500) return t("errorProviderUnavailable", locale);
     }
   }
   // fetch rejects with a TypeError when the connection itself fails; its

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import exc as sa_exc
 
 
 class Error(BaseModel):
@@ -32,6 +35,35 @@ class PlatformError(Exception):
 
     def __post_init__(self) -> None:
         super().__init__(self.message)
+
+
+def is_transient_infrastructure_error(exc: BaseException) -> bool:
+    """True for failures that a retry can plausibly fix (not server bugs).
+
+    Network/timeout errors talking to providers and lost or exhausted
+    database connections stay ``provider_unavailable`` (503, retryable);
+    anything else reaching the global handler is an ``internal_error``.
+    """
+
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
+        return True
+    if isinstance(exc, (sa_exc.TimeoutError, sa_exc.DisconnectionError)):
+        return True
+    if isinstance(exc, sa_exc.DBAPIError) and exc.connection_invalidated:
+        return True
+    if isinstance(exc, sa_exc.OperationalError):
+        # psycopg maps connection loss, deadlocks, serialization failures and
+        # admin shutdowns to OperationalError; schema/SQL bugs are
+        # ProgrammingError and therefore stay internal_error.  sqlite3 also
+        # reports "no such table" as OperationalError, so on SQLite only a
+        # busy/locked database counts as transient.
+        if isinstance(exc.orig, sqlite3.Error):
+            text = str(exc.orig).lower()
+            return "locked" in text or "busy" in text
+        return True
+    return False
 
 
 def request_id_for(request: Request) -> str:

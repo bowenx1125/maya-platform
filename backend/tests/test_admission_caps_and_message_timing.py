@@ -8,6 +8,7 @@ import json
 import logging
 import threading
 from collections.abc import Iterator
+from typing import Any
 
 import httpx
 import pytest
@@ -343,3 +344,35 @@ def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ig
     }
     timing = body["message_timing"]
     assert set(timing) >= {"messages", "total_ms", "queue_wait_ms", "llm_calls_per_msg", "ttft_ms"}
+
+
+def test_a_handled_failure_sets_the_outcome() -> None:
+    with mt.message_timing("team", turn_id="t-failed"):
+        mt.set_outcome("failed")
+    summary = mt.message_timing_snapshot()
+    assert summary["messages"] == 1 and summary["errors"] == 1
+
+
+def test_a_failed_team_turn_is_not_logged_as_ok(
+    client: Any, database: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Prod (2026-10-18): every member failed, yet message_timing said "ok".
+    from app.modules.workspace import team_runtime as runtime
+
+    from tests.conftest import post_message
+    from tests.test_mayaform_team_turns import _body, _chat, _headers
+
+    session, csrf, _actor = _chat(client, database)
+
+    def fail(_request: Any) -> Any:
+        raise PlatformError("team_provider_not_sent", "The provider was not called.", 502)
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", fail)
+    caplog.set_level(logging.INFO, logger="maya.message_timing")
+    url = f"/api/v1/conversations/{session['id']}/messages"
+    post_message(client, url, headers=_headers(csrf), json=_body(session, "all"))
+    records = [
+        json.loads(r.getMessage()) for r in caplog.records if r.name == "maya.message_timing"
+    ]
+    team = [record for record in records if record["kind"] == "team"]
+    assert team and team[-1]["outcome"] == "failed"

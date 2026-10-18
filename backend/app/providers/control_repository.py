@@ -376,7 +376,14 @@ class ProviderRepository:
         }
         try:
             with self._write_connection() as connection:
-                connection.execute(_MANIFEST_TABLE.insert().values(**values))
+                if self._shared.get() is connection and self.engine.dialect.name != "sqlite":
+                    # Inside one_transaction() a failed INSERT aborts the whole
+                    # PostgreSQL transaction; a savepoint keeps it usable for
+                    # the caller's duplicate check.
+                    with connection.begin_nested():
+                        connection.execute(_MANIFEST_TABLE.insert().values(**values))
+                else:
+                    connection.execute(_MANIFEST_TABLE.insert().values(**values))
         except IntegrityError as exc:
             raise ProviderRepositoryError("provider export manifest already exists") from exc
         return row_id
@@ -408,6 +415,26 @@ class ProviderRepository:
             turn_id=resolved_turn_id,
         )
 
+        # Prod (2026-10-19): a Team member with knowledge wrote its query
+        # manifest, then the standing authorization ensured the same manifest
+        # inside one_transaction(). The duplicate INSERT aborted that
+        # PostgreSQL transaction, the fallback SELECT failed with
+        # InFailedSqlTransaction and the member showed "could not reply".
+        # An existing manifest is verified without attempting the INSERT.
+        existing = self._read_one(
+            select(_MANIFEST_TABLE).where(_MANIFEST_TABLE.c.manifest_hash == manifest.manifest_hash)
+        )
+        if existing is not None:
+            return self._verified_manifest_id(
+                existing,
+                effective_manifest,
+                policy_snapshot_id=policy_snapshot_id,
+                course_id=course_id,
+                group_id=group_id,
+                agent_version_id=agent_version_id,
+                debate_id=resolved_debate_id,
+                turn_id=resolved_turn_id,
+            )
         try:
             return self.save_export_manifest(
                 effective_manifest,
@@ -427,23 +454,50 @@ class ProviderRepository:
             )
             if row is None:
                 raise
-            try:
-                persisted = _manifest_from_row(row)
-            except Exception as exc:
-                raise ProviderRepositoryError("provider export manifest is corrupt") from exc
-            if (
-                persisted != effective_manifest
-                or str(row["policy_snapshot_id"]) != policy_snapshot_id
-                or _optional_string(row["course_id"]) != course_id
-                or _optional_string(row["group_id"]) != group_id
-                or _optional_string(row["agent_version_id"]) != agent_version_id
-                or _optional_string(row["debate_id"]) != resolved_debate_id
-                or _optional_string(row["turn_id"]) != resolved_turn_id
-            ):
-                raise ProviderRepositoryError(
-                    "provider export manifest already exists with different ownership"
-                ) from error
-            return str(row["id"])
+            return self._verified_manifest_id(
+                row,
+                effective_manifest,
+                policy_snapshot_id=policy_snapshot_id,
+                course_id=course_id,
+                group_id=group_id,
+                agent_version_id=agent_version_id,
+                debate_id=resolved_debate_id,
+                turn_id=resolved_turn_id,
+                cause=error,
+            )
+
+    @staticmethod
+    def _verified_manifest_id(
+        row: Mapping[str, object],
+        effective_manifest: ExportManifestV1,
+        *,
+        policy_snapshot_id: str,
+        course_id: str | None,
+        group_id: str | None,
+        agent_version_id: str | None,
+        debate_id: str | None,
+        turn_id: str | None,
+        cause: BaseException | None = None,
+    ) -> str:
+        """The stored manifest's id when it is exactly this manifest and owner tuple."""
+
+        try:
+            persisted = _manifest_from_row(row)
+        except Exception as exc:
+            raise ProviderRepositoryError("provider export manifest is corrupt") from exc
+        if (
+            persisted != effective_manifest
+            or str(row["policy_snapshot_id"]) != policy_snapshot_id
+            or _optional_string(row["course_id"]) != course_id
+            or _optional_string(row["group_id"]) != group_id
+            or _optional_string(row["agent_version_id"]) != agent_version_id
+            or _optional_string(row["debate_id"]) != debate_id
+            or _optional_string(row["turn_id"]) != turn_id
+        ):
+            raise ProviderRepositoryError(
+                "provider export manifest already exists with different ownership"
+            ) from cause
+        return str(row["id"])
 
     def get_export_manifest(self, manifest_hash_or_id: str) -> ExportManifestV1 | None:
         table = _MANIFEST_TABLE

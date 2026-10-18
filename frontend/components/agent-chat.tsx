@@ -99,13 +99,29 @@ const memoryRouteKeys = [
  * the text in the box and asks the student, at the Send button, to send it
  * again; nothing resends it on its own.
  */
+function isScoringRefusal(error: unknown): boolean {
+  return (
+    isRefusedSend(error) &&
+    (error as PlatformApiError).code === CHAT_BUSY_CODE &&
+    (error as PlatformApiError).details?.reason === "assessment_scoring"
+  );
+}
+
 function sendRefusalHint(
   error: unknown,
-): "chatSendBusyRetry" | "chatSendPreviousRunning" | null {
+  scoring = false,
+):
+  | "chatSendBusyRetry"
+  | "chatSendPreviousRunning"
+  | "chatSendScoringBusy"
+  | null {
   if (!isRefusedSend(error)) return null;
-  return (error as PlatformApiError).code === CHAT_BUSY_CODE
-    ? "chatSendPreviousRunning"
-    : "chatSendBusyRetry";
+  const refusal = error as PlatformApiError;
+  if (refusal.code !== CHAT_BUSY_CODE) return "chatSendBusyRetry";
+  // The Scorer is marking a finished test: a short wait, not an error.
+  return scoring || isScoringRefusal(refusal)
+    ? "chatSendScoringBusy"
+    : "chatSendPreviousRunning";
 }
 
 function memoryParamsOf(search: string): string {
@@ -612,6 +628,7 @@ function AgentChatScope({
   const insertedMention = useRef<InsertedMention | null>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
+  const [teamError, setTeamError] = useState<unknown>(null);
   // The server scores and summarizes after the last answer, with no message
   // from the student, so the open Chat keeps checking until it is finished.
   // So does a turn still running after the student left and came back,
@@ -635,10 +652,17 @@ function AgentChatScope({
         void api
           .conversationSession(finishingTeamId)
           .then((next) => {
-            if (active && isTeamSession(next))
+            if (active && isTeamSession(next)) {
               setSelectedTeam((current) =>
                 current?.id === next.id ? next : current,
               );
+              // Scoring finished (or failed): its "try again shortly" note
+              // is done too.
+              if (next.assessment_stage !== "scoring")
+                setTeamError((current: unknown) =>
+                  isScoringRefusal(current) ? null : current,
+                );
+            }
           })
           .catch(() => {
             // The next tick asks again; sending still reports a lasting failure.
@@ -686,7 +710,6 @@ function AgentChatScope({
       window.clearInterval(timer);
     };
   }, [api, knowledgeGenerationActive]);
-  const [teamError, setTeamError] = useState<unknown>(null);
   const [teamLastEventId, setTeamLastEventId] = useState(0);
   const [memoryRetryEntry, setMemoryRetryEntry] =
     useState<MemoryEntryResult | null>(null);
@@ -2534,7 +2557,11 @@ function AgentChatScope({
     selected?.can_send !== false &&
     character?.available !== false;
   const teamMode = Boolean(selectedTeam);
-  const sendHint = sendRefusalHint(teamMode ? teamError : error);
+  // After the last answer the Scorer marks the test; the Chat waits for it.
+  const teamScoring = selectedTeam?.assessment_stage === "scoring";
+  const sendHint = teamMode
+    ? sendRefusalHint(teamError, teamScoring)
+    : sendRefusalHint(error);
   const activeSession = selectedTeam ?? selected;
   const teamIds = new Set(teamChoices.map((team) => team.id));
   const teamOptions: ChatTargetTeam[] = [
@@ -2566,6 +2593,14 @@ function AgentChatScope({
   const shownTeamTurns = selectedTeam
     ? studentEndFlowTurns(selectedTeam.turns)
     : [];
+  // Name the real reason when no member can be reached: that is not a
+  // runtime limit (bug 2026-10-18 showed the runtime text for it).
+  const teamUnavailableText =
+    selectedTeam &&
+    selectedTeam.team.members.length > 0 &&
+    selectedTeam.team.members.every((member) => !member.available)
+      ? t("teamChatMembersUnavailable")
+      : t("teamChatUnavailable");
   // Why this Chat cannot continue, shown once under its latest message.
   const closedNotice = selectedTeam
     ? selectedTeam.team.deleted
@@ -2575,7 +2610,7 @@ function AgentChatScope({
         : selectedTeam.read_only
           ? t("teamChatReadOnly")
           : !selectedTeam.can_send && !teamWorking
-            ? t("teamChatUnavailable")
+            ? teamUnavailableText
             : null
     : selected?.agent.deleted
       ? t("chatAgentDeleted")
@@ -3124,6 +3159,11 @@ function AgentChatScope({
                     ) : null}
                   </div>
                 ) : null}
+                {teamScoring ? (
+                  <p className={styles.scoringNotice} role="status">
+                    {t("chatScoringNotice")}
+                  </p>
+                ) : null}
                 <form
                   className={styles.composer}
                   onSubmit={(event) => submitMessage(event)}
@@ -3261,7 +3301,7 @@ function AgentChatScope({
                           : selectedTeam &&
                               !selectedTeam.can_send &&
                               !teamWorking
-                            ? t("teamChatUnavailable")
+                            ? teamUnavailableText
                             : !teamMode && character?.available === false
                               ? "Read-only"
                               : "Send"
@@ -3281,7 +3321,7 @@ function AgentChatScope({
                           : selectedTeam &&
                               !selectedTeam.can_send &&
                               !teamWorking
-                            ? t("teamChatUnavailable")
+                            ? teamUnavailableText
                             : !teamMode && !agentCanSend
                               ? readOnlyHelp
                               : undefined

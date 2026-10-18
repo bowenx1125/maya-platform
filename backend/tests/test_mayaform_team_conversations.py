@@ -784,3 +784,79 @@ def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
         member["name"] for member in team_saved["team"]["members"] if member["deleted"]
     ]
     assert deleted_members == ["Teacher member 0"]
+
+
+def test_student_teams_list_chat_with_teacher_public_team_can_send(
+    client: TestClient, database: Database
+) -> None:
+    """Bug (2026-10-18): a student opened the teacher's public Team from the
+    Teams list (kind "team"). The Chat was created, but its recheck only let the
+    owner or a group student in, so every member looked unavailable and the
+    Chat said "Team Chat sending is unavailable in the current runtime"."""
+
+    team, _versions, _csrf = _team(client, database)
+    _, student_csrf = login(client, "bowen")
+    session = _create(client, student_csrf, {"kind": "team", "team_id": team["id"]})
+    assert session["entry_kind"] == "team"
+    assert session["origin"] == "custom_team"
+    assert session["team"]["available"] is True
+    assert all(member["available"] for member in session["team"]["members"])
+    assert session["can_send"] is True
+    reloaded = client.get(f"/api/v1/conversations/{session['id']}")
+    assert reloaded.status_code == 200, reloaded.text
+    assert reloaded.json()["can_send"] is True
+    sent = post_message(
+        client,
+        f"/api/v1/conversations/{session['id']}/messages",
+        headers=_headers(student_csrf),
+        json={"request_id": str(uuid4()), "expected_revision": 0, "message": "Hello team"},
+    )
+    assert sent.status_code == 200, sent.text
+    turns = sent.json()["turns"]
+    assert len(turns) == 1 and turns[0]["state"] in {"ready", "partial"}, turns
+    # The Chat page sends over the stream endpoint; it must not 404 either.
+    streamed = client.post(
+        f"/api/v1/conversations/{session['id']}/messages:stream",
+        headers={**_headers(student_csrf), "Accept": "text/event-stream"},
+        json={"request_id": str(uuid4()), "expected_revision": 1, "message": "Hello again"},
+    )
+    assert streamed.status_code == 200, streamed.text
+
+    # Revoking the publication (the teacher makes the Team private again by
+    # deleting it) still closes the Chat: access follows the live publication.
+    _, teacher_csrf = login(client, "maya")
+    deleted = client.delete(
+        f"/api/v1/teams/{team['id']}",
+        headers=_headers(teacher_csrf, f"delete-public-team-{uuid4()}"),
+    )
+    assert deleted.status_code == 204, deleted.text
+    login(client, "bowen")
+    closed = client.get(f"/api/v1/conversations/{session['id']}").json()
+    assert closed["can_send"] is False
+    assert closed["team"]["deleted"] is True
+
+
+def test_other_teacher_private_team_chat_stays_closed_to_student(
+    client: TestClient, database: Database
+) -> None:
+    """The fix lets a student continue a teacher's published public Team only;
+    a private or unpublished Team of someone else is still not reachable."""
+
+    _, csrf = login(client, "maya")
+    versions = [
+        _make_agent_version(database, owner_id=MAYA_ID, name=f"Private member {i}")[1]
+        for i in range(2)
+    ]
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, f"private-team-{uuid4()}"),
+        json=_team_payload(versions, visibility="private"),
+    )
+    assert created.status_code == 201, created.text
+    _, student_csrf = login(client, "bowen")
+    response = client.post(
+        "/api/v1/conversations",
+        headers=_headers(student_csrf),
+        json={"entry": {"kind": "team", "team_id": created.json()["id"]}},
+    )
+    assert response.status_code == 404, response.text
