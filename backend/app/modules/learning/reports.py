@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -186,6 +187,55 @@ def _activity_label(db: Session, activity: AssessmentActivity, team_version: Tea
     return f"{team} · {version}"
 
 
+def _require_course_teacher(db: Session, actor: AuthContext, course_id: str) -> None:
+    if (
+        actor.user.status != "active"
+        or course_member_role(db, str(actor.user.id), course_id) != "teacher"
+    ):
+        raise not_found()
+
+
+def _authorized_activities(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+) -> list[tuple[AssessmentActivityListItem, AssessmentActivity]]:
+    """Each current published activity, validated once, with its list item."""
+
+    _require_course_teacher(db, actor, course_id)
+    rows = db.scalars(
+        select(AssessmentActivity)
+        .where(AssessmentActivity.course_id == course_id)
+        .order_by(AssessmentActivity.created_at.desc(), AssessmentActivity.id)
+    ).all()
+    output: list[tuple[AssessmentActivityListItem, AssessmentActivity]] = []
+    for row in rows:
+        try:
+            activity = _validated_activity(
+                db,
+                actor,
+                course_id=course_id,
+                activity_id=row.id,
+            )
+        except PlatformError:
+            continue
+        team_version = db.get(TeamVersion, activity.team_version_id)
+        if team_version is not None:
+            output.append(
+                (
+                    AssessmentActivityListItem(
+                        id=UUID(activity.id),
+                        name=_activity_label(db, activity, team_version),
+                        team_name=team_version.display_name,
+                        created_at=activity.created_at,
+                    ),
+                    activity,
+                )
+            )
+    return output
+
+
 def list_authorized_assessment_activities(
     db: Session,
     actor: AuthContext,
@@ -194,38 +244,7 @@ def list_authorized_assessment_activities(
 ) -> list[AssessmentActivityListItem]:
     """List current published activities without reading or counting Private attempts."""
 
-    if (
-        actor.user.status != "active"
-        or course_member_role(db, str(actor.user.id), course_id) != "teacher"
-    ):
-        raise not_found()
-    rows = db.scalars(
-        select(AssessmentActivity)
-        .where(AssessmentActivity.course_id == course_id)
-        .order_by(AssessmentActivity.created_at.desc(), AssessmentActivity.id)
-    ).all()
-    output: list[AssessmentActivityListItem] = []
-    for activity in rows:
-        try:
-            _validated_activity(
-                db,
-                actor,
-                course_id=course_id,
-                activity_id=activity.id,
-            )
-        except PlatformError:
-            continue
-        team_version = db.get(TeamVersion, activity.team_version_id)
-        if team_version is not None:
-            output.append(
-                AssessmentActivityListItem(
-                    id=UUID(activity.id),
-                    name=_activity_label(db, activity, team_version),
-                    team_name=team_version.display_name,
-                    created_at=activity.created_at,
-                )
-            )
-    return output
+    return [item for item, _activity in _authorized_activities(db, actor, course_id=course_id)]
 
 
 def _eligible_attempts(db: Session, activity: AssessmentActivity) -> list[AssessmentAttempt]:
@@ -810,37 +829,38 @@ def read_student_answers(
     return sheets
 
 
-def _overview_phase(db: Session, attempt: AssessmentAttempt) -> str:
-    phase = attempt_teacher_phase(db, attempt)
-    if phase not in _TEACHER_PHASES:
-        raise not_found()
-    return phase
-
-
-def read_group_results(
+def _attempt_rows(
     db: Session,
     actor: AuthContext,
     *,
     course_id: str,
-    user_ids: set[str],
-    group_id: str | None = None,
-    group_name: str | None = None,
+    group_of: Callable[[str], tuple[str | None, str | None] | None],
+    wanted: Callable[[AssessmentAttempt], bool] | None = None,
 ) -> list[dict[str, Any]]:
-    """Each formal attempt by these students, newest first, with its sheet.
+    """Formal attempts, newest first, each with its sheet and its group.
 
-    The same activities, eligibility and answer sheets the teacher's tools
-    read, narrowed to one group's members. Abandoned attempts are left out,
-    and each carries the teacher's latest course report for its test.
+    Bug (2026-10-17, #123): the course list re-ran every activity check and
+    attempt query once per group, so Record took seconds to open. Each
+    activity is now validated once and its attempts read once; ``group_of``
+    places a student, and an attempt with no group is left out.
     """
 
     results: list[dict[str, Any]] = []
-    for item in list_authorized_assessment_activities(db, actor, course_id=course_id):
-        activity = _validated_activity(db, actor, course_id=course_id, activity_id=str(item.id))
-        report_path = _latest_report_path(db, actor, activity_id=activity.id)
+    for item, activity in _authorized_activities(db, actor, course_id=course_id):
+        report_path: str | None = None
+        report_read = False
         for attempt in _eligible_attempts(db, activity):
-            if attempt.actor_user_id not in user_ids or attempt.status == "abandoned":
+            if attempt.status == "abandoned":
                 continue
+            group = group_of(attempt.actor_user_id)
+            if group is None or (wanted is not None and not wanted(attempt)):
+                continue
+            if not report_read:
+                report_path = _latest_report_path(db, actor, activity_id=activity.id)
+                report_read = True
             sheet = attempt_answer_sheet(db, attempt)
+            if sheet["phase"] not in _TEACHER_PHASES:
+                raise not_found()
             awarded = [
                 question["points_awarded"]
                 for question in sheet["questions"]
@@ -859,10 +879,10 @@ def read_group_results(
                     "test_name": item.name,
                     "team_name": item.team_name,
                     "status": attempt.status,
-                    "phase": _overview_phase(db, attempt),
+                    "phase": sheet["phase"],
                     "conversation_id": attempt.source_conversation_id,
-                    "group_id": group_id,
-                    "group_name": group_name,
+                    "group_id": group[0],
+                    "group_name": group[1],
                     "started_at": attempt.started_at,
                     "ended_at": attempt.completed_at,
                     "points_awarded": sum(awarded) if awarded else None,
@@ -873,6 +893,30 @@ def read_group_results(
             )
     results.sort(key=lambda row: row["started_at"], reverse=True)
     return results
+
+
+def read_group_results(
+    db: Session,
+    actor: AuthContext,
+    *,
+    course_id: str,
+    user_ids: set[str],
+    group_id: str | None = None,
+    group_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """Each formal attempt by these students, newest first, with its sheet.
+
+    The same activities, eligibility and answer sheets the teacher's tools
+    read, narrowed to one group's members. Abandoned attempts are left out,
+    and each carries the teacher's latest course report for its test.
+    """
+
+    return _attempt_rows(
+        db,
+        actor,
+        course_id=course_id,
+        group_of=lambda user_id: (group_id, group_name) if user_id in user_ids else None,
+    )
 
 
 def list_course_assessment_attempts(
@@ -887,10 +931,11 @@ def list_course_assessment_attempts(
     """Formal attempts in a course, without the teacher entering a group.
 
     A conversation or attempt id that is not one of these attempts is not
-    found. The same rule hides a group outside the course.
+    found. The same rule hides a group outside the course. A student in
+    several groups is listed under the first by name.
     """
 
-    list_authorized_assessment_activities(db, actor, course_id=course_id)
+    _require_course_teacher(db, actor, course_id)
     groups = list(
         db.scalars(
             select(Group).where(Group.course_id == course_id).order_by(Group.name, Group.id)
@@ -900,31 +945,29 @@ def list_course_assessment_attempts(
         groups = [group for group in groups if group.id == group_id]
         if not groups:
             raise not_found()
-    rows: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for group in groups:
-        member_ids = set(
-            db.scalars(select(GroupMember.user_id).where(GroupMember.group_id == group.id)).all()
+    order = {group.id: index for index, group in enumerate(groups)}
+    placed: dict[str, tuple[str | None, str | None]] = {}
+    if groups:
+        memberships = db.execute(
+            select(GroupMember.user_id, GroupMember.group_id).where(
+                GroupMember.group_id.in_(list(order))
+            )
+        ).all()
+        by_id = {group.id: group for group in groups}
+        for user_id, member_group_id in sorted(memberships, key=lambda row: order[row[1]]):
+            if user_id not in placed:
+                group = by_id[member_group_id]
+                placed[user_id] = (group.id, group.name)
+
+    def wanted(attempt: AssessmentAttempt) -> bool:
+        # A single sheet is asked for: build no other sheet.
+        return (attempt_id is None or attempt.id == attempt_id) and (
+            conversation_id is None or attempt.source_conversation_id == conversation_id
         )
-        for row in read_group_results(
-            db,
-            actor,
-            course_id=course_id,
-            user_ids=member_ids,
-            group_id=group.id,
-            group_name=group.name,
-        ):
-            if row["attempt_id"] in seen:
-                continue
-            seen.add(row["attempt_id"])
-            rows.append(row)
-    if attempt_id is not None:
-        rows = [row for row in rows if row["attempt_id"] == attempt_id]
-    if conversation_id is not None:
-        rows = [row for row in rows if row["conversation_id"] == conversation_id]
+
+    rows = _attempt_rows(db, actor, course_id=course_id, group_of=placed.get, wanted=wanted)
     if (attempt_id is not None or conversation_id is not None) and not rows:
         raise not_found()
-    rows.sort(key=lambda row: row["started_at"], reverse=True)
     return rows
 
 

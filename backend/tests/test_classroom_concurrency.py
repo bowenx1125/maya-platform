@@ -31,7 +31,7 @@ from app.modules.learning.attempts import (
 from app.modules.learning.models import AssessmentAttempt, LearningRecord
 from app.modules.learning.schemas import AssessmentRuntimeDecision
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 from tests.conftest import login
 from tests.test_mayaform_assessment_attempts import _create_formal_conversation
@@ -236,10 +236,31 @@ def test_a_whole_class_at_once(classroom: Any, students: int) -> None:
 
     # The teacher reads every student's attempt from Brainform Record.
     _, teacher_csrf = login(client, "maya")
-    listed = client.get(f"/api/v1/learning/courses/{COURSE_ID}/assessment-attempts")
+    statements: list[str] = []
+
+    def count(*args: Any) -> None:
+        statements.append(args[2])
+
+    event.listen(database.engine, "before_cursor_execute", count)
+    try:
+        listed = client.get(f"/api/v1/learning/courses/{COURSE_ID}/assessment-attempts")
+    finally:
+        event.remove(database.engine, "before_cursor_execute", count)
     assert listed.status_code == 200, listed.text
     listed_users = {row["user_id"] for row in listed.json()}
     assert {result["user_id"] for result in results} <= listed_users
+    # #123: each activity is checked once and each sheet built once, not once
+    # per group (8 groups; here every student has their own Team). 40 rows took
+    # 8,712 statements before and 1,127 after.
+    assert len(statements) <= 30 * len(listed.json()) + 100
+    # One attempt asked for builds one sheet and returns the same row.
+    first = listed.json()[0]
+    single = client.get(
+        f"/api/v1/learning/courses/{COURSE_ID}/assessment-attempts",
+        params={"attempt_id": first["attempt_id"]},
+    )
+    assert single.status_code == 200, single.text
+    assert single.json() == [first]
 
     snapshot = aa.adaptive_admission_snapshot(settings)
     assert snapshot["in_flight"] == 0

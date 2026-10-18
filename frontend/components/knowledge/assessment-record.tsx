@@ -25,24 +25,34 @@ export type RecordTeam = {
   latest: string;
 };
 
+// Bug (2026-10-17, #123): Record stayed blank on every open while the list
+// loaded. The last list per course shows at once and refreshes behind it.
+const lastAttempts = new Map<string, OverviewResult[]>();
+
 /**
  * Every formal attempt in the course, grouped by the assessment Team's name,
  * most recently active Team first. Attempts inside a Team read by student.
  */
 export function useAssessmentRecord(courseId: string, enabled: boolean) {
-  const { api } = useSession();
-  const [attempts, setAttempts] = useState<OverviewResult[] | null>(null);
+  const { api, user } = useSession();
+  // Per signed-in teacher: report links are each teacher's own.
+  const cacheKey = `${user?.id ?? ""}:${courseId}`;
+  const [attempts, setAttempts] = useState<OverviewResult[] | null>(
+    () => lastAttempts.get(cacheKey) ?? null,
+  );
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     if (!enabled || !courseId) return;
     setError(null);
     try {
-      setAttempts(await api.courseAssessmentAttempts(courseId));
+      const next = await api.courseAssessmentAttempts(courseId);
+      lastAttempts.set(cacheKey, next);
+      setAttempts(next);
     } catch (cause) {
       setError(cause);
     }
-  }, [api, courseId, enabled]);
+  }, [api, cacheKey, courseId, enabled]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -123,7 +133,16 @@ export function RecordSection({
       </div>
       {error ? (
         <ErrorNotice inline error={error} onRetry={onRetry} />
-      ) : !loaded ? null : teams.length ? (
+      ) : !loaded ? (
+        <ul className={styles.list} aria-busy="true" aria-label={t("loading")}>
+          {[0, 1, 2].map((index) => (
+            <li className={`${styles.row} ${record.skeletonRow}`} key={index}>
+              <span className={record.skeletonLine} />
+              <span className={record.skeletonRing} />
+            </li>
+          ))}
+        </ul>
+      ) : teams.length ? (
         <ul className={styles.list}>
           {teams.map((team) => (
             <li className={styles.row} key={team.name}>
