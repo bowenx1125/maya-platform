@@ -354,6 +354,28 @@
   text-decoration: none;
 }
 
+.debateActions .iconAction.iconAction {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  color: var(--muted, #6e6e73);
+}
+
+.debateActions .iconAction.iconAction:hover:not(:disabled),
+.debateActions .iconAction.iconAction:focus-visible {
+  color: var(--ink, #1d1d1f);
+}
+
+.debateActions .iconAction:global(.icon-action-danger):hover:not(:disabled),
+.debateActions .iconAction:global(.icon-action-danger):focus-visible {
+  background: rgba(183, 79, 90, 0.08);
+  color: var(--red, #b74f5a);
+}
+
 .debateActions button:disabled {
   opacity: 0.5;
 }

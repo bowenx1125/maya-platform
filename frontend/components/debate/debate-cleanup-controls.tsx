@@ -10,6 +10,7 @@ import {
   type IdempotencyHandle,
   type PlatformApi,
 } from "../../lib/api";
+import { IconBell, IconBellOff, IconClose } from "../quiet-icons";
 
 type Intent = {
   debateId: string;
@@ -47,6 +48,7 @@ export function DebateCleanupControls({
   onAllDeleted,
   className = "row-actions",
   audioRestoreNeeded,
+  iconClassName = "",
 }: {
   detail?: DebateDetail;
   debateId?: string;
@@ -54,6 +56,7 @@ export function DebateCleanupControls({
   onAllDeleted?: () => void | Promise<void>;
   className?: string;
   audioRestoreNeeded?: boolean;
+  iconClassName?: string;
   api: Pick<
     PlatformApi,
     "deleteDebateVoice" | "deleteDebateAll" | "regenerateDebateTurnAudio"
@@ -205,29 +208,39 @@ export function DebateCleanupControls({
     }
   }
 
+  const voiceLabel =
+    removal === "voice"
+      ? "Devocalizing"
+      : generatingAudio
+        ? "Revocalize..."
+        : revoice
+          ? "Revocalize"
+          : "Devocalize";
+  const deleteLabel = removal === "all" ? "Deleting" : "Delete";
+  // Bell = this debate has its audio; clicking devocalizes. Bell struck
+  // through = audio removed; clicking revocalizes (lifts the strike).
   return (
     <div className={className}>
       <button
-        className="secondary-action"
+        className={`icon-action ${iconClassName}`}
         type="button"
         disabled={busy}
+        aria-label={voiceLabel}
+        title={voiceLabel}
+        data-vocalized={revoice ? "false" : "true"}
         onClick={() => void (revoice ? generateAudio() : remove("voice"))}
       >
-        {removal === "voice"
-          ? "Devocalizing"
-          : generatingAudio
-            ? "Revocalize..."
-            : revoice
-              ? "Revocalize"
-              : "Devocalize"}
+        {revoice ? <IconBellOff size={18} /> : <IconBell size={18} />}
       </button>
       <button
-        className="secondary-action"
+        className={`icon-action icon-action-danger ${iconClassName}`}
         type="button"
         disabled={busy}
+        aria-label={deleteLabel}
+        title={deleteLabel}
         onClick={() => void remove("all")}
       >
-        {removal === "all" ? "Deleting" : "Delete"}
+        <IconClose size={18} />
       </button>
     </div>
   );

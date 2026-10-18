@@ -1,5 +1,7 @@
 /** Small outline icons for quiet workspace actions. */
 
+import type { ReactNode } from "react";
+
 export function IconPlay({ size = 16 }: { size?: number }) {
   return (
     <svg
@@ -194,5 +196,65 @@ export function IconPin({
         d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2v.8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1Z"
       />
     </svg>
+  );
+}
+
+function OutlineIcon({
+  size,
+  children,
+}: {
+  size: number;
+  children: ReactNode;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+/** Enter: an arrow going into a doorway (step into the room). */
+export function IconEnter({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <path d="m10 17 5-5-5-5" />
+      <path d="M15 12H3" />
+    </OutlineIcon>
+  );
+}
+
+const BELL_BODY = "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9";
+const BELL_CLAPPER = "M10.3 21a1.94 1.94 0 0 0 3.4 0";
+
+/** Sound is on: shown while audio exists; clicking silences it. */
+export function IconBell({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <path d={BELL_BODY} />
+      <path d={BELL_CLAPPER} />
+    </OutlineIcon>
+  );
+}
+
+/** Sound is off: the same bell struck through; clicking restores it. */
+export function IconBellOff({ size = 16 }: { size?: number }) {
+  return (
+    <OutlineIcon size={size}>
+      <path d={BELL_BODY} />
+      <path d={BELL_CLAPPER} />
+      <path d="M3 3l18 18" />
+    </OutlineIcon>
   );
 }

@@ -30,6 +30,7 @@ import { useLocale, useT } from "../../locale";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";
+import { IconEnter } from "../../quiet-icons";
 
 import {
   EmptyCard,
@@ -189,28 +190,30 @@ export function TeacherDebateList({
                         onDone={() => load(true, true)}
                       />
                     ) : null}
-                    {debate.status === "draft" && debate.preview ? (
-                      <Link
-                        className="secondary-action"
-                        href={`/teacher/debates/${debate.id}/control`}
-                      >
-                        Preview
-                      </Link>
-                    ) : null}
+                    {/* The row itself opens Preview, so it has no button of
+                      its own; the remaining actions are icons. */}
                     {!["failed", "stopped"].includes(debate.status) &&
                     (debate.preview?.ready ||
                       ["running", "completed", "debate_finished"].includes(
                         debate.status,
                       )) ? (
                       <Link
-                        className="secondary-action"
+                        className={`icon-action ${styles.iconAction}`}
                         href={`/teacher/debates-beta/${debate.id}/control`}
+                        aria-label="Immerse"
+                        title="Immerse"
                       >
-                        Immerse
+                        <IconEnter size={18} />
                       </Link>
                     ) : (
-                      <button type="button" disabled>
-                        Immerse
+                      <button
+                        className={`icon-action ${styles.iconAction}`}
+                        type="button"
+                        aria-label="Immerse"
+                        title="Immerse"
+                        disabled
+                      >
+                        <IconEnter size={18} />
                       </button>
                     )}
                     <DebateCleanupControls
@@ -225,6 +228,7 @@ export function TeacherDebateList({
                         );
                       }}
                       className={styles.listCleanup}
+                      iconClassName={styles.iconAction}
                       audioRestoreNeeded={debate.audio_restore_needed}
                     />
                   </div>
