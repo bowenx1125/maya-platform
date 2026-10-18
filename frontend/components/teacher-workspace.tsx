@@ -24,10 +24,20 @@ import {
   type KnowledgeSnapshot,
   type PublishedAgentSummary,
 } from "../lib/api";
-import { prefetchVoiceList, voiceListIdentity } from "../lib/voice-list-cache";
+import { prefetchVoiceList } from "../lib/voice-list-cache";
 import { useT } from "./locale";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
+import {
+  cachedCall,
+  forgetRequestCache,
+  invalidateRequestCache,
+  isBusyResponse,
+  peekRequestCache,
+  rememberRequestCache,
+  requestCacheGeneration,
+  requestCacheIdentity,
+} from "../lib/request-cache";
 import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { UserAvatar } from "./user-avatar";
@@ -226,6 +236,13 @@ export function TeacherDashboard() {
   );
 }
 
+type TeacherStudyformSnapshot = {
+  personalAgents: PublishedAgentSummary[];
+  ownedAgents: AgentSummary[];
+  chatAgents: ChatAgent[];
+  teams: TeamSummaryDto[];
+};
+
 export function TeacherStudyformWorkspace({
   initialGroupId,
   initialMode,
@@ -241,23 +258,44 @@ export function TeacherStudyformWorkspace({
     (membership) => membership.role === "teacher",
   )?.course_id;
   const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${initialMode ?? ""}:${initialTeamId ?? ""}:${identityGeneration}`;
-  const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
-  const [personalAgents, setPersonalAgents] = useState<PublishedAgentSummary[]>(
-    [],
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
+  const snapshotKey = `page:studyform-teacher:${teacherCourseId ?? "none"}`;
+  // A return visit paints the last page this identity saw, then refreshes.
+  const [snapshot] = useState(() =>
+    teacherCourseId
+      ? peekRequestCache<TeacherStudyformSnapshot>(
+          api,
+          cacheIdentity,
+          snapshotKey,
+        )
+      : undefined,
   );
-  const [ownedAgents, setOwnedAgents] = useState<AgentSummary[]>([]);
-  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
-  const [teams, setTeams] = useState<TeamSummaryDto[]>([]);
+  const [personalAgents, setPersonalAgents] = useState<PublishedAgentSummary[]>(
+    snapshot?.personalAgents ?? [],
+  );
+  const [ownedAgents, setOwnedAgents] = useState<AgentSummary[]>(
+    snapshot?.ownedAgents ?? [],
+  );
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>(
+    snapshot?.chatAgents ?? [],
+  );
+  const [teams, setTeams] = useState<TeamSummaryDto[]>(snapshot?.teams ?? []);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const [loadedScope, setLoadedScope] = useState<string | null>(
+    snapshot ? scope : null,
+  );
+  const paintedScope = useRef<string | null>(snapshot ? scope : null);
   const loading = loadedScope !== scope;
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     let active = true;
     const requestScope = scope;
+    // Painted from a snapshot: refresh quietly instead of blanking.
+    const background = paintedScope.current === requestScope;
+    paintedScope.current = null;
     const timer = window.setTimeout(() => {
-      setError(null);
+      if (!background) setError(null);
       if (!teacherCourseId) {
         setPersonalAgents([]);
         setOwnedAgents([]);
@@ -268,17 +306,24 @@ export function TeacherStudyformWorkspace({
       }
       // The Voices panel mounts only after this page loads; start its list
       // now so it is not a second wait after the first.
-      prefetchVoiceList(api, voiceIdentity, "personal", teacherCourseId);
+      prefetchVoiceList(api, cacheIdentity, "personal", teacherCourseId);
+      const generation = requestCacheGeneration(api);
+      const courseId = teacherCourseId;
+      const read = <T,>(
+        name: string,
+        run: () => Promise<T>,
+        args: unknown[] = [courseId],
+      ): Promise<T> => cachedCall(api, cacheIdentity, name, args, run);
       void Promise.all([
         typeof api.publishedAgents === "function"
-          ? api.publishedAgents(teacherCourseId)
+          ? read("publishedAgents", () => api.publishedAgents(courseId))
           : Promise.resolve([]),
-        api.chatAgents(teacherCourseId),
+        read("chatAgents", () => api.chatAgents(courseId)),
         typeof api.teams === "function"
-          ? api.teams(teacherCourseId)
+          ? read("teams", () => api.teams(courseId), [courseId, undefined])
           : Promise.resolve([]),
         typeof api.workspaceAgents === "function"
-          ? api.workspaceAgents(teacherCourseId)
+          ? read("workspaceAgents", () => api.workspaceAgents(courseId))
           : Promise.resolve([]),
       ])
         .then(([nextPersonalAgents, nextChatAgents, nextTeams, nextOwned]) => {
@@ -286,17 +331,39 @@ export function TeacherStudyformWorkspace({
           const publishedIds = new Set(
             nextPersonalAgents.map((item) => item.agent.id),
           );
-          setPersonalAgents(nextPersonalAgents);
-          setOwnedAgents(
-            nextOwned.filter((agent) => !publishedIds.has(agent.id)),
-          );
-          setChatAgents(nextChatAgents);
-          setTeams(nextTeams);
+          const next: TeacherStudyformSnapshot = {
+            personalAgents: nextPersonalAgents,
+            ownedAgents: nextOwned.filter(
+              (agent) => !publishedIds.has(agent.id),
+            ),
+            chatAgents: nextChatAgents,
+            teams: nextTeams,
+          };
+          setPersonalAgents(next.personalAgents);
+          setOwnedAgents(next.ownedAgents);
+          setChatAgents(next.chatAgents);
+          setTeams(next.teams);
           setLoadedScope(requestScope);
           setError(null);
+          rememberRequestCache(
+            api,
+            cacheIdentity,
+            snapshotKey,
+            next,
+            generation,
+          );
         })
         .catch((cause) => {
           if (!active) return;
+          // Busy server during a quiet refresh: keep the page on screen.
+          if (background && isBusyResponse(cause)) return;
+          forgetRequestCache(api, cacheIdentity, snapshotKey);
+          if (background) {
+            setPersonalAgents([]);
+            setOwnedAgents([]);
+            setChatAgents([]);
+            setTeams([]);
+          }
           setError(cause);
           setLoadedScope(requestScope);
         });
@@ -305,7 +372,7 @@ export function TeacherStudyformWorkspace({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [api, initialGroupId, scope, teacherCourseId, voiceIdentity]);
+  }, [api, cacheIdentity, initialGroupId, scope, snapshotKey, teacherCourseId]);
 
   async function deletePersonalAgent(agentId: string) {
     if (deletingId || !window.confirm(t("deleteAgentConfirm"))) return;
@@ -313,6 +380,7 @@ export function TeacherStudyformWorkspace({
     setError(null);
     try {
       await api.deleteAgent(agentId);
+      invalidateRequestCache(api);
       setPersonalAgents((current) =>
         current.filter((item) => item.agent.id !== agentId),
       );
@@ -332,6 +400,7 @@ export function TeacherStudyformWorkspace({
     setError(null);
     try {
       await api.deleteTeam(teamId);
+      invalidateRequestCache(api);
       setTeams((current) => current.filter((team) => team.id !== teamId));
     } catch (cause) {
       setError(cause);

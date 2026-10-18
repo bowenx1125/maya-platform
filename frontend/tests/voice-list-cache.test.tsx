@@ -16,6 +16,7 @@ import {
   VOICE_LIST_FRESH_MS,
   voiceListIdentity,
 } from "../lib/voice-list-cache";
+import { invalidateRequestCache } from "../lib/request-cache";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({}),
@@ -233,6 +234,17 @@ describe("Studyform voice list cache", () => {
     await early;
     expect(api.voiceProfiles).toHaveBeenCalledTimes(2);
     expect(cachedVoiceList(api, identity, "group", "group-a")).toEqual([]);
+  });
+
+  it("lives in the shared page-load cache, so any change empties it", async () => {
+    const api = freshApi();
+    const identity = voiceListIdentity("student-a", 1);
+    api.voiceProfiles.mockResolvedValueOnce([voice("v1", "kept.wav")]);
+    await fetchVoiceList(api, identity, "group", "group-a");
+    expect(cachedVoiceList(api, identity, "group", "group-a")).toHaveLength(1);
+    // What PlatformApi does on every non-GET request.
+    invalidateRequestCache(api);
+    expect(cachedVoiceList(api, identity, "group", "group-a")).toBeUndefined();
   });
 
   it("keeps a teacher's personal list apart from a group list", async () => {

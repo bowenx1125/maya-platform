@@ -286,10 +286,9 @@ describe("Brainform workspace actions", () => {
         </ActionsHost>
       </LocaleProvider>,
     );
-    await waitFor(() =>
-      expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(2),
-    );
     await screen.findByRole("button", { name: "Back" });
+    // A second visit within FRESH_MS reuses the shared page-load read.
+    expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
     expect(screen.queryByLabelText("Import a file")).toBeNull();
   });
