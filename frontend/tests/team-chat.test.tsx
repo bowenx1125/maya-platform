@@ -1842,26 +1842,35 @@ describe("Chatform", () => {
     expect(
       screen.queryByRole("button", { name: "Add @ recipient" }),
     ).toBeNull();
-    expect(within(menu).getByRole("menuitem", { name: "All" })).toBeTruthy();
+    expect(within(menu).queryByRole("menuitem", { name: "All" })).toBeNull();
     expect(
       within(menu).getAllByRole("menuitem", { name: "Bowen" }),
     ).toHaveLength(2);
     expect(within(menu).getByRole("menuitem", { name: "Jade" })).toBeTruthy();
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "All" }));
-    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
-    expect((message as HTMLTextAreaElement).value).toBe("@All");
     expect(screen.queryByRole("button", { name: "Remove All" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove Bowen" })).toBeNull();
+
+    fireEvent.click(
+      within(menu).getAllByRole("menuitem", { name: "Bowen" })[0],
+    );
+    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
+    expect((message as HTMLTextAreaElement).value).toBe("@Bowen ");
+    expect((message as HTMLTextAreaElement).selectionStart).toBe(
+      "@Bowen ".length,
+    );
+    expect((message as HTMLTextAreaElement).selectionEnd).toBe(
+      "@Bowen ".length,
+    );
 
     fireEvent.change(message, { target: { value: "@" } });
     fireEvent.keyDown(message, { key: "@", shiftKey: true });
     fireEvent.click(
       within(screen.getByRole("menu", { name: "Recipients" })).getAllByRole(
         "menuitem",
-        { name: "Bowen" },
+        { name: "Jade" },
       )[0],
     );
-    expect((message as HTMLTextAreaElement).value).toBe("@Bowen");
+    expect((message as HTMLTextAreaElement).value).toBe("@Jade ");
     expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
 
     const pastedText = "```txt\n@All members @Bowen\n``` this is quoted text";

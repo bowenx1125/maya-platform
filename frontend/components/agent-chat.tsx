@@ -9,6 +9,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { DismissibleAlert } from "./dismissible-alert";
@@ -51,6 +52,7 @@ import {
   settleChatRequest,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
+import { applyMentionInsert, placeMentionCaret } from "../lib/mention-insert";
 import {
   ChatTargetPicker,
   type ChatTargetTeam,
@@ -181,7 +183,8 @@ function routingForMention(
   message: string,
 ): TeamRouting {
   // Bare sends: every member reads and replies (length by relevance). An
-  // empty reply is omitted and is not a failure. @Name / @All stay explicit.
+  // empty reply is omitted and is not a failure. @Name is explicit; typed
+  // @All still routes to everyone (picker no longer offers All).
   const all: TeamRouting = { mode: "all", participant_ids: [] };
   const label = mentionLabel(message);
   if (!label) return all;
@@ -2628,14 +2631,12 @@ function AgentChatScope({
   );
 
   function insertMention(label: string) {
-    const draft = teamDraft;
-    const at = draft.lastIndexOf("@");
-    const next =
-      at >= 0
-        ? `${draft.slice(0, at)}@${label}${draft.slice(at + 1).replace(/^[^\s@]*/, "")}`
-        : `${draft}@${label}`;
-    setTeamDraft(next);
-    setTeamRecipientMenu(false);
+    const { next, caret } = applyMentionInsert(teamDraft, label);
+    flushSync(() => {
+      setTeamDraft(next);
+      setTeamRecipientMenu(false);
+    });
+    placeMentionCaret(messageRef.current, caret);
   }
 
   function submitMessage(event?: FormEvent) {
@@ -3132,14 +3133,6 @@ function AgentChatScope({
                       role="menu"
                       aria-label={t("teamRecipients")}
                     >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={teamBusy}
-                        onClick={() => insertMention(t("teamAllMembers"))}
-                      >
-                        {t("teamAllMembers")}
-                      </button>
                       {mentionMembers.map((member) => (
                         <button
                           key={member.key}
