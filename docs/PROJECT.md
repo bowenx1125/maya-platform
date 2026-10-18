@@ -199,14 +199,13 @@ UI polish: Teams match Agents; create Done validates; edit Done needs a dirty fo
 Oct14: Voice/Rebirth recovery, speech routing, nonvoice, Coding-A locks.
 Speech models stay paused after Notice118434.
 
-Built `f007a11` (PR #69); backup `maya-20261014T111701Z.sqlite3` ok, schema0064.
 Voices upload help states sample rules; no side copy.
 
 Knowledge partial promote skips `provider_asset_invalid` assets and still promotes a head when something applied (`prompt_v3`, `minItems:1`). Same published version + source manifest reuses the in-flight run. Teacher Chat shows generation progress; Agent Chat appends report links.
 
 Formal micro-rounds need Guide `# Team Ruleset` → `## Formal assessment` naming `answer_recorder`, `question_guide`, `scorer`, `summarizer`, and `student_round_order` as roster display names. The order is exactly scorer and question_guide; anything else is `assessment_ruleset_incomplete` with no attempt. `answer_recorder` is that scorer: the write Tool, `已记录你的回答。` (receipt only), and the abandon recorder line. Explicit starts (正式测评/测试, 开始测试, 再来一轮/一遍, formal test/assessment) set the ledger first; that turn is Guide-only `收到，第一题是…`. Later messages follow `student_round_order` (the Tool runs before the Guide line). A non-answer is rejected once; the Guide restates it once. All answered: Guide `答题全部结束`, Summarizer `正在总结答案`. Abandon uses that order, then Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`, then the flag is false. `MAYA-ASSESSMENT-ROLE` does not pick speakers; `assessment_active` is a ledger flag. Ordinary chat (greetings too) asks the leader first, then each member, length by relevance; an empty reply is omitted, not a failure; an @-named member must reply. `## Informal` may change who replies and length. Precedence: ACL, ledger, Ruleset. Only the server appends report links. Later executor turns stay on that scorer and summarizer.
 
-Built `2c62871` (PR #72 with #71: the items above). Production: backup `maya-20261014T135154Z.sqlite3` integrity ok; healthy/ready200/schema0064/public200.
+Built `f007a11` (PR #69), then `2c62871` (PRs #71/#72: the items above); backups `maya-20261014T111701Z`/`T135154Z.sqlite3` ok, schema0064, ready/public200.
 
 October 16: Production can move to PostgreSQL (ADR-010) without rewriting `maya.sqlite3`. Postgres 16 stamped `0065_auth_login_admission`
 accepted a read-only SQLite head import (111 tables, receipt). Compose runs `BACKEND_REPLICAS` backends
@@ -221,6 +220,6 @@ October 17: One adaptive admission queue fronts login/create/write/LLM. Danger (
 
 October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, then each student's attempt, score, sheet and report; it opens cached and reads each test once (0068 index). Accounts/group visits drop Test results. Student Record: own answers only. A Voice owner can Delete it in Studyform; its Agents use the fallback voice. System voices use `qwen3-tts-flash`; new clones enroll for `VOICE_CLONE_MODEL` (default `qwen-audio-3.1-tts-flash`, or 3.0) via `voice-enrollment` (temp upload). Retired `qwen3-tts-vc-2026-01-22` clones use the fallback voice. Unverified on the real supplier. A 40/60-student run (sign in, Team create/chat, answers) passes on PostgreSQL; queued creates hold no pooled connection; ledger: 6 commits per model call (was 9).
 
-October 17: last_sequence RETURNING; votes 40/40.
+October 17: Vote and barrage (`0069_barrage_sequence`) sequences use `UPDATE … RETURNING`; 40 concurrent Postgres submits stored 1–40; a collision is retried, not `idempotency_conflict`.
 
-October 17: Barrage sequences use `UPDATE … RETURNING` (`0069_barrage_sequence`); 40 concurrent `submit_barrage` calls on Postgres stored 1–40; a collision is retried, not `idempotency_conflict`.
+October 18: Team turns read repeated access checks once per model-call phase, per request only: 812→448 SELECTs per answer turn.

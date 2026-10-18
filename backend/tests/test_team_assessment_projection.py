@@ -722,10 +722,13 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     )
     write_commits: list[int] = []
     wrote: set[int] = set()
+    selects: list[int] = []
 
     def note_write(conn, _cursor, statement, *_args):  # type: ignore[no-untyped-def]
         if not statement.lstrip()[:6].upper().startswith("SELECT"):
             wrote.add(id(conn))
+        else:
+            selects.append(1)
 
     def note_commit(conn):  # type: ignore[no-untyped-def]
         if id(conn) in wrote:
@@ -742,6 +745,9 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     # 2026-10-18: one answer turn with one model call committed 14 write
     # transactions; the ledger steps between network points now share one (10).
     assert len(write_commits) <= 10, len(write_commits)
+    # 2026-10-18: the same turn ran 812 SELECTs (112 distinct); the assessment
+    # context and Team member checks now run once per request phase (448).
+    assert len(selects) <= 500, len(selects)
     # The student turn dispatches the scorer. The Guide and Summarizer are
     # server text, so they have no model wire on this turn.
     assert wires[leader.id] == [] and wires[boundary.id] == []

@@ -22,6 +22,7 @@ from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
 from app.core.message_timing import message_timing
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
+from app.core.read_memo import forget_request_reads, memoized, request_read_memo
 from app.core.sqlutil import begin_immediate
 from app.core.write_guard import WriteSlot, write_guard_slot
 from app.modules.auth.service import AuthContext
@@ -219,6 +220,21 @@ def _targets(
 
 
 def _validate_members(
+    db: Session, row: Conversation, participants: list[ConversationParticipant]
+) -> None:
+    key = frozenset(
+        (p.id, p.agent_id, p.agent_version_id, p.snapshot_id, p.team_member_id)
+        for p in participants
+    )
+    memoized(
+        db,
+        ("team_members_valid", row.id, row.user_id, key),
+        lambda: _read_validate_members(db, row, participants),
+        across_sessions=True,
+    )
+
+
+def _read_validate_members(
     db: Session, row: Conversation, participants: list[ConversationParticipant]
 ) -> None:
     _owner(db, row.id, row.user_id)
@@ -1978,6 +1994,7 @@ def invoke_mock_team_model(
                     }
                 ],
             )
+    forget_request_reads()  # a model call: checks after it read again
     reply = invoke_mock_member(request)
     return ModelResponse(role="assistant", content=reply.text)
 
@@ -3112,6 +3129,7 @@ def execute_member(
                 actor_context=actor_context,
             )
             return
+        forget_request_reads()  # a model call: checks after it read again
         reply = invoke_mock_member(request)
         settle_member(factory, turn_id, token, result_id, reply=reply)
     except Exception as exc:
@@ -3181,6 +3199,8 @@ def execute_team_turn(
     with (
         message_timing("team", turn_id=claim.turn_id),
         write_guard_slot(reserved=write_slot),
+        # Repeated access checks read once per model-call phase of this turn.
+        request_read_memo(),
     ):
         _execute_team_turn_body(factory, claim)
 
