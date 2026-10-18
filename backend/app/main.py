@@ -673,8 +673,12 @@ def create_app(
     app.include_router(live_router, prefix="/api/v1")
     app.include_router(cardroom_router, prefix="/api/v1")
     app.include_router(provider_settings_router, prefix="/api/v1")
-    app.include_router(demo_baseline_router, prefix="/api/v1")
-    app.include_router(demo_acceptance_router, prefix="/api/v1")
+    # Demo composition/baseline/status and acceptance-run routes exist only
+    # for the local Demo. Production must run with DEMO_MODE off, so these
+    # unauthenticated or Demo-only surfaces are not registered there at all.
+    if runtime_settings.demo_mode:
+        app.include_router(demo_baseline_router, prefix="/api/v1")
+        app.include_router(demo_acceptance_router, prefix="/api/v1")
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:

@@ -287,3 +287,45 @@ def test_demo_startup_revives_philosophers_a_data_reset_soft_deleted(
                 assert agent.status == "active"
                 document = db.get(KnowledgeDocument, spec.document_id)
                 assert document is not None and document.workspace_state == "active"
+
+
+DEMO_ONLY_ROUTES = (
+    ("GET", "/api/v1/demo/composition"),
+    ("GET", "/api/v1/demo/baseline"),
+    ("GET", "/api/v1/demo/status"),
+    ("POST", "/api/v1/demo/acceptance-runs"),
+    ("GET", "/api/v1/demo/acceptance-runs/00000000-0000-4000-8000-000000000000"),
+    ("POST", "/api/v1/demo/acceptance-runs/00000000-0000-4000-8000-000000000000/debate"),
+    ("POST", "/api/v1/demo/acceptance-runs/00000000-0000-4000-8000-000000000000/report"),
+    ("POST", "/api/v1/demo/acceptance-runs/00000000-0000-4000-8000-000000000000/calls"),
+    ("GET", "/api/v1/demo/acceptance-runs/00000000-0000-4000-8000-000000000000/summary"),
+)
+
+
+def _registered_paths(app: Any) -> set[str]:
+    return {route.path for route in app.routes if hasattr(route, "path")} | {
+        str(path) for path in app.openapi().get("paths", {})
+    }
+
+
+def test_demo_routes_are_not_registered_without_demo_mode(app_factory: Any) -> None:
+    app, _database, _settings = app_factory(demo_mode=False)
+    with TestClient(app) as client:
+        for method, path in DEMO_ONLY_ROUTES:
+            response = client.request(method, path, json={})
+            assert response.status_code == 404, (method, path, response.text)
+        # Real routes still answer, so the 404 above is not a dead app.
+        assert client.get("/health/live").status_code == 200
+    assert not any("/demo/" in path for path in _registered_paths(app))
+
+
+def test_demo_routes_are_registered_in_demo_mode(app_factory: Any) -> None:
+    app, database, settings = app_factory(demo_mode=True)
+    with TestClient(app) as client:
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
+        assert client.get("/api/v1/demo/composition").status_code == 200
+        assert client.get("/api/v1/demo/baseline").status_code == 200
+        assert client.get("/api/v1/demo/status").status_code == 200
+        # Acceptance runs stay teacher-only; unauthenticated is refused, not 404.
+        assert client.post("/api/v1/demo/acceptance-runs", json={}).status_code != 404

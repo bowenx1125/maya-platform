@@ -40,6 +40,9 @@ Before producing a runtime artifact:
 
 The production profile must use an exact HTTPS origin, protected individual account
 credentials and no Demo identity selection, switching or automatic Demo consent.
+With `DEMO_MODE` off the `/api/v1/demo/*` routes (composition, baseline, status,
+acceptance runs) are not registered and answer 404; `scripts/status_demo.py` and
+`scripts/next_wave_real_sessions.py` need a Demo-mode target.
 Local HTTP/Demo manual acceptance remains a separate deployment configuration.
 The Demo profile stays on a private network and must not be exposed. Open
 self-enrollment into the configured course/group remains the explicit product
