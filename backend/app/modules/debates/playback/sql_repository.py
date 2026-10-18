@@ -14,6 +14,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -3144,12 +3145,28 @@ class SqlPlaybackRepository(PlaybackRepository):
             )
         else:
             age_clause = "(" + job_age + ")"
+        from app.modules.debates.round_count import debate_round_count, uses_segment_protocol
+
+        def _awaits_final_input(row: Any) -> bool:
+            # A segments_v2 final round is generated only after the teacher
+            # freezes the final input (Final). Until then nothing is meant to
+            # prepare it, so its age says nothing about a stuck worker:
+            # expiring it marked every warmed draft "Stalled" and parked a
+            # running Debate's finale behind Retry.
+            snapshot = SimpleNamespace(rule_snapshot_json=row[2])
+            return (
+                uses_segment_protocol(snapshot)
+                and int(row[1] or 0) >= debate_round_count(snapshot)
+                and not row[3]
+            )
+
         stale_ids = sorted(
             {
                 str(row[0])
                 for row in db.execute(
                     text(
-                        "SELECT t.id FROM debate_turns AS t "
+                        "SELECT t.id, t.round_no, d.rule_snapshot_json, d.final_input_json "
+                        "FROM debate_turns AS t "
                         "JOIN debates AS d ON d.id=t.debate_id "
                         + job_join
                         + "WHERE t.generation_status IN ('pending','running') "
@@ -3167,6 +3184,7 @@ class SqlPlaybackRepository(PlaybackRepository):
                     ),
                     params,
                 ).all()
+                if not _awaits_final_input(row)
             }
         )
         if not stale_ids:

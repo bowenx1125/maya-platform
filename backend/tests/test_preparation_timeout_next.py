@@ -311,3 +311,120 @@ async def test_duplicate_next_while_not_ready_stays_idempotent() -> None:
 
     assert debate.playback.current_turn_id == current.id
     assert debate.playback.control_version == 0
+
+
+def _segments_snapshot(rounds: int) -> str:
+    import json
+
+    return json.dumps({"turn_protocol": "segments_v2", "round_count": rounds})
+
+
+def _clear_final_input(db, debate_id: str) -> None:
+    # The seeded graph already froze Final; the trigger keeps it immutable, so
+    # the fixture drops it (SQLite test database only) to model a lesson that
+    # has not reached Final yet.
+    db.execute(text("DROP TRIGGER IF EXISTS debate_final_input_immutable"))
+    db.execute(
+        text(
+            "UPDATE debates SET final_input_json=NULL, final_input_hash=NULL, "
+            "final_frozen_at=NULL WHERE id=:debate_id"
+        ),
+        {"debate_id": debate_id},
+    )
+
+
+@pytest.mark.parametrize("status", ["draft", "running"])
+def test_expire_skips_segments_final_round_awaiting_final_input(timeout_db, status) -> None:
+    """The final round waits for the teacher's Final; it is not a stuck worker.
+
+    Production showed every warmed four-round draft as "Stalled": once
+    rounds 1-3 were ready, the list read expired the round-4 head by age.
+    """
+
+    database, ids = timeout_db
+    stale = datetime.now(UTC) - timedelta(seconds=600)
+    with database.session() as db:
+        db.execute(text("DELETE FROM jobs WHERE id=:job_id"), {"job_id": ids["job"]})
+        _clear_final_input(db, ids["debate"])
+        round_no = db.execute(
+            text("SELECT round_no FROM debate_turns WHERE id=:turn_id"),
+            {"turn_id": ids["turn"]},
+        ).scalar_one()
+        db.execute(
+            text(
+                "UPDATE debates SET status=:status, rule_snapshot_json=:snapshot "
+                "WHERE id=:debate_id"
+            ),
+            {
+                "status": status,
+                "snapshot": _segments_snapshot(max(int(round_no), 2)),
+                "debate_id": ids["debate"],
+            },
+        )
+        db.execute(
+            text(
+                "UPDATE debate_turns SET round_no=:round_no, generation_status='pending', "
+                "preparation_stage='generation', publication_status='unpublished', "
+                "speech=NULL, safe_error_code=NULL, updated_at=:stale, created_at=:stale "
+                "WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"], "stale": stale, "round_no": max(int(round_no), 2)},
+        )
+        db.commit()
+        repository = SqlPlaybackRepository()
+        assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == 0
+        db.commit()
+        row = db.execute(
+            text("SELECT generation_status, safe_error_code FROM debate_turns WHERE id=:turn_id"),
+            {"turn_id": ids["turn"]},
+        ).one()
+        assert row[0] == "pending"
+        assert row[1] is None
+        assert (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM jobs WHERE turn_id=:turn_id "
+                    "AND operation='debate_turn_prepare'"
+                ),
+                {"turn_id": ids["turn"]},
+            ).scalar_one()
+            == 0
+        )
+
+        # Once Final is frozen the round is meant to prepare, so a stuck
+        # final turn expires exactly like any other.
+        db.execute(
+            text("UPDATE debates SET final_input_json='{}' WHERE id=:debate_id"),
+            {"debate_id": ids["debate"]},
+        )
+        db.commit()
+        assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == 1
+        db.commit()
+        code = db.execute(
+            text("SELECT safe_error_code FROM debate_turns WHERE id=:turn_id"),
+            {"turn_id": ids["turn"]},
+        ).scalar_one()
+        assert code == _PREPARATION_TIMEOUT_CODE
+
+
+def test_expire_still_times_out_segments_earlier_round(timeout_db) -> None:
+    database, ids = timeout_db
+    stale = datetime.now(UTC) - timedelta(seconds=600)
+    with database.session() as db:
+        db.execute(text("DELETE FROM jobs WHERE id=:job_id"), {"job_id": ids["job"]})
+        _clear_final_input(db, ids["debate"])
+        db.execute(
+            text("UPDATE debates SET rule_snapshot_json=:snapshot WHERE id=:debate_id"),
+            {"snapshot": _segments_snapshot(4), "debate_id": ids["debate"]},
+        )
+        db.execute(
+            text(
+                "UPDATE debate_turns SET round_no=1, generation_status='pending', "
+                "preparation_stage='generation', publication_status='unpublished', "
+                "speech=NULL, safe_error_code=NULL, updated_at=:stale WHERE id=:turn_id"
+            ),
+            {"turn_id": ids["turn"], "stale": stale},
+        )
+        db.commit()
+        repository = SqlPlaybackRepository()
+        assert repository.expire_stale_preparation(db, debate_id=ids["debate"]) == 1
