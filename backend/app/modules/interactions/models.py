@@ -36,6 +36,11 @@ class ClassroomInteractionWindow(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="closed")
     token_nonce: Mapped[bytes | None] = mapped_column(LargeBinary(32), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Last sequence handed to a barrage. Writers increment it in one statement
+    # instead of reading MAX(sequence), which collides under Postgres.
+    barrage_sequence: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     opened_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finalized_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -74,6 +79,7 @@ class ClassroomInteractionWindow(Base):
             name="ck_interaction_windows_status",
         ),
         CheckConstraint("revision >= 0", name="ck_interaction_windows_revision"),
+        CheckConstraint("barrage_sequence >= 0", name="ck_interaction_windows_barrage_sequence"),
         CheckConstraint(
             "token_nonce IS NULL OR length(token_nonce) = 32",
             name="ck_interaction_windows_nonce_shape",
