@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.modules.org.schemas import OverviewResult
 from .attempts import apply_attempt_lifecycle_action
 from .reports import (
     download_assessment_course_report,
+    hide_course_assessment_attempt,
     list_course_assessment_attempts,
     list_my_assessment_attempts,
 )
@@ -97,6 +98,26 @@ def list_my_assessment_attempts_route(
         OverviewResult.model_validate(row)
         for row in list_my_assessment_attempts(db, actor, course_id=str(course_id))
     ]
+
+
+@router.delete(
+    "/courses/{course_id}/assessment-attempts/{attempt_id}",
+    status_code=204,
+    operation_id="deleteCourseAssessmentAttempt",
+    response_class=Response,
+    responses={404: {"model": Error}},
+)
+def delete_course_assessment_attempt_route(
+    course_id: UUID,
+    attempt_id: UUID,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    actor: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+) -> Response:
+    """A course teacher deletes an attempt from Record. It is only hidden."""
+
+    hide_course_assessment_attempt(db, actor, course_id=str(course_id), attempt_id=str(attempt_id))
+    return Response(status_code=204)
 
 
 @router.get(

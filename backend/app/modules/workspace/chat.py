@@ -1624,6 +1624,7 @@ def delete_conversation(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
     row = db.get(Conversation, str(conversation_id))
     if row is None or row.user_id != context.user.id:
@@ -1647,6 +1648,12 @@ def delete_conversation(
         )
         withdraw_conversation_attempts(db, row.id)
         db.commit()
+    from .attachments import purge_conversation_attachments
+    from .chat_reports import purge_conversation_reports
+
+    # Attached files and saved reports are private to this Chat and leave with it.
+    purge_conversation_attachments(db, settings, row.id)
+    purge_conversation_reports(db, row.id)
     return Response(status_code=204)
 
 

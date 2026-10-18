@@ -9,8 +9,10 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { ChatAttachments } from "./chats/chat-attachments";
 import { DismissibleAlert } from "./dismissible-alert";
 import {
   CHAT_BUSY_CODE,
@@ -32,6 +34,7 @@ import {
   type TeamMemberResult,
   type TeamSummaryDto,
 } from "../lib/api";
+import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import {
   abandonChatRequest,
   adoptPendingChatRequest,
@@ -50,6 +53,7 @@ import {
   settleChatRequest,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
+import { applyMentionInsert, placeMentionCaret } from "../lib/mention-insert";
 import {
   ChatTargetPicker,
   type ChatTargetTeam,
@@ -180,7 +184,8 @@ function routingForMention(
   message: string,
 ): TeamRouting {
   // Bare sends: every member reads and replies (length by relevance). An
-  // empty reply is omitted and is not a failure. @Name / @All stay explicit.
+  // empty reply is omitted and is not a failure. @Name is explicit; typed
+  // @All still routes to everyone (picker no longer offers All).
   const all: TeamRouting = { mode: "all", participant_ids: [] };
   const label = mentionLabel(message);
   if (!label) return all;
@@ -423,6 +428,7 @@ function upsertTeamResult(
 
 export function AgentChat() {
   const { api, identityGeneration, user } = useSession();
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const role = pathname.startsWith("/teacher/") ? "teacher" : "student";
@@ -453,6 +459,7 @@ export function AgentChat() {
       courseId={courseId}
       actorId={user?.id ?? ""}
       scopeKey={scopeKey}
+      cacheIdentity={cacheIdentity}
       role={role}
     />
   );
@@ -463,12 +470,15 @@ function AgentChatScope({
   courseId,
   actorId,
   scopeKey,
+  cacheIdentity,
   role,
 }: {
   api: PlatformApi;
   courseId: string;
   actorId: string;
   scopeKey: string;
+  /** Shared page-load cache identity (user id + session generation). */
+  cacheIdentity: string | null;
   role: "teacher" | "student";
 }) {
   const t = useT();
@@ -845,7 +855,14 @@ function AgentChatScope({
       : typeof api.conversationSessions === "function"
         ? api.conversationSessions()
         : api.conversations();
-    void Promise.all([api.chatAgents(courseId), historyRequest])
+    // The catalog is a shared, briefly cached read; history is always read
+    // fresh because pending sends are reconciled against it.
+    void Promise.all([
+      cachedCall(api, cacheIdentity, "chatAgents", [courseId], () =>
+        api.chatAgents(courseId),
+      ),
+      historyRequest,
+    ])
       .then(([catalog, allHistory]) => {
         if (!active || !isChatRequestScopeActive(scopeKey)) return;
         setAgents(catalog);
@@ -1021,6 +1038,7 @@ function AgentChatScope({
     };
   }, [
     api,
+    cacheIdentity,
     courseId,
     invalidMemoryRoute,
     newChatRoute,
@@ -1031,22 +1049,27 @@ function AgentChatScope({
   const loadTeamChoices = useCallback(async () => {
     const [teams, mayaTeams] = await Promise.all([
       typeof api.teams === "function"
-        ? api.teams(courseId).catch(() => [])
+        ? cachedCall(api, cacheIdentity, "teams", [courseId, undefined], () =>
+            api.teams(courseId),
+          ).catch(() => [])
         : Promise.resolve([]),
       typeof api.mayaTeams === "function"
-        ? api.mayaTeams(courseId).catch(() => [])
+        ? cachedCall(api, cacheIdentity, "mayaTeams", [courseId], () =>
+            api.mayaTeams(courseId),
+          ).catch(() => [])
         : Promise.resolve([]),
     ]);
     if (!isChatRequestScopeActive(scopeKey)) return;
     setTeamChoices(teams);
     setMayaChoices(mayaTeams);
-  }, [api, courseId, scopeKey]);
+  }, [api, cacheIdentity, courseId, scopeKey]);
 
+  // Read beside the catalog and history, not after them: one round trip.
   useEffect(() => {
-    if (loadedScope !== scopeKey) return;
+    if (!scopeKey) return;
     const timer = window.setTimeout(() => void loadTeamChoices(), 0);
     return () => window.clearTimeout(timer);
-  }, [loadTeamChoices, loadedScope, newChatRoute, scopeKey]);
+  }, [loadTeamChoices, newChatRoute, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || loadedScope !== scopeKey) return;
@@ -2609,14 +2632,12 @@ function AgentChatScope({
   );
 
   function insertMention(label: string) {
-    const draft = teamDraft;
-    const at = draft.lastIndexOf("@");
-    const next =
-      at >= 0
-        ? `${draft.slice(0, at)}@${label}${draft.slice(at + 1).replace(/^[^\s@]*/, "")}`
-        : `${draft}@${label}`;
-    setTeamDraft(next);
-    setTeamRecipientMenu(false);
+    const { next, caret } = applyMentionInsert(teamDraft, label);
+    flushSync(() => {
+      setTeamDraft(next);
+      setTeamRecipientMenu(false);
+    });
+    placeMentionCaret(messageRef.current, caret);
   }
 
   function submitMessage(event?: FormEvent) {
@@ -3113,14 +3134,6 @@ function AgentChatScope({
                       role="menu"
                       aria-label={t("teamRecipients")}
                     >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={teamBusy}
-                        onClick={() => insertMention(t("teamAllMembers"))}
-                      >
-                        {t("teamAllMembers")}
-                      </button>
                       {mentionMembers.map((member) => (
                         <button
                           key={member.key}
@@ -3178,6 +3191,13 @@ function AgentChatScope({
                       // longer composing. Only the Send button submits.
                     }}
                   />
+                  {selectedTeam && !selectedTeam.read_only ? (
+                    <ChatAttachments
+                      key={selectedTeam.id}
+                      conversationId={selectedTeam.id}
+                      disabled={teamBusy || teamWorking}
+                    />
+                  ) : null}
                   <div className={styles.composerBar}>
                     {sendHint ? (
                       <p

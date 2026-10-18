@@ -7,6 +7,7 @@ import time
 
 import httpx
 import pytest
+from app.core import adaptive_admission as aa
 from app.core.config import Settings
 from app.core.errors import PlatformError
 from app.core.llm_admission import llm_admission_slot, reset_llm_admission_state
@@ -15,9 +16,17 @@ from app.providers.llm_transport import HttpxLLMTransport
 
 @pytest.fixture(autouse=True)
 def _reset_gate() -> None:
+    # These tests are about the layer-2 LLM gate. Layer 1 (the adaptive queue)
+    # is module state too: an earlier test's slow DB writes, or a busy CI box's
+    # real CPU, would brake it and hold the second thread there instead of at
+    # the gate. Start it clean on a quiet, scripted host.
+    aa.reset_adaptive_admission_state()
+    aa.set_signal_readers(load=lambda: 0.5, mem=lambda: 4000.0, cpu=lambda: 0.1)
     reset_llm_admission_state()
     yield
     reset_llm_admission_state()
+    aa.set_signal_readers()
+    aa.reset_adaptive_admission_state()
 
 
 def _settings(**overrides: object) -> Settings:

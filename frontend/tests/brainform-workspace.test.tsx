@@ -246,6 +246,7 @@ beforeEach(() => {
     saveKnowledgeMarkdown: vi.fn(),
     courseAssessmentAttempts: vi.fn().mockResolvedValue([]),
     myAssessmentAttempts: vi.fn().mockResolvedValue([]),
+    deleteCourseAssessmentAttempt: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -286,10 +287,9 @@ describe("Brainform workspace actions", () => {
         </ActionsHost>
       </LocaleProvider>,
     );
-    await waitFor(() =>
-      expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(2),
-    );
     await screen.findByRole("button", { name: "Back" });
+    // A second visit within FRESH_MS reuses the shared page-load read.
+    expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
     expect(screen.queryByLabelText("Import a file")).toBeNull();
   });
@@ -964,7 +964,7 @@ describe("Brainform workspace actions", () => {
       "Group A · Formal diagnostic questions · V1.0",
     );
     expect(
-      screen.getByRole("button", { name: /^Ben.*In progress$/ }),
+      screen.getByRole("button", { name: /^Ben.*Unfinished$/ }),
     ).toBeTruthy();
     expect(
       screen
@@ -983,6 +983,113 @@ describe("Brainform workspace actions", () => {
         name: "Open the results for Keynotes",
       }),
     ).toBeTruthy();
+  });
+
+  // Owner request (2026-10-18): Record keeps revoked versions' and
+  // unfinished attempts, and a teacher can delete (hide) one after a confirm.
+  it("labels revoked and unfinished attempts and deletes one after a confirm", async () => {
+    state.role = "teacher";
+    const revoked = {
+      attempt_id: "attempt-revoked",
+      user_id: "student-1",
+      student_name: "Ada",
+      test_name: "Keynotes · Formal diagnostic questions · V1.0",
+      team_name: "Keynotes",
+      status: "in_progress",
+      phase: "answering",
+      conversation_id: "4afc794f-5555-4555-8555-555555555555",
+      group_name: "Group A",
+      started_at: "2026-10-16T02:25:00Z",
+      ended_at: null,
+      points_awarded: null,
+      points_total: null,
+      questions: [
+        {
+          number: 1,
+          prompt: "What is ren?",
+          answers: ["Half an answer"],
+          skipped: false,
+          points_awarded: null,
+          points_total: null,
+          feedback: "",
+        },
+      ],
+      report_download_path: null,
+      publication_state: "revoked",
+      version_label: "V1.0",
+    };
+    state.api.courseAssessmentAttempts
+      .mockResolvedValueOnce([revoked])
+      .mockResolvedValue([]);
+    const confirm = vi.spyOn(window, "confirm");
+    renderWithActions();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Open the results for Keynotes",
+      }),
+    );
+    const row = await screen.findByRole("button", {
+      name: /^Ada.*Unfinished$/,
+    });
+    expect(row.textContent).toContain(
+      "Formal diagnostic questions · V1.0 · Revoked version",
+    );
+    fireEvent.click(row);
+    expect(screen.getByRole("cell", { name: "Half an answer" })).toBeTruthy();
+
+    const remove = screen.getByRole("button", {
+      name: "Delete Ada's attempt",
+    });
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(remove);
+    expect(state.api.deleteCourseAssessmentAttempt).not.toHaveBeenCalled();
+
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(remove);
+    await waitFor(() =>
+      expect(state.api.deleteCourseAssessmentAttempt).toHaveBeenCalledWith(
+        "course-1",
+        "attempt-revoked",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /^Ada/ })).toBeNull(),
+    );
+    confirm.mockRestore();
+  });
+
+  it("never offers a student the Record delete", async () => {
+    state.api.myAssessmentAttempts.mockResolvedValue([
+      {
+        attempt_id: "own-attempt-2",
+        user_id: state.userId,
+        student_name: "Bowen",
+        test_name: "Keynotes · Formal diagnostic questions · V1.0",
+        team_name: "Keynotes",
+        status: "completed",
+        phase: "completed",
+        conversation_id: "4afc794f-4444-4444-8444-444444444444",
+        group_name: "Group A",
+        started_at: "2026-10-16T02:25:00Z",
+        ended_at: "2026-10-16T02:45:00Z",
+        points_awarded: null,
+        points_total: null,
+        questions: [],
+        report_download_path: null,
+      },
+    ]);
+    renderWorkspace("student");
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Open your answers for Keynotes",
+      }),
+    );
+    await screen.findByRole("heading", { name: "Keynotes" });
+    expect(
+      screen.queryByRole("button", { name: /^Delete .*'s attempt$/ }),
+    ).toBeNull();
+    expect(state.api.deleteCourseAssessmentAttempt).not.toHaveBeenCalled();
   });
 
   it("shows the last Record at once while it refreshes (#123)", async () => {

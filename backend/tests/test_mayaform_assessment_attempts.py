@@ -3823,3 +3823,132 @@ def test_a_student_record_lists_only_the_students_own_attempts(attempt_env: Any)
     assert client.get(missing_course).status_code == 404
     client.cookies.clear()
     assert client.get(url).status_code in {401, 403}
+
+
+# Owner request (2026-10-18): Record shows attempts on revoked Team versions
+# and unfinished attempts with their saved answers; a course teacher can
+# delete an attempt, which only hides it. Abandoned attempts stay hidden.
+def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
+    attempt_env: Any,
+) -> None:
+    from app.core.models import Course, CourseMember
+    from app.modules.learning.reports import (
+        hide_course_assessment_attempt,
+        list_course_assessment_attempts,
+    )
+    from app.modules.teams.models import CourseTeamPublication
+
+    _app, database, settings, client = attempt_env
+    url = f"/api/v1/learning/courses/{COURSE_ID}/assessment-attempts"
+    token, _csrf = _login(client, "bowen")
+    with database.session() as db:
+        conversation_id, _team, _version, publication_id, *_rest = _create_formal_conversation(
+            db, prompts=("Q1", "Q2")
+        )
+        actor = _context(db, settings, token)
+        started = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
+        assert started is not None
+        _answer_current(db, actor, conversation_id, "bowen half answer")
+        kept = str(started.attempt.id)
+
+    other_token, other_csrf = _login(client, "kaikai")
+    with database.session() as db:
+        other_conversation, *_rest = _create_formal_conversation(
+            db, actor_user_id=OTHER_STUDENT_ID, prompts=("Q1",)
+        )
+        other_actor = _context(db, settings, other_token)
+        other = start_or_resume_attempt(
+            db, other_actor, other_conversation, client_event_id=uuid4()
+        )
+        assert other is not None
+        abandoned = str(other.attempt.id)
+    abandon = client.post(
+        f"/api/v1/learning/attempts/{abandoned}/actions",
+        headers={"X-CSRF-Token": other_csrf},
+        json={"client_event_id": str(uuid4()), "action": "abandon"},
+    )
+    assert abandon.status_code == 200, abandon.text
+
+    _token, teacher_csrf = _login(client, "maya")
+    [row] = [item for item in client.get(url).json() if item["attempt_id"] == kept]
+    assert (row["status"], row["phase"]) == ("in_progress", "answering")
+    assert row["questions"][0]["answers"] == ["bowen half answer"]
+    assert (row["publication_state"], row["version_label"]) == ("published", "V1.0")
+    assert abandoned not in client.get(url).text
+
+    # A newer version revokes this one: the attempt stays in Record.
+    with database.session() as db:
+        publication = db.get(CourseTeamPublication, publication_id)
+        assert publication is not None
+        publication.state = "revoked"
+        publication.revoked_at = datetime.now(UTC)
+        db.commit()
+    listed = client.get(url)
+    assert listed.status_code == 200, listed.text
+    [row] = [item for item in listed.json() if item["attempt_id"] == kept]
+    assert row["publication_state"] == "revoked"
+    assert row["questions"][0]["answers"] == ["bowen half answer"]
+
+    delete_url = f"{url}/{kept}"
+    # A student cannot delete, not even their own attempt.
+    _token, bowen_csrf = _login(client, "bowen")
+    mine_url = f"/api/v1/learning/courses/{COURSE_ID}/my-assessment-attempts"
+    assert kept in client.get(mine_url).text
+    assert client.delete(delete_url, headers={"X-CSRF-Token": bowen_csrf}).status_code == 404
+    # A teacher of another course cannot either.
+    with database.session() as db:
+        now = datetime.now(UTC)
+        stranger_id, other_course = str(uuid4()), str(uuid4())
+        db.add(
+            User(
+                id=stranger_id,
+                username=f"t-{stranger_id[:8]}",
+                display_name="T",
+                created_at=now,
+            )
+        )
+        db.add(Course(id=other_course, code=f"c-{other_course[:8]}", name="Other", created_at=now))
+        db.flush()
+        db.add(
+            CourseMember(
+                course_id=other_course, user_id=stranger_id, role="teacher", created_at=now
+            )
+        )
+        db.flush()
+        stranger = _service_actor(db, settings, stranger_id)
+        for course in (COURSE_ID, other_course):
+            with pytest.raises(PlatformError) as refused:
+                hide_course_assessment_attempt(db, stranger, course_id=course, attempt_id=kept)
+            assert refused.value.code == "not_found"
+        db.rollback()
+
+    _token, teacher_csrf = _login(client, "maya")
+    missing = client.delete(f"{url}/{uuid4()}", headers={"X-CSRF-Token": teacher_csrf})
+    assert missing.status_code == 404
+    deleted = client.delete(delete_url, headers={"X-CSRF-Token": teacher_csrf})
+    assert deleted.status_code == 204, deleted.text
+    assert client.delete(delete_url, headers={"X-CSRF-Token": teacher_csrf}).status_code == 204
+    assert kept not in client.get(url).text
+    # The student's own Record no longer shows it either.
+    _login(client, "bowen")
+    mine = client.get(mine_url)
+    assert mine.status_code == 200, mine.text
+    assert kept not in mine.text
+
+    # Only hidden: the attempt, its answers and its chat are all still there.
+    with database.session() as db:
+        attempt = db.get(AssessmentAttempt, kept)
+        assert attempt is not None and attempt.status == "in_progress"
+        assert attempt.teacher_hidden_at is not None
+        assert attempt.teacher_hidden_by_user_id == TEACHER_ID
+        assert db.get(Conversation, conversation_id) is not None
+        assert db.scalar(
+            select(func.count())
+            .select_from(LearningRecord)
+            .where(LearningRecord.attempt_id == kept)
+        )
+        teacher = _service_actor(db, settings, TEACHER_ID)
+        assert kept not in {
+            item["attempt_id"]
+            for item in list_course_assessment_attempts(db, teacher, course_id=COURSE_ID)
+        }
