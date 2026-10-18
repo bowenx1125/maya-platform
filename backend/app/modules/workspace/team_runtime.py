@@ -1519,6 +1519,11 @@ def _start_member(
             return None
         if assessment_source_revoked:
             history = ()
+        elif not assessment_active:
+            from .attachments import attachment_history
+
+            # A live formal attempt keeps its ledger-fixed context.
+            history = (*history, *attachment_history(db, row.id, turn.created_at))
         return MemberRequest(
             actor_id=actor_id,
             conversation_id=conversation_id,
@@ -2651,6 +2656,8 @@ def answer_sheet_markdown(raw_receipts: Iterable[str]) -> str:
 def report_paths(raw_receipts: Iterable[str]) -> list[str]:
     """Download paths in saved report Tool results, in order and once each."""
 
+    from .chat_reports import is_chat_report_path
+
     links: list[str] = []
     for raw in raw_receipts:
         try:
@@ -2665,7 +2672,7 @@ def report_paths(raw_receipts: Iterable[str]) -> list[str]:
             path = item.get("download_path") if isinstance(item, dict) else None
             if (
                 isinstance(path, str)
-                and path.startswith("/api/v1/learning/reports/")
+                and (path.startswith("/api/v1/learning/reports/") or is_chat_report_path(path))
                 and path not in links
             ):
                 links.append(path)
@@ -2739,6 +2746,8 @@ def _report_download_links(
     its turn, including one a member such as the Summarizer created.
     """
 
+    from .chat_reports import CHAT_REPORT_TOOL
+
     query = (
         select(RuntimeToolReceipt.result_json)
         .join(
@@ -2748,7 +2757,9 @@ def _report_download_links(
         .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
         .where(
             RuntimeToolReceipt.turn_id == turn.id,
-            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+            RuntimeToolReceipt.tool_name.in_(
+                ("create_course_report", "list_course_reports", CHAT_REPORT_TOOL)
+            ),
             TeamTurnResult.turn_id == turn.id,
         )
         .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
@@ -4457,6 +4468,10 @@ def poll_team_events(
                 .order_by(TeamChatEvent.sequence)
             )
         )
+        if not events:
+            # Most polls find nothing new; rebuilding the turn view for them
+            # cost ~35 queries each, 20 times a second per waiting student.
+            return [], turn.state, row.active_request_id == turn.id
         projected = project_team_turn(db, turn, read_only=False)
         results = {str(result.id): result for result in projected.member_results}
         replayed = []

@@ -1,7 +1,7 @@
 """Teacher soft delete of an assessment attempt in Record.
 
-Revision ID: 0070_attempt_teacher_hidden
-Revises: 0069_barrage_sequence
+Revision ID: 0072_attempt_teacher_hidden
+Revises: 0071_chat_reports
 Create Date: 2026-10-18
 """
 
@@ -10,8 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0070_attempt_teacher_hidden"
-down_revision: str | Sequence[str] | None = "0069_barrage_sequence"
+revision: str = "0072_attempt_teacher_hidden"
+down_revision: str | Sequence[str] | None = "0071_chat_reports"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

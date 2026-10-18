@@ -11,6 +11,12 @@ import {
 
 import { PlatformApiError, type VoiceProfile } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
+import {
+  cachedVoiceList,
+  fetchVoiceList,
+  forgetVoiceList,
+  voiceListIdentity,
+} from "../../lib/voice-list-cache";
 import { statusLabel, type MessageKey } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { useLocale, useT } from "../locale";
@@ -88,6 +94,11 @@ function enrollmentCreated(profile: VoiceProfile | null | undefined): boolean {
   );
 }
 
+// A deleted voice stays on the server for its audit trail only.
+function listedVoices(profiles: VoiceProfile[]): ListedVoice[] {
+  return profiles.filter((profile) => profile.status !== "deleted");
+}
+
 function previewIsCurrent(expiresAt: string): boolean {
   const expires = Date.parse(expiresAt);
   return Number.isFinite(expires) && expires > Date.now();
@@ -128,7 +139,13 @@ export function VoiceLibrary({
 }) {
   const t = useT();
   const { locale } = useLocale();
-  const { api } = useSession();
+  const session = useSession();
+  const { api } = session;
+  const cacheIdentity = voiceListIdentity(
+    session.user?.id,
+    session.identityGeneration,
+  );
+  const listKind = courseId ? "personal" : "group";
   const membershipKey = membershipGroupIds.join("|");
   const scopes = useMemo<string[]>(
     () =>
@@ -141,13 +158,29 @@ export function VoiceLibrary({
             : [],
     [courseId, groupId, membershipKey],
   );
-  const [profiles, setProfiles] = useState<ListedVoice[]>([]);
+  // A return visit shows the list this person was last given at once and
+  // refreshes it quietly; the first visit still shows the loading card.
+  const [cached] = useState(() => {
+    if (scopes.length === 0) return null;
+    const lists = scopes.map((scopeId) =>
+      cachedVoiceList(api, cacheIdentity, listKind, scopeId),
+    );
+    return lists.every((list) => list !== undefined)
+      ? listedVoices(lists.flat())
+      : null;
+  });
+  const [profiles, setProfiles] = useState<ListedVoice[]>(cached ?? []);
   const [scopeStatus, setScopeStatus] = useState<Record<string, ScopeStatus>>(
-    {},
+    () =>
+      cached
+        ? Object.fromEntries(
+            scopes.map((scopeId) => [scopeId, "ready" as ScopeStatus]),
+          )
+        : {},
   );
   const [file, setFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(initialCreate && !listenOnly);
-  const [loading, setLoading] = useState(scopes.length > 0);
+  const [loading, setLoading] = useState(scopes.length > 0 && !cached);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const controlsDisabled = busy || disabled;
@@ -169,7 +202,7 @@ export function VoiceLibrary({
   }, []);
 
   const load = useCallback(
-    async (options?: { quiet?: boolean }) => {
+    async (options?: { quiet?: boolean; reuse?: boolean }) => {
       const sequence = ++loadSequence.current;
       if (scopes.length === 0) {
         setProfiles([]);
@@ -193,9 +226,13 @@ export function VoiceLibrary({
             return {
               scopeId,
               status: "ready" as const,
-              profiles: courseId
-                ? await api.personalVoiceProfiles(scopeId)
-                : await api.voiceProfiles(scopeId),
+              profiles: await fetchVoiceList(
+                api,
+                cacheIdentity,
+                listKind,
+                scopeId,
+                { reuse: options?.reuse },
+              ),
               cause: null,
             };
           } catch (cause) {
@@ -212,11 +249,8 @@ export function VoiceLibrary({
         }),
       );
       if (sequence !== loadSequence.current) return;
-      // A deleted voice stays on the server for its audit trail only.
       const nextProfiles = results.flatMap((result) =>
-        result.status === "denied"
-          ? []
-          : result.profiles.filter((profile) => profile.status !== "deleted"),
+        result.status === "denied" ? [] : listedVoices(result.profiles),
       );
       setProfiles(nextProfiles);
       onProfilesChange?.(nextProfiles);
@@ -236,16 +270,21 @@ export function VoiceLibrary({
       });
       setLoading(false);
     },
-    [api, courseId, onProfilesChange, scopes],
+    [api, cacheIdentity, listKind, onProfilesChange, scopes],
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
+    // Join a Studyform prefetch already in flight; a cached list refreshes
+    // without blanking.
+    const timer = window.setTimeout(
+      () => void load({ quiet: cached !== null, reuse: true }),
+      0,
+    );
     return () => {
       window.clearTimeout(timer);
       loadSequence.current += 1;
     };
-  }, [load]);
+  }, [cached, load]);
 
   const invalidatePreview = useCallback(
     (profileId: string, message: MessageKey) => {
@@ -399,6 +438,9 @@ export function VoiceLibrary({
     setFailure(null);
     try {
       const renamed = await api.renameVoiceProfile(profile.id, name);
+      // The next visit must not show the old name from the cached list.
+      for (const scopeId of scopes)
+        forgetVoiceList(api, cacheIdentity, listKind, scopeId);
       setProfiles((current) =>
         current.map((item) =>
           item.id === profile.id ? { ...item, ...renamed } : item,
