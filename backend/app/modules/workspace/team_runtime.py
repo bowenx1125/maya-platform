@@ -2656,6 +2656,8 @@ def answer_sheet_markdown(raw_receipts: Iterable[str]) -> str:
 def report_paths(raw_receipts: Iterable[str]) -> list[str]:
     """Download paths in saved report Tool results, in order and once each."""
 
+    from .chat_reports import is_chat_report_path
+
     links: list[str] = []
     for raw in raw_receipts:
         try:
@@ -2670,7 +2672,7 @@ def report_paths(raw_receipts: Iterable[str]) -> list[str]:
             path = item.get("download_path") if isinstance(item, dict) else None
             if (
                 isinstance(path, str)
-                and path.startswith("/api/v1/learning/reports/")
+                and (path.startswith("/api/v1/learning/reports/") or is_chat_report_path(path))
                 and path not in links
             ):
                 links.append(path)
@@ -2744,6 +2746,8 @@ def _report_download_links(
     its turn, including one a member such as the Summarizer created.
     """
 
+    from .chat_reports import CHAT_REPORT_TOOL
+
     query = (
         select(RuntimeToolReceipt.result_json)
         .join(
@@ -2753,7 +2757,9 @@ def _report_download_links(
         .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
         .where(
             RuntimeToolReceipt.turn_id == turn.id,
-            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+            RuntimeToolReceipt.tool_name.in_(
+                ("create_course_report", "list_course_reports", CHAT_REPORT_TOOL)
+            ),
             TeamTurnResult.turn_id == turn.id,
         )
         .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)

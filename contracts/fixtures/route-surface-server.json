@@ -699,6 +699,64 @@
         ]
       }
     },
+    "/api/v1/conversations/{conversation_id}/reports/{report_id}": {
+      "get": {
+        "operationId": "downloadConversationReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Download Conversation Report",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
     "/api/v1/conversations/{conversation_id}/messages:stream": {
       "post": {
         "operationId": "streamConversationMessage",

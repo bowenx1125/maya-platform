@@ -1649,9 +1649,11 @@ def delete_conversation(
         withdraw_conversation_attempts(db, row.id)
         db.commit()
     from .attachments import purge_conversation_attachments
+    from .chat_reports import purge_conversation_reports
 
-    # Attached files are private to this Chat and leave with it.
+    # Attached files and saved reports are private to this Chat and leave with it.
     purge_conversation_attachments(db, settings, row.id)
+    purge_conversation_reports(db, row.id)
     return Response(status_code=204)
 
 
