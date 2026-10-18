@@ -728,7 +728,12 @@ def test_recorded_fact_requires_a_tool_receipt(
             select(TeamTurnResult.state).where(TeamTurnResult.turn_id == turn_id)
         ).all()
         assert states
-        assert all(state == "failed" for state in states)
+        # No receipt, nothing claimed as recorded: the Scorer asks for the
+        # answer again and the Guide stays quiet, instead of a failed turn.
+        assert all(state == "ready" for state in states)
+        from app.modules.workspace.formal_assessment import UNSAVED_RETRY_LINE
+
+        assert UNSAVED_RETRY_LINE["zh"] in texts
         assert (
             db.scalar(
                 select(func.count())

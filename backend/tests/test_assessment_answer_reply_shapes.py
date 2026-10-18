@@ -199,9 +199,10 @@ SCENARIOS: dict[str, tuple[list[Any], int, str, str | None]] = {
         "ready",
         None,
     ),
-    # The action protocol requires the Tool; prose or no text alone stays a failed turn.
-    "prose_only": ([("text", "很好的回答！")], 0, "failed", "assessment_action_required"),
-    "empty_only": ([("text", None)], 0, "failed", "assessment_action_required"),
+    # The action protocol requires the Tool. Prose or no text saves nothing; the
+    # Scorer asks for the answer again instead of failing the turn (2026-10-18).
+    "prose_only": ([("text", "很好的回答！")], 0, "ready", None),
+    "empty_only": ([("text", None)], 0, "ready", None),
 }
 
 
@@ -406,6 +407,11 @@ def test_first_answer_is_saved_for_each_leader_reply_shape(
             assert saved.answer_text == MESSAGES[scenario]
         elif scenario in MESSAGES:
             pass
+        elif scenario in {"prose_only", "empty_only"}:
+            from app.modules.workspace.formal_assessment import UNSAVED_RETRY_LINE
+
+            assert scorer.assistant_text == UNSAVED_RETRY_LINE["zh"]
+            assert turn.state == "ready"
         elif expected_state == "ready":
             assert scorer.assistant_text == "已记录你的回答。"
             assert turn.state == "ready"

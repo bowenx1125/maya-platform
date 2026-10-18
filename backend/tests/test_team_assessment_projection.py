@@ -352,9 +352,31 @@ def test_real_sdk_dispatch_scopes_private_assessment_payload_to_assigned_executo
 # Bug (2026-10-13): with a follow-up for a wrong answer, the scorer's closing
 # model call rechecked the test after the follow-up was added, found it
 # unanswered and failed as "This Team member could not reply".
-@pytest.mark.parametrize("follow_up", [False, True])
+#
+# Prod (2026-10-18): the Scorer's assessment_action failed with
+# assessment_action_required when it carried an argument the Tool does not
+# take (reply_language='zh') or arrived as truncated JSON ("'{' was never
+# closed"). An unknown argument is now ignored and logged; truncated JSON gets
+# one forced retry through admission; a second failure asks for the answer again.
+@pytest.mark.parametrize(
+    ("follow_up", "scorer_wire"),
+    [
+        (False, "clean"),
+        (True, "clean"),
+        (False, "unknown_argument"),
+        (False, "argument_beside"),
+        (False, "truncated_once"),
+        (False, "truncated_twice"),
+    ],
+)
 def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
-    client: TestClient, database: Any, app_bundle: Any, monkeypatch: Any, follow_up: bool
+    client: TestClient,
+    database: Any,
+    app_bundle: Any,
+    monkeypatch: Any,
+    follow_up: bool,
+    scorer_wire: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     app, _database, base_settings = app_bundle
     teacher_token, teacher_csrf = _login(client, "maya")
@@ -599,6 +621,27 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
             }
         ).encode()
 
+    def raw_tool_body(call_id: str, name: str, raw_arguments: str) -> bytes:
+        return json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "id": call_id,
+                                    "type": "function",
+                                    "function": {"name": name, "arguments": raw_arguments},
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            }
+        ).encode()
+
     def text_body(content: str) -> bytes:
         return json.dumps(
             {
@@ -675,16 +718,30 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
                 )
             return text_body("BOUNDARY_RAW_CANARY includes private assessment task JSON.")
         if request.participant_id == evaluator.id and request.message.startswith("My final answer"):
-            if ordinal == 0:
-                return tool_body(
-                    f"answer-{request.turn_id}",
-                    "assessment_action",
-                    {
-                        "classification": "answer_only",
-                        "relevant": True,
-                        "answer_span": "FINAL_ANSWER_CANARY",
-                    },
+            answer = {
+                "classification": "answer_only",
+                "relevant": True,
+                "answer_span": "FINAL_ANSWER_CANARY",
+            }
+            truncated = '{"arguments": {"classification": "answer_only", "relevant": true'
+            if scorer_wire == "truncated_once" and ordinal == 0:
+                return raw_tool_body(f"broken-{request.turn_id}", "assessment_action", truncated)
+            if scorer_wire == "truncated_twice" and ordinal <= 1:
+                return raw_tool_body(
+                    f"broken-{request.turn_id}-{ordinal}", "assessment_action", truncated
                 )
+            retried = scorer_wire == "truncated_once" and ordinal == 1
+            if ordinal == 0 or retried:
+                call_id = f"answer-{request.turn_id}"
+                if scorer_wire == "unknown_argument":
+                    return tool_body(call_id, "assessment_action", {**answer, "mood": "calm"})
+                if scorer_wire == "argument_beside":
+                    return raw_tool_body(
+                        call_id,
+                        "assessment_action",
+                        json.dumps({"arguments": answer, "reply_language": "en"}),
+                    )
+                return tool_body(call_id, "assessment_action", answer)
             return text_body("Untrusted coordinator prose after formal work.")
         raise AssertionError(
             f"Unexpected dispatch participant={request.participant_id} "
@@ -720,6 +777,16 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     monkeypatch.setattr(
         "app.modules.workspace.chat_team_provider.dispatch_team_model", synthetic_dispatch
     )
+    from app.modules.workspace import chat_team_provider
+
+    admitted: list[str] = []
+    real_slot = chat_team_provider.llm_admission_slot
+
+    def counted_slot(*args: Any, **kwargs: Any) -> Any:
+        admitted.append("llm")
+        return real_slot(*args, **kwargs)
+
+    monkeypatch.setattr(chat_team_provider, "llm_admission_slot", counted_slot)
     write_commits: list[int] = []
     wrote: set[int] = set()
     selects: list[int] = []
@@ -742,12 +809,59 @@ def test_open_test_runs_the_leader_alone_and_the_server_scores_without_leaks(
     finally:
         event.remove(database.engine, "after_cursor_execute", note_write)
         event.remove(database.engine, "commit", note_commit)
+    scorer_wires = [json.loads(wire) for wire in wires[evaluator.id]]
+    forced = {"type": "function", "function": {"name": "assessment_action"}}
+    if scorer_wire.startswith("truncated"):
+        # One retry, sent through the same dispatch (and admission) as the
+        # first call, with the Tool still required; never a third call.
+        assert len(scorer_wires) == 2
+        assert [wire.get("tool_choice") for wire in scorer_wires] == [forced, forced]
+        # Every model call on this turn (the retry included) took an LLM slot.
+        assert len(admitted) == len(scorer_wires)
+    if scorer_wire == "unknown_argument":
+        assert "ignored unknown arguments tool=assessment_action arguments=mood" in caplog.text
+    if scorer_wire == "truncated_twice":
+        from app.modules.workspace.formal_assessment import (
+            SILENT_MEMBER_LINE,
+            UNSAVED_RETRY_LINE,
+        )
+
+        with database.session() as db:
+            turn = db.get(ConversationTurn, claim.turn_id)
+            assert turn is not None and turn.state == "ready"
+            results = {
+                row.participant_id: row
+                for row in db.scalars(
+                    select(TeamTurnResult).where(TeamTurnResult.turn_id == claim.turn_id)
+                )
+            }
+            # The Scorer asks for the answer again; the Guide adds nothing.
+            assert results[evaluator.id].state == "ready"
+            assert results[evaluator.id].assistant_text == UNSAVED_RETRY_LINE["en"]
+            assert results[leader.id].state == "ready"
+            assert results[leader.id].assistant_text == SILENT_MEMBER_LINE
+            assert all(row.safe_error_code is None for row in results.values())
+            # Answers saved earlier stay; the broken one is not invented.
+            waiting = get_assessment_runtime_context(db, actor, conversation_id)
+            assert waiting is not None and waiting.current_question is not None
+            assert waiting.progress.resolved_count == question_count - 1
+            saved = db.scalars(
+                select(LearningRecord.payload_json).where(
+                    LearningRecord.conversation_id == conversation_id
+                )
+            ).all()
+            assert sum("Earlier saved answer" in text for text in saved) == question_count - 1
+            assert not any("FINAL_ANSWER_CANARY" in text for text in saved)
+        return
     # 2026-10-18: one answer turn with one model call committed 14 write
     # transactions; the ledger steps between network points now share one (10).
-    assert len(write_commits) <= 10, len(write_commits)
+    # The retried model call adds its own five provider ledger steps.
+    assert len(write_commits) <= (15 if scorer_wire == "truncated_once" else 10), len(write_commits)
     # 2026-10-18: the same turn ran 812 SELECTs (112 distinct); the assessment
     # context and Team member checks now run once per request phase (448).
-    assert len(selects) <= 500, len(selects)
+    # A retried Scorer call is one more model-call phase of checks (593).
+    select_cap = 650 if scorer_wire.startswith("truncated") else 500
+    assert len(selects) <= select_cap, len(selects)
     # The student turn dispatches the scorer. The Guide and Summarizer are
     # server text, so they have no model wire on this turn.
     assert wires[leader.id] == [] and wires[boundary.id] == []
