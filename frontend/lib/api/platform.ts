@@ -5,6 +5,7 @@ import {
   type PlatformClientHandle,
 } from "./generated/client";
 import { t, tm } from "../i18n";
+import { invalidateRequestCache } from "../request-cache";
 
 export type AuthSession = components["schemas"]["AuthSession"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
@@ -309,6 +310,7 @@ export type AgentChatSession = ChatSession & {
   can_send?: boolean;
 };
 export type ConversationSession = AgentChatSession | TeamChatSession;
+export type ChatAttachment = components["schemas"]["ChatAttachment"];
 export type TeamChatEntry =
   | { kind: "team"; team_id: string; team_version_id?: string | null }
   | { kind: "maya_team"; team_id: string };
@@ -709,6 +711,11 @@ function waitForQueue(
   });
 }
 
+function isReadMethod(method: string | undefined): boolean {
+  const upper = (method ?? "GET").toUpperCase();
+  return upper === "GET" || upper === "HEAD";
+}
+
 async function unwrap<T>(result: ClientResult<T>): Promise<T> {
   if (result.data !== undefined) return result.data;
   if (result.response.ok) return undefined as T;
@@ -833,6 +840,29 @@ export class PlatformApi {
       baseUrl: this.baseUrl,
       csrfToken: this.csrfToken,
     });
+    // A change empties the shared page-load cache both when it is sent and
+    // when it is answered, so no read from before the change is shown after.
+    this.client.use({
+      onRequest: ({ request }) => {
+        if (!isReadMethod(request.method)) invalidateRequestCache(this);
+      },
+      onResponse: ({ request }) => {
+        if (!isReadMethod(request.method)) invalidateRequestCache(this);
+      },
+    });
+  }
+
+  private async trackedFetch(
+    input: string,
+    init: RequestInit & { method: string },
+  ): Promise<Response> {
+    if (isReadMethod(init.method)) return fetch(input, init);
+    invalidateRequestCache(this);
+    try {
+      return await fetch(input, init);
+    } finally {
+      invalidateRequestCache(this);
+    }
   }
 
   setCsrfToken(token: string | undefined): void {
@@ -856,7 +886,7 @@ export class PlatformApi {
       form.append(name, value);
     }
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
+    const response = await this.trackedFetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method: "POST",
@@ -892,7 +922,7 @@ export class PlatformApi {
     keepalive = false,
   ): Promise<T> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
+    const response = await this.trackedFetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method: "POST",
@@ -925,7 +955,7 @@ export class PlatformApi {
 
   private async getJson<T>(path: string): Promise<T> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
+    const response = await this.trackedFetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method: "GET",
@@ -960,7 +990,7 @@ export class PlatformApi {
     idempotencyKey: string,
   ): Promise<T> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
+    const response = await this.trackedFetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method,
@@ -993,7 +1023,7 @@ export class PlatformApi {
 
   private async deleteJson(path: string): Promise<void> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
+    const response = await this.trackedFetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method: "DELETE",
@@ -1300,7 +1330,7 @@ export class PlatformApi {
     } = {},
   ): Promise<TeamChatSession> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
-    const response = await fetch(
+    const response = await this.trackedFetch(
       `${this.baseUrl}${separator}conversations/${encodeURIComponent(id)}/messages:stream`,
       {
         method: "POST",
@@ -1403,6 +1433,42 @@ export class PlatformApi {
     return this.deleteJson(`conversations/${id}`);
   }
 
+  /** Files attached to one Team Chat. Only that Chat's owner reads them. */
+  async conversationAttachments(id: string): Promise<ChatAttachment[]> {
+    return unwrap(
+      await this.client.GET("/conversations/{conversation_id}/attachments", {
+        params: { path: { conversation_id: id } },
+      }),
+    );
+  }
+
+  async uploadConversationAttachment(
+    id: string,
+    file: File,
+  ): Promise<ChatAttachment> {
+    const form = new FormData();
+    form.append("file", file);
+    return unwrap(
+      await this.client.POST("/conversations/{conversation_id}/attachments", {
+        params: {
+          path: { conversation_id: id },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        // The real FormData keeps the browser's multipart boundary.
+        body: form as unknown as never,
+      }),
+    );
+  }
+
+  deleteConversationAttachment(
+    id: string,
+    attachmentId: string,
+  ): Promise<void> {
+    return this.deleteJson(
+      `conversations/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`,
+    );
+  }
+
   /** Rename or pin a Chat; a field left out keeps its value. */
   async updateConversation(
     id: string,
@@ -1442,7 +1508,7 @@ export class PlatformApi {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     let response: Response;
     try {
-      response = await fetch(
+      response = await this.trackedFetch(
         `${this.baseUrl}${separator}conversations/${id}/messages:stream`,
         {
           method: "POST",
@@ -1717,6 +1783,16 @@ export class PlatformApi {
         "/learning/courses/{course_id}/my-assessment-attempts",
         { params: { path: { course_id: courseId } } },
       ),
+    );
+  }
+
+  /** A course teacher deletes an attempt from Record; the server only hides it. */
+  deleteCourseAssessmentAttempt(
+    courseId: string,
+    attemptId: string,
+  ): Promise<void> {
+    return this.deleteJson(
+      `learning/courses/${courseId}/assessment-attempts/${attemptId}`,
     );
   }
 

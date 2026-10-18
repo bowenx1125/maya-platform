@@ -388,6 +388,41 @@ describe("Studyform Teams", () => {
     ).toBeNull();
   });
 
+  it("lists a teacher's public Team members by name without links to their Agent pages", async () => {
+    // Studyform (2026-10-18): students never receive a teacher's public
+    // Agents, so the reader view must stand on the Team roster alone.
+    state.api.team.mockResolvedValue({
+      ...publicTeam,
+      owner_user_id: "teacher",
+      can_edit: false,
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="student">
+          <TeamEntryFlow
+            api={state.api as never}
+            courseId="course"
+            agents={[]}
+            standalone
+            backHref="/student/groups/group-1"
+            initialRouteMode="team-edit"
+            initialTeamId="team-1"
+          />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    expect(
+      await screen.findByRole("checkbox", { name: /Socrates/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: /Mencius/ })).toBeTruthy();
+    const main = document.querySelector("form") as HTMLElement;
+    expect(
+      [...main.querySelectorAll("a")].filter((link) =>
+        (link.getAttribute("href") ?? "").includes("/agents/"),
+      ),
+    ).toEqual([]);
+  });
+
   it("shows members, the Leader and selected Brainform names without letting a reader change them", async () => {
     state.api.team.mockResolvedValue({
       ...publicTeam,
@@ -1842,26 +1877,35 @@ describe("Chatform", () => {
     expect(
       screen.queryByRole("button", { name: "Add @ recipient" }),
     ).toBeNull();
-    expect(within(menu).getByRole("menuitem", { name: "All" })).toBeTruthy();
+    expect(within(menu).queryByRole("menuitem", { name: "All" })).toBeNull();
     expect(
       within(menu).getAllByRole("menuitem", { name: "Bowen" }),
     ).toHaveLength(2);
     expect(within(menu).getByRole("menuitem", { name: "Jade" })).toBeTruthy();
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "All" }));
-    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
-    expect((message as HTMLTextAreaElement).value).toBe("@All");
     expect(screen.queryByRole("button", { name: "Remove All" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove Bowen" })).toBeNull();
+
+    fireEvent.click(
+      within(menu).getAllByRole("menuitem", { name: "Bowen" })[0],
+    );
+    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
+    expect((message as HTMLTextAreaElement).value).toBe("@Bowen ");
+    expect((message as HTMLTextAreaElement).selectionStart).toBe(
+      "@Bowen ".length,
+    );
+    expect((message as HTMLTextAreaElement).selectionEnd).toBe(
+      "@Bowen ".length,
+    );
 
     fireEvent.change(message, { target: { value: "@" } });
     fireEvent.keyDown(message, { key: "@", shiftKey: true });
     fireEvent.click(
       within(screen.getByRole("menu", { name: "Recipients" })).getAllByRole(
         "menuitem",
-        { name: "Bowen" },
+        { name: "Jade" },
       )[0],
     );
-    expect((message as HTMLTextAreaElement).value).toBe("@Bowen");
+    expect((message as HTMLTextAreaElement).value).toBe("@Jade ");
     expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
 
     const pastedText = "```txt\n@All members @Bowen\n``` this is quoted text";
@@ -1882,6 +1926,51 @@ describe("Chatform", () => {
         mode: "all",
         participant_ids: [],
       },
+    });
+  });
+
+  it("Backspace after a picked @Name drops the name, keeps @ and reopens the picker; wrong @ falls back to all", async () => {
+    renderChats();
+    await startMayaTeamChat("Start the Team Chat");
+    await waitFor(() =>
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1),
+    );
+    const message = (await screen.findByRole("textbox", {
+      name: "Message",
+    })) as HTMLTextAreaElement;
+    await waitFor(() => expect(message.value).toBe(""));
+
+    fireEvent.change(message, { target: { value: "hi @" } });
+    fireEvent.keyDown(message, { key: "@", shiftKey: true });
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "Recipients" })).getByRole(
+        "menuitem",
+        { name: "Jade" },
+      ),
+    );
+    expect(message.value).toBe("hi @Jade ");
+    expect(message.selectionStart).toBe("hi @Jade ".length);
+
+    fireEvent.keyDown(message, { key: "Backspace" });
+    expect(message.value).toBe("hi @");
+    expect(message.selectionStart).toBe("hi @".length);
+    expect(screen.getByRole("menu", { name: "Recipients" })).toBeTruthy();
+
+    // Ordinary typed text is not collapsed (default Backspace handling).
+    fireEvent.keyDown(message, { key: "Escape" });
+    fireEvent.change(message, { target: { value: "plain text " } });
+    message.setSelectionRange(11, 11);
+    fireEvent.keyDown(message, { key: "Backspace" });
+    expect(message.value).toBe("plain text ");
+    expect(screen.queryByRole("menu", { name: "Recipients" })).toBeNull();
+
+    fireEvent.change(message, { target: { value: "@Nobody 你好" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(2),
+    );
+    expect(state.api.streamTeamConversation.mock.calls[1][1]).toMatchObject({
+      routing: { mode: "all", participant_ids: [] },
     });
   });
 

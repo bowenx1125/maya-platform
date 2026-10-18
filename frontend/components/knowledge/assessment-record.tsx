@@ -11,6 +11,7 @@ import {
 import type { OverviewResult } from "../../lib/api/platform";
 import { useLocale, useT } from "../locale";
 import { useSession } from "../session-provider";
+import { IconClose } from "../quiet-icons";
 import { ErrorNotice } from "../ui";
 import styles from "./brainform-workspace.module.css";
 import record from "./assessment-record.module.css";
@@ -206,14 +207,33 @@ export function RecordSection({
 export function RecordDetail({
   team,
   scope = "course",
+  onDelete,
 }: {
   team: RecordTeam | undefined;
   scope?: RecordScope;
+  /** A course teacher's delete; the server only hides the attempt. */
+  onDelete?: (attempt: OverviewResult) => Promise<void>;
 }) {
   const own = scope === "own";
   const t = useT();
   const when = useWhen();
   const [open, setOpen] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<unknown>(null);
+
+  async function remove(attempt: OverviewResult) {
+    if (!onDelete || deleting || !window.confirm(t("recordDeleteConfirm")))
+      return;
+    setDeleting(attempt.attempt_id);
+    setDeleteError(null);
+    try {
+      await onDelete(attempt);
+    } catch (cause) {
+      setDeleteError(cause);
+    } finally {
+      setDeleting(null);
+    }
+  }
   if (!team) {
     return (
       <section className={styles.editorPanel}>
@@ -264,6 +284,7 @@ export function RecordDetail({
         )}
       </dl>
 
+      {deleteError ? <ErrorNotice inline error={deleteError} /> : null}
       <ul className={styles.list}>
         {team.attempts.map((attempt) => {
           const key = attempt.attempt_id;
@@ -288,7 +309,16 @@ export function RecordDetail({
                   <span className={styles.rowMeta}>
                     {(own
                       ? [when(attempt.started_at)]
-                      : [attempt.group_name, version, when(attempt.started_at)]
+                      : [
+                          attempt.group_name,
+                          version,
+                          // Owner request (2026-10-18): a revoked version's
+                          // attempts stay in Record, labelled as such.
+                          attempt.publication_state === "revoked"
+                            ? t("recordRevokedVersion")
+                            : null,
+                          when(attempt.started_at),
+                        ]
                     )
                       .filter(Boolean)
                       .join(" · ")}
@@ -301,19 +331,34 @@ export function RecordDetail({
                   {own ? progress(attempt, t) : score(attempt, t)}
                 </span>
               </button>
-              {!own && attempt.report_download_path ? (
+              {!own && (attempt.report_download_path || onDelete) ? (
                 <div className={styles.actions}>
-                  <a
-                    className={record.report}
-                    href={attempt.report_download_path}
-                    download
-                    // The report covers the whole test, not this attempt.
-                    aria-label={t("recordReportFor", {
-                      name: attempt.test_name,
-                    })}
-                  >
-                    {t("overviewReport")}
-                  </a>
+                  {attempt.report_download_path ? (
+                    <a
+                      className={record.report}
+                      href={attempt.report_download_path}
+                      download
+                      // The report covers the whole test, not this attempt.
+                      aria-label={t("recordReportFor", {
+                        name: attempt.test_name,
+                      })}
+                    >
+                      {t("overviewReport")}
+                    </a>
+                  ) : null}
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      className={styles.iconButton}
+                      aria-label={t("recordDeleteNamed", {
+                        name: attempt.student_name,
+                      })}
+                      disabled={deleting === key}
+                      onClick={() => void remove(attempt)}
+                    >
+                      <IconClose />
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               {open === key ? (
@@ -381,7 +426,7 @@ function ScoreRing({ ratio }: { ratio: number | null }) {
 function score(result: OverviewResult, t: Translate): string {
   if (result.phase === "summary_not_saved") return t("overviewSummaryNotSaved");
   if (result.phase === "scoring_not_saved") return t("overviewScoringNotSaved");
-  if (result.status === "in_progress") return t("overviewInProgress");
+  if (result.status === "in_progress") return t("recordUnfinished");
   if (result.status === "paused") return t("overviewPaused");
   const awarded = result.points_awarded;
   const total = result.points_total;

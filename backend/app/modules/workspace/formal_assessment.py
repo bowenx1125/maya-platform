@@ -195,6 +195,23 @@ def resolve_formal_assessment(
     )
 
 
+def declares_assessment(agent_md: str) -> bool:
+    """Whether a Guide Agent.md declares any assessment at all.
+
+    True for a `## Formal assessment` subsection inside `# Team Ruleset` (even an
+    incomplete one) or an explicit `MAYA-ASSESSMENT-RECIPE:` marker. A Team whose
+    Guide declares neither can never open a formal attempt, so its ordinary chat
+    must carry no assessment protocol text or assessment Tools.
+    """
+
+    from app.modules.learning.recipes import RECIPE_DECLARATION
+
+    if RECIPE_DECLARATION.search(agent_md) is not None:
+        return True
+    ruleset = extract_team_ruleset(agent_md)
+    return ruleset is not None and _formal_body(ruleset) is not None
+
+
 def is_formal_start_message(message: str) -> bool:
     """Whether this student message asks to open a formal attempt.
 

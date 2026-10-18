@@ -1296,6 +1296,55 @@ describe("private Agent chat", () => {
     expect(screen.getByText("A considered reply")).toBeTruthy();
   });
 
+  it("offers the same + attachments in a writable Agent chat, for that chat only", async () => {
+    state.api.conversations.mockResolvedValue([completedConversation]);
+    state.api.conversationAttachments = vi.fn().mockResolvedValue([
+      {
+        id: "attachment-1",
+        conversation_id: "conversation",
+        filename: "chat-log.txt",
+        media_type: "text/plain",
+        size_bytes: 12,
+        text_chars: 4,
+        created_at: "2026-10-18T00:00:00Z",
+      },
+    ]);
+    state.api.uploadConversationAttachment = vi.fn().mockResolvedValue({
+      id: "attachment-2",
+      conversation_id: "conversation",
+      filename: "export.json",
+      media_type: "application/json",
+      size_bytes: 2,
+      text_chars: 2,
+      created_at: "2026-10-18T00:01:00Z",
+    });
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChat />
+      </LocaleProvider>,
+    );
+    await screen.findByText("A considered reply");
+    const add = await screen.findByRole("button", { name: "Attach a file" });
+    expect(add.getAttribute("title")).toContain("Only you can see it");
+    // The "+" sits in the composer, next to Send.
+    expect(add.closest("form")).toBe(
+      screen.getByRole("textbox", { name: "Message" }).closest("form"),
+    );
+    expect(await screen.findByText("chat-log.txt")).toBeTruthy();
+    expect(state.api.conversationAttachments).toHaveBeenCalledWith(
+      "conversation",
+    );
+    const file = new File(["{}"], "export.json", { type: "application/json" });
+    fireEvent.change(screen.getByTestId("chat-attachment-input"), {
+      target: { files: [file] },
+    });
+    expect(await screen.findByText("export.json")).toBeTruthy();
+    expect(state.api.uploadConversationAttachment).toHaveBeenCalledWith(
+      "conversation",
+      file,
+    );
+  });
+
   it("keeps deleted Agent history readable without allowing a new message", async () => {
     const saved = completedConversation;
     state.api.conversations.mockResolvedValue([
@@ -1333,6 +1382,8 @@ describe("private Agent chat", () => {
         .textContent,
     ).toBe("This Agent is unavailable for new messages.");
     expect(state.api.streamConversation).not.toHaveBeenCalled();
+    // A read-only Agent Chat offers no attachments.
+    expect(screen.queryByRole("button", { name: "Attach a file" })).toBeNull();
   });
 });
 

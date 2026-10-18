@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import PlatformError
 from app.core.llm_admission import llm_admission_slot
+from app.core.read_memo import forget_request_reads
 from app.modules.auth.service import AuthContext
 from app.modules.provider_disclosure.team_standing import authorize_team_dispatch
 from app.modules.workspace.models import (
@@ -237,6 +238,114 @@ def without_repeated_successful_tool(
             and tool["function"].get("name") == name
         )
     ]
+
+
+def tool_arguments_decode(arguments: object) -> bool:
+    """True when the SDK can read these Tool arguments (JSON, or a Python literal)."""
+
+    if not isinstance(arguments, str) or arguments == "":
+        return True
+    try:
+        json.loads(arguments)
+        return True
+    except ValueError:
+        pass
+    try:
+        ast.literal_eval(arguments)
+        return True
+    except (ValueError, SyntaxError, MemoryError, RecursionError, TypeError):
+        return False
+
+
+def _malformed_tool_names(calls: object) -> set[str]:
+    names: set[str] = set()
+    for call in calls if isinstance(calls, list) else []:
+        function = call.get("function") if isinstance(call, dict) else None
+        if not isinstance(function, dict) or not isinstance(function.get("name"), str):
+            continue
+        if not tool_arguments_decode(function.get("arguments")):
+            names.add(function["name"])
+    return names
+
+
+# One correction is allowed: the SDK hands the decode error back and the model
+# may send the call again. A second unreadable call to the same Tool in a row
+# ends that Tool for this reply.
+MALFORMED_TOOL_CALLS_IN_A_ROW = 2
+
+
+def without_repeatedly_malformed_tool(
+    messages: Sequence[Message],
+    tools: list[dict[str, Any]] | None,
+    *,
+    keep: str | None = None,
+) -> list[dict[str, Any]] | None:
+    """Drop a Tool whose last two calls in a row carried unreadable arguments.
+
+    Bug (2026-10-18, 171 s Team turn): the report member's
+    create_chat_html_report arguments were cut mid-string. The SDK answered
+    "Error while decoding function arguments … retry", the model sent the same
+    long call again, and nothing stopped it: 12 sequential model calls, the
+    prompt growing from 9.5k to 24k tokens, and still no report. Loop guards
+    above skip calls they cannot decode, so this one counts them. The next
+    call goes without that Tool and the member must reply in words. ``keep``
+    is a Tool the caller forces (an assessment executor's write Tool), which
+    keeps its own retry rule.
+    """
+
+    if not tools:
+        return tools
+    recent: list[set[str]] = []
+    for message in reversed(messages):
+        if message.role != "assistant" or not getattr(message, "tool_calls", None):
+            continue
+        recent.append(_malformed_tool_names(message.tool_calls))
+        if len(recent) == MALFORMED_TOOL_CALLS_IN_A_ROW:
+            break
+    if len(recent) < MALFORMED_TOOL_CALLS_IN_A_ROW:
+        return tools
+    blocked = set.intersection(*recent) - ({keep} if keep else set())
+    if not blocked:
+        return tools
+    LOGGER.info("Team tool withdrawn after unreadable arguments tools=%s", sorted(blocked))
+    remaining = [
+        tool
+        for tool in tools
+        if not (
+            isinstance(tool, dict)
+            and isinstance(tool.get("function"), dict)
+            and tool["function"].get("name") in blocked
+        )
+    ]
+    # An empty "tools" array is not a valid request body; no Tools is.
+    return remaining or None
+
+
+def _cut_tool_arguments(response_json: str, wire: bytes, usage: dict[str, Any]) -> bool:
+    """A Tool call cut at the output cap the request sent.
+
+    DashScope labels such a reply ``finish_reason: "tool_calls"``, not
+    ``"length"``, so the truncation check never saw it (2026-10-18: nine
+    report calls of exactly 1,510 completion tokens). Sending the same call
+    again is cut at the same place, so it is a truncation, not a retry case.
+    """
+
+    completion = usage.get("completion_tokens")
+    if not isinstance(completion, int):
+        return False
+    try:
+        sent_cap = json.loads(wire).get("max_tokens")
+    except (ValueError, AttributeError):
+        return False
+    if not isinstance(sent_cap, int) or completion < sent_cap:
+        return False
+    try:
+        message = json.loads(response_json)["choices"][0]["message"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return False
+    return bool(
+        _malformed_tool_names(message.get("tool_calls") if isinstance(message, dict) else None)
+    )
 
 
 def stalled_refusal_code(messages: list[Message], tools: list[dict[str, Any]] | None) -> str | None:
@@ -751,6 +860,9 @@ def dispatch_team_model(
             raise TeamDispatchError(_preflight_code(exc)) from None
 
         provider_transport = transport or HttpxLLMTransport()
+        # The model call takes time: every check after it reads the database
+        # again (the request's read memo starts over).
+        forget_request_reads()
         try:
             response = provider_transport.post_bytes(
                 config.resolved_endpoint,
@@ -803,7 +915,14 @@ def dispatch_team_model(
         usage.get("prompt_tokens"),
         usage.get("completion_tokens"),
     )
-    if finish_reason == "length":
+    if finish_reason == "length" or (
+        finish_reason == "tool_calls"
+        # Assessment executors keep their forced retry (#121): a shorter
+        # second attempt can still save the student's answer.
+        and not request.assessment_active
+        and request.assessment_purpose is None
+        and _cut_tool_arguments(response_json, wire, usage)
+    ):
         # A cut reply would show half a question or lose a half-written
         # answer; it fails visibly instead, so the student can send again.
         repository.mark_failed(operation.id, safe_error_code="team_response_truncated")
@@ -833,4 +952,10 @@ def dispatch_team_model(
     return TeamProviderDispatch(result, stage.call_id)
 
 
-__all__ = ["TeamProviderDispatch", "dispatch_team_model", "team_request_bytes"]
+__all__ = [
+    "TeamProviderDispatch",
+    "dispatch_team_model",
+    "team_request_bytes",
+    "tool_arguments_decode",
+    "without_repeatedly_malformed_tool",
+]

@@ -35,7 +35,7 @@ from sqlalchemy import event, func, select
 
 from tests.conftest import login
 from tests.test_mayaform_assessment_attempts import _create_formal_conversation
-from tests.test_mayaform_team_conversations import MAYA_ID, _make_agent_version
+from tests.test_mayaform_team_conversations import _make_agent_version
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 PASSWORD = "classroom-load-1"
@@ -75,6 +75,14 @@ def _student(
     csrf = session["csrf_token"]
     user_id = session["user"]["id"]
     headers = {"X-CSRF-Token": csrf}
+    # Students reach teachers' public Agents only through Teams (#182), so each
+    # student builds the Team from Agents of their own.
+    members = [
+        _make_agent_version(
+            database, owner_id=user_id, name=f"{username} agent {n}", visibility="private"
+        )[1]
+        for n in range(2)
+    ]
 
     team = _retrying(
         lambda: client.post(
@@ -199,13 +207,7 @@ def classroom(app_factory: Any) -> Any:
 @pytest.mark.parametrize("students", [40, 60])
 def test_a_whole_class_at_once(classroom: Any, students: int) -> None:
     app, database, settings, client = classroom
-    # Two public teacher Agents every student may put in a Team.
-    members = [
-        _make_agent_version(
-            database, owner_id=MAYA_ID, name=f"Class Agent {n}", visibility="public"
-        )[1]
-        for n in range(2)
-    ]
+    members: list[str] = []  # each student seeds their own Agents in _student
     start = threading.Barrier(students)
 
     def run(index: int) -> dict[str, Any]:

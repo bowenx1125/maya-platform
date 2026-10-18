@@ -150,11 +150,47 @@ def read_memory(
     }
 
 
+# Tools that only make sense where an assessment can exist: the formal test
+# action, attempt/session/record reads, scoring and Boundary writes, and the
+# teacher's assessment statistics, transcripts and activity reports. A Team
+# whose Guide declares no assessment is never offered any of them. Every new
+# registry Tool must be listed here or in NON_ASSESSMENT_TOOL_NAMES (tested).
+ASSESSMENT_TOOL_NAMES = frozenset(
+    {
+        "assessment_action",
+        "read_session",
+        "read_memory",
+        "read_learning_attempt",
+        "read_assessment",
+        "read_learning_boundary",
+        "edit_assessment",
+        "update_learning_boundary",
+        "list_course_assessments",
+        "read_course_statistics",
+        "read_student_test_transcripts",
+        "read_student_answers",
+        "create_course_report",
+        "list_course_reports",
+    }
+)
+NON_ASSESSMENT_TOOL_NAMES = frozenset(
+    {
+        "create_chat_html_report",
+        "generate_agent_knowledge",
+        "read_agent_memory",
+        "write_agent_memory",
+    }
+)
+
+
 def runtime_registry() -> dict[str, ToolSpec]:
+    from app.modules.workspace.chat_reports import chat_report_tools
+
     from .agent_memory import agent_memory_tools
 
     return {
         **teacher_tools(),
+        **chat_report_tools(),
         **knowledge_tools(),
         **learning_tools(),
         **agent_memory_tools(),

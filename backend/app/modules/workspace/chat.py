@@ -46,6 +46,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     can_invoke_version,
     snapshot_sources_are_readable,
+    teacher_public_agent_hidden_from,
 )
 from app.modules.knowledge_sets.generation import get_generation_status
 from app.modules.knowledge_sets.models import KnowledgeGenerationRun
@@ -784,6 +785,12 @@ def _generate_reply_body(
         sending_guard=sending_guard,
     )
     history = _saved_chat_history(db, row.id, current_turn.position)
+    if not assessment_active:
+        from .attachments import attachment_history
+
+        # Same context as Team members: the owner's files attached to this
+        # Chat before this turn. A live formal attempt keeps its fixed context.
+        history.extend(attachment_history(db, row.id, current_turn.created_at))
     history.append({"role": "user", "content": message})
     require_current_chat_claim(db, row.id, request_id, claim_revision)
     canonical_knowledge: list[dict[str, Any]] = []
@@ -1075,6 +1082,10 @@ def _conversation_is_callable(
     is_owner = agent.owner_user_id == conversation.user_id
     if not is_owner and conversation.agent_authorization_epoch != agent.authorization_epoch:
         return False
+    # An existing student chat with a teacher's public Agent stays readable
+    # but becomes read-only: the Agent is now reachable only through a Team.
+    if teacher_public_agent_hidden_from(db, actor_user_id, agent):
+        return False
     return can_invoke_version(db, actor_user_id, version, agent)
 
 
@@ -1089,7 +1100,10 @@ def _conversation_unavailable_error(agent: Agent | None) -> PlatformError:
 def _version_chat_allowed(
     db: Session, context: AuthContext, version: AgentVersion, agent: Agent
 ) -> bool:
-    return can_invoke_version(db, context, version, agent)
+    # A teacher's public Agent only reaches students through a Team.
+    return not teacher_public_agent_hidden_from(db, context, agent) and can_invoke_version(
+        db, context, version, agent
+    )
 
 
 def _version_chat_available(
@@ -1175,6 +1189,7 @@ def _agent_knowledge_generation_progress(
 def _agent_report_download_suffix(db: Session, conversation_id: str, turn_id: str) -> str:
     """Append server-authored report links; models must not invent download paths."""
 
+    from app.modules.workspace.chat_reports import CHAT_REPORT_TOOL
     from app.modules.workspace.team_runtime import report_paths
 
     raw = db.scalars(
@@ -1182,7 +1197,9 @@ def _agent_report_download_suffix(db: Session, conversation_id: str, turn_id: st
         .where(
             RuntimeToolReceipt.conversation_id == conversation_id,
             RuntimeToolReceipt.turn_id == turn_id,
-            RuntimeToolReceipt.tool_name.in_(("create_course_report", "list_course_reports")),
+            RuntimeToolReceipt.tool_name.in_(
+                ("create_course_report", "list_course_reports", CHAT_REPORT_TOOL)
+            ),
         )
         .order_by(RuntimeToolReceipt.created_at, RuntimeToolReceipt.id)
     ).all()
@@ -1624,6 +1641,7 @@ def delete_conversation(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
     row = db.get(Conversation, str(conversation_id))
     if row is None or row.user_id != context.user.id:
@@ -1647,6 +1665,12 @@ def delete_conversation(
         )
         withdraw_conversation_attempts(db, row.id)
         db.commit()
+    from .attachments import purge_conversation_attachments
+    from .chat_reports import purge_conversation_reports
+
+    # Attached files and saved reports are private to this Chat and leave with it.
+    purge_conversation_attachments(db, settings, row.id)
+    purge_conversation_reports(db, row.id)
     return Response(status_code=204)
 
 

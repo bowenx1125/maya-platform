@@ -799,3 +799,40 @@ def test_member_system_marks_only_an_at_mentioned_member() -> None:
         "# Member\n\nSpeak.", "{}", assessment_active=True, speaker_name="Ada", mentioned=True
     )
     assert "You must reply" not in active
+
+
+def test_mention_parser_matches_longest_name_and_ignores_unknown() -> None:
+    from app.modules.workspace.mention_parse import mentioned_names
+
+    names = ["Guider", "Scorer", "Scorer Pro"]
+    assert mentioned_names("@Scorer你是干嘛的", names) == ["Scorer"]
+    assert mentioned_names("@Scorer Pro hi", names) == ["Scorer Pro"]
+    assert mentioned_names("@Nobody 你好", names) == []
+    assert mentioned_names("```\n@Guider\n``` x", names) == []
+    assert mentioned_names("@Scorer @Guider @Scorer", names) == ["Scorer", "Guider"]
+
+
+def test_wrong_name_at_mention_falls_back_to_default_reply_rules(
+    client: TestClient, database: Any, monkeypatch: Any
+) -> None:
+    session, csrf, _ = _chat(client, database)
+    members = session["team"]["members"]
+    leader = next(member for member in members if member["is_leader"])
+    others = [member["id"] for member in members if not member["is_leader"]]
+    seen: list[runtime.MemberRequest] = []
+
+    def reply(request: runtime.MemberRequest) -> runtime.MemberReply:
+        seen.append(request)
+        # Non-leaders may stay silent by relevance; that is not a failure.
+        text = "" if request.participant_id != leader["id"] else "Leader reply"
+        return runtime.MemberReply(text)
+
+    monkeypatch.setattr(runtime, "invoke_mock_member", reply)
+    url = f"/api/v1/conversations/{session['id']}/messages"
+    body = {**_body(session, "all"), "message": "@NoSuchMember 你好介绍你自己"}
+    response = post_message(client, url, headers=_headers(csrf), json=body)
+    assert response.status_code == 200, response.text
+    turn = [item for item in response.json()["turns"] if item["user_text"]][-1]
+    assert turn["state"] != "failed"
+    assert [request.participant_id for request in seen] == [leader["id"], *others]
+    assert all("@-mentioned you" not in request.system_message for request in seen)

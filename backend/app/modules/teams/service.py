@@ -23,6 +23,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     _agent_workspace_role,
@@ -31,6 +32,7 @@ from app.modules.knowledge.services import (
     course_member_role,
     observes_group,
     scoped_group_role_for_user,
+    teacher_public_agent_hidden_from,
 )
 from app.modules.knowledge_sets import service as knowledge_set_service
 from app.modules.knowledge_sets.models import (
@@ -57,7 +59,6 @@ from app.modules.teams.schemas import (
     TeamMemberDTO,
     TeamMemberInput,
     TeamSummary,
-    TeamVersionDTO,
 )
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -200,7 +201,11 @@ def _validate_members(
             raise unprocessable("duplicate_team_agent", "An Agent can only appear once in a Team.")
         seen_agent_ids.add(agent.id)
         role = _agent_workspace_role(db, actor, agent)
-        if role is None or not can_read_version(db, version, agent, role, context=actor):
+        if (
+            role is None
+            or not can_read_version(db, version, agent, role, context=actor)
+            or teacher_public_agent_hidden_from(db, actor, agent)
+        ):
             raise not_found("An Agent version is not available to the current user.")
         if group_id is not None and agent.group_id != group_id:
             raise not_found("A group Team can only contain Agents from that group.")
@@ -809,31 +814,6 @@ def get_team_detail(db: Session, actor: AuthContext | str, team_id: str) -> Team
         shared_knowledge_sets=_shared_knowledge_set_dtos(db, version.id),
         publication_state=_publication_state(db, team, version),  # type: ignore[arg-type]
     )
-
-
-def get_team_versions(db: Session, actor: AuthContext | str, team_id: str) -> list[TeamVersionDTO]:
-    team = _get_team_for_owner(db, actor, team_id)
-    versions = db.scalars(
-        select(TeamVersion)
-        .where(TeamVersion.team_id == team.id)
-        .order_by(TeamVersion.version_seq.desc())
-    ).all()
-    return [
-        TeamVersionDTO(
-            id=_uid(version.id),
-            team_id=_uid(team.id),
-            version_seq=version.version_seq,
-            display_name=version.display_name,
-            visibility=version.visibility,  # type: ignore[arg-type]
-            authorization_epoch=version.authorization_epoch,
-            members=[_team_member_dto(row) for row in _member_rows(db, version.id)],
-            shared_knowledge_set_ids=[
-                _uid(row.knowledge_set_id) for row in _set_rows(db, version.id)
-            ],
-            created_at=version.created_at,
-        )
-        for version in versions
-    ]
 
 
 def _create_version_rows(
@@ -1526,6 +1506,21 @@ def resolve_frozen_chat_selection(
 ) -> None:
     """Recheck an existing frozen Team selection without selecting its new head."""
 
+    targets = None if target_binding_ids is None else frozenset(target_binding_ids)
+    memoized(
+        db,
+        ("frozen_chat_selection_valid", _actor_id(actor), repr(frozen_selection), targets),
+        lambda: _resolve_frozen_chat_selection(db, actor, frozen_selection, target_binding_ids),
+        across_sessions=True,
+    )
+
+
+def _resolve_frozen_chat_selection(
+    db: Session,
+    actor: AuthContext | str,
+    frozen_selection: FrozenTeamSelection,
+    target_binding_ids: set[str] | None,
+) -> None:
     user_id = _actor_id(actor)
     targets = (
         set(frozen_selection.invokable_binding_ids)

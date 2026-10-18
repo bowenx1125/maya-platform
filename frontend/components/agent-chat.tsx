@@ -9,8 +9,10 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { ChatAttachments } from "./chats/chat-attachments";
 import { DismissibleAlert } from "./dismissible-alert";
 import {
   CHAT_BUSY_CODE,
@@ -32,6 +34,7 @@ import {
   type TeamMemberResult,
   type TeamSummaryDto,
 } from "../lib/api";
+import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import {
   abandonChatRequest,
   adoptPendingChatRequest,
@@ -50,6 +53,14 @@ import {
   settleChatRequest,
   subscribeChatRequest,
 } from "../lib/chat-request-store";
+import {
+  applyMentionInsert,
+  collapseMentionOnBackspace,
+  insertedMentionAt,
+  placeMentionCaret,
+  type InsertedMention,
+} from "../lib/mention-insert";
+import { mentionedMembers } from "../lib/mention-parse";
 import {
   ChatTargetPicker,
   type ChatTargetTeam,
@@ -169,26 +180,19 @@ function newRequestId(): string {
     .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
-function mentionLabel(text: string): string | null {
-  const visible = text.replace(/```[\s\S]*?```/g, " ");
-  const labels = [...visible.matchAll(/@([^\s@]+)/g)].map((match) => match[1]);
-  return labels.at(-1) ?? null;
-}
-
 function routingForMention(
   session: TeamChatSession,
   message: string,
 ): TeamRouting {
-  // Bare sends: every member reads and replies (length by relevance). An
-  // empty reply is omitted and is not a failure. @Name / @All stay explicit.
+  // Bare sends: every member reads; the leader replies first and the rest
+  // reply by relevance (an empty reply is not a failure). @Name matches the
+  // longest member name (no space needed). An @ naming no available member,
+  // or typed @All, is ignored and the default rules apply.
   const all: TeamRouting = { mode: "all", participant_ids: [] };
-  const label = mentionLabel(message);
-  if (!label) return all;
-  if (label === "All") return all;
-  const member = session.team.members.find(
-    (item) => item.name === label && item.available !== false,
-  );
-  return member ? { mode: "selected", participant_ids: [member.id] } : all;
+  const named = mentionedMembers(message, session.team.members);
+  return named.length
+    ? { mode: "selected", participant_ids: named.map((member) => member.id) }
+    : all;
 }
 
 function isAgentSession(
@@ -423,6 +427,7 @@ function upsertTeamResult(
 
 export function AgentChat() {
   const { api, identityGeneration, user } = useSession();
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const role = pathname.startsWith("/teacher/") ? "teacher" : "student";
@@ -453,6 +458,7 @@ export function AgentChat() {
       courseId={courseId}
       actorId={user?.id ?? ""}
       scopeKey={scopeKey}
+      cacheIdentity={cacheIdentity}
       role={role}
     />
   );
@@ -463,12 +469,15 @@ function AgentChatScope({
   courseId,
   actorId,
   scopeKey,
+  cacheIdentity,
   role,
 }: {
   api: PlatformApi;
   courseId: string;
   actorId: string;
   scopeKey: string;
+  /** Shared page-load cache identity (user id + session generation). */
+  cacheIdentity: string | null;
   role: "teacher" | "student";
 }) {
   const t = useT();
@@ -600,6 +609,7 @@ function AgentChatScope({
   const [teamDraft, setTeamDraft] = useState("");
   const [teamRecipientMenu, setTeamRecipientMenu] = useState(false);
   const teamRecipientMenuRef = useRef<HTMLDivElement>(null);
+  const insertedMention = useRef<InsertedMention | null>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
   // The server scores and summarizes after the last answer, with no message
@@ -845,7 +855,14 @@ function AgentChatScope({
       : typeof api.conversationSessions === "function"
         ? api.conversationSessions()
         : api.conversations();
-    void Promise.all([api.chatAgents(courseId), historyRequest])
+    // The catalog is a shared, briefly cached read; history is always read
+    // fresh because pending sends are reconciled against it.
+    void Promise.all([
+      cachedCall(api, cacheIdentity, "chatAgents", [courseId], () =>
+        api.chatAgents(courseId),
+      ),
+      historyRequest,
+    ])
       .then(([catalog, allHistory]) => {
         if (!active || !isChatRequestScopeActive(scopeKey)) return;
         setAgents(catalog);
@@ -1021,6 +1038,7 @@ function AgentChatScope({
     };
   }, [
     api,
+    cacheIdentity,
     courseId,
     invalidMemoryRoute,
     newChatRoute,
@@ -1031,22 +1049,27 @@ function AgentChatScope({
   const loadTeamChoices = useCallback(async () => {
     const [teams, mayaTeams] = await Promise.all([
       typeof api.teams === "function"
-        ? api.teams(courseId).catch(() => [])
+        ? cachedCall(api, cacheIdentity, "teams", [courseId, undefined], () =>
+            api.teams(courseId),
+          ).catch(() => [])
         : Promise.resolve([]),
       typeof api.mayaTeams === "function"
-        ? api.mayaTeams(courseId).catch(() => [])
+        ? cachedCall(api, cacheIdentity, "mayaTeams", [courseId], () =>
+            api.mayaTeams(courseId),
+          ).catch(() => [])
         : Promise.resolve([]),
     ]);
     if (!isChatRequestScopeActive(scopeKey)) return;
     setTeamChoices(teams);
     setMayaChoices(mayaTeams);
-  }, [api, courseId, scopeKey]);
+  }, [api, cacheIdentity, courseId, scopeKey]);
 
+  // Read beside the catalog and history, not after them: one round trip.
   useEffect(() => {
-    if (loadedScope !== scopeKey) return;
+    if (!scopeKey) return;
     const timer = window.setTimeout(() => void loadTeamChoices(), 0);
     return () => window.clearTimeout(timer);
-  }, [loadTeamChoices, loadedScope, newChatRoute, scopeKey]);
+  }, [loadTeamChoices, newChatRoute, scopeKey]);
 
   useEffect(() => {
     if (!scopeKey || loadedScope !== scopeKey) return;
@@ -2609,14 +2632,13 @@ function AgentChatScope({
   );
 
   function insertMention(label: string) {
-    const draft = teamDraft;
-    const at = draft.lastIndexOf("@");
-    const next =
-      at >= 0
-        ? `${draft.slice(0, at)}@${label}${draft.slice(at + 1).replace(/^[^\s@]*/, "")}`
-        : `${draft}@${label}`;
-    setTeamDraft(next);
-    setTeamRecipientMenu(false);
+    const { next, caret } = applyMentionInsert(teamDraft, label);
+    insertedMention.current = insertedMentionAt(teamDraft, label);
+    flushSync(() => {
+      setTeamDraft(next);
+      setTeamRecipientMenu(false);
+    });
+    placeMentionCaret(messageRef.current, caret);
   }
 
   function submitMessage(event?: FormEvent) {
@@ -3113,14 +3135,6 @@ function AgentChatScope({
                       role="menu"
                       aria-label={t("teamRecipients")}
                     >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={teamBusy}
-                        onClick={() => insertMention(t("teamAllMembers"))}
-                      >
-                        {t("teamAllMembers")}
-                      </button>
                       {mentionMembers.map((member) => (
                         <button
                           key={member.key}
@@ -3167,6 +3181,31 @@ function AgentChatScope({
                         return;
                       }
                       if (
+                        teamMode &&
+                        event.key === "Backspace" &&
+                        !event.nativeEvent.isComposing
+                      ) {
+                        const el = event.currentTarget;
+                        const collapsed =
+                          el.selectionStart === el.selectionEnd
+                            ? collapseMentionOnBackspace(
+                                teamDraft,
+                                el.selectionStart,
+                                insertedMention.current,
+                              )
+                            : null;
+                        insertedMention.current = null;
+                        if (collapsed) {
+                          event.preventDefault();
+                          flushSync(() => {
+                            setTeamDraft(collapsed.next);
+                            if (canMention) setTeamRecipientMenu(true);
+                          });
+                          placeMentionCaret(el, collapsed.caret);
+                          return;
+                        }
+                      }
+                      if (
                         canMention &&
                         event.key === "@" &&
                         !event.nativeEvent.isComposing
@@ -3178,6 +3217,24 @@ function AgentChatScope({
                       // longer composing. Only the Send button submits.
                     }}
                   />
+                  {selectedTeam && !selectedTeam.read_only ? (
+                    <ChatAttachments
+                      key={selectedTeam.id}
+                      conversationId={selectedTeam.id}
+                      disabled={teamBusy || teamWorking}
+                    />
+                  ) : !selectedTeam &&
+                    selected &&
+                    isAgentSession(selected) &&
+                    agentCanSend ? (
+                    // Same "+" for a one-to-one Agent Chat: the files belong
+                    // to this Chat and its owner only (server-enforced).
+                    <ChatAttachments
+                      key={selected.id}
+                      conversationId={selected.id}
+                      disabled={busy}
+                    />
+                  ) : null}
                   <div className={styles.composerBar}>
                     {sendHint ? (
                       <p
