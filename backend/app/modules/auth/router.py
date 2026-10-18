@@ -41,6 +41,8 @@ from app.modules.auth.profile import (
 )
 from app.modules.auth.registration import (
     hash_registration_password,
+    normalize_display_name,
+    normalize_group_name,
     normalize_username,
     register_student,
     registration_turn,
@@ -545,15 +547,36 @@ def register(
     """
 
     _require_production_auth_origin(request, settings)
+    # Cheap checks first: a bad field is refused before the hash, the queue
+    # or the limiter, and a client over its registration limit gets its 429
+    # without taking a place in the shared pressure queue.
+    username = normalize_username(payload.username)
+    normalize_group_name(payload.group_name)
+    normalize_display_name(payload.display_name, username)
+    limiter = _limiter(request) if settings.is_production else None
+    limiter_key = client_key(request, settings) if limiter is not None else ""
+    attempt = limiter.consume_registration(limiter_key, settings) if limiter is not None else None
+    try:
+        result, raw_token = _register_admitted(payload, request, db, settings)
+    except PlatformError as exc:
+        # A retryable refusal (queue full, wait timeout, busy turn) did no
+        # work; it must not spend the client's registration allowance.
+        if limiter is not None and attempt is not None and exc.status_code == 503:
+            limiter.refund_registration(limiter_key, attempt)
+        raise
+    _set_session_cookie(response, raw_token, settings, request)
+    return result
+
+
+def _register_admitted(
+    payload: RegisterRequest, request: Request, db: Session, settings: Settings
+) -> tuple[AuthSession, str]:
     # Same unified pressure queue as sign-in (Argon2 + a short write): under
     # host pressure a registration waits instead of piling on.
     with adaptive_slot("login", settings):
-        if settings.is_production:
-            _limiter(request).consume_registration(client_key(request, settings), settings)
         # Hash outside the registration turn so only the short DB write is
         # serialized; nothing has touched the request Session yet, so neither
         # wait below holds a pooled connection.
-        normalize_username(payload.username)  # reject a bad name before hashing
         password_hash = hash_registration_password(payload.password, settings)
         with registration_turn(settings):
             user, _group = register_student(
@@ -578,8 +601,7 @@ def register(
             # Commit inside the turn: the advisory lock ends with this
             # transaction, before the next registrant takes a connection.
             db.commit()
-    _set_session_cookie(response, raw_token, settings, request)
-    return result
+    return result, raw_token
 
 
 @router.post(

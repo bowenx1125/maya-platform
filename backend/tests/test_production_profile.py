@@ -509,6 +509,93 @@ def test_signup_limit_denial_does_not_create_an_account_or_session(tmp_path: Pat
         assert session.scalar(select(func.count(SessionRecord.id_hash))) == 1
 
 
+def _register(client: TestClient, username: str, group_name: str = "Class A") -> Any:
+    return client.post(
+        "/api/v1/auth/register",
+        json={"username": username, "password": "student-password-1", "group_name": group_name},
+        headers=_origin_headers(),
+    )
+
+
+def test_signup_over_its_limit_gets_429_without_entering_the_pressure_queue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#141: a rate-limited client must not hold a place in the shared queue."""
+
+    from contextlib import contextmanager
+
+    from app.modules.auth import router as auth_router
+
+    app, _database, _settings_value = _new_app(
+        tmp_path, settings_overrides={"auth_register_client_limit": 1}
+    )
+    real_slot = auth_router.adaptive_slot
+    entered: list[str] = []
+
+    @contextmanager
+    def tracked_slot(kind: str, settings: Any) -> Any:
+        entered.append(kind)
+        with real_slot(kind, settings):
+            yield
+
+    monkeypatch.setattr(auth_router, "adaptive_slot", tracked_slot)
+    with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
+        assert _register(client, "first-student").status_code == 201
+        assert entered == ["login"]
+        limited = _register(client, "second-student")
+    assert limited.status_code == 429
+    assert entered == ["login"]
+
+
+def test_signup_rejects_a_bad_group_name_before_hashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.modules.auth import router as auth_router
+
+    app, _database, _settings_value = _new_app(tmp_path)
+    hashed: list[str] = []
+    monkeypatch.setattr(
+        auth_router,
+        "hash_registration_password",
+        lambda password, settings: hashed.append(password) or "unused",
+    )
+    with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
+        response = _register(client, "valid-student", group_name="   ")
+    assert response.status_code == 422, response.text
+    assert hashed == []
+
+
+def test_signup_busy_refusal_does_not_spend_the_client_allowance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from contextlib import contextmanager
+
+    from app.modules.auth import router as auth_router
+
+    app, database, _settings_value = _new_app(
+        tmp_path, settings_overrides={"auth_register_client_limit": 1}
+    )
+    real_turn = auth_router.registration_turn
+    refusals = {"left": 1}
+
+    @contextmanager
+    def busy_once(settings: Any) -> Any:
+        if refusals["left"]:
+            refusals["left"] -= 1
+            raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
+        with real_turn(settings):
+            yield
+
+    monkeypatch.setattr(auth_router, "registration_turn", busy_once)
+    with TestClient(app, base_url=PUBLIC_ORIGIN) as client:
+        assert _register(client, "retrying-student").status_code == 503
+        # The one allowed attempt is still available for the retry.
+        assert _register(client, "retrying-student").status_code == 201
+        assert _register(client, "third-student").status_code == 429
+    with database.session() as session:
+        assert session.scalar(select(User.id).where(User.username == "retrying-student"))
+
+
 def test_limiter_recovery_expiry_concurrency_and_bounded_memory() -> None:
     class FakeClock:
         now = 100.0
