@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -25,6 +26,8 @@ from app.modules.workspace.models import (
 )
 
 from .models import RuntimeModelCallStage, RuntimeToolReceipt
+
+LOGGER = logging.getLogger("maya.runtime_tools")
 
 ToolClass = Literal["Public", "Student", "Teacher"]
 ToolHandler = Callable[
@@ -107,6 +110,49 @@ def exposed_tools(
         if spec.authorization_class
         in ({"Public", "Teacher"} if role == "teacher" else {"Public", "Student"})
         and (spec.entry_kinds is None or row.entry_kind in spec.entry_kinds)
+    )
+
+
+def merged_tool_arguments(saved: Any) -> Any:
+    """The payload a model meant: fields under "arguments" plus any sent beside it.
+
+    A field inside "arguments" wins over the same field beside it.
+    """
+
+    if isinstance(saved, dict) and isinstance(saved.get("arguments"), dict):
+        beside = {key: value for key, value in saved.items() if key != "arguments"}
+        return {**beside, **saved["arguments"]}
+    return saved
+
+
+def _validated_payload(spec: ToolSpec, arguments: dict[str, Any]) -> BaseModel:
+    """Validate a Tool's arguments, dropping unknown top-level ones.
+
+    Prod (2026-10-18): a Tool call carried an argument its strict model does
+    not take (reply_language='zh' is assessment_action's alone); the whole
+    call was rejected, nothing was saved and the member failed with
+    assessment_action_required.
+    An argument the Tool does not know is ignored and logged instead. Wrong
+    values and missing fields are still errors.
+    """
+
+    try:
+        return spec.payload_model.model_validate(arguments)
+    except ValidationError as error:
+        unknown = {
+            str(item["loc"][0])
+            for item in error.errors()
+            if item["type"] == "extra_forbidden" and len(item["loc"]) == 1
+        }
+        if not unknown or len(unknown) != len(error.errors()):
+            raise
+    LOGGER.warning(
+        "Tool call ignored unknown arguments tool=%s arguments=%s",
+        spec.name,
+        ",".join(sorted(unknown)),
+    )
+    return spec.payload_model.model_validate(
+        {key: value for key, value in arguments.items() if key not in unknown}
     )
 
 
@@ -211,9 +257,9 @@ def _accepted_call(
                 saved = json.loads(saved)
             except ValueError:
                 break
-        # The model may send the payload flat instead of under "arguments";
-        # either shape matches only this exact payload.
-        if saved in ({"arguments": arguments}, arguments):
+        # The model may send the payload flat instead of under "arguments", or
+        # put some fields beside it; every shape matches only this exact payload.
+        if saved == arguments or merged_tool_arguments(saved) == arguments:
             return stage.operation_id
     raise conflict(
         "tool_call_unverified", "This Tool call does not match its accepted model result."
@@ -253,7 +299,7 @@ def execute_tool(
                     "in English."
                 ),
             }
-        payload = spec.payload_model.model_validate(arguments)
+        payload = _validated_payload(spec, arguments)
         spec.authorize(db, actor, row, payload)
         model_operation_id = _accepted_call(db, identity, name, arguments)
         request_hash = hashlib.sha256(

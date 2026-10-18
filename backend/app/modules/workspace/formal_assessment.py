@@ -21,6 +21,12 @@ ABANDON_SCORER = "做题者放弃作答，已保存记录已删除。"
 ABANDON_GUIDE = "已放弃作答，你要重新开始吗，或者和我随便聊聊"
 # Emitted only when an assessment_action receipt exists for this reply.
 RECORDED_FACT = "已记录你的回答。"
+# The Scorer's line when its Tool call failed even after the retry: nothing new
+# was saved and every saved answer stays.
+UNSAVED_RETRY_LINE = {
+    "zh": "这条回答没能保存，请再发送一次。之前保存的回答都还在。",
+    "en": "That answer couldn't be saved. Please send it again; your saved answers are kept.",
+}
 # Settles a member after the test is already closed, with no student-visible bubble.
 SILENT_MEMBER_LINE = "\u2060"
 
