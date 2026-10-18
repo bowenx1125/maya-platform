@@ -385,6 +385,9 @@ export function TeacherDebateCreate({
   const [error, setError] = useState<unknown>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
+  // Bumped on every validation pass, so a message closed with × shows again
+  // when the same mistake is repeated (the text alone would not change).
+  const [validationAttempt, setValidationAttempt] = useState(0);
   useEffect(() => {
     if (loading || typeof ResizeObserver === "undefined") return;
     const inputs = [topicInputRef.current, backgroundInputRef.current].filter(
@@ -447,6 +450,7 @@ export function TeacherDebateCreate({
 
   function toggleCandidate(candidate: PublishedAgentSummary) {
     setFormError(null);
+    setValidationAttempt((attempt) => attempt + 1);
     const id = candidate.agent.id;
     if (selectedIds.includes(id)) {
       setSelectedIds((current) => current.filter((item) => item !== id));
@@ -474,6 +478,7 @@ export function TeacherDebateCreate({
     event.preventDefault();
     if (rulesEditing || busy || !rulesLoaded.current) return;
     setFormError(null);
+    setValidationAttempt((attempt) => attempt + 1);
     const topicValidation = validateDebateTopic(topic);
     if (!topicValidation.valid) {
       setTopicError(copy(t, "debateTopicRequired"));
@@ -588,6 +593,7 @@ export function TeacherDebateCreate({
                   as="span"
                   className={styles.fieldError}
                   id="debate-topic-error"
+                  resetKey={validationAttempt}
                 >
                   {topicError}
                 </DismissibleAlert>
@@ -753,7 +759,11 @@ export function TeacherDebateCreate({
           onEditingChange={setRulesEditing}
         />
         {formError ? (
-          <DismissibleAlert as="div" className="form-error">
+          <DismissibleAlert
+            as="div"
+            className="form-error"
+            resetKey={validationAttempt}
+          >
             {formError}
           </DismissibleAlert>
         ) : null}

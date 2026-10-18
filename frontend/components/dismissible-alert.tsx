@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type HTMLAttributes, type ReactNode } from "react";
+import { useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 
 import { useT } from "./locale";
 import { IconClose } from "./quiet-icons";
@@ -57,6 +57,7 @@ export function DismissibleAlert({
   children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "role" | "className">) {
   const [dismissed, setDismissed] = useState<unknown>(NOT_DISMISSED);
+  const lineRef = useRef<HTMLElement | null>(null);
   const key =
     resetKey !== undefined
       ? resetKey
@@ -64,16 +65,40 @@ export function DismissibleAlert({
         ? children
         : SAME_MOUNT;
   if (dismissed !== NOT_DISMISSED && Object.is(dismissed, key)) return null;
+  function dismiss() {
+    // Closing removes the focused ×; hand focus to the field this line
+    // describes, else the form's submit button, never to <body>.
+    const line = lineRef.current;
+    const id = line?.id;
+    const described = id
+      ? Array.from(
+          document.querySelectorAll<HTMLElement>("[aria-describedby]"),
+        ).find((element) =>
+          (element.getAttribute("aria-describedby") ?? "")
+            .split(/\s+/)
+            .includes(id),
+        )
+      : undefined;
+    const target =
+      described ??
+      line?.closest("form")?.querySelector<HTMLElement>("[type=submit]") ??
+      null;
+    target?.focus();
+    setDismissed(key);
+  }
   return (
     <Tag
       {...rest}
+      ref={(node: HTMLElement | null) => {
+        lineRef.current = node;
+      }}
       className={
         className ? `dismissible-alert ${className}` : "dismissible-alert"
       }
       role={role}
     >
       <span className="dismissible-alert-body">{children}</span>
-      <DismissButton label={dismissLabel} onDismiss={() => setDismissed(key)} />
+      <DismissButton label={dismissLabel} onDismiss={dismiss} />
     </Tag>
   );
 }

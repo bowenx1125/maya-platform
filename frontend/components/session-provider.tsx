@@ -522,6 +522,8 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const [errorFallback, setErrorFallback] = useState<MessageKey>("loginFailed");
   const [identities, setIdentities] = useState<DemoIdentity[]>([]);
   const [emptyField, setEmptyField] = useState<MessageKey | null>(null);
+  // Bumped on every submit, so a closed message shows again on a repeat.
+  const [attempt, setAttempt] = useState(0);
   const setMood = useSetAcademyMood();
   const loginAbort = useRef<AbortController | null>(null);
 
@@ -572,6 +574,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setAttempt((value) => value + 1);
     const name = username.trim();
     // An empty field is a typo, not a rejected credential. Naming which one is
     // missing avoids a round trip that could only answer "that failed".
@@ -729,7 +732,10 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
         </p>
       ) : null}
       {emptyField ? (
-        <DismissibleAlert className="form-error" resetKey={emptyField}>
+        <DismissibleAlert
+          className="form-error"
+          resetKey={`${attempt}:${emptyField}`}
+        >
           {t(emptyField)}
         </DismissibleAlert>
       ) : error ? (
