@@ -22,8 +22,18 @@ import {
   type KnowledgeDocument,
   type KnowledgeGenerationStatus,
   type KnowledgeMarkdown,
+  type PlatformApi,
 } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
+import {
+  cachedCall,
+  forgetRequestCache,
+  isBusyResponse,
+  peekRequestCache,
+  rememberRequestCache,
+  requestCacheGeneration,
+  requestCacheIdentity,
+} from "../../lib/request-cache";
 import {
   buildMarkdownFile,
   downloadKnowledgeMarkdown,
@@ -555,6 +565,25 @@ export function BrainformWorkspace({
   );
 }
 
+function accessibleCourseNames(
+  courseRows: BrainformSnapshot["courseRows"],
+  courseIds: string[],
+): Record<string, string> {
+  return Object.fromEntries(
+    courseRows
+      .filter((course) => courseIds.includes(course.id))
+      .map((course) => [course.id, course.name]),
+  );
+}
+
+type BrainformSnapshot = {
+  courseRows: Awaited<ReturnType<PlatformApi["courses"]>>;
+  nextRag: KnowledgeDocument[];
+  nextKnowledge: BrainformKnowledge[];
+  nextAgents: ChatAgent[];
+  nextGroups: Group[];
+};
+
 function BrainformWorkspaceBody({
   role,
   courseIds,
@@ -585,14 +614,30 @@ function BrainformWorkspaceBody({
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
+  const snapshotKey = `page:brainform:${identityScope}`;
+  // A return visit paints the last lists this identity saw, then refreshes.
+  const [snapshot] = useState(() =>
+    courseId
+      ? peekRequestCache<BrainformSnapshot>(api, cacheIdentity, snapshotKey)
+      : undefined,
+  );
   const mutationStore = useIdempotencyStore();
-  const [courseNames, setCourseNames] = useState<Record<string, string>>({});
-  const [ragDocuments, setRagDocuments] = useState<KnowledgeDocument[]>([]);
-  const [knowledgeRows, setKnowledgeRows] = useState<BrainformKnowledge[]>([]);
-  const [chatAgents, setChatAgents] = useState<ChatAgent[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [courseNames, setCourseNames] = useState<Record<string, string>>(() =>
+    snapshot ? accessibleCourseNames(snapshot.courseRows, courseIds) : {},
+  );
+  const [ragDocuments, setRagDocuments] = useState<KnowledgeDocument[]>(
+    snapshot?.nextRag ?? [],
+  );
+  const [knowledgeRows, setKnowledgeRows] = useState<BrainformKnowledge[]>(
+    snapshot?.nextKnowledge ?? [],
+  );
+  const [chatAgents, setChatAgents] = useState<ChatAgent[]>(
+    snapshot?.nextAgents ?? [],
+  );
+  const [groups, setGroups] = useState<Group[]>(snapshot?.nextGroups ?? []);
+  const [loading, setLoading] = useState(!snapshot);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [notice, setNotice] = useState("");
   const [pendingRagAction, setPendingRagAction] =
@@ -711,8 +756,22 @@ function BrainformWorkspaceBody({
     [],
   );
 
+  // Page-load reads go through the shared cache: identical reads in flight
+  // are sent once (both lists below read each group), and a quiet refresh
+  // asks the server again.
+  const read = useCallback(
+    <T,>(
+      name: string,
+      args: unknown[],
+      run: () => Promise<T>,
+      refresh = false,
+    ): Promise<T> =>
+      cachedCall(api, cacheIdentity, name, args, run, { refresh }),
+    [api, cacheIdentity],
+  );
+
   const loadRagDocuments = useCallback(
-    async (activeCourseId: string) => {
+    async (activeCourseId: string, refresh = false) => {
       if (initialGroupId) {
         if (
           role === "student" &&
@@ -721,45 +780,75 @@ function BrainformWorkspaceBody({
           )
         )
           throw new Error(t("groupNotFound"));
-        const group = await api.group(initialGroupId);
+        // The group and its files together; the files count only when the
+        // group belongs to this course.
+        const documents = read(
+          "knowledge",
+          [initialGroupId],
+          () => api.knowledge(initialGroupId),
+          refresh,
+        );
+        documents.catch(() => undefined);
+        const group = await read(
+          "group",
+          [initialGroupId],
+          () => api.group(initialGroupId),
+          refresh,
+        );
         if (group.course_id !== activeCourseId)
           throw new Error(t("groupNotFound"));
-        return api.knowledge(initialGroupId);
+        return documents;
       }
-      if (role === "teacher") return api.workspaceDocuments(activeCourseId);
+      if (role === "teacher")
+        return read(
+          "workspaceDocuments",
+          [activeCourseId],
+          () => api.workspaceDocuments(activeCourseId),
+          refresh,
+        );
       const joinedGroupIds = [
         ...new Set((user?.groups ?? []).map((group) => group.group_id)),
       ];
-      const groupRows = await Promise.allSettled(
-        joinedGroupIds.map((groupId) => api.group(groupId)),
-      );
-      const currentCourseGroups = groupRows.flatMap((result) =>
-        result.status === "fulfilled" &&
-        result.value.course_id === activeCourseId
-          ? [result.value]
-          : [],
-      );
-      const documentRows = await Promise.allSettled(
-        currentCourseGroups.map((group) => api.knowledge(group.id)),
+      // One round trip: each joined group and its files at once; files of a
+      // group in another course are dropped.
+      const rows = await Promise.all(
+        joinedGroupIds.map(async (groupId) => {
+          const [group, documents] = await Promise.allSettled([
+            read("group", [groupId], () => api.group(groupId), refresh),
+            read("knowledge", [groupId], () => api.knowledge(groupId), refresh),
+          ]);
+          return group.status === "fulfilled" &&
+            group.value.course_id === activeCourseId &&
+            documents.status === "fulfilled"
+            ? documents.value
+            : [];
+        }),
       );
       const byId = new Map<string, KnowledgeDocument>();
-      for (const result of documentRows) {
-        if (result.status !== "fulfilled") continue;
-        for (const document of result.value) byId.set(document.id, document);
+      for (const documents of rows) {
+        for (const document of documents) byId.set(document.id, document);
       }
       return [...byId.values()];
     },
-    [api, initialGroupId, role, t, user?.groups],
+    [api, initialGroupId, read, role, t, user?.groups],
   );
 
   const loadGroups = useCallback(
-    async (activeCourseId: string) => {
-      if (role === "teacher") return api.groups(activeCourseId);
+    async (activeCourseId: string, refresh = false) => {
+      if (role === "teacher")
+        return read(
+          "groups",
+          [activeCourseId],
+          () => api.groups(activeCourseId),
+          refresh,
+        );
       const groupIds = [
         ...new Set((user?.groups ?? []).map((group) => group.group_id)),
       ];
       const results = await Promise.allSettled(
-        groupIds.map((groupId) => api.group(groupId)),
+        groupIds.map((groupId) =>
+          read("group", [groupId], () => api.group(groupId), refresh),
+        ),
       );
       return results.flatMap((result) =>
         result.status === "fulfilled" &&
@@ -768,11 +857,69 @@ function BrainformWorkspaceBody({
           : [],
       );
     },
-    [api, role, user?.groups],
+    [api, read, role, user?.groups],
   );
 
+  const applyWorkspace = useCallback(
+    (scope: string, data: BrainformSnapshot) => {
+      const { courseRows, nextRag, nextKnowledge, nextAgents, nextGroups } =
+        data;
+      setCourseNames(accessibleCourseNames(courseRows, courseIds));
+      setRagDocuments(nextRag);
+      setKnowledgeRows(nextKnowledge);
+      setChatAgents(nextAgents);
+      setGroups(nextGroups);
+      const latestJobs: Record<string, string | null> = {};
+      for (const row of nextKnowledge) {
+        const setId = row.canonical_set_id;
+        if (!Object.prototype.hasOwnProperty.call(latestJobs, setId)) {
+          latestJobs[setId] = null;
+        }
+        if (role === "teacher" && row.can_edit && row.generation_job_id) {
+          latestJobs[setId] = row.generation_job_id;
+        }
+      }
+      latestGenerationJobs.current = { scope, jobs: latestJobs };
+      const restoredJobs = Object.fromEntries(
+        Object.entries(latestJobs).filter(
+          (entry): entry is [string, string] => entry[1] !== null,
+        ),
+      );
+      const previousJobs = getGenerationJobs(scope);
+      const jobsChanged =
+        Object.keys(previousJobs).length !== Object.keys(restoredJobs).length ||
+        Object.entries(restoredJobs).some(
+          ([setId, jobId]) => previousJobs[setId] !== jobId,
+        );
+      if (jobsChanged) {
+        rememberGenerationJobs(scope, restoredJobs);
+      }
+      setGenerationJobs((current) => {
+        const currentEntries = Object.entries(current);
+        return currentEntries.length === Object.keys(restoredJobs).length &&
+          currentEntries.every(
+            ([setId, jobId]) => restoredJobs[setId] === jobId,
+          )
+          ? current
+          : restoredJobs;
+      });
+      setGenerationStatuses((current) => {
+        const retained = Object.entries(current).filter(
+          ([setId, status]) => restoredJobs[setId] === status.job_id,
+        );
+        return retained.length === Object.keys(current).length
+          ? current
+          : Object.fromEntries(retained);
+      });
+    },
+    [courseIds, role],
+  );
+
+  const refreshingSnapshot = useRef(Boolean(snapshot));
+  // Every reload (after a change, the polling below) asks the server; only
+  // the first load of a visit reuses reads under FRESH_MS old or in flight.
   const loadWorkspace = useCallback(
-    async (background = false) => {
+    async (background = false, refresh = true) => {
       const scope = identityScope;
       const sequence = ++loadSequence.current;
       if (!courseId) {
@@ -792,77 +939,53 @@ function BrainformWorkspaceBody({
         setLoading(true);
         setLoadError(null);
       }
+      const generation = requestCacheGeneration(api);
       try {
         const [courseRows, nextRag, nextKnowledge, nextAgents, nextGroups] =
           await Promise.all([
-            api.courses(),
+            read("courses", [], () => api.courses(), refresh),
             // A private Agent's files live only inside that Agent; Brainform is
             // the group's shared library of public Agents' RAG.
-            loadRagDocuments(courseId).then((documents) =>
+            loadRagDocuments(courseId, refresh).then((documents) =>
               documents.filter((document) => document.visibility !== "private"),
             ),
-            api.brainformKnowledge(courseId),
-            api.chatAgents(courseId),
-            loadGroups(courseId),
+            read(
+              "brainformKnowledge",
+              [courseId],
+              () => api.brainformKnowledge(courseId),
+              refresh,
+            ),
+            read(
+              "chatAgents",
+              [courseId],
+              () => api.chatAgents(courseId),
+              refresh,
+            ),
+            loadGroups(courseId, refresh),
           ]);
         if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
-        const accessibleCourseNames = Object.fromEntries(
-          courseRows
-            .filter((course) => courseIds.includes(course.id))
-            .map((course) => [course.id, course.name]),
-        );
-        setCourseNames(accessibleCourseNames);
-        setRagDocuments(nextRag);
-        setKnowledgeRows(nextKnowledge);
-        setChatAgents(nextAgents);
-        setGroups(nextGroups);
-        const latestJobs: Record<string, string | null> = {};
-        for (const row of nextKnowledge) {
-          const setId = row.canonical_set_id;
-          if (!Object.prototype.hasOwnProperty.call(latestJobs, setId)) {
-            latestJobs[setId] = null;
-          }
-          if (role === "teacher" && row.can_edit && row.generation_job_id) {
-            latestJobs[setId] = row.generation_job_id;
-          }
-        }
-        latestGenerationJobs.current = { scope, jobs: latestJobs };
-        const restoredJobs = Object.fromEntries(
-          Object.entries(latestJobs).filter(
-            (entry): entry is [string, string] => entry[1] !== null,
-          ),
-        );
-        const previousJobs = getGenerationJobs(scope);
-        const jobsChanged =
-          Object.keys(previousJobs).length !==
-            Object.keys(restoredJobs).length ||
-          Object.entries(restoredJobs).some(
-            ([setId, jobId]) => previousJobs[setId] !== jobId,
-          );
-        if (jobsChanged) {
-          rememberGenerationJobs(scope, restoredJobs);
-        }
-        setGenerationJobs((current) => {
-          const currentEntries = Object.entries(current);
-          return currentEntries.length === Object.keys(restoredJobs).length &&
-            currentEntries.every(
-              ([setId, jobId]) => restoredJobs[setId] === jobId,
-            )
-            ? current
-            : restoredJobs;
-        });
-        setGenerationStatuses((current) => {
-          const retained = Object.entries(current).filter(
-            ([setId, status]) => restoredJobs[setId] === status.job_id,
-          );
-          return retained.length === Object.keys(current).length
-            ? current
-            : Object.fromEntries(retained);
-        });
+        const data: BrainformSnapshot = {
+          courseRows,
+          nextRag,
+          nextKnowledge,
+          nextAgents,
+          nextGroups,
+        };
+        applyWorkspace(scope, data);
+        rememberRequestCache(api, cacheIdentity, snapshotKey, data, generation);
+        refreshingSnapshot.current = false;
         if (!background) setNotice("");
       } catch (cause) {
+        // The first quiet refresh of a painted snapshot must not leave lists
+        // on screen that the server now refuses; a busy server keeps them.
+        const refusedSnapshot =
+          background && refreshingSnapshot.current && !isBusyResponse(cause);
+        if (refusedSnapshot) {
+          refreshingSnapshot.current = false;
+          forgetRequestCache(api, cacheIdentity, snapshotKey);
+        }
         if (
-          !background &&
+          (!background || refusedSnapshot) &&
           scopeIsCurrent(scope) &&
           sequence === loadSequence.current
         ) {
@@ -876,18 +999,23 @@ function BrainformWorkspaceBody({
     },
     [
       api,
+      applyWorkspace,
+      cacheIdentity,
       courseId,
-      courseIds,
       identityScope,
       loadGroups,
       loadRagDocuments,
-      role,
+      read,
       scopeIsCurrent,
+      snapshotKey,
     ],
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void loadWorkspace(), 0);
+    const timer = window.setTimeout(
+      () => void loadWorkspace(refreshingSnapshot.current, false),
+      0,
+    );
     return () => window.clearTimeout(timer);
   }, [loadWorkspace]);
 
@@ -2484,6 +2612,17 @@ function BrainformWorkspaceBody({
         <RecordDetail
           scope={recordScope}
           team={assessmentRecord.teams.find((team) => team.name === pane.team)}
+          onDelete={
+            role === "teacher"
+              ? async (attempt) => {
+                  await api.deleteCourseAssessmentAttempt(
+                    courseId,
+                    attempt.attempt_id,
+                  );
+                  await assessmentRecord.reload();
+                }
+              : undefined
+          }
         />
       ) : null}
 
