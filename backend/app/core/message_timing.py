@@ -238,6 +238,10 @@ def message_timing_snapshot() -> dict[str, Any]:
         "total_ms": _percentiles([float(record["total_ms"]) for record in records]),
         "queue_wait_ms": _percentiles([float(record["queue_wait_ms"]) for record in records]),
         "db_write_ms": _percentiles([float(record["db_write_ms"]) for record in records]),
+        # Write statements per message (load_tune reports it per step).
+        "db_writes_per_msg": _percentiles(
+            [float(record.get("db_writes", 0)) for record in records]
+        ),
         "llm_calls_per_msg": _percentiles([float(record["llm_calls"]) for record in records]),
         "ttft_ms": _percentiles(ttfts),
     }

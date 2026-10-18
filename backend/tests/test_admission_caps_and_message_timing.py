@@ -282,6 +282,7 @@ def test_message_timing_accumulates_and_logs(
     summary = mt.message_timing_snapshot()
     assert summary["messages"] == 1 and summary["with_retry"] == 1
     assert summary["llm_calls_per_msg"] == {"p50": 2.0, "p95": 2.0}
+    assert summary["db_writes_per_msg"] == {"p50": 2.0, "p95": 2.0}
     assert summary["ttft_ms"]["p50"] is not None
 
 
