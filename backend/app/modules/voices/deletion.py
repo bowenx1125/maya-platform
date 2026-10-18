@@ -197,7 +197,8 @@ def delete_voice_profile(
     a later delete (or enrollment completion) can finish the cleanup.
     """
 
-    scoped = visible_student_voice(db, context, profile_id)
+    # Withdrawing a clone must stay possible after its owner left the group.
+    scoped = visible_student_voice(db, context, profile_id, former_member=True)
     profile = scoped.profile
     # A preset is a published supplier name, not an enrolled clone. Students
     # cannot delete it, and this path must not ask the clone API about it.

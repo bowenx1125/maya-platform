@@ -129,28 +129,35 @@ def voice_profile_dto(profile: VoiceProfile, *, can_manage: bool = True) -> Voic
     )
 
 
-def _scoped_voice_query(context: AuthContext, profile_id: str) -> Any:
+def _scoped_voice_query(
+    context: AuthContext, profile_id: str, *, former_member: bool = False
+) -> Any:
     """A cloned voice belongs to the student who uploaded it, not the group.
 
     Membership is still required, but a group-scope profile is only visible to
     the uploading student recorded in ``consent_actor_user_id``.  A profile
     with a missing owner fails closed: nobody can read or act on it.
+
+    ``former_member`` drops the current-membership requirement (course
+    membership stays): a student moved to another group can still withdraw
+    their own clone, though not read or rename it.
     """
 
-    return (
+    query = (
         select(VoiceProfile)
         .join(Group, Group.id == VoiceProfile.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
-        .join(
+    )
+    if not former_member:
+        query = query.join(
             WorkspaceMember,
             and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == context.user.id),
         )
-        .where(
-            VoiceProfile.id == profile_id,
-            VoiceProfile.scope == "group",
-            VoiceProfile.consent_actor_user_id == context.user.id,
-            CourseMember.user_id == context.user.id,
-        )
+    return query.where(
+        VoiceProfile.id == profile_id,
+        VoiceProfile.scope == "group",
+        VoiceProfile.consent_actor_user_id == context.user.id,
+        CourseMember.user_id == context.user.id,
     )
 
 
@@ -165,10 +172,12 @@ def _personal_voice_query(context: AuthContext, profile_id: str) -> Any:
     )
 
 
-def visible_student_voice(db: Session, context: AuthContext, profile_id: str) -> ScopedVoice:
+def visible_student_voice(
+    db: Session, context: AuthContext, profile_id: str, *, former_member: bool = False
+) -> ScopedVoice:
     """The voice its creator may manage: their group clone or their personal voice."""
 
-    row = db.execute(_scoped_voice_query(context, profile_id)).first()
+    row = db.execute(_scoped_voice_query(context, profile_id, former_member=former_member)).first()
     if row is None:
         row = db.execute(_personal_voice_query(context, profile_id)).first()
     if row is None:

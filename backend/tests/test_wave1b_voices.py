@@ -66,7 +66,7 @@ from app.providers.voice import (
     VoiceProviderError,
     VoiceProviderTimeout,
 )
-from app.seed import JADE_ID
+from app.seed import BOWEN_ID, JADE_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select, text
@@ -490,6 +490,69 @@ def test_group_voice_is_owner_private_within_the_same_group(
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
     assert orphan_id not in [item["id"] for item in listed]
     assert profile_id in [item["id"] for item in listed]
+
+
+def test_owner_leaving_the_group_stops_their_voice_and_keeps_their_delete(
+    voice_client: tuple[TestClient, Database, Settings],
+) -> None:
+    """#141: a groupmate's Agent stops speaking with a clone once its owner leaves."""
+
+    client, database, _settings = voice_client
+    csrf = login(client, "bowen")[1]
+    enrolled = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, "left-owner-enroll-001"),
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert enrolled.status_code == 202, enrolled.text
+    profile_id = enrolled.json()["id"]
+    with database.session() as session:
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None
+        profile.status = "ready"
+
+    kaikai_csrf = login(client, "kaikai")[1]
+    agent = client.post(
+        f"/api/v1/groups/{GROUP_A}/agents",
+        headers=_headers(kaikai_csrf, "left-owner-agent-001"),
+        json={"name": "Borrowed voice", "description": ""},
+    )
+    assert agent.status_code == 201, agent.text
+    draft = agent.json()["versions"][0]
+    bound = client.patch(
+        f"/api/v1/agent-versions/{draft['id']}",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": kaikai_csrf},
+        json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
+    )
+    assert bound.status_code == 200, bound.text
+    detail = client.get(f"/api/v1/agents/{agent.json()['id']}").json()["versions"][0]
+    assert detail["effective_voice_profile_id"] == profile_id
+    assert detail["voice_fallback_active"] is False
+
+    # A teacher moves Bowen to another group: his membership row goes away.
+    with database.session() as session:
+        session.execute(
+            text("DELETE FROM group_members WHERE group_id = :g AND user_id = :u"),
+            {"g": GROUP_A, "u": BOWEN_ID},
+        )
+
+    detail = client.get(f"/api/v1/agents/{agent.json()['id']}").json()["versions"][0]
+    assert detail["voice_profile_id"] == profile_id
+    assert detail["effective_voice_profile_id"] != profile_id
+    assert detail["voice_fallback_active"] is True
+
+    # Bowen can still withdraw his own clone (reading and renaming it keep
+    # requiring current membership).
+    csrf = login(client, "bowen")[1]
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
+    deleted = client.delete(
+        f"/api/v1/voice-profiles/{profile_id}", headers=_headers(csrf, "left-owner-delete-01")
+    )
+    assert deleted.status_code in {200, 202}, deleted.text
+    with database.session() as session:
+        profile = session.get(VoiceProfile, profile_id)
+        assert profile is not None and profile.status == "deleted"
 
 
 def test_voice_scope_and_upload_validation(
@@ -1082,7 +1145,7 @@ def test_effective_voice_resolver_prefers_ready_custom_and_fails_closed_to_syste
             source_filename="sample.wav",
             source_sha256="a" * 64,
             consent_copy_version="voice-consent-v1",
-            consent_actor_user_id=None,
+            consent_actor_user_id=BOWEN_ID,
             consent_accepted_at=None,
             created_at=timestamp,
             updated_at=timestamp,

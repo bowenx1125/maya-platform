@@ -411,7 +411,7 @@ def _resolve_agent_version(
             "The current Agent has no usable Avatar configuration.", code="avatar_missing"
         ) from exc
 
-    from app.modules.voices.service import baseline_configured_voice_id
+    from app.modules.voices.service import _groupmate_owner_ids, baseline_configured_voice_id
 
     own_voice_id = version.voice_profile_id
     requested_voice_id = own_voice_id or baseline_configured_voice_id(settings, agent.id)
@@ -425,7 +425,13 @@ def _resolve_agent_version(
         # A group Agent may use its group's voice; a teacher's personal Agent
         # only that teacher's personal voice.
         same_group = custom is not None and (
-            (group is not None and custom.group_id == group.id)
+            (
+                group is not None
+                and custom.group_id == group.id
+                # A clone whose owner left the group no longer speaks for it.
+                and custom.consent_actor_user_id
+                in set(db.scalars(_groupmate_owner_ids(db, group.id)).all())
+            )
             or (
                 group is None
                 and custom.scope == "personal"
