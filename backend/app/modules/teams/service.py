@@ -48,6 +48,7 @@ from app.modules.teams.models import (
     TeamVersionMember,
     TeamVersionSet,
 )
+from app.modules.teams.publication_access import live_teacher_publication
 from app.modules.teams.schemas import (
     CreateTeamRequest,
     DirectoryMemberDTO,
@@ -1577,7 +1578,16 @@ def _resolve_frozen_chat_selection(
             or team.group_id is None
             or scoped_group_role_for_user(db, user_id, team.group_id) != "student"
         ):
-            raise not_found()
+            # Bug (2026-10-18): a student who opened a teacher's public Team
+            # from the Teams list got an ordinary Team Chat (no recipe, so no
+            # stored publication). resolve_chat_entry let it in through the
+            # live publication, but this recheck did not, so every member
+            # looked unavailable and the Chat could never send. Recheck it the
+            # same way: through the teacher's current publication of this
+            # exact Team version, checked as the publisher.
+            publication = live_teacher_publication(db, team, version)
+            if publication is None:
+                raise not_found()
 
     current_members = _member_rows(db, version.id)
     frozen_members = {member.binding_id: member for member in frozen_selection.members}

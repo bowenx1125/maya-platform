@@ -18,6 +18,7 @@ from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role, scoped_group_role_for_user
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion
+from app.modules.teams.publication_access import live_teacher_publication
 from app.modules.workspace.models import Conversation
 
 from .models import (
@@ -137,10 +138,16 @@ def _read_authorized_provenance(
                 and scoped_group_role_for_user(db, user_id, team.group_id) != "student"
             ):
                 raise not_found()
-            if team.owner_user_id != user_id and (
-                team.ownership_scope != "group"
-                or team.visibility != "public"
-                or team.group_id is None
+            if (
+                team.owner_user_id != user_id
+                and (
+                    team.ownership_scope != "group"
+                    or team.visibility != "public"
+                    or team.group_id is None
+                )
+                # A student's Teams-list Chat with a teacher's public Team
+                # (bug 2026-10-18): allowed while that version is published.
+                and live_teacher_publication(db, team, version) is None
             ):
                 raise not_found()
         else:
