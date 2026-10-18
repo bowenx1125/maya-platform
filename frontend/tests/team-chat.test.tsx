@@ -1115,6 +1115,46 @@ describe("Chatform", () => {
     ).toBeNull();
   });
 
+  it("says the members are unavailable, not the runtime, when none can be reached", async () => {
+    const history = {
+      ...teamSession,
+      can_send: false,
+      team: {
+        ...teamSession.team,
+        available: false,
+        members: teamSession.team.members.map((member) => ({
+          ...member,
+          available: false,
+        })),
+      },
+      turns: [
+        {
+          id: "closed-turn",
+          user_text: "A closed Team question",
+          state: "ready",
+          member_results: [],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([history]);
+    state.api.conversationSession.mockResolvedValue(history);
+    renderChats();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "A closed Team question" }),
+    );
+    const log = await screen.findByRole("log");
+    expect(
+      await within(log).findByText(
+        "This Team Chat can't continue: its members are no longer available to you. Start a new Chat with the Team.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Team Chat sending is unavailable in the current runtime.",
+      ),
+    ).toBeNull();
+  });
+
   it("tells the student an unrecorded answer must be sent again", async () => {
     state.api.streamTeamConversation.mockResolvedValue({
       ...teamSession,

@@ -854,6 +854,8 @@ const enMessages = {
   teamSavedWaitingForChat: "Team saved. You can now start a Team Chat.",
   teamChatUnavailable:
     "Team Chat sending is unavailable in the current runtime.",
+  teamChatMembersUnavailable:
+    "This Team Chat can't continue: its members are no longer available to you. Start a new Chat with the Team.",
   teamRequestFailure: "The Team Chat request could not be completed.",
   teamMemberFailure: "This Team member could not reply.",
   teamSummaryNotSaved:
@@ -1680,6 +1682,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   teamNotEditable: "你已没有权限编辑此 Team。",
   teamSavedWaitingForChat: "Team 已保存，现在可以开始 Team 聊天。",
   teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
+  teamChatMembersUnavailable:
+    "这个 Team 聊天不能继续：你已经无法使用它的成员。请重新和这个 Team 开一个聊天。",
   teamRequestFailure: "Team 聊天请求无法完成。",
   teamMemberFailure: "这位 Team 成员未能回复。",
   teamSummaryNotSaved: "这位成员没能保存总结。再发一条消息即可重试。",

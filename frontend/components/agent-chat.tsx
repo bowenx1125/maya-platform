@@ -2566,6 +2566,14 @@ function AgentChatScope({
   const shownTeamTurns = selectedTeam
     ? studentEndFlowTurns(selectedTeam.turns)
     : [];
+  // Name the real reason when no member can be reached: that is not a
+  // runtime limit (bug 2026-10-18 showed the runtime text for it).
+  const teamUnavailableText =
+    selectedTeam &&
+    selectedTeam.team.members.length > 0 &&
+    selectedTeam.team.members.every((member) => !member.available)
+      ? t("teamChatMembersUnavailable")
+      : t("teamChatUnavailable");
   // Why this Chat cannot continue, shown once under its latest message.
   const closedNotice = selectedTeam
     ? selectedTeam.team.deleted
@@ -2575,7 +2583,7 @@ function AgentChatScope({
         : selectedTeam.read_only
           ? t("teamChatReadOnly")
           : !selectedTeam.can_send && !teamWorking
-            ? t("teamChatUnavailable")
+            ? teamUnavailableText
             : null
     : selected?.agent.deleted
       ? t("chatAgentDeleted")
@@ -3261,7 +3269,7 @@ function AgentChatScope({
                           : selectedTeam &&
                               !selectedTeam.can_send &&
                               !teamWorking
-                            ? t("teamChatUnavailable")
+                            ? teamUnavailableText
                             : !teamMode && character?.available === false
                               ? "Read-only"
                               : "Send"
@@ -3281,7 +3289,7 @@ function AgentChatScope({
                           : selectedTeam &&
                               !selectedTeam.can_send &&
                               !teamWorking
-                            ? t("teamChatUnavailable")
+                            ? teamUnavailableText
                             : !teamMode && !agentCanSend
                               ? readOnlyHelp
                               : undefined
