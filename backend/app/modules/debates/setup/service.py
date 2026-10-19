@@ -1097,12 +1097,43 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             "participants": participant_dtos,
             "public_turns": turn_dtos,
             "playback": playback_dto,
-            "interaction_status": "closed",
-            "insight_status": "not_started",
-            "report_status": "not_started",
+            **_classroom_statuses(db, debate.id),
             "mutual_learning_synthesis": synthesis,
         }
     )
+
+
+def _classroom_statuses(db: Session, debate_id: str) -> dict[str, str]:
+    """Read interaction, insight and report status from their own tables.
+
+    The detail used to hard-code ``closed``/``not_started``, so a Debate whose
+    report Version 1 was ready still said ``report_status: not_started``.
+    """
+
+    from app.modules.interactions.models import ClassroomInteractionWindow
+    from app.modules.reports.models import BarrageInsightSnapshot, CivilizationReport
+
+    window_status = db.scalar(
+        select(ClassroomInteractionWindow.status).where(
+            ClassroomInteractionWindow.debate_id == debate_id
+        )
+    )
+    insight_status = db.scalar(
+        select(BarrageInsightSnapshot.status)
+        .where(BarrageInsightSnapshot.debate_id == debate_id)
+        .order_by(BarrageInsightSnapshot.revision_no.desc(), BarrageInsightSnapshot.id.desc())
+        .limit(1)
+    )
+    report_status = db.scalar(
+        select(CivilizationReport.generation_status).where(
+            CivilizationReport.debate_id == debate_id
+        )
+    )
+    return {
+        "interaction_status": str(window_status or "closed"),
+        "insight_status": str(insight_status or "not_started"),
+        "report_status": str(report_status or "not_started"),
+    }
 
 
 def debate_summary(

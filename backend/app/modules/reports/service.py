@@ -1999,9 +1999,83 @@ def render_real_report_markdown(
     return render_report_markdown(context, projected)
 
 
+# One CJK character is one unit of length, the way Chinese text is measured;
+# the Latin word pattern alone saw a 1,000-character Chinese report as 18 words.
+_CJK_CHAR_RE = re.compile(
+    "[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\U00020000-\U0002ffff]"
+)
+
+
 def report_word_count(markdown: str) -> int:
+    """Words for Latin text plus one per CJK character; citations do not count."""
+
     without_citations = _CITATION_RE.sub("", markdown)
-    return len(WORD_RE.findall(without_citations))
+    return len(_CJK_CHAR_RE.findall(without_citations)) + len(WORD_RE.findall(without_citations))
+
+
+def _report_is_chinese(markdown: str) -> bool:
+    head = markdown.lstrip()[:200]
+    return head.startswith("# 文明互鉴报告") or len(_CJK_CHAR_RE.findall(head)) > len(
+        WORD_RE.findall(head)
+    )
+
+
+def display_report_markdown(markdown: str, manifest_json: str | None = None) -> str:
+    """Turn stored ``[evidence:...]`` tokens into numbered citations for readers.
+
+    The stored Markdown keeps the server-owned tokens (they are the audit trail
+    the report was validated against). What a teacher reads or downloads shows
+    ``[1]``-style references and a source list built from the frozen input
+    manifest; a token the manifest cannot resolve is removed, never shown raw.
+    """
+
+    if not markdown or "[evidence:" not in markdown:
+        return markdown
+    by_id: dict[str, ManifestTurnSource] = {}
+    if manifest_json:
+        try:
+            manifest = _load_report_manifest(manifest_json)
+        except (TypeError, ValueError):
+            manifest = None
+        if manifest is not None:
+            for source in manifest.turn_sources:
+                evidence_id = getattr(source, "evidence_id", None)
+                if evidence_id:
+                    by_id.setdefault(str(evidence_id), source)
+                by_id.setdefault(str(source.turn_source_id), source)
+    numbers: dict[str, int] = {}
+    entries: list[tuple[int, ManifestTurnSource]] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        source = by_id.get(match.group(1))
+        if source is None:
+            return ""
+        key = f"{source.turn_source_id}"
+        number = numbers.get(key)
+        if number is None:
+            number = len(numbers) + 1
+            numbers[key] = number
+            entries.append((number, source))
+        return f"[{number}]"
+
+    body = _CITATION_RE.sub(_replace, markdown)
+    body = re.sub(r"\[evidence:[^\]\n]*\]", "", body)
+    body = re.sub(r"(\[\d+\])[ \t]+(?=\[\d+\])", r"\1", body)
+    body = re.sub(r"(?<=[^\s])[ \t]+(?=[。，；、])", "", body)
+    body = re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", body).rstrip()
+    if not entries:
+        return body + "\n"
+    chinese = _report_is_chinese(markdown)
+    heading = "## 资料来源" if chinese else "## Sources"
+    lines = [
+        (
+            f"{number}. {source.source_filename}（第{source.turn_index + 1}次发言）"
+            if chinese
+            else f"{number}. {source.source_filename} (turn {source.turn_index + 1})"
+        )
+        for number, source in entries
+    ]
+    return body + "\n\n" + heading + "\n\n" + "\n".join(lines) + "\n"
 
 
 class ReportValidationError(ValueError):
@@ -2916,6 +2990,16 @@ def _insight_dto(db: Session, debate_id: str) -> BarrageInsight:
     )
 
 
+def _revision_word_count(revision: CivilizationReportRevision) -> int | None:
+    """Recount from the saved text so revisions stored before CJK counting read right."""
+
+    if revision.status != "ready":
+        return None
+    if revision.english_markdown:
+        return report_word_count(revision.english_markdown)
+    return revision.word_count
+
+
 def _revision_dto(
     db: Session,
     revision: CivilizationReportRevision,
@@ -2939,8 +3023,10 @@ def _revision_dto(
         return ReadyReportRevision.model_validate(
             {
                 **common,
-                "english_markdown": revision.english_markdown or "",
-                "word_count": revision.word_count,
+                "english_markdown": display_report_markdown(
+                    revision.english_markdown or "", revision.input_manifest_json
+                ),
+                "word_count": _revision_word_count(revision),
                 "safe_error_code": None,
             }
         )
@@ -3027,7 +3113,7 @@ def list_report_revisions(
                 "id": _uuid(revision.id),
                 "revision_no": revision.revision_no,
                 "status": revision.status,
-                "word_count": revision.word_count if revision.status == "ready" else None,
+                "word_count": _revision_word_count(revision),
                 "safe_error_code": (
                     revision.safe_error_code if revision.status == "failed" else None
                 ),
@@ -3423,7 +3509,10 @@ def download_current_report(
         raise not_found()
     if language != "en":
         raise not_found()
-    return revision.english_markdown, f"civilization-mutual-learning-report--{debate_id}.md"
+    return (
+        display_report_markdown(revision.english_markdown, revision.input_manifest_json),
+        f"civilization-mutual-learning-report--{debate_id}.md",
+    )
 
 
 def reconcile_orphaned_report_statuses(db: Session) -> int:
@@ -3575,5 +3664,6 @@ __all__ = [
     "render_report_markdown",
     "render_real_report_markdown",
     "report_word_count",
+    "display_report_markdown",
     "validate_report_markdown",
 ]

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
@@ -53,6 +54,86 @@ _SOURCE_ID_RE = re.compile(r"^S[1-9][0-9]*$")
 _BARRAGE_ID_RE = re.compile(r"^B[1-9][0-9]*$")
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}")
 _WHITESPACE_RE = re.compile(r"\s+")
+
+
+# A sentence this long (non-space characters) that already appears word for
+# word in history is a copy, not a quotation: short acknowledgements such as
+# "照耀问得好。" stay, a re-read paragraph does not.
+SEGMENT_HISTORY_COPY_MIN_CHARS = 14
+SEGMENT_HISTORY_COPY_KEEP_RATIO = 0.4
+_SENTENCE_END_RE = re.compile(r"[。！？!?；;]+[”’」』\"')）]*|\.(?=\s|$)[”’\"')]*|\n+")
+
+
+def _copy_key(text: str) -> str:
+    return "".join(unicodedata.normalize("NFKC", text).split()).casefold()
+
+
+def _sentence_spans(text: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    start = 0
+    for match in _SENTENCE_END_RE.finditer(text):
+        end = match.start() if match.group().startswith("\n") else match.end()
+        if end > start:
+            spans.append((start, end))
+        start = match.end() if match.group().startswith("\n") else match.end()
+    if start < len(text):
+        spans.append((start, len(text)))
+    return spans
+
+
+def strip_history_copies(
+    text: str, history_keys: Sequence[str], *, protected: Sequence[str] = ()
+) -> str:
+    """Remove sentences copied verbatim from earlier public speeches.
+
+    The flash model sometimes re-emits a whole earlier speech (its own or the
+    previous speaker's) as the start of a new turn; the teaching rules already
+    forbid it, so the server enforces it instead of publishing the echo.
+    """
+
+    if not history_keys:
+        return text
+    spans = _sentence_spans(text)
+    keys = [_copy_key(text[start:end]) for start, end in spans]
+    protected_keys = tuple(key for key in (_copy_key(item) for item in protected) if key)
+    in_history = [
+        bool(key)
+        and any(key in item for item in history_keys)
+        # The round-2 question must stay spoken even if a teammate asked it too.
+        and not any(guard in key or key in guard for guard in protected_keys)
+        for key in keys
+    ]
+    copied = [
+        found and len(key) >= SEGMENT_HISTORY_COPY_MIN_CHARS
+        for found, key in zip(in_history, keys, strict=True)
+    ]
+    # A short line that the copy started with ("我感觉：红樱桃问得好。") goes with it.
+    for index, found in enumerate(in_history):
+        if found and not copied[index]:
+            neighbours = copied[index - 1 : index] + copied[index + 1 : index + 2]
+            if any(neighbours):
+                copied[index] = True
+    if not any(copied):
+        return text
+    pieces: list[str] = []
+    cursor = 0
+    for (start, end), drop in zip(spans, copied, strict=True):
+        if drop:
+            pieces.append(text[cursor:start])
+            cursor = end
+    pieces.append(text[cursor:])
+    result = "".join(pieces)
+    # What is left of a mostly copied paragraph is the copy's lead-in ("红樱桃问
+    # 得好。"), which on its own still reads as the earlier speech restarting.
+    remaining = len(_copy_key(result))
+    if (
+        remaining < len(_copy_key(text)) * SEGMENT_HISTORY_COPY_KEEP_RATIO
+        and remaining < SEGMENT_HISTORY_COPY_MIN_CHARS * 2
+    ):
+        return ""
+    result = re.sub(r"[ \t]*\n[ \t]*", "\n", result)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return re.sub(r"[ \t]{2,}", " ", result).strip()
 
 
 class SegmentProtocolError(ValueError):
@@ -1492,6 +1573,7 @@ def load_segment_turn_result(
             ),
         },
         snapshot,
+        allow_history_copy=True,
     )
 
 
@@ -1554,8 +1636,19 @@ def _lineage(segments: Sequence[Segment]) -> tuple[SegmentLineage, ...]:
     return tuple(rows)
 
 
-def validate_segment_output(value: object, snapshot: SegmentInputSnapshot) -> SegmentTurnResult:
-    """Validate output shape and resolve every S/B ref against ``snapshot``."""
+def validate_segment_output(
+    value: object,
+    snapshot: SegmentInputSnapshot,
+    *,
+    allow_history_copy: bool = False,
+) -> SegmentTurnResult:
+    """Validate output shape and resolve every S/B ref against ``snapshot``.
+
+    Sentences repeated verbatim from history are removed. When nothing new is
+    left the output is rejected with the repairable ``segment_history_copy``,
+    unless ``allow_history_copy`` (the repair attempt, or a stored result being
+    reloaded) says a turn must not be lost over it.
+    """
 
     if not isinstance(snapshot, SegmentInputSnapshot):
         raise _error("an immutable input snapshot is required.", code="snapshot_invalid")
@@ -1589,6 +1682,28 @@ def validate_segment_output(value: object, snapshot: SegmentInputSnapshot) -> Se
                 support_mode=mode,
             )
         )
+    history_keys = tuple(_copy_key(item.text) for item in snapshot.history)
+    if history_keys:
+        raw_question = raw.get("question")
+        protected = (
+            (str(raw_question.get("text") or ""),) if isinstance(raw_question, Mapping) else ()
+        )
+        deduplicated = []
+        for segment in segments_list:
+            text = strip_history_copies(segment.text, history_keys, protected=protected)
+            if text:
+                deduplicated.append(
+                    replace(segment, text=text) if text != segment.text else segment
+                )
+        if not deduplicated and allow_history_copy:
+            deduplicated = segments_list
+        if not deduplicated:
+            raise _error(
+                "every paragraph repeats an earlier speech verbatim.",
+                code="segment_history_copy",
+                pointer="/segments",
+            )
+        segments_list = deduplicated
     segments = tuple(segments_list)
     speech = "\n\n".join(item.text for item in segments)
     discussion = snapshot.discussion

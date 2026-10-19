@@ -64,6 +64,7 @@ SEGMENT_REPAIR_CODES = frozenset(
         "segment_shape_invalid",
         "segment_count_invalid",
         "segment_text_invalid",
+        "segment_history_copy",
     }
 )
 
@@ -461,7 +462,11 @@ class SegmentLLMRuntime:
         output_hash = candidate.output_hash
         if candidate.provider_output is not None:
             try:
-                checked = validate_segment_output(candidate.provider_output, prepared.snapshot)
+                checked = validate_segment_output(
+                    candidate.provider_output,
+                    prepared.snapshot,
+                    allow_history_copy=prepared.attempt_no >= 2,
+                )
                 stored = checked.as_stored_payload()
                 output_json = json.dumps(
                     stored, ensure_ascii=False, sort_keys=True, separators=(",", ":")

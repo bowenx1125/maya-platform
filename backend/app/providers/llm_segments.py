@@ -77,6 +77,16 @@ SEGMENT_RECOVERY_INPUT_BYTES_LIMIT = 256 * 1024
 SEGMENT_SCHEMA_SHA256 = "aca03345f91e4e34c07fa9bbdc02020131bafc972778fc4cc3dd67a2ca52a26b"
 
 
+# Appended at send time so Debates frozen before this rule get it too. The
+# validator removes verbatim copies; this keeps the model from writing them.
+SEGMENT_NO_HISTORY_COPY_RULE = (
+    " Never copy a sentence from history word for word, including your own earlier"
+    " speeches and the speech just before yours: refer to an earlier point in at most"
+    " one new sentence of your own, then say something new. Verbatim repeats are removed"
+    " by the server."
+)
+
+
 def segment_prompt_version(snapshot: SegmentInputSnapshot) -> str:
     return (
         FOUR_ROUND_SEGMENT_PROMPT_VERSION
@@ -740,6 +750,8 @@ class SegmentLLMAdapter:
         )
         query_catalog = tuple(_query_record(item) for item in queries)
         system = build_segment_system_prompt(snapshot)
+        if snapshot.history:
+            system += SEGMENT_NO_HISTORY_COPY_RULE
         if repair_feedback is not None:
             system += (
                 " Repair the prior output using the same frozen input and this server feedback;"
@@ -1025,7 +1037,11 @@ class SegmentLLMAdapter:
                 if isinstance(candidate, SegmentAcceptedCandidateV2) and candidate.safe_error_code
                 else "provider_response_invalid",
             )
-        return validate_segment_output(candidate.provider_output, candidate.request.snapshot)
+        return validate_segment_output(
+            candidate.provider_output,
+            candidate.request.snapshot,
+            allow_history_copy=candidate.request.attempt_no >= 2,
+        )
 
     def execute(
         self,

@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  cleanReportCitations,
+  reportLengthUnit,
+} from "../../lib/report-citations";
 import { ReportMarkdown } from "../report/report-markdown";
 
 import type { ReactNode } from "react";
@@ -228,10 +232,10 @@ function RevisionCard({ revision }: { revision: ReportRevisionView }) {
       {revision.status === "ready" && revision.english_markdown ? (
         <>
           <p className={styles.muted}>
-            {revision.word_count} {label(locale, { en: "words", zh: "词" })}
+            {revision.word_count} {reportLengthUnit(locale)}
           </p>
           <ReportMarkdown className={styles.report}>
-            {revision.english_markdown}
+            {cleanReportCitations(revision.english_markdown)}
           </ReportMarkdown>
         </>
       ) : revision.safe_error_code ? (
