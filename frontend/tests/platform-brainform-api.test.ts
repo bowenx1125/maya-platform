@@ -272,7 +272,7 @@ describe("PlatformApi RAG +", () => {
       value: string | Blob,
     ) {
       fields[name] = value;
-      return append.call(this, name, value);
+      Reflect.apply(append, this, [name, value]);
     });
     const api = new PlatformApi({
       baseUrl: "http://localhost/api/v1",
