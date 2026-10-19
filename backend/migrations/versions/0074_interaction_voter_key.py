@@ -47,7 +47,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_barrage_messages_window_voter", table_name="barrage_messages")
     op.drop_index("uq_votes_window_voter", table_name="votes")
-    with op.batch_alter_table("barrage_messages") as batch:
-        batch.drop_column("voter_key")
-    with op.batch_alter_table("votes") as batch:
-        batch.drop_column("voter_key")
+    # A plain DROP COLUMN (PostgreSQL; SQLite >= 3.35): a batch table rebuild
+    # trips the foreign keys that point at barrage_messages on SQLite.
+    op.execute("ALTER TABLE barrage_messages DROP COLUMN voter_key")
+    op.execute("ALTER TABLE votes DROP COLUMN voter_key")
