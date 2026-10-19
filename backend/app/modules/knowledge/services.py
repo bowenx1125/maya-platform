@@ -1093,6 +1093,36 @@ def load_file_operation(db: Session, operation_id: str) -> FileOperation:
     return operation
 
 
+def _claim_lost_error(db: Session, record: IdempotencyRecord) -> PlatformError:
+    """Tell a lapsed lease apart from a real takeover.
+
+    Under DB pool pressure a request can wait longer than its short claim
+    lease for a connection.  If the claim is still pending with our token,
+    nobody else owns it: answer a retryable 503 so the same Idempotency-Key
+    can take the lease over and finish.  A replaced token stays a conflict.
+    """
+
+    session = _independent_session(db)
+    try:
+        ours = session.scalar(
+            select(IdempotencyRecord.id).where(
+                IdempotencyRecord.id == record.id,
+                IdempotencyRecord.claim_token == record.claim_token,
+                IdempotencyRecord.state == "pending",
+            )
+        )
+    finally:
+        session.close()
+    if ours is not None:
+        return PlatformError(
+            "idempotency_lease_expired",
+            "The server was busy and this request paused too long. Try again.",
+            503,
+            {"retryable": True, "retry_after_seconds": 5},
+        )
+    return invalid_state("The idempotency claim is no longer owned by this request.")
+
+
 def assert_claim_owned(db: Session, record: IdempotencyRecord) -> None:
     """Fail before a side effect if a lease was taken over by another worker."""
 
@@ -1109,7 +1139,7 @@ def assert_claim_owned(db: Session, record: IdempotencyRecord) -> None:
     finally:
         session.close()
     if owned is None:
-        raise invalid_state("The idempotency claim is no longer owned by this request.")
+        raise _claim_lost_error(db, record)
 
 
 def renew_idempotency_lease(
@@ -1144,10 +1174,14 @@ def renew_idempotency_lease(
         )
         if getattr(changed, "rowcount", 0) != 1:
             session.rollback()
-            raise invalid_state("The idempotency claim is no longer owned by this request.")
-        session.commit()
+            lost = True
+        else:
+            session.commit()
+            lost = False
     finally:
         session.close()
+    if lost:
+        raise _claim_lost_error(db, record)
     db.expire_all()
     return new_expiry
 

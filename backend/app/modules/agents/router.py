@@ -1648,6 +1648,26 @@ def publish_agent_version(
     # direct non-generation domain tests/callers compatible with the endpoint.
     request: Request = cast(Request, None),
 ) -> AgentVersionDTO:
+    # Each publish holds its request connection plus short independent
+    # sessions for the idempotency lease, so unbounded concurrent publishes
+    # exhaust the DB pool and the 10s claim lease expires while waiting for a
+    # connection.  Queue publishes behind the create admission gate (below
+    # pool capacity) before the claim starts, so they wait instead of failing.
+    with create_admission_slot(settings):
+        return _publish_agent_version_admitted(
+            version_id, payload, idempotency_key, context, db, settings, request
+        )
+
+
+def _publish_agent_version_admitted(
+    version_id: UUID,
+    payload: PublishAgentVersionRequest,
+    idempotency_key: str,
+    context: AuthContext,
+    db: Session,
+    settings: Settings,
+    request: Request,
+) -> AgentVersionDTO:
     # Keep the original scope check for the stable permission/not-found
     # boundary, but never reuse that ORM object after the durable claim.  The
     # guarded re-read below is the authority for the publish write.
