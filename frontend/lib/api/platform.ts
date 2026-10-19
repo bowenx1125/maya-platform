@@ -5,6 +5,7 @@ import {
   type PlatformClientHandle,
 } from "./generated/client";
 import { t, tm } from "../i18n";
+import { notePollResponse } from "../poll-pacing";
 import { invalidateRequestCache } from "../request-cache";
 
 export type AuthSession = components["schemas"]["AuthSession"];
@@ -506,6 +507,22 @@ export function isRefusedSend(error: unknown): boolean {
   );
 }
 
+/**
+ * Busy refusals and the server's poll-after hint slow every poller for a
+ * while (lib/poll-pacing.ts). Test doubles may hand back partial responses.
+ */
+function notePollHints(response: unknown): void {
+  const candidate = response as Partial<Response> | null | undefined;
+  if (
+    !candidate ||
+    typeof candidate.status !== "number" ||
+    !candidate.headers ||
+    typeof candidate.headers.get !== "function"
+  )
+    return;
+  notePollResponse(candidate as Response);
+}
+
 export class PlatformApiError extends Error {
   readonly status: number;
   readonly code?: string;
@@ -846,8 +863,9 @@ export class PlatformApi {
       onRequest: ({ request }) => {
         if (!isReadMethod(request.method)) invalidateRequestCache(this);
       },
-      onResponse: ({ request }) => {
+      onResponse: ({ request, response }) => {
         if (!isReadMethod(request.method)) invalidateRequestCache(this);
+        notePollHints(response);
       },
     });
   }
@@ -856,10 +874,16 @@ export class PlatformApi {
     input: string,
     init: RequestInit & { method: string },
   ): Promise<Response> {
-    if (isReadMethod(init.method)) return fetch(input, init);
+    if (isReadMethod(init.method)) {
+      const response = await fetch(input, init);
+      notePollHints(response);
+      return response;
+    }
     invalidateRequestCache(this);
     try {
-      return await fetch(input, init);
+      const response = await fetch(input, init);
+      notePollHints(response);
+      return response;
     } finally {
       invalidateRequestCache(this);
     }

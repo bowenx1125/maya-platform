@@ -89,12 +89,13 @@ def test_a_busy_refusal_is_retried_like_a_stall(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(finalizer, "drive_assessment", busy)
     monkeypatch.setattr(finalizer, "RETRY_DELAYS_SECONDS", (0.01,))
+    monkeypatch.setattr(finalizer, "BUSY_RETRY_DELAYS_SECONDS", (0.01,))
     runner = _finalizer()
     try:
         runner.wake("c-4")
         _wait_for(lambda: len(calls) >= 2)
-        time.sleep(0.1)
-        assert calls == ["c-4", "c-4"]
+        # Busy refusals keep retrying (see the never-run-out test below).
+        assert calls[:2] == ["c-4", "c-4"]
     finally:
         runner.close()
 
@@ -134,3 +135,70 @@ def test_executor_retry_calls_keep_the_tool_required(
         team_runtime._executor_write_still_required(db, request, ordinal)  # type: ignore[arg-type]
         is forced
     )
+
+
+def test_a_busy_refusal_woken_mid_run_still_gets_its_delayed_retry(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """50-student run (2026-10-19): backend-2 scheduled 4 retries for 18 busy
+    refusals. A wake that arrived while the chain waited in the full queue
+    (the sweep wakes every waiting attempt) took the immediate re-wake path,
+    which skipped the retry and went straight back into the busy queue."""
+
+    from app.core.errors import PlatformError
+
+    calls: list[float] = []
+    entered = threading.Event()
+    proceed = threading.Event()
+    runner = _finalizer()
+
+    def busy(_factory: Any, _settings: Any, conversation_id: str) -> bool:
+        calls.append(time.monotonic())
+        if len(calls) == 1:
+            entered.set()
+            proceed.wait(3)  # queued in admission while the sweep wakes it
+        raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
+
+    monkeypatch.setattr(finalizer, "drive_assessment", busy)
+    monkeypatch.setattr(finalizer, "BUSY_RETRY_DELAYS_SECONDS", (0.3,))
+    caplog.set_level("INFO", logger="maya.assessment")
+    try:
+        runner.wake("c-5")
+        assert entered.wait(3)
+        runner.wake("c-5")  # the sweep (or a message) wakes it mid-run
+        stopped_at = time.monotonic()
+        proceed.set()
+        _wait_for(lambda: len(calls) >= 2)
+        assert len(calls) == 2
+        # The second run came from the delayed retry, not an immediate re-wake.
+        assert calls[1] - stopped_at >= 0.25
+        scheduled = [r for r in caplog.records if "retry scheduled" in r.getMessage()]
+        assert len(scheduled) >= 1
+    finally:
+        runner.close()
+
+
+def test_busy_refusals_keep_being_retried_and_never_run_out(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from app.core.errors import PlatformError
+
+    calls: list[str] = []
+
+    def busy(_factory: Any, _settings: Any, conversation_id: str) -> bool:
+        calls.append(conversation_id)
+        raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
+
+    monkeypatch.setattr(finalizer, "drive_assessment", busy)
+    monkeypatch.setattr(finalizer, "BUSY_RETRY_DELAYS_SECONDS", (0.01, 0.02))
+    caplog.set_level("INFO", logger="maya.assessment")
+    runner = _finalizer()
+    try:
+        runner.wake("c-6")
+        _wait_for(lambda: len(calls) >= 6)
+        # A stall that saved nothing would stop after 2 retries; a latch can
+        # outlast 600 s, so busy refusals keep their (longest) delay instead.
+        assert len(calls) >= 6
+        assert not [r for r in caplog.records if "exhausted" in r.getMessage()]
+    finally:
+        runner.close()

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import math
 import re
 import weakref
 from collections.abc import Callable
@@ -15,6 +16,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.core.adaptive_admission import polling_pressure
 from app.core.config import Settings, get_settings
 from app.core.create_admission import create_admission_slot
 from app.core.db import Database
@@ -73,6 +75,7 @@ from .models import (
     TeamProviderCall,
     TeamTurnResult,
 )
+from .poll_cache import CONVERSATION_POLL_CACHE, POLL_AFTER_HEADER
 from .schemas import (
     AgentChatEntry,
     ChatAgent,
@@ -1620,6 +1623,7 @@ def create_memory_entry_action(
 )
 def get_conversation(
     conversation_id: UUID,
+    response: Response,
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -1627,7 +1631,23 @@ def get_conversation(
     row = db.get(Conversation, str(conversation_id))
     if row is None:
         raise not_found()
-    return session_view(db, row, context, settings)
+    ttl = float(settings.conversation_poll_pressure_cache_seconds)
+    # Only the owner's own live chat is cached: read-only (shared) views keep
+    # their per-request access check, and a withdrawn chat is never served.
+    if (
+        ttl <= 0
+        or row.user_id != context.user.id
+        or row.withdrawn_at is not None
+        or not polling_pressure(settings)
+    ):
+        return session_view(db, row, context, settings)
+    response.headers[POLL_AFTER_HEADER] = str(max(1, math.ceil(ttl)))
+    cached = CONVERSATION_POLL_CACHE.get(context.user.id, row.id, int(row.revision or 0), ttl)
+    if cached is not None:
+        return cast(ConversationSession, cached)
+    view = session_view(db, row, context, settings)
+    CONVERSATION_POLL_CACHE.put(context.user.id, row.id, int(row.revision or 0), view)
+    return view
 
 
 @router.delete(

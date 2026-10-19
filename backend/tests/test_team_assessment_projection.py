@@ -1848,7 +1848,7 @@ def test_last_answer_starts_the_scorer_once_without_a_student_message(
     # turn is left holding the conversation, and the refusal surfaces.
     from app.core import write_guard
 
-    def refuse(_settings: Any = None) -> Any:
+    def refuse(_settings: Any = None, **_kwargs: Any) -> Any:
         raise write_guard.write_pressure_error(
             reason="queue_full", limit=8, retry_after_seconds=5, in_flight=8, waiters=100
         )

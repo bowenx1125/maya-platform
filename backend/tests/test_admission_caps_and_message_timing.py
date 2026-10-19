@@ -180,7 +180,12 @@ def test_in_flight_cap_48_still_binds(probe: _Probe) -> None:
 def test_danger_still_suspends_at_new_caps(
     probe: _Probe, load: float, mem: float, recover_load: float, recover_mem: float
 ) -> None:
-    s = _settings(adaptive_admission_initial_units=96)
+    # Full-stop latch pinned; the reserve is covered in test_danger_latch_reserve.py.
+    s = _settings(
+        adaptive_admission_initial_units=96,
+        adaptive_admission_danger_reserve_slots=0,
+        adaptive_admission_memory_danger_trickle=0,
+    )
     aa.adaptive_admission_snapshot(s)
     probe.load, probe.mem = load, mem
     probe.now = 1.0
@@ -341,6 +346,9 @@ def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ig
         "reason",
         "active_seconds",
         "total_seconds",
+        "max_hold_releases",
+        "reserve_slots",
+        "reserve_admitted",
     }
     timing = body["message_timing"]
     assert set(timing) >= {"messages", "total_ms", "queue_wait_ms", "llm_calls_per_msg", "ttft_ms"}

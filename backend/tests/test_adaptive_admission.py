@@ -37,6 +37,10 @@ def _settings(**overrides: object) -> Settings:
         "adaptive_admission_sample_seconds": 1.0,
         "adaptive_admission_adjust_seconds": 1.0,
         "adaptive_admission_wait_seconds": 1,
+        # These tests pin the full-stop latch; the reserve and memory trickle
+        # (on by default) are covered in test_danger_latch_reserve.py.
+        "adaptive_admission_danger_reserve_slots": 0,
+        "adaptive_admission_memory_danger_trickle": 0,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]
@@ -656,6 +660,9 @@ def test_danger_latch_logs_enter_and_release_and_counts_them(
         "reason": None,
         "active_seconds": 0.0,
         "total_seconds": 0.0,
+        "max_hold_releases": 0,
+        "reserve_slots": 0,
+        "reserve_admitted": 0,
     }
 
     probe.load = 6.5
@@ -693,6 +700,7 @@ def test_danger_latch_logs_enter_and_release_and_counts_them(
     ]
     assert released == [
         "admission_danger_released reason=load+mem held_s=4.0 load=3.5 mem_mb=600.0 queued=0"
+        " release=recovered"
     ]
 
     probe.mem = 300.0

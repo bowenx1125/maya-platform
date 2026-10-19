@@ -105,17 +105,18 @@ class WriteSlot:
         self.reservation.release()
 
 
-def reserve_write_slot(settings: Settings | None = None) -> WriteSlot:
+def reserve_write_slot(settings: Settings | None = None, *, priority: bool = False) -> WriteSlot:
     """Wait for a Chat/Team turn's write slot before anything is stored.
 
     A rejection (queue full, wait over) raises its retryable 503 and holds
     nothing, so the student's message was never saved and nothing replays it.
+    ``priority`` (Scorer/Summarizer finishing) goes first in layer 1.
     """
 
     runtime = settings if settings is not None else get_settings()
     entered = time.perf_counter()
     # Layer 1: the unified pressure queue (suspends under the danger line).
-    reservation = reserve_slot("write", runtime)
+    reservation = reserve_slot("write", runtime, priority=priority)
     limit = int(runtime.write_guard_limit)
     if limit <= 0:
         return WriteSlot(reservation, False, entered)

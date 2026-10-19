@@ -370,6 +370,43 @@ class Settings(BaseSettings):
     adaptive_admission_hold_threadpool_ratio: float = Field(
         default=0.45, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_HOLD_THREADPOOL_RATIO"
     )
+    # Danger latch reserve / release (60-student rerun, 2026-10-19: a full
+    # stop held 1400 s at in-flight 0 while polling kept load at 4.7-5.9).
+    # Load danger still admits this many top-level operations per process,
+    # Scorer/Summarizer finishing first, then student turns (0 = old full
+    # stop; memory danger always stops fully). A latch held this long while
+    # load is under the trip line is released (0 = only load <= resume).
+    # After a release, top-level admissions ramp from the reserve by `step`
+    # every `ramp` seconds up to the in-flight cap (0 = no ramp).
+    adaptive_admission_danger_reserve_slots: int = Field(
+        default=2, ge=0, le=64, validation_alias="ADAPTIVE_ADMISSION_DANGER_RESERVE_SLOTS"
+    )
+    # Memory danger: still admit one operation while nothing runs (0 = full
+    # stop), so a long low-memory spell cannot strand queued students.
+    adaptive_admission_memory_danger_trickle: int = Field(
+        default=1, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_MEMORY_DANGER_TRICKLE"
+    )
+    adaptive_admission_danger_max_hold_seconds: float = Field(
+        default=120.0,
+        ge=0,
+        le=86_400,
+        validation_alias="ADAPTIVE_ADMISSION_DANGER_MAX_HOLD_SECONDS",
+    )
+    adaptive_admission_release_ramp_seconds: float = Field(
+        default=5.0, ge=0, le=600, validation_alias="ADAPTIVE_ADMISSION_RELEASE_RAMP_SECONDS"
+    )
+    adaptive_admission_release_ramp_step: int = Field(
+        default=1, ge=1, le=1_000, validation_alias="ADAPTIVE_ADMISSION_RELEASE_RAMP_STEP"
+    )
+    # GET /conversations/{id} while admission sheds load (danger, ramp or a
+    # fast brake): serve a copy at most this old per (user, conversation,
+    # revision) and tell clients to poll no faster (X-Maya-Poll-After). 0 off.
+    conversation_poll_pressure_cache_seconds: float = Field(
+        default=5.0,
+        ge=0,
+        le=60,
+        validation_alias="CONVERSATION_POLL_PRESSURE_CACHE_SECONDS",
+    )
     # Layer-1 queue depth; past it callers get an immediate retryable 503.
     adaptive_admission_queue_max: int = Field(
         default=200, ge=0, le=10_000, validation_alias="ADAPTIVE_ADMISSION_QUEUE_MAX"

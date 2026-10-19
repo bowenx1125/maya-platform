@@ -519,8 +519,10 @@ def create_app(
     async def platform_error_response(request: Request, exc: PlatformError) -> JSONResponse:
         response = await platform_error_handler(request, exc)
         retry_after = exc.details.get("retry_after_seconds")
+        # 429 rate limits and retryable 503 busy refusals both tell clients
+        # when to come back, so pollers and retries slow down under load.
         if (
-            exc.status_code == 429
+            exc.status_code in {429, 503}
             and isinstance(retry_after, int)
             and not isinstance(retry_after, bool)
         ):

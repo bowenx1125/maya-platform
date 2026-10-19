@@ -35,6 +35,9 @@ MAX_STEPS = 4
 # the student chat sat at 40% or 75% until a restart. A stalled chain is run
 # again after these delays; the student's next message also wakes it.
 RETRY_DELAYS_SECONDS = (30.0, 120.0, 600.0)
+# Busy refusals ran nothing: retried sooner (finishing has admission
+# priority now), staying at the last delay for as long as the server is full.
+BUSY_RETRY_DELAYS_SECONDS = (15.0, 30.0, 60.0)
 # Refusals that ran nothing; the chain is retried like a stalled step.
 BUSY_CODES = frozenset({"write_pressure", "adaptive_admission_busy", "llm_admission_busy"})
 # Off the startup path too: attempts still waiting are swept this often.
@@ -151,7 +154,9 @@ def drive_assessment(
             # The write slot comes before the claim: a busy refusal must not
             # leave a claimed executor turn holding the conversation.
             db.commit()  # hold no pooled connection while queued
-            slot = reserve_write_slot(settings)
+            # Finishing is the student's last step: it goes first, also
+            # through the danger reserve, so scores keep coming under load.
+            slot = reserve_write_slot(settings, priority=True)
             try:
                 claim = claim_assessment_executor_turn(
                     db,
@@ -186,6 +191,9 @@ class AssessmentFinalizer:
         self._rewake: set[str] = set()
         # Stalled chains: how many delayed retries each conversation has used.
         self._retries: dict[str, int] = {}
+        # Busy refusals (nothing ran) back off on their own count and never
+        # run out: the server was only full, the step is still owed.
+        self._busy_retries: dict[str, int] = {}
         self._timers: dict[str, threading.Timer] = {}
         self._sweeper: threading.Thread | None = None
         self._stop = threading.Event()
@@ -206,12 +214,13 @@ class AssessmentFinalizer:
 
     def _run(self, conversation_id: str) -> None:
         stalled = False
+        busy = False
         try:
             stalled = drive_assessment(self._factory, self._settings(), conversation_id)
         except PlatformError as error:
             # A busy refusal (the write guard's queue, admission) ran nothing:
             # retry later like a step that did not save.
-            stalled = error.code in BUSY_CODES
+            stalled = busy = error.code in BUSY_CODES
             LOGGER.warning(
                 "Assessment finishing stopped conversation_id=%s code=%s",
                 conversation_id,
@@ -226,23 +235,37 @@ class AssessmentFinalizer:
                 self._rewake.discard(conversation_id)
                 if not stalled:
                     self._retries.pop(conversation_id, None)
-            if again:
+                if not busy:
+                    self._busy_retries.pop(conversation_id, None)
+            # Bug (50-student run, 2026-10-19): a busy refusal whose
+            # conversation was woken again mid-run (the 5-minute sweep wakes
+            # every waiting attempt, on both replicas) took the immediate
+            # re-wake branch instead of a delayed retry: backend-2 scheduled
+            # 4 retries for 18 refusals, and the re-run went straight back
+            # into the full queue. A busy refusal now always gets its delayed
+            # retry; that retry also answers the wake.
+            if busy:
+                self._schedule_retry(conversation_id, busy=True)
+            elif again:
                 self.wake(conversation_id)
             elif stalled:
                 self._schedule_retry(conversation_id)
 
-    def _schedule_retry(self, conversation_id: str) -> None:
+    def _schedule_retry(self, conversation_id: str, *, busy: bool = False) -> None:
+        delay = 0.0
         with self._lock:
-            used = self._retries.get(conversation_id, 0)
-            if self._closed or used >= len(RETRY_DELAYS_SECONDS):
+            counts = self._busy_retries if busy else self._retries
+            used = counts.get(conversation_id, 0)
+            if self._closed or (not busy and used >= len(RETRY_DELAYS_SECONDS)):
                 exhausted = not self._closed
                 timer = None
             else:
                 exhausted = False
-                self._retries[conversation_id] = used + 1
-                timer = threading.Timer(
-                    RETRY_DELAYS_SECONDS[used], self._retry_due, args=(conversation_id,)
-                )
+                counts[conversation_id] = used + 1
+                delays = BUSY_RETRY_DELAYS_SECONDS if busy else RETRY_DELAYS_SECONDS
+                # Busy retries stay at the longest delay once they reach it.
+                delay = delays[min(used, len(delays) - 1)]
+                timer = threading.Timer(delay, self._retry_due, args=(conversation_id,))
                 timer.daemon = True
                 previous = self._timers.pop(conversation_id, None)
                 if previous is not None:
@@ -252,7 +275,7 @@ class AssessmentFinalizer:
             LOGGER.info(
                 "Assessment finishing retry scheduled conversation_id=%s in_seconds=%s",
                 conversation_id,
-                RETRY_DELAYS_SECONDS[used],
+                delay,
             )
             timer.start()
         elif exhausted:
