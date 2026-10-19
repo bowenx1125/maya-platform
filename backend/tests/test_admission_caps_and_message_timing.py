@@ -341,6 +341,9 @@ def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ig
         "reason",
         "active_seconds",
         "total_seconds",
+        "max_hold_releases",
+        "reserve_slots",
+        "reserve_admitted",
     }
     timing = body["message_timing"]
     assert set(timing) >= {"messages", "total_ms", "queue_wait_ms", "llm_calls_per_msg", "ttft_ms"}

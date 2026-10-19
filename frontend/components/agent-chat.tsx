@@ -36,6 +36,11 @@ import {
 } from "../lib/api";
 import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import {
+  nextPollDelay,
+  notePollError,
+  serverUnderPressure,
+} from "../lib/poll-pacing";
+import {
   abandonChatRequest,
   adoptPendingChatRequest,
   adoptUncertainChatRequest,
@@ -645,34 +650,42 @@ function AgentChatScope({
       return;
     let active = true;
     let delay = 2500;
+    let attempt = 0;
     let timer = 0;
     // Backs off (2.5 s up to 15 s): a long scoring run is not polled flat out.
+    // A busy server (503 / Retry-After / poll-after hint) stretches it to
+    // 5-10 s or whatever the server asked (lib/poll-pacing.ts).
     const tick = () => {
-      timer = window.setTimeout(() => {
-        void api
-          .conversationSession(finishingTeamId)
-          .then((next) => {
-            if (active && isTeamSession(next)) {
-              setSelectedTeam((current) =>
-                current?.id === next.id ? next : current,
-              );
-              // Scoring finished (or failed): its "try again shortly" note
-              // is done too.
-              if (next.assessment_stage !== "scoring")
-                setTeamError((current: unknown) =>
-                  isScoringRefusal(current) ? null : current,
+      timer = window.setTimeout(
+        () => {
+          void api
+            .conversationSession(finishingTeamId)
+            .then((next) => {
+              if (active && isTeamSession(next)) {
+                setSelectedTeam((current) =>
+                  current?.id === next.id ? next : current,
                 );
-            }
-          })
-          .catch(() => {
-            // The next tick asks again; sending still reports a lasting failure.
-          })
-          .finally(() => {
-            if (!active) return;
-            delay = Math.min(15000, Math.round(delay * 1.5));
-            tick();
-          });
-      }, delay);
+                // Scoring finished (or failed): its "try again shortly" note
+                // is done too.
+                if (next.assessment_stage !== "scoring")
+                  setTeamError((current: unknown) =>
+                    isScoringRefusal(current) ? null : current,
+                  );
+              }
+            })
+            .catch((cause: unknown) => {
+              // The next tick asks again; sending still reports a lasting failure.
+              notePollError(cause);
+            })
+            .finally(() => {
+              if (!active) return;
+              delay = Math.min(15000, Math.round(delay * 1.5));
+              attempt += 1;
+              tick();
+            });
+        },
+        nextPollDelay(delay, attempt),
+      );
     };
     tick();
     return () => {
@@ -1153,6 +1166,7 @@ function AgentChatScope({
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let checking = false;
+    let attempt = 0;
 
     const poll = async () => {
       if (!active || checking) return;
@@ -1203,6 +1217,7 @@ function AgentChatScope({
           return;
         }
       } catch (cause) {
+        notePollError(cause);
         if (
           active &&
           isChatRequestScopeActive(scopeKey) &&
@@ -1213,7 +1228,13 @@ function AgentChatScope({
       } finally {
         checking = false;
       }
-      if (active) timer = setTimeout(() => void poll(), 1500);
+      // 1.5 s, then easing off to 5 s while the reply is still pending;
+      // 5-10 s (or the server's wait) while the server is busy.
+      if (active) {
+        const base = Math.min(5000, Math.round(1500 * 1.5 ** attempt));
+        timer = setTimeout(() => void poll(), nextPollDelay(base, attempt));
+        attempt += 1;
+      }
     };
 
     void poll();
@@ -1244,6 +1265,8 @@ function AgentChatScope({
     const teamSequenceAtStart = contextAtStart.teamSequence;
     let active = true;
     let inFlight = false;
+    let lastRefreshAt = 0;
+    let busyRefreshes = 0;
     const ownsRefresh = () => {
       const current = idleHistoryContext.current;
       return (
@@ -1270,6 +1293,15 @@ function AgentChatScope({
       ) {
         return;
       }
+      // Busy server: the 5 s idle refresh waits out its 5-10 s pace.
+      if (
+        serverUnderPressure() &&
+        Date.now() - lastRefreshAt < nextPollDelay(5000, busyRefreshes)
+      ) {
+        return;
+      }
+      busyRefreshes = serverUnderPressure() ? busyRefreshes + 1 : 0;
+      lastRefreshAt = Date.now();
       inFlight = true;
       try {
         const latest = await api.conversationSession(selectedId);
@@ -1286,9 +1318,10 @@ function AgentChatScope({
           return;
         }
         rememberTeam(latest);
-      } catch {
+      } catch (cause) {
         // Idle refresh is opportunistic; opening the history remains the
         // explicit path that reports a failed conversation read.
+        notePollError(cause);
       } finally {
         inFlight = false;
       }

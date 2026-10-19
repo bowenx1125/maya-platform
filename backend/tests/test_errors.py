@@ -126,5 +126,6 @@ def test_platform_errors_keep_their_own_code(app_factory: Any, code: str, status
     response = _get(app, raiser)
     assert response.status_code == status
     assert response.json()["code"] == code
-    if status == 429:
-        assert response.headers["Retry-After"] == "3"
+    # Both 429 limits and retryable 503 refusals say when to come back, so
+    # pollers and retries slow down under load (60-student rerun, 2026-10-19).
+    assert response.headers["Retry-After"] == "3"

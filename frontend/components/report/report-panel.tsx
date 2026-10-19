@@ -6,6 +6,7 @@ import { DismissibleAlert } from "../dismissible-alert";
 import type { components } from "../../lib/api/generated/schema";
 import { apiErrorMessage, type IdempotencyHandle } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
+import { nextPollDelay } from "../../lib/poll-pacing";
 import { useLocale } from "../locale";
 import { ReportMarkdown } from "./report-markdown";
 
@@ -197,6 +198,7 @@ export function ReportPanel({
     const startedAt = pollStartedAt.current ?? Date.now();
     pollStartedAt.current = startedAt;
     const deadline = startedAt + REPORT_POLL_LIMIT_MS;
+    let attempt = 0;
     const poll = async () => {
       if (disposed) return;
       if (Date.now() >= deadline) {
@@ -206,7 +208,11 @@ export function ReportPanel({
       }
       await load({ quiet: true });
       if (!disposed) {
-        timer = window.setTimeout(() => void poll(), REPORT_POLL_INTERVAL_MS);
+        // 5-10 s while the server is busy (lib/poll-pacing.ts).
+        timer = window.setTimeout(
+          () => void poll(),
+          nextPollDelay(REPORT_POLL_INTERVAL_MS, attempt++),
+        );
       }
     };
     timer = window.setTimeout(() => void poll(), REPORT_POLL_INTERVAL_MS);

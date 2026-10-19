@@ -151,7 +151,9 @@ def drive_assessment(
             # The write slot comes before the claim: a busy refusal must not
             # leave a claimed executor turn holding the conversation.
             db.commit()  # hold no pooled connection while queued
-            slot = reserve_write_slot(settings)
+            # Finishing is the student's last step: it goes first, also
+            # through the danger reserve, so scores keep coming under load.
+            slot = reserve_write_slot(settings, priority=True)
             try:
                 claim = claim_assessment_executor_turn(
                     db,

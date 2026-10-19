@@ -8,8 +8,18 @@ this single queue as backstops (the login queue is folded into it):
 * Unified pressure signal: 1m loadavg and MemAvailable share one latch
   (danger at load >= 6 or Mem < 500 MiB; clear only when load <= 4 AND
   Mem >= 550 MiB) so the old memory and load guards cannot disagree.
-  Under danger nothing new is admitted; callers suspend in the queue and
-  continue automatically once the latch clears.
+  Under danger only a small reserve keeps moving (load danger only; a memory
+  danger still admits nothing): ``ADAPTIVE_ADMISSION_DANGER_RESERVE_SLOTS``
+  (2) top-level operations per process, Scorer/Summarizer finishing first,
+  then student turns; creates, logins and stand-alone model calls wait.
+  Everyone else suspends in the queue and continues once the latch clears.
+  A latch held ``ADAPTIVE_ADMISSION_DANGER_MAX_HOLD_SECONDS`` (120) while
+  load is already back under the trip line (and memory is fine) is released
+  instead of waiting for load <= 4. After any release, top-level admissions
+  ramp up (+1 every 5 s from the reserve) instead of letting the whole queue
+  in at once. 60-student rerun (2026-10-19): with a full stop, student
+  polling alone kept load at 4.7-5.9, so the latch held 1400 s with nothing
+  running, then re-tripped 10 s after it let the backlog in.
 * AIMD on server-side signals only: danger, load, MemAvailable, DB write
   p95 and DB pool checkout wait p95 shrink the weighted budget x0.7; a band
   just below those (load 3-4, Mem 900-1100 MiB, thread pool >= 90%) holds
@@ -306,6 +316,17 @@ class _Waiter:
     cls: str
     weight: int
     granted: bool = False
+    # Scorer/Summarizer finishing: served before ordinary waiters, and first
+    # through the danger reserve.
+    priority: bool = False
+    # Counted against the danger reserve / release ramp (not a nested call).
+    top: bool = True
+
+
+# Classes the danger reserve serves (besides priority waiters): a student's
+# next message in a chat already open. Creates, logins and stand-alone model
+# calls (reports, generation) wait for the latch to clear.
+DANGER_RESERVE_CLASSES: tuple[str, ...] = ("write",)
 
 
 SHRINK_REASONS: tuple[str, ...] = ("danger", "load", "mem", "db_write_p95", "pool_wait_p95")
@@ -332,6 +353,15 @@ class _State:
     danger_since: float | None = None
     danger_reason: str | None = None
     danger_seconds_total: float = 0.0
+    danger_max_hold_releases: int = 0
+    mem_bad: bool = False  # MemAvailable under the resume floor at the last sample
+    # Set at a release: top-level admissions ramp up from the reserve.
+    ramp_since: float | None = None
+    # Top-level (non-nested) operations running now; the reserve / ramp cap.
+    top_in_flight: int = 0
+    priority_queue: deque[_Waiter] = field(default_factory=deque)
+    reserve_admitted: int = 0
+    priority_admitted: int = 0
     load: float | None = None
     mem: float | None = None
     threadpool: float | None = None
@@ -417,14 +447,31 @@ def _refresh_locked(settings: Settings) -> None:
     mem_resume = max(float(settings.memory_guard_resume_available_mb), mem_floor)
     load_bad = load_reject > 0 and s.load is not None and s.load >= load_reject
     mem_bad = mem_floor > 0 and s.mem is not None and s.mem < mem_floor
+    # The reserve stops whenever memory is short of the resume floor.
+    s.mem_bad = mem_floor > 0 and s.mem is not None and s.mem < mem_resume
     if not s.danger:
         if load_bad or mem_bad:
             _enter_danger_locked(now, load_bad=load_bad, mem_bad=mem_bad)
     else:
         load_ok = load_reject <= 0 or s.load is None or s.load <= load_resume
         mem_ok = mem_floor <= 0 or s.mem is None or s.mem >= mem_resume
+        max_hold = float(settings.adaptive_admission_danger_max_hold_seconds)
+        held_too_long = (
+            max_hold > 0
+            and s.danger_since is not None
+            and now - s.danger_since >= max_hold
+            and not load_bad
+            and not mem_bad
+        )
         if load_ok and mem_ok:
-            _release_danger_locked(now)
+            _release_danger_locked(now, settings)
+        elif held_too_long and mem_ok:
+            # Load sits between the resume and trip lines (4-6): the latch
+            # itself is no longer protecting anything, only starving the
+            # queue. Release into the ramp; load >= 6 trips it again.
+            s.danger_max_hold_releases += 1
+            _release_danger_locked(now, settings, reason="max_hold")
+    _end_ramp_locked(settings, now)
 
     if s.in_flight_units > 0 or _waiting_total() > 0 or s.last_busy == float("-inf"):
         s.last_busy = now
@@ -548,21 +595,53 @@ def _enter_danger_locked(now: float, *, load_bad: bool, mem_bad: bool) -> None:
     )
 
 
-def _release_danger_locked(now: float) -> None:
+def _release_danger_locked(now: float, settings: Settings, *, reason: str = "recovered") -> None:
     s = _state
     held = max(0.0, now - s.danger_since) if s.danger_since is not None else 0.0
     s.danger = False
     s.danger_releases += 1
     s.danger_seconds_total += held
+    s.ramp_since = now if float(settings.adaptive_admission_release_ramp_seconds) > 0 else None
     LOGGER.warning(
-        "admission_danger_released reason=%s held_s=%.1f load=%s mem_mb=%s queued=%s",
+        "admission_danger_released reason=%s held_s=%.1f load=%s mem_mb=%s queued=%s release=%s",
         s.danger_reason,
         held,
         s.load,
         s.mem,
         _waiting_total(),
+        reason,
     )
     s.danger_since = None
+
+
+def _reserve_slots(settings: Settings) -> int:
+    """Top-level operations the danger latch still admits (0 under memory danger)."""
+
+    s = _state
+    if not s.danger or s.mem_bad:
+        return 0
+    return max(0, int(settings.adaptive_admission_danger_reserve_slots))
+
+
+def _ramp_cap_locked(settings: Settings, now: float) -> int | None:
+    """Top-level operations allowed while ramping up after a release."""
+
+    s = _state
+    if s.ramp_since is None:
+        return None
+    interval = float(settings.adaptive_admission_release_ramp_seconds)
+    if interval <= 0:
+        return None
+    start = max(1, int(settings.adaptive_admission_danger_reserve_slots))
+    steps = int(max(0.0, now - s.ramp_since) // interval)
+    return start + steps * max(1, int(settings.adaptive_admission_release_ramp_step))
+
+
+def _end_ramp_locked(settings: Settings, now: float) -> None:
+    s = _state
+    cap = _ramp_cap_locked(settings, now)
+    if cap is not None and cap >= int(settings.adaptive_admission_max_in_flight):
+        s.ramp_since = None
 
 
 def _shrink_reason(settings: Settings) -> str | None:
@@ -600,12 +679,22 @@ def _hold(settings: Settings) -> bool:
     )
 
 
-def _fits(weight: int, settings: Settings) -> bool:
+def _fits(
+    weight: int, settings: Settings, *, cls: str | None = None, priority: bool = False
+) -> bool:
     s = _state
-    if s.danger:
-        return False
     if sum(s.in_flight.values()) >= int(settings.adaptive_admission_max_in_flight):
         return False  # global hard cap
+    if s.danger:
+        # Only the reserve moves, regardless of the (floored) budget: finishing
+        # first, then a student's next turn; one turn plus its nested model
+        # call already exceeds a minimum budget of 4 units.
+        if not priority and cls not in DANGER_RESERVE_CLASSES:
+            return False
+        return s.top_in_flight < _reserve_slots(settings)
+    cap = _ramp_cap_locked(settings, _clock())
+    if cap is not None and s.top_in_flight >= cap:
+        return False
     # An idle process always admits one caller, so a weight above a shrunken
     # budget still makes progress instead of deadlocking.
     return s.in_flight_units == 0 or s.in_flight_units + weight <= s.budget
@@ -617,6 +706,16 @@ def _grant(waiter: _Waiter) -> None:
     s.in_flight_units += waiter.weight
     s.in_flight[waiter.cls] += 1
     s.admitted[waiter.cls] += 1
+    if waiter.top:
+        s.top_in_flight += 1
+        if s.danger:
+            s.reserve_admitted += 1
+    if waiter.priority:
+        s.priority_admitted += 1
+
+
+def _waiter_fits(waiter: _Waiter, settings: Settings) -> bool:
+    return _fits(waiter.weight, settings, cls=waiter.cls, priority=waiter.priority)
 
 
 def _dispatch_locked(settings: Settings) -> bool:
@@ -630,18 +729,30 @@ def _dispatch_locked(settings: Settings) -> bool:
     s = _state
     granted_any = False
     while True:
-        active = [name for name in CLASSES if s.queues[name]]
-        if not active:
-            break
+        # Scorer/Summarizer finishing goes first: it is the student's last step
+        # and frees a whole attempt. A priority head that does not fit stops
+        # everything behind it, like any other head.
+        if s.priority_queue:
+            head = s.priority_queue[0]
+            if not _waiter_fits(head, settings):
+                break
+            s.priority_queue.popleft()
+            _grant(head)
+            granted_any = True
+            continue
+        # Under danger only the reserve classes are eligible, so a queued
+        # create or login whose turn it is cannot block the reserve.
+        eligible = DANGER_RESERVE_CLASSES if s.danger else CLASSES
         cls = None
         for offset in range(len(CLASSES)):
             candidate = CLASSES[(s.rr_index + offset) % len(CLASSES)]
-            if s.queues[candidate]:
+            if candidate in eligible and s.queues[candidate]:
                 cls = candidate
                 break
-        assert cls is not None
+        if cls is None:
+            break
         head = s.queues[cls][0]
-        if not _fits(head.weight, settings):
+        if not _waiter_fits(head, settings):
             break
         s.queues[cls].popleft()
         _grant(head)
@@ -653,7 +764,7 @@ def _dispatch_locked(settings: Settings) -> bool:
 
 
 def _waiting_total() -> int:
-    return sum(len(q) for q in _state.queues.values())
+    return sum(len(q) for q in _state.queues.values()) + len(_state.priority_queue)
 
 
 def adaptive_admission_busy_error(
@@ -685,13 +796,16 @@ class Reservation:
     idempotent, so every exit path may call it.
     """
 
-    __slots__ = ("cls", "weight", "deadline", "settings", "_released")
+    __slots__ = ("cls", "weight", "deadline", "settings", "top", "_released")
 
-    def __init__(self, cls: str, weight: int, deadline: float, settings: Settings) -> None:
+    def __init__(
+        self, cls: str, weight: int, deadline: float, settings: Settings, *, top: bool = True
+    ) -> None:
         self.cls = cls
         self.weight = weight
         self.deadline = deadline
         self.settings = settings
+        self.top = top
         self._released = weight == 0
 
     def release(self) -> None:
@@ -701,13 +815,19 @@ class Reservation:
             self._released = True
             _state.in_flight_units = max(0, _state.in_flight_units - self.weight)
             _state.in_flight[self.cls] = max(0, _state.in_flight[self.cls] - 1)
+            if self.top:
+                _state.top_in_flight = max(0, _state.top_in_flight - 1)
             _refresh_locked(self.settings)
             _dispatch_locked(self.settings)
 
 
-def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
+def reserve_slot(
+    cls: str, settings: Settings | None = None, *, priority: bool = False
+) -> Reservation:
     """Wait for weighted budget for one ``cls`` operation and hold it.
 
+    ``priority`` (Scorer/Summarizer finishing) is served before ordinary
+    waiters and first through the danger reserve.
     Raises the retryable ``adaptive_admission_busy`` 503 when the queue is
     full or the request deadline passes; nothing is held in that case.
     """
@@ -729,16 +849,18 @@ def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
     else:
         deadline = outer_deadline
     weight = max(0, _weight(runtime, cls))
-    reservation = Reservation(cls, weight, deadline, runtime)
+    nested = depth > 0
+    reservation = Reservation(cls, weight, deadline, runtime, top=not nested)
     if weight == 0:
         return reservation
     retry_after = int(runtime.adaptive_admission_retry_seconds)
-    waiter = _Waiter(cls=cls, weight=weight)
+    waiter = _Waiter(cls=cls, weight=weight, priority=priority and not nested, top=not nested)
     with _cond:
         _refresh_locked(runtime)
-        if depth > 0:
+        queue = _state.priority_queue if waiter.priority else _state.queues[cls]
+        if nested:
             _grant(waiter)
-        elif _waiting_total() == 0 and _fits(weight, runtime):
+        elif _waiting_total() == 0 and _waiter_fits(waiter, runtime):
             _grant(waiter)
         else:
             if _waiting_total() >= int(runtime.adaptive_admission_queue_max):
@@ -746,12 +868,12 @@ def reserve_slot(cls: str, settings: Settings | None = None) -> Reservation:
                 raise adaptive_admission_busy_error(
                     cls=cls, reason="queue_full", retry_after_seconds=retry_after
                 )
-            _state.queues[cls].append(waiter)
+            queue.append(waiter)
             poll = max(0.05, float(runtime.adaptive_admission_sample_seconds))
             while not waiter.granted:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    _state.queues[cls].remove(waiter)
+                    queue.remove(waiter)
                     _state.rejects[cls] += 1
                     # Our departure may unblock the next class in line.
                     _dispatch_locked(runtime)
@@ -800,6 +922,18 @@ def adaptive_slot(cls: str, settings: Settings | None = None) -> Iterator[None]:
         yield
 
 
+def polling_pressure(settings: Settings | None = None) -> bool:
+    """True while this process is shedding load: danger latched, ramping up
+    after a release, or a fast brake signal bad. Cheap reads (conversation
+    polling) use it to serve a few-seconds-old copy instead of rebuilding."""
+
+    runtime = settings if settings is not None else get_settings()
+    with _cond:
+        _refresh_locked(runtime)
+        s = _state
+        return s.danger or s.ramp_since is not None or s.brake_reason is not None
+
+
 def shared_wait_seconds(cap: float) -> float:
     """Seconds a layer-2 gate may still wait: ``cap`` bounded by the request
     deadline set in ``adaptive_slot`` (0 when it already expired)."""
@@ -840,6 +974,15 @@ def adaptive_admission_snapshot(settings: Settings | None = None) -> dict[str, A
                     else 0.0
                 ),
                 "total_seconds": round(s.danger_seconds_total, 1),
+                "max_hold_releases": s.danger_max_hold_releases,
+                "reserve_slots": _reserve_slots(runtime),
+                "reserve_admitted": s.reserve_admitted,
+            },
+            "release_ramp_cap": _ramp_cap_locked(runtime, _clock()),
+            "top_in_flight": s.top_in_flight,
+            "priority": {
+                "queued": len(s.priority_queue),
+                "admitted": s.priority_admitted,
             },
             "load_1m": s.load,
             "mem_available_mb": s.mem,
@@ -886,6 +1029,7 @@ __all__ = [
     "db_write_finished",
     "db_write_started",
     "db_writes_in_flight",
+    "polling_pressure",
     "record_db_write_ms",
     "set_cpu_reader",
     "record_pool_wait_ms",

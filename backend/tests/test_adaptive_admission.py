@@ -656,6 +656,9 @@ def test_danger_latch_logs_enter_and_release_and_counts_them(
         "reason": None,
         "active_seconds": 0.0,
         "total_seconds": 0.0,
+        "max_hold_releases": 0,
+        "reserve_slots": 0,
+        "reserve_admitted": 0,
     }
 
     probe.load = 6.5
@@ -693,6 +696,7 @@ def test_danger_latch_logs_enter_and_release_and_counts_them(
     ]
     assert released == [
         "admission_danger_released reason=load+mem held_s=4.0 load=3.5 mem_mb=600.0 queued=0"
+        " release=recovered"
     ]
 
     probe.mem = 300.0
