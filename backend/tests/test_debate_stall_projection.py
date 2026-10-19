@@ -291,3 +291,46 @@ def test_aged_pending_draft_projects_preparation_timeout_for_stall_and_preview(
         assert head_preview["audio_ready"] is False
     finally:
         client.__exit__(None, None, None)
+
+
+def test_an_old_planned_turn_with_a_fresh_prepare_job_is_not_expired(
+    app_factory: Callable[..., Any],
+) -> None:
+    """2026-10-20: a late turn of a long Preview was planned minutes ago but
+    its prepare job was only just enqueued; plan age must not expire it."""
+
+    from sqlalchemy import text
+
+    client, database, debate_id = _draft_debate(app_factory)
+    try:
+        stale = datetime.now(UTC) - timedelta(seconds=120)
+        with database.session() as session:
+            turns = list(
+                session.scalars(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id)
+                    .order_by(DebateTurn.turn_index)
+                ).all()
+            )
+            for turn in turns:
+                turn.updated_at = stale
+                turn.created_at = stale
+            # The prepare job was enqueued just now (fresh created/updated).
+            session.execute(
+                text(
+                    "UPDATE jobs SET updated_at=:now, created_at=:now "
+                    "WHERE debate_id=:debate_id AND operation='debate_turn_prepare'"
+                ),
+                {"now": datetime.now(UTC), "debate_id": debate_id},
+            )
+            session.commit()
+
+        from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+        with database.session() as session:
+            expired = SqlPlaybackRepository().expire_stale_preparation(session, debate_id=debate_id)
+            session.commit()
+        assert expired == 0
+        assert _listed(client, debate_id)["stall"] is None
+    finally:
+        client.__exit__(None, None, None)
