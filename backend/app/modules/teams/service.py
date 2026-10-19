@@ -49,7 +49,11 @@ from app.modules.teams.models import (
     TeamVersionMember,
     TeamVersionSet,
 )
-from app.modules.teams.publication_access import live_teacher_publication
+from app.modules.teams.publication_access import (
+    live_teacher_publication,
+    log_team_chat_refused,
+    teacher_uses_student_public_team,
+)
 from app.modules.teams.schemas import (
     CreateTeamRequest,
     DirectoryMemberDTO,
@@ -1574,9 +1578,20 @@ def _resolve_frozen_chat_selection(
             or course_member_role(db, team.owner_user_id, team.course_id) != "teacher"
         ):
             raise not_found()
+    elif teacher_uses_student_public_team(db, user_id, team):
+        # Bug (2026-10-19): a teacher opened a student's public Team (listed by
+        # can_read_team) but every send 404ed here: the group check needs a
+        # student inside the group. The teacher uses it as themselves, with no
+        # publication: resource_owner_id below stays the teacher, so a member
+        # or shared Set the teacher may not read is refused, never borrowed.
+        pass
     else:
         if team.group_id is not None:
-            _can_access_group_scope(db, user_id, team.group_id, team.course_id)
+            try:
+                _can_access_group_scope(db, user_id, team.group_id, team.course_id)
+            except PlatformError:
+                log_team_chat_refused(team, user_id, "not_in_team_group", check="team_recheck")
+                raise
         if team.owner_user_id != user_id and (
             team.ownership_scope != "group"
             or team.visibility != "public"
@@ -1592,6 +1607,9 @@ def _resolve_frozen_chat_selection(
             # exact Team version, checked as the publisher.
             publication = live_teacher_publication(db, team, version)
             if publication is None:
+                log_team_chat_refused(
+                    team, user_id, "not_owner_and_not_public_to_caller", check="team_recheck"
+                )
                 raise not_found()
 
     current_members = _member_rows(db, version.id)

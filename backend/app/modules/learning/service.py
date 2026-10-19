@@ -18,7 +18,11 @@ from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import course_member_role, scoped_group_role_for_user
 from app.modules.teams.models import CourseTeamPublication, Team, TeamVersion
-from app.modules.teams.publication_access import live_teacher_publication
+from app.modules.teams.publication_access import (
+    live_teacher_publication,
+    log_team_chat_refused,
+    teacher_uses_student_public_team,
+)
 from app.modules.workspace.models import Conversation
 
 from .models import (
@@ -133,13 +137,21 @@ def _read_authorized_provenance(
         if conversation.entry_kind == "team":
             if conversation.origin != "custom_team" or conversation.publication_id is not None:
                 raise not_found()
+            # A course teacher using a student's public Team (2026-10-19)
+            # follows the Team recheck: checked as the teacher, no publication.
+            teacher_use = teacher_uses_student_public_team(db, user_id, team)
             if (
                 team.group_id is not None
+                and not teacher_use
                 and scoped_group_role_for_user(db, user_id, team.group_id) != "student"
             ):
+                log_team_chat_refused(
+                    team, user_id, "not_in_team_group", check="learning_provenance"
+                )
                 raise not_found()
             if (
-                team.owner_user_id != user_id
+                not teacher_use
+                and team.owner_user_id != user_id
                 and (
                     team.ownership_scope != "group"
                     or team.visibility != "public"
@@ -149,6 +161,12 @@ def _read_authorized_provenance(
                 # (bug 2026-10-18): allowed while that version is published.
                 and live_teacher_publication(db, team, version) is None
             ):
+                log_team_chat_refused(
+                    team,
+                    user_id,
+                    "not_owner_and_not_public_to_caller",
+                    check="learning_provenance",
+                )
                 raise not_found()
         else:
             if conversation.origin != "published_course_team" or not conversation.publication_id:

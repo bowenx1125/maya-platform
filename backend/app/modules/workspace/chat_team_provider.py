@@ -448,8 +448,11 @@ def _model_response(response_json: str) -> ModelResponse:
         raise TeamDispatchError("team_response_invalid") from None
 
 
-def _live_teacher_public(connection: Any, current: Any) -> bool:
-    from app.modules.teams.publication_access import chat_team_is_live_teacher_public
+def _live_teacher_public(connection: Any, current: Any, actor_user_id: str) -> bool:
+    """A non-owner's ordinary Team Chat: a teacher's live public Team, or a
+    student's public Team used by a course teacher."""
+
+    from app.modules.teams.publication_access import chat_team_open_to_non_owner
 
     try:
         with Session(
@@ -458,8 +461,9 @@ def _live_teacher_public(connection: Any, current: Any) -> bool:
             expire_on_commit=False,
             join_transaction_mode="create_savepoint",
         ) as db:
-            return chat_team_is_live_teacher_public(
+            return chat_team_open_to_non_owner(
                 db,
+                actor_user_id=actor_user_id,
                 team_id=current["team_id"],
                 team_version_id=current["team_version_id"],
                 team_authorization_epoch=current["team_authorization_epoch"],
@@ -541,9 +545,10 @@ def _current_claim_guard(
                 return False
             # A student continues a teacher's public Team opened from the Teams
             # list; the live publication of this exact version stands in for
-            # ownership, as in the Team recheck (#186).
+            # ownership, as in the Team recheck (#186). A course teacher may
+            # also use a student's public Team (checked as the teacher).
             if current["team_owner_user_id"] != actor_user_id and not _live_teacher_public(
-                connection, current
+                connection, current, actor_user_id
             ):
                 return False
         elif current["entry_kind"] == "maya_team":
