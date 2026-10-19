@@ -3148,7 +3148,20 @@ class SqlPlaybackRepository(PlaybackRepository):
             # enqueued, so its plan time must not expire it (2026-10-20: the
             # 12th turn of a 4-Agent Preview failed preparation_timeout the
             # instant its job was created).
-            turn_ts = "COALESCE(t.updated_at, t.created_at)"
+            # Also count from the previous turn's last change: between one turn
+            # finishing and the next prepare job being inserted there is no job
+            # row yet, and plan time alone expired the next turn at once
+            # (combined 60-student test, 2026-10-20 02:35 JST).
+            plan_ts = "COALESCE(t.updated_at, t.created_at)"
+            prev_ts = (
+                "(SELECT MAX(COALESCE(prev.updated_at, prev.created_at)) "
+                "FROM debate_turns AS prev WHERE prev.debate_id=t.debate_id "
+                "AND prev.turn_index < t.turn_index)"
+            )
+            turn_ts = (
+                f"(CASE WHEN {prev_ts} IS NOT NULL AND {prev_ts} > {plan_ts} "
+                f"THEN {prev_ts} ELSE {plan_ts} END)"
+            )
             since = (
                 f"(CASE WHEN j.created_at IS NOT NULL AND j.created_at > {turn_ts} "
                 f"THEN j.created_at ELSE {turn_ts} END)"

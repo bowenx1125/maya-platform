@@ -1635,9 +1635,17 @@ def build_real_report_request(context: ReportContext) -> ReportRequest | ReportR
         )
         for participant in context.manifest.participants
     )
+    # The report input accepts at most REPORT_INSIGHT_LIMIT insights. A busy
+    # class can leave hundreds of distinct barrage insights (1185 in the
+    # 2026-10-20 40-student run), which failed the whole report as
+    # insights too_long. Keep the most frequent ones, stable within a count.
+    ranked = sorted(
+        enumerate(context.manifest.insight.items),
+        key=lambda pair: (-int(getattr(pair[1], "count", 1) or 1), pair[0]),
+    )[:REPORT_INSIGHT_LIMIT]
     insights = tuple(
         ReportInsight(category=item.category, summary=_safe_fragment(item.summary, limit=1600))
-        for item in context.manifest.insight.items
+        for _, item in ranked
     )
     common: dict[str, Any] = {
         "topic": context.manifest.topic or context.debate.topic,
@@ -1672,6 +1680,9 @@ def build_real_report_request(context: ReportContext) -> ReportRequest | ReportR
             discussion_memories=context.discussion_memories,
         )
     return ReportRequest(**common)
+
+
+REPORT_INSIGHT_LIMIT = 32
 
 
 def _safe_fragment(value: str, *, limit: int = 260) -> str:

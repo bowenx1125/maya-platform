@@ -119,3 +119,25 @@ def test_report_keeps_long_rag_evidence_intact_in_actual_provider_input():
         tokenizer=_Tokenizer(),
     )
     assert long_evidence in wire.user_message.content
+
+
+def test_many_classroom_insights_are_capped_to_the_most_frequent():
+    """2026-10-20: 1185 distinct barrage insights failed the report (too_long)."""
+
+    from app.modules.reports.schemas import BarrageInsight, BarrageInsightItem
+    from app.modules.reports.service import REPORT_INSIGHT_LIMIT
+
+    context = _context()
+    items = [
+        BarrageInsightItem(category="question", summary=f"问题 {i}", count=1) for i in range(300)
+    ]
+    items.append(BarrageInsightItem(category="question", summary="最常见的问题", count=9))
+    insight = BarrageInsight(status="ready", included_count=309, filtered_count=0, items=items)
+    manifest = (
+        context.manifest.model_copy(update={"insight": insight})
+        if hasattr(context.manifest, "model_copy")
+        else replace(context.manifest, insight=insight)
+    )
+    request = build_real_report_request(replace(context, manifest=manifest))
+    assert len(request.insights) == REPORT_INSIGHT_LIMIT
+    assert request.insights[0].summary == "最常见的问题"

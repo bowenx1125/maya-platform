@@ -334,3 +334,52 @@ def test_an_old_planned_turn_with_a_fresh_prepare_job_is_not_expired(
         assert _listed(client, debate_id)["stall"] is None
     finally:
         client.__exit__(None, None, None)
+
+
+def test_a_turn_whose_predecessor_just_finished_is_not_expired_before_its_job(
+    app_factory: Callable[..., Any],
+) -> None:
+    """2026-10-20 02:35: the next turn had no prepare job yet (its predecessor
+    had just finished); plan time alone must not expire it."""
+
+    from sqlalchemy import text
+
+    client, database, debate_id = _draft_debate(app_factory)
+    try:
+        stale = datetime.now(UTC) - timedelta(seconds=150)
+        with database.session() as session:
+            turns = list(
+                session.scalars(
+                    select(DebateTurn)
+                    .where(DebateTurn.debate_id == debate_id)
+                    .order_by(DebateTurn.turn_index)
+                ).all()
+            )
+            assert len(turns) >= 2
+            for turn in turns:
+                turn.updated_at = stale
+                turn.created_at = stale
+            head = turns[0]
+            head.generation_status = "final_ready"
+            head.preparation_stage = "ready"
+            head.speech = "A prepared speech."
+            head.structured_json = '{"schema_version": "segment_turn_v2"}'
+            head.transcript_hash = "0" * 64
+            head.cutoff_turn_index = 0
+            head.retrieval_status = "matched"
+            head.grounding_mode = "rag_grounded"
+            head.word_count = 3
+            head.updated_at = datetime.now(UTC)  # just finished
+            session.execute(
+                text("DELETE FROM jobs WHERE debate_id=:debate_id"), {"debate_id": debate_id}
+            )
+            session.commit()
+
+        from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
+
+        with database.session() as session:
+            expired = SqlPlaybackRepository().expire_stale_preparation(session, debate_id=debate_id)
+            session.commit()
+        assert expired == 0
+    finally:
+        client.__exit__(None, None, None)
