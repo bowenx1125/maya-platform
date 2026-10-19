@@ -249,3 +249,43 @@ describe("PlatformApi Brainform actions", () => {
     });
   });
 });
+
+describe("PlatformApi RAG +", () => {
+  // The Brainform RAG + adds to the shared pool Brainform lists: public, in
+  // no Agent (no target_agent_version_id), on the same library endpoints.
+  it.each([
+    [{ courseId: "course-1" }, "/api/v1/courses/course-1/workspace-documents"],
+    [{ groupId: "group-1" }, "/api/v1/groups/group-1/knowledge-documents"],
+  ])("posts %o as a shared library RAG", async (target, url) => {
+    const document = { id: "document-new" };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ document, agent_version: null }), {
+        status: 201,
+      }),
+    );
+    // Read the multipart fields as the adapter writes them.
+    const fields: Record<string, unknown> = {};
+    const append = FormData.prototype.append;
+    vi.spyOn(FormData.prototype, "append").mockImplementation(function (
+      this: FormData,
+      name: string,
+      value: string | Blob,
+    ) {
+      fields[name] = value;
+      return append.call(this, name, value);
+    });
+    const api = new PlatformApi({
+      baseUrl: "http://localhost/api/v1",
+      csrfToken: "csrf",
+    });
+    const file = new File(["# Notes"], "Notes.md", { type: "text/markdown" });
+    expect(await api.uploadRagLibraryDocument(target, file)).toEqual(document);
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.url).toBe(`http://localhost${url}`);
+    expect(request.method).toBe("POST");
+    expect(fields.visibility).toBe("public");
+    expect(fields).not.toHaveProperty("target_agent_version_id");
+    expect(fields).not.toHaveProperty("expected_revision");
+    expect((fields.file as File).name).toBe("Notes.md");
+  });
+});

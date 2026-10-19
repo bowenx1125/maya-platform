@@ -45,6 +45,7 @@ import { republishAgentsUsingDocument } from "./republish";
 import { useT } from "../locale";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
+import { ModulePlus } from "../studyform-layout";
 import { ErrorNotice, LoadingCard } from "../ui";
 import { ReportMarkdown } from "../report/report-markdown";
 import {
@@ -150,6 +151,7 @@ type Pane =
   | { kind: "knowledge-view"; documentId: string }
   | { kind: "knowledge-edit"; documentId: string }
   | { kind: "knowledge-new" }
+  | { kind: "rag-new" }
   | { kind: "record"; team: string };
 
 type PendingRagAction = { kind: "hide" | "reindex"; documentId: string };
@@ -690,6 +692,14 @@ function BrainformWorkspaceBody({
   const [renameDocumentId, setRenameDocumentId] = useState<string | null>(null);
   // New opens this draft; a picked Markdown file fills it, Done saves it.
   const [newKnowledge, setNewKnowledge] = useState({ name: "", markdown: "" });
+  // RAG + opens this draft: typed Markdown, or a picked file (a .md fills
+  // the text; a PDF or DOCX is imported by the server on Done).
+  const [newRag, setNewRag] = useState<{
+    name: string;
+    markdown: string;
+    file: File | null;
+    groupId: string;
+  }>({ name: "", markdown: "", file: null, groupId: "" });
   const initialKnowledgeOpened = useRef(false);
   const initialJobRead = useRef<string | null>(null);
   const latestGenerationJobs = useRef<{
@@ -1538,6 +1548,100 @@ function BrainformWorkspaceBody({
     setLoadError(null);
   }
 
+  function beginNewRag() {
+    setNewRag({
+      name: "",
+      markdown: "",
+      file: null,
+      groupId: ragGroupIds[0] ?? "",
+    });
+    setPane({ kind: "rag-new" });
+    setNotice("");
+    setLoadError(null);
+  }
+
+  async function importNewRag(file: File) {
+    const extension = file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() ?? "";
+    const fileName = file.name.replace(/\.[^.]+$/, "").trim() || file.name;
+    if (extension === ".pdf" || extension === ".docx") {
+      setNotice("");
+      setNewRag((current) => ({
+        ...current,
+        name: current.name.trim() ? current.name : fileName,
+        markdown: "",
+        file,
+      }));
+      return;
+    }
+    if (extension !== ".md") {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    let content: string;
+    try {
+      content = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+    } catch {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    if (!content.trim()) {
+      setNotice(t("brainformMarkdownRequired"));
+      return;
+    }
+    setNotice("");
+    setNewRag((current) => ({
+      ...current,
+      name: current.name.trim() ? current.name : fileName,
+      markdown: content,
+      file: null,
+    }));
+  }
+
+  async function saveNewRag() {
+    const draft = newRag;
+    const name = draft.name.trim().replace(/\.(md|pdf|docx)$/i, "");
+    if (busyKeyRef.current || !courseId || !name) return;
+    if (!draft.file && !draft.markdown.trim()) return;
+    const groupId = initialGroupId ?? draft.groupId;
+    const target =
+      role === "teacher" ? { courseId } : groupId ? { groupId } : null;
+    if (!target) return;
+    const extension = draft.file
+      ? (draft.file.name.match(/\.[^.]+$/)?.[0]?.toLowerCase() ?? "")
+      : ".md";
+    const upload = draft.file
+      ? new File([draft.file], `${name}${extension}`, { type: draft.file.type })
+      : new File([draft.markdown], `${name}.md`, { type: "text/markdown" });
+    // Done returns to the list at once; the RAG + shows the work.
+    commitBusy("rag-new");
+    setPane(null);
+    setLoadError(null);
+    setNotice("");
+    try {
+      // Keyed by the exact draft, so a retried Done after a lost reply
+      // replays the same upload instead of adding a second RAG.
+      const draftKey = `${JSON.stringify(target)}:${upload.name}:${await fingerprintRagFile(upload)}`;
+      await runKnowledgeMutation(
+        mutationStore,
+        `rag-new:${draftKey}`,
+        (idempotency) =>
+          api.uploadRagLibraryDocument(target, upload, { idempotency }),
+      );
+      if (!scopeIsCurrent()) return;
+      setNewRag({ name: "", markdown: "", file: null, groupId: "" });
+      await loadWorkspace(true);
+    } catch (cause) {
+      if (!scopeIsCurrent()) return;
+      // The draft is kept: reopen it beside the error so Done can retry.
+      setPane({ kind: "rag-new" });
+      setLoadError(cause);
+    } finally {
+      if (scopeIsCurrent()) commitBusy(null);
+    }
+  }
+
   // A picked Markdown file fills the new Knowledge, named after the file
   // unless a name was typed. Its question sections are recognised on save
   // the same way as an edit in Brainform.
@@ -2110,6 +2214,14 @@ function BrainformWorkspaceBody({
     (knowledgeNameDraft.trim() !== markdown.knowledge_display_name ||
       markdownDraft !== markdown.markdown),
   );
+  // The groups a student's new RAG can go to: the open group, else each
+  // joined group of this course.
+  const ragGroupIds =
+    role === "teacher"
+      ? []
+      : initialGroupId
+        ? [initialGroupId]
+        : groups.map((group) => group.id);
   const displayedKnowledgeRows = useMemo(() => {
     const bySet = new Map<string, BrainformKnowledge[]>();
     for (const row of knowledgeRows) {
@@ -2157,19 +2269,27 @@ function BrainformWorkspaceBody({
   // only their own answers (owner request, 2026-10-18: Memory became Record).
   const recordScope = role === "teacher" ? "course" : "own";
   const assessmentRecord = useAssessmentRecord(courseId, true, recordScope);
+  // Owner request (2026-10-19): the sidebar New is gone; RAG and Knowledge
+  // each add from a + at their top right, the same + as Studyform's Agents
+  // and Teams. Only a teacher adds Knowledge; a teacher reading a group's
+  // Brainform adds neither (that group's library is read-only to them).
+  const teacherGroupView = role === "teacher" && Boolean(initialGroupId);
+  const canAddKnowledge = role === "teacher" && !teacherGroupView;
+  const canAddRag =
+    !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
 
   return (
     <main className={styles.page}>
-      {/* RAG is added inside its Agent; the overview's New adds Knowledge. */}
-      {!pane &&
-      !initialMode &&
-      courseId &&
-      !(role === "teacher" && initialGroupId) ? (
+      {pane?.kind === "rag-new" ? (
         <WorkspaceAction
-          name="new"
-          onClick={beginNewKnowledge}
-          disabled={Boolean(busyKey)}
-          busy={busyKey === "knowledge-new"}
+          name="done"
+          onClick={() => void saveNewRag()}
+          disabled={
+            Boolean(busyKey) ||
+            !newRag.name.trim() ||
+            (!newRag.file && !newRag.markdown.trim()) ||
+            (role !== "teacher" && !(initialGroupId ?? newRag.groupId))
+          }
         />
       ) : null}
       {pane?.kind === "knowledge-new" ? (
@@ -2282,7 +2402,16 @@ function BrainformWorkspaceBody({
                   RAG
                 </h2>
               </div>
-              <span className={styles.count}>{ragDocuments.length}</span>
+              {canAddRag ? (
+                <ModulePlus
+                  label={t("brainformNewRag")}
+                  onClick={beginNewRag}
+                  disabled={Boolean(busyKey)}
+                  busy={busyKey === "rag-new"}
+                />
+              ) : (
+                <span className={styles.count}>{ragDocuments.length}</span>
+              )}
             </div>
             {ragDocuments.length ? (
               <ul className={styles.list}>
@@ -2440,9 +2569,18 @@ function BrainformWorkspaceBody({
                   {t("brainformKnowledgeHeading")}
                 </h2>
               </div>
-              <span className={styles.count}>
-                {displayedKnowledgeRows.length}
-              </span>
+              {canAddKnowledge ? (
+                <ModulePlus
+                  label={t("brainformNewKnowledge")}
+                  onClick={beginNewKnowledge}
+                  disabled={Boolean(busyKey)}
+                  busy={busyKey === "knowledge-new"}
+                />
+              ) : (
+                <span className={styles.count}>
+                  {displayedKnowledgeRows.length}
+                </span>
+              )}
             </div>
             {displayedKnowledgeRows.length ? (
               <ul className={styles.list}>
@@ -2645,7 +2783,9 @@ function BrainformWorkspaceBody({
                     ? pane.filename
                     : pane.kind === "knowledge-new"
                       ? newKnowledge.name.trim() || t("brainformNewKnowledge")
-                      : (markdown?.knowledge_display_name ?? t("loading"))}
+                      : pane.kind === "rag-new"
+                        ? newRag.name.trim() || t("brainformNewRag")
+                        : (markdown?.knowledge_display_name ?? t("loading"))}
               </h2>
             </div>
           </div>
@@ -2688,6 +2828,77 @@ function BrainformWorkspaceBody({
                   setNewKnowledge((current) => ({ ...current, markdown }))
                 }
               />
+            </div>
+          ) : null}
+
+          {pane.kind === "rag-new" ? (
+            <div className={styles.editorForm}>
+              <label
+                className={styles.importButton}
+                aria-busy={busyKey === "rag-new"}
+              >
+                <IconUpload />
+                <input
+                  className="sr-only"
+                  type="file"
+                  aria-label={t("uploadRag")}
+                  accept=".md,.pdf,.docx,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  disabled={Boolean(busyKey)}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (file) void importNewRag(file);
+                  }}
+                />
+              </label>
+              {role !== "teacher" &&
+              !initialGroupId &&
+              ragGroupIds.length > 1 ? (
+                <label className={styles.field}>
+                  <span>{t("group")}</span>
+                  <select
+                    value={newRag.groupId}
+                    disabled={busyKey === "rag-new"}
+                    onChange={(event) => {
+                      const groupId = event.target.value;
+                      setNewRag((current) => ({ ...current, groupId }));
+                    }}
+                  >
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <KnowledgeFilenameField
+                className={styles.field}
+                value={newRag.name}
+                disabled={busyKey === "rag-new"}
+                onChange={(name) =>
+                  setNewRag((current) => ({ ...current, name }))
+                }
+              />
+              {newRag.file ? (
+                <p className={styles.empty} role="status">
+                  {t("brainformRagFileStaged", {
+                    filename: newRag.file.name,
+                  })}{" "}
+                  {t("brainformNotMarkdownEditor")}
+                </p>
+              ) : (
+                <KnowledgeMarkdownField
+                  className={styles.field}
+                  value={newRag.markdown}
+                  disabled={busyKey === "rag-new"}
+                  readOnly={busyKey === "rag-new"}
+                  rows={18}
+                  onChange={(markdown) =>
+                    setNewRag((current) => ({ ...current, markdown }))
+                  }
+                />
+              )}
             </div>
           ) : null}
 

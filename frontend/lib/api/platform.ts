@@ -2574,6 +2574,38 @@ export class PlatformApi {
     });
   }
 
+  /**
+   * A RAG source added from Brainform's RAG +, in no Agent yet: a teacher's
+   * course workspace or a student's group library. Public, so Brainform
+   * lists it (a private source stays inside its Agent).
+   */
+  async uploadRagLibraryDocument(
+    target: { courseId: string } | { groupId: string },
+    file: File,
+    options: IdempotentMutationOptions = {},
+  ): Promise<KnowledgeDocument> {
+    return commitMutation(options.idempotency, async (key) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("visibility", "public");
+      const header = {
+        "Idempotency-Key": key,
+        "X-CSRF-Token": this.csrfToken ?? "",
+      };
+      const result =
+        "courseId" in target
+          ? await this.client.POST("/courses/{course_id}/workspace-documents", {
+              params: { path: { course_id: target.courseId }, header },
+              body: form as unknown as never,
+            })
+          : await this.client.POST("/groups/{group_id}/knowledge-documents", {
+              params: { path: { group_id: target.groupId }, header },
+              body: form as unknown as never,
+            });
+      return (await unwrap(result)).document;
+    });
+  }
+
   async uploadKnowledge(
     groupId: string,
     versionId: string,
