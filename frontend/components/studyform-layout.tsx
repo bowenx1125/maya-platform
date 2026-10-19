@@ -157,14 +157,21 @@ export function ModulePlus({
   href,
   label,
   disabled,
+  busy,
   onClick,
 }: {
   href?: string;
   label: string;
   disabled?: boolean;
+  /** Work this + started is still running: it shows a spinner. */
+  busy?: boolean;
   onClick?: () => void;
 }) {
-  const icon = <WorkspaceIcon name="new" />;
+  const icon = busy ? (
+    <span className="spinner" aria-hidden="true" />
+  ) : (
+    <WorkspaceIcon name="new" />
+  );
   if (href && !disabled) {
     return (
       <Link className={styles.addButton} href={href} aria-label={label}>
@@ -177,7 +184,8 @@ export function ModulePlus({
       type="button"
       className={styles.addButton}
       aria-label={label}
-      disabled={disabled}
+      aria-busy={busy || undefined}
+      disabled={disabled || busy}
       onClick={onClick}
     >
       {icon}

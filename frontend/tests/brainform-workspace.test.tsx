@@ -266,32 +266,110 @@ afterEach(() => {
 });
 
 describe("Brainform workspace actions", () => {
-  it("adds no RAG here: RAG is uploaded inside its Agent", async () => {
+  // Owner request (2026-10-19): no sidebar New; RAG and Knowledge each add
+  // from the Studyform + at their section's top right.
+  it("drops the sidebar New and adds from a + on RAG and Knowledge", async () => {
     state.role = "teacher";
     state.api.workspaceDocuments.mockResolvedValue([source]);
-    const view = renderWithActions();
+    renderWithActions();
     await screen.findAllByText("lesson.md");
-    // Owner decision (2026-10-13): the overview's New adds Knowledge, not RAG.
-    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+    const ragPlus = screen.getByRole("button", { name: "New RAG" });
+    const knowledgePlus = screen.getByRole("button", { name: "New Knowledge" });
+    // The same + as Studyform's Agents and Teams, in each section heading.
+    const rag = screen.getByRole("region", { name: "RAG" });
+    const knowledge = screen.getByRole("region", { name: "Knowledge" });
+    expect(within(rag).getByRole("button", { name: "New RAG" })).toBe(ragPlus);
     expect(
-      screen.getByLabelText("Upload a Markdown file as Knowledge"),
-    ).toBeTruthy();
-    expect(screen.queryByLabelText("Import a file")).toBeNull();
-    view.unmount();
+      within(knowledge).getByRole("button", { name: "New Knowledge" }),
+    ).toBe(knowledgePlus);
+    expect(ragPlus.className).toContain("addButton");
+    expect(knowledgePlus.className).toBe(ragPlus.className);
+    expect(ragPlus.parentElement?.className).toContain("sectionHeading");
 
-    // An old deep link to the removed form opens nothing.
-    render(
-      <LocaleProvider initialLocale="en">
-        <ActionsHost>
-          <BrainformWorkspace role="teacher" initialMode="rag-new" />
-        </ActionsHost>
-      </LocaleProvider>,
+    fireEvent.click(ragPlus);
+    expect(screen.getByLabelText("Upload RAG")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+  });
+
+  it("hides the Knowledge + from a student and keeps the RAG +", async () => {
+    state.role = "student";
+    state.groups = [{ group_id: "group-1" }];
+    renderWithActions({ role: "student" });
+    expect(await screen.findByRole("button", { name: "New RAG" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "New Knowledge" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+  });
+
+  it("adds neither + to a teacher reading a group's Brainform", async () => {
+    state.role = "teacher";
+    renderWithActions({ role: "teacher", initialGroupId: "group-1" });
+    await screen.findByRole("region", { name: "RAG" });
+    expect(screen.queryByRole("button", { name: "New RAG" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "New Knowledge" })).toBeNull();
+  });
+
+  it("adds a teacher's RAG to the shared course pool, in no Agent", async () => {
+    state.role = "teacher";
+    state.api.uploadRagLibraryDocument = vi
+      .fn()
+      .mockResolvedValue({ ...source, id: "document-new" });
+    renderWithActions();
+    fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));
+    const markdown = "# Notes\n\nShared text.";
+    fireEvent.change(screen.getByLabelText("Upload RAG"), {
+      target: {
+        files: [
+          markdownUpload(
+            "Notes.md",
+            Promise.resolve(new TextEncoder().encode(markdown).buffer),
+          ),
+        ],
+      },
+    });
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Filename") as HTMLInputElement).value,
+      ).toBe("Notes"),
     );
-    await screen.findByRole("button", { name: "Back" });
-    // A second visit within FRESH_MS reuses the shared page-load read.
-    expect(state.api.workspaceDocuments).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("textbox", { name: "Content" })).toBeNull();
-    expect(screen.queryByLabelText("Import a file")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(state.api.uploadRagLibraryDocument).toHaveBeenCalledWith(
+        { courseId: "course-1" },
+        expect.objectContaining({ name: "Notes.md" }),
+        expect.objectContaining({ idempotency: expect.any(Object) }),
+      ),
+    );
+    // The list is read again so the new shared RAG shows.
+    await waitFor(() =>
+      expect(state.api.workspaceDocuments.mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it("adds a student's RAG to their group's shared library", async () => {
+    state.role = "student";
+    state.groups = [{ group_id: "group-1" }];
+    state.api.uploadRagLibraryDocument = vi
+      .fn()
+      .mockResolvedValue({ ...source, id: "document-new" });
+    renderWithActions({ role: "student" });
+    fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));
+    fireEvent.change(screen.getByLabelText("Filename"), {
+      target: { value: "Group notes" },
+    });
+    fireEvent.change(screen.getByLabelText("Content"), {
+      target: { value: "# Group notes" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() =>
+      expect(state.api.uploadRagLibraryDocument).toHaveBeenCalledWith(
+        { groupId: "group-1" },
+        expect.objectContaining({ name: "Group notes.md" }),
+        expect.anything(),
+      ),
+    );
   });
 
   it("deletes a Knowledge with its current revisions after confirming", async () => {
@@ -330,9 +408,10 @@ describe("Brainform workspace actions", () => {
     );
   });
 
-  // Owner request (2026-10-13): the sidebar New opens a new Knowledge; a
+  // Owner request (2026-10-13): the Knowledge + (the sidebar New until
+  // 2026-10-19) opens a new Knowledge; a
   // picked Markdown file fills it and Done saves it, named after the file.
-  it("adds Knowledge from a Markdown file through New and Done", async () => {
+  it("adds Knowledge from a Markdown file through + and Done", async () => {
     state.role = "teacher";
     state.api.createKnowledgeSet = vi
       .fn()
@@ -343,7 +422,9 @@ describe("Brainform workspace actions", () => {
     );
     renderWorkspace("teacher");
 
-    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "New Knowledge" }),
+    );
     expect(
       (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
         .disabled,
@@ -383,13 +464,15 @@ describe("Brainform workspace actions", () => {
       { display_name: "Form A" },
       expect.anything(),
     );
-    // Done returns to the list; New shows the work and no notice follows.
-    const busyNew = screen.getByRole("button", { name: "New" });
+    // Done returns to the list; the + shows the work and no notice follows.
+    const busyNew = screen.getByRole("button", { name: "New Knowledge" });
     expect(busyNew.getAttribute("aria-busy")).toBe("true");
     finishSave({});
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "New" }).getAttribute("aria-busy"),
+        screen
+          .getByRole("button", { name: "New Knowledge" })
+          .getAttribute("aria-busy"),
       ).toBeNull(),
     );
     expect(screen.queryByRole("status")).toBeNull();
@@ -403,12 +486,16 @@ describe("Brainform workspace actions", () => {
     state.role = "teacher";
     state.api.createKnowledgeSet = vi.fn();
     renderWorkspace("teacher");
-    fireEvent.click(await screen.findByRole("button", { name: "New" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "New Knowledge" }),
+    );
     fireEvent.change(screen.getByLabelText("Filename"), {
       target: { value: "Draft" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(await screen.findByRole("button", { name: "New" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "New Knowledge" }),
+    ).toBeTruthy();
     expect(state.api.createKnowledgeSet).not.toHaveBeenCalled();
   });
 
