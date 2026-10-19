@@ -259,7 +259,14 @@ class TurnGenerationService:
                 segment_result = (
                     raw
                     if isinstance(raw, SegmentTurnResult)
-                    else validate_segment_output(raw, snapshot)
+                    else validate_segment_output(
+                        raw,
+                        snapshot,
+                        # The offline mock replays authored per-round fixtures,
+                        # so repeated text is its design, not a model echo.
+                        allow_history_copy=attempt >= 2
+                        or bool(getattr(self.llm, "replays_fixture_text", False)),
+                    )
                 )
                 validated = ValidatedTurn(
                     result=segment_result,

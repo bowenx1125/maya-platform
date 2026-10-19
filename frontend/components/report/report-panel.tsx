@@ -8,6 +8,10 @@ import { apiErrorMessage, type IdempotencyHandle } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import { nextPollDelay } from "../../lib/poll-pacing";
 import { useLocale } from "../locale";
+import {
+  cleanReportCitations,
+  reportLengthUnit,
+} from "../../lib/report-citations";
 import { ReportMarkdown } from "./report-markdown";
 
 import styles from "./report.module.css";
@@ -114,7 +118,7 @@ export function ReportPanel({
             failed: "报告生成失败；既有成功修订仍会保留。",
             included: "已纳入",
             filtered: "已筛除",
-            words: "词",
+            words: reportLengthUnit("zh"),
           }
         : {
             title: "Report",
@@ -130,7 +134,7 @@ export function ReportPanel({
             failed: "Report generation failed; earlier revisions remain.",
             included: "included",
             filtered: "filtered",
-            words: "words",
+            words: reportLengthUnit("en"),
           },
     [locale],
   );
@@ -243,7 +247,7 @@ export function ReportPanel({
     setError(null);
     try {
       const result = await api.downloadCurrentReport(debateId, "en");
-      triggerDownload(result.content, result.filename);
+      triggerDownload(cleanReportCitations(result.content), result.filename);
     } catch (cause) {
       setError(apiErrorMessage(cause));
     } finally {
@@ -341,7 +345,7 @@ export function ReportPanel({
           </div>
           {displayed?.status === "ready" ? (
             <ReportMarkdown className={styles.markdown} label={copy.report}>
-              {displayed.english_markdown}
+              {cleanReportCitations(displayed.english_markdown)}
             </ReportMarkdown>
           ) : displayed?.status === "failed" ? (
             <DismissibleAlert className={styles.notice} role="status">

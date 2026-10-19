@@ -13,7 +13,7 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Literal, Protocol, cast
+from typing import ClassVar, Literal, Protocol, cast
 
 from app.modules.agents.persona import PersonaProviderViewV1, PersonaSpecV1
 from app.modules.agents.persona_mock import (
@@ -234,6 +234,10 @@ def _mutual_claims(
 class MockLLMProvider:
     """Byte-stable local model double with explicit adversarial injections."""
 
+    # Authored per-round fixtures repeat across speakers by design; the
+    # verbatim-history guard is for real model echoes only.
+    replays_fixture_text: ClassVar[bool] = True
+
     failures: Iterable[str] = ()
     calls: int = field(default=0, init=False)
     call_log: list[MockLLMCall] = field(default_factory=list, init=False)
@@ -260,7 +264,9 @@ class MockLLMProvider:
         prompt: MutualLearningPromptInput | ProviderPromptV1 | SegmentInputSnapshot,
     ) -> StructuredTurnResult | MutualLearningTurnResultV1 | SegmentTurnResult:
         if isinstance(prompt, SegmentInputSnapshot):
-            return validate_segment_output(self.generate_segments(prompt), prompt)
+            return validate_segment_output(
+                self.generate_segments(prompt), prompt, allow_history_copy=True
+            )
         self.calls += 1
         messages: tuple[tuple[str, str], ...] = ()
         if isinstance(prompt, ProviderPromptV1):

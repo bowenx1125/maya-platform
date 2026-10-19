@@ -24,6 +24,16 @@ from app.modules.reports.models import (
 )
 
 
+def _word_count(revision: CivilizationReportRevision | None) -> int | None:
+    if revision is None:
+        return None
+    if revision.status == "ready" and revision.english_markdown:
+        from app.modules.reports.service import report_word_count
+
+        return report_word_count(revision.english_markdown)
+    return revision.word_count
+
+
 def wave3_snapshot_projection(db: Session, debate_id: str) -> dict[str, Any]:
     window = db.scalar(
         select(ClassroomInteractionWindow).where(ClassroomInteractionWindow.debate_id == debate_id)
@@ -142,9 +152,7 @@ def wave3_snapshot_projection(db: Session, debate_id: str) -> dict[str, Any]:
             "current_success_revision_id": (
                 current_revision.id if current_revision is not None else None
             ),
-            "current_success_word_count": (
-                current_revision.word_count if current_revision is not None else None
-            ),
+            "current_success_word_count": _word_count(current_revision),
         },
     }
 
