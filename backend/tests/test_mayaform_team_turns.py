@@ -682,7 +682,12 @@ def test_extract_team_ruleset_only_from_guide_heading() -> None:
     assert system.rstrip().endswith(
         "You are Scorer. Speak only as yourself to the student. "
         "Do not claim another member's name, role, or title, and do not "
-        "introduce yourself as anyone else."
+        "introduce yourself as anyone else. "
+        "Write only Scorer's own reply: never write lines for another member, "
+        "never start a line with another member's name and a colon, and do not "
+        "start with your own name. Messages that begin with "
+        "[队友 … 的发言] are teammates' earlier replies, "
+        "shown as context; they are neither yours nor the student's."
     )
     assert "saying 正式测评" not in system
     leader = runtime._member_system(

@@ -1382,9 +1382,106 @@ def history_speaker_name(display_name: str, participant_id: str) -> str:
     return token
 
 
+def teammate_narration(name: str, text: str) -> str:
+    """A teammate's earlier reply, shown to another member as labeled context."""
+
+    return f"{TEAMMATE_NARRATION_PREFIX}{name} 的发言]\n{text}"
+
+
+TEAMMATE_NARRATION_PREFIX = "[队友 "
+
+
+def _speaker_prefix(names: Sequence[str]) -> re.Pattern[str] | None:
+    names = sorted({name for name in names if name}, key=len, reverse=True)
+    if not names:
+        return None
+    alternatives = "|".join(re.escape(name) for name in names)
+    # `名字:`, `名字：`, `**名字**：`, `【名字】：` or `[名字]:` at a line start.
+    return re.compile(
+        rf"^[ \t>*_#【\[]*({alternatives})[ \t*_】\]]*[:：][ \t*_]*",
+        re.MULTILINE,
+    )
+
+
+def strip_impersonation(text: str, own_name: str, other_names: Sequence[str]) -> str:
+    """Drop what a member wrote as a teammate; drop its own `名字:` prefix.
+
+    A line that opens with a teammate's name and a colon starts a segment
+    written as that teammate; it runs to the next such speaker line or the end
+    and is removed. A line that opens with the member's own name and a colon
+    keeps its text without the prefix and resumes keeping lines.
+    """
+
+    own = _single_line_name(own_name)
+    others = [
+        name for name in (_single_line_name(item) for item in other_names) if name and name != own
+    ]
+    pattern = _speaker_prefix([own, *others])
+    if pattern is None:
+        return text
+    kept: list[str] = []
+    keeping = True
+    changed = False
+    for line in text.split("\n"):
+        match = pattern.match(line)
+        if match is None:
+            if keeping:
+                kept.append(line)
+            else:
+                changed = True
+            continue
+        changed = True
+        if match.group(1) == own:
+            keeping = True
+            rest = line[match.end() :]
+            if rest.strip():
+                kept.append(rest)
+        else:
+            keeping = False
+    if not changed:
+        return text
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
+
+
+def _strip_member_reply(
+    db: Session, conversation_id: str, participant: ConversationParticipant | None, text: str
+) -> str:
+    if participant is None:
+        return text
+    others = db.scalars(
+        select(ConversationParticipant.display_name).where(
+            ConversationParticipant.conversation_id == conversation_id,
+            ConversationParticipant.id != participant.id,
+        )
+    ).all()
+    stripped = strip_impersonation(text, participant.display_name, others)
+    if stripped != text:
+        LOGGER.warning(
+            "Team member reply wrote as a teammate or itself; stripped "
+            "participant_id=%s before_chars=%s after_chars=%s",
+            participant.id,
+            len(text),
+            len(stripped),
+        )
+    return stripped
+
+
 def team_history(
-    db: Session, conversation_id: str, before_position: int
+    db: Session,
+    conversation_id: str,
+    before_position: int,
+    participant_id: str | None = None,
 ) -> tuple[dict[str, str], ...]:
+    """The Chat so far as one member's model sees it.
+
+    Only that member's own replies are assistant messages. Every teammate's
+    reply is a labeled user-role narration block: sent as assistant with a
+    `名字: ` prefix (Chinese names cannot ride in the name field), it read as
+    the model's own earlier writing, and a member then wrote as every member
+    (bug 2026-10-19, chat 9689e727). Without a participant (no one replying,
+    e.g. an audit read) every reply is narration.
+    """
+
     history: list[dict[str, str]] = []
     active_attempt = db.scalar(
         select(AssessmentAttempt)
@@ -1443,18 +1540,21 @@ def team_history(
                 member.display_name, member.id
             )
             if result.state == "ready" and result.assistant_text is not None:
-                token = history_speaker_name(member.display_name, member.id)
-                content = result.assistant_text
-                # The name field cannot carry a display name the provider rejects.
-                if shown and token != shown:
-                    content = f"{shown}: {content}"
-                history.append(
-                    {
-                        "role": "assistant",
-                        "name": token,
-                        "content": content,
-                    }
-                )
+                if participant_id is not None and member.id == participant_id:
+                    history.append(
+                        {
+                            "role": "assistant",
+                            "name": history_speaker_name(member.display_name, member.id),
+                            "content": result.assistant_text,
+                        }
+                    )
+                else:
+                    history.append(
+                        {
+                            "role": "user",
+                            "content": teammate_narration(shown, result.assistant_text),
+                        }
+                    )
             else:
                 history.append(
                     {
@@ -1505,7 +1605,11 @@ def _start_member(
         actor_id = row.user_id
         conversation_id = row.id
         participant_id = participant.id
-        history = () if revoked_target is not None else team_history(db, row.id, turn.position)
+        history = (
+            ()
+            if revoked_target is not None
+            else team_history(db, row.id, turn.position, participant.id)
+        )
         selected_binding_ids = _selected_binding_ids(db, row, turn)
 
     # RAG can make a paid query. Keep it outside BEGIN IMMEDIATE and recheck
@@ -1811,7 +1915,12 @@ def _speaker_identity(
     return (
         f"You are {name}. {audience}"
         "Do not claim another member's name, role, or title, and do not "
-        "introduce yourself as anyone else.\n"
+        "introduce yourself as anyone else. "
+        f"Write only {name}'s own reply: never write lines for another member, "
+        "never start a line with another member's name and a colon, and do not "
+        "start with your own name. Messages that begin with "
+        f"{TEAMMATE_NARRATION_PREFIX}… 的发言] are teammates' earlier replies, "
+        "shown as context; they are neither yours nor the student's.\n"
     )
 
 
@@ -2711,7 +2820,7 @@ def settle_member(
                         db, row, assessment_result
                     )
                 prose = (
-                    reply.text
+                    _strip_member_reply(db, row.id, participant, reply.text)
                     if reply is not None
                     and assessment_result.disposition == "read"
                     and assessment_result.response_key == "assessment.progress"
@@ -2739,6 +2848,11 @@ def settle_member(
                 "assessment_action_required",
                 "Continue the current assessment action or pause this attempt.",
                 409,
+            )
+        elif reply is not None and error is None:
+            # Ordinary model prose: keep only what this member said as itself.
+            reply = MemberReply(
+                _strip_member_reply(db, row.id, participant, reply.text), reply.sources
             )
         if error is None:
             participant = db.get(ConversationParticipant, result.participant_id)
