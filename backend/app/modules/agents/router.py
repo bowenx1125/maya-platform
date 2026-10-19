@@ -1653,6 +1653,12 @@ def publish_agent_version(
     # exhaust the DB pool and the 10s claim lease expires while waiting for a
     # connection.  Queue publishes behind the create admission gate (below
     # pool capacity) before the claim starts, so they wait instead of failing.
+    # Auth already checked out a pool connection for this request.  Commit
+    # (persisting anything the auth path touched) so that connection returns
+    # to the pool while we queue; otherwise every waiter pins one and the
+    # admitted publishes starve for their own lease sessions.  Loaded ORM
+    # state is expired and reloads lazily after admission.
+    db.commit()
     with create_admission_slot(settings):
         return _publish_agent_version_admitted(
             version_id, payload, idempotency_key, context, db, settings, request
