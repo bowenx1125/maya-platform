@@ -381,6 +381,11 @@ class Settings(BaseSettings):
     adaptive_admission_danger_reserve_slots: int = Field(
         default=2, ge=0, le=64, validation_alias="ADAPTIVE_ADMISSION_DANGER_RESERVE_SLOTS"
     )
+    # Memory danger: still admit one operation while nothing runs (0 = full
+    # stop), so a long low-memory spell cannot strand queued students.
+    adaptive_admission_memory_danger_trickle: int = Field(
+        default=1, ge=0, le=1, validation_alias="ADAPTIVE_ADMISSION_MEMORY_DANGER_TRICKLE"
+    )
     adaptive_admission_danger_max_hold_seconds: float = Field(
         default=120.0,
         ge=0,

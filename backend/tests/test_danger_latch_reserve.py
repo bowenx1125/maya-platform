@@ -104,28 +104,64 @@ def test_a_turns_nested_model_call_does_not_use_another_reserve_slot(probe: _Pro
 
 
 @pytest.mark.parametrize("cls", ["create", "login", "llm"])
-def test_the_reserve_is_only_for_turns_and_finishing(probe: _Probe, cls: str) -> None:
+def test_every_class_still_moves_under_danger(probe: _Probe, cls: str) -> None:
+    """Nothing may wait with nothing running: a class opening its chats or
+    signing in during a latch is served by the reserve too."""
+
     s = _settings()
     aa.adaptive_admission_snapshot(s)
     _trip(probe, s)
-    with pytest.raises(PlatformError):
-        with aa.adaptive_slot(cls, s):
-            pass
+    with aa.adaptive_slot(cls, s):
+        assert aa._state.top_in_flight == 1
 
 
-def test_memory_danger_still_admits_nothing(probe: _Probe) -> None:
+def test_the_reserve_serves_turns_before_creates_logins_and_model_calls(
+    probe: _Probe,
+) -> None:
+    s = _settings(adaptive_admission_danger_reserve_slots=1)
+    with aa._cond:
+        aa._refresh_locked(s)
+        probe.load = 6.5
+        probe.now += 1.0
+        aa._refresh_locked(s)
+        assert aa._state.danger
+        waiters = {cls: aa._Waiter(cls, aa._weight(s, cls)) for cls in ("llm", "login", "create")}
+        for cls, waiter in waiters.items():
+            aa._state.queues[cls].append(waiter)
+        turn = aa._Waiter("write", 2)
+        aa._state.queues["write"].append(turn)
+        order: list[str] = []
+        for _ in range(4):
+            aa._dispatch_locked(s)
+            granted = [w for w in [turn, *waiters.values()] if w.granted and w.cls not in order]
+            assert len(granted) == 1
+            order.append(granted[0].cls)
+            # The granted operation finishes; the next one may go.
+            aa._state.top_in_flight -= 1
+            aa._state.in_flight[granted[0].cls] -= 1
+            aa._state.in_flight_units -= granted[0].weight
+    assert order == ["write", "create", "login", "llm"]
+
+
+def test_memory_danger_trickles_one_operation_while_nothing_runs(probe: _Probe) -> None:
     s = _settings()
+    probe.mem = 450.0
+    aa.adaptive_admission_snapshot(s)
+    held = aa.reserve_slot("write", s)  # nothing ran: one goes
+    with pytest.raises(PlatformError):
+        aa.reserve_slot("write", s, priority=True)  # one already runs: waits
+    held.release()
+    aa.reserve_slot("write", s, priority=True).release()
+    snap = aa.adaptive_admission_snapshot(s)
+    assert snap["danger_latch"]["reserve_slots"] == 1  # type: ignore[index]
+
+
+def test_memory_trickle_zero_restores_the_full_stop(probe: _Probe) -> None:
+    s = _settings(adaptive_admission_memory_danger_trickle=0)
     probe.mem = 450.0
     with pytest.raises(PlatformError):
         with aa.adaptive_slot("write", s):
             pass
-    with pytest.raises(PlatformError):
-        aa.reserve_slot("write", s, priority=True)
-    # Memory back over the floor but under the resume line: still no reserve.
-    probe.mem = 520.0
-    probe.load = 6.5
-    _tick(probe, s)
-    assert aa.adaptive_admission_snapshot(s)["danger_latch"]["reserve_slots"] == 0  # type: ignore[index]
 
 
 def test_reserve_zero_restores_the_full_stop(probe: _Probe) -> None:

@@ -15,6 +15,18 @@ const state = vi.hoisted(() => ({
   userId: "team-chat-student",
 }));
 const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+// The busy-resend test shortens the 5-10 s busy pace; others keep it.
+const pacing = vi.hoisted(() => ({ fast: false }));
+vi.mock("../lib/poll-pacing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/poll-pacing")>();
+  return {
+    ...actual,
+    nextPollDelay: (base: number, attempt?: number) =>
+      pacing.fast && actual.serverUnderPressure()
+        ? 20
+        : actual.nextPollDelay(base, attempt),
+  };
+});
 const originalVisibilityDescriptor = Object.getOwnPropertyDescriptor(
   document,
   "visibilityState",
@@ -1349,11 +1361,6 @@ describe("Chatform", () => {
 
   it.each([
     [
-      503,
-      "adaptive_admission_busy",
-      "Many people are using Maya right now. Press Send again in a moment.",
-    ],
-    [
       409,
       "chat_busy",
       "The previous message is still being answered. Send again in a moment.",
@@ -1384,6 +1391,68 @@ describe("Chatform", () => {
       });
     },
   );
+
+  // Overload acceptance (2026-10-19): a busy refusal stored nothing, so the
+  // same request is resent on its own at the busy pace; the student keeps
+  // waiting on the loading turn instead of being told to press Send again.
+  it("resends a busy-refused Team message on its own until it is accepted", async () => {
+    pacing.fast = true;
+    try {
+      const busy = new PlatformApiError(503, "busy", {
+        code: "adaptive_admission_busy",
+        message: "busy",
+        details: { retryable: true, retry_after_seconds: 5 },
+      });
+      state.api.streamTeamConversation
+        .mockRejectedValueOnce(busy)
+        .mockRejectedValueOnce(busy)
+        .mockImplementation(
+          async (
+            _id: string,
+            body: { request_id: string; message: string },
+          ) => ({
+            ...teamSession,
+            revision: 1,
+            turns: [
+              {
+                id: body.request_id,
+                user_text: body.message,
+                state: "ready",
+                member_results: [
+                  {
+                    id: "busy-result",
+                    participant_id: "participant-1",
+                    speaker_name: "Bowen",
+                    assistant_text: "Accepted after the queue",
+                    state: "ready",
+                    safe_error_code: null,
+                  },
+                ],
+              },
+            ],
+          }),
+        );
+      renderChats();
+      await startMayaTeamChat("排队也要发出去");
+      expect(await screen.findByText("Accepted after the queue")).toBeTruthy();
+      const calls = state.api.streamTeamConversation.mock.calls;
+      expect(calls).toHaveLength(3);
+      // The same request each time: nothing was stored by the refusals.
+      expect(calls[2][1].request_id).toBe(calls[0][1].request_id);
+      expect(calls[2][1].expected_revision).toBe(calls[0][1].expected_revision);
+      expect(
+        screen.queryByText(
+          "Many people are using Maya right now. Press Send again in a moment.",
+        ),
+      ).toBeNull();
+      const box = screen.getByRole("textbox", {
+        name: "Message",
+      }) as HTMLTextAreaElement;
+      expect(box.value).toBe("");
+    } finally {
+      pacing.fast = false;
+    }
+  });
 
   it("disables Send while a Team message is in flight", async () => {
     state.api.streamTeamConversation.mockImplementation(

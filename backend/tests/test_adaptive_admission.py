@@ -37,6 +37,10 @@ def _settings(**overrides: object) -> Settings:
         "adaptive_admission_sample_seconds": 1.0,
         "adaptive_admission_adjust_seconds": 1.0,
         "adaptive_admission_wait_seconds": 1,
+        # These tests pin the full-stop latch; the reserve and memory trickle
+        # (on by default) are covered in test_danger_latch_reserve.py.
+        "adaptive_admission_danger_reserve_slots": 0,
+        "adaptive_admission_memory_danger_trickle": 0,
     }
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

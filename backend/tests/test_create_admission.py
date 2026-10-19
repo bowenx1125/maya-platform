@@ -136,6 +136,8 @@ def test_host_load_pressure_suspends_instead_of_rejecting() -> None:
                     adaptive_admission_wait_seconds=1,
                     host_load_reject_threshold=6.0,
                     host_load_resume_threshold=4.0,
+                    # Full stop pinned; the reserve: test_danger_latch_reserve.py.
+                    adaptive_admission_danger_reserve_slots=0,
                 )
             ):
                 pass

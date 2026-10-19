@@ -8,10 +8,12 @@ this single queue as backstops (the login queue is folded into it):
 * Unified pressure signal: 1m loadavg and MemAvailable share one latch
   (danger at load >= 6 or Mem < 500 MiB; clear only when load <= 4 AND
   Mem >= 550 MiB) so the old memory and load guards cannot disagree.
-  Under danger only a small reserve keeps moving (load danger only; a memory
-  danger still admits nothing): ``ADAPTIVE_ADMISSION_DANGER_RESERVE_SLOTS``
-  (2) top-level operations per process, Scorer/Summarizer finishing first,
-  then student turns; creates, logins and stand-alone model calls wait.
+  Under danger only a small reserve keeps moving:
+  ``ADAPTIVE_ADMISSION_DANGER_RESERVE_SLOTS`` (2) top-level operations per
+  process under load danger, one at a time (only while nothing runs) under
+  memory danger. Scorer/Summarizer finishing goes first, then student turns,
+  chat creates, logins, and stand-alone model calls last, so in-flight never
+  stays 0 while work is queued.
   Everyone else suspends in the queue and continues once the latch clears.
   A latch held ``ADAPTIVE_ADMISSION_DANGER_MAX_HOLD_SECONDS`` (120) while
   load is already back under the trip line (and memory is fine) is released
@@ -323,10 +325,12 @@ class _Waiter:
     top: bool = True
 
 
-# Classes the danger reserve serves (besides priority waiters): a student's
-# next message in a chat already open. Creates, logins and stand-alone model
-# calls (reports, generation) wait for the latch to clear.
-DANGER_RESERVE_CLASSES: tuple[str, ...] = ("write",)
+# Order the danger reserve serves classes in, after priority (finishing)
+# waiters: a student's next message first, then opening a chat, sign-in, and
+# stand-alone model calls (reports, generation) last. Every class is served
+# eventually, so nothing waits with nothing running (acceptance 2026-10-19:
+# 50 students on 2 vCPUs must all finish while connected).
+DANGER_RESERVE_CLASSES: tuple[str, ...] = ("write", "create", "login", "llm")
 
 
 SHRINK_REASONS: tuple[str, ...] = ("danger", "load", "mem", "db_write_p95", "pool_wait_p95")
@@ -618,8 +622,11 @@ def _reserve_slots(settings: Settings) -> int:
     """Top-level operations the danger latch still admits (0 under memory danger)."""
 
     s = _state
-    if not s.danger or s.mem_bad:
+    if not s.danger:
         return 0
+    if s.mem_bad:
+        # Memory short: one operation at a time, only while nothing runs.
+        return min(1, max(0, int(settings.adaptive_admission_memory_danger_trickle)))
     return max(0, int(settings.adaptive_admission_danger_reserve_slots))
 
 
@@ -686,11 +693,9 @@ def _fits(
     if sum(s.in_flight.values()) >= int(settings.adaptive_admission_max_in_flight):
         return False  # global hard cap
     if s.danger:
-        # Only the reserve moves, regardless of the (floored) budget: finishing
-        # first, then a student's next turn; one turn plus its nested model
-        # call already exceeds a minimum budget of 4 units.
-        if not priority and cls not in DANGER_RESERVE_CLASSES:
-            return False
+        # Only the reserve moves, regardless of the (floored) budget: one
+        # turn plus its nested model call already exceeds a minimum budget of
+        # 4 units. Who goes first is decided in _dispatch_locked.
         return s.top_in_flight < _reserve_slots(settings)
     cap = _ramp_cap_locked(settings, _clock())
     if cap is not None and s.top_in_flight >= cap:
@@ -740,15 +745,17 @@ def _dispatch_locked(settings: Settings) -> bool:
             _grant(head)
             granted_any = True
             continue
-        # Under danger only the reserve classes are eligible, so a queued
-        # create or login whose turn it is cannot block the reserve.
-        eligible = DANGER_RESERVE_CLASSES if s.danger else CLASSES
+        # Under danger the reserve serves classes in a fixed order (turns
+        # first); otherwise round-robin so no class starves another.
         cls = None
-        for offset in range(len(CLASSES)):
-            candidate = CLASSES[(s.rr_index + offset) % len(CLASSES)]
-            if candidate in eligible and s.queues[candidate]:
-                cls = candidate
-                break
+        if s.danger:
+            cls = next((name for name in DANGER_RESERVE_CLASSES if s.queues[name]), None)
+        else:
+            for offset in range(len(CLASSES)):
+                candidate = CLASSES[(s.rr_index + offset) % len(CLASSES)]
+                if s.queues[candidate]:
+                    cls = candidate
+                    break
         if cls is None:
             break
         head = s.queues[cls][0]

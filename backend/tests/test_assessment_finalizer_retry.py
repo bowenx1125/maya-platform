@@ -89,6 +89,7 @@ def test_a_busy_refusal_is_retried_like_a_stall(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(finalizer, "drive_assessment", busy)
     monkeypatch.setattr(finalizer, "RETRY_DELAYS_SECONDS", (0.01,))
+    monkeypatch.setattr(finalizer, "BUSY_RETRY_DELAYS_SECONDS", (0.01,))
     runner = _finalizer()
     try:
         runner.wake("c-4")
@@ -159,7 +160,7 @@ def test_a_busy_refusal_woken_mid_run_still_gets_its_delayed_retry(
         raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
 
     monkeypatch.setattr(finalizer, "drive_assessment", busy)
-    monkeypatch.setattr(finalizer, "RETRY_DELAYS_SECONDS", (0.3,))
+    monkeypatch.setattr(finalizer, "BUSY_RETRY_DELAYS_SECONDS", (0.3,))
     caplog.set_level("INFO", logger="maya.assessment")
     try:
         runner.wake("c-5")
@@ -189,7 +190,7 @@ def test_busy_refusals_keep_being_retried_and_never_run_out(
         raise PlatformError("adaptive_admission_busy", "busy", 503, {"retryable": True})
 
     monkeypatch.setattr(finalizer, "drive_assessment", busy)
-    monkeypatch.setattr(finalizer, "RETRY_DELAYS_SECONDS", (0.01, 0.02))
+    monkeypatch.setattr(finalizer, "BUSY_RETRY_DELAYS_SECONDS", (0.01, 0.02))
     caplog.set_level("INFO", logger="maya.assessment")
     runner = _finalizer()
     try:

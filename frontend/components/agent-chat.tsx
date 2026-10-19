@@ -19,6 +19,7 @@ import {
   ChatRequestPendingError,
   isRefusedSend,
   PlatformApiError,
+  SEND_REFUSED_BUSY_CODES,
   type PlatformApi,
   type ChatAgent,
   type ChatSession,
@@ -109,6 +110,18 @@ function isScoringRefusal(error: unknown): boolean {
     isRefusedSend(error) &&
     (error as PlatformApiError).code === CHAT_BUSY_CODE &&
     (error as PlatformApiError).details?.reason === "assessment_scoring"
+  );
+}
+
+/** How long a busy-refused Team send keeps resending on its own. */
+const TEAM_BUSY_RETRY_LIMIT_MS = 20 * 60_000;
+
+/** Server-full refusals (nothing stored); not chat_busy (a running turn). */
+function isAutoRetriedBusyRefusal(error: unknown): boolean {
+  return (
+    error instanceof PlatformApiError &&
+    error.code !== undefined &&
+    SEND_REFUSED_BUSY_CODES.has(error.code)
   );
 }
 
@@ -1851,8 +1864,14 @@ function AgentChatScope({
     setTeamBusy(true);
     setTeamError(null);
     setTeamLastEventId(0);
+    const sendStillOwned = () =>
+      sequence === teamSendSequence.current &&
+      isChatRequestScopeActive(scopeAtSend) &&
+      (Boolean(preset) || selectedTeamIdRef.current === sentSessionId);
     try {
-      const result = await api.streamTeamConversation(session.id, request, {
+      const streamHooks: NonNullable<
+        Parameters<PlatformApi["streamTeamConversation"]>[2]
+      > = {
         onEvent: (event) => {
           if (
             sequence !== teamSendSequence.current ||
@@ -1886,7 +1905,39 @@ function AgentChatScope({
             );
           }
         },
-      });
+      };
+      // A busy refusal stored nothing, so the same request (id, revision) is
+      // sent again on its own while the student waits, at the busy pace
+      // (5-10 s, or the server's Retry-After), instead of handing the text
+      // back. Load tests (2026-10-19): students left waiting on a refusal
+      // gave up or hammered Send; a class must still finish under overload.
+      const busyRetryUntil = Date.now() + TEAM_BUSY_RETRY_LIMIT_MS;
+      let busyAttempt = 0;
+      let result: TeamChatSession;
+      for (;;) {
+        try {
+          result = await api.streamTeamConversation(
+            session.id,
+            request,
+            streamHooks,
+          );
+          break;
+        } catch (cause) {
+          if (
+            !isAutoRetriedBusyRefusal(cause) ||
+            !sendStillOwned() ||
+            Date.now() >= busyRetryUntil
+          ) {
+            throw cause;
+          }
+          notePollError(cause);
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, nextPollDelay(5000, busyAttempt)),
+          );
+          busyAttempt += 1;
+          if (!sendStillOwned()) throw cause;
+        }
+      }
       if (
         sequence !== teamSendSequence.current ||
         !isChatRequestScopeActive(scopeAtSend) ||

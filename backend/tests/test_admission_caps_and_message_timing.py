@@ -180,7 +180,12 @@ def test_in_flight_cap_48_still_binds(probe: _Probe) -> None:
 def test_danger_still_suspends_at_new_caps(
     probe: _Probe, load: float, mem: float, recover_load: float, recover_mem: float
 ) -> None:
-    s = _settings(adaptive_admission_initial_units=96)
+    # Full-stop latch pinned; the reserve is covered in test_danger_latch_reserve.py.
+    s = _settings(
+        adaptive_admission_initial_units=96,
+        adaptive_admission_danger_reserve_slots=0,
+        adaptive_admission_memory_danger_trickle=0,
+    )
     aa.adaptive_admission_snapshot(s)
     probe.load, probe.mem = load, mem
     probe.now = 1.0

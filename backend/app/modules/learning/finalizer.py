@@ -35,6 +35,9 @@ MAX_STEPS = 4
 # the student chat sat at 40% or 75% until a restart. A stalled chain is run
 # again after these delays; the student's next message also wakes it.
 RETRY_DELAYS_SECONDS = (30.0, 120.0, 600.0)
+# Busy refusals ran nothing: retried sooner (finishing has admission
+# priority now), staying at the last delay for as long as the server is full.
+BUSY_RETRY_DELAYS_SECONDS = (15.0, 30.0, 60.0)
 # Refusals that ran nothing; the chain is retried like a stalled step.
 BUSY_CODES = frozenset({"write_pressure", "adaptive_admission_busy", "llm_admission_busy"})
 # Off the startup path too: attempts still waiting are swept this often.
@@ -249,6 +252,7 @@ class AssessmentFinalizer:
                 self._schedule_retry(conversation_id)
 
     def _schedule_retry(self, conversation_id: str, *, busy: bool = False) -> None:
+        delay = 0.0
         with self._lock:
             counts = self._busy_retries if busy else self._retries
             used = counts.get(conversation_id, 0)
@@ -258,11 +262,10 @@ class AssessmentFinalizer:
             else:
                 exhausted = False
                 counts[conversation_id] = used + 1
+                delays = BUSY_RETRY_DELAYS_SECONDS if busy else RETRY_DELAYS_SECONDS
                 # Busy retries stay at the longest delay once they reach it.
-                used = min(used, len(RETRY_DELAYS_SECONDS) - 1)
-                timer = threading.Timer(
-                    RETRY_DELAYS_SECONDS[used], self._retry_due, args=(conversation_id,)
-                )
+                delay = delays[min(used, len(delays) - 1)]
+                timer = threading.Timer(delay, self._retry_due, args=(conversation_id,))
                 timer.daemon = True
                 previous = self._timers.pop(conversation_id, None)
                 if previous is not None:
@@ -272,7 +275,7 @@ class AssessmentFinalizer:
             LOGGER.info(
                 "Assessment finishing retry scheduled conversation_id=%s in_seconds=%s",
                 conversation_id,
-                RETRY_DELAYS_SECONDS[used],
+                delay,
             )
             timer.start()
         elif exhausted:
