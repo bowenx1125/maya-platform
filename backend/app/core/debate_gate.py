@@ -27,7 +27,11 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import Any
 
-from app.core.adaptive_admission import admission_waiting, danger_latched, polling_pressure
+from app.core.adaptive_admission import (
+    admission_waiting,
+    debate_audience_cap,
+    polling_pressure,
+)
 from app.core.config import Settings
 from app.core.errors import PlatformError
 
@@ -95,33 +99,43 @@ async def interaction_slot(settings: Settings) -> AsyncIterator[None]:
     """Hold one Debate audience write slot for the ``async with`` block."""
 
     retry = int(settings.debate_interaction_retry_seconds)
-    if danger_latched(settings):
-        # The reserve belongs to scoring and chat; audience writes wait outside.
-        raise debate_busy_error("danger", retry)
-    limit = int(settings.debate_interaction_gate_limit)
-    if limit <= 0:
+    base_limit = int(settings.debate_interaction_gate_limit)
+    if base_limit <= 0:
         yield
         return
+
+    def limit_now() -> int:
+        # Under the danger latch a 1-slot reserve keeps votes/barrages
+        # trickling in FIFO; after a release the cap ramps like adaptive
+        # admission (2, then +1 every 5 s). A 503 only after the wait runs out.
+        cap = debate_audience_cap(
+            settings, reserve=int(settings.debate_interaction_latched_reserve)
+        )
+        return base_limit if cap is None else max(1, min(base_limit, cap))
+
     condition = _GATE._cond()
     deadline = time.monotonic() + float(settings.debate_interaction_gate_wait_seconds)
     async with condition:
         if _GATE.waiters >= int(settings.debate_interaction_gate_queue_max) and (
-            _GATE.in_flight >= limit
+            _GATE.in_flight >= limit_now()
         ):
             raise debate_busy_error("queue_full", retry)
         _GATE.waiters += 1
         try:
-            while _GATE.in_flight >= limit or admission_waiting() > 0:
+            while True:
+                limit = limit_now()
+                # Scoring/chat queued for the adaptive budget go first, but
+                # only while we are not latched (then the reserve is ours).
+                yields = admission_waiting() > 0 and limit >= base_limit
+                if _GATE.in_flight < limit and not yields:
+                    break
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise debate_busy_error("wait_timeout", retry)
-                if danger_latched(settings):
-                    raise debate_busy_error("danger", retry)
-                timeout = (
-                    min(remaining, _YIELD_POLL_SECONDS) if _GATE.in_flight < limit else remaining
-                )
                 try:
-                    await asyncio.wait_for(condition.wait(), timeout=timeout)
+                    await asyncio.wait_for(
+                        condition.wait(), timeout=min(remaining, _YIELD_POLL_SECONDS * 4)
+                    )
                 except TimeoutError:
                     continue
             _GATE.in_flight += 1
@@ -179,7 +193,7 @@ class PublicCopy:
         what: str,
         version: int | None = None,
     ) -> Any:
-        """A fresh copy, else (under pressure) a stale one or 503, else ``load()``.
+        """A fresh copy, else (under pressure) a stale one, else ``load()``.
 
         With ``version`` a fresh copy must also carry that version; a stale
         copy under pressure is served whatever its version.
@@ -192,9 +206,7 @@ class PublicCopy:
             stale = self.get(key, float(settings.debate_public_stale_seconds))
             if stale is not None:
                 return stale
-            raise debate_busy_error(
-                f"{what}_pressure", int(settings.debate_interaction_retry_seconds)
-            )
+            # No copy yet: one read rather than an instant 503 (steering 2026-10-19).
         value = load()
         self.put(key, value, version)
         return value

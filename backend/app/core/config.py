@@ -254,7 +254,11 @@ class Settings(BaseSettings):
         default=64, ge=0, le=10_000, validation_alias="DEBATE_INTERACTION_GATE_QUEUE_MAX"
     )
     debate_interaction_gate_wait_seconds: float = Field(
-        default=5.0, ge=0, le=120, validation_alias="DEBATE_INTERACTION_GATE_WAIT_SECONDS"
+        default=20.0, ge=0, le=120, validation_alias="DEBATE_INTERACTION_GATE_WAIT_SECONDS"
+    )
+    # Votes/barrages admitted at a time per backend while the danger latch holds.
+    debate_interaction_latched_reserve: int = Field(
+        default=1, ge=1, le=16, validation_alias="DEBATE_INTERACTION_LATCHED_RESERVE"
     )
     debate_interaction_retry_seconds: int = Field(
         default=3, ge=1, le=120, validation_alias="DEBATE_INTERACTION_RETRY_SECONDS"

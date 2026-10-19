@@ -951,6 +951,21 @@ def danger_latched(settings: Settings | None = None) -> bool:
         return _state.danger
 
 
+def debate_audience_cap(settings: Settings | None = None, reserve: int = 1) -> int | None:
+    """Concurrency cap for Debate audience writes under pressure (2026-10-19).
+
+    ``reserve`` while the danger latch holds (a trickle, never zero); the
+    release ramp cap (2, then +1 every 5 s) while ramping; None otherwise.
+    """
+
+    runtime = settings if settings is not None else get_settings()
+    with _cond:
+        _refresh_locked(runtime)
+        if _state.danger:
+            return max(1, int(reserve))
+        return _ramp_cap_locked(runtime, _clock())
+
+
 def admission_waiting() -> int:
     """Operations queued for the adaptive budget (scoring, chat, creates...)."""
 
@@ -1055,6 +1070,7 @@ __all__ = [
     "db_writes_in_flight",
     "polling_pressure",
     "danger_latched",
+    "debate_audience_cap",
     "admission_waiting",
     "record_db_write_ms",
     "set_cpu_reader",

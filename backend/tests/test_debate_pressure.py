@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from app.core import adaptive_admission, debate_gate
+from app.core import debate_gate
 from app.core.config import Settings
 from app.core.debate_gate import PublicCopy, interaction_slot, reset_debate_gate
 from app.core.errors import PlatformError
@@ -35,17 +36,21 @@ def _event(debate_id: str, sequence: int) -> EventRecord:
     )
 
 
-def test_gate_full_answers_503_with_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
+def _cap(value):
+    return lambda settings=None, reserve=1: value(reserve) if callable(value) else value
+
+
+def test_gate_full_answers_503_only_after_the_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_debate_gate()
-    monkeypatch.setattr(debate_gate, "danger_latched", lambda settings=None: False)
+    monkeypatch.setattr(debate_gate, "debate_audience_cap", _cap(None))
     monkeypatch.setattr(debate_gate, "admission_waiting", lambda: 0)
     settings = _settings(
         DEBATE_INTERACTION_GATE_LIMIT=1,
-        DEBATE_INTERACTION_GATE_WAIT_SECONDS=0.1,
+        DEBATE_INTERACTION_GATE_WAIT_SECONDS=0.2,
         DEBATE_INTERACTION_RETRY_SECONDS=3,
     )
 
-    async def scenario() -> PlatformError:
+    async def scenario() -> tuple[PlatformError, float]:
         held = asyncio.Event()
         release = asyncio.Event()
 
@@ -56,41 +61,85 @@ def test_gate_full_answers_503_with_retry_after(monkeypatch: pytest.MonkeyPatch)
 
         task = asyncio.create_task(holder())
         await held.wait()
+        t = time.monotonic()
         try:
             async with interaction_slot(settings):
                 raise AssertionError("second slot must not be granted")
         except PlatformError as exc:
             error = exc
+        waited = time.monotonic() - t
         release.set()
         await task
-        return error
+        return error, waited
 
-    error = asyncio.run(scenario())
-    assert error.status_code == 503
-    assert error.code == "debate_interaction_busy"
-    assert error.details["retry_after_seconds"] == 3
+    error, waited = asyncio.run(scenario())
+    assert waited >= 0.15
+    assert error.status_code == 503 and error.details["retry_after_seconds"] == 3
     assert error.details["reason"] == "wait_timeout"
 
 
-def test_latched_refuses_at_once_without_touching_the_reserve(
+def test_latched_vote_queues_on_the_reserve_and_is_admitted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reset_debate_gate()
-    monkeypatch.setattr(debate_gate, "danger_latched", lambda settings=None: True)
-    before = adaptive_admission.adaptive_admission_snapshot()
+    monkeypatch.setattr(debate_gate, "debate_audience_cap", _cap(lambda reserve: reserve))
+    monkeypatch.setattr(debate_gate, "admission_waiting", lambda: 5)  # scoring queued
+    settings = _settings(DEBATE_INTERACTION_GATE_LIMIT=4, DEBATE_INTERACTION_GATE_WAIT_SECONDS=5)
+    peak = {"n": 0}
 
-    async def scenario() -> PlatformError:
-        try:
-            async with interaction_slot(_settings()):
-                raise AssertionError("latched gate must refuse")
-        except PlatformError as exc:
-            return exc
+    async def one(done: list[int]) -> None:
+        async with interaction_slot(settings):
+            peak["n"] = max(peak["n"], debate_gate.debate_gate_snapshot()["in_flight"])
+            await asyncio.sleep(0.05)
+            done.append(1)
 
-    error = asyncio.run(scenario())
-    assert error.status_code == 503 and error.details["reason"] == "danger"
-    after = adaptive_admission.adaptive_admission_snapshot()
-    assert after.get("in_flight") == before.get("in_flight")
-    assert debate_gate.debate_gate_snapshot() == {"in_flight": 0, "waiters": 0}
+    async def scenario() -> int:
+        done: list[int] = []
+        await asyncio.gather(*(one(done) for _ in range(5)))
+        return len(done)
+
+    assert asyncio.run(scenario()) == 5  # every queued vote eventually lands
+    assert peak["n"] == 1  # one at a time through the latched reserve
+
+
+def test_ramp_after_release_caps_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import adaptive_admission as aa
+
+    settings = _settings()
+    monkeypatch.setattr(aa, "_refresh_locked", lambda s: None)
+    monkeypatch.setattr(aa, "_ramp_cap_locked", lambda s, now: 2)
+    monkeypatch.setattr(aa._state, "danger", False)
+    assert aa.debate_audience_cap(settings) == 2
+    monkeypatch.setattr(aa._state, "danger", True)
+    assert aa.debate_audience_cap(settings, reserve=1) == 1
+    monkeypatch.setattr(aa._state, "danger", False)
+    monkeypatch.setattr(aa, "_ramp_cap_locked", lambda s, now: None)
+    assert aa.debate_audience_cap(settings) is None
+    reset_debate_gate()
+    monkeypatch.setattr(debate_gate, "debate_audience_cap", _cap(2))
+    monkeypatch.setattr(debate_gate, "admission_waiting", lambda: 0)
+    gate = _settings(DEBATE_INTERACTION_GATE_LIMIT=4, DEBATE_INTERACTION_GATE_WAIT_SECONDS=5)
+    peak = {"n": 0}
+
+    async def one() -> None:
+        async with interaction_slot(gate):
+            peak["n"] = max(peak["n"], debate_gate.debate_gate_snapshot()["in_flight"])
+            await asyncio.sleep(0.05)
+
+    async def scenario() -> None:
+        await asyncio.gather(*(one() for _ in range(6)))
+
+    asyncio.run(scenario())
+    assert peak["n"] == 2
+
+
+def test_debate_turn_is_served_by_the_danger_reserve_in_the_write_class() -> None:
+    from app.core import adaptive_admission as aa
+
+    # The reserve serves priority (scoring/finalize) first, then "write",
+    # where Debate turns/TTS/reports queue (debate_llm_slot), before login and llm.
+    order = aa.DANGER_RESERVE_CLASSES
+    assert order.index("write") < order.index("login") < order.index("llm")
 
 
 def test_public_copy_version_and_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -110,10 +159,9 @@ def test_public_copy_version_and_pressure(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(debate_gate, "polling_pressure", lambda settings=None: True)
     # Under pressure the older copy answers whatever its version.
     assert copy.read("k", settings, load, what="x", version=3) == 2
-    with pytest.raises(PlatformError) as refused:
-        copy.read("other", settings, load, what="x")
-    assert refused.value.status_code == 503
-    assert len(loads) == 2
+    # No copy at all: one read, never an instant 503.
+    assert copy.read("other", settings, load, what="x") == 3
+    assert len(loads) == 3
 
 
 def test_shared_snapshot_single_build_and_same_version() -> None:
