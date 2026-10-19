@@ -54,6 +54,19 @@
       "422": {
         "reason": "FastAPI UUID path-validation response; not a replacement for frozen 404."
       }
+    },
+    "submitVote": {
+      "503": {
+        "reason": "Debate audience pressure gate (2026-10-19): busy/danger latch answers retryable 503 with retry_after_seconds."
+      }
+    },
+    "submitBarrage": {
+      "503": {
+        "reason": "Debate audience pressure gate (2026-10-19): busy/danger latch answers retryable 503 with retry_after_seconds."
+      },
+      "429": {
+        "reason": "One barrage per audience member per 3 s across backends (2026-10-19); 429 with Retry-After."
+      }
     }
   }
 }

@@ -21,6 +21,7 @@ from .models import (
 )
 from .service import (
     RealReportRuntime,
+    ReportAdmissionDeferred,
     fail_report_waiting_for_insight,
     process_insight_job,
     process_report_job,
@@ -135,6 +136,16 @@ class ReportTaskManager:
                     self._run_insight(debate_id, owner_id)
                 else:
                     self._run_report(debate_id, owner_id)
+            except ReportAdmissionDeferred as exc:
+                # The server is shedding load: the Job is pending again and
+                # nothing was sent. Slower, never stuck: look again later.
+                LOGGER.info(
+                    "Report for debate %s deferred under pressure retry_after_s=%s",
+                    debate_id,
+                    exc.retry_after_seconds,
+                )
+                self._retry_later(debate_id, exc.retry_after_seconds)
+                return
             except Exception as exc:
                 # An unexpected failure used to escape into the asyncio task
                 # and die there as "Task exception was never retrieved". The
@@ -159,6 +170,15 @@ class ReportTaskManager:
                     )
                 self._fail_stuck_job(debate_id, operation, owner_id)
                 return
+
+    def _retry_later(self, debate_id: str, delay_seconds: float) -> None:
+        loop = self._loop
+        if self._closed or loop is None or loop.is_closed():
+            return
+        delay = min(30.0, max(2.0, float(delay_seconds)))
+        loop.call_soon_threadsafe(
+            lambda: None if self._closed else loop.call_later(delay, self._schedule, debate_id)
+        )
 
     def _fail_stuck_job(self, debate_id: str, operation: str, owner_id: str) -> None:
         """Record an unexpected failure so the teacher can retry it."""

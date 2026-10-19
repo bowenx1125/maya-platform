@@ -13,6 +13,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -32,6 +33,7 @@ from app.core.errors import (
     invalid_state,
     not_found,
 )
+from app.core.llm_admission import debate_llm_slot
 from app.core.models import (
     CourseMember,
     DemoAcceptanceRun,
@@ -42,6 +44,7 @@ from app.core.models import (
     ProviderOperation,
     ProviderPolicySnapshot,
 )
+from app.core.replica import hold_claim
 from app.core.sqlutil import begin_immediate
 from app.modules.debates.final_input import read_final_input
 from app.modules.debates.generation.segment_grading import (
@@ -985,12 +988,18 @@ def _mark_job_running(db: Session, operation: str, owner_id: str) -> bool:
         raise invalid_state("The generation Job is missing.")
     if row.state != "pending":
         return False
+    # Atomic claim: one backend wins the pending row. The claim token lets
+    # this process keep the job touched while it works (app.core.replica).
+    token = str(uuid4())
     changed = db.execute(
         update(Job)
         .where(where, Job.state == "pending")
-        .values(state="running", attempt=1, updated_at=utc_now())
+        .values(state="running", attempt=1, claim_token=token, updated_at=utc_now())
     )
-    return int(getattr(changed, "rowcount", 0)) == 1
+    claimed = int(getattr(changed, "rowcount", 0)) == 1
+    if claimed:
+        hold_claim(token)
+    return claimed
 
 
 def _mark_job_failed(
@@ -2495,6 +2504,41 @@ def _report_operation_for_call(
     return prepared_operation
 
 
+REPORT_ADMISSION_RETRY_SECONDS = 5
+
+
+class ReportAdmissionDeferred(PlatformError):
+    """The report waited for an LLM slot and was refused; nothing was sent.
+
+    The Job is pending again and the revision still generating: the report
+    worker retries after ``retry_after_seconds``, and a route answers the
+    usual retryable 503.
+    """
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        self.retry_after_seconds = max(1, int(retry_after_seconds))
+        super().__init__(
+            "report_admission_busy",
+            "The server is busy. The report will continue shortly.",
+            503,
+            {"retryable": True, "retry_after_seconds": self.retry_after_seconds},
+        )
+
+
+def _defer_real_report_job(db: Session, revision_id: str) -> None:
+    db.rollback()
+    db.execute(
+        update(Job)
+        .where(
+            Job.operation == REPORT_GENERATE_OPERATION,
+            Job.report_revision_id == revision_id,
+            Job.state == "running",
+        )
+        .values(state="pending", safe_error_code=None, updated_at=utc_now())
+    )
+    db.commit()
+
+
 def _pause_real_report_job(db: Session, revision_id: str) -> None:
     job = db.scalar(
         select(Job).where(
@@ -2670,9 +2714,26 @@ def _process_real_report_revision(
             or operation.charged_request_count != 0
         ):
             raise ReportProviderError("report_operation_not_prepared")
-        runtime.repository.reserve(operation.id)
-        runtime.repository.transition(operation.id, expected="reserved", state="sending")
-        sections = runtime.provider.execute_prepared(wire)
+        # Wait for the LLM slot before the call is reserved or "sending"
+        # (2026-10-19). A refusal under pressure used to land after "sending"
+        # and fail the report for good; now the Job goes back to pending and
+        # the worker tries again later. Nothing is held while queued.
+        db.commit()
+        admission = ExitStack()
+        try:
+            admission.enter_context(debate_llm_slot())
+        except PlatformError as exc:
+            if not exc.details.get("retryable"):
+                raise
+            _defer_real_report_job(db, revision.id)
+            raise ReportAdmissionDeferred(
+                int(exc.details.get("retry_after_seconds") or REPORT_ADMISSION_RETRY_SECONDS)
+            ) from exc
+        with admission:
+            runtime.repository.reserve(operation.id)
+            runtime.repository.transition(operation.id, expected="reserved", state="sending")
+            # The transport's own slot request is re-entrant on this thread.
+            sections = runtime.provider.execute_prepared(wire)
         markdown = render_real_report_markdown(prepared.context, sections)
         count = validate_report_markdown(
             markdown,
@@ -2680,6 +2741,8 @@ def _process_real_report_revision(
             vote_total=prepared.context.vote_total,
             barrage_total=prepared.context.barrage_total,
         )
+    except ReportAdmissionDeferred:
+        raise
     except ReportProviderError as exc:
         _mark_real_report_failed(db, revision=revision, code=exc.code, runtime=runtime)
         return revision
@@ -3417,8 +3480,12 @@ def reconcile_orphaned_report_statuses(db: Session) -> int:
     return repaired
 
 
-def recover_report_jobs(db: Session) -> int:
-    """Fail running M14 jobs after process restart; never rerun ready rows."""
+def recover_report_jobs(db: Session, *, only_job_ids: Sequence[str] | None = None) -> int:
+    """Fail running M14 jobs after process restart; never rerun ready rows.
+
+    ``only_job_ids`` (a peer backend is alive): fail just these orphans and
+    leave every other running job and status alone.
+    """
 
     # Startup recovery is a writer operation.  Serialize it with worker
     # completion so a stale worker cannot race the failed transition.
@@ -3428,6 +3495,7 @@ def recover_report_jobs(db: Session) -> int:
             select(Job).where(
                 Job.operation.in_(("barrage_insight.generate", "report.generate")),
                 Job.state == "running",
+                *(() if only_job_ids is None else (Job.id.in_(tuple(only_job_ids)),)),
             )
         ).all()
     )
@@ -3472,6 +3540,8 @@ def recover_report_jobs(db: Session) -> int:
         job.updated_at = utc_now()
         recovered += 1
     db.flush()
+    if only_job_ids is not None:
+        return recovered
     return recovered + reconcile_orphaned_report_statuses(db)
 
 

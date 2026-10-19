@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import AsyncGenerator, Iterator
 from typing import Annotated, Any, cast
 from uuid import UUID, uuid4
@@ -68,7 +69,10 @@ def get_playback_service(request: Request) -> PlaybackService:
     if database is None or settings is None:
         raise RuntimeError("playback service is not configured")
     repository = SqlPlaybackRepository(session_factory=database.session_factory)
-    event_hub = DebateEventHub(SqlEventStore(database.session_factory))
+    event_hub = DebateEventHub(
+        SqlEventStore(database.session_factory),
+        relay_poll_seconds=settings.debate_event_relay_poll_seconds,
+    )
     selected_tts = tts_provider(settings)
     service = PlaybackService(
         repository,
@@ -537,12 +541,47 @@ async def debate_events_route(
     epoch: str | None = None
     seen_command_ids: set[str] = set()
 
+    recheck_seconds = float(settings.debate_ws_auth_recheck_seconds)
+    snapshot_ttl = float(settings.debate_snapshot_cache_seconds)
+    debate_key = str(debate_id)
+
+    def still_authorized() -> bool:
+        """Live session and course-teacher scope, without building a snapshot."""
+
+        with _websocket_session(database, settings) as auth_db:
+            fresh = get_auth_context(auth_db, settings, raw_token)
+            if fresh is None:
+                return False
+            try:
+                service._assert_teacher(auth_db, service._get_debate(auth_db, debate_key), fresh)
+            except PlatformError:
+                return False
+        return True
+
     async def snapshot_factory() -> tuple[dict[str, Any], int]:
         with _websocket_session(database, settings) as snapshot_db:
             current = get_auth_context(snapshot_db, settings, raw_token)
             if current is None:
                 raise forbidden()
-            return await service.snapshot(snapshot_db, str(debate_id), current)
+            service._assert_teacher(
+                snapshot_db, service._get_debate(snapshot_db, debate_key), current
+            )
+
+        async def build() -> tuple[dict[str, Any], int]:
+            with _websocket_session(database, settings) as build_db:
+                return await service.snapshot(build_db, debate_key, current)
+
+        # 2026-10-19: one teacher snapshot per Debate per ``snapshot_ttl``,
+        # shared by every teacher socket; the stream drains events after its
+        # watermark, so a copy a second old loses nothing.
+        snapshot, _version = await service.event_hub.snapshots.get(
+            (debate_key, "teacher", session_hash(raw_token or "")),
+            snapshot_ttl,
+            service.event_hub.version(debate_key),
+            build,
+            same_version=True,
+        )
+        return cast(tuple[dict[str, Any], int], snapshot)
 
     stream = cast(
         AsyncGenerator[dict[str, Any], None],
@@ -550,6 +589,7 @@ async def debate_events_route(
     )
     event_task: asyncio.Task[Any] | None = None
     receive_task: asyncio.Task[Any] | None = None
+    last_authorized = time.monotonic()
     try:
         event_task = asyncio.create_task(stream.__anext__())
         receive_task = asyncio.create_task(websocket.receive_json())
@@ -563,22 +603,16 @@ async def debate_events_route(
                 except StopAsyncIteration:
                     break
                 # Public stream events can include the one reviewed raw-text
-                # exception, ``interaction.barrage_created``.  Revalidate the
-                # live session and course-teacher scope immediately before
-                # every delivery so revocation or membership changes cannot
-                # leave a long-lived socket authorized to receive it.
-                delivery_authorized = False
-                with _websocket_session(database, settings) as delivery_db:
-                    fresh = get_auth_context(delivery_db, settings, raw_token)
-                    if fresh is not None:
-                        try:
-                            await service.snapshot(delivery_db, str(debate_id), fresh)
-                            delivery_authorized = True
-                        except PlatformError:
-                            delivery_authorized = False
-                if not delivery_authorized:
-                    await _close_ws(websocket, 4401)
-                    break
+                # exception, ``interaction.barrage_created``.  The live
+                # session and course-teacher scope are rechecked before
+                # delivery at most every ``recheck_seconds`` (2026-10-19: a
+                # full snapshot per event did not survive a barrage burst),
+                # so a revocation closes the socket within that interval.
+                if time.monotonic() - last_authorized >= recheck_seconds:
+                    if not await asyncio.to_thread(still_authorized):
+                        await _close_ws(websocket, 4401)
+                        break
+                    last_authorized = time.monotonic()
                 await websocket.send_json(event)
                 event_task = asyncio.create_task(stream.__anext__())
             if receive_task in done:

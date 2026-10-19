@@ -890,7 +890,7 @@ def _admission_runtime(monkeypatch, slot) -> tuple[object, object, object, objec
     from app.modules.debates.generation import runtime as runtime_module
 
     monkeypatch.setattr(runtime_module, "scan_llm_outbound_messages", lambda *args, **kwargs: None)
-    monkeypatch.setattr(runtime_module, "llm_admission_slot", slot)
+    monkeypatch.setattr(runtime_module, "debate_llm_slot", slot)
     people = _participants()
     plan = MutualLearningPolicy().plan(people, round_count=2)[0]
     prompt = build_provider_prompt(

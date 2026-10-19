@@ -19,6 +19,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from app.core.config import configured_llm_model
 from app.core.errors import PlatformError
+from app.core.llm_admission import debate_llm_slot
 from app.providers.control import LLMAcceptedStageV1, ProviderReservationRequestV1
 from app.providers.llm_adapter import LLMAdapterError
 from app.providers.llm_price_card import (
@@ -622,7 +623,10 @@ class SegmentLLMRuntime:
                 sender = _method(self.adapter, "send_accepted")
                 if sender is None:
                     raise SegmentRuntimeError(code="segment_adapter_unavailable")
-                candidate = cast(SegmentAcceptedCandidateV2, _invoke(sender, current.request))
+                # Debate priority (2026-10-19): the transport's own slot
+                # request is re-entrant inside this one.
+                with debate_llm_slot():
+                    candidate = cast(SegmentAcceptedCandidateV2, _invoke(sender, current.request))
             except (LLMTransportNotSent, PlatformError):
                 # PlatformError: refused before sending (admission busy, host
                 # memory pressure); nothing left the host, so it is not unknown.

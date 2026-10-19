@@ -341,8 +341,9 @@ describe("M13 anonymous audience form", () => {
       round_no: 2,
       barrage_open: false,
     });
+    // After a failure the next check backs off from 2 s to 4 s.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(4000);
     });
     expect(screen.getByText("Collection closed")).toBeTruthy();
     expect(screen.queryByText(/Connection interrupted/)).toBeNull();

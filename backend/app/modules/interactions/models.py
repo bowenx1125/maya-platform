@@ -21,6 +21,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -132,6 +133,8 @@ class Vote(Base):
     participant_id: Mapped[str] = mapped_column(String(36), nullable=False)
     client_submission_id: Mapped[str] = mapped_column(String(36), nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Server hash of window + audience id (0074): one vote per person.
+    voter_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -148,6 +151,14 @@ class Vote(Base):
         ),
         UniqueConstraint("window_id", "client_submission_id", name="uq_votes_window_submission"),
         Index("ix_votes_window_participant", "window_id", "participant_id"),
+        Index(
+            "uq_votes_window_voter",
+            "window_id",
+            "voter_key",
+            unique=True,
+            sqlite_where=text("voter_key IS NOT NULL"),
+            postgresql_where=text("voter_key IS NOT NULL"),
+        ),
     )
 
 
@@ -165,6 +176,8 @@ class BarrageMessage(Base):
     client_submission_id: Mapped[str] = mapped_column(String(36), nullable=False)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Server hash of window + audience id (0074): the per-person cooldown.
+    voter_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -181,6 +194,7 @@ class BarrageMessage(Base):
         CheckConstraint("length(trim(nickname)) > 0", name="ck_barrage_messages_nickname_nonblank"),
         CheckConstraint("length(trim(raw_text)) > 0", name="ck_barrage_messages_text_nonblank"),
         Index("ix_barrage_messages_window_sequence", "window_id", "sequence"),
+        Index("ix_barrage_messages_window_voter", "window_id", "voter_key", "submitted_at"),
     )
 
 

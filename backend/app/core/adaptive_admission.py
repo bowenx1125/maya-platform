@@ -941,6 +941,38 @@ def polling_pressure(settings: Settings | None = None) -> bool:
         return s.danger or s.ramp_since is not None or s.brake_reason is not None
 
 
+def danger_latched(settings: Settings | None = None) -> bool:
+    """True while the danger latch holds: low-priority traffic (Debate audience
+    votes and barrages) is refused at once instead of using the reserve."""
+
+    runtime = settings if settings is not None else get_settings()
+    with _cond:
+        _refresh_locked(runtime)
+        return _state.danger
+
+
+def debate_audience_cap(settings: Settings | None = None, reserve: int = 1) -> int | None:
+    """Concurrency cap for Debate audience writes under pressure (2026-10-19).
+
+    ``reserve`` while the danger latch holds (a trickle, never zero); the
+    release ramp cap (2, then +1 every 5 s) while ramping; None otherwise.
+    """
+
+    runtime = settings if settings is not None else get_settings()
+    with _cond:
+        _refresh_locked(runtime)
+        if _state.danger:
+            return max(1, int(reserve))
+        return _ramp_cap_locked(runtime, _clock())
+
+
+def admission_waiting() -> int:
+    """Operations queued for the adaptive budget (scoring, chat, creates...)."""
+
+    with _cond:
+        return _waiting_total()
+
+
 def shared_wait_seconds(cap: float) -> float:
     """Seconds a layer-2 gate may still wait: ``cap`` bounded by the request
     deadline set in ``adaptive_slot`` (0 when it already expired)."""
@@ -1037,6 +1069,9 @@ __all__ = [
     "db_write_started",
     "db_writes_in_flight",
     "polling_pressure",
+    "danger_latched",
+    "debate_audience_cap",
+    "admission_waiting",
     "record_db_write_ms",
     "set_cpu_reader",
     "record_pool_wait_ms",

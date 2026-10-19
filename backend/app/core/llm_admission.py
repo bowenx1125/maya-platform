@@ -75,6 +75,27 @@ def llm_admission_slot(settings: Settings | None = None) -> Iterator[None]:
         yield
 
 
+@contextmanager
+def debate_llm_slot(settings: Settings | None = None) -> Iterator[None]:
+    """An LLM/TTS slot for Debate turns, speech and reports.
+
+    2026-10-19: these waited in the lowest ("llm") class, behind sign-in and
+    chat opening, so a busy lesson could starve the Debate on stage. They now
+    queue in the "write" class like a student's next message (just below
+    scoring/finishing, which stays first) and are served first by the danger
+    reserve after it; the per-process LLM backstop still applies inside.
+    Re-entrant like ``llm_admission_slot``.
+    """
+
+    if int(getattr(_held, "depth", 0)) > 0:
+        yield
+        return
+    runtime = settings if settings is not None else get_settings()
+    with adaptive_slot("write", runtime):
+        with _held_slot(runtime):
+            yield
+
+
 def llm_admission_held() -> bool:
     """Whether this thread currently holds an LLM slot."""
 
@@ -123,6 +144,7 @@ def _admitted(settings: Settings | None) -> Iterator[None]:
 
 
 __all__ = [
+    "debate_llm_slot",
     "llm_admission_busy_error",
     "llm_admission_held",
     "llm_admission_slot",

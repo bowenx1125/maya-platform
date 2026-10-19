@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import secrets
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -19,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -348,25 +349,43 @@ def _barrages(session: Session, window_id: str) -> list[BarrageMessage]:
     )
 
 
+def _vote_counts(session: Session, window_id: str) -> dict[str, int]:
+    """Votes per participant in one COUNT ... GROUP BY (2026-10-19).
+
+    Every vote used to read all of the window's votes twice, so a class of
+    60 voting together did ~60² row reads under the window lock.
+    """
+
+    return {
+        str(participant_id): int(count)
+        for participant_id, count in session.execute(
+            select(Vote.participant_id, func.count())
+            .where(Vote.window_id == window_id)
+            .group_by(Vote.participant_id)
+        )
+    }
+
+
+def _percentage(count: int, total: int) -> float:
+    # The contract uses one deterministic decimal place.  Avoid binary
+    # representation drift by rounding the integer ratio before storing
+    # the JSON projection.
+    return round((count * 1000 / total) if total else 0) / 10
+
+
 def _aggregates(
     session: Session,
     debate_id: str,
     window_id: str,
 ) -> list[VoteAggregate]:
     participants = _participants(session, debate_id)
-    votes = _votes(session, window_id)
-    counts: dict[str, int] = {str(item.id): 0 for item in participants}
-    for vote in votes:
-        if vote.participant_id in counts:
-            counts[vote.participant_id] += 1
+    stored = _vote_counts(session, window_id)
+    counts: dict[str, int] = {str(item.id): stored.get(str(item.id), 0) for item in participants}
     total = sum(counts.values())
     output: list[VoteAggregate] = []
     for participant in participants:
         count = counts[str(participant.id)]
-        # The contract uses one deterministic decimal place.  Avoid binary
-        # representation drift by rounding the integer ratio before storing
-        # the JSON projection.
-        percentage = round((count * 1000 / total) if total else 0) / 10
+        percentage = _percentage(count, total)
         output.append(
             VoteAggregate(
                 participant_id=_as_uuid(participant.id),
@@ -861,6 +880,62 @@ def _sqlite_write_conflict(exc: OperationalError) -> bool:
     return "database is locked" in detail or "snapshot" in detail or "busy" in detail
 
 
+def _vote_replay(
+    session: Session,
+    window_id: str,
+    submission_id: str,
+    voter_key: str | None,
+    participant_id: str,
+) -> VoteSubmitted | None:
+    """An already-counted vote: the same submission, or the same person again.
+
+    A repeat vote by one person (another submission id, any participant) keeps
+    the first vote and answers as submitted: one vote per window per person.
+    """
+
+    existing = session.scalar(
+        select(Vote).where(Vote.window_id == window_id, Vote.client_submission_id == submission_id)
+    )
+    if existing is not None:
+        if existing.participant_id != participant_id:
+            raise idempotency_conflict()
+        return VoteSubmitted(vote_submitted=True)
+    if voter_key is not None and session.scalar(
+        select(Vote.id).where(Vote.window_id == window_id, Vote.voter_key == voter_key).limit(1)
+    ):
+        return VoteSubmitted(vote_submitted=True)
+    return None
+
+
+def debate_rate_limited(retry_after_seconds: float) -> PlatformError:
+    seconds = max(1, math.ceil(retry_after_seconds))
+    return PlatformError(
+        "debate_rate_limited",
+        "You are sending too fast. Wait a moment and send again.",
+        429,
+        {"retryable": True, "retry_after_seconds": seconds},
+    )
+
+
+def _barrage_cooldown_left(
+    session: Session, window_id: str, voter_key: str | None, cooldown: float
+) -> float:
+    """Seconds until this person may send another barrage (0 when allowed)."""
+
+    if voter_key is None or cooldown <= 0:
+        return 0.0
+    last = session.scalar(
+        select(func.max(BarrageMessage.submitted_at)).where(
+            BarrageMessage.window_id == window_id, BarrageMessage.voter_key == voter_key
+        )
+    )
+    if last is None:
+        return 0.0
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    return max(0.0, cooldown - (_now() - last).total_seconds())
+
+
 def _begin_writer(session_factory: Callable[[], Session]) -> Session:
     session = session_factory()
     try:
@@ -1221,8 +1296,18 @@ class InteractionService:
         *,
         access_token: str,
         payload: VoteRequest,
+        voter_key: str | None = None,
     ) -> VoteSubmitted:
         parsed = _window_token(self.settings, access_token)
+        submission_id = str(payload.client_submission_id)
+        # Replays and repeat voters answer from a plain read, before the
+        # window lock every other vote of this Debate waits behind.
+        with self.session_factory() as read:
+            replay = _vote_replay(
+                read, str(parsed.window_id), submission_id, voter_key, str(payload.participant_id)
+            )
+        if replay is not None:
+            return replay
         session = _begin_writer(self.session_factory)
         event: PostCommitInteractionEvent | None = None
         try:
@@ -1238,18 +1323,13 @@ class InteractionService:
                     )
                     if window is None:
                         raise not_found()
-                    existing = session.scalar(
-                        select(Vote).where(
-                            Vote.window_id == window.id,
-                            Vote.client_submission_id == str(payload.client_submission_id),
-                        )
+                    replay = _vote_replay(
+                        session, window.id, submission_id, voter_key, str(payload.participant_id)
                     )
-                    if existing is not None:
-                        if existing.participant_id != str(payload.participant_id):
-                            raise idempotency_conflict()
+                    if replay is not None:
                         session.commit()
                         session.close()
-                        return VoteSubmitted(vote_submitted=True)
+                        return replay
                     if window.status == "finalized":
                         raise PlatformError(
                             "interaction_finalized",
@@ -1276,17 +1356,16 @@ class InteractionService:
                         participant_id=str(payload.participant_id),
                         client_submission_id=str(payload.client_submission_id),
                         submitted_at=_now(),
+                        voter_key=voter_key,
                     )
                     session.add(vote)
                     session.flush()
                     debate = session.get(Debate, window.debate_id)
                     if debate is None:
                         raise not_found()
-                    aggregate = next(
-                        row
-                        for row in _aggregates(session, window.debate_id, window.id)
-                        if str(row.participant_id) == str(participant.id)
-                    )
+                    counts = _vote_counts(session, window.id)
+                    new_count = counts.get(str(participant.id), 0)
+                    total_votes = sum(counts.values())
                     event = _event(
                         session,
                         debate,
@@ -1294,9 +1373,9 @@ class InteractionService:
                         {
                             "participant_id": str(participant.id),
                             "slot": participant.slot,
-                            "new_count": aggregate.count,
-                            "percentage": aggregate.percentage,
-                            "total_votes": len(_votes(session, window.id)),
+                            "new_count": new_count,
+                            "percentage": _percentage(new_count, total_votes),
+                            "total_votes": total_votes,
                         },
                     )
                     session.commit()
@@ -1316,6 +1395,15 @@ class InteractionService:
                             )
                         )
                         if row is not None and row.participant_id == str(payload.participant_id):
+                            session.close()
+                            return VoteSubmitted(vote_submitted=True)
+                        # The same person voted at once on the other backend.
+                        if voter_key is not None and retry.scalar(
+                            select(Vote.id).where(
+                                Vote.window_id == str(parsed.window_id),
+                                Vote.voter_key == voter_key,
+                            )
+                        ):
                             session.close()
                             return VoteSubmitted(vote_submitted=True)
                     if _is_event_sequence_integrity(exc) and attempt + 1 < _EVENT_SEQUENCE_ATTEMPTS:
@@ -1348,9 +1436,35 @@ class InteractionService:
         *,
         access_token: str,
         payload: BarrageRequest,
+        voter_key: str | None = None,
     ) -> BarrageSubmitted:
         parsed = _window_token(self.settings, access_token)
         submission_id = str(payload.client_submission_id)
+        cooldown = float(self.settings.debate_barrage_cooldown_seconds)
+        # A resend of the same barrage is a replay, never rate limited; a new
+        # one inside the person's cooldown is refused before the window lock.
+        with self.session_factory() as read:
+            replayed = read.scalar(
+                select(BarrageMessage).where(
+                    BarrageMessage.window_id == str(parsed.window_id),
+                    BarrageMessage.client_submission_id == submission_id,
+                )
+            )
+            open_window = read.scalar(
+                select(ClassroomInteractionWindow.id)
+                .join(Debate, Debate.id == ClassroomInteractionWindow.debate_id)
+                .where(
+                    ClassroomInteractionWindow.id == str(parsed.window_id),
+                    ClassroomInteractionWindow.status == "open",
+                    Debate.final_input_json.is_(None),
+                )
+            )
+            # Only an open collection is paced here; a closed one answers its
+            # own 410/404 under the lock below.
+            if replayed is None and open_window is not None:
+                wait = _barrage_cooldown_left(read, str(parsed.window_id), voter_key, cooldown)
+                if wait > 0:
+                    raise debate_rate_limited(wait)
         session = _begin_writer(self.session_factory)
         event: PostCommitInteractionEvent | None = None
         try:
@@ -1424,6 +1538,13 @@ class InteractionService:
                         raise unprocessable(
                             "barrage_turn_unavailable", "This lesson has no turn-bound collection."
                         )
+                    # Under the window lock (after the closed/turn checks, so
+                    # a closed collection still answers 410/409), so two
+                    # backends cannot both admit one person's barrages inside
+                    # the cooldown.
+                    wait = _barrage_cooldown_left(session, window.id, voter_key, cooldown)
+                    if wait > 0:
+                        raise debate_rate_limited(wait)
                     next_sequence = _allocate_barrage_sequence(session, window)
                     # The debate row may have been loaded before this window lock.
                     # Refresh it so the event allocator sees sequences already
@@ -1439,6 +1560,7 @@ class InteractionService:
                         client_submission_id=str(payload.client_submission_id),
                         sequence=next_sequence,
                         submitted_at=_now(),
+                        voter_key=voter_key,
                     )
                     session.add(barrage)
                     session.flush()

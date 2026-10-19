@@ -23,7 +23,7 @@ from typing import Literal, Protocol, cast
 
 from app.core.config import configured_llm_model
 from app.core.errors import PlatformError
-from app.core.llm_admission import llm_admission_slot
+from app.core.llm_admission import debate_llm_slot
 from app.providers.control import (
     REPAIR_FEEDBACK_POLICY_HASH,
     ExportFieldV1,
@@ -1681,7 +1681,7 @@ class LLMTurnRuntime:
                     # rather than a "sending" row recovery must call unknown.
                     # The transport's own slot request is re-entrant here.
                     try:
-                        admission.enter_context(llm_admission_slot())
+                        admission.enter_context(debate_llm_slot())
                     except PlatformError as exc:
                         raise _AdmissionRefused(exc.code) from exc
                     sending = _method(self.ledger, "mark_sending")

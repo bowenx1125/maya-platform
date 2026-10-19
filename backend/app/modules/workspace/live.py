@@ -2,13 +2,18 @@
 
 import asyncio
 import json
+import time
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Response, WebSocket, WebSocketDisconnect
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core.adaptive_admission import polling_pressure
+from app.core.config import Settings, get_settings
+from app.core.debate_gate import PublicCopy
 from app.core.errors import Error, PlatformError, conflict, not_found
 from app.core.sqlutil import dialect_insert
 from app.modules.agents.schemas import AvatarConfig
@@ -29,6 +34,20 @@ router = APIRouter(
     tags=["Live"], responses={401: {"model": Error}, 403: {"model": Error}, 404: {"model": Error}}
 )
 
+# A heartbeat for the same lease/session/epoch acknowledged this recently is
+# answered from memory while the server sheds load (the lease lasts 20 s).
+HEARTBEAT_ACK_SECONDS = 10.0
+_HEARTBEAT_ACKS: dict[tuple[str, str, str, str], tuple[float, LiveSummary]] = {}
+# Per-process copies of the course live status and the audience view.
+_PUBLIC = PublicCopy()
+
+
+def reset_live_caches() -> None:
+    """Forget cached live answers (tests only)."""
+
+    _HEARTBEAT_ACKS.clear()
+    _PUBLIC.clear()
+
 
 @router.post(
     "/debates/{debate_id}/live",
@@ -42,13 +61,31 @@ def heartbeat(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
+    settings: Settings = Depends(get_settings),
 ) -> LiveSummary | None:
+    if payload.active and polling_pressure(settings):
+        # Under pressure the same lease, session and controller epoch that
+        # was refreshed within HEARTBEAT_ACK_SECONDS is acknowledged from
+        # memory: the 20 s lease is still valid, so one write per ~10 s keeps
+        # the broadcast alive at a fraction of the database work.
+        ack = _HEARTBEAT_ACKS.get(
+            (
+                str(debate_id),
+                str(payload.lease_id),
+                context.session.id_hash,
+                str(payload.controller_epoch),
+            )
+        )
+        if ack is not None and time.monotonic() - ack[0] < HEARTBEAT_ACK_SECONDS:
+            return ack[1]
     debate = db.get(Debate, str(debate_id))
     if debate is None or debate.deleted_at is not None:
         raise not_found()
     course_member(db, context, debate.course_id, teacher=True)
     lease_id = str(payload.lease_id)
+    ack_key = (str(debate_id), lease_id, context.session.id_hash, str(payload.controller_epoch))
     if not payload.active:
+        _HEARTBEAT_ACKS.pop(ack_key, None)
         db.execute(
             delete(LivePresence).where(
                 LivePresence.course_id == debate.course_id,
@@ -88,7 +125,9 @@ def heartbeat(
             set_=values,
         )
     )
-    return LiveSummary(course_id=UUID(debate.course_id), debate_id=debate_id, topic=debate.topic)
+    summary = LiveSummary(course_id=UUID(debate.course_id), debate_id=debate_id, topic=debate.topic)
+    _HEARTBEAT_ACKS[ack_key] = (time.monotonic(), summary)
+    return summary
 
 
 @router.get(
@@ -99,8 +138,22 @@ def live_status(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
+    settings: Settings = Depends(get_settings),
 ) -> LiveSummary | None:
     course_member(db, context, str(course_id))
+
+    def load() -> tuple[LiveSummary | None]:
+        return (_live_status(db, service, course_id),)
+
+    # Every student page polls this. The answer is the same for the whole
+    # course: a copy for a couple of seconds, a stale one under pressure.
+    return cast(
+        tuple[LiveSummary | None],
+        _PUBLIC.read(("live_status", str(course_id)), settings, load, what="live_status"),
+    )[0]
+
+
+def _live_status(db: Session, service: PlaybackService, course_id: UUID) -> LiveSummary | None:
     presence = db.get(LivePresence, str(course_id))
     if presence is None or presence.expires_at.replace(tzinfo=UTC) <= datetime.now(UTC):
         return None
@@ -115,10 +168,26 @@ def live_status(
 def live_snapshot(
     db: Session, service: PlaybackService, debate_id: str, context: AuthContext
 ) -> LiveSnapshot:
+    live_access(db, debate_id, context)
+    return live_view(db, service, debate_id)
+
+
+def live_access(db: Session, debate_id: str, context: AuthContext) -> str:
+    """The viewer may watch this Debate's course; returns the course id."""
+
     debate = db.get(Debate, debate_id)
     if debate is None or debate.deleted_at is not None:
         raise not_found()
     course_member(db, context, debate.course_id)
+    return str(debate.course_id)
+
+
+def live_view(db: Session, service: PlaybackService, debate_id: str) -> LiveSnapshot:
+    """The audience snapshot, the same for every viewer (access checked apart)."""
+
+    debate = db.get(Debate, debate_id)
+    if debate is None or debate.deleted_at is not None:
+        raise not_found()
     presence = db.get(LivePresence, debate.course_id)
     now = datetime.now(UTC)
     state = service._state(db, debate)
@@ -210,12 +279,37 @@ def get_live_snapshot(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
+    settings: Settings = Depends(get_settings),
 ) -> LiveSnapshot:
-    return live_snapshot(db, service, str(debate_id), context)
+    key = str(debate_id)
+    live_access(db, key, context)
+    view = cast(
+        LiveSnapshot,
+        _PUBLIC.read(
+            ("live_view", key),
+            settings,
+            lambda: live_view(db, service, key),
+            what="live_view",
+            # A Debate event (local or relayed) retires the fresh copy at
+            # once; under pressure an older copy is still served.
+            version=service.event_hub.version(key),
+        ),
+    )
+    return view.model_copy(update={"server_time": datetime.now(UTC)})
 
 
 @router.websocket("/live/{debate_id}/events")
 async def live_events(websocket: WebSocket, debate_id: UUID) -> None:
+    """Audience stream: woken by Debate events, never one query per viewer per tick.
+
+    Load plan 2026-10-19: every viewer's socket used to read the database once
+    a second. Now the audience view is one per-process copy per Debate
+    (rebuilt at most every ``DEBATE_SNAPSHOT_CACHE_SECONDS``), sockets wake on
+    events (local, or relayed from the other backend) with a fallback poll of
+    ``DEBATE_WS_FALLBACK_POLL_SECONDS``, and access is rechecked every
+    ``DEBATE_WS_AUTH_RECHECK_SECONDS``.
+    """
+
     await websocket.accept()
     settings = websocket.app.state.settings
     if not _websocket_origin_allowed(websocket, settings):
@@ -223,17 +317,44 @@ async def live_events(websocket: WebSocket, debate_id: UUID) -> None:
         return
     database = websocket.app.state.database
     service = websocket.app.state.playback_service
-    queue = await service.event_hub.subscribe(str(debate_id))
+    hub = service.event_hub
+    key = str(debate_id)
+    cache_key = (key, "audience")
+    ttl = float(settings.debate_snapshot_cache_seconds)
+    recheck = float(settings.debate_ws_auth_recheck_seconds)
+    fallback = float(settings.debate_ws_fallback_poll_seconds)
+    raw_token = websocket.cookies.get("maya_session")
+
+    def authorized() -> bool:
+        with database.session() as db:
+            context = get_auth_context(db, settings, raw_token)
+            if context is None:
+                return False
+            live_access(db, key, context)
+            return True
+
+    async def build() -> LiveSnapshot:
+        def read() -> LiveSnapshot:
+            with database.session() as db:
+                return live_view(db, service, key)
+
+        return await asyncio.to_thread(read)
+
+    queue = await hub.subscribe(key)
     incoming = asyncio.create_task(websocket.receive())
     previous = ""
+    last_authorized: float | None = None
     try:
         while True:
-            with database.session() as db:
-                context = get_auth_context(db, settings, websocket.cookies.get("maya_session"))
-                if context is None:
+            if last_authorized is None or time.monotonic() - last_authorized >= recheck:
+                if not await asyncio.to_thread(authorized):
                     await websocket.close(code=4401)
                     return
-                snapshot = live_snapshot(db, service, str(debate_id), context)
+                last_authorized = time.monotonic()
+            shared, built_version = await hub.snapshots.get(cache_key, ttl, hub.version(key), build)
+            snapshot = cast(LiveSnapshot, shared).model_copy(
+                update={"server_time": datetime.now(UTC)}
+            )
             comparable = snapshot.model_dump(mode="json", exclude={"server_time", "playback"})
             if snapshot.playback:
                 comparable["playback"] = snapshot.playback.model_dump(
@@ -246,10 +367,15 @@ async def live_events(websocket: WebSocket, debate_id: UUID) -> None:
             if not snapshot.active:
                 await websocket.close(code=1000)
                 return
+            timeout = fallback
+            if built_version < hub.version(key):
+                # The shared copy predates an event: look again when it expires.
+                age = hub.snapshots.age(cache_key) or 0.0
+                timeout = max(0.05, ttl - age)
             event = asyncio.create_task(queue.get())
             try:
                 done, _ = await asyncio.wait(
-                    {event, incoming}, timeout=1, return_when=asyncio.FIRST_COMPLETED
+                    {event, incoming}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
                 )
                 if incoming in done:
                     await websocket.close(code=4403)
@@ -257,6 +383,9 @@ async def live_events(websocket: WebSocket, debate_id: UUID) -> None:
             finally:
                 event.cancel()
                 await asyncio.gather(event, return_exceptions=True)
+            # A burst of events is one wake-up.
+            while not queue.empty():
+                queue.get_nowait()
     except PlatformError:
         await websocket.close(code=4403)
     except (WebSocketDisconnect, RuntimeError):
@@ -264,7 +393,7 @@ async def live_events(websocket: WebSocket, debate_id: UUID) -> None:
     finally:
         incoming.cancel()
         await asyncio.gather(incoming, return_exceptions=True)
-        await service.event_hub.unsubscribe(str(debate_id), queue)
+        await hub.unsubscribe(key, queue)
 
 
 @router.get(

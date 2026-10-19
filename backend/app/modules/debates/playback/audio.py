@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
 
+from app.core.errors import PlatformError
+from app.core.llm_admission import debate_llm_slot
 from app.modules.knowledge.files import (
     contained_path,
     promote_atomic,
@@ -22,7 +24,13 @@ from app.modules.knowledge.files import (
     verify_staged,
     write_atomic,
 )
-from app.providers.tts import MockTTSProvider, TTSProvider, TTSProviderError
+from app.providers.tts import (
+    MockTTSProvider,
+    TTSProvider,
+    TTSProviderError,
+    TTSProviderUnavailableError,
+    TTSResult,
+)
 
 MEDIA_TICKET_TTL = timedelta(minutes=5)
 MEDIA_TICKET_GRACE = timedelta(seconds=60)
@@ -310,6 +318,41 @@ class AudioStore:
         with self._lock:
             self._metadata[(metadata.debate_id, metadata.turn_id)] = metadata
 
+    def _synthesize(
+        self,
+        speech: str,
+        voice_token: str,
+        *,
+        language: str,
+        target_model_key: str | None,
+    ) -> TTSResult:
+        """One TTS provider call, holding an LLM admission slot like a model call.
+
+        2026-10-19: Debate speech was the one provider call outside global
+        pressure protection, so a busy lesson could crowd out assessment
+        scoring and chat. A real provider call now waits for a slot in the
+        lowest ("llm") class; the transport-style wait is bounded by the
+        shared deadline. A retryable refusal is ``tts_provider_unavailable``:
+        the turn plays as text and its audio can be regenerated later, so the
+        lesson never stalls on it. The local Mock makes no outbound call.
+        """
+
+        if getattr(self.tts_provider, "key", "mock") == "mock":
+            return self.tts_provider.synthesize(
+                speech, voice_token, language=language, target_model_key=target_model_key
+            )
+        try:
+            with debate_llm_slot():
+                return self.tts_provider.synthesize(
+                    speech, voice_token, language=language, target_model_key=target_model_key
+                )
+        except PlatformError as exc:
+            if not exc.details.get("retryable"):
+                raise
+            raise TTSProviderUnavailableError(
+                "speech admission refused", safe_code="tts_provider_unavailable"
+            ) from exc
+
     def synthesize_and_store(
         self,
         *,
@@ -328,7 +371,7 @@ class AudioStore:
         # The caller supplies a server-side kind/profile token; it never leaves
         # the store or appears in a public DTO. The model is the profile's
         # own target, so a preset is not sent to the clone model.
-        result = self.tts_provider.synthesize(
+        result = self._synthesize(
             speech,
             voice_token,
             language=language,
@@ -379,7 +422,7 @@ class AudioStore:
         path = self._non_symlink_path(relative)
         if path is None or path.exists() or path.is_symlink():
             raise TTSProviderError("audio staging path is unavailable")
-        result = self.tts_provider.synthesize(
+        result = self._synthesize(
             speech,
             voice_token,
             language=language,
