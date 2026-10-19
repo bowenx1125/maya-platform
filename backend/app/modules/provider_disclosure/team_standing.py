@@ -48,7 +48,7 @@ from app.modules.teams.models import (
     TeamVersion,
     TeamVersionMember,
 )
-from app.modules.teams.publication_access import chat_team_is_live_teacher_public
+from app.modules.teams.publication_access import chat_team_open_to_non_owner
 from app.modules.teams.service import (
     FrozenTeamSelection,
     resolve_chat_entry,
@@ -1502,8 +1502,9 @@ def _current_team_dispatch_is_authorized(
             conversation.origin != "custom_team"
             or (
                 conversation.team_owner_user_id != actor_user_id
-                and not chat_team_is_live_teacher_public(
+                and not chat_team_open_to_non_owner(
                     db,
+                    actor_user_id=actor_user_id,
                     team_id=conversation.team_id,
                     team_version_id=conversation.team_version_id,
                     team_authorization_epoch=conversation.team_authorization_epoch,
