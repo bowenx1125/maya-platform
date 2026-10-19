@@ -3142,6 +3142,21 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "LEFT JOIN jobs AS j ON j.turn_id=t.id AND j.debate_id=t.debate_id "
                 "AND j.operation='debate_turn_prepare' "
             )
+            # Turn age counts from the later of the turn's own timestamp and
+            # its prepare job's creation: a later turn of a long Preview was
+            # planned minutes ago but only became runnable when its job was
+            # enqueued, so its plan time must not expire it (2026-10-20: the
+            # 12th turn of a 4-Agent Preview failed preparation_timeout the
+            # instant its job was created).
+            turn_ts = "COALESCE(t.updated_at, t.created_at)"
+            since = (
+                f"(CASE WHEN j.created_at IS NOT NULL AND j.created_at > {turn_ts} "
+                f"THEN j.created_at ELSE {turn_ts} END)"
+            )
+            job_age = (
+                f"(t.generation_status='pending' AND {since}<=:pending_cut) OR "
+                f"(t.generation_status='running' AND {since}<=:running_cut)"
+            )
             age_clause = (
                 "("
                 "(j.id IS NOT NULL AND j.state='pending' AND j.claim_token IS NULL "
