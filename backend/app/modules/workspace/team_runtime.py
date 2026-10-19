@@ -1398,18 +1398,23 @@ def _speaker_prefix(names: Sequence[str]) -> re.Pattern[str] | None:
     alternatives = "|".join(re.escape(name) for name in names)
     # `名字:`, `名字：`, `**名字**：`, `【名字】：` or `[名字]:` at a line start.
     return re.compile(
-        rf"^[ \t>*_#【\[]*({alternatives})[ \t*_】\]]*[:：][ \t*_]*",
+        rf"^[ \t>*_#【\[]*({alternatives})[ \t*_】\]]*[:：][ \t]*",
         re.MULTILINE,
     )
 
 
-def strip_impersonation(text: str, own_name: str, other_names: Sequence[str]) -> str:
-    """Drop what a member wrote as a teammate; drop its own `名字:` prefix.
+_FIRST_PERSON = ("我", "I ", "I'm", "I’m")
 
-    A line that opens with a teammate's name and a colon starts a segment
-    written as that teammate; it runs to the next such speaker line or the end
-    and is removed. A line that opens with the member's own name and a colon
-    keeps its text without the prefix and resumes keeping lines.
+
+def strip_impersonation(text: str, own_name: str, other_names: Sequence[str]) -> str:
+    """Drop what a member wrote as a teammate; drop its own leading `名字:`.
+
+    A reply in transcript shape (its first line opens with a member name and a
+    colon, as in chat 9689e727: `小爱鉴定师: …` then `读心师: …`) has every
+    teammate segment removed, from that speaker line to the next one, and its
+    own prefixes dropped. Elsewhere a teammate line is removed only when it
+    speaks in the first person (`读心师：我…`): a leader describing its team
+    (`**读心师**：他负责记录…`) is kept as written.
     """
 
     own = _single_line_name(own_name)
@@ -1419,10 +1424,13 @@ def strip_impersonation(text: str, own_name: str, other_names: Sequence[str]) ->
     pattern = _speaker_prefix([own, *others])
     if pattern is None:
         return text
+    lines = text.split("\n")
+    first = next((line for line in lines if line.strip()), "")
+    transcript = pattern.match(first) is not None
     kept: list[str] = []
     keeping = True
     changed = False
-    for line in text.split("\n"):
+    for line in lines:
         match = pattern.match(line)
         if match is None:
             if keeping:
@@ -1430,14 +1438,24 @@ def strip_impersonation(text: str, own_name: str, other_names: Sequence[str]) ->
             else:
                 changed = True
             continue
-        changed = True
+        rest = line[match.end() :]
         if match.group(1) == own:
             keeping = True
-            rest = line[match.end() :]
-            if rest.strip():
-                kept.append(rest)
-        else:
+            if transcript:
+                changed = True
+                # `小爱鉴定师: 小爱鉴定师: …` drops every repeated prefix.
+                while (again := pattern.match(rest)) is not None and again.group(1) == own:
+                    rest = rest[again.end() :]
+                if rest.strip():
+                    kept.append(rest)
+            else:
+                kept.append(line)
+        elif transcript or rest.lstrip().startswith(_FIRST_PERSON):
+            changed = True
             keeping = False
+        else:
+            keeping = True
+            kept.append(line)
     if not changed:
         return text
     return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()

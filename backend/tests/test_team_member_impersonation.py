@@ -78,9 +78,29 @@ def test_strip_resumes_at_the_members_own_name_and_handles_full_width_and_bold()
     text = "读心师：我替读心师说一句。\n**小爱鉴定师**：回到我自己。\n我的第二行。"
     assert _strip(text) == "回到我自己。\n我的第二行。"
     assert _strip("小爱鉴定师：你好") == "你好"
+    # Seen in the A/B on the old history: a doubled prefix, and bold text.
+    assert _strip("小爱鉴定师: 小爱鉴定师: 收个尾。") == "收个尾。"
+    assert _strip("小爱鉴定师: **完整结论**\n正文") == "**完整结论**\n正文"
     assert _strip("Scorer: hi", own="Scorer") == "hi"
     # Only teammates count: a name outside the Team is ordinary text.
     assert _strip("老师: 这是引用") == "老师: 这是引用"
+
+
+def test_strip_keeps_a_leader_describing_its_team() -> None:
+    # Real-model A/B (2026-10-19): the leader introduced the team this way;
+    # the first stripper removed everything after the first teammate line.
+    text = (
+        "你好呀。我们这队里有两个人。\n\n"
+        "**读心师**：他负责记录你答的每一句原话。\n\n"
+        "**我（小爱鉴定师）**：我负责出题。\n"
+        "小爱鉴定师：也负责收尾。"
+    )
+    assert _strip(text) == text
+
+
+def test_strip_drops_a_first_person_teammate_line_mid_reply() -> None:
+    text = "我先开个头。\n\n读心师：我来分析她的性格。\n她偏回避。\n\n军师：他会给建议。"
+    assert _strip(text) == "我先开个头。\n\n军师：他会给建议。"
 
 
 def test_strip_of_only_teammate_lines_is_empty() -> None:
