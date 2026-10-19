@@ -97,14 +97,21 @@ def test_publish_runs_inside_the_create_admission_slot(monkeypatch: Any) -> None
         return "ok"
 
     monkeypatch.setattr(agents_router, "_publish_agent_version_admitted", fake)
-    result = agents_router.publish_agent_version(
+
+    class _Db:
+        def commit(self) -> None:
+            events.append("release-connection")
+
+    publish: Any = agents_router.publish_agent_version
+    result = publish(
         uuid4(),
         object(),
         idempotency_key="k" * 16,
-        _csrf_header="x" * 32,  # type: ignore[arg-type]
+        _csrf_header="x" * 32,
         context=object(),
-        db=object(),
-        settings=object(),  # type: ignore[arg-type]
+        db=_Db(),
+        settings=object(),
     )
     assert result == "ok"
-    assert events == ["enter", "publish", "exit"]
+    # The request's pool connection is handed back before queueing.
+    assert events == ["release-connection", "enter", "publish", "exit"]
