@@ -16,7 +16,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError
-from app.core.llm_admission import llm_admission_slot
+from app.core.llm_admission import debate_llm_slot
 from app.modules.knowledge.files import (
     contained_path,
     promote_atomic,
@@ -342,7 +342,7 @@ class AudioStore:
                 speech, voice_token, language=language, target_model_key=target_model_key
             )
         try:
-            with llm_admission_slot():
+            with debate_llm_slot():
                 return self.tts_provider.synthesize(
                     speech, voice_token, language=language, target_model_key=target_model_key
                 )

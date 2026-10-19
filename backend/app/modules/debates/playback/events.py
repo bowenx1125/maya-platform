@@ -184,6 +184,9 @@ LOGGER = logging.getLogger(__name__)
 # Sequences remembered per Debate to drop a second delivery of one event (the
 # local publish and the relay both see it).
 _SEEN_WINDOW = 4096
+# How long a socket waits for a missing sequence to appear in the store.
+GAP_FILL_SECONDS = 5.0
+GAP_FILL_RETRY_SECONDS = 0.25
 
 
 class SharedSnapshots:
@@ -210,16 +213,27 @@ class SharedSnapshots:
         ttl: float,
         version: int,
         load: Callable[[], Awaitable[Any]],
+        *,
+        same_version: bool = False,
     ) -> tuple[Any, int]:
-        """The snapshot for ``key`` and the hub version it was built at."""
+        """The snapshot for ``key`` and the hub version it was built at.
+
+        ``same_version`` also drops a copy built before the latest event (the
+        teacher stage must never get a snapshot older than events it saw).
+        """
+
+        def usable(entry: tuple[Any, float, int] | None) -> bool:
+            if entry is None or time.monotonic() - entry[1] >= ttl:
+                return False
+            return not same_version or entry[2] == version
 
         entry = self._entries.get(key)
-        if entry is not None and time.monotonic() - entry[1] < ttl:
+        if entry is not None and usable(entry):
             return entry[0], entry[2]
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
             entry = self._entries.get(key)
-            if entry is not None and time.monotonic() - entry[1] < ttl:
+            if entry is not None and usable(entry):
                 return entry[0], entry[2]
             value = await load()
             self.builds += 1
@@ -330,6 +344,30 @@ class DebateEventHub:
                 cursor = max(cursor, event.sequence)
                 await self.publish(event)
 
+    async def _fill_gap(self, debate_id: str, watermark: int, upto: int) -> list[EventRecord]:
+        """Events ``watermark+1 .. upto`` read from the store, contiguous.
+
+        Raises the sequence-gap error only when the store still lacks one of
+        them after ``GAP_FILL_SECONDS``.
+        """
+
+        deadline = time.monotonic() + GAP_FILL_SECONDS
+        while True:
+            missing = await asyncio.to_thread(self.store.events_after, debate_id, watermark)
+            pending = [item for item in missing if item.sequence <= upto]
+            expected = list(range(watermark + 1, upto + 1))
+            if [item.sequence for item in pending] == expected:
+                return pending
+            if time.monotonic() >= deadline:
+                LOGGER.warning(
+                    "Debate event sequence gap debate_id=%s watermark=%s upto=%s",
+                    debate_id,
+                    watermark,
+                    upto,
+                )
+                raise RuntimeError("debate event sequence gap")
+            await asyncio.sleep(GAP_FILL_RETRY_SECONDS)
+
     def append_committed(
         self,
         debate_id: str,
@@ -396,11 +434,10 @@ class DebateEventHub:
                 pending = [event]
                 if event.sequence != watermark + 1:
                     # Local commits and relayed events from another backend
-                    # can arrive out of order; the store has the gap.
-                    missing = await asyncio.to_thread(self.store.events_after, debate_id, watermark)
-                    pending = [item for item in missing if item.sequence <= event.sequence]
-                    if not pending or pending[0].sequence != watermark + 1:
-                        raise RuntimeError("debate event sequence gap")
+                    # can arrive out of order; the store has the gap. A row
+                    # still committing on the other backend shows up within
+                    # moments, so look again briefly before giving up.
+                    pending = await self._fill_gap(debate_id, watermark, event.sequence)
                 for item in pending:
                     if item.sequence != watermark + 1:
                         raise RuntimeError("debate event sequence gap")

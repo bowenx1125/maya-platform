@@ -148,7 +148,7 @@ describe("audience form under load", () => {
     expect(screen.getByText("Submitted")).toBeTruthy();
   });
 
-  it("stops after five busy answers and keeps the vote for a manual resend", async () => {
+  it("stops after twelve busy answers (~85 s) and keeps the vote for a manual resend", async () => {
     vi.useFakeTimers();
     const api = audienceApi();
     vi.mocked(api.submitVote).mockRejectedValue(busy(1));
@@ -158,8 +158,8 @@ describe("audience form under load", () => {
       target: { value: "Learner" },
     });
     fireEvent.click(screen.getByRole("button", { name: /^Vote$/ }));
-    await advance(60_000);
-    expect(api.submitVote).toHaveBeenCalledTimes(5);
+    await advance(120_000);
+    expect(api.submitVote).toHaveBeenCalledTimes(12);
     expect(screen.queryByText("It's busy right now, retrying…")).toBeNull();
     expect(screen.getByText("busy")).toBeTruthy();
     expect(

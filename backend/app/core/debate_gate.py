@@ -139,6 +139,7 @@ async def interaction_slot(settings: Settings) -> AsyncIterator[None]:
 class _Copy:
     value: Any
     stored_at: float
+    version: int | None = None
 
 
 class PublicCopy:
@@ -153,19 +154,21 @@ class PublicCopy:
         with self._lock:
             self._items.clear()
 
-    def get(self, key: Hashable, max_age: float) -> Any | None:
+    def get(self, key: Hashable, max_age: float, version: int | None = None) -> Any | None:
         with self._lock:
             item = self._items.get(key)
         if item is None or time.monotonic() - item.stored_at > max_age:
             return None
+        if version is not None and item.version != version:
+            return None
         return item.value
 
-    def put(self, key: Hashable, value: Any) -> None:
+    def put(self, key: Hashable, value: Any, version: int | None = None) -> None:
         with self._lock:
             if len(self._items) >= self._max and key not in self._items:
                 oldest = min(self._items, key=lambda k: self._items[k].stored_at)
                 self._items.pop(oldest, None)
-            self._items[key] = _Copy(value, time.monotonic())
+            self._items[key] = _Copy(value, time.monotonic(), version)
 
     def read(
         self,
@@ -174,10 +177,15 @@ class PublicCopy:
         load: Callable[[], Any],
         *,
         what: str,
+        version: int | None = None,
     ) -> Any:
-        """A fresh copy, else (under pressure) a stale one or 503, else ``load()``."""
+        """A fresh copy, else (under pressure) a stale one or 503, else ``load()``.
 
-        fresh = self.get(key, float(settings.debate_public_cache_seconds))
+        With ``version`` a fresh copy must also carry that version; a stale
+        copy under pressure is served whatever its version.
+        """
+
+        fresh = self.get(key, float(settings.debate_public_cache_seconds), version)
         if fresh is not None:
             return fresh
         if polling_pressure(settings):
@@ -188,7 +196,7 @@ class PublicCopy:
                 f"{what}_pressure", int(settings.debate_interaction_retry_seconds)
             )
         value = load()
-        self.put(key, value)
+        self.put(key, value, version)
         return value
 
 

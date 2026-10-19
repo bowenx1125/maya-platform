@@ -12,7 +12,7 @@ import { PlatformApiError } from "../../lib/api";
 
 export const FORM_POLL_MIN_MS = 2000;
 export const FORM_POLL_MAX_MS = 10000;
-export const SUBMIT_RETRY_ATTEMPTS = 5;
+export const SUBMIT_RETRY_ATTEMPTS = 12;
 const SUBMIT_RETRY_BASE_MS = 1000;
 const AUDIENCE_ID_KEY = "maya-audience-id";
 

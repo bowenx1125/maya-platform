@@ -33,7 +33,7 @@ from app.core.errors import (
     invalid_state,
     not_found,
 )
-from app.core.llm_admission import llm_admission_slot
+from app.core.llm_admission import debate_llm_slot
 from app.core.models import (
     CourseMember,
     DemoAcceptanceRun,
@@ -44,6 +44,7 @@ from app.core.models import (
     ProviderOperation,
     ProviderPolicySnapshot,
 )
+from app.core.replica import hold_claim
 from app.core.sqlutil import begin_immediate
 from app.modules.debates.final_input import read_final_input
 from app.modules.debates.generation.segment_grading import (
@@ -987,12 +988,18 @@ def _mark_job_running(db: Session, operation: str, owner_id: str) -> bool:
         raise invalid_state("The generation Job is missing.")
     if row.state != "pending":
         return False
+    # Atomic claim: one backend wins the pending row. The claim token lets
+    # this process keep the job touched while it works (app.core.replica).
+    token = str(uuid4())
     changed = db.execute(
         update(Job)
         .where(where, Job.state == "pending")
-        .values(state="running", attempt=1, updated_at=utc_now())
+        .values(state="running", attempt=1, claim_token=token, updated_at=utc_now())
     )
-    return int(getattr(changed, "rowcount", 0)) == 1
+    claimed = int(getattr(changed, "rowcount", 0)) == 1
+    if claimed:
+        hold_claim(token)
+    return claimed
 
 
 def _mark_job_failed(
@@ -2714,7 +2721,7 @@ def _process_real_report_revision(
         db.commit()
         admission = ExitStack()
         try:
-            admission.enter_context(llm_admission_slot())
+            admission.enter_context(debate_llm_slot())
         except PlatformError as exc:
             if not exc.details.get("retryable"):
                 raise
@@ -3473,8 +3480,12 @@ def reconcile_orphaned_report_statuses(db: Session) -> int:
     return repaired
 
 
-def recover_report_jobs(db: Session) -> int:
-    """Fail running M14 jobs after process restart; never rerun ready rows."""
+def recover_report_jobs(db: Session, *, only_job_ids: Sequence[str] | None = None) -> int:
+    """Fail running M14 jobs after process restart; never rerun ready rows.
+
+    ``only_job_ids`` (a peer backend is alive): fail just these orphans and
+    leave every other running job and status alone.
+    """
 
     # Startup recovery is a writer operation.  Serialize it with worker
     # completion so a stale worker cannot race the failed transition.
@@ -3484,6 +3495,7 @@ def recover_report_jobs(db: Session) -> int:
             select(Job).where(
                 Job.operation.in_(("barrage_insight.generate", "report.generate")),
                 Job.state == "running",
+                *(() if only_job_ids is None else (Job.id.in_(tuple(only_job_ids)),)),
             )
         ).all()
     )
@@ -3528,6 +3540,8 @@ def recover_report_jobs(db: Session) -> int:
         job.updated_at = utc_now()
         recovered += 1
     db.flush()
+    if only_job_ids is not None:
+        return recovered
     return recovered + reconcile_orphaned_report_statuses(db)
 
 

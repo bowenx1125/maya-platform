@@ -1450,7 +1450,18 @@ class InteractionService:
                     BarrageMessage.client_submission_id == submission_id,
                 )
             )
-            if replayed is None:
+            open_window = read.scalar(
+                select(ClassroomInteractionWindow.id)
+                .join(Debate, Debate.id == ClassroomInteractionWindow.debate_id)
+                .where(
+                    ClassroomInteractionWindow.id == str(parsed.window_id),
+                    ClassroomInteractionWindow.status == "open",
+                    Debate.final_input_json.is_(None),
+                )
+            )
+            # Only an open collection is paced here; a closed one answers its
+            # own 410/404 under the lock below.
+            if replayed is None and open_window is not None:
                 wait = _barrage_cooldown_left(read, str(parsed.window_id), voter_key, cooldown)
                 if wait > 0:
                     raise debate_rate_limited(wait)
@@ -1493,11 +1504,6 @@ class InteractionService:
                         raise unprocessable(
                             "barrage_blank", "Nickname and barrage text must not be blank."
                         )
-                    # Under the window lock, so two backends cannot both admit
-                    # one person's barrages inside the cooldown.
-                    wait = _barrage_cooldown_left(session, window.id, voter_key, cooldown)
-                    if wait > 0:
-                        raise debate_rate_limited(wait)
                     debate = session.get(Debate, window.debate_id)
                     if debate is None:
                         raise not_found()
@@ -1532,6 +1538,13 @@ class InteractionService:
                         raise unprocessable(
                             "barrage_turn_unavailable", "This lesson has no turn-bound collection."
                         )
+                    # Under the window lock (after the closed/turn checks, so
+                    # a closed collection still answers 410/409), so two
+                    # backends cannot both admit one person's barrages inside
+                    # the cooldown.
+                    wait = _barrage_cooldown_left(session, window.id, voter_key, cooldown)
+                    if wait > 0:
+                        raise debate_rate_limited(wait)
                     next_sequence = _allocate_barrage_sequence(session, window)
                     # The debate row may have been loaded before this window lock.
                     # Refresh it so the event allocator sees sequences already

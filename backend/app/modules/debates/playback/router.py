@@ -575,7 +575,11 @@ async def debate_events_route(
         # shared by every teacher socket; the stream drains events after its
         # watermark, so a copy a second old loses nothing.
         snapshot, _version = await service.event_hub.snapshots.get(
-            (debate_key, "teacher"), snapshot_ttl, service.event_hub.version(debate_key), build
+            (debate_key, "teacher", session_hash(raw_token or "")),
+            snapshot_ttl,
+            service.event_hub.version(debate_key),
+            build,
+            same_version=True,
         )
         return cast(tuple[dict[str, Any], int], snapshot)
 

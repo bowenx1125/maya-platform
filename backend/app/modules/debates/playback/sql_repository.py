@@ -21,6 +21,7 @@ from uuid import uuid4
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
+from app.core.replica import hold_claim
 from app.core.sqlutil import begin_immediate
 from app.providers.dashscope import LEGACY_CLONE_MODEL_KEY
 from app.providers.tts import TTS_UNAVAILABLE_CODES
@@ -2885,7 +2886,12 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "generation": cancellation_generation,
             },
         )
-        return token if int(getattr(changed, "rowcount", 0)) == 1 else None
+        if int(getattr(changed, "rowcount", 0)) != 1:
+            return None
+        # Keep jobs.updated_at fresh while this backend works on the turn, so
+        # a restarting peer leaves it alone (app.core.replica).
+        hold_claim(token)
+        return token
 
     def authorize_pending_tts_retry(
         self, db: Any, debate: SqlRow, turn: SqlRow, *, code: str

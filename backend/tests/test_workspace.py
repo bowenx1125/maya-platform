@@ -3049,6 +3049,8 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
     workspace: Any, monkeypatch: Any, current_turn_id: UUID | None
 ) -> None:
     app, database, client = workspace
+    # This test edits rows directly (no Debate events): read them uncached.
+    monkeypatch.setattr(app.state.settings, "debate_public_cache_seconds", 0.0)
     _, csrf = login(client)
     headers = {"X-CSRF-Token": csrf}
     debate_id, lease_id = str(uuid4()), str(uuid4())
@@ -3095,7 +3097,7 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
     assert snapshot.json()["interaction_url"] == f"/classroom/{expected_token}"
     form_url = f"/api/v1/classroom-interactions/{expected_token}"
     assert client.get(form_url).status_code == 200
-    for _ in range(3):
+    for index in range(3):
         assert (
             client.post(
                 f"{form_url}/barrages",
@@ -3104,6 +3106,8 @@ def test_live_lease_authorization_expiry_readonly_socket_and_safe_projection(
                     "raw_text": "A question",
                     "client_submission_id": str(uuid4()),
                 },
+                # Three viewers: one barrage per viewer per 3 s (2026-10-19).
+                headers={"X-Maya-Audience": f"viewer-{index}"},
             ).status_code
             == 201
         )

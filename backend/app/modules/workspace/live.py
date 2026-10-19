@@ -286,7 +286,13 @@ def get_live_snapshot(
     view = cast(
         LiveSnapshot,
         _PUBLIC.read(
-            ("live_view", key), settings, lambda: live_view(db, service, key), what="live_view"
+            ("live_view", key),
+            settings,
+            lambda: live_view(db, service, key),
+            what="live_view",
+            # A Debate event (local or relayed) retires the fresh copy at
+            # once; under pressure an older copy is still served.
+            version=service.event_hub.version(key),
         ),
     )
     return view.model_copy(update={"server_time": datetime.now(UTC)})

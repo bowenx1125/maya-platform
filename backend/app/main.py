@@ -42,6 +42,12 @@ from app.core.errors import (
 from app.core.logging import configure_application_logging
 from app.core.message_timing import message_timing_snapshot
 from app.core.models import Course, CourseMember, ProviderOperation, User
+from app.core.replica import (
+    ORPHAN_GRACE_SECONDS,
+    ReplicaPresence,
+    running_debate_jobs,
+    untouched,
+)
 from app.modules.agents.router import router as agents_router
 from app.modules.auth.abuse import AuthAbuseLimiter
 from app.modules.auth.credentials import active_catalog_snapshot
@@ -60,6 +66,7 @@ from app.modules.debates.playback.audio_regeneration import (
 )
 from app.modules.debates.playback.events import DebateEventHub
 from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
+from app.modules.debates.playback.orphans import recover_orphan_debate_jobs
 from app.modules.debates.playback.prewarm import PrewarmScheduler
 from app.modules.debates.playback.router import router as debate_playback_router
 from app.modules.debates.playback.service import PlaybackService
@@ -214,6 +221,29 @@ def _bootstrap_accounts(database: Database, settings: Settings) -> None:
             seed_demo_data(session)
 
 
+async def _reclaim_orphans_later(database: Any, snapshot: dict[str, Any]) -> None:
+    """After the grace, fail only the Debate/report jobs whose owner died."""
+
+    if not snapshot:
+        return
+    await asyncio.sleep(ORPHAN_GRACE_SECONDS)
+
+    def reclaim() -> int:
+        with database.session() as session:
+            orphans = untouched(session, snapshot)
+            if not orphans:
+                return 0
+            count = recover_orphan_debate_jobs(session, orphans)
+            session.commit()
+            return count
+
+    try:
+        count = await asyncio.to_thread(reclaim)
+        logger.info("Reclaimed %s orphaned Debate/report jobs", count)
+    except Exception:
+        logger.warning("Orphan Debate/report reclaim failed", exc_info=True)
+
+
 def create_app(
     settings: Settings | None = None,
     database: Database | None = None,
@@ -351,6 +381,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        orphan_task: asyncio.Task[None] | None = None
         limiter = anyio.to_thread.current_default_thread_limiter()
         # Sync handlers and admission waits run in this pool. AnyIO's default
         # 40 threads would be gone at 48 admitted requests plus waiters, and
@@ -389,6 +420,15 @@ def create_app(
             background_leader = runtime_database.try_background_leader()
         else:
             background_leader = False
+        presence: ReplicaPresence | None = None
+        peers_alive = False
+        if initialize_database:
+            presence = ReplicaPresence(runtime_database.engine, runtime_database.session_factory)
+            try:
+                peers_alive = background_leader and presence.peers_alive()
+                presence.start()
+            except Exception:
+                logger.warning("Replica presence unavailable", exc_info=True)
         if initialize_database:
             with runtime_database.session() as session:
                 preferences = session.get(ProviderPreferences, 1)
@@ -442,7 +482,8 @@ def create_app(
                         logger.info("Reinstalled %s reviewed provider policies", restored)
             if background_leader:
                 recover_embedding_provider_startup(runtime_database)
-                recover_llm_startup(ProviderRepository(runtime_database))
+                if not peers_alive:
+                    recover_llm_startup(ProviderRepository(runtime_database))
                 with runtime_database.session() as session:
                     resume_cleanup_journals(session, runtime_settings.resolved_data_root)
                 with runtime_database.session() as session:
@@ -452,8 +493,17 @@ def create_app(
                 with runtime_database.session() as session:
                     recover_startup(session, runtime_settings.resolved_data_root)
                     startup_voice_cleanup(runtime_settings.resolved_data_root)
-                    await playback_service.recover_startup(session)
-                    recover_report_jobs(session)
+                    if peers_alive:
+                        # 2026-10-19: another backend is serving. Its Debate
+                        # turns, reports and controllers are live; reclaim
+                        # only the jobs nobody touches within the grace.
+                        logger.info("Peer backend alive: deferring Debate/report recovery")
+                        orphan_task = asyncio.create_task(
+                            _reclaim_orphans_later(runtime_database, running_debate_jobs(session))
+                        )
+                    else:
+                        await playback_service.recover_startup(session)
+                        recover_report_jobs(session)
                     recover_generation_runs_at_startup(session)
                 report_tasks.schedule_pending()
                 if not runtime_settings.is_test:
@@ -465,6 +515,10 @@ def create_app(
         try:
             yield
         finally:
+            if orphan_task is not None:
+                orphan_task.cancel()
+            if presence is not None:
+                presence.close()
             assessment_finalizer.close()
             await prewarm.close()
             await report_tasks.close()

@@ -100,8 +100,11 @@ def test_http_barrage_freezes_anonymously_then_survives_mock_generation_and_publ
             }
             assert client.post(url, json=first).status_code == 201
             assert client.post(url, json=first).status_code == 201
+            # Another viewer (one barrage per viewer per 3 s since 2026-10-19).
             stale = client.post(
-                url, json={**first, "client_submission_id": str(uuid4()), "turn_id": turn_ids[2]}
+                url,
+                json={**first, "client_submission_id": str(uuid4()), "turn_id": turn_ids[2]},
+                headers={"X-Maya-Audience": "viewer-stale"},
             )
             assert stale.status_code == 409 and stale.json()["code"] == "barrage_turn_changed"
             with database.session() as db:
@@ -113,7 +116,12 @@ def test_http_barrage_freezes_anonymously_then_survives_mock_generation_and_publ
                 "client_submission_id": str(uuid4()),
                 "turn_id": turn_ids[2],
             }
-            assert client.post(url, json=second).status_code == 201
+            assert (
+                client.post(
+                    url, json=second, headers={"X-Maya-Audience": "viewer-second"}
+                ).status_code
+                == 201
+            )
             history = client.get(f"/api/v1/debates/{debate_id}/interaction").json()["barrages"]
             assert [message["raw_text"] for message in history] == [
                 first["raw_text"],

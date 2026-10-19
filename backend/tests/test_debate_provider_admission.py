@@ -75,7 +75,7 @@ def test_debate_speech_holds_an_llm_slot(tmp_path: Any) -> None:
 
 
 def test_mock_speech_takes_no_slot(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(audio_module, "llm_admission_slot", _refused)
+    monkeypatch.setattr(audio_module, "debate_llm_slot", _refused)
     store = AudioStore(tmp_path)  # the local Mock makes no outbound call
     metadata = store.synthesize_and_store(**_ids(), speech="Hello.", voice_token="voice")
     assert metadata.size_bytes > 0
@@ -85,7 +85,7 @@ def test_refused_speech_slot_plays_the_turn_as_text(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     provider = _RealishTTS()
-    monkeypatch.setattr(audio_module, "llm_admission_slot", _refused)
+    monkeypatch.setattr(audio_module, "debate_llm_slot", _refused)
     store = AudioStore(tmp_path, tts_provider=provider)  # type: ignore[arg-type]
     with pytest.raises(TTSProviderError) as refused:
         store.synthesize_and_store(**_ids(), speech="Hello.", voice_token="voice")
@@ -147,7 +147,7 @@ def test_report_takes_its_slot_before_reserving_the_call(monkeypatch: pytest.Mon
         order.append(f"slot after {list(repository.transitions)}")
         yield
 
-    monkeypatch.setattr(service, "llm_admission_slot", slot)
+    monkeypatch.setattr(service, "debate_llm_slot", slot)
     result = service.continue_real_report_revision(
         database,  # type: ignore[arg-type]
         revision.id,
@@ -166,7 +166,7 @@ def test_refused_report_slot_defers_the_job_without_sending(
 ) -> None:
     revision, provider, operation, database, prepared, repository = _report_fixture(monkeypatch)
     deferred: list[str] = []
-    monkeypatch.setattr(service, "llm_admission_slot", _refused)
+    monkeypatch.setattr(service, "debate_llm_slot", _refused)
     monkeypatch.setattr(service, "_defer_real_report_job", lambda _db, rid: deferred.append(rid))
 
     with pytest.raises(service.ReportAdmissionDeferred) as busy:
