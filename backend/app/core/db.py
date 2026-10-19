@@ -27,7 +27,7 @@ SQLITE_BUSY_TIMEOUT_MS = 5_000
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0073_voice_ready_on_upload"
+ALEMBIC_HEAD = "0074_interaction_voter_key"
 _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 

@@ -239,7 +239,10 @@ def create_app(
     playback_repository = SqlPlaybackRepository(session_factory=runtime_database.session_factory)
     selected_tts = tts_provider(runtime_settings)
     report_runtime = build_report_runtime(runtime_settings, runtime_database)
-    event_hub = DebateEventHub(SqlEventStore(runtime_database.session_factory))
+    event_hub = DebateEventHub(
+        SqlEventStore(runtime_database.session_factory),
+        relay_poll_seconds=runtime_settings.debate_event_relay_poll_seconds,
+    )
     wave3_events = Wave3EventPublisher(runtime_database.session_factory, event_hub)
     report_tasks = ReportTaskManager(
         runtime_database.session_factory,

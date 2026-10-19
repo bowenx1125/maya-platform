@@ -5,6 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { DismissibleAlert } from "../dismissible-alert";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
 import { useLocale } from "../locale";
+import {
+  audienceId,
+  isBusyRefusal,
+  isRateLimited,
+  nextFormPollDelay,
+  retryAfterMs,
+  sleep,
+  SUBMIT_RETRY_ATTEMPTS,
+  submitRetryDelay,
+  FORM_POLL_MIN_MS,
+} from "./audience-backoff";
 import type { AudienceInteractionApi } from "./types";
 import appearance from "../workspace-appearance.module.css";
 import styles from "./audience-interaction-form.module.css";
@@ -54,7 +65,10 @@ const browserAudienceApi: AudienceInteractionApi = {
       `/classroom-interactions/${encodeURIComponent(accessToken)}/votes`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Maya-Audience": audienceId(),
+        },
         body: JSON.stringify(payload),
       },
     ),
@@ -63,7 +77,10 @@ const browserAudienceApi: AudienceInteractionApi = {
       `/classroom-interactions/${encodeURIComponent(accessToken)}/barrages`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Maya-Audience": audienceId(),
+        },
         body: JSON.stringify(payload),
       },
     ),
@@ -93,7 +110,20 @@ async function requestBrowser<T>(path: string, init?: RequestInit): Promise<T> {
       typeof payload.code === "string"
         ? payload.code
         : undefined;
-    throw new PlatformApiError(response.status, message, { code });
+    const details: Record<string, unknown> =
+      payload &&
+      typeof payload === "object" &&
+      "details" in payload &&
+      payload.details &&
+      typeof payload.details === "object"
+        ? { ...(payload.details as Record<string, unknown>) }
+        : {};
+    // A busy server says how long to wait; the header counts too.
+    const header = Number(response.headers?.get?.("Retry-After"));
+    if (details.retry_after_seconds === undefined && header > 0) {
+      details.retry_after_seconds = header;
+    }
+    throw new PlatformApiError(response.status, message, { code, details });
   }
   return payload as T;
 }
@@ -135,6 +165,42 @@ export function AudienceInteractionForm({
   // Vote and Send enabled for another rejected attempt.
   const [submissionsClosed, setSubmissionsClosed] = useState(false);
   const submissionsClosedRef = useRef(false);
+  // A 503 is resent (same client_submission_id) while this says so.
+  const [voteRetrying, setVoteRetrying] = useState(false);
+  const [barrageRetrying, setBarrageRetrying] = useState(false);
+  const [barrageWaitSeconds, setBarrageWaitSeconds] = useState(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  /** Send once, then resend after a 503 with the same payload, backing off. */
+  async function sendWithRetry<T>(
+    send: () => Promise<T>,
+    setRetrying: (value: boolean) => void,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const result = await send();
+        if (mounted.current) setRetrying(false);
+        return result;
+      } catch (cause) {
+        if (
+          !isBusyRefusal(cause) ||
+          attempt + 1 >= SUBMIT_RETRY_ATTEMPTS ||
+          !mounted.current
+        ) {
+          if (mounted.current) setRetrying(false);
+          throw cause;
+        }
+        setRetrying(true);
+        await sleep(submitRetryDelay(attempt, cause));
+      }
+    }
+  }
 
   function lockFinalizedCollection() {
     submissionsClosedRef.current = true;
@@ -169,7 +235,11 @@ export function AudienceInteractionForm({
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
+    // 2 s while the server answers; backs off to 10 s (or its Retry-After)
+    // while it is busy or unreachable.
+    let delay = FORM_POLL_MIN_MS;
     async function refreshTurn() {
+      let failure: unknown = null;
       try {
         const next = await api.getForm(accessToken);
         // A stale open form must not undo Conclude. A finalized window cannot
@@ -181,15 +251,20 @@ export function AudienceInteractionForm({
       } catch (cause: unknown) {
         if (!active) return;
         if (collectionFinalized(cause)) {
+          // An authoritative answer, not a busy server: keep the pace.
           lockFinalizedCollection();
           return;
         }
+        failure = cause;
         if (!submissionsClosedRef.current) setSyncFailed(true);
       } finally {
-        if (active) timer = setTimeout(() => void refreshTurn(), 2000);
+        if (active) {
+          delay = nextFormPollDelay(delay, failure);
+          timer = setTimeout(() => void refreshTurn(), delay);
+        }
       }
     }
-    timer = setTimeout(() => void refreshTurn(), 2000);
+    timer = setTimeout(() => void refreshTurn(), delay);
     return () => {
       active = false;
       clearTimeout(timer);
@@ -233,9 +308,14 @@ export function AudienceInteractionForm({
         client_submission_id: newSubmissionId(),
       };
       if (!votePayload) setVotePayload(payload);
-      await api.submitVote(accessToken, payload);
+      await sendWithRetry(
+        () => api.submitVote(accessToken, payload),
+        setVoteRetrying,
+      );
+      if (!mounted.current) return;
       setVoteState("success");
     } catch (cause) {
+      if (!mounted.current) return;
       setVoteState("idle");
       setVoteError(cause);
       if (collectionFinalized(cause)) lockFinalizedCollection();
@@ -254,6 +334,7 @@ export function AudienceInteractionForm({
       return;
     setBarrageState("busy");
     setBarrageError(null);
+    setBarrageWaitSeconds(0);
     try {
       const payload = barragePayload ?? {
         nickname,
@@ -262,12 +343,25 @@ export function AudienceInteractionForm({
         client_submission_id: newSubmissionId(),
       };
       if (!barragePayload) setBarragePayload(payload);
-      await api.submitBarrage(accessToken, payload);
+      await sendWithRetry(
+        () => api.submitBarrage(accessToken, payload),
+        setBarrageRetrying,
+      );
+      if (!mounted.current) return;
       setBarrageState("success");
       setBarrageText("");
       setBarragePayload(null);
     } catch (cause) {
+      if (!mounted.current) return;
       setBarrageState("idle");
+      if (isRateLimited(cause)) {
+        // Too fast: say how long to wait; nothing is resent behind the
+        // student, and the text stays for them to send again.
+        setBarrageWaitSeconds(
+          Math.max(1, Math.ceil(retryAfterMs(cause) / 1000)),
+        );
+        return;
+      }
       setBarrageError(cause);
       if (
         cause instanceof PlatformApiError &&
@@ -350,6 +444,16 @@ export function AudienceInteractionForm({
                   {t("audienceReconnecting")}
                 </p>
               ) : null}
+              {barrageRetrying ? (
+                <p className={styles.connection} role="status">
+                  {t("audienceBusyRetrying")}
+                </p>
+              ) : null}
+              {barrageWaitSeconds > 0 ? (
+                <p className={styles.connection} role="status">
+                  {t("audienceTooFast", { seconds: barrageWaitSeconds })}
+                </p>
+              ) : null}
               <textarea
                 ref={messageInput}
                 aria-label={t("audienceBarrage")}
@@ -369,6 +473,7 @@ export function AudienceInteractionForm({
                   setBarrageError(null);
                   setBarragePayload(null);
                   setBarrageState("idle");
+                  setBarrageWaitSeconds(0);
                 }}
                 maxLength={turnBound ? 300 : undefined}
                 rows={5}
@@ -471,6 +576,11 @@ export function AudienceInteractionForm({
                   ? t("audienceSubmitting")
                   : t("audienceVoteSubmit")}
               </button>
+              {voteRetrying ? (
+                <p className={styles.connection} role="status">
+                  {t("audienceBusyRetrying")}
+                </p>
+              ) : null}
               {voteError ? (
                 <DismissibleAlert className={styles.error} resetKey={voteError}>
                   {apiErrorMessage(voteError)}

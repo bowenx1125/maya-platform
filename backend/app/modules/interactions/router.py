@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
+from app.core.debate_gate import PublicCopy, interaction_slot
 from app.core.errors import Error
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
@@ -77,6 +80,26 @@ async def freeze_final_input_route(
     db.rollback()
     await get_playback_service(request).enqueue_frozen_final(db, str(debate_id))
     return result
+
+
+# The anonymous form's last answers per token (fresh 2 s; stale under pressure).
+_PUBLIC_FORMS = PublicCopy()
+
+
+def audience_key(request: Request, access_token: str) -> str:
+    """Per-person key for anonymous votes and barrages (never stored raw).
+
+    Classroom devices usually share one NAT address, so the browser's own
+    audience id (``X-Maya-Audience``, kept in its local storage) comes first;
+    without it, address and user agent stand in. Scoped to the token's window.
+    """
+
+    audience = (request.headers.get("x-maya-audience") or "").strip()[:128]
+    if not audience:
+        client = request.client.host if request.client else ""
+        audience = f"addr:{client}|ua:{request.headers.get('user-agent', '')[:256]}"
+    # The token names one window (a new window issues a new token).
+    return hashlib.sha256(f"{access_token}\n{audience}".encode()).hexdigest()
 
 
 def _no_store(response: Response) -> None:
@@ -159,11 +182,19 @@ def close_interaction(
 def get_classroom_interaction_form(
     access_token: str,
     response: Response,
-    _db: Any = Depends(get_db),
+    settings: Settings = Depends(get_settings),
     service: InteractionService = Depends(get_interaction_service),
 ) -> PublicInteractionForm:
     _no_store(response)
-    return service.public_form(access_token=access_token)
+    # Every viewer polls this; under pressure a recent copy (or a 503 with
+    # retry_after_seconds) answers instead of a database read.
+    form: PublicInteractionForm = _PUBLIC_FORMS.read(
+        access_token,
+        settings,
+        lambda: service.public_form(access_token=access_token),
+        what="interaction_form",
+    )
+    return form
 
 
 @router.post(
@@ -177,17 +208,26 @@ def get_classroom_interaction_form(
         409: {"model": Error},
         410: {"model": Error},
         422: {"model": Error},
+        503: {"model": Error},
     },
 )
-def submit_vote(
+async def submit_vote(
     access_token: str,
     payload: VoteRequest,
+    request: Request,
     response: Response,
-    _db: Any = Depends(get_db),
+    settings: Settings = Depends(get_settings),
     service: InteractionService = Depends(get_interaction_service),
 ) -> VoteSubmitted:
     _no_store(response)
-    return service.submit_vote(access_token=access_token, payload=payload)
+    voter_key = audience_key(request, access_token)
+    async with interaction_slot(settings):
+        result: VoteSubmitted = await run_in_threadpool(
+            lambda: service.submit_vote(
+                access_token=access_token, payload=payload, voter_key=voter_key
+            )
+        )
+    return result
 
 
 @router.post(
@@ -201,17 +241,27 @@ def submit_vote(
         409: {"model": Error},
         410: {"model": Error},
         422: {"model": Error},
+        429: {"model": Error},
+        503: {"model": Error},
     },
 )
-def submit_barrage(
+async def submit_barrage(
     access_token: str,
     payload: BarrageRequest,
+    request: Request,
     response: Response,
-    _db: Any = Depends(get_db),
+    settings: Settings = Depends(get_settings),
     service: InteractionService = Depends(get_interaction_service),
 ) -> BarrageSubmitted:
     _no_store(response)
-    return service.submit_barrage(access_token=access_token, payload=payload)
+    voter_key = audience_key(request, access_token)
+    async with interaction_slot(settings):
+        result: BarrageSubmitted = await run_in_threadpool(
+            lambda: service.submit_barrage(
+                access_token=access_token, payload=payload, voter_key=voter_key
+            )
+        )
+    return result
 
 
 __all__ = ["get_interaction_service", "router"]

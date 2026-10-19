@@ -243,6 +243,50 @@ class Settings(BaseSettings):
     write_guard_retry_seconds: int = Field(
         default=5, ge=1, le=300, validation_alias="WRITE_GUARD_RETRY_SECONDS"
     )
+    # Debate audience traffic (2026-10-19): votes and barrages pass a small
+    # per-process asyncio gate below scoring and chat. Under the danger latch
+    # they are refused at once (503) and never take a reserved slot; a full
+    # queue or a spent wait answers 503 with retry_after_seconds.
+    debate_interaction_gate_limit: int = Field(
+        default=4, ge=0, le=1_000, validation_alias="DEBATE_INTERACTION_GATE_LIMIT"
+    )
+    debate_interaction_gate_queue_max: int = Field(
+        default=64, ge=0, le=10_000, validation_alias="DEBATE_INTERACTION_GATE_QUEUE_MAX"
+    )
+    debate_interaction_gate_wait_seconds: float = Field(
+        default=5.0, ge=0, le=120, validation_alias="DEBATE_INTERACTION_GATE_WAIT_SECONDS"
+    )
+    debate_interaction_retry_seconds: int = Field(
+        default=3, ge=1, le=120, validation_alias="DEBATE_INTERACTION_RETRY_SECONDS"
+    )
+    # One barrage per audience member per this many seconds (all backends).
+    debate_barrage_cooldown_seconds: float = Field(
+        default=3.0, ge=0, le=600, validation_alias="DEBATE_BARRAGE_COOLDOWN_SECONDS"
+    )
+    # The anonymous form and the live view serve a copy this fresh; under
+    # pressure an older copy (up to the stale limit) instead of a database read.
+    debate_public_cache_seconds: float = Field(
+        default=2.0, ge=0, le=60, validation_alias="DEBATE_PUBLIC_CACHE_SECONDS"
+    )
+    debate_public_stale_seconds: float = Field(
+        default=60.0, ge=0, le=3_600, validation_alias="DEBATE_PUBLIC_STALE_SECONDS"
+    )
+    # Debate WebSockets: one snapshot per debate shared by every connection,
+    # access rechecked every few seconds, a fallback poll when no event wakes
+    # them, and one relay task per debate reading new events from the database
+    # so viewers on the other backend see them.
+    debate_snapshot_cache_seconds: float = Field(
+        default=1.5, ge=0, le=30, validation_alias="DEBATE_SNAPSHOT_CACHE_SECONDS"
+    )
+    debate_ws_auth_recheck_seconds: float = Field(
+        default=10.0, ge=0, le=600, validation_alias="DEBATE_WS_AUTH_RECHECK_SECONDS"
+    )
+    debate_ws_fallback_poll_seconds: float = Field(
+        default=7.0, ge=1, le=60, validation_alias="DEBATE_WS_FALLBACK_POLL_SECONDS"
+    )
+    debate_event_relay_poll_seconds: float = Field(
+        default=1.0, ge=0.1, le=30, validation_alias="DEBATE_EVENT_RELAY_POLL_SECONDS"
+    )
     # Per-operation backstop: concurrent Agent/Team/Conversation creates per
     # process. 8 per backend (#140 sweep, 2026-10-18): a class opening its
     # chats at once peaked at 8 here and waited briefly instead of reaching
