@@ -5,7 +5,7 @@ Every teammate's earlier reply went to the model as role=assistant with a
 them as its own writing: the leader 小爱鉴定师 opened with `小爱鉴定师:` and
 then wrote as 读心师 and the others until it stopped mid-sentence. Now only
 the member's own replies are assistant messages; teammates' replies are
-labeled user-role narration, the system line says to write only as itself,
+labeled system-role narration, the system line says to write only as itself,
 and a reply is stripped of lines written as a teammate before it is saved.
 """
 
@@ -127,9 +127,13 @@ def test_history_sends_only_own_replies_as_assistant(
         }
     ]
     assert {
-        "role": "user",
+        "role": "system",
         "content": f"[队友 {names[ids[2]]} 的发言]\nanswer of {ids[2]}",
     } in history
+    # The student's own words stay the only user messages.
+    assert [item["content"] for item in history if item["role"] == "user"] == [
+        _body(session, "selected")["message"]
+    ]
     # No prefixed copy of anyone's reply is left in the model's own voice.
     assert not any(item["content"].startswith(f"{names[ids[2]]}:") for item in history)
 
@@ -258,6 +262,6 @@ def test_assessment_scorer_sees_the_guide_as_narration_and_scoring_completes(
         item["content"]
         for _pid, history in histories
         for item in history
-        if item["role"] == "user" and item["content"].startswith("[队友 ")
+        if item["role"] == "system" and item["content"].startswith("[队友 ")
     ]
     assert any("收到，第一题是甲题" in content for content in narrated)

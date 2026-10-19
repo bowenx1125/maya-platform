@@ -1475,7 +1475,9 @@ def team_history(
     """The Chat so far as one member's model sees it.
 
     Only that member's own replies are assistant messages. Every teammate's
-    reply is a labeled user-role narration block: sent as assistant with a
+    reply is a labeled system-role narration block, so it is read neither as
+    the member's own writing nor as the student's words. Sent as assistant
+    with a
     `名字: ` prefix (Chinese names cannot ride in the name field), it read as
     the model's own earlier writing, and a member then wrote as every member
     (bug 2026-10-19, chat 9689e727). Without a participant (no one replying,
@@ -1551,7 +1553,7 @@ def team_history(
                 else:
                     history.append(
                         {
-                            "role": "user",
+                            "role": "system",
                             "content": teammate_narration(shown, result.assistant_text),
                         }
                     )
