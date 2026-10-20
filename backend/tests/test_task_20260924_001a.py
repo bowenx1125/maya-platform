@@ -80,12 +80,6 @@ def _ready_profile(client: TestClient, csrf: str, key: str) -> str:
         headers={"X-CSRF-Token": csrf},
     )
     assert preview.status_code == 200, preview.text
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile_id}/confirm",
-        headers={"X-CSRF-Token": csrf},
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["status"] == "ready"
     return str(profile_id)
 
 
@@ -128,23 +122,6 @@ def test_dashscope_key_not_in_public_dto(
     assert "api_key" not in schemas
     assert secret not in schemas
 
-    client, _database, _settings = voice_app
-    client.app.state.settings = client.app.state.settings.model_copy(
-        update={"dashscope_api_key": secret}
-    )
-    _user, csrf = login(client)
-    settings_response = client.get(f"/api/v1/courses/{COURSE_ID}/provider-settings")
-    assert settings_response.status_code == 200
-    assert secret not in settings_response.text
-    assert "api_key" not in settings_response.json()
-    saved = client.post(
-        f"/api/v1/courses/{COURSE_ID}/provider-settings",
-        headers={"X-CSRF-Token": csrf},
-        json={"expected_revision": settings_response.json()["revision"], "api_key": secret},
-    )
-    assert saved.status_code == 200, saved.text
-    assert secret not in saved.text
-
 
 def test_enroll_ready_encrypts_external_id(
     voice_app: tuple[TestClient, Database, Settings],
@@ -166,12 +143,6 @@ def test_enroll_ready_encrypts_external_id(
         ).status_code
         == 200
     )
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile_id}/confirm",
-        headers={"X-CSRF-Token": csrf},
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["status"] == "ready"
     with database.session() as session:
         row = session.get(VoiceProfile, profile_id)
         assert row is not None
@@ -188,7 +159,6 @@ def test_enroll_ready_encrypts_external_id(
         )
     assert plain
     assert plain.encode() not in (row.external_id_encrypted or b"")
-    assert plain not in confirmed.text
     assert plain not in enrolled.text
 
 

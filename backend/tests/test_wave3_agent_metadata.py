@@ -217,24 +217,6 @@ def _prepare_draft_for_publish(
         files={"file": ("race.md", b"# Race\n\nEvidence", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
-    compiled = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/compile",
-        headers=_headers(csrf),
-        json={"expected_revision": 2},
-    )
-    assert compiled.status_code == 200, compiled.text
-    compiled_body = compiled.json()
-    confirmed = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/confirm",
-        headers=_headers(csrf),
-        json={
-            "expected_revision": 2,
-            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
-            "persona_spec_hash": compiled_body["persona_spec_hash"],
-            "compiler_version": "persona_template_v1",
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
     return agent["id"], version_id
 
 
@@ -534,24 +516,6 @@ def test_delete_removes_unreferenced_published_agent_from_both_workspaces(
         files={"file": ("published.md", b"# Published", "text/markdown")},
     )
     assert uploaded.status_code == 201, uploaded.text
-    compiled = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/compile",
-        headers=_headers(csrf),
-        json={"expected_revision": 2},
-    )
-    assert compiled.status_code == 200, compiled.text
-    compiled_body = compiled.json()
-    confirmed = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/confirm",
-        headers=_headers(csrf),
-        json={
-            "expected_revision": 2,
-            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
-            "persona_spec_hash": compiled_body["persona_spec_hash"],
-            "compiler_version": "persona_template_v1",
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
     published = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "wave3-publish-agent-001"}),

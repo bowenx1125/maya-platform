@@ -45,9 +45,8 @@ from app.modules.workspace.models import (
     Conversation,
     ConversationTurn,
     LivePresence,
-    ProviderPreferences,
 )
-from app.modules.workspace.providers import preferences_settings, settings_view
+from app.modules.workspace.providers import settings_view
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_transport import LLMAcceptanceUnknown, LLMTransportNotSent
 from app.seed import COURSE_ID, TEACHER_ID
@@ -2895,51 +2894,6 @@ def test_chat_failure_is_safe_and_does_not_retry(
     assert "Private learner text" not in caplog.text
 
 
-def test_provider_controls_are_teacher_only_and_key_is_encrypted(workspace: Any) -> None:
-    app, database, client = workspace
-    _, csrf = login(client, "bowen")
-    url = f"/api/v1/courses/{COURSE_ID}/provider-settings"
-    assert client.get(url).status_code == 404
-    assert (
-        client.post(url, headers={"X-CSRF-Token": csrf}, json={"expected_revision": 0}).status_code
-        == 404
-    )
-    _, csrf = login(client)
-    headers = {"X-CSRF-Token": csrf}
-    assert client.get(url).json()["credential_ready"] is False
-    missing = client.post(
-        url,
-        headers=headers,
-        json={"expected_revision": 0, "component": "llm", "mode": "real"},
-    )
-    assert missing.json()["code"] == "provider_key_required"
-    secret = "test-only-not-a-real-key"
-    saved = client.post(url, headers=headers, json={"expected_revision": 0, "api_key": secret})
-    assert saved.status_code == 200, saved.text
-    assert saved.json()["credential_ready"] is True
-    assert secret not in saved.text + client.get(url).text
-    with database.session() as db:
-        row = db.get(ProviderPreferences, 1)
-        assert secret not in row.encrypted_key
-        assert preferences_settings(app.state.base_settings, row).dashscope_api_key == secret
-    assert (
-        client.post(
-            url,
-            headers=headers,
-            json={"expected_revision": 0, "component": "llm", "mode": "mock"},
-        ).status_code
-        == 409
-    )
-    assert (
-        client.post(
-            url,
-            headers=headers,
-            json={"expected_revision": 1, "component": "tts", "mode": "real"},
-        ).json()["code"]
-        == "provider_deferred"
-    )
-
-
 @pytest.mark.parametrize("selector,status", [("mock", "deferred"), ("dashscope", "unchecked")])
 def test_speech_configuration_does_not_claim_live_acceptance(
     workspace: Any, selector: str, status: str
@@ -2954,94 +2908,6 @@ def test_speech_configuration_does_not_claim_live_acceptance(
     assert all(item.mode == ("real" if selector == "dashscope" else "mock") for item in speech)
     assert all(item.status == status and not item.switchable for item in speech)
     assert all(item.checked_at is None for item in speech)
-
-
-def test_environment_dashscope_key_wins_over_saved_dialog_key(workspace: Any) -> None:
-    app, database, client = workspace
-    _, csrf = login(client)
-    url = f"/api/v1/courses/{COURSE_ID}/provider-settings"
-    saved_key = "saved-dialog-key-not-real"
-    saved = client.post(
-        url,
-        headers={"X-CSRF-Token": csrf},
-        json={"expected_revision": 0, "api_key": saved_key},
-    )
-    assert saved.status_code == 200, saved.text
-    rotated = "rotated-env-key-not-real"
-    app.state.base_settings = app.state.base_settings.model_copy(
-        update={"dashscope_api_key": rotated}
-    )
-    with database.session() as db:
-        row = db.get(ProviderPreferences, 1)
-        assert row is not None
-        effective = preferences_settings(app.state.base_settings, row)
-        stored = row.encrypted_key or ""
-    assert effective.dashscope_api_key == rotated
-    assert saved_key not in stored
-    assert rotated not in stored
-    assert saved_key not in saved.text
-    assert rotated not in saved.text
-
-
-def test_provider_refresh_and_mock_check_never_make_a_paid_call(workspace: Any) -> None:
-    _, database, client = workspace
-    _, csrf = login(client)
-    url = f"/api/v1/courses/{COURSE_ID}/provider-settings"
-    before = client.get(url).json()
-    assert all(item["status"] in {"unchecked", "deferred"} for item in before["components"])
-    request = {"request_id": str(uuid4()), "expected_revision": 0}
-    first = client.post(f"{url}/llm/check", headers={"X-CSRF-Token": csrf}, json=request)
-    assert first.status_code == 200
-    assert (
-        next(item for item in first.json()["components"] if item["key"] == "llm")["status"]
-        == "ready"
-    )
-    assert (
-        client.post(f"{url}/llm/check", headers={"X-CSRF-Token": csrf}, json=request).json()
-        == first.json()
-    )
-    assert client.get(url).json() == first.json()
-    with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
-
-
-def test_mode_change_invalidates_only_that_check_and_key_change_invalidates_all(
-    workspace: Any,
-) -> None:
-    app, database, client = workspace
-    _, csrf = login(client)
-    headers = {"X-CSRF-Token": csrf}
-    url = f"/api/v1/courses/{COURSE_ID}/provider-settings"
-    with database.session() as db:
-        db.add(
-            ProviderPreferences(
-                id=1,
-                revision=0,
-                modes_json="{}",
-                checks_json=json.dumps(
-                    {key: {"status": "ready"} for key in ("llm", "embedding", "report")}
-                ),
-            )
-        )
-    app.state.settings = app.state.settings.model_copy(update={"llm_provider": "dashscope"})
-    result = client.post(
-        url,
-        headers=headers,
-        json={"expected_revision": 0, "component": "llm", "mode": "mock"},
-    )
-    assert result.status_code == 200
-    statuses = {item["key"]: item["status"] for item in result.json()["components"]}
-    assert statuses["llm"] == "unchecked"
-    assert statuses["embedding"] == statuses["report"] == "ready"
-    result = client.post(
-        url,
-        headers=headers,
-        json={"expected_revision": 1, "api_key": "test-only-not-a-real-key"},
-    )
-    assert result.status_code == 200
-    assert all(item["status"] in ("unchecked", "deferred") for item in result.json()["components"])
-    with database.session() as db:
-        assert db.scalar(select(func.count()).select_from(ProviderOperation)) == 0
 
 
 @pytest.mark.parametrize("current_turn_id", [None, UUID("d9184dc9-e513-483a-b811-a642907222fa")])

@@ -212,7 +212,6 @@ function makeApi() {
     avatarTemplates: vi.fn(async () => makeTemplates()),
     voiceProfiles: vi.fn(async (): Promise<VoiceProfile[]> => []),
     updateDraft: vi.fn(async (..._args: unknown[]) => version),
-    compilePersona: vi.fn(),
     uploadKnowledge: vi.fn(async (..._args: unknown[]) => ({
       agent_version: version,
       document,
@@ -492,7 +491,6 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(
       api.publish.mock.invocationCallOrder[0],
     );
-    expect(api.compilePersona).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Persona" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Compile" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Test Chat" })).toBeNull();

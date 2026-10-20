@@ -21,7 +21,6 @@ from app.modules.voices.schemas import (
     VoiceProfileResponse,
 )
 from app.modules.voices.service import (
-    confirm_voice_profile,
     create_voice_preview,
     delete_voice_profile,
     enroll_voice,
@@ -292,25 +291,6 @@ def create_voice_preview_route(
         raise
     except (RuntimeError, OSError) as exc:
         raise _safe_provider_failure("preview") from exc
-
-
-@router.post(
-    "/voice-profiles/{voice_profile_id}/confirm",
-    response_model=VoiceProfileResponse,
-    operation_id="confirmVoiceProfile",
-    responses={
-        404: {"model": Error, "description": "Voice profile not found."},
-        409: {"model": Error, "description": "Invalid confirmation transition."},
-    },
-)
-def confirm_voice_profile_route(
-    voice_profile_id: UUID,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-) -> VoiceProfileResponse:
-    return confirm_voice_profile(db, context, str(voice_profile_id), settings)
 
 
 @router.get(

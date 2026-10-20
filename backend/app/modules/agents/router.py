@@ -18,7 +18,6 @@ from app.core.errors import (
     Error,
     PlatformError,
     conflict,
-    forbidden,
     invalid_state,
     not_found,
     stale_revision,
@@ -44,21 +43,10 @@ from app.modules.agents.persona import (
     agent_name_from_markdown,
     raw_agent_md_hash,
 )
-from app.modules.agents.persona_repository import SqlAlchemyPersonaStore
-from app.modules.agents.persona_service import (
-    PersonaConfirmationRequest as PersonaConfirmationDomainRequest,
-)
-from app.modules.agents.persona_service import (
-    PersonaDomainError,
-    PersonaService,
-)
 from app.modules.agents.schemas import (
     AgentCreateRequest,
     AgentDetail,
     AgentSummary,
-    CompilePersonaRequest,
-    ConfirmPersonaRequest,
-    PersonaCompileResponse,
     PublishAgentVersionRequest,
     PublishedAgentAuthor,
     PublishedAgentSummary,
@@ -268,26 +256,6 @@ def _sync_markdown_name(
         .values(name=name, metadata_revision=Agent.metadata_revision + 1, updated_at=_time())
     )
     db.refresh(agent)
-
-
-def _raise_persona_domain_error(error: PersonaDomainError) -> NoReturn:
-    """Map the pure Persona port error to Maya's stable error envelope."""
-
-    if error.code == "stale_revision":
-        current = error.details.get("current_revision")
-        raise stale_revision(int(current) if isinstance(current, int) else None)
-    if error.code == "version_immutable":
-        raise version_immutable()
-    if error.code == "forbidden":
-        raise forbidden(error.message)
-    if error.code in {
-        "persona_confirmation_required",
-        "persona_integrity_mismatch",
-        "persona_compile_required",
-        "persona_compile_failed",
-    }:
-        raise validation_failure(error.message, error.details, code=error.code)
-    raise invalid_state(error.message)
 
 
 def _summary_with_metadata(
@@ -1334,88 +1302,6 @@ def get_agent_version(
 ) -> AgentVersionDTO:
     scoped = readable_version(db, context, str(version_id))
     return _version_dto_for_actor(db, scoped.version, scoped.agent, context, scoped.role)
-
-
-@router.post(
-    "/agent-versions/{version_id}/persona/compile",
-    response_model=PersonaCompileResponse,
-    operation_id="compileAgentPersona",
-    responses={
-        200: {"model": PersonaCompileResponse, "description": "Deterministic Persona preview."},
-        404: {"model": Error, "description": "Version not found."},
-        409: {"model": Error, "description": "Revision or immutability conflict."},
-    },
-)
-def compile_agent_persona(
-    version_id: UUID,
-    payload: CompilePersonaRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> PersonaCompileResponse:
-    reject_baseline_version_mutation(str(version_id))
-    scoped = visible_student_version(db, context, str(version_id))
-    if scoped.version.state != "draft":
-        raise version_immutable()
-    store = SqlAlchemyPersonaStore(db)
-    service = PersonaService(store)
-    try:
-        result = service.compile_draft(str(version_id), expected_revision=payload.expected_revision)
-    except PersonaDomainError as error:
-        _raise_persona_domain_error(error)
-    state = store.get_persona_version(str(version_id))
-    if state is None:  # pragma: no cover - compile CAS already loaded the row
-        raise not_found()
-    return PersonaCompileResponse(
-        version_id=version_id,
-        revision=state.revision,
-        compiled=result.compiled,
-        raw_agent_md_hash=result.source_agent_md_hash,
-        persona_spec=result.spec,
-        persona_spec_hash=result.persona_spec_hash,
-        compiler_version=result.compiler_version,
-        diagnostics=list(result.diagnostics),
-        persona_confirmed=False,
-    )
-
-
-@router.post(
-    "/agent-versions/{version_id}/persona/confirm",
-    response_model=AgentVersionDTO,
-    operation_id="confirmAgentPersona",
-    responses={
-        200: {"model": AgentVersionDTO, "description": "Persona confirmed for the exact draft."},
-        403: {"model": Error, "description": "A current group member is required."},
-        404: {"model": Error, "description": "Version not found."},
-        409: {"model": Error, "description": "Revision conflict."},
-        422: {"model": Error, "description": "Persona confirmation required."},
-    },
-)
-def confirm_agent_persona(
-    version_id: UUID,
-    payload: ConfirmPersonaRequest,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> AgentVersionDTO:
-    reject_baseline_version_mutation(str(version_id))
-    visible = visible_student_version(db, context, str(version_id))
-    if visible.version.state != "draft":
-        raise version_immutable()
-    request = PersonaConfirmationDomainRequest(
-        version_id=str(version_id),
-        expected_revision=payload.expected_revision,
-        raw_agent_md_hash=payload.raw_agent_md_hash,
-        persona_spec_hash=payload.persona_spec_hash,
-        compiler_version=payload.compiler_version,
-    )
-    service = PersonaService(SqlAlchemyPersonaStore(db))
-    try:
-        service.confirm(request, confirming_user_id=context.user.id)
-    except PersonaDomainError as error:
-        _raise_persona_domain_error(error)
-    refreshed = visible_student_version(db, context, str(version_id))
-    return _version_dto_for_actor(db, refreshed.version, refreshed.agent, context)
 
 
 @router.patch(

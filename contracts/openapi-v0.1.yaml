@@ -655,170 +655,6 @@ paths:
       summary: Live Status
       tags:
       - Live
-  /courses/{course_id}/provider-settings:
-    get:
-      operationId: getProviderSettings
-      parameters:
-      - in: path
-        name: course_id
-        required: true
-        schema:
-          format: uuid
-          title: Course Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderSettings'
-          description: Successful Response
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Not Found
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Conflict
-      security:
-      - sessionCookie: []
-      summary: Get Provider Settings
-      tags:
-      - Provider settings
-    post:
-      operationId: updateProviderSettings
-      parameters:
-      - in: path
-        name: course_id
-        required: true
-        schema:
-          format: uuid
-          title: Course Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProviderSettings'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderSettings'
-          description: Successful Response
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Not Found
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Conflict
-      security:
-      - sessionCookie: []
-      summary: Update Provider Settings
-      tags:
-      - Provider settings
-  /courses/{course_id}/provider-settings/{component}/check:
-    post:
-      operationId: checkProvider
-      parameters:
-      - in: path
-        name: course_id
-        required: true
-        schema:
-          format: uuid
-          title: Course Id
-          type: string
-      - in: path
-        name: component
-        required: true
-        schema:
-          enum:
-          - llm
-          - embedding
-          - report
-          - tts
-          - voice
-          title: Component
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CheckProvider'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderSettings'
-          description: Successful Response
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Not Found
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Conflict
-      security:
-      - sessionCookie: []
-      summary: Check Provider
-      tags:
-      - Provider settings
   /debates/{debate_id}/live:
     post:
       operationId: updateClassroomLive
@@ -2255,60 +2091,6 @@ paths:
                 type: string
         '404':
           $ref: '#/components/responses/Error'
-  /agent-versions/{version_id}/persona/compile:
-    parameters:
-    - $ref: '#/components/parameters/VersionId'
-    post:
-      tags:
-      - Agents
-      operationId: compileAgentPersona
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CompilePersonaRequest'
-      responses:
-        '200':
-          description: Deterministic Persona preview.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PersonaCompileResponse'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
-          $ref: '#/components/responses/Error'
-  /agent-versions/{version_id}/persona/confirm:
-    parameters:
-    - $ref: '#/components/parameters/VersionId'
-    post:
-      tags:
-      - Agents
-      operationId: confirmAgentPersona
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfirmPersonaRequest'
-      responses:
-        '200':
-          description: Persona confirmed for the exact draft.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentVersion'
-        '403':
-          $ref: '#/components/responses/Error'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
-          $ref: '#/components/responses/Error'
   /agent-versions/{version_id}/knowledge-documents:
     parameters:
     - $ref: '#/components/parameters/VersionId'
@@ -2694,26 +2476,6 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
         '503':
-          $ref: '#/components/responses/Error'
-  /voice-profiles/{voice_profile_id}/confirm:
-    parameters:
-    - $ref: '#/components/parameters/VoiceProfileId'
-    post:
-      tags:
-      - Voices
-      operationId: confirmVoiceProfile
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '200':
-          description: Preview accepted; status ready.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoiceProfile'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
           $ref: '#/components/responses/Error'
   /courses/{course_id}/published-agents:
     parameters:
@@ -3601,34 +3363,6 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
-  /debates/{debate_id}/report/revisions/{revision_id}/continue:
-    post:
-      tags:
-      - Reports
-      operationId: continueRealReport
-      parameters:
-      - $ref: '#/components/parameters/DebateId'
-      - $ref: '#/components/parameters/RevisionId'
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ContinueRealReportRequest'
-      responses:
-        '202':
-          description: Continue one already-confirmed and attached Real Report operation.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContinueRealReportResponse'
-        '403':
-          $ref: '#/components/responses/Error'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
-          $ref: '#/components/responses/Error'
   /debates/{debate_id}/report/download:
     get:
       tags:
@@ -3825,33 +3559,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderDataCallPublicationManifestListResponseV1'
-        '401':
-          $ref: '#/components/responses/Error'
-        '403':
-          $ref: '#/components/responses/Error'
-        '404':
-          $ref: '#/components/responses/Error'
-  /provider/data-call/pending/reports/{debate_id}:
-    get:
-      tags:
-      - Provider
-      operationId: listProviderDataCallReportManifests
-      parameters:
-      - name: debate_id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
-          minLength: 1
-          maxLength: 255
-      responses:
-        '200':
-          description: Teacher-only exact prepared Real Report manifests for one Debate.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderDataCallReportManifestListResponseV1'
         '401':
           $ref: '#/components/responses/Error'
         '403':
@@ -4729,35 +4436,6 @@ paths:
       security:
       - sessionCookie: []
       summary: Create Knowledge Set Asset
-      tags:
-      - knowledge-sets
-  /knowledge-sets/{set_id}/graph:
-    get:
-      operationId: getKnowledgeSetGraph
-      parameters:
-      - in: path
-        name: set_id
-        required: true
-        schema:
-          format: uuid
-          title: Set Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KnowledgeGraph'
-          description: Successful Response
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Knowledge Set not found.
-      security:
-      - sessionCookie: []
-      summary: Get Knowledge Set Graph
       tags:
       - knowledge-sets
   /knowledge-sets/{set_id}/sources:

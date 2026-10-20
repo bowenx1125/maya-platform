@@ -22,9 +22,7 @@ const api = {
   personalVoiceProfiles: vi.fn(),
   enrollVoice: vi.fn(),
   enrollPersonalVoice: vi.fn(),
-  voiceProfile: vi.fn(),
   createVoicePreview: vi.fn(),
-  confirmVoiceProfile: vi.fn(),
   renameVoiceProfile: vi.fn(),
 };
 
@@ -105,7 +103,6 @@ describe("Voice recovery", () => {
       ]);
       // Listening is only listening: the voice was selectable all along.
       fireEvent.ended(document.querySelector("audio")!);
-      expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
       const choice = screen.getByRole("radio", { name: "sample.wav" });
       expect(choice).toHaveProperty("disabled", false);
       fireEvent.click(choice);
@@ -176,7 +173,6 @@ describe("Voice recovery", () => {
     expect(document.querySelector("audio")).toBeNull();
     expect(document.querySelector("audio")).toBeNull();
     expect(api.createVoicePreview).toHaveBeenCalledTimes(1);
-    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
     await act(async () =>
       fireEvent.click(screen.getByRole("button", { name: "Retry" })),
     );
@@ -207,8 +203,6 @@ describe("Voice recovery", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
     await waitFor(() => expect(document.querySelector("audio")).toBeTruthy());
     await act(async () => fireEvent.ended(document.querySelector("audio")!));
-    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
-    expect(api.voiceProfile).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByRole("radio", { name: "sample.wav" })).toHaveProperty(
       "disabled",
@@ -241,7 +235,6 @@ describe("Voice recovery", () => {
     fireEvent.click(choice);
     expect(onSelect).toHaveBeenCalledWith(unfinished.id);
     expect(api.createVoicePreview).not.toHaveBeenCalled();
-    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
   });
 
   it.each(["enrolling", "failed", "outcome_unknown"])(

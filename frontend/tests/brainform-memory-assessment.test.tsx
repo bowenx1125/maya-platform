@@ -189,7 +189,6 @@ beforeEach(() => {
     conversationSession: vi.fn().mockResolvedValue(session()),
     streamTeamConversation: vi.fn(),
     controlConversationTurn: vi.fn(),
-    assessmentAttemptAction: vi.fn(),
     deleteConversation: vi.fn(),
   };
   window.history.replaceState({}, "", `/${state.role}/chat`);
@@ -349,7 +348,6 @@ describe("Brainform Memory and Assessment Chat path", () => {
       expect.objectContaining({ message: "继续", expected_revision: 1 }),
       expect.any(Object),
     );
-    expect(state.api.assessmentAttemptAction).not.toHaveBeenCalled();
     expect(state.api.controlConversationTurn).not.toHaveBeenCalled();
   });
 
@@ -407,7 +405,6 @@ describe("Brainform Memory and Assessment Chat path", () => {
       expect.objectContaining({ message: "暂停", expected_revision: 1 }),
       expect.any(Object),
     );
-    expect(state.api.assessmentAttemptAction).not.toHaveBeenCalled();
     expect(state.api.controlConversationTurn).not.toHaveBeenCalled();
   });
 
@@ -511,7 +508,6 @@ describe("Brainform Memory and Assessment Chat path", () => {
       expect.objectContaining({ message: "继续" }),
       expect.any(Object),
     );
-    expect(state.api.assessmentAttemptAction).not.toHaveBeenCalled();
     expect(state.api.controlConversationTurn).not.toHaveBeenCalled();
   });
 });

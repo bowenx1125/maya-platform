@@ -18,7 +18,6 @@ if str(SCRIPTS) not in sys.path:
 
 from app.modules.agents.persona import compile_persona_v2  # noqa: E402
 from next_wave_session_authoring import (  # noqa: E402
-    PERSONA_COMPILER_VERSION,
     AuthoringFailure,
     author_session_agents,
 )
@@ -126,27 +125,6 @@ class FakeAuthorTransport:
             assert isinstance(payload, dict)
             state.revision = int(payload["expected_revision"]) + 1
             return Response(200, self._version(state))
-        if method == "POST" and path.endswith("/persona/compile"):
-            state = self.versions[path.split("/agent-versions/", 1)[1].split("/", 1)[0]]
-            assert isinstance(payload, dict)
-            assert payload["expected_revision"] == state.revision
-            return Response(
-                200,
-                {
-                    "version_id": state.version_id,
-                    "revision": state.revision,
-                    "compiled": True,
-                    "raw_agent_md_hash": "sha256:" + "c" * 64,
-                    "persona_spec_hash": "d" * 64,
-                    "compiler_version": PERSONA_COMPILER_VERSION,
-                    "persona_spec": {"schema_version": "persona_spec_v2"},
-                },
-            )
-        if method == "POST" and path.endswith("/persona/confirm"):
-            state = self.versions[path.split("/agent-versions/", 1)[1].split("/", 1)[0]]
-            assert isinstance(payload, dict)
-            assert payload["expected_revision"] == state.revision
-            return Response(200, {**self._version(state), "persona_confirmed": True})
         if method == "POST" and path.endswith("/publish"):
             version_id = path.split("/agent-versions/", 1)[1].split("/", 1)[0]
             state = self.versions[version_id]
@@ -281,15 +259,13 @@ def test_authoring_creates_unique_v2_personas_and_uses_live_revisions() -> None:
     assert result["version_ids"] == [item["version_id"] for item in result["agents"]]
     assert result["snapshot_ids"] == [item["snapshot_id"] for item in result["agents"]]
 
-    expected_suffixes = ("/agents", "/persona/compile", "/persona/confirm", "/publish")
+    expected_suffixes = ("/agents", "/publish")
     for slot in range(5):
-        events = student.calls[slot * 6 : (slot + 1) * 6]
+        events = student.calls[slot * 4 : (slot + 1) * 4]
         assert [event["kind"] for event in events] == [
             "request",
             "request",
             "multipart",
-            "request",
-            "request",
             "request",
         ]
         assert events[0]["path"].endswith(expected_suffixes[0])
@@ -300,13 +276,10 @@ def test_authoring_creates_unique_v2_personas_and_uses_live_revisions() -> None:
         assert events[2]["file_content"] == CORPUS
         assert events[2]["content_type"] == "text/markdown"
         assert events[3]["path"].endswith(expected_suffixes[1])
-        assert events[4]["path"].endswith(expected_suffixes[2])
-        assert events[5]["path"].endswith(expected_suffixes[3])
         assert events[3]["payload"]["expected_revision"] == 4
-        assert events[4]["payload"]["expected_revision"] == 4
 
     keys = _mutation_keys(student)
-    assert len(keys) == 30
+    assert len(keys) == 20
     assert all(isinstance(key, str) and len(key) >= 16 for key in keys)
     assert len(set(keys)) == len(keys)
 
@@ -357,15 +330,15 @@ def test_provider_confirmation_is_exact_and_preflight_only() -> None:
     assert "slot_1.publish_after_confirmation" in stages
     assert len([event for event in student.calls if event["path"].endswith("/publish")]) == 4
     assert len([event for event in teacher.calls if event["method"] == "POST"]) == 2
-    assert len(_mutation_keys(student)) == 14
+    assert len(_mutation_keys(student)) == 10
     assert len(_mutation_keys(teacher)) == 2
-    assert len(set(_mutation_keys(student) + _mutation_keys(teacher))) == 16
+    assert len(set(_mutation_keys(student) + _mutation_keys(teacher))) == 12
 
 
 @pytest.mark.parametrize(
     ("kwargs", "expected_code", "teacher_calls"),
     [
-        ({"fail_path": "/persona/compile"}, "provider_unavailable", 0),
+        ({"fail_path": "/knowledge-documents"}, "provider_unavailable", 0),
         ({"unknown_publish": True}, "acceptance_unknown", 0),
         (
             {"require_teacher_confirmation": True, "nonzero_confirmation_send": True},
@@ -396,10 +369,9 @@ def test_failure_stops_without_downstream_or_unknown_retry(
     assert len([event for event in teacher.calls if event["method"] == "POST"]) == teacher_calls
     paths = _paths(student)
     if expected_code == "provider_unavailable":
-        assert any(path.endswith("/persona/compile") for path in paths)
-        assert not any(path.endswith("/persona/confirm") for path in paths)
+        assert any(path.endswith("/knowledge-documents") for path in paths)
         assert not any(path.endswith("/publish") for path in paths)
-        assert not any(path.endswith("/agents") for path in paths[6:])
+        assert not any(path.endswith("/agents") for path in paths[3:])
     elif expected_code == "acceptance_unknown":
         assert len([path for path in paths if path.endswith("/publish")]) == 1
         assert not any("provider/data-call" in path for path in paths)

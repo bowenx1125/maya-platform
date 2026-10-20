@@ -323,7 +323,6 @@ def test_group_public_student_projection_omits_rubric_and_its_fingerprint(
     )
     assert "private rubric canary" not in history.text
     assert "private answer canary" not in history.text
-    assert client.get(f"/api/v1/knowledge-sets/{set_id}/graph").status_code == 200
 
     _owner, _owner_csrf = login(client, "bowen")
     owner_asset = client.get(f"/api/v1/knowledge-assets/{asset_id}")
@@ -425,9 +424,6 @@ def test_private_asset_requires_owner_save_after_public_set_before_group_can_rea
     assert peer_assets.json() == []
     assert client.get(f"/api/v1/knowledge-assets/{asset_id}").status_code == 404
     assert client.get(f"/api/v1/knowledge-assets/{asset_id}/versions").status_code == 404
-    peer_graph = client.get(f"/api/v1/knowledge-sets/{set_id}/graph")
-    assert peer_graph.status_code == 200, peer_graph.text
-    assert peer_graph.json()["content_revision"] is None
 
     _owner, owner_csrf = login(client, "bowen")
     owner_history = client.get(f"/api/v1/knowledge-assets/{asset_id}/versions")

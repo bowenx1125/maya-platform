@@ -144,41 +144,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/courses/{course_id}/provider-settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Provider Settings */
-        get: operations["getProviderSettings"];
-        put?: never;
-        /** Update Provider Settings */
-        post: operations["updateProviderSettings"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/courses/{course_id}/provider-settings/{component}/check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Check Provider */
-        post: operations["checkProvider"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debates/{debate_id}/live": {
         parameters: {
             query?: never;
@@ -846,42 +811,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent-versions/{version_id}/persona/compile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["compileAgentPersona"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent-versions/{version_id}/persona/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["confirmAgentPersona"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/agent-versions/{version_id}/knowledge-documents": {
         parameters: {
             query?: never;
@@ -1058,24 +987,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["createVoicePreview"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/voice-profiles/{voice_profile_id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                voice_profile_id: components["parameters"]["VoiceProfileId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["confirmVoiceProfile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1600,22 +1511,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debates/{debate_id}/report/revisions/{revision_id}/continue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["continueRealReport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debates/{debate_id}/report/download": {
         parameters: {
             query?: never;
@@ -1704,22 +1599,6 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listProviderDataCallPublicationManifests"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/provider/data-call/pending/reports/{debate_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["listProviderDataCallReportManifests"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1919,23 +1798,6 @@ export interface paths {
         put?: never;
         /** Create Knowledge Set Asset */
         post: operations["createKnowledgeSetAsset"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/knowledge-sets/{set_id}/graph": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Knowledge Set Graph */
-        get: operations["getKnowledgeSetGraph"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6504,189 +6366,6 @@ export interface operations {
             };
         };
     };
-    getProviderSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderSettings"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updateProviderSettings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateProviderSettings"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderSettings"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    checkProvider: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                component: "llm" | "embedding" | "report" | "tts" | "voice";
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CheckProvider"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderSettings"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     updateClassroomLive: {
         parameters: {
             query?: never;
@@ -8364,69 +8043,6 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
-    compileAgentPersona: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CompilePersonaRequest"];
-            };
-        };
-        responses: {
-            /** @description Deterministic Persona preview. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonaCompileResponse"];
-                };
-            };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
-    confirmAgentPersona: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfirmPersonaRequest"];
-            };
-        };
-        responses: {
-            /** @description Persona confirmed for the exact draft. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentVersion"];
-                };
-            };
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
     setAgentVersionDocuments: {
         parameters: {
             query?: never;
@@ -8847,33 +8463,6 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             503: components["responses"]["Error"];
-        };
-    };
-    confirmVoiceProfile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                voice_profile_id: components["parameters"]["VoiceProfileId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Preview accepted; status ready. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VoiceProfile"];
-                };
-            };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
         };
     };
     listPublishedAgentsForTeacher: {
@@ -9852,39 +9441,6 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
-    continueRealReport: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                debate_id: components["parameters"]["DebateId"];
-                revision_id: components["parameters"]["RevisionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ContinueRealReportRequest"];
-            };
-        };
-        responses: {
-            /** @description Continue one already-confirmed and attached Real Report operation. */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContinueRealReportResponse"];
-                };
-            };
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
     downloadCurrentReport: {
         parameters: {
             query?: {
@@ -10069,31 +9625,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderDataCallPublicationManifestListResponseV1"];
-                };
-            };
-            401: components["responses"]["Error"];
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-        };
-    };
-    listProviderDataCallReportManifests: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                debate_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Teacher-only exact prepared Real Report manifests for one Debate. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderDataCallReportManifestListResponseV1"];
                 };
             };
             401: components["responses"]["Error"];
@@ -10855,37 +10386,6 @@ export interface operations {
             };
             /** @description Set content revision is stale. */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getKnowledgeSetGraph: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                set_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeGraph"];
-                };
-            };
-            /** @description Knowledge Set not found. */
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };
