@@ -94,6 +94,14 @@ def test_four_round_text_only_http_lifecycle(app_factory: Any, voice_missing: bo
                 "participants": [{"agent_id": item, "stance_mode": "open"} for item in agents],
             },
         )
+        if voice_missing:
+            # Real TTS + no ready voice is refused up front; text-only lifecycle
+            # under a mock provider is covered by voice_missing=False below.
+            assert created.status_code == 422, created.text
+            error = created.json().get("error", created.json())
+            assert error["code"] == "agent_voice_missing"
+            assert error["details"]["agent_names"] == ["Text only 0", "Text only 1"]
+            return
         assert created.status_code == 201, created.text
         debate_id = created.json()["id"]
         detail = _wait(client, debate_id, lambda item: item["preview"]["ready"])
@@ -165,8 +173,7 @@ def test_four_round_text_only_http_lifecycle(app_factory: Any, voice_missing: bo
             assert len(turns) == 8
             assert all(turn.generation_status == "final_ready" for turn in turns)
             assert all(turn.audio_file_id is None for turn in turns)
-            expected = "tts_voice_unavailable" if voice_missing else "tts_timeout"
-            assert all(turn.safe_error_code == expected for turn in turns)
+            assert all(turn.safe_error_code == "tts_timeout" for turn in turns)
             assert (
                 db.execute(
                     text(

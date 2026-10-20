@@ -367,4 +367,21 @@ describe("teacher debate preview", () => {
     ).toBeTruthy();
     expect(screen.queryByText("Preview progress")).toBeNull();
   });
+  it("says at the top that audio failed and retries the first failed turn", () => {
+    const onRetryTurn = vi.fn();
+    renderPreview(detail, onRetryTurn);
+    expect(screen.getByTestId("preview-audio-failed").textContent).toContain(
+      "Audio failed for 1 turn(s) (tts_failed)",
+    );
+    fireEvent.click(screen.getByTestId("preview-audio-failed-retry"));
+    expect(onRetryTurn).toHaveBeenCalledWith("turn-a");
+  });
+
+  it("shows no audio failure banner when every turn has audio", () => {
+    renderPreview({
+      ...detail,
+      preview_turns: (detail.preview_turns ?? []).slice(1),
+    });
+    expect(screen.queryByTestId("preview-audio-failed")).toBeNull();
+  });
 });

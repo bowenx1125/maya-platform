@@ -172,6 +172,10 @@ const enMessages = {
     "A real provider is selected but its reviewed policy is not installed. Retrying cannot help; an operator has to import it.",
   debatePreviewNotReady:
     "Preview is not ready yet. Open Preview to check the saved speeches before trying again.",
+  errorAgentVoiceMissing:
+    "These Agents have no ready voice: {names}. Choose a voice for each of them, then try again.",
+  debatePreviewAudioFailed:
+    "Audio failed for {count} turn(s) ({code}). Those turns will play as text only. Retry, or fix the Agent's voice first.",
   debateCleanupDeferred:
     "A classroom operation is still running. Wait for it to finish, then try again.",
   debateRebirthRefreshFailed:
@@ -1066,6 +1070,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "已选择真实供应商，但其已审阅策略尚未导入。重试无法解决，需要先导入策略。",
   debatePreviewNotReady:
     "预览尚未就绪。请打开 Preview 检查已保存的发言后重试。",
+  errorAgentVoiceMissing:
+    "以下智能体还没有可用的音色：{names}。请先为它们选好音色再试。",
+  debatePreviewAudioFailed:
+    "有 {count} 段发言的语音生成失败（{code}），这些发言只会显示文字。可以重试，或先修好智能体的音色。",
   debateCleanupDeferred: "课堂仍有操作正在进行，请等待完成后重试。",
   debateRebirthRefreshFailed:
     "课堂已重置，但列表更新失败。重试只会重新加载列表。",
@@ -1989,6 +1997,18 @@ export function localizeError(
       ) {
         return tm("errorAuthRateLimited", { seconds }, locale);
       }
+    }
+    if (
+      candidate.code === "agent_voice_missing" &&
+      candidate.details &&
+      typeof candidate.details === "object" &&
+      "agent_names" in candidate.details &&
+      Array.isArray(candidate.details.agent_names)
+    ) {
+      const names = candidate.details.agent_names
+        .filter((name): name is string => typeof name === "string")
+        .join(locale === "zh" ? "、" : ", ");
+      return tm("errorAgentVoiceMissing", { names }, locale);
     }
     if (typeof candidate.code === "string") {
       const key = errorCodeKeys[candidate.code];

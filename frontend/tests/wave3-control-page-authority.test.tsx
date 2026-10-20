@@ -28,6 +28,18 @@ vi.mock("../components/app-shell", () => ({
 vi.mock("../components/ui", () => ({
   ErrorNotice: () => <div>Error</div>,
   LoadingCard: () => <div>Loading</div>,
+  Notice: ({
+    children,
+    action,
+  }: {
+    children?: ReactNode;
+    action?: ReactNode;
+  }) => (
+    <div>
+      {children}
+      {action}
+    </div>
+  ),
   SectionCard: ({
     children,
     title,
