@@ -117,7 +117,7 @@ def test_upgrade_backfills_completed_attempt_own_selection_with_fk_children(
             )
             == 2
         )
-    assert ALEMBIC_HEAD == "0074_interaction_voter_key"
+    assert ALEMBIC_HEAD == "0075_answer_guard_state"
     _assert_foreign_keys(database)
 
 

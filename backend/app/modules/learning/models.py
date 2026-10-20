@@ -665,6 +665,10 @@ class AssessmentAttemptQuestion(Base):
     presented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     effective_answer_record_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Server-side relevance guard for a free question (answer_guard.GuardState):
+    # whether it was judged off-topic once, the reply awaiting 确认, the last
+    # unrecorded reply. Never read by the model.
+    guard_state_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint("ordinal >= 0", name="ck_assessment_attempt_question_ordinal"),

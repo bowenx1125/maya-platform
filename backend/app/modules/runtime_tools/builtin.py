@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -39,6 +39,11 @@ class AssessmentActionArguments(BaseModel):
     classification: AssessmentClassification
     answer_span: str | None = None
     reply_language: Literal["zh", "en"] | None = None
+    # Free questions: what the message is and how sure the model is. The
+    # server alone decides whether it is recorded (answer_guard).
+    category: Literal["answer", "off_topic", "other"] | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    # Deprecated (pre-2026-10-20 prompt); still accepted, mapped to category.
     relevant: bool | None = None
     guidance: str | None = None
 
@@ -61,6 +66,8 @@ def assessment_action(
         action=AssessmentStudentAction(
             classification=arguments.classification,
             answer_span=arguments.answer_span,
+            category=arguments.category,
+            confidence=arguments.confidence,
             relevant=arguments.relevant,
             guidance=arguments.guidance,
         ),
@@ -201,21 +208,17 @@ def runtime_registry() -> dict[str, ToolSpec]:
                 "Apply the user's explicit assessment action. A formal test starts only through "
                 "this Tool (start_request) and the server shows every Question: never write test "
                 "questions yourself or pretend a test has started. "
-                "Classify the saved current message. On a free-response question set relevant "
-                "to true only when the message actually answers that question, and provide "
-                "only its exact answer span. A progress or status question, a question back, "
-                "a help request, emotional venting, or a bare letter or digit when the "
-                "question asks for a reason is not an answer: set relevant to false, "
-                "classification to off_topic, and guidance to one sentence that says what "
-                "this question wants or that acknowledges distress. Do not repeat the "
-                "question text in guidance, and do not say the answer was recorded. "
-                "The server saves a free answer only when relevant is true and classification "
-                "is answer_only or answer_with_restricted_request. When guidance is set, the "
-                "server speaks that sentence and does not paste the question again. "
+                "Classify the saved current message and provide only its exact answer span. "
+                "On a free-response question also set category: answer (the message is the "
+                "student's answer), off_topic (clearly unrelated to the question) or other "
+                "(a question back, chit-chat, a help request), and confidence from 0 to 1. "
+                "The server alone decides what is recorded. Guidance is one optional sentence "
+                "for a reply that is not an answer; do not repeat the question text or say "
+                "the answer was recorded. "
                 "A choice or scale reply is saved only when it matches that question's letters "
                 "or range. Never invent an answer. "
                 "Saying the learner does not know or forgot (我不知道, 不知道, 不会, 忘了, "
-                "I don't know) is answer_only with relevant true and that exact text as the span: "
+                "I don't know) is answer_only, category answer, with that exact text as the span: "
                 "it is an answer and is scored. Use skip_request only when the user explicitly "
                 "asks to skip or move on (跳过, 下一题, skip). "
                 "complete_request means the user ends the test now: unanswered Questions are "

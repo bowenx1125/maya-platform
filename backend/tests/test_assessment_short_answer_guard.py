@@ -364,3 +364,148 @@ def test_change_request_without_an_answer_says_how(quiz: _Harness) -> None:
     reply = quiz.send("修改第1题", OFF)
     assert "修改第1题：新答案" in reply
     assert quiz.answers() == ["2330034002"]
+
+
+# --- Relevance guard v2 (owner design 2026-10-20 evening) -------------------
+# The model only reports category + confidence; the program decides.
+
+SURE_OFF = {"classification": "off_topic", "category": "off_topic", "confidence": 0.95}
+WEAK_OFF = {"classification": "off_topic", "category": "off_topic", "confidence": 0.7}
+SURE_ANSWER = {"classification": "answer_only", "category": "answer", "confidence": 0.9}
+OTHER = {"classification": "off_topic", "category": "other", "confidence": 0.8}
+
+
+def _to_q3(quiz: _Harness) -> None:
+    quiz.send("2330034002", SURE_OFF)
+    quiz.send("人工智能", SURE_OFF)
+    assert quiz.answers() == ["2330034002", "人工智能"]
+
+
+def _guard_state(quiz: _Harness) -> dict[str, Any]:
+    ctx = quiz.context()
+    with quiz.database.session() as db:
+        row = db.scalar(
+            select(AssessmentAttemptQuestion).where(
+                AssessmentAttemptQuestion.attempt_id == str(ctx.attempt.id),
+                AssessmentAttemptQuestion.question_version_id
+                == str(ctx.current_question.question_version_id),
+            )
+        )
+        return json.loads(row.guard_state_json or "{}")
+
+
+def test_chenshaoyan_id_and_major_recorded_even_when_model_is_sure_off_topic(
+    quiz: _Harness,
+) -> None:
+    _to_q3(quiz)
+    assert quiz.context().progress.resolved_count == 2
+
+
+def test_rule1_only_sure_off_topic_is_judged_directly(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    reply = quiz.send("今天中午吃什么", SURE_OFF)
+    assert "输入“确认”" not in reply
+    assert quiz.answers() == ["2330034002", "人工智能"]
+    assert _guard_state(quiz)["off_topic_judged"] is True
+
+
+def test_rule1_unsure_off_topic_asks_to_confirm(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    assert "输入“确认”" in quiz.send("心里有数才能做好", WEAK_OFF)
+    assert quiz.answers() == ["2330034002", "人工智能"]
+    state = _guard_state(quiz)
+    assert state["pending_text"] == "心里有数才能做好" and state["off_topic_judged"] is False
+
+
+def test_rule2_after_off_topic_a_statement_cannot_be_off_topic_again(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    quiz.send("今天中午吃什么", SURE_OFF)
+    # The model insists off_topic with high confidence; the program refuses.
+    quiz.send("知行合一就是知道和做到要统一", SURE_OFF)
+    assert quiz.answers()[-1] == "知行合一就是知道和做到要统一"
+    assert quiz.context().progress.resolved_count == 3
+
+
+def test_rule2_after_off_topic_a_question_back_asks_to_confirm_then_records(
+    quiz: _Harness,
+) -> None:
+    _to_q3(quiz)
+    quiz.send("今天中午吃什么", SURE_OFF)
+    reply = quiz.send("是不是说要边学边做？", SURE_OFF)
+    assert "输入“确认”" in reply
+    assert len(quiz.answers()) == 2
+    quiz.send("确认", SURE_OFF)
+    assert quiz.answers()[-1] == "是不是说要边学边做？"
+
+
+def test_rule3_same_reply_again_is_recorded_whatever_the_model_says(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    quiz.send("今天中午吃什么", SURE_OFF)
+    quiz.send("今天中午吃什么。", SURE_OFF)
+    assert quiz.answers()[-1] == "今天中午吃什么。"
+
+
+def test_rule3_near_duplicate_after_a_question_back(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    quiz.send("这是什么意思？", OTHER)
+    quiz.send("这是什么意思?", OTHER)
+    assert quiz.answers()[-1] == "这是什么意思?"
+
+
+def test_rule4_confirm_records_the_pending_reply_from_server_state(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    quiz.send("边做边想", WEAK_OFF)
+    assert _guard_state(quiz)["pending_text"] == "边做边想"
+    quiz.send("确认", SURE_OFF)
+    assert quiz.answers()[-1] == "边做边想"
+
+
+def test_rule5_never_stuck_on_one_question(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    replies = ["吃饭了吗", "我觉得是实践", "反正就是要做"]
+    for message in replies:
+        quiz.send(message, SURE_OFF)
+    # Two inputs at most before the question is recorded.
+    assert quiz.answers()[2] == "我觉得是实践"
+    assert quiz.context().progress.resolved_count >= 3
+
+
+def test_sure_answer_is_recorded_directly(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    reply = quiz.send("知行合一是王阳明的主张", SURE_ANSWER)
+    assert "输入“确认”" not in reply
+    assert quiz.answers()[-1] == "知行合一是王阳明的主张"
+
+
+def test_guard_rule_units() -> None:
+    from app.modules.learning.answer_guard import GuardState, decide, nearly_same
+
+    assert nearly_same("2330034002", " 2330034002。")
+    assert nearly_same("知行合一就是边做边想", "知行合一就是边做边想吧")
+    assert not nearly_same("A", "B")
+    fresh = GuardState()
+    assert decide(fresh, "吃饭", category="off_topic", confidence=0.95, statement=True) == (
+        "off_topic"
+    )
+    assert decide(fresh, "吃饭", category="off_topic", confidence=0.89, statement=True) == (
+        "confirm"
+    )
+    judged = GuardState(off_topic_judged=True)
+    assert decide(judged, "吃饭", category="off_topic", confidence=1.0, statement=True) == (
+        "record"
+    )
+    assert decide(judged, "为什么？", category="off_topic", confidence=1.0, statement=False) == (
+        "other_confirm"
+    )
+    assert GuardState.load("not json") == GuardState()
+    assert GuardState.load(GuardState(pending_text="x").dump()).pending_text == "x"
+
+
+def test_completed_attempt_answers_are_not_rescored(quiz: _Harness) -> None:
+    _to_q3(quiz)
+    quiz.send("结束测试", {"classification": "complete_request"})
+    before = quiz.answers()
+    reply = quiz.send("修改第1题：2330034003", SURE_OFF)
+    assert quiz.answers() == before
+    assert "2330034003" not in quiz.answers()
+    assert reply

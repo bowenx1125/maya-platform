@@ -1801,41 +1801,85 @@ def _student_guidance(value: str | None) -> str | None:
     return text[:400]
 
 
-def _pending_confirmed_answer(
-    db: Session, conversation_id: str, turn: ConversationTurn | None, presented_at: Any
-) -> str | None:
-    """The previous message, when the student was asked to confirm it as an answer.
+def _guard_free_answer(
+    db: Session,
+    row: AssessmentAttemptQuestion | None,
+    prompt: str,
+    text: str,
+    user_text: str,
+    action: AssessmentStudentAction,
+    guidance: str | None,
+) -> AssessmentStudentAction | tuple[AssessmentStudentAction, str]:
+    """Apply the program's relevance rules to a free question (answer_guard).
 
-    Read from the saved turns themselves, so it survives a refresh and needs
-    no extra state: the turn just before this one must be after the question
-    was shown, be a plain statement, and have been answered with the confirm
-    prompt.
+    The model's category and confidence are inputs only. The per-question
+    state (judged off-topic once, reply awaiting 确认, last unrecorded reply)
+    is stored on the attempt question row, so it survives refreshes and both
+    backends see the same state.
     """
 
-    from app.modules.workspace.models import TeamTurnResult
-
     from .answer_format import is_statement
-    from .answer_guard import asked_to_confirm, is_confirm_only
+    from .answer_guard import (
+        GuardState,
+        chinese,
+        collects_info,
+        confirm_prompt,
+        decide,
+        is_confirm_only,
+        model_category,
+    )
 
-    if turn is None or presented_at is None:
-        return None
-    previous = db.scalar(
-        select(ConversationTurn).where(
-            ConversationTurn.conversation_id == conversation_id,
-            ConversationTurn.position == turn.position - 1,
+    state = GuardState.load(row.guard_state_json if row is not None else None)
+
+    def save(next_state: GuardState) -> None:
+        if row is not None:
+            row.guard_state_json = next_state.dump()
+            db.flush()
+
+    def record(answer: str) -> tuple[AssessmentStudentAction, str]:
+        state.history.append(answer)
+        save(GuardState(off_topic_judged=state.off_topic_judged, history=state.history))
+        return AssessmentStudentAction(classification="answer_only", answer_span=answer), answer
+
+    # Rule 4: 确认 records the pending reply.
+    if is_confirm_only(text):
+        if state.pending_text:
+            return record(state.pending_text)
+        return AssessmentStudentAction(
+            classification="off_topic", guidance=guidance or confirm_prompt(chinese(prompt))
         )
-    )
-    if previous is None or previous.created_at < presented_at:
-        return None
-    text = (previous.user_text or "").strip()
-    if not text or is_confirm_only(text) or not is_statement(text):
-        return None
-    replies = [previous.assistant_text] + list(
-        db.scalars(
-            select(TeamTurnResult.assistant_text).where(TeamTurnResult.turn_id == previous.id)
-        )
-    )
-    return text if asked_to_confirm(replies) else None
+    statement = is_statement(text)
+    # A question that only collects a fact (学号/专业…) takes any plain statement.
+    if (
+        statement
+        and collects_info(prompt)
+        and action.classification in (_ANSWER_CLASSES | {"off_topic"})
+    ):
+        return record(text)
+    category = model_category(action.classification, action.category, action.relevant)
+    confidence = action.confidence
+    if action.relevant is True and action.category is None and confidence is None:
+        confidence = 1.0
+    verdict = decide(state, text, category=category, confidence=confidence, statement=statement)
+    if verdict == "record":
+        span = action.answer_span or ""
+        exact = category == "answer" and span.strip() and span in user_text
+        return record(span if exact else text)
+    state.last_text = text
+    state.history.append(text)
+    is_chinese = chinese(prompt)
+    if verdict == "off_topic":
+        state.off_topic_judged = True
+        state.pending_text = None
+        save(state)
+        return AssessmentStudentAction(classification="off_topic", guidance=guidance)
+    # confirm / other_confirm: ask, keep the reply pending for 确认.
+    state.rejections += 1
+    state.pending_text = text if statement or verdict == "other_confirm" else None
+    save(state)
+    ask = confirm_prompt(is_chinese)
+    sentence = f"{guidance} {ask}" if guidance else ask
+    return AssessmentStudentAction(classification="off_topic", guidance=sentence)
 
 
 def _fit_answer_action(
@@ -1883,14 +1927,7 @@ def _fit_answer_action_inner(
     ):
         return action
     from .answer_format import answer_format, fits, is_statement
-    from .answer_guard import (
-        asked_to_confirm,
-        chinese,
-        collects_info,
-        confirm_prompt,
-        is_confirm_only,
-        is_skip_only,
-    )
+    from .answer_guard import is_skip_only
 
     text = user_text.strip()
     prompt = context.current_question.prompt
@@ -1899,68 +1936,15 @@ def _fit_answer_action_inner(
     if is_skip_only(text):
         return AssessmentStudentAction(classification="skip_request")
     if form.kind == "free":
-        presented_at = next(
+        row = next(
             (
-                row.presented_at
-                for row in _attempt_question_rows(db, str(context.attempt.id))
-                if row.question_version_id == str(context.current_question.question_version_id)
+                r
+                for r in _attempt_question_rows(db, str(context.attempt.id))
+                if r.question_version_id == str(context.current_question.question_version_id)
             ),
             None,
         )
-        if is_confirm_only(text):
-            pending = _pending_confirmed_answer(db, conversation_id, turn, presented_at)
-            if pending is not None:
-                return (
-                    AssessmentStudentAction(classification="answer_only", answer_span=pending),
-                    pending,
-                )
-        if action.classification in _ANSWER_CLASSES and action.relevant is True:
-            span = action.answer_span or ""
-            if not span.strip() or span not in user_text:
-                return action.model_copy(update={"answer_span": text})
-            return action
-        statement = is_statement(text) and not is_confirm_only(text)
-        # A question that only collects a fact takes any plain statement.
-        if (
-            statement
-            and collects_info(prompt)
-            and action.classification in _ANSWER_CLASSES | {"off_topic"}
-        ):
-            return AssessmentStudentAction(classification="answer_only", answer_span=text)
-        if action.classification in _ANSWER_CLASSES and statement:
-            # The model called it an answer but not relevant: unsure. Ask once;
-            # a re-entered reply right after the prompt is taken as meant.
-            previous_asked = False
-            if turn is not None:
-                from app.modules.workspace.models import TeamTurnResult
-
-                previous = db.scalar(
-                    select(ConversationTurn).where(
-                        ConversationTurn.conversation_id == conversation_id,
-                        ConversationTurn.position == turn.position - 1,
-                    )
-                )
-                if previous is not None and (
-                    presented_at is None or previous.created_at >= presented_at
-                ):
-                    previous_asked = asked_to_confirm(
-                        [previous.assistant_text]
-                        + list(
-                            db.scalars(
-                                select(TeamTurnResult.assistant_text).where(
-                                    TeamTurnResult.turn_id == previous.id
-                                )
-                            )
-                        )
-                    )
-            if previous_asked:
-                return AssessmentStudentAction(classification="answer_only", answer_span=text)
-            return AssessmentStudentAction(
-                classification="off_topic", guidance=confirm_prompt(chinese(prompt))
-            )
-        if action.classification in _ANSWER_CLASSES:
-            return AssessmentStudentAction(classification="off_topic", guidance=guidance)
-        return action
+        return _guard_free_answer(db, row, prompt, text, user_text, action, guidance)
     if action.classification in _ANSWER_CLASSES:
         if not fits(form, text):
             return AssessmentStudentAction(classification="off_topic", guidance=guidance)
