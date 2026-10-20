@@ -578,3 +578,69 @@
     transition: none;
   }
 }
+
+/* Studyform embeds Brainform's RAG and Record: the wrappers vanish so both
+   cards sit in Studyform's own grid. */
+.embeddedPage,
+.embeddedSections,
+.recordSlot {
+  display: contents;
+}
+
+.embeddedPage > :not(.embeddedSections) {
+  grid-column: 1 / -1;
+}
+
+/* Studyform: Agents | Teams on top (3 + 3 columns), RAG | Voices | Record
+   below (2 + 2 + 2). */
+.studyformGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.studyformGrid > [aria-labelledby="studyform-agents"] {
+  grid-column: 1 / 4;
+  grid-row: 1;
+}
+
+.studyformGrid > [aria-labelledby="studyform-teams"] {
+  grid-column: 4 / 7;
+  grid-row: 1;
+}
+
+.studyformGrid [data-studyform-slot="rag"] {
+  grid-column: 1 / 3;
+  grid-row: 2;
+}
+
+.studyformGrid > #studyform-voices {
+  grid-column: 3 / 5;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.studyformGrid [data-studyform-slot="record"] > * {
+  grid-column: 5 / 7;
+  grid-row: 2;
+}
+
+/* Wider Agents/Teams cards hold three tiles a row instead of two. */
+.studyformGrid :global(.agent-tile-grid.module-tile-grid) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 960px) {
+  .studyformGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .studyformGrid > *,
+  .studyformGrid [data-studyform-slot="rag"],
+  .studyformGrid [data-studyform-slot="record"] > *,
+  .embeddedPage > :not(.embeddedSections) {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}

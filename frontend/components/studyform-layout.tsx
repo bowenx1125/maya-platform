@@ -5,8 +5,23 @@ import styles from "./knowledge/brainform-workspace.module.css";
 import { IconClose } from "./quiet-icons";
 import { WorkspaceIcon } from "./workspace-icon";
 
-export function ModuleGrid({ children }: { children: ReactNode }) {
-  return <div className={styles.sections}>{children}</div>;
+export function ModuleGrid({
+  children,
+  variant,
+}: {
+  children: ReactNode;
+  /** "studyform": the 2-top / 3-bottom Studyform layout. */
+  variant?: "studyform";
+}) {
+  return (
+    <div
+      className={
+        variant === "studyform" ? styles.studyformGrid : styles.sections
+      }
+    >
+      {children}
+    </div>
+  );
 }
 
 export function ModuleCard({

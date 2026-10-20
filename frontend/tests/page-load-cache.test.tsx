@@ -46,6 +46,11 @@ function signIn(userId = "student-a") {
     publishedAgents: vi.fn().mockResolvedValue([]),
     voiceProfiles: vi.fn().mockResolvedValue([]),
     deleteTeam: vi.fn().mockResolvedValue(undefined),
+    // Studyform also holds Brainform's RAG and Record cards.
+    courses: vi.fn().mockResolvedValue([{ id: "course-1", name: "Course" }]),
+    knowledge: vi.fn().mockResolvedValue([]),
+    brainformKnowledge: vi.fn().mockResolvedValue([]),
+    myAssessmentAttempts: vi.fn().mockResolvedValue([]),
   };
   h.session = {
     api,
@@ -149,9 +154,13 @@ describe("Studyform page cache", () => {
   });
 
   it("Brainform hides painted lists when the refresh is refused", async () => {
+    // Only teachers see the Knowledge card now (2026-10-20).
     const api: Record<string, ReturnType<typeof vi.fn>> = signIn(
-      "student-brainform",
+      "teacher-brainform",
     );
+    (h.session.user as { courses: unknown[] }).courses = [
+      { course_id: "course-1", role: "teacher" },
+    ];
     Object.assign(api, {
       courses: vi.fn().mockResolvedValue([{ id: "course-1", name: "Course" }]),
       groups: vi.fn().mockResolvedValue([]),
@@ -174,7 +183,7 @@ describe("Studyform page cache", () => {
     });
     const page = () => (
       <LocaleProvider initialLocale="en">
-        <BrainformWorkspace role="student" />
+        <BrainformWorkspace role="teacher" />
       </LocaleProvider>
     );
     const first = render(page());

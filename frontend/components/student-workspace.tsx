@@ -41,6 +41,7 @@ import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { VoiceLibrary } from "./voice/voice-library";
+import { BrainformWorkspace } from "./knowledge/brainform-workspace";
 import {
   ModuleCard,
   ModuleGrid,
@@ -282,7 +283,13 @@ export function GroupWorkspace({
   initialTeamId?: string;
 }) {
   const { identityGeneration, user } = useSession();
-  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}:${initialMode ?? ""}:${initialTeamId ?? ""}`;
+  // Only Team modes swap the page; RAG modes open inside the embedded
+  // Brainform cards and must not remount Studyform.
+  const pageMode =
+    initialMode === "team-new" || initialMode === "team-edit"
+      ? initialMode
+      : "";
+  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}:${pageMode}:${initialTeamId ?? ""}`;
   return (
     <GroupWorkspaceSession
       key={scope}
@@ -572,7 +579,7 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
-      <ModuleGrid>
+      <ModuleGrid variant={teacherIdentity ? undefined : "studyform"}>
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
@@ -674,6 +681,16 @@ function GroupWorkspaceSession({
           moduleCard
           initialCreate={teacherIdentity ? false : initialVoiceCreate}
         />
+        {/* Owner request (2026-10-20): Brainform's RAG and Record cards
+            moved here for students; same component, same API calls. */}
+        {teacherIdentity ? null : (
+          <BrainformWorkspace
+            role="student"
+            embedded
+            initialGroupId={groupId}
+            initialCourseId={group.course_id}
+          />
+        )}
       </ModuleGrid>
       {/* A visiting teacher also sees who is in the group, how their tests
           went and what happened lately. */}

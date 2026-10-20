@@ -443,7 +443,10 @@ export function BrainformWorkspace({
   initialGroupId,
   initialMode,
   initialDocumentId,
+  embedded = false,
 }: {
+  /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
+  embedded?: boolean;
   role: BrainformRole;
   initialAgentId?: string;
   initialSetId?: string;
@@ -557,6 +560,7 @@ export function BrainformWorkspace({
       initialGroupId={initialGroupId}
       initialMode={initialMode}
       initialDocumentId={initialDocumentId}
+      embedded={embedded}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
         user?.id ?? null,
@@ -597,9 +601,11 @@ function BrainformWorkspaceBody({
   initialGroupId,
   initialMode,
   initialDocumentId,
+  embedded = false,
   identityScope,
   ragDraftScope,
 }: {
+  embedded?: boolean;
   role: BrainformRole;
   courseIds: string[];
   courseId: string;
@@ -2279,7 +2285,10 @@ function BrainformWorkspaceBody({
     !teacherGroupView && (role === "teacher" || ragGroupIds.length > 0);
 
   return (
-    <main className={styles.page}>
+    <main
+      className={embedded ? styles.embeddedPage : styles.page}
+      data-studyform-embedded={embedded || undefined}
+    >
       {pane?.kind === "rag-new" ? (
         <WorkspaceAction
           name="done"
@@ -2386,9 +2395,10 @@ function BrainformWorkspaceBody({
       {loading && courseId ? <LoadingCard /> : null}
 
       {!pane && !initialMode && !loading && !loadError && courseId ? (
-        <div className={styles.sections}>
+        <div className={embedded ? styles.embeddedSections : styles.sections}>
           <section
             className={styles.section}
+            data-studyform-slot="rag"
             aria-labelledby="brainform-rag-heading"
           >
             <div className={styles.sectionHeading}>
@@ -2554,195 +2564,206 @@ function BrainformWorkspaceBody({
             )}
           </section>
 
-          <section
-            className={styles.section}
-            aria-labelledby="brainform-knowledge-heading"
-          >
-            <div className={styles.sectionHeading}>
-              <div>
-                <h2
-                  id="brainform-knowledge-heading"
-                  data-ui-guide="knowledge.files"
-                  data-ui-guide-text={t("brainformKnowledgeIntro")}
-                  tabIndex={0}
-                >
-                  {t("brainformKnowledgeHeading")}
-                </h2>
+          {/* Owner request (2026-10-20): students no longer see the
+              Knowledge card; teachers keep it. Data and APIs are untouched. */}
+          {role === "teacher" ? (
+            <section
+              className={styles.section}
+              aria-labelledby="brainform-knowledge-heading"
+            >
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h2
+                    id="brainform-knowledge-heading"
+                    data-ui-guide="knowledge.files"
+                    data-ui-guide-text={t("brainformKnowledgeIntro")}
+                    tabIndex={0}
+                  >
+                    {t("brainformKnowledgeHeading")}
+                  </h2>
+                </div>
+                {canAddKnowledge ? (
+                  <ModulePlus
+                    label={t("brainformNewKnowledge")}
+                    onClick={beginNewKnowledge}
+                    disabled={Boolean(busyKey)}
+                    busy={busyKey === "knowledge-new"}
+                  />
+                ) : (
+                  <span className={styles.count}>
+                    {displayedKnowledgeRows.length}
+                  </span>
+                )}
               </div>
-              {canAddKnowledge ? (
-                <ModulePlus
-                  label={t("brainformNewKnowledge")}
-                  onClick={beginNewKnowledge}
-                  disabled={Boolean(busyKey)}
-                  busy={busyKey === "knowledge-new"}
-                />
-              ) : (
-                <span className={styles.count}>
-                  {displayedKnowledgeRows.length}
-                </span>
-              )}
-            </div>
-            {displayedKnowledgeRows.length ? (
-              <ul className={styles.list}>
-                {displayedKnowledgeRows.map((row) => {
-                  const currentDoc = (row.version_seq ?? 0) > 0;
-                  const isGenerating = isGenerationActive(row.generation_state);
-                  const jobStatus = generationStatuses[row.canonical_set_id];
-                  const generationErrorCode =
-                    jobStatus &&
-                    jobStatus.job_id === generationJobs[row.canonical_set_id]
-                      ? jobStatus.safe_error_code
-                      : row.safe_error_code;
-                  return (
-                    <li className={styles.row} key={row.canonical_set_id}>
-                      <div className={styles.rowCopy}>
-                        {renameSetId === row.canonical_set_id ? (
-                          <input
-                            ref={renameInputRef}
-                            className={styles.inlineNameInput}
-                            aria-label={t("brainformSetName")}
-                            value={renameValue}
-                            onChange={(event) =>
-                              setRenameValue(event.target.value)
-                            }
-                            onBlur={() =>
-                              void saveSetName(row.canonical_set_id)
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                event.currentTarget.blur();
+              {displayedKnowledgeRows.length ? (
+                <ul className={styles.list}>
+                  {displayedKnowledgeRows.map((row) => {
+                    const currentDoc = (row.version_seq ?? 0) > 0;
+                    const isGenerating = isGenerationActive(
+                      row.generation_state,
+                    );
+                    const jobStatus = generationStatuses[row.canonical_set_id];
+                    const generationErrorCode =
+                      jobStatus &&
+                      jobStatus.job_id === generationJobs[row.canonical_set_id]
+                        ? jobStatus.safe_error_code
+                        : row.safe_error_code;
+                    return (
+                      <li className={styles.row} key={row.canonical_set_id}>
+                        <div className={styles.rowCopy}>
+                          {renameSetId === row.canonical_set_id ? (
+                            <input
+                              ref={renameInputRef}
+                              className={styles.inlineNameInput}
+                              aria-label={t("brainformSetName")}
+                              value={renameValue}
+                              onChange={(event) =>
+                                setRenameValue(event.target.value)
                               }
-                              if (event.key === "Escape") setRenameSetId(null);
-                            }}
-                          />
-                        ) : (
-                          // Like a RAG row and a Team or Agent tile: the
-                          // enter button shows on hover over the title and
-                          // opens the editor, whose Done saves a version
-                          // every user reads; a double-click renames.
-                          <TitleButton
-                            title={row.knowledge_display_name}
-                            editable={row.can_edit}
-                            enterLabel={
-                              row.can_edit
-                                ? t("brainformEditKnowledgeNamed", {
-                                    name: row.knowledge_display_name,
+                              onBlur={() =>
+                                void saveSetName(row.canonical_set_id)
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  event.currentTarget.blur();
+                                }
+                                if (event.key === "Escape")
+                                  setRenameSetId(null);
+                              }}
+                            />
+                          ) : (
+                            // Like a RAG row and a Team or Agent tile: the
+                            // enter button shows on hover over the title and
+                            // opens the editor, whose Done saves a version
+                            // every user reads; a double-click renames.
+                            <TitleButton
+                              title={row.knowledge_display_name}
+                              editable={row.can_edit}
+                              enterLabel={
+                                row.can_edit
+                                  ? t("brainformEditKnowledgeNamed", {
+                                      name: row.knowledge_display_name,
+                                    })
+                                  : t("brainformViewKnowledgeNamed", {
+                                      name: row.knowledge_display_name,
+                                    })
+                              }
+                              onEnter={
+                                isGenerating || (!currentDoc && !row.can_edit)
+                                  ? undefined
+                                  : () =>
+                                      void openKnowledge(
+                                        row,
+                                        row.can_edit ? "edit" : "view",
+                                      )
+                              }
+                              onRename={
+                                row.can_edit
+                                  ? () => {
+                                      setRenameSetId(row.canonical_set_id);
+                                      setRenameValue(
+                                        row.knowledge_display_name,
+                                      );
+                                    }
+                                  : undefined
+                              }
+                            />
+                          )}
+                          {!isGenerating &&
+                          row.generation_state &&
+                          row.generation_state !== "completed" ? (
+                            <DismissibleAlert
+                              as="span"
+                              className={styles.rowStatus}
+                              resetKey={`${row.generation_state}:${generationErrorCode ?? ""}`}
+                            >
+                              {generationErrorCode &&
+                              generationErrorCode !==
+                                "provider_confirmation_required"
+                                ? t("brainformGenerationFailedReason", {
+                                    reason: generationErrorCode.replaceAll(
+                                      "_",
+                                      " ",
+                                    ),
                                   })
-                                : t("brainformViewKnowledgeNamed", {
-                                    name: row.knowledge_display_name,
-                                  })
-                            }
-                            onEnter={
-                              isGenerating || (!currentDoc && !row.can_edit)
-                                ? undefined
-                                : () =>
-                                    void openKnowledge(
-                                      row,
-                                      row.can_edit ? "edit" : "view",
-                                    )
-                            }
-                            onRename={
-                              row.can_edit
-                                ? () => {
-                                    setRenameSetId(row.canonical_set_id);
-                                    setRenameValue(row.knowledge_display_name);
-                                  }
-                                : undefined
-                            }
-                          />
-                        )}
-                        {!isGenerating &&
-                        row.generation_state &&
-                        row.generation_state !== "completed" ? (
-                          <DismissibleAlert
-                            as="span"
-                            className={styles.rowStatus}
-                            resetKey={`${row.generation_state}:${generationErrorCode ?? ""}`}
-                          >
-                            {generationErrorCode &&
-                            generationErrorCode !==
-                              "provider_confirmation_required"
-                              ? t("brainformGenerationFailedReason", {
-                                  reason: generationErrorCode.replaceAll(
-                                    "_",
-                                    " ",
-                                  ),
-                                })
-                              : t("brainformGenerationFailed")}
-                          </DismissibleAlert>
-                        ) : null}
-                        {!currentDoc && !row.generation_state ? (
-                          <span className={styles.rowStatus} role="status">
-                            {t("brainformNoKnowledgeDocument")}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className={styles.actions}>
-                        {isGenerating ? (
-                          <button
-                            type="button"
-                            className={styles.iconButton}
-                            aria-label={t("brainformGeneratingNamed", {
-                              name: row.knowledge_display_name,
-                            })}
-                            aria-busy="true"
-                            disabled
-                          >
-                            <span className="spinner" aria-hidden="true" />
-                          </button>
-                        ) : null}
-                        {currentDoc && !isGenerating ? (
-                          <button
-                            type="button"
-                            className={styles.iconButton}
-                            aria-label={t("brainformDownloadKnowledgeNamed", {
-                              name: row.knowledge_display_name,
-                            })}
-                            data-ui-guide="knowledge.download"
-                            disabled={
-                              busyKey ===
-                              `download-knowledge:${row.canonical_set_id}`
-                            }
-                            onClick={() => void downloadKnowledgeSet(row)}
-                          >
-                            <IconDownload />
-                          </button>
-                        ) : null}
-                        {row.can_edit && !isGenerating ? (
-                          <button
-                            type="button"
-                            className={styles.iconButton}
-                            aria-label={t("brainformDeleteKnowledgeNamed", {
-                              name: row.knowledge_display_name,
-                            })}
-                            data-ui-guide="knowledge.hide"
-                            disabled={
-                              busyKey === `delete-set:${row.canonical_set_id}`
-                            }
-                            onClick={() => void deleteKnowledge(row)}
-                          >
-                            <IconClose />
-                          </button>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className={styles.empty}>{t("brainformKnowledgeEmpty")}</p>
-            )}
-          </section>
+                                : t("brainformGenerationFailed")}
+                            </DismissibleAlert>
+                          ) : null}
+                          {!currentDoc && !row.generation_state ? (
+                            <span className={styles.rowStatus} role="status">
+                              {t("brainformNoKnowledgeDocument")}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.actions}>
+                          {isGenerating ? (
+                            <button
+                              type="button"
+                              className={styles.iconButton}
+                              aria-label={t("brainformGeneratingNamed", {
+                                name: row.knowledge_display_name,
+                              })}
+                              aria-busy="true"
+                              disabled
+                            >
+                              <span className="spinner" aria-hidden="true" />
+                            </button>
+                          ) : null}
+                          {currentDoc && !isGenerating ? (
+                            <button
+                              type="button"
+                              className={styles.iconButton}
+                              aria-label={t("brainformDownloadKnowledgeNamed", {
+                                name: row.knowledge_display_name,
+                              })}
+                              data-ui-guide="knowledge.download"
+                              disabled={
+                                busyKey ===
+                                `download-knowledge:${row.canonical_set_id}`
+                              }
+                              onClick={() => void downloadKnowledgeSet(row)}
+                            >
+                              <IconDownload />
+                            </button>
+                          ) : null}
+                          {row.can_edit && !isGenerating ? (
+                            <button
+                              type="button"
+                              className={styles.iconButton}
+                              aria-label={t("brainformDeleteKnowledgeNamed", {
+                                name: row.knowledge_display_name,
+                              })}
+                              data-ui-guide="knowledge.hide"
+                              disabled={
+                                busyKey === `delete-set:${row.canonical_set_id}`
+                              }
+                              onClick={() => void deleteKnowledge(row)}
+                            >
+                              <IconClose />
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className={styles.empty}>{t("brainformKnowledgeEmpty")}</p>
+              )}
+            </section>
+          ) : null}
 
-          <RecordSection
-            scope={recordScope}
-            teams={assessmentRecord.teams}
-            loaded={assessmentRecord.loaded}
-            error={assessmentRecord.error}
-            onRetry={() => void assessmentRecord.reload()}
-            onOpen={(team) => setPane({ kind: "record", team })}
-          />
+          <div className={styles.recordSlot} data-studyform-slot="record">
+            <RecordSection
+              scope={recordScope}
+              teams={assessmentRecord.teams}
+              loaded={assessmentRecord.loaded}
+              error={assessmentRecord.error}
+              onRetry={() => void assessmentRecord.reload()}
+              onOpen={(team) => setPane({ kind: "record", team })}
+            />
+          </div>
         </div>
       ) : null}
 
