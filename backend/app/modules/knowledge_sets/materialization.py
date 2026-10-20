@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError
+from app.core.links import live_link
 from app.core.models import Job, ProviderOperation
 from app.modules.knowledge_sets.generation import (
     GENERATION_OPERATION,
@@ -567,7 +568,7 @@ def _materialize_one(
                     generation_lineage_key=cast(str, lineage_key),
                     expected_asset_version_seq=expected_seq,
                     content=content,
-                    generator_agent_version_id=run.agent_version_id,
+                    generator_agent_version_id=live_link(run.agent_version_id, "Agent version"),
                     generation_job_id=run.job_id,
                     data_root=data_root,
                 )

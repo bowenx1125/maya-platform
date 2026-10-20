@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, object_session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
+from app.core.links import live_link
 from app.core.message_timing import message_timing, set_outcome
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.read_memo import forget_request_reads, memoized, request_read_memo
@@ -1736,7 +1737,7 @@ def _start_member(
             result_id=result_id,
             claim_token=token,
             participant_id=participant.id,
-            agent_version_id=participant.agent_version_id,
+            agent_version_id=live_link(participant.agent_version_id, "Agent version"),
             speaker_name=participant.display_name,
             message=message,
             history=history,

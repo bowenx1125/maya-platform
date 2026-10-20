@@ -43,6 +43,7 @@ from app.core.models import (
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
+from app.modules.debates.owned_copies import voice_snapshot
 from app.modules.debates.round_count import (
     debate_teaching_protocol,
     expected_turn_count,
@@ -601,6 +602,9 @@ def _participant_row(
     )
     stance = item.assigned_stance if item.stance_mode == "assigned" else None
     timestamp = utc_now()
+    voice_json, voice_cipher = voice_snapshot(
+        db.get(VoiceProfile, effective_voice_id) if effective_voice_id else None
+    )
     return DebateParticipant(
         id=str(uuid4()),
         debate_id=debate.id,
@@ -609,6 +613,9 @@ def _participant_row(
         agent_id=agent.id,
         agent_version_id=version.id,
         knowledge_snapshot_id=snapshot.id,
+        agent_md_snapshot=version.agent_md,
+        voice_snapshot_json=voice_json,
+        voice_external_id_encrypted=voice_cipher,
         slot=chr(65 + order_index),
         order_index=order_index,
         agent_name=agent.name,
@@ -920,9 +927,11 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 "id": _as_uuid(row.id),
                 "slot": row.slot,
                 "order_index": row.order_index,
-                "agent_id": _as_uuid(row.agent_id),
+                "agent_id": _as_uuid(row.agent_id) if row.agent_id else None,
                 "agent_name": row.agent_name,
-                "agent_version_id": _as_uuid(row.agent_version_id),
+                "agent_version_id": (
+                    _as_uuid(row.agent_version_id) if row.agent_version_id else None
+                ),
                 "version_label": row.version_label,
                 "knowledge_snapshot_id": _as_uuid(row.knowledge_snapshot_id),
                 "avatar_config": json.loads(row.avatar_config_json),

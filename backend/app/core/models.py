@@ -549,7 +549,7 @@ class AgentVersionDocument(Base):
         String(36), ForeignKey("agent_versions.id", ondelete="CASCADE"), primary_key=True
     )
     document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), primary_key=True
+        String(36), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), primary_key=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -575,10 +575,10 @@ class KnowledgeSnapshot(Base):
     __tablename__ = "knowledge_snapshots"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    agent_version_id: Mapped[str] = mapped_column(
+    agent_version_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("agent_versions.id", ondelete="RESTRICT"),
-        nullable=False,
+        ForeignKey("agent_versions.id", ondelete="SET NULL"),
+        nullable=True,
     )
     stored_file_id: Mapped[str] = mapped_column(
         "combined_file_id",
@@ -740,8 +740,8 @@ class SnapshotDocument(Base):
     snapshot_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_snapshots.id", ondelete="CASCADE"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     stored_file_id: Mapped[str] = mapped_column(
         "frozen_file_id",
@@ -799,8 +799,8 @@ class KnowledgeChunk(Base):
     snapshot_document_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("snapshot_documents.id", ondelete="CASCADE"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_text: Mapped[str] = mapped_column("text", Text, nullable=False)
@@ -1148,7 +1148,7 @@ class VoiceProviderOperation(Base):
         String(36),
         ForeignKey(
             "voice_profiles.id",
-            ondelete="RESTRICT",
+            ondelete="CASCADE",
             name="fk_voice_provider_operations_profile",
         ),
         nullable=False,

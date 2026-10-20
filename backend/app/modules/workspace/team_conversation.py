@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, not_found
+from app.core.links import live_link
 from app.core.models import Agent, AgentVersion, CourseMember
 from app.core.read_memo import memoized
 from app.modules.agents.schemas import AvatarConfig
@@ -274,8 +275,8 @@ def _read_frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSel
         members.append(
             FrozenTeamMember(
                 binding_id=participant.team_member_id,
-                agent_id=participant.agent_id,
-                agent_version_id=participant.agent_version_id,
+                agent_id=live_link(participant.agent_id, "Agent"),
+                agent_version_id=live_link(participant.agent_version_id, "Agent version"),
                 position=participant.position,
                 is_leader=participant.is_leader,
                 display_name=participant.display_name,

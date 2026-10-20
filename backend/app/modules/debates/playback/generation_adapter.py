@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, configured_llm_model
 from app.core.errors import PlatformError, conflict
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -483,7 +484,7 @@ class SqlTurnPreparer:
             defer_publication=True,
             budget_cap=LLMBudgetCapV1(2_147_483_647, Decimal("1e18")),
         )
-        version = db.get(AgentVersion, str(participant_row.agent_version_id))
+        version = db.get(AgentVersion, live_link(participant_row.agent_version_id, "Agent version"))
         agent = db.get(Agent, version.agent_id) if version is not None else None
         # A teacher's personal Agent has no group; its course is its own.
         group = db.get(Group, agent.group_id) if agent is not None and agent.group_id else None
@@ -1536,7 +1537,7 @@ class SqlTurnPreparer:
                 "Real Embedding is unavailable until every policy control is verified.",
                 503,
             )
-        version = db.get(AgentVersion, str(participant_row.agent_version_id))
+        version = db.get(AgentVersion, live_link(participant_row.agent_version_id, "Agent version"))
         if version is None or not str(version.agent_md or "").strip():
             raise ValueError("the frozen query Agent markdown is unavailable")
         # The outbound identity is the published AGENT.md. A compiled Persona
@@ -1800,12 +1801,17 @@ class SqlTurnPreparer:
 
     @staticmethod
     def _participant(db: Session, row: DebateParticipant) -> ParticipantContext:
-        version = db.get(AgentVersion, row.agent_version_id)
-        if version is None or version.state not in {"published", "superseded"}:
-            raise ValueError("frozen AgentVersion is unavailable")
-        if str(version.knowledge_snapshot_id or "") != str(row.knowledge_snapshot_id):
-            raise ValueError("frozen AgentVersion snapshot does not match participant")
-        authored = AgentMarkdown(name=row.agent_name, markdown=version.agent_md)
+        # The Debate owns its AGENT.md copy (2026-10-20); the live version row
+        # may be pruned or deleted. Older rows without a copy still read it.
+        agent_md = row.agent_md_snapshot
+        if agent_md is None:
+            version = db.get(AgentVersion, row.agent_version_id) if row.agent_version_id else None
+            if version is None or version.state not in {"published", "superseded"}:
+                raise ValueError("frozen AgentVersion is unavailable")
+            if str(version.knowledge_snapshot_id or "") != str(row.knowledge_snapshot_id):
+                raise ValueError("frozen AgentVersion snapshot does not match participant")
+            agent_md = version.agent_md
+        authored = AgentMarkdown(name=row.agent_name, markdown=agent_md)
         return ParticipantContext(
             participant_id=row.id,
             agent_id=row.agent_id,
@@ -1813,7 +1819,7 @@ class SqlTurnPreparer:
             slot=row.slot,
             order_index=row.order_index,
             snapshot_id=row.knowledge_snapshot_id,
-            agent_md=version.agent_md,
+            agent_md=agent_md,
             stance_mode=row.stance_mode,  # type: ignore[arg-type]
             initial_stance=row.initial_stance,  # type: ignore[arg-type]
             current_stance=row.current_stance,  # type: ignore[arg-type]
@@ -1821,7 +1827,7 @@ class SqlTurnPreparer:
             current_position_summary=row.current_position_summary,
             teacher_note=row.teacher_note,
             persona=authored,
-            persona_spec_hash=markdown_hash(version.agent_md),
+            persona_spec_hash=markdown_hash(agent_md),
         )
 
     @staticmethod

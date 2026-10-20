@@ -84,8 +84,8 @@ class KnowledgeSetSource(Base):
     knowledge_set_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_sets.id", ondelete="CASCADE"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     stored_file_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False
@@ -131,7 +131,7 @@ class KnowledgeDocumentVersion(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+        String(36), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False
     )
     version_seq: Mapped[int] = mapped_column(Integer, nullable=False)
     stored_file_id: Mapped[str] = mapped_column(
@@ -213,7 +213,7 @@ class KnowledgeAssetVersion(Base):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     generator_agent_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=True
+        String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
     )
     generation_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -249,8 +249,8 @@ class KnowledgeAssetVersionSource(Base):
     source_binding_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_set_sources.id", ondelete="RESTRICT"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     stored_file_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False
@@ -325,11 +325,11 @@ class KnowledgeGenerationRun(Base):
     course_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("courses.id", ondelete="RESTRICT"), nullable=False
     )
-    agent_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
-    agent_version_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
+    agent_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
     )
     knowledge_set_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_sets.id", ondelete="RESTRICT"), nullable=False
@@ -407,7 +407,7 @@ class KnowledgeSetMarkdownVersion(Base):
         String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     generator_agent_version_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=True
+        String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -523,8 +523,8 @@ class KnowledgeGenerationSourceReceipt(Base):
     source_binding_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_set_sources.id", ondelete="RESTRICT"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     stored_file_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("stored_files.id", ondelete="RESTRICT"), nullable=False

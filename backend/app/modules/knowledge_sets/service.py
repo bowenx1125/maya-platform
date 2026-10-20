@@ -18,6 +18,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, invalid_state, not_found, stale_revision, unprocessable
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -460,7 +461,7 @@ def _source_dto(
     document = db.get(KnowledgeDocument, source.document_id)
     return KnowledgeSetSourceDTO(
         id=_uid(source.id),
-        document_id=_uid(source.document_id),
+        document_id=_uid(live_link(source.document_id, "file")),
         source_filename=source.source_filename,
         char_count=document.char_count if document is not None else 0,
         content_hash=source.source_content_hash,
@@ -1958,7 +1959,7 @@ def enqueue_brainform_regeneration(
     )
     return RegenerateKnowledgeResponse(
         action_id=UUID(queued.action_id or queued.run.action_id),
-        agent_id=_uid(queued.run.agent_id),
+        agent_id=_uid(live_link(queued.run.agent_id, "Agent")),
         canonical_set_id=_uid(queued.run.knowledge_set_id),
         run_id=_uid(queued.run.id),
         job_id=_uid(queued.job.id),

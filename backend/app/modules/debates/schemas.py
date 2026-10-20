@@ -163,9 +163,9 @@ class DebateParticipant(_ClosedModel):
     id: UUID
     slot: Slot
     order_index: int = Field(ge=0, le=4)
-    agent_id: UUID
+    agent_id: UUID | None
     agent_name: str
-    agent_version_id: UUID
+    agent_version_id: UUID | None
     version_label: str = Field(pattern=r"^V[0-9]+\.[0-9]+$")
     knowledge_snapshot_id: UUID
     avatar_config: AvatarConfig

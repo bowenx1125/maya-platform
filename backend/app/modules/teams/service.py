@@ -11,6 +11,7 @@ from typing import Literal, cast
 from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, not_found, stale_revision, unprocessable
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -746,8 +747,8 @@ def _team_member_dto(row: TeamVersionMember) -> TeamMemberDTO:
         avatar = {}
     return TeamMemberDTO(
         id=_uid(row.id),
-        agent_id=_uid(row.agent_id),
-        agent_version_id=_uid(row.agent_version_id),
+        agent_id=_uid(live_link(row.agent_id, "Agent")),
+        agent_version_id=_uid(live_link(row.agent_version_id, "Agent version")),
         display_name=row.display_name,
         avatar_config=cast(dict[str, object], avatar),
         position=row.position,
@@ -1014,8 +1015,8 @@ def _publish_eligible_team(
                 publication_id=publication.id,
                 team_version_id=version.id,
                 team_member_id=member.id,
-                agent_id=member.agent_id,
-                agent_version_id=member.agent_version_id,
+                agent_id=live_link(member.agent_id, "Agent"),
+                agent_version_id=live_link(member.agent_version_id, "Agent version"),
                 authorization_epoch=team.authorization_epoch,
                 created_at=timestamp,
             )
@@ -1341,8 +1342,8 @@ def resolve_chat_entry(
         resolved_members.append(
             FrozenTeamMember(
                 binding_id=member.id,
-                agent_id=member.agent_id,
-                agent_version_id=member.agent_version_id,
+                agent_id=live_link(member.agent_id, "Agent"),
+                agent_version_id=live_link(member.agent_version_id, "Agent version"),
                 position=member.position,
                 is_leader=member.is_leader,
                 display_name=dto.display_name,
@@ -1460,7 +1461,7 @@ def _validate_member_current(
         db,
         resource_owner_id,
         cast(list[dict[str, object]], source_fences),
-        agent_version_id=member.agent_version_id,
+        agent_version_id=live_link(member.agent_version_id, "Agent version"),
         course_id=team.course_id,
     ):
         raise _member_unavailable(team, member, "rag_source_changed_or_hidden")

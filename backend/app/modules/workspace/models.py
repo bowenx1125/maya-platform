@@ -105,12 +105,12 @@ class ConversationParticipant(Base):
     conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
     team_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
     team_member_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"))
-    agent_version_id: Mapped[str] = mapped_column(
-        ForeignKey("agent_versions.id", ondelete="RESTRICT")
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    agent_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_versions.id", ondelete="SET NULL")
     )
     snapshot_id: Mapped[str | None] = mapped_column(
-        ForeignKey("knowledge_snapshots.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("knowledge_snapshots.id", ondelete="SET NULL"), nullable=True
     )
     agent_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -545,7 +545,7 @@ class AgentAccountMemory(Base):
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     agent_id: Mapped[str] = mapped_column(
-        ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
     )
     course_id: Mapped[str] = mapped_column(
         ForeignKey("courses.id", ondelete="RESTRICT"), nullable=False

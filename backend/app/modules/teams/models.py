@@ -100,11 +100,11 @@ class TeamVersionMember(Base):
     team_version_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("team_versions.id", ondelete="RESTRICT"), nullable=False
     )
-    agent_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
-    agent_version_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
+    agent_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     is_leader: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -200,11 +200,11 @@ class TeamMemberInvokeGrant(Base):
     team_member_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("team_version_members.id", ondelete="RESTRICT"), nullable=False
     )
-    agent_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+    agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
-    agent_version_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
+    agent_version_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
     )
     authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
