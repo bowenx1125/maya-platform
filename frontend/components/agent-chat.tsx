@@ -1,5 +1,6 @@
 "use client";
 
+import { ASSESSMENT_COMPLETED_EVENT } from "../lib/assessment-events";
 import {
   useCallback,
   useEffect,
@@ -110,6 +111,33 @@ function isScoringRefusal(error: unknown): boolean {
     isRefusedSend(error) &&
     (error as PlatformApiError).code === CHAT_BUSY_CODE &&
     (error as PlatformApiError).details?.reason === "assessment_scoring"
+  );
+}
+
+/**
+ * The Team chat has moved past this send: its turn is answered, or the test
+ * is being summarized / is done. A stale send error must not stay on screen.
+ */
+function teamSendSettled(
+  session: TeamChatSession,
+  requestId?: string,
+): boolean {
+  if (
+    session.assessment_stage === "summarizing" ||
+    session.assessment_stage === "completed"
+  )
+    return true;
+  const turn = requestId
+    ? session.turns.find((item) => item.id === requestId)
+    : session.turns.at(-1);
+  return turn?.state === "ready";
+}
+
+function announceAssessmentCompleted(session: TeamChatSession) {
+  if (session.assessment_stage !== "completed" || typeof window === "undefined")
+    return;
+  window.dispatchEvent(
+    new CustomEvent(ASSESSMENT_COMPLETED_EVENT, { detail: session.id }),
   );
 }
 
@@ -647,6 +675,9 @@ function AgentChatScope({
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const [teamBusy, setTeamBusy] = useState(false);
   const [teamError, setTeamError] = useState<unknown>(null);
+  // A send whose stream dropped while its turn is still running on the
+  // server: shown as "scoring…" while polling, not as a red failure.
+  const [teamStreamDropped, setTeamStreamDropped] = useState(false);
   // The server scores and summarizes after the last answer, with no message
   // from the student, so the open Chat keeps checking until it is finished.
   // So does a turn still running after the student left and came back,
@@ -678,6 +709,14 @@ function AgentChatScope({
                 setSelectedTeam((current) =>
                   current?.id === next.id ? next : current,
                 );
+                // Polling stops once the test is done, so this fires once.
+                announceAssessmentCompleted(next);
+                // The chat moved on (answered, summarizing, done): an error
+                // from an earlier send is stale.
+                if (teamSendSettled(next)) {
+                  setTeamError(null);
+                  setTeamStreamDropped(false);
+                }
                 // Scoring finished (or failed): its "try again shortly" note
                 // is done too.
                 if (next.assessment_stage !== "scoring")
@@ -1623,6 +1662,7 @@ function AgentChatScope({
     const sequence = ++teamSendSequence.current;
     const scopeAtOpen = scopeKey;
     setTeamBusy(true);
+    setTeamStreamDropped(false);
     setTeamError(null);
     try {
       const refreshed = await api.conversationSession(session.id);
@@ -1673,6 +1713,7 @@ function AgentChatScope({
       return;
     const sequence = ++teamSendSequence.current;
     setTeamBusy(true);
+    setTeamStreamDropped(false);
     setTeamError(null);
     try {
       const refreshed = await api.controlConversationTurn(
@@ -1712,6 +1753,7 @@ function AgentChatScope({
     const sequence = ++teamSendSequence.current;
     const conversationId = selectedTeam.id;
     setTeamBusy(true);
+    setTeamStreamDropped(false);
     try {
       const refreshed = await api.conversationSession(conversationId);
       if (
@@ -1862,6 +1904,7 @@ function AgentChatScope({
     );
     setTeamDraft("");
     setTeamBusy(true);
+    setTeamStreamDropped(false);
     setTeamError(null);
     setTeamLastEventId(0);
     const sendStillOwned = () =>
@@ -1978,23 +2021,39 @@ function AgentChatScope({
         ) {
           rememberTeam(refreshed);
           setSelectedTeam(refreshed);
+          announceAssessmentCompleted(refreshed);
           const turn = refreshed.turns.find((item) => item.id === requestId);
+          // The stream broke but the server finished the turn (or moved on
+          // to the summary): it went through, so no error and no draft.
+          if (turn && teamSendSettled(refreshed, requestId)) {
+            setTeamDraft("");
+            teamPendingRequest.current = null;
+            setTeamError(null);
+            setTeamStreamDropped(false);
+            return;
+          }
+          // Still running on the server: wait like a busy turn (polling
+          // picks it up), not a red "could not complete".
+          if (turn?.state === "pending") {
+            setTeamDraft("");
+            setTeamError(null);
+            setTeamStreamDropped(true);
+            return;
+          }
           // Nothing was saved, or the turn failed (e.g. server busy): give
           // the message back so the student can resend without retyping.
           if (!turn || turn.state === "failed") {
             setTeamDraft((current) => current || message);
           }
           setTeamError(
-            turn?.state === "pending"
-              ? new ChatRequestPendingError()
-              : turn?.state === "acceptance_unknown"
-                ? unknownChatOutcomeError()
-                : turn?.safe_error_code
-                  ? new PlatformApiError(503, turn.safe_error_code, {
-                      code: turn.safe_error_code,
-                      message: turn.safe_error_code,
-                    })
-                  : cause,
+            turn?.state === "acceptance_unknown"
+              ? unknownChatOutcomeError()
+              : turn?.safe_error_code
+                ? new PlatformApiError(503, turn.safe_error_code, {
+                    code: turn.safe_error_code,
+                    message: turn.safe_error_code,
+                  })
+                : cause,
           );
         }
       } catch {
@@ -2642,7 +2701,9 @@ function AgentChatScope({
     character?.available !== false;
   const teamMode = Boolean(selectedTeam);
   // After the last answer the Scorer marks the test; the Chat waits for it.
-  const teamScoring = selectedTeam?.assessment_stage === "scoring";
+  const teamScoring =
+    selectedTeam?.assessment_stage === "scoring" ||
+    (teamStreamDropped && selectedTeam?.turns.at(-1)?.state === "pending");
   const sendHint = teamMode
     ? sendRefusalHint(teamError, teamScoring)
     : sendRefusalHint(error);
