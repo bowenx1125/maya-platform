@@ -90,9 +90,12 @@ export function DebatePreview({
   const { locale } = useLocale();
   // A turn whose audio failed used to show only on its own card, so a Preview
   // where every turn failed read as still preparing. Say so at the top.
+  // An Agent with no voice is a teacher's choice, not a failure: its turns
+  // simply play as text, so they never raise this banner.
   const audioFailed = turns.filter(
     (turn) =>
       !turn.audio_ready &&
+      turn.safe_error_code !== "tts_voice_unavailable" &&
       (turn.generation_status === "failed" || Boolean(turn.safe_error_code)),
   );
   const firstFailed = audioFailed[0];

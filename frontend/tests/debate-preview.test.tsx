@@ -384,4 +384,22 @@ describe("teacher debate preview", () => {
     });
     expect(screen.queryByTestId("preview-audio-failed")).toBeNull();
   });
+
+  it("does not raise the audio failure banner for an Agent with no voice", () => {
+    renderPreview({
+      ...detail,
+      preview_turns: detail.preview_turns!.map((turn) =>
+        turn.id === "turn-a"
+          ? {
+              ...turn,
+              generation_status: "final_ready",
+              audio_ready: false,
+              safe_error_code: "tts_voice_unavailable",
+            }
+          : turn,
+      ),
+    });
+    expect(screen.queryByTestId("preview-audio-failed")).toBeNull();
+    expect(screen.getByTestId("preview-turn-turn-a")).toBeTruthy();
+  });
 });

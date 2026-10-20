@@ -629,36 +629,6 @@ def _participant_row(
     )
 
 
-def _require_participant_voices(
-    db: Session, rows: list[DebateParticipant], settings: Settings
-) -> None:
-    """Refuse a Debate whose Agents cannot speak under a real TTS provider.
-
-    Playback resolves each turn's voice with the same resolver; an empty token
-    means every turn of that Agent ends in ``tts_voice_unavailable``. Without
-    a configured fallback voice the Preview then never reaches audio, so the
-    teacher is told up front which Agents need a voice instead.
-    """
-
-    if getattr(settings, "tts_provider", "mock") == "mock":
-        return
-    from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
-
-    missing = [
-        str(row.agent_name)
-        for row in rows
-        if not SqlPlaybackRepository.resolve_effective_voice(
-            db, cast(Any, row), settings
-        ).voice_token
-    ]
-    if missing:
-        raise validation_failure(
-            "These Agents have no ready voice: " + ", ".join(missing) + ".",
-            {"agent_names": missing},
-            code="agent_voice_missing",
-        )
-
-
 def _ensure_payload(payload: DebateDraftRequest, *, teaching_protocol: str | None = None) -> None:
     if teaching_protocol == "four_round_v1" and payload.round_count != 4:
         raise validation_failure(
@@ -1281,7 +1251,6 @@ def create_debate_draft(
         )
         for index, item in enumerate(payload.participants)
     ]
-    _require_participant_voices(db, participant_rows, runtime_settings)
     require_teacher_course(db, actor_user_id, course_id)
     db.add_all(participant_rows)
     db.add(
@@ -1570,18 +1539,18 @@ def update_debate_draft(
     db.execute(delete(DebateParticipant).where(DebateParticipant.debate_id == debate.id))
     db.flush()
     runtime_settings = _settings(db, settings)
-    participant_rows = [
-        _participant_row(
-            db,
-            debate=debate,
-            item=item,
-            order_index=index,
-            settings=runtime_settings,
-        )
-        for index, item in enumerate(payload.participants)
-    ]
-    _require_participant_voices(db, participant_rows, runtime_settings)
-    db.add_all(participant_rows)
+    db.add_all(
+        [
+            _participant_row(
+                db,
+                debate=debate,
+                item=item,
+                order_index=index,
+                settings=runtime_settings,
+            )
+            for index, item in enumerate(payload.participants)
+        ]
+    )
     db.flush()
     return _detail(db, debate)
 
