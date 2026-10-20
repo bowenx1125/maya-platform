@@ -1,4 +1,4 @@
-"""0075 against a copy of the production schema (PostgreSQL only).
+"""0077 against a copy of the production schema (PostgreSQL only).
 
 Set ``MAYA_TEST_POSTGRES_URL`` and ``MAYA_TEST_PROD_SCHEMA_SQL`` (a
 ``pg_dump -s --no-owner --no-privileges`` file at 0074). The dump is schema
@@ -30,8 +30,8 @@ _RULE = {"SET NULL": "n", "CASCADE": "c", "RESTRICT": "r"}
 
 
 def _migration() -> ModuleType:
-    path = _ROOT / "migrations" / "versions" / "0075_real_delete_history_links.py"
-    spec = importlib.util.spec_from_file_location("m0075", path)
+    path = _ROOT / "migrations" / "versions" / "0077_real_delete_history_links.py"
+    spec = importlib.util.spec_from_file_location("m0077", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

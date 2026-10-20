@@ -27,7 +27,7 @@ SQLITE_BUSY_TIMEOUT_MS = 5_000
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0075_real_delete_history_links"
+ALEMBIC_HEAD = "0077_real_delete_history_links"
 _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 

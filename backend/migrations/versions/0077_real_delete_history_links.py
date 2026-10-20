@@ -17,18 +17,27 @@ deletion is #230's migration). Pruning skips versions those rows reference.
 
 The FK work is PostgreSQL-only (SQLite tests build from the models).
 
-Revision ID: 0075_real_delete_history_links
-Revises: 0074_interaction_voter_key
+Revision ID: 0077_real_delete_history_links
+Revises: 0076_agent_editor_audit (#229) <- 0075_answer_guard_state (#225) <- 0074
+
+Migration chain (planned, linear): #225 = 0075_answer_guard_state,
+#229 = 0076_agent_editor_audit, this = 0077, chat hard-delete = 0078.
+Until #225/#229 land, down_revision falls back to the newest one present, so
+this stack runs on its own. Deploy in that order (225 -> 229 -> this).
 Create Date: 2026-10-20
 """
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0075_real_delete_history_links"
-down_revision: str | Sequence[str] | None = "0074_interaction_voter_key"
+revision: str = "0077_real_delete_history_links"
+_PARENTS = ("0076_agent_editor_audit", "0075_answer_guard_state", "0074_interaction_voter_key")
+down_revision: str | Sequence[str] | None = next(
+    name for name in _PARENTS if (Path(__file__).parent / f"{name}.py").exists()
+)
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
