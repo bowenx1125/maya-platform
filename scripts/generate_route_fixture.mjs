@@ -154,7 +154,6 @@ const implemented = new Set([
   "listMayaTeams",
   "getTeam",
   "saveTeamVersion",
-  "applyAssessmentLifecycleAction",
   "changeCurrentPassword",
   "confirmTeamProviderStandingGrant",
   "createMemoryEntryAction",

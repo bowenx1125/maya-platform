@@ -118,7 +118,6 @@ const implementedOperationIds = new Set([
   "getClassroomLive",
   "getLiveSnapshot",
   "getLiveAudio",
-  "applyAssessmentLifecycleAction",
   "changeCurrentPassword",
   "confirmTeamProviderStandingGrant",
   "createMemoryEntryAction",
