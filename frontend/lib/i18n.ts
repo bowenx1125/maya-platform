@@ -551,7 +551,8 @@ const enMessages = {
   errorCrossGroupReference: "That resource belongs to another group.",
   errorVoiceFallback:
     "The custom voice is unavailable; the platform fallback is being used.",
-  errorAudioInvalid: "The audio file could not be used.",
+  errorAudioInvalid:
+    "The audio file could not be used. Upload a 10–20 second WAV, MP3 or M4A recording, then choose the file again.",
   errorVoiceEnrollmentFailed: "Voice creation could not be completed.",
   errorDebateAlreadyRunning:
     "Another debate is already running for this course.",
@@ -1417,7 +1418,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "名字已被使用，请换一个名字，比如在后面加上你的名字或数字（如「Zhu Xi 2」）。",
   errorCrossGroupReference: "该资源属于另一个小组。",
   errorVoiceFallback: "自定义音色不可用，当前使用平台兜底音色。",
-  errorAudioInvalid: "无法使用这个音频文件。",
+  errorAudioInvalid:
+    "无法使用这个音频文件。请上传 10–20 秒的 WAV、MP3 或 M4A 录音，然后重新选择文件。",
   errorVoiceEnrollmentFailed: "无法完成音色创建。",
   errorDebateAlreadyRunning: "该课程已有另一场辩论正在进行。",
   errorPreviousAudioCleanup: "开始前请确认清理上一场辩论语音。",

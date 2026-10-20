@@ -515,6 +515,65 @@ describe("M08 voice library", () => {
     expect(screen.queryByText("Created")).toBeNull();
   });
 
+  it("re-uploads a fixed file with the same name after a rejected sample", async () => {
+    api.voiceProfiles.mockResolvedValue([]);
+    api.enrollVoice
+      .mockRejectedValueOnce(
+        new PlatformApiError(422, "bad", { code: "audio_invalid" }),
+      )
+      .mockResolvedValueOnce({
+        id: "voice-ok",
+        scope: "group",
+        group_id: "group-a",
+        status: "preview_ready",
+        source_filename: "me.wav",
+        safe_error_code: null,
+        created_at: "2026-01-01T00:00:00Z",
+      });
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "New" }).hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const input = screen.getByLabelText(
+      "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).",
+    ) as HTMLInputElement;
+    const bad = new File([new Uint8Array([1])], "me.wav", {
+      type: "audio/wav",
+    });
+    fireEvent.change(input, { target: { files: [bad] } });
+    fireEvent.click(screen.getByRole("button", { name: CONSENT }));
+    expect(
+      await screen.findByText(/The audio file could not be used\./),
+    ).toBeTruthy();
+    // A rejected file is final: no Retry of the same bytes, and the stale
+    // selection is cleared so consent cannot resend it.
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: CONSENT }).hasAttribute("disabled"),
+    ).toBe(true);
+    // The input was reset, so the browser fires change for the same name.
+    expect(input.value).toBe("");
+    const good = new File([new Uint8Array([1, 2, 3, 4])], "me.wav", {
+      type: "audio/wav",
+    });
+    fireEvent.change(input, { target: { files: [good] } });
+    expect(screen.queryByText(/The audio file could not be used\./)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: CONSENT }));
+    await waitFor(() => expect(api.enrollVoice).toHaveBeenCalledTimes(2));
+    expect(api.enrollVoice.mock.calls[1][1]).toBe(good);
+    expect(api.enrollVoice.mock.calls[1][3].idempotency).not.toBe(
+      api.enrollVoice.mock.calls[0][3].idempotency,
+    );
+    expect(await screen.findByText("Created")).toBeTruthy();
+  });
+
   it("shows a platform preview URL and plays it without any confirm step", async () => {
     api.voiceProfiles.mockResolvedValue([
       {

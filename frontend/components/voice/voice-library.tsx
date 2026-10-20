@@ -66,6 +66,22 @@ function isCloneRefusal(cause: unknown): boolean {
   );
 }
 
+// A 4xx answer about the file itself (bad audio, wrong type, too large) is
+// final for those bytes: retrying the same File can never succeed, and the
+// next attempt must be a freshly picked file under a fresh idempotency key.
+function isFileRejection(cause: unknown): boolean {
+  return (
+    cause instanceof PlatformApiError &&
+    typeof cause.status === "number" &&
+    cause.status >= 400 &&
+    cause.status < 500 &&
+    cause.status !== 401 &&
+    cause.status !== 403 &&
+    cause.status !== 408 &&
+    cause.status !== 429
+  );
+}
+
 function voiceAwareCause(cause: unknown): unknown {
   // Only for enroll/preview: supplier outages steer to the platform fallback voice.
   // Do not remap rename/load — a 5xx there is not "provider unavailable".
@@ -396,9 +412,16 @@ export function VoiceLibrary({
       setNotice("voiceProfileCreatedNotice");
       await load();
     } catch (cause) {
+      const rejected = isCloneRefusal(cause) || isFileRejection(cause);
+      if (rejected) {
+        // Drop the rejected file and its key so re-picking a fixed file, even
+        // one with the same name, is a brand-new upload and not a replay.
+        idempotency.abandon("voice-enroll");
+        setFile(null);
+      }
       setFailure({
         cause: voiceAwareCause(cause),
-        retry: isCloneRefusal(cause) ? null : { kind: "enroll", file: upload },
+        retry: rejected ? null : { kind: "enroll", file: upload },
       });
     } finally {
       setBusy(false);
@@ -576,6 +599,10 @@ export function VoiceLibrary({
               idempotency.abandon("voice-enroll");
               setFailure(null);
               setFile(event.target.files?.[0] ?? null);
+              // Browsers fire change only when the chosen path differs, so
+              // re-picking an edited file with the same name after a failure
+              // would silently keep the stale File. Reset so every pick fires.
+              event.target.value = "";
             }}
             aria-label={t("voiceSampleFile")}
           />
