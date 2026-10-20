@@ -199,3 +199,30 @@ def test_editing_a_rag_file_publishes_a_new_version_with_the_new_content(
     assert after.version_seq == before.version_seq + 1
     assert docs == [doc]
     assert after.knowledge_snapshot_id not in {None, before.knowledge_snapshot_id}
+    from app.modules.agents.cascade import stale_agents
+
+    with database.session() as db:
+        assert stale_agents(db) == []  # nothing left for the restart sweep
+
+
+def test_sweep_recovers_a_lost_auto_publish_and_is_idempotent(
+    client: TestClient, app_bundle: Any
+) -> None:
+    from app.core.models import KnowledgeDocument
+    from app.modules.agents.cascade import stale_agents, sweep_stale_agents
+
+    _app, database, settings = app_bundle
+    _owner, csrf = login(client, "bowen")
+    keep = _upload(client, csrf, "sw-keep.md", b"# K\n\nKEEP", "cascade-up-swkeep-01")
+    lost = _upload(client, csrf, "sw-lost.md", b"# L\n\nLOST", "cascade-up-swlost-01")
+    agent_id = _agent_with_docs(client, csrf, "Cascade Sweep", [keep, lost])
+    with database.session() as db:  # simulate a delete whose job died with the backend
+        document = db.get(KnowledgeDocument, lost)
+        assert document is not None
+        document.workspace_state = "hidden"
+        db.commit()
+        assert [row[0] for row in stale_agents(db)] == [agent_id]
+    assert sweep_stale_agents(database, settings) == 1
+    _after, docs = _current(database, agent_id)
+    assert docs == [keep]
+    assert sweep_stale_agents(database, settings) == 0

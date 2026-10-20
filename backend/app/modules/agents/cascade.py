@@ -316,3 +316,115 @@ def cascade_removed_sources(
         "Agent auto-bump done at=%s published=%d", datetime.now(UTC).isoformat(), len(published)
     )
     return published
+
+
+_SWEEP_LOCK_KEY = 0x4D415941_0228  # "MAYA" + PR number; one sweeper across backends
+
+
+def stale_agents(db: Session) -> list[tuple[str, list[str], list[str], list[str]]]:
+    """Live Agents whose current version still uses a deleted or edited source.
+
+    Derived from durable state only, so it doubles as the restart-recovery
+    journal: a job lost to a crash leaves exactly these rows behind.
+    Returns ``(agent_id, dropped_doc_ids, dropped_voice_ids, refreshed_doc_ids)``.
+    """
+
+    from sqlalchemy.orm import aliased
+
+    from app.core.models import (
+        KnowledgeDocument,
+        KnowledgeSnapshot,
+        SnapshotDocument,
+        StoredFile,
+        VoiceProfile,
+    )
+
+    frozen = aliased(StoredFile)
+    live = aliased(StoredFile)
+    found: dict[str, tuple[set[str], set[str], set[str]]] = {}
+
+    def slot(agent_id: str) -> tuple[set[str], set[str], set[str]]:
+        return found.setdefault(agent_id, (set(), set(), set()))
+
+    for agent, _version, document in db.execute(
+        _live_current_versions(db)
+        .join(AgentVersionDocument, AgentVersionDocument.agent_version_id == AgentVersion.id)
+        .join(KnowledgeDocument, KnowledgeDocument.id == AgentVersionDocument.document_id)
+        .add_columns(KnowledgeDocument)
+        .where(KnowledgeDocument.workspace_state != "active")
+    ).all():
+        slot(agent.id)[0].add(document.id)
+    for agent, version in db.execute(
+        _live_current_versions(db).where(AgentVersion.voice_profile_id.is_not(None))
+    ).all():
+        voice = db.get(VoiceProfile, version.voice_profile_id)
+        if voice is not None and voice.status == "deleted":
+            slot(agent.id)[1].add(voice.id)
+    for agent, _version, document_id in db.execute(
+        _live_current_versions(db)
+        .join(KnowledgeSnapshot, KnowledgeSnapshot.id == AgentVersion.knowledge_snapshot_id)
+        .join(SnapshotDocument, SnapshotDocument.snapshot_id == KnowledgeSnapshot.id)
+        .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
+        .join(frozen, frozen.id == SnapshotDocument.stored_file_id)
+        .join(live, live.id == KnowledgeDocument.stored_file_id)
+        .add_columns(KnowledgeDocument.id)
+        .where(
+            KnowledgeDocument.workspace_state == "active",
+            frozen.sha256 != live.sha256,
+        )
+    ).all():
+        slot(agent.id)[2].add(document_id)
+    return [
+        (agent_id, sorted(docs), sorted(voices), sorted(refresh - docs))
+        for agent_id, (docs, voices, refresh) in sorted(found.items())
+    ]
+
+
+def sweep_stale_agents(database: Database, settings: Settings) -> int:
+    """Re-run lost auto-publishes. Idempotent; one sweeper at a time on Postgres."""
+
+    from sqlalchemy import text
+
+    lock_session = database.session_factory()
+    try:
+        postgres = lock_session.get_bind().dialect.name == "postgresql"
+        if (
+            postgres
+            and not lock_session.execute(
+                text("SELECT pg_try_advisory_lock(:k)"), {"k": _SWEEP_LOCK_KEY}
+            ).scalar()
+        ):
+            return 0
+        try:
+            scan = database.session_factory()
+            try:
+                work = stale_agents(scan)
+            finally:
+                scan.close()
+            published = 0
+            for agent_id, docs, voices, refresh in work:
+                session = database.session_factory()
+                session.info["maya_settings"] = settings
+                try:
+                    if bump_agent(
+                        session,
+                        settings,
+                        agent_id,
+                        drop_document_ids=docs,
+                        drop_voice_profile_ids=voices,
+                        refresh_document_ids=refresh,
+                    ):
+                        published += 1
+                except Exception:  # noqa: BLE001
+                    session.rollback()
+                    LOGGER.exception("Agent auto-bump sweep failed agent_id=%s", agent_id)
+                finally:
+                    session.close()
+            if work:
+                LOGGER.info("Agent auto-bump sweep stale=%d published=%d", len(work), published)
+            return published
+        finally:
+            if postgres:
+                lock_session.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _SWEEP_LOCK_KEY})
+    finally:
+        lock_session.close()
