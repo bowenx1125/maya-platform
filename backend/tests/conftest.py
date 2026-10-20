@@ -196,3 +196,29 @@ def make_foreign_group(database: Any, course_id: str, name: str = "Foreign Group
             )
             session.commit()
     return FOREIGN_GROUP_ID
+
+
+@pytest.fixture(autouse=True)
+def _calm_host_pressure(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Keep polling-pressure shortcuts off unless a test turns them on.
+
+    ``polling_pressure`` reads host-wide ``/proc/loadavg`` and ``/proc/stat``.
+    On a busy CI box it flips on mid-suite, so conversation and live views
+    were served from the few-seconds pressure caches and tests that change
+    membership, epochs or playback mode directly in the database saw stale
+    answers. Tests that exercise pressure patch these names themselves.
+    """
+
+    from app.core import debate_gate
+    from app.modules.workspace import chat as chat_module
+    from app.modules.workspace import live as live_module
+    from app.modules.workspace.poll_cache import reset_conversation_poll_cache
+
+    calm = lambda _settings=None: False  # noqa: E731
+    for module in (chat_module, live_module, debate_gate):
+        monkeypatch.setattr(module, "polling_pressure", calm)
+    reset_conversation_poll_cache()
+    live_module.reset_live_caches()
+    yield
+    reset_conversation_poll_cache()
+    live_module.reset_live_caches()
