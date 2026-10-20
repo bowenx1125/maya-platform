@@ -1658,21 +1658,13 @@ def test_abandon_and_redo_discard_learning_records_while_withdraw_keeps_them(
             user_message="Answer one stays with a withdrawn Chat.",
             decision=_answer_decision(uuid4(), other_version, "one"),
         )
-        assert withdraw_conversation_attempts(db, withdrawn_conversation) == 1
+        # Owner rule (2026-10-20): deleting the Chat keeps the attempt and answers.
+        assert withdraw_conversation_attempts(db, withdrawn_conversation) == 0
         assert learning_rows(db, str(other_started.attempt.id))[:2] == (1, 1)
         withdrawn_attempt = db.get(AssessmentAttempt, str(other_started.attempt.id))
         assert withdrawn_attempt is not None
-        assert withdrawn_attempt.status == "abandoned"
-        assert withdrawn_attempt.abandonment_reason == "chat_withdrawn"
-        assert (
-            db.scalar(
-                select(func.count(AssessmentAttemptEvent.id)).where(
-                    AssessmentAttemptEvent.attempt_id == withdrawn_attempt.id,
-                    AssessmentAttemptEvent.event_kind == "withdraw",
-                )
-            )
-            == 1
-        )
+        assert withdrawn_attempt.status == "in_progress"
+        assert withdrawn_attempt.abandonment_reason is None
 
 
 def test_original_actor_can_abandon_after_question_source_revocation(attempt_env: Any) -> None:

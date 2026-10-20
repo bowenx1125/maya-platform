@@ -610,6 +610,19 @@ function AgentChatScope({
       return t("errorChatAcceptanceUnknown");
     }
     if (cause instanceof ChatRequestPendingError) return t("teamTurnPending");
+    // Owner rule (2026-10-20): one unfinished attempt per Team; the server asks.
+    if (
+      cause instanceof PlatformApiError &&
+      cause.code === "assessment_resume_choice_required"
+    ) {
+      return "你有一份没做完的作答，要接着上次继续，还是重新做？";
+    }
+    if (
+      cause instanceof PlatformApiError &&
+      cause.code === "assessment_resume_original_conversation"
+    ) {
+      return "上次没做完的作答已恢复，点「打开上次的作答」接着做。";
+    }
     return teamFailureText(
       cause instanceof PlatformApiError ? cause.code : null,
       "teamRequestFailure",
@@ -3251,14 +3264,53 @@ function AgentChatScope({
                       tone="error"
                       onClose={() => setTeamError(null)}
                       action={
-                        <button
-                          type="button"
-                          className="inline-button"
-                          disabled={teamBusy}
-                          onClick={() => void checkTeamStatus()}
-                        >
-                          {t("teamCheckStatus")}
-                        </button>
+                        teamError instanceof PlatformApiError &&
+                        teamError.code ===
+                          "assessment_resume_choice_required" ? (
+                          <span>
+                            {["继续", "重新做"].map((choice) => (
+                              <button
+                                key={choice}
+                                type="button"
+                                className="inline-button"
+                                disabled={teamBusy}
+                                onClick={() => {
+                                  setTeamError(null);
+                                  setTeamDraft(choice);
+                                }}
+                              >
+                                {choice}
+                              </button>
+                            ))}
+                          </span>
+                        ) : teamError instanceof PlatformApiError &&
+                          teamError.code ===
+                            "assessment_resume_original_conversation" &&
+                          typeof teamError.details?.conversation_id ===
+                            "string" ? (
+                          <button
+                            type="button"
+                            className="inline-button"
+                            disabled={teamBusy}
+                            onClick={() =>
+                              void openTeamHistory({
+                                id: (teamError as PlatformApiError).details
+                                  ?.conversation_id,
+                              } as TeamChatSession)
+                            }
+                          >
+                            打开上次的作答
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="inline-button"
+                            disabled={teamBusy}
+                            onClick={() => void checkTeamStatus()}
+                          >
+                            {t("teamCheckStatus")}
+                          </button>
+                        )
                       }
                     >
                       {teamErrorText(teamError)}

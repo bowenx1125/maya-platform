@@ -277,7 +277,7 @@ def _eligible_attempts(db: Session, activity: AssessmentActivity) -> list[Assess
                 Conversation.publication_id == activity.publication_id,
                 Conversation.team_id == activity.team_id,
                 Conversation.team_version_id == activity.team_version_id,
-                Conversation.withdrawn_at.is_(None),
+                # Record is independent of the Chat window (owner, 2026-10-20).
                 CourseMember.course_id == activity.course_id,
                 CourseMember.user_id == AssessmentAttempt.actor_user_id,
                 CourseMember.role == "student",
@@ -998,7 +998,7 @@ def list_my_assessment_attempts(
     Owner request (2026-10-18): the student's Brainform shows Record, like
     the teacher's, listing the assessment Teams the student took. Every row
     is read by ``actor_user_id`` from the session, so no request can name
-    another student. Abandoned attempts and withdrawn chats stay out. A
+    another student. Abandoned attempts stay out; a deleted chat does not hide its attempt. A
     revoked or superseded publication does not hide a student's own answers.
     Scores and feedback stay with the teacher.
     """
@@ -1021,7 +1021,7 @@ def list_my_assessment_attempts(
             AssessmentActivity.course_id == course_id,
             Conversation.user_id == own_id,
             Conversation.course_id == course_id,
-            Conversation.withdrawn_at.is_(None),
+            # A deleted Chat keeps its attempt in Record (owner, 2026-10-20).
         )
         .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id)
     ).all()
