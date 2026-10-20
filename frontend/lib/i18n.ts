@@ -545,7 +545,7 @@ const enMessages = {
   errorParticipantDuplicate: "Each participant can be selected only once.",
   errorAgentNotCurrent: "Only the current published Agent can be selected.",
   errorAgentNameConflict:
-    "An Agent with this name already exists. Choose another name or delete the duplicate Agent first.",
+    'This name is already in use. Please choose another name, for example add your name or a number (such as "Zhu Xi 2").',
   errorAgentArchived:
     "Archived Agents are not available for new classroom work.",
   errorCrossGroupReference: "That resource belongs to another group.",
@@ -1413,7 +1413,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorParticipantDuplicate: "同一参辩者只能选择一次。",
   errorAgentNotCurrent: "只能选择当前已发布智能体。",
   errorAgentArchived: "已归档智能体不能用于新的课堂活动。",
-  errorAgentNameConflict: "已有同名Agent，请换名字或先删除重复Agent。",
+  errorAgentNameConflict:
+    "名字已被使用，请换一个名字，比如在后面加上你的名字或数字（如「Zhu Xi 2」）。",
   errorCrossGroupReference: "该资源属于另一个小组。",
   errorVoiceFallback: "自定义音色不可用，当前使用平台兜底音色。",
   errorAudioInvalid: "无法使用这个音频文件。",

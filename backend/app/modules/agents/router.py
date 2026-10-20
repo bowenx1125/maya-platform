@@ -199,6 +199,64 @@ def _require_available_agent_name(
         )
 
 
+def _reclaim_abandoned_agent_name(
+    db: Session,
+    name: str,
+    *,
+    owner_user_id: str,
+    group_id: str | None = None,
+    course_id: str | None = None,
+    visibility: str | None = None,
+) -> None:
+    """Free a name held only by the actor's own never-written empty draft.
+
+    Creating an Agent is two requests: create the row, then save AGENT.md.
+    When the second step failed and the student left the page, the empty
+    Agent kept the name and every retry with that name hit
+    ``agent_name_conflict``. Such a row has no Markdown, no files, was never
+    published and has no history, so retiring it loses nothing.
+    """
+
+    key = _agent_name_key(name)
+    statement = select(Agent).where(
+        Agent.deleted_at.is_(None),
+        Agent.owner_user_id == owner_user_id,
+        Agent.current_published_version_id.is_(None),
+    )
+    if group_id is not None:
+        # Stay inside the exact namespace the name check uses, so a private
+        # create never touches a public draft and vice versa.
+        statement = statement.where(
+            Agent.ownership_scope == "group",
+            Agent.group_id == group_id,
+            Agent.visibility == (visibility or "private"),
+        )
+    else:
+        statement = statement.where(
+            Agent.ownership_scope == "personal", Agent.course_id == course_id
+        )
+    for candidate in db.scalars(statement).all():
+        if _agent_name_key(candidate.name) != key:
+            continue
+        versions = db.scalars(
+            select(AgentVersion).where(AgentVersion.agent_id == candidate.id)
+        ).all()
+        if any(v.state != "draft" or (v.agent_md or "").strip() for v in versions):
+            continue
+        has_documents = db.scalar(
+            select(AgentVersionDocument.document_id)
+            .where(AgentVersionDocument.agent_version_id.in_([v.id for v in versions]))
+            .limit(1)
+        )
+        if has_documents is not None or _agent_has_history(db, candidate.id):
+            continue
+        timestamp = _time()
+        candidate.deleted_at = timestamp
+        candidate.status = "archived"
+        candidate.updated_at = timestamp
+    db.flush()
+
+
 def _retire_agent_documents(db: Session, agent: Agent) -> None:
     """Take a deleted Agent's own RAG files out of the library with it.
 
@@ -241,15 +299,24 @@ def _sync_markdown_name(
     name = agent_name_from_markdown(markdown)
     if name is None or name == agent.name:
         return
-    _require_available_agent_name(
-        db,
-        name,
-        group_id=agent.group_id,
-        owner_user_id=actor_user_id,
-        course_id=agent.course_id,
-        visibility=agent.visibility,
-        current=agent,
-    )
+    try:
+        _require_available_agent_name(
+            db,
+            name,
+            group_id=agent.group_id,
+            owner_user_id=actor_user_id,
+            course_id=agent.course_id,
+            visibility=agent.visibility,
+            current=agent,
+        )
+    except PlatformError as error:
+        if error.code != "agent_name_conflict":
+            raise
+        # The heading only suggests a name. The student already chose this
+        # Agent's name in the form, so a heading that collides with another
+        # Agent (often a shared sample AGENT.md) must not reject the whole
+        # upload; the chosen name stays and the Markdown is saved.
+        return
     db.execute(
         update(Agent)
         .where(Agent.id == agent.id)
@@ -791,6 +858,13 @@ def create_agent(
         try:
             scoped_student_group_role(db, context, str(group_id))
             assert_claim_owned(db, record)
+            _reclaim_abandoned_agent_name(
+                db,
+                payload.name,
+                owner_user_id=context.user.id,
+                group_id=str(group_id),
+                visibility=payload.visibility,
+            )
             _require_available_agent_name(
                 db,
                 payload.name,
@@ -919,6 +993,9 @@ def create_course_workspace_agent(
             if course_member_role(db, context.user.id, course_key) != "teacher":
                 raise not_found()
             assert_claim_owned(db, record)
+            _reclaim_abandoned_agent_name(
+                db, payload.name, owner_user_id=context.user.id, course_id=course_key
+            )
             _require_available_agent_name(
                 db,
                 payload.name,

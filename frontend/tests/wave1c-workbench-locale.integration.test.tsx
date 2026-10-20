@@ -426,7 +426,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
       expect.stringContaining(
-        "An Agent with this name already exists. Choose another name or delete the duplicate Agent first.",
+        "This name is already in use. Please choose another name",
       ),
     );
     expect(editor).toHaveProperty("value", "# Duplicate");

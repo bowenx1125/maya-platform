@@ -135,6 +135,16 @@ def test_private_group_names_are_owner_scoped_and_public_editor_cannot_probe_the
     )
     assert private.status_code == 201, private.text
     private_id = private.json()["id"]
+    # An empty never-saved draft is reclaimable on retry; give it content so
+    # it really holds the name.
+    assert (
+        client.patch(
+            f"/api/v1/agent-versions/{private.json()['versions'][0]['id']}",
+            headers=_headers(student_csrf),
+            json={"expected_revision": 0, "agent_md": "Private body"},
+        ).status_code
+        == 200
+    )
 
     duplicate = client.post(
         f"/api/v1/groups/{GROUP_ID}/agents",
@@ -189,6 +199,14 @@ def test_private_group_names_are_owner_scoped_and_public_editor_cannot_probe_the
         json={"name": "Hidden Name Canary", "visibility": "public"},
     )
     assert teacher_public.status_code == 201, teacher_public.text
+    assert (
+        client.patch(
+            f"/api/v1/agent-versions/{teacher_public.json()['versions'][0]['id']}",
+            headers=_headers(teacher_csrf),
+            json={"expected_revision": 0, "agent_md": "Teacher body"},
+        ).status_code
+        == 200
+    )
     other_owner_private = client.post(
         f"/api/v1/groups/{GROUP_ID}/agents",
         headers=_headers(
