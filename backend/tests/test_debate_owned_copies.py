@@ -61,3 +61,13 @@ def test_voice_snapshot_copies_config_and_ciphertext() -> None:
         "voice_profile_id": "v1",
     }
     assert voice_snapshot(None) == (None, None)
+
+
+def test_frozen_owner_needs_no_live_agent_or_version() -> None:
+    from app.modules.debates.owned_copies import frozen_owner
+
+    row = _row(course_id="c1", group_id=None, persona_spec_hash_snapshot="h" * 64)
+    owner = frozen_owner(cast(Any, _NoDb()), row)
+    assert (owner.course_id, owner.group_id, owner.version_id) == ("c1", None, None)
+    assert owner.agent_md.startswith("# Confucius")
+    assert owner.persona_spec_hash == "h" * 64

@@ -26,6 +26,7 @@ from app.core.models import (
     VoiceProviderOperation,
 )
 from app.modules.auth.service import AuthContext
+from app.modules.debates.voice_clones import retain_voice_sample
 from app.modules.knowledge.services import (
     assert_claim_owned,
     claim_idempotency,
@@ -51,6 +52,8 @@ from app.providers.audio import (
 )
 from app.providers.dashscope import DEFAULT_TARGET_MODEL_KEY, FLASH_TTS_MODEL_KEY
 from app.providers.factory import voice_provider
+
+logger = logging.getLogger(__name__)
 from app.providers.tts import TTSProvider
 from app.providers.voice import (
     VoiceCloneProvider,
@@ -1136,6 +1139,15 @@ def enroll_voice(
         _store_enrollment_success(
             db, profile, operation, provider_result, settings, provider=provider_instance
         )
+        if profile.status == "ready":
+            # Kept so each Debate can create its own independent clone.
+            try:
+                with db.begin_nested():
+                    retain_voice_sample(
+                        db, settings.resolved_data_root, profile, normalized, provider_language
+                    )
+            except Exception:  # noqa: BLE001 - the Voice itself is fine
+                logger.warning("voice_sample_retain_failed profile=%s", profile.id)
         result = voice_profile_dto(profile)
         if not claim_lost:
             finish_idempotency(db, record, 202, result.model_dump(mode="json"))

@@ -18,7 +18,6 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.db import Database  # noqa: E402
-from tests.legacy_organization import seed_legacy_organization  # noqa: E402
 from test_wave2_migration import (  # noqa: E402
     PRE_WAVE_3_POLISH_REVISION,
     WAVE_0_REVISION,
@@ -32,6 +31,7 @@ from test_wave2_migration import (  # noqa: E402
     table_columns,
     table_fingerprints,
 )
+from tests.legacy_organization import seed_legacy_organization  # noqa: E402
 
 REVISION_0007 = "0007_wave3_interaction_report"
 REVISION_0008 = "0008_wave4_mutual_learning_rounds"

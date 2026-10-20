@@ -273,18 +273,79 @@ WHERE vp.id = p.effective_voice_profile_id AND p.voice_snapshot_json IS NULL
 """
 
 
+_BACKFILL_PERSONA_HASH = """
+UPDATE debate_participants AS p
+SET persona_spec_hash_snapshot = v.persona_spec_hash
+FROM agent_versions AS v
+WHERE v.id = p.agent_version_id AND p.persona_spec_hash_snapshot IS NULL
+"""
+
+
 def upgrade() -> None:
-    op.add_column("debate_participants", sa.Column("agent_md_snapshot", sa.Text(), nullable=True))
-    op.add_column("debate_participants", sa.Column("voice_snapshot_json", sa.Text(), nullable=True))
-    op.add_column(
-        "debate_participants",
+    existing = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("debate_participants")}
+    for column in (
+        sa.Column("agent_md_snapshot", sa.Text(), nullable=True),
+        sa.Column("voice_snapshot_json", sa.Text(), nullable=True),
         sa.Column("voice_external_id_encrypted", sa.LargeBinary(), nullable=True),
+        sa.Column("persona_spec_hash_snapshot", sa.String(length=64), nullable=True),
+    ):
+        # A SQLite downgrade keeps these (its CHECKs name them); re-upgrade
+        # must then not add them twice.
+        if column.name not in existing:
+            op.add_column("debate_participants", column)
+    with op.batch_alter_table("voice_profiles") as batch:
+        batch.add_column(sa.Column("sample_file_id", sa.String(length=36), nullable=True))
+        batch.add_column(sa.Column("sample_language", sa.String(length=16), nullable=True))
+        batch.create_foreign_key(
+            "fk_voice_profiles_sample",
+            "stored_files",
+            ["sample_file_id"],
+            ["id"],
+            ondelete="RESTRICT",
+        )
+    op.create_table(
+        "debate_voice_clones",
+        sa.Column("id", sa.String(length=36), primary_key=True),
+        sa.Column("debate_id", sa.String(length=36), nullable=False),
+        sa.Column("source_voice_profile_id", sa.String(length=36), nullable=False),
+        sa.Column("origin", sa.String(length=16), nullable=False),
+        sa.Column("status", sa.String(length=16), nullable=False),
+        sa.Column("provider_key", sa.String(length=32), nullable=False),
+        sa.Column("target_model_key", sa.String(length=120), nullable=False),
+        sa.Column(
+            "sample_file_id",
+            sa.String(length=36),
+            sa.ForeignKey(
+                "stored_files.id", ondelete="RESTRICT", name="fk_debate_voice_clones_sample"
+            ),
+            nullable=True,
+        ),
+        sa.Column("sample_language", sa.String(length=16), nullable=True),
+        sa.Column("recovery_name", sa.String(length=120), nullable=False, unique=True),
+        sa.Column("external_id_encrypted", sa.LargeBinary(), nullable=True),
+        sa.Column("attempts", sa.Integer(), nullable=False),
+        sa.Column("safe_error_code", sa.String(length=64), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint(
+            "debate_id", "source_voice_profile_id", name="uq_debate_voice_clones_debate_voice"
+        ),
+        sa.CheckConstraint(
+            "status IN ('pending', 'ready', 'failed', 'no_sample')",
+            name="ck_debate_voice_clones_status",
+        ),
+        sa.CheckConstraint(
+            "origin IN ('create', 'backfill')", name="ck_debate_voice_clones_origin"
+        ),
+        sa.CheckConstraint("attempts >= 0", name="ck_debate_voice_clones_attempts"),
     )
+    op.create_index("ix_debate_voice_clones_status", "debate_voice_clones", ["status"])
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
     op.execute(_BACKFILL_AGENT_MD)
     op.execute(_BACKFILL_VOICE)
+    op.execute(_BACKFILL_PERSONA_HASH)
 
     for name in _DEBATE_COMPOSITES:
         op.execute(f"ALTER TABLE debate_participants DROP CONSTRAINT IF EXISTS {name}")
@@ -336,8 +397,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_debate_voice_clones_status", table_name="debate_voice_clones")
+    op.drop_table("debate_voice_clones")
+    with op.batch_alter_table("voice_profiles") as batch:
+        batch.drop_constraint("fk_voice_profiles_sample", type_="foreignkey")
+        batch.drop_column("sample_language")
+        batch.drop_column("sample_file_id")
     # Restoring RESTRICT/NOT NULL would fail once rows were really deleted;
     # like 0066 this migration is forward-only on PostgreSQL.
-    op.drop_column("debate_participants", "voice_external_id_encrypted")
-    op.drop_column("debate_participants", "voice_snapshot_json")
-    op.drop_column("debate_participants", "agent_md_snapshot")
+    if op.get_bind().dialect.name == "sqlite":
+        # SQLite cannot drop a column a CHECK names; extra NULL columns are inert.
+        return
+    for column in (
+        "persona_spec_hash_snapshot",
+        "voice_external_id_encrypted",
+        "voice_snapshot_json",
+        "agent_md_snapshot",
+    ):
+        op.drop_column("debate_participants", column)

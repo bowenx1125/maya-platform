@@ -441,7 +441,7 @@ def _assert_manifest_row_owner(
     policy_snapshot_id: str,
     course_id: str,
     group_id: str | None,
-    agent_version_id: str,
+    agent_version_id: str | None,
 ) -> Any:
     if row is None:
         raise _product_error("provider export manifest is missing", "manifest_missing")
@@ -449,7 +449,8 @@ def _assert_manifest_row_owner(
         str(row["policy_snapshot_id"]) != policy_snapshot_id
         or str(row["course_id"]) != course_id
         or row["group_id"] != group_id
-        or str(row["agent_version_id"]) != agent_version_id
+        # NULL once the version is deleted; a Debate keeps going (2026-10-20).
+        or (str(row["agent_version_id"]) if row["agent_version_id"] else None) != agent_version_id
     ):
         raise _product_error("provider export manifest owner changed", "manifest_owner_drift")
     return row
@@ -586,7 +587,7 @@ def require_exact_confirmation(
     if str(manifest_row["policy_snapshot_id"]) != str(policy_row["id"]):
         raise _product_error("provider manifest policy changed", "policy_drift")
     if course_id is not None or group_id is not None or agent_version_id is not None:
-        if not course_id or not agent_version_id:
+        if not course_id:
             raise _product_error("provider manifest owner is incomplete", "manifest_owner_drift")
         _assert_manifest_row_owner(
             manifest_row,

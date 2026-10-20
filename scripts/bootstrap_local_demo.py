@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import csv
 import getpass
-import ipaddress
 import io
+import ipaddress
 import os
 import re
 import secrets

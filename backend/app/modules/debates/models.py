@@ -16,6 +16,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Float,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
@@ -176,6 +177,7 @@ class DebateParticipant(Base):
     agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     knowledge_snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False)
     agent_md_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    persona_spec_hash_snapshot: Mapped[str | None] = mapped_column(String(64), nullable=True)
     voice_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     slot: Mapped[str] = mapped_column(String(1), nullable=False)
@@ -651,3 +653,48 @@ __all__ = [
     "PositionHistory",
     "TurnSource",
 ]
+
+
+class DebateVoiceClone(Base):
+    """A provider voice clone owned by one Debate (2026-10-20).
+
+    Created from the platform Voice's retained sample when the Debate is
+    created, so deleting the platform Voice never changes a Debate's audio.
+    ``debate_id`` deliberately has no FK: the clone outlives the Debate row
+    just long enough for the sweeper to delete the provider voice.
+    """
+
+    __tablename__ = "debate_voice_clones"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_voice_profile_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="create")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    provider_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_model_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    sample_file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("stored_files.id", ondelete="RESTRICT", name="fk_debate_voice_clones_sample"),
+        nullable=True,
+    )
+    sample_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    recovery_name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "debate_id", "source_voice_profile_id", name="uq_debate_voice_clones_debate_voice"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'ready', 'failed', 'no_sample')",
+            name="ck_debate_voice_clones_status",
+        ),
+        CheckConstraint("origin IN ('create', 'backfill')", name="ck_debate_voice_clones_origin"),
+        CheckConstraint("attempts >= 0", name="ck_debate_voice_clones_attempts"),
+        Index("ix_debate_voice_clones_status", "status"),
+    )

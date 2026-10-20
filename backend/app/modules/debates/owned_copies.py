@@ -9,6 +9,8 @@ Debate references; this module copies the rest onto the participant row.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -47,3 +49,37 @@ def fill_owned_copies(db: Session, row: object) -> bool:
             row.voice_external_id_encrypted = cipher  # type: ignore[attr-defined]
             changed = True
     return changed
+
+
+@dataclass(frozen=True)
+class FrozenOwner:
+    course_id: str
+    group_id: str | None
+    version_id: str | None
+    agent_md: str
+    persona_spec_hash: str
+
+
+def frozen_owner(db: Session, row: Any) -> FrozenOwner:
+    """Everything a running Debate needs about a participant's source Agent.
+
+    Reads only the participant row; the live version is a fallback for rows
+    written before 0077 that have no AGENT.md copy yet.
+    """
+
+    agent_md = row.agent_md_snapshot
+    persona_hash = getattr(row, "persona_spec_hash_snapshot", None)
+    if agent_md is None or persona_hash is None:
+        version = db.get(AgentVersion, row.agent_version_id) if row.agent_version_id else None
+        if version is None and agent_md is None:
+            raise ValueError("the frozen participant AGENT.md is unavailable")
+        if version is not None:
+            agent_md = version.agent_md if agent_md is None else agent_md
+            persona_hash = version.persona_spec_hash if persona_hash is None else persona_hash
+    return FrozenOwner(
+        course_id=str(row.course_id),
+        group_id=str(row.group_id) if row.group_id else None,
+        version_id=str(row.agent_version_id) if row.agent_version_id else None,
+        agent_md=str(agent_md or ""),
+        persona_spec_hash=str(persona_hash or ""),
+    )

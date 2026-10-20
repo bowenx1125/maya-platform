@@ -22,12 +22,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, configured_llm_model
 from app.core.errors import PlatformError, conflict
-from app.core.links import live_link
 from app.core.models import (
-    Agent,
     AgentVersion,
     CourseMember,
-    Group,
     KnowledgeChunk,
     KnowledgeSnapshot,
     ProviderPolicySnapshot,
@@ -74,6 +71,7 @@ from app.modules.debates.generation.types import MutualLearningTurnResultV1
 from app.modules.debates.generation.validator import count_turn_words
 from app.modules.debates.models import DebateParticipant, DebateTurn
 from app.modules.debates.output_language import debate_output_language
+from app.modules.debates.owned_copies import frozen_owner
 from app.modules.debates.round_count import (
     debate_teaching_protocol,
     uses_four_round_protocol,
@@ -484,24 +482,18 @@ class SqlTurnPreparer:
             defer_publication=True,
             budget_cap=LLMBudgetCapV1(2_147_483_647, Decimal("1e18")),
         )
-        version = db.get(AgentVersion, live_link(participant_row.agent_version_id, "Agent version"))
-        agent = db.get(Agent, version.agent_id) if version is not None else None
-        # A teacher's personal Agent has no group; its course is its own.
-        group = db.get(Group, agent.group_id) if agent is not None and agent.group_id else None
-        if version is None or agent is None or (agent.group_id is not None and group is None):
-            raise PlatformError(
-                "provider_preflight_blocked",
-                "The frozen LLM Persona owner is unavailable.",
-                503,
-            )
-        owner_group_id = str(group.id) if group is not None else None
+        # The Debate owns its participant snapshot (2026-10-20): the course,
+        # group and AGENT.md come from the frozen row, so a deleted Agent,
+        # version, file or voice never stops a running Debate.
+        owner = frozen_owner(db, participant_row)
+        owner_group_id = owner.group_id
         static_options: dict[str, object] = {
             "scope_id": str(debate.id),
             "policy_hash": policy_hash,
             "policy_snapshot_id": str(policy_row_id),
-            "course_id": str(agent.course_id),
+            "course_id": owner.course_id,
             "group_id": owner_group_id,
-            "agent_version_id": str(version.id),
+            "agent_version_id": owner.version_id,
             "repair_policy_hash": getattr(outbound_manifest, "repair_policy_hash", None) or "",
             "outbound_manifest": outbound_manifest,
             "identity_tokens": tuple(
@@ -509,7 +501,7 @@ class SqlTurnPreparer:
                     (
                         *self._authoritative_identity_tokens(
                             db,
-                            course_id=str(agent.course_id),
+                            course_id=owner.course_id,
                             group_id=owner_group_id,
                             participants=participants,
                         ),
@@ -597,11 +589,11 @@ class SqlTurnPreparer:
                     "input_hash": input_hash,
                     "receipt_hash": receipt_hash,
                     "round": getattr(getattr(snapshot, "round", None), "as_payload", lambda: {})(),
-                    "persona_spec_hash": str(getattr(version, "persona_spec_hash", "")),
+                    "persona_spec_hash": owner.persona_spec_hash,
                 }
                 build_manifest_hash = digest(logical_build)
                 model_key = str(getattr(segment_adapter.config, "model", configured_llm_model()))
-                persona_spec_hash = str(getattr(version, "persona_spec_hash", ""))
+                persona_spec_hash = owner.persona_spec_hash
                 if len(persona_spec_hash) != 64:
                     persona_spec_hash = digest(persona_payload)
                 field_values: dict[str, object] = {
@@ -664,9 +656,9 @@ class SqlTurnPreparer:
                     repository.ensure_export_manifest(
                         manifest,
                         policy_snapshot_id=str(policy_row_id),
-                        course_id=str(agent.course_id),
+                        course_id=owner.course_id,
                         group_id=owner_group_id,
-                        agent_version_id=str(version.id),
+                        agent_version_id=owner.version_id,
                         debate_id=str(debate.id),
                         turn_id=str(turn.id),
                     )
@@ -690,9 +682,9 @@ class SqlTurnPreparer:
                         db,
                         persisted,
                         policy,
-                        course_id=str(agent.course_id),
+                        course_id=owner.course_id,
                         group_id=owner_group_id,
-                        agent_version_id=str(version.id),
+                        agent_version_id=owner.version_id,
                     )
                 except ProductPublicationError as exc:
                     if exc.code not in {
@@ -746,9 +738,9 @@ class SqlTurnPreparer:
                 policy_hash=policy_hash,
                 build_manifest_hash=build_manifest_hash,
                 policy_snapshot_id=str(policy_row_id),
-                course_id=str(agent.course_id),
+                course_id=owner.course_id,
                 group_id=owner_group_id,
-                agent_version_id=str(version.id),
+                agent_version_id=owner.version_id,
                 identity_tokens=tuple(static_options["identity_tokens"]),  # type: ignore[arg-type]
                 outbound_manifest=outbound_manifest,
             )
@@ -760,9 +752,9 @@ class SqlTurnPreparer:
                     db,
                     persisted,
                     policy,
-                    course_id=str(agent.course_id),
+                    course_id=owner.course_id,
                     group_id=owner_group_id,
-                    agent_version_id=str(version.id),
+                    agent_version_id=owner.version_id,
                 )
             except ProductPublicationError as exc:
                 if exc.code not in {
@@ -1537,17 +1529,13 @@ class SqlTurnPreparer:
                 "Real Embedding is unavailable until every policy control is verified.",
                 503,
             )
-        version = db.get(AgentVersion, live_link(participant_row.agent_version_id, "Agent version"))
-        if version is None or not str(version.agent_md or "").strip():
+        owner = frozen_owner(db, participant_row)
+        if not owner.agent_md.strip():
             raise ValueError("the frozen query Agent markdown is unavailable")
         # The outbound identity is the published AGENT.md. A compiled Persona
         # hash is not required and is not what this query discloses.
-        agent_md_hash = markdown_hash(version.agent_md)
-        agent = db.get(Agent, version.agent_id)
-        group = db.get(Group, agent.group_id) if agent is not None and agent.group_id else None
-        if agent is None or (agent.group_id is not None and group is None):
-            raise ValueError("the frozen query owner is unavailable")
-        query_group_id = group.id if group is not None else None
+        agent_md_hash = markdown_hash(owner.agent_md)
+        query_group_id = owner.group_id
         subqueries = build_turn_subqueries(context)
         try:
             query_plan = ensure_real_query_export_manifest(
@@ -1555,9 +1543,9 @@ class SqlTurnPreparer:
                 db=db,
                 scope_id=str(debate.id),
                 turn_id=str(turn.id),
-                course_id=agent.course_id,
+                course_id=owner.course_id,
                 group_id=query_group_id,
-                agent_version_id=version.id,
+                agent_version_id=owner.version_id,
                 snapshot_id=snapshot.id,
                 identity=identity,
                 transcript_hash=transcript_hash,
@@ -1648,9 +1636,9 @@ class SqlTurnPreparer:
                 db,
                 query_plan.manifest,
                 policy,
-                course_id=agent.course_id,
+                course_id=owner.course_id,
                 group_id=query_group_id,
-                agent_version_id=version.id,
+                agent_version_id=owner.version_id,
             )
         except ProductPublicationError as error:
             if error.code not in {
@@ -1691,9 +1679,9 @@ class SqlTurnPreparer:
                     db,
                     query_plan.manifest,
                     policy,
-                    course_id=agent.course_id,
+                    course_id=owner.course_id,
                     group_id=query_group_id,
-                    agent_version_id=version.id,
+                    agent_version_id=owner.version_id,
                 )
             except ProductPublicationError as confirmed_error:
                 if confirmed_error.code == "provider_confirmation_required":

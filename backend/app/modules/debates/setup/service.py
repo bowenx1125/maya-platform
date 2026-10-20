@@ -75,6 +75,7 @@ from app.modules.debates.setup.rules import (
 )
 from app.modules.debates.teaching_rules import freeze_teaching_rules
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
+from app.modules.debates.voice_clones import request_debate_clones, sync_debate_clones
 from app.modules.interactions.service import create_closed_window
 from app.providers.tts import TTS_UNAVAILABLE_CODES
 
@@ -614,6 +615,7 @@ def _participant_row(
         agent_version_id=version.id,
         knowledge_snapshot_id=snapshot.id,
         agent_md_snapshot=version.agent_md,
+        persona_spec_hash_snapshot=version.persona_spec_hash,
         voice_snapshot_json=voice_json,
         voice_external_id_encrypted=voice_cipher,
         slot=chr(65 + order_index),
@@ -1262,6 +1264,9 @@ def create_debate_draft(
     ]
     require_teacher_course(db, actor_user_id, course_id)
     db.add_all(participant_rows)
+    db.flush()
+    # The Debate's own voice clones; enrollment runs in the background.
+    request_debate_clones(db, debate.id, list(participant_rows))
     db.add(
         PlaybackState(
             id=str(uuid4()),
@@ -1561,6 +1566,7 @@ def update_debate_draft(
         ]
     )
     db.flush()
+    sync_debate_clones(db, debate.id)
     return _detail(db, debate)
 
 

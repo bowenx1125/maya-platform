@@ -126,11 +126,18 @@ class ConversationParticipant(Base):
             ["conversation_id", "team_version_id"],
             ["agent_conversations.id", "agent_conversations.team_version_id"],
             ondelete="CASCADE",
+            # A Team chat follows a new Team version in place (2026-10-20).
+            onupdate="CASCADE",
+            name="conversation_participants_conversation_id_team_version_id_fkey",
         ),
         ForeignKeyConstraint(
             ["team_version_id", "team_member_id"],
             ["team_version_members.team_version_id", "team_version_members.id"],
             ondelete="RESTRICT",
+            # Checked at commit, after the member ids are moved too.
+            deferrable=True,
+            initially="DEFERRED",
+            name="conversation_participants_team_version_id_team_member_id_fkey",
         ),
         CheckConstraint(
             "position >= 0 AND agent_authorization_epoch >= 0",

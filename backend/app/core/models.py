@@ -1075,6 +1075,14 @@ class VoiceProfile(Base):
     provider_key: Mapped[str] = mapped_column(String(32), nullable=False)
     target_model_key: Mapped[str] = mapped_column(String(120), nullable=False)
     external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # The normalized enrollment sample, kept so a Debate can create its own
+    # independent clone (2026-10-20). NULL for voices enrolled before 0077.
+    sample_file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("stored_files.id", ondelete="RESTRICT", name="fk_voice_profiles_sample"),
+        nullable=True,
+    )
+    sample_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     recovery_name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -1413,7 +1421,7 @@ class ProviderExportManifest(Base):
         String(36),
         ForeignKey(
             "agent_versions.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_provider_export_manifests_agent_version",
         ),
         nullable=True,

@@ -44,7 +44,10 @@ if str(BACKEND) not in sys.path:
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from app.core.config import Settings  # noqa: E402
+from app.core.config import (
+    Settings,  # noqa: E402
+    configured_llm_model,  # noqa: E402
+)
 from app.core.db import Database  # noqa: E402
 from app.core.models import (  # noqa: E402
     Agent,
@@ -135,7 +138,6 @@ from app.providers.control import (  # noqa: E402
     sha256_hex,
 )
 from app.providers.control_repository import ProviderRepository  # noqa: E402
-from app.core.config import configured_llm_model  # noqa: E402
 from app.providers.factory import embedding_provider, llm_provider  # noqa: E402
 from app.providers.llm_adapter import DashScopeLLMAdapter  # noqa: E402
 from app.providers.llm_price_card import (  # noqa: E402

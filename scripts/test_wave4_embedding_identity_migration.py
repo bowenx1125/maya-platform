@@ -17,6 +17,7 @@ for import_root in (BACKEND_ROOT, TEST_ROOT):
         sys.path.insert(0, str(import_root))
 
 from app.core.db import Database
+
 from test_wave4_embedding_identity_orm import (
     REVISION,
     _database_url,
