@@ -75,9 +75,7 @@ export function RulesetEditor({
               className={`${styles.action} ${styles.iconAction}`}
               disabled={disabled}
               aria-label={dirty ? "Save" : "Back"}
-              data-ui-guide={
-                dirty ? "debate.rulesetSave" : "debate.rulesetBack"
-              }
+              data-ui-guide={dirty ? "debate.rulesetSave" : "debate.rulesetBack"}
               onClick={dirty ? save : cancel}
             >
               {dirty ? <IconCheck /> : <IconArrowLeft />}
