@@ -42,3 +42,10 @@ class JobStatus(BaseModel):
     kind: str
     status: Literal["pending", "running", "completed", "failed", "interrupted"]
     safe_error_code: str | None = None
+
+
+class AffectedAgentDTO(BaseModel):
+    """An Agent that gets a new version when a RAG file or Voice is deleted."""
+
+    agent_id: UUID
+    name: str

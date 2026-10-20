@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response
 from sqlalchemy import case, delete, or_, select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -47,7 +47,12 @@ from app.modules.agents.schemas import (
     RagPreview,
     SetDocumentsRequest,
 )
-from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
+from app.modules.auth.dependencies import (
+    get_database,
+    get_db,
+    require_auth,
+    require_authenticated_mutation,
+)
 from app.modules.auth.service import AuthContext
 from app.modules.demo_baseline.service import (
     reject_baseline_document_mutation,
@@ -74,7 +79,11 @@ from app.modules.knowledge.markdown import (
 )
 from app.modules.knowledge.multipart import UploadTooLargeError, integer_field, parse_upload
 from app.modules.knowledge.replacement import replace_document_copy_on_write
-from app.modules.knowledge.schemas import JobStatus, UpdateKnowledgeDocumentVisibility
+from app.modules.knowledge.schemas import (
+    AffectedAgentDTO,
+    JobStatus,
+    UpdateKnowledgeDocumentVisibility,
+)
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.services import (
     _document_dto,
@@ -1152,10 +1161,13 @@ def reindex_knowledge_document(
 )
 def hide_knowledge_document(
     document_id: UUID,
+    background: BackgroundTasks,
+    request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> KnowledgeDocumentDTO:
     """Remove a source from the working Knowledge library.
 
@@ -1184,9 +1196,14 @@ def hide_knowledge_document(
             AgentVersion.state == "draft",
         )
     )
-    if enabled is not None:
-        abandon_claim(db, record)
-        raise invalid_state("An enabled draft document cannot be deleted.")
+    # Owner decision (2026-10-20): deleting a file also drops it from drafts
+    # and auto-publishes every live Agent that uses it (agents/cascade.py).
+    del enabled
+    from app.modules.agents.cascade import affected_agents, cascade_removed_sources
+
+    affected_ids = [
+        item.agent_id for item in affected_agents(db, document_ids=[scoped.document.id])
+    ]
     # Drop draft-only disabled links so a deleted library file cannot linger in
     # draft selections.  Published and superseded version links stay untouched.
     draft_ids = list(
@@ -1292,7 +1309,37 @@ def hide_knowledge_document(
     saga_checkpoint("hide_knowledge_document.before_final_commit")
     db.commit()
     saga_checkpoint("hide_knowledge_document.after_final_commit")
+    if affected_ids:
+        background.add_task(
+            cascade_removed_sources,
+            get_database(request),
+            settings,
+            agent_ids=affected_ids,
+            document_ids=[str(document_id)],
+        )
     return result
+
+
+@router.get(
+    "/knowledge-documents/{document_id}/affected-agents",
+    response_model=list[AffectedAgentDTO],
+    operation_id="listKnowledgeDocumentAffectedAgents",
+    responses={404: {"model": Error, "description": "Document not found."}},
+)
+def list_knowledge_document_affected_agents(
+    document_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[AffectedAgentDTO]:
+    """Live Agents that would get a new version if this file were deleted."""
+
+    from app.modules.agents.cascade import affected_agents
+
+    scoped = visible_mutable_document(db, context, str(document_id))
+    return [
+        AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
+        for item in affected_agents(db, document_ids=[scoped.document.id])
+    ]
 
 
 @router.put(

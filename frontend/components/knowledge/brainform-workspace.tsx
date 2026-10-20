@@ -1,5 +1,6 @@
 "use client";
 
+import { deleteConfirmText } from "../../lib/affected-agents";
 import { usePathname, useRouter } from "next/navigation";
 import {
   useCallback,
@@ -1531,15 +1532,14 @@ function BrainformWorkspaceBody({
 
   async function hideRag(document: KnowledgeDocument, retry = false) {
     if (!document.can_manage_visibility) return;
-    if (
-      !retry &&
-      !window.confirm(
-        t("brainformRagHideConfirm", {
-          filename: document.source_filename,
-        }),
-      )
-    )
-      return;
+    if (!retry) {
+      const message = await deleteConfirmText(
+        t("brainformRagHideConfirm", { filename: document.source_filename }),
+        () => api.knowledgeAffectedAgents(document.id),
+        (names) => t("deleteAffectsAgents", { names }),
+      );
+      if (!window.confirm(message)) return;
+    }
     const intent = `knowledge-hide:${document.id}`;
     commitBusy(`hide:${document.id}`);
     setPendingRagAction(null);

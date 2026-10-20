@@ -347,7 +347,9 @@ const enMessages = {
     "Open a personal Chat context and ask what it remembers.",
   brainformRagEmpty: "No RAG yet.",
   brainformRagHideConfirm:
-    "Hide {filename} from Brainform? Published Agent snapshots and retained Knowledge versions remain available.",
+    "Delete {filename}? Debates already created keep their own copy.",
+  deleteAffectsAgents:
+    "This will affect these Agents: {names}. Each gets a new version without it and stays usable.",
   brainformRagFileStaged:
     "{filename} is selected. It will be imported when you save.",
   brainformAgentsUsingKnowledge: "Agents using this Knowledge",
@@ -704,7 +706,7 @@ const enMessages = {
   voiceDeleteNamed: "Delete {name}",
   voiceDelete: "Delete",
   voiceDeleteConfirm:
-    "Delete this custom voice? New playback will use the platform fallback.",
+    "Delete this custom voice? Debates already created keep their voice.",
   leader: "leader",
   admin: "admin",
   member: "member",
@@ -1237,8 +1239,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformGraphAccessibleLabel: "Knowledge 关系图",
   brainformMemoryIntro: "进入个人聊天上下文并询问它记得什么。",
   brainformRagEmpty: "还没有 RAG。",
-  brainformRagHideConfirm:
-    "从 Brainform 隐藏 {filename}？已发布的 Agent 快照和保留的 Knowledge 版本仍然可用。",
+  brainformRagHideConfirm: "删除 {filename}？已经创建的 Debate 不受影响。",
+  deleteAffectsAgents:
+    "会影响这些 Agent：{names}。它们会自动发布一个不含它的新版本，照常可用。",
   brainformRagFileStaged: "已选择 {filename}。保存时才会导入。",
   brainformAgentsUsingKnowledge: "正在使用此 Knowledge 的 Agents",
   brainformKnowledgeFirstVersionEmpty:
@@ -1554,7 +1557,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   voicePreviewFailed: "试听音频无法播放，请再点一次播放。",
   voiceDeleteNamed: "删除「{name}」",
   voiceDelete: "删除",
-  voiceDeleteConfirm: "删除这个自定义音色？新的播放将使用平台兜底音色。",
+  voiceDeleteConfirm: "删除这个自定义音色？已经创建的 Debate 不受影响。",
   leader: "组长",
   admin: "管理员",
   member: "成员",

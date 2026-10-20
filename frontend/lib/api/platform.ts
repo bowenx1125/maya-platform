@@ -28,6 +28,7 @@ export type AgentSummary = components["schemas"]["AgentSummary"];
 export type AgentDetail = components["schemas"]["AgentDetail"];
 export type AgentVersion = components["schemas"]["AgentVersion"];
 export type KnowledgeDocument = components["schemas"]["KnowledgeDocument"];
+export type AffectedAgent = components["schemas"]["AffectedAgent"];
 export type KnowledgeSetSummary = components["schemas"]["KnowledgeSetSummary"];
 export type KnowledgeSetDetail = components["schemas"]["KnowledgeSetDetail"];
 export type KnowledgeGenerationStatus =
@@ -2551,6 +2552,24 @@ export class PlatformApi {
       );
       return (await unwrap(result)) as unknown as KnowledgeDocument;
     });
+  }
+
+  async knowledgeAffectedAgents(documentId: string): Promise<AffectedAgent[]> {
+    return unwrap(
+      await this.client.GET(
+        "/knowledge-documents/{document_id}/affected-agents",
+        { params: { path: { document_id: documentId } } },
+      ),
+    );
+  }
+
+  async voiceAffectedAgents(profileId: string): Promise<AffectedAgent[]> {
+    return unwrap(
+      await this.client.GET(
+        "/voice-profiles/{voice_profile_id}/affected-agents",
+        { params: { path: { voice_profile_id: profileId } } },
+      ),
+    );
   }
 
   async avatarTemplates(): Promise<AvatarTemplate[]> {

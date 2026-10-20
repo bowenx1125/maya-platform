@@ -1,5 +1,6 @@
 "use client";
 
+import { deleteConfirmText } from "../../lib/affected-agents";
 import {
   useCallback,
   useEffect,
@@ -492,11 +493,16 @@ export function VoiceLibrary({
     }
   }
 
-  // Agents bound to a deleted voice speak with the fallback voice, so
-  // deleting never blocks a Debate.
+  // Agents using a deleted voice get a new version without it (silent in
+  // Immerse); Debates keep their own voice, so deleting never blocks one.
   async function remove(profile: ListedVoice) {
     if (controlsDisabled) return;
-    if (!window.confirm(t("voiceDeleteConfirm"))) return;
+    const message = await deleteConfirmText(
+      t("voiceDeleteConfirm"),
+      () => api.voiceAffectedAgents(profile.id),
+      (names) => t("deleteAffectsAgents", { names }),
+    );
+    if (!window.confirm(message)) return;
     setBusy(true);
     setFailure(null);
     setNotice(null);

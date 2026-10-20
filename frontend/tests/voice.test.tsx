@@ -143,8 +143,10 @@ describe("M08 voice library", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Delete mine.wav" }),
     );
-    expect(confirm).toHaveBeenCalledWith(
-      "Delete this custom voice? New playback will use the platform fallback.",
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith(
+        "Delete this custom voice? Debates already created keep their voice.",
+      ),
     );
     await waitFor(() =>
       expect(api.deleteVoiceProfile).toHaveBeenCalledWith(
