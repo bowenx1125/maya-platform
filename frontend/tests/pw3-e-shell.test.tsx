@@ -98,7 +98,6 @@ describe("PW3-E teacher information architecture", () => {
     expect(destinations.map((item) => item.textContent?.trim())).toEqual([
       "Mayaform",
       "Studyform",
-      "Brainform",
       "Chatform",
       "Debates",
       "Accounts",
@@ -110,14 +109,14 @@ describe("PW3-E teacher information architecture", () => {
     ).toEqual([
       "/teacher",
       "/teacher/studyform",
-      "/teacher/knowledge",
       "/teacher/chat",
       "/teacher/debates",
       "/teacher/roster",
     ]);
+    // Owner request (2026-10-20): Brainform's cards joined Studyform.
     expect(
-      primaryNavigation.getByRole("link", { name: "Brainform" }),
-    ).toBeTruthy();
+      primaryNavigation.queryByRole("link", { name: "Brainform" }),
+    ).toBeNull();
     expect(
       primaryNavigation.getByRole("link", { name: "Mayaform" }).className,
     ).toContain("active");

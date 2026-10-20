@@ -2598,6 +2598,7 @@ function BrainformWorkspaceBody({
           {role === "teacher" ? (
             <section
               className={styles.section}
+              data-studyform-slot="knowledge"
               aria-labelledby="brainform-knowledge-heading"
             >
               <div className={styles.sectionHeading}>

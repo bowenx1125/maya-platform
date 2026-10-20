@@ -339,8 +339,6 @@ export function AppShell({
       -1,
     );
   }, [actionRegistry, visitingGroup]);
-  const teacherLegacyBrainform =
-    teacherSurface && pathname === "/student/knowledge" ? locationSearch : "";
   const visit =
     visitingGroup && visitGroupId
       ? encodeURIComponent(visitGroupId)
@@ -360,14 +358,14 @@ export function AppShell({
   }[] = [
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
-    // Owner request (2026-10-20): students reach RAG and Record from
-    // Studyform, so only teachers keep a Brainform entry.
-    ...(teacherSurface || visit
+    // Owner request (2026-10-20): RAG, Knowledge and Record live on
+    // Studyform for students and teachers alike; only a teacher visiting a
+    // group keeps a Brainform entry for that group's read-only library.
+    // /teacher/knowledge stays routable for its deep links.
+    ...(visit
       ? [
           {
-            href: visit
-              ? `/teacher/knowledge?group_id=${visit}`
-              : `/teacher/knowledge${teacherLegacyBrainform}`,
+            href: `/teacher/knowledge?group_id=${visit}`,
             label: "Brainform",
             icon: "brain" as const,
           },
@@ -414,8 +412,10 @@ export function AppShell({
       : studyformHref.split("?", 1)[0]
     : isStudent && groupId && agentRoute
       ? `/student/groups/${groupId}`
-      : teacherSurface && pathname === "/student/knowledge"
-        ? "/teacher/knowledge"
+      : teacherSurface &&
+          (pathname === "/student/knowledge" ||
+            pathname === "/teacher/knowledge")
+        ? "/teacher/studyform"
         : teacherSurface && pathname.startsWith("/teacher/agents/")
           ? "/teacher/studyform"
           : pathname.startsWith("/teacher/debates")

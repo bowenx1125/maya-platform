@@ -44,6 +44,7 @@ import { UserAvatar } from "./user-avatar";
 import { AgentReadOnly, AgentWorkbench } from "./agent-workspace";
 import { CreateAgentForm } from "./student-workspace";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
+import { BrainformWorkspace } from "./knowledge/brainform-workspace";
 import {
   ModuleCard,
   ModuleGrid,
@@ -247,17 +248,31 @@ export function TeacherStudyformWorkspace({
   initialGroupId,
   initialMode,
   initialTeamId,
+  initialDocumentId,
 }: {
   initialGroupId?: string;
   initialMode?: string;
   initialTeamId?: string;
+  /** A RAG file a ?mode=rag-view / rag-edit link opens. */
+  initialDocumentId?: string;
 }) {
   const t = useT();
   const { api, identityGeneration, user } = useSession();
   const teacherCourseId = user?.courses.find(
     (membership) => membership.role === "teacher",
   )?.course_id;
-  const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${initialMode ?? ""}:${initialTeamId ?? ""}:${identityGeneration}`;
+  // Owner request (2026-10-20): the teacher's Brainform cards (RAG,
+  // Knowledge, Record) joined Studyform. Only Team modes swap the page; any
+  // other mode belongs to the embedded cards and must not reload Studyform.
+  const teamMode =
+    initialMode === "team-new" ||
+    initialMode === "team-edit" ||
+    initialMode === "maya-new" ||
+    initialMode === "maya-edit";
+  const pageMode = teamMode ? initialMode : "";
+  const brainformMode = teamMode ? undefined : initialMode;
+  const [brainformPane, setBrainformPane] = useState(false);
+  const scope = `${user?.id ?? "anonymous"}:${teacherCourseId ?? "none"}:${initialGroupId ?? "all"}:${pageMode}:${initialTeamId ?? ""}:${identityGeneration}`;
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const snapshotKey = `page:studyform-teacher:${teacherCourseId ?? "none"}`;
   // A return visit paints the last page this identity saw, then refreshes.
@@ -418,11 +433,7 @@ export function TeacherStudyformWorkspace({
   )
     return <ErrorNotice inline error={error} />;
 
-  const teamForm =
-    initialMode === "team-new" ||
-    initialMode === "team-edit" ||
-    initialMode === "maya-new" ||
-    initialMode === "maya-edit";
+  const teamForm = teamMode;
   if (teamForm)
     return (
       <>
@@ -451,7 +462,7 @@ export function TeacherStudyformWorkspace({
     <>
       <PageIntro title={t("studyform")} />
       {error ? <ErrorNotice error={error} /> : null}
-      <ModuleGrid>
+      <ModuleGrid variant="teacherStudyform" paneOpen={brainformPane}>
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
@@ -557,6 +568,16 @@ export function TeacherStudyformWorkspace({
           courseId={teacherCourseId ?? null}
           moduleCard
         />
+        {teacherCourseId ? (
+          <BrainformWorkspace
+            role="teacher"
+            embedded
+            initialCourseId={teacherCourseId}
+            initialMode={brainformMode}
+            initialDocumentId={initialDocumentId}
+            onPaneChange={setBrainformPane}
+          />
+        ) : null}
       </ModuleGrid>
     </>
   );

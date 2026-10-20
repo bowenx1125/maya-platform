@@ -402,6 +402,13 @@ describe("W1 teacher personal workspace", () => {
       enrollVoice: vi.fn(),
       enrollPersonalVoice: vi.fn(),
       createVoicePreview: vi.fn(),
+      knowledge: vi.fn().mockResolvedValue([]),
+      workspaceDocuments: vi.fn().mockResolvedValue([]),
+      brainformKnowledge: vi.fn().mockResolvedValue([]),
+      teams: vi.fn().mockResolvedValue([]),
+      mayaTeams: vi.fn().mockResolvedValue([]),
+      courseAssessmentAttempts: vi.fn().mockResolvedValue([]),
+      courses: vi.fn().mockResolvedValue([]),
     };
     mockedUseSession.mockReturnValue(
       teacherSession(api, [{ group_id: "teacher-group" }]),
@@ -422,7 +429,12 @@ describe("W1 teacher personal workspace", () => {
     ).toBeTruthy();
     expect(api.personalVoiceProfiles).toHaveBeenCalledWith(courseId);
     expect(api.voiceProfiles).not.toHaveBeenCalled();
-    expect(api.groups).not.toHaveBeenCalled();
+    // Owner request (2026-10-20): teacher Studyform holds six cards,
+    // Agents / Teams / Record over RAG / Knowledge / Voices.
+    for (const name of ["Agents", "Teams", "Record", "RAG", "Knowledge"])
+      expect(await screen.findByRole("heading", { name })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Brainform" })).toBeNull();
+    // The embedded Brainform cards read groups for RAG; Voices does not.
     expect(api.enrollVoice).not.toHaveBeenCalled();
   });
 

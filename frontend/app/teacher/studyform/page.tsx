@@ -9,6 +9,7 @@ export default async function TeacherStudyformPage({
     group_id?: string;
     mode?: string;
     team_id?: string;
+    document_id?: string;
   }>;
 }) {
   const query = await searchParams;
@@ -19,6 +20,7 @@ export default async function TeacherStudyformPage({
           initialGroupId={query.group_id}
           initialMode={query.mode}
           initialTeamId={query.team_id}
+          initialDocumentId={query.document_id}
         />
       </AppShell>
     </RouteGuard>

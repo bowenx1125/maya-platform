@@ -1039,7 +1039,7 @@ describe("Brainform workspace actions", () => {
     expect(screen.queryByRole("heading", { name: "Memory" })).toBeNull();
     expect(state.api.courseAssessmentAttempts).toHaveBeenCalledWith("course-1");
     const team = await screen.findByRole("button", {
-      name: "Open the results for Keynotes",
+      name: "Open the Record for Keynotes",
     });
     expect(team.textContent).toContain("Students 2 · Attempts 2");
     fireEvent.click(team);
@@ -1068,7 +1068,7 @@ describe("Brainform workspace actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(
       await screen.findByRole("button", {
-        name: "Open the results for Keynotes",
+        name: "Open the Record for Keynotes",
       }),
     ).toBeTruthy();
   });
@@ -1114,7 +1114,7 @@ describe("Brainform workspace actions", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Open the results for Keynotes",
+        name: "Open the Record for Keynotes",
       }),
     );
     const row = await screen.findByRole("button", {
@@ -1202,7 +1202,7 @@ describe("Brainform workspace actions", () => {
       },
     ]);
     const first = renderWithActions();
-    await screen.findByRole("button", { name: "Open the results for Cached" });
+    await screen.findByRole("button", { name: "Open the Record for Cached" });
     first.unmount();
 
     // The refresh never answers: the cached list is what shows. (Record now
@@ -1213,7 +1213,7 @@ describe("Brainform workspace actions", () => {
     renderWithActions();
     expect(
       await screen.findByRole("button", {
-        name: "Open the results for Cached",
+        name: "Open the Record for Cached",
       }),
     ).toBeTruthy();
     expect(state.api.courseAssessmentAttempts).toHaveBeenCalledTimes(2);
