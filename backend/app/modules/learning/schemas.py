@@ -141,7 +141,11 @@ class AssessmentStudentAction(StrictModel):
 
     classification: AssessmentClassification
     answer_span: str | None = None
-    # The model's judgment that a free-form message answers the current question.
+    # Free questions: the model's category and confidence (0-1). Only input to
+    # the server's guard; never decides recording by itself.
+    category: Literal["answer", "off_topic", "other"] | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    # Deprecated (pre-2026-10-20 prompt): True maps to category answer.
     relevant: bool | None = None
     # Student-facing sentence when that message is not saved.
     guidance: str | None = None

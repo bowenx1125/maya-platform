@@ -1563,6 +1563,9 @@ def test_ordinary_protocol_omits_an_empty_reply_without_failing() -> None:
 
 REASON = "关于第 1 题：你选了哪一项？能用一两句话说说你当时是怎么想的吗？"
 HOW_TO_ANSWER = "请说出你在第 1 题选了哪项，并用一两句话说说理由"
+# 2026-10-20 relevance guard: an unsure free reply is never dropped silently;
+# the program asks the student to confirm (model guidance, if any, first).
+CONFIRM = "请确认这是你的回答，输入“确认”；如果不是，请重新输入。"
 SAD = "听起来你现在很难受。想答的时候，回复 1 到 5 里的一个数字就好。"
 QUIT = "不想做的时候可以先停一下。想答时，回复 1 到 5 里的一个数字就好。"
 SCALE = (
@@ -1579,7 +1582,7 @@ SCALE = (
             "现在进展如何",
             {"classification": "off_topic", "relevant": False, "guidance": HOW_TO_ANSWER},
             False,
-            HOW_TO_ANSWER,
+            f"{HOW_TO_ANSWER} {CONFIRM}",
             False,
         ),
         (
@@ -1587,7 +1590,7 @@ SCALE = (
             "B",
             {"classification": "off_topic", "relevant": False, "guidance": HOW_TO_ANSWER},
             False,
-            HOW_TO_ANSWER,
+            f"{HOW_TO_ANSWER} {CONFIRM}",
             False,
         ),
         (
@@ -1595,8 +1598,8 @@ SCALE = (
             "现在进展如何",
             {"classification": "answer_only", "answer_span": "现在进展如何"},
             False,
-            "这条回复不是本题的答案，没有记录。请直接写出你对这道题的回答。",
-            True,
+            CONFIRM,
+            False,
         ),
         (
             SCALE,
