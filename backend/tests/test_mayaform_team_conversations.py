@@ -756,12 +756,17 @@ def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
     _, teacher_csrf = login(client, "maya")
     with database.session() as db:
         member_agent_id = db.get(AgentVersion, versions[0]).agent_id  # type: ignore[union-attr]
-    for deleted_agent in (agent_id, member_agent_id):
-        response = client.delete(
-            f"/api/v1/agents/{deleted_agent}",
-            headers=_headers(teacher_csrf, f"delete-agent-{uuid4()}"),
-        )
-        assert response.status_code == 204, response.text
+    response = client.delete(
+        f"/api/v1/agents/{agent_id}",
+        headers=_headers(teacher_csrf, f"delete-agent-{uuid4()}"),
+    )
+    assert response.status_code == 204, response.text
+    # Owner decision (2026-10-20): an Agent inside a Team cannot be deleted.
+    blocked = client.delete(
+        f"/api/v1/agents/{member_agent_id}",
+        headers=_headers(teacher_csrf, f"delete-agent-{uuid4()}"),
+    )
+    assert blocked.status_code == 409 and blocked.json()["code"] == "agent_in_team"
 
     # The student who chatted is not the publisher, yet still learns the
     # Agent was deleted rather than that it is merely unavailable.
@@ -780,10 +785,7 @@ def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(
 
     team_saved = client.get(f"/api/v1/conversations/{team_chat['id']}").json()
     assert team_saved["team"]["deleted"] is False
-    deleted_members = [
-        member["name"] for member in team_saved["team"]["members"] if member["deleted"]
-    ]
-    assert deleted_members == ["Teacher member 0"]
+    assert not any(member["deleted"] for member in team_saved["team"]["members"])
 
 
 def test_student_teams_list_chat_with_teacher_public_team_can_send(
