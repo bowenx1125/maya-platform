@@ -161,7 +161,13 @@ export function AppShell({
       typeof api?.classroomLive !== "function"
     )
       return;
+    // Live badge (2026-10-20): the server pushes start/stop over one socket
+    // per tab; a slow poll (60 s, and on focus/visibility/reconnect) covers a
+    // dropped socket or a server that refused it (4429 = process full).
     let active = true;
+    let socket: WebSocket | null = null;
+    let retry: number | undefined;
+    let attempts = 0;
     const refresh = () => {
       if (document.visibilityState === "hidden") return;
       void api
@@ -173,13 +179,70 @@ export function AppShell({
           if (active) setLive(false);
         });
     };
+    const connect = () => {
+      if (!active || socket || typeof WebSocket === "undefined") return;
+      const url = new URL(
+        `/api/v1/courses/${courseId}/live/events`,
+        window.location.href,
+      );
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      let connection: WebSocket;
+      try {
+        connection = new WebSocket(url.href);
+      } catch {
+        return;
+      }
+      socket = connection;
+      connection.onmessage = (event) => {
+        if (!active || socket !== connection) return;
+        attempts = 0;
+        try {
+          const message = JSON.parse(String(event.data)) as {
+            live?: unknown;
+          };
+          setLive(Boolean(message.live));
+        } catch {
+          // Ignore a malformed frame; the slow poll corrects the badge.
+        }
+      };
+      connection.onclose = (event) => {
+        if (socket !== connection) return;
+        socket = null;
+        if (!active) return;
+        // Signed out / no access: stop; full or dropped: back off.
+        if (event.code === 4401 || event.code === 4403) return;
+        attempts += 1;
+        const delay = Math.min(60_000, 2_000 * 2 ** Math.min(attempts, 5));
+        window.clearTimeout(retry);
+        retry = window.setTimeout(() => {
+          refresh();
+          connect();
+        }, delay);
+      };
+    };
+    const wake = () => {
+      refresh();
+      connect();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") wake();
+    };
+    connect();
     refresh();
-    const timer = window.setInterval(refresh, 5000);
-    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", wake);
+    window.addEventListener("online", wake);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
       window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
+      window.clearTimeout(retry);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("online", wake);
+      document.removeEventListener("visibilitychange", onVisible);
+      const current = socket;
+      socket = null;
+      current?.close();
     };
   }, [api, courseId, role]);
 
