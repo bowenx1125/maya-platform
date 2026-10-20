@@ -14,12 +14,18 @@ export function ModuleGrid({
   /** A RAG or Record page is open: only it shows, as on Brainform. */
   paneOpen?: boolean;
   /** "studyform": the 2-top / 3-bottom Studyform layout. */
-  variant?: "studyform";
+  /** "teacherStudyform": Agents / Teams / Record over RAG / Knowledge /
+      Voices, three columns a row. */
+  variant?: "studyform" | "teacherStudyform";
 }) {
   return (
     <div
       className={
-        variant === "studyform" ? styles.studyformGrid : styles.sections
+        variant === "studyform"
+          ? styles.studyformGrid
+          : variant === "teacherStudyform"
+            ? `${styles.studyformGrid} ${styles.teacherStudyformGrid}`
+            : styles.sections
       }
       data-pane-open={paneOpen || undefined}
     >

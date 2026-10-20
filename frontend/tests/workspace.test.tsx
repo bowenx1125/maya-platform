@@ -1548,14 +1548,7 @@ describe("teacher workspace access", () => {
       Array.from(navigation.children)
         .filter((item) => item.matches("a, [aria-disabled='true']"))
         .map((item) => item.textContent?.trim()),
-    ).toEqual([
-      "Mayaform",
-      "Studyform",
-      "Brainform",
-      "Chatform",
-      "Debates",
-      "Accounts",
-    ]);
+    ).toEqual(["Mayaform", "Studyform", "Chatform", "Debates", "Accounts"]);
     expect(screen.queryByText("Components")).toBeNull();
     expect(screen.queryByRole("button", { name: "Set API Key" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Check" })).toBeNull();

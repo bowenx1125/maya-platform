@@ -718,7 +718,7 @@ const enMessages = {
   overviewMembers: "Members",
   recordIntro:
     "Formal assessment results, grouped by the Team that ran the assessment.",
-  recordOpenNamed: "Open the results for {name}",
+  recordOpenNamed: "Open the Record for {name}",
   recordTeamMeta: "Students {students} · Attempts {attempts}",
   recordStudents: "Students",
   recordCompleted: "Completed",
@@ -736,7 +736,7 @@ const enMessages = {
     "Delete this attempt from Record? Its answers and chat are kept and can be restored.",
   overviewActivity: "Recent activity",
   overviewNoMembers: "No students in this group yet.",
-  overviewNoResults: "No test results yet.",
+  overviewNoResults: "No Record yet.",
   overviewNoActivity: "Nothing yet.",
   overviewNoWork: "No Agents or Teams yet.",
   overviewWorkCounts:
@@ -1563,7 +1563,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   groupNameLabel: "小组",
   overviewMembers: "组员",
   recordIntro: "正式测评的结果，按发起测评的 Team 分组。",
-  recordOpenNamed: "查看「{name}」的测评结果",
+  recordOpenNamed: "查看「{name}」的 Record",
   recordTeamMeta: "学生 {students} · 测评 {attempts}",
   recordStudents: "学生",
   recordCompleted: "已完成",
@@ -1580,7 +1580,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "从 Record 删除这次测评？作答和聊天记录会保留，可以恢复。",
   overviewActivity: "最近动态",
   overviewNoMembers: "这个组还没有学生。",
-  overviewNoResults: "还没有测试成绩。",
+  overviewNoResults: "还没有 Record。",
   overviewNoActivity: "还没有动态。",
   overviewNoWork: "还没有 Agent 或 Team。",
   overviewWorkCounts:

@@ -239,7 +239,9 @@ describe("page-load round trips", () => {
       () => <TeacherStudyformWorkspace />,
       "Debate Team",
     );
-    expect(first.rounds).toBe(1);
+    // The embedded RAG / Knowledge / Record cards (moved from Brainform,
+    // 2026-10-20) read the course library after the page's own round.
+    expect(first.rounds).toBeLessThanOrEqual(2);
     expect(soon.requests).toBe(0);
   });
 
