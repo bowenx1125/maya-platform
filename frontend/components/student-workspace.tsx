@@ -42,6 +42,7 @@ import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { VoiceLibrary } from "./voice/voice-library";
 import { BrainformWorkspace } from "./knowledge/brainform-workspace";
+import { assessmentAttemptsRead } from "./knowledge/assessment-record";
 import {
   ModuleCard,
   ModuleGrid,
@@ -407,6 +408,23 @@ function GroupWorkspaceSession({
           void read("knowledge", [groupId], () => api.knowledge(groupId)).catch(
             () => undefined,
           );
+        }
+        if (
+          !teacherCourseIds.length &&
+          typeof api.myAssessmentAttempts === "function"
+        ) {
+          // Record's own attempts, warmed beside the group read (Record joins
+          // it through the cache instead of asking after the page paints).
+          void groupRequest
+            .then((nextGroup) =>
+              assessmentAttemptsRead(
+                api,
+                cacheIdentity,
+                "own",
+                nextGroup.course_id,
+              ),
+            )
+            .catch(() => undefined);
         }
         const courseRequest = groupRequest.then((nextGroup) =>
           Promise.all([

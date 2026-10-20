@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { invalidateRequestCache } from "../lib/request-cache";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMemo, useState, type ComponentProps, type ReactNode } from "react";
 
@@ -1204,7 +1205,10 @@ describe("Brainform workspace actions", () => {
     await screen.findByRole("button", { name: "Open the results for Cached" });
     first.unmount();
 
-    // The refresh never answers: the cached list is what shows.
+    // The refresh never answers: the cached list is what shows. (Record now
+    // reads through the shared request cache; a later visit, past its fresh
+    // window, asks the server again.)
+    invalidateRequestCache(state.api);
     state.api.courseAssessmentAttempts.mockReturnValue(new Promise(() => {}));
     renderWithActions();
     expect(
@@ -1213,6 +1217,18 @@ describe("Brainform workspace actions", () => {
       }),
     ).toBeTruthy();
     expect(state.api.courseAssessmentAttempts).toHaveBeenCalledTimes(2);
+  });
+
+  // Perf (2026-10-20): Knowledge is hidden in a student's Studyform, so the
+  // embedded cards skip its (slowest) list, and Record paints while RAG loads.
+  it("embedded for a student skips Knowledge and paints Record before RAG", async () => {
+    state.role = "student";
+    state.api.knowledge.mockReturnValue(new Promise(() => {}));
+    state.api.myAssessmentAttempts.mockResolvedValue([]);
+    renderWithActions({ role: "student", embedded: true });
+    expect(await screen.findByRole("heading", { name: "Record" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "RAG" })).toBeTruthy();
+    expect(state.api.brainformKnowledge).not.toHaveBeenCalled();
   });
 
   // Owner request (2026-10-18): a student's Memory became Record, listing
