@@ -102,6 +102,7 @@ def bump_agent(
     *,
     drop_document_ids: Iterable[str] = (),
     drop_voice_profile_ids: Iterable[str] = (),
+    refresh_document_ids: Iterable[str] = (),
 ) -> str | None:
     """Publish the next version of one Agent without the given files/Voices.
 
@@ -116,6 +117,7 @@ def bump_agent(
 
     drop_docs = {str(item) for item in drop_document_ids}
     drop_voices = {str(item) for item in drop_voice_profile_ids}
+    refresh_docs = {str(item) for item in refresh_document_ids}
     agent = db.get(Agent, agent_id)
     if agent is None or agent.deleted_at is not None or agent.status != "active":
         return None
@@ -133,7 +135,7 @@ def bump_agent(
             .order_by(AgentVersionDocument.order_index)
         ).all()
     )
-    uses_doc = any(rel.document_id in drop_docs for rel in relations)
+    uses_doc = any(rel.document_id in drop_docs | refresh_docs for rel in relations)
     uses_voice = current.voice_profile_id is not None and current.voice_profile_id in drop_voices
     if not uses_doc and not uses_voice:
         return None
@@ -152,34 +154,32 @@ def bump_agent(
         select(AgentVersion).where(AgentVersion.agent_id == agent.id, AgentVersion.state == "draft")
     )
     timestamp = _time()
-    # Only one draft may exist per Agent. Park the owner's unpublished edit,
-    # publish the auto version, then restore the edit as a fresh draft (minus
-    # the same files/Voice) so it is never published by accident.
-    parked: dict[str, Any] | None = None
+    # Only one draft may exist per Agent. Park the owner's unpublished edit
+    # (same row and id) outside the draft slot, publish the auto version,
+    # then put the edit back as the next draft minus the same files/Voice,
+    # so it is never published by accident and an open editor keeps its id.
+    parked_id: str | None = None
     if draft is not None:
-        parked = {
-            "agent_md": draft.agent_md,
-            "avatar_config_json": draft.avatar_config_json,
-            "voice_profile_id": (
-                None if draft.voice_profile_id in drop_voices else draft.voice_profile_id
-            ),
-            "draft_visibility": draft.draft_visibility,
-            "persona_required": draft.persona_required,
-            "docs": [
-                (rel.document_id, rel.enabled)
-                for rel in db.scalars(
-                    select(AgentVersionDocument)
-                    .where(AgentVersionDocument.agent_version_id == draft.id)
-                    .order_by(AgentVersionDocument.order_index)
-                ).all()
-                if rel.document_id not in drop_docs
-            ],
-        }
+        parked_id = draft.id
+        changed = False
         for rel in db.scalars(
-            select(AgentVersionDocument).where(AgentVersionDocument.agent_version_id == draft.id)
+            select(AgentVersionDocument).where(
+                AgentVersionDocument.agent_version_id == draft.id,
+                AgentVersionDocument.document_id.in_(drop_docs or {""}),
+            )
         ).all():
             db.delete(rel)
-        db.delete(draft)
+            changed = True
+        if draft.voice_profile_id is not None and draft.voice_profile_id in drop_voices:
+            draft.voice_profile_id = None
+            changed = True
+        if changed:
+            draft.revision = draft.revision + 1
+            draft.updated_at = timestamp
+        # The state CHECK allows only draft/published/superseded; a superseded
+        # row with no published_at is the transient parking spot.
+        draft.state = "superseded"
+        draft.version_seq = max_seq + 2
         db.flush()
     version = AgentVersion(
         id=str(uuid4()),
@@ -238,57 +238,28 @@ def bump_agent(
         db.rollback()
         LOGGER.warning("Agent auto-bump publish failed agent_id=%s code=%s", agent_id, error.code)
         _discard_failed_draft(db, version_id)
-        _restore_parked_draft(db, agent_id, parked)
+        _restore_parked_draft(db, agent_id, parked_id)
         return None
-    _restore_parked_draft(db, agent_id, parked)
+    _restore_parked_draft(db, agent_id, parked_id)
     return version_id
 
 
-def _restore_parked_draft(db: Session, agent_id: str, parked: dict[str, Any] | None) -> None:
-    if parked is None:
+def _restore_parked_draft(db: Session, agent_id: str, parked_id: str | None) -> None:
+    if parked_id is None:
         return
-    from app.modules.agents.persona import raw_agent_md_hash
-    from app.modules.agents.router import _time
-
-    agent = db.get(Agent, agent_id)
-    if agent is None or agent.deleted_at is not None:
+    draft = db.get(AgentVersion, parked_id)
+    if draft is None or draft.state != "superseded" or draft.published_at is not None:
         return
     max_seq = (
         db.scalar(
-            select(func.max(AgentVersion.version_seq)).where(AgentVersion.agent_id == agent_id)
+            select(func.max(AgentVersion.version_seq)).where(
+                AgentVersion.agent_id == agent_id, AgentVersion.id != parked_id
+            )
         )
         or 0
     )
-    timestamp = _time()
-    restored = AgentVersion(
-        id=str(uuid4()),
-        agent_id=agent_id,
-        version_seq=max_seq + 1,
-        state="draft",
-        revision=0,
-        agent_md=parked["agent_md"],
-        raw_agent_md_hash=raw_agent_md_hash(parked["agent_md"]),
-        persona_required=parked["persona_required"],
-        avatar_config_json=parked["avatar_config_json"],
-        voice_profile_id=parked["voice_profile_id"],
-        knowledge_snapshot_id=None,
-        authorization_epoch=agent.authorization_epoch,
-        draft_visibility=parked["draft_visibility"],
-        published_visibility=None,
-        created_at=timestamp,
-        updated_at=timestamp,
-    )
-    db.add(restored)
-    db.flush()
-    for index, (document_id, enabled) in enumerate(parked["docs"]):
-        db.add(
-            AgentVersionDocument(
-                agent_version_id=restored.id,
-                document_id=document_id,
-                enabled=enabled,
-                order_index=index,
-            )
-        )
+    draft.state = "draft"
+    draft.version_seq = max_seq + 1
     db.commit()
 
 
@@ -310,9 +281,15 @@ def cascade_removed_sources(
     agent_ids: Iterable[str],
     document_ids: Iterable[str] = (),
     voice_profile_ids: Iterable[str] = (),
+    refreshed_document_ids: Iterable[str] = (),
 ) -> list[str]:
-    """Background entry point: bump each Agent in its own session."""
+    """Background entry point: bump each Agent in its own session.
 
+    ``document_ids`` were deleted (dropped from the Agent);
+    ``refreshed_document_ids`` were edited (kept, snapshot rebuilt).
+    """
+
+    refreshed = list(refreshed_document_ids)
     docs = list(document_ids)
     voices = list(voice_profile_ids)
     published: list[str] = []
@@ -326,6 +303,7 @@ def cascade_removed_sources(
                 agent_id,
                 drop_document_ids=docs,
                 drop_voice_profile_ids=voices,
+                refresh_document_ids=refreshed,
             )
             if new_id is not None:
                 published.append(new_id)

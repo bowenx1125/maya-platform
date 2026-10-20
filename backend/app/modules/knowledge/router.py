@@ -795,6 +795,7 @@ async def upload_knowledge_document(
 )
 async def replace_knowledge_document(
     document_id: UUID,
+    background: BackgroundTasks,
     request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
@@ -872,6 +873,11 @@ async def replace_knowledge_document(
         # ``replace_document_copy_on_write`` re-captures this source and all
         # draft references after the claim, stages/indexes/promotes bytes via
         # its typed journal, and owns the final BEGIN IMMEDIATE transaction.
+        from app.modules.agents.cascade import affected_agents, cascade_removed_sources
+
+        edited_agent_ids = [
+            item.agent_id for item in affected_agents(db, document_ids=[str(document_id)])
+        ]
         db.rollback()
         enqueued_run_ids: list[str] = []
         new_document, _affected_versions, _operation_id = replace_document_copy_on_write(
@@ -896,6 +902,16 @@ async def replace_knowledge_document(
         db.flush()
         db.commit()
         saga_checkpoint("replace.after_final_commit")
+        if edited_agent_ids:
+            # Owner decision (2026-10-20): editing a RAG file also publishes
+            # a new version of every live Agent using it.
+            background.add_task(
+                cascade_removed_sources,
+                get_database(request),
+                settings,
+                agent_ids=edited_agent_ids,
+                refreshed_document_ids=[str(document_id)],
+            )
         if not settings.is_test:
             task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
             if task_manager is not None:

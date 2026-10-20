@@ -169,13 +169,33 @@ def test_bump_keeps_an_owner_draft_unpublished(client: TestClient, app_bundle: A
         db.commit()
         new_id = bump_agent(db, settings, agent_id, drop_voice_profile_ids=["voice-x"])
         assert new_id is not None
-        assert db.get(AgentVersion, draft_id) is None  # parked, then restored as a new row
-        draft = db.scalar(
-            select(AgentVersion).where(
-                AgentVersion.agent_id == agent_id, AgentVersion.state == "draft"
-            )
-        )
+        draft = db.get(AgentVersion, draft_id)  # same row, back in the draft slot
         published = db.get(AgentVersion, new_id)
         assert published is not None and published.state == "published"
         assert draft is not None and draft.version_seq == published.version_seq + 1
         assert draft.voice_profile_id is None
+
+
+def test_editing_a_rag_file_publishes_a_new_version_with_the_new_content(
+    client: TestClient, app_bundle: Any
+) -> None:
+    _app, database, _settings = app_bundle
+    _owner, csrf = login(client, "bowen")
+    doc = _upload(client, csrf, "edit.md", b"# Edit\n\nOLD_CANARY", "cascade-up-edit-0001")
+    agent_id = _agent_with_docs(client, csrf, "Cascade Edit", [doc])
+    before, _ = _current(database, agent_id)
+    current = client.get(f"/api/v1/knowledge-documents/{doc}").json()
+    replaced = client.post(
+        f"/api/v1/knowledge-documents/{doc}/replace",
+        headers=_h(csrf, "cascade-replace-edit-001"),
+        data={
+            "expected_content_hash": current["content_hash"],
+            "expected_index_revision": str(current["index_revision"]),
+        },
+        files={"file": ("edit.md", b"# Edit\n\nNEW_CANARY", "text/markdown")},
+    )
+    assert replaced.status_code == 201, replaced.text
+    after, docs = _current(database, agent_id)
+    assert after.version_seq == before.version_seq + 1
+    assert docs == [doc]
+    assert after.knowledge_snapshot_id not in {None, before.knowledge_snapshot_id}
