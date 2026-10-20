@@ -395,6 +395,19 @@ function GroupWorkspaceSession({
         const agentsRequest = read("agents", [groupId, true], () =>
           api.agents(groupId, true),
         );
+        if (
+          !teacherCourseIds.length &&
+          typeof api.courses === "function" &&
+          typeof api.knowledge === "function"
+        ) {
+          // The RAG and Record cards (Brainform's, embedded) mount after
+          // this page loads; warm the same cached reads now so they do not
+          // add round trips of their own (same endpoints, same cache keys).
+          void read("courses", [], () => api.courses()).catch(() => undefined);
+          void read("knowledge", [groupId], () => api.knowledge(groupId)).catch(
+            () => undefined,
+          );
+        }
         const courseRequest = groupRequest.then((nextGroup) =>
           Promise.all([
             typeof api.teams === "function"
