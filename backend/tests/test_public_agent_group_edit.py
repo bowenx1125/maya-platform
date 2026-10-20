@@ -204,3 +204,83 @@ def test_visibility_cannot_change_for_anyone(client):
     )
     assert response.status_code == 409
     assert response.json()["code"] == "agent_visibility_locked"
+
+
+def test_after_stale_conflict_refresh_reloads_latest_and_save_succeeds(client):
+    """Every Agent stale-save surface: 409 -> re-read -> save succeeds."""
+
+    _, bowen_csrf = login(client, "bowen")
+    agent = _create(client, bowen_csrf, "Refresh Works", "public")
+    draft = agent["versions"][0]
+    url = f"/api/v1/agent-versions/{draft['id']}"
+    # Someone else (a groupmate) saves first.
+    client.cookies.clear()
+    _, kaikai_csrf = login(client, "kaikai")
+    assert (
+        client.patch(
+            url,
+            headers=_headers(kaikai_csrf),
+            json={"expected_revision": 0, "agent_md": "# Refresh Works\nGroupmate"},
+        ).status_code
+        == 200
+    )
+    client.cookies.clear()
+    _, bowen_csrf = login(client, "bowen")
+    # 1) draft PATCH
+    stale = client.patch(
+        url,
+        headers=_headers(bowen_csrf),
+        json={"expected_revision": 0, "agent_md": "# Refresh Works\nMine"},
+    )
+    assert stale.status_code == 409 and stale.json()["code"] == "stale_revision"
+    fresh = client.get(url).json()
+    assert fresh["agent_md"].endswith("Groupmate")
+    saved = client.patch(
+        url,
+        headers=_headers(bowen_csrf),
+        json={"expected_revision": fresh["revision"], "agent_md": "# Refresh Works\nMine"},
+    )
+    assert saved.status_code == 200, saved.text
+    # 2) AGENT.md upload
+    stale_upload = client.post(
+        f"{url}/agent-md/upload",
+        headers=_headers(bowen_csrf),
+        data={"expected_revision": "0"},
+        files={"file": ("AGENT.md", b"# Refresh Works\nUpload", "text/markdown")},
+    )
+    assert stale_upload.status_code == 409
+    fresh = client.get(url).json()
+    uploaded = client.post(
+        f"{url}/agent-md/upload",
+        headers=_headers(bowen_csrf),
+        data={"expected_revision": str(fresh["revision"])},
+        files={"file": ("AGENT.md", b"# Refresh Works\nUpload", "text/markdown")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    # 3) Agent metadata (description)
+    meta_url = f"/api/v1/agents/{agent['id']}"
+    assert (
+        client.patch(
+            meta_url,
+            headers=_headers(bowen_csrf),
+            json={"expected_metadata_revision": 0, "description": "first"},
+        ).status_code
+        == 200
+    )
+    stale_meta = client.patch(
+        meta_url,
+        headers=_headers(bowen_csrf),
+        json={"expected_metadata_revision": 0, "description": "second"},
+    )
+    assert stale_meta.status_code == 409
+    assert stale_meta.json()["code"] == "stale_metadata_revision"
+    fresh_meta = client.get(meta_url).json()
+    resaved = client.patch(
+        meta_url,
+        headers=_headers(bowen_csrf),
+        json={
+            "expected_metadata_revision": fresh_meta["metadata_revision"],
+            "description": "second",
+        },
+    )
+    assert resaved.status_code == 200, resaved.text

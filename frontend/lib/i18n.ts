@@ -81,7 +81,9 @@ const enMessages = {
   deleteChatConfirm: "Delete this entire conversation? This cannot be undone.",
   delete: "Delete",
   readOnly: "Read-only published snapshot",
-  retryConflict: "The draft changed elsewhere. Your local text is still here.",
+  retryConflict:
+    "Someone else changed this content. Please refresh. Copy any unsaved text first.",
+  refreshPage: "Refresh",
   signInContinue: "Sign in to continue.",
   sessionRequired:
     "Your session is required before Mayaform can reveal course or group content.",
@@ -272,7 +274,7 @@ const enMessages = {
   immutable: "Immutable",
   discardDraftConfirm: "Discard unsaved changes?",
   conflictDetail:
-    "Your local AGENT.md and evidence selection are unchanged. Copy your edits before reopening this page.",
+    "Someone else changed this content. Please refresh. Your local AGENT.md is still here; copy your edits before refreshing.",
   agentMd: "AGENT.md",
   insertOutline: "Template",
   uploadMd: "Upload",
@@ -983,7 +985,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   deleteChatConfirm: "删除整段对话？此操作无法撤销。",
   delete: "删除",
   readOnly: "已发布快照（只读）",
-  retryConflict: "草稿已在其他地方更新，本地文字仍然保留。",
+  retryConflict: "内容已被别人修改，请刷新。未保存的文字请先复制。",
+  refreshPage: "刷新",
   signInContinue: "登录后继续。",
   sessionRequired: "需要登录后才能查看课程或小组内容。",
   viewUnavailable: "此账号无法访问该页面。",
@@ -1166,7 +1169,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   immutable: "不可变",
   discardDraftConfirm: "放弃未保存的修改？",
   conflictDetail:
-    "本地 AGENT.md 和证据选择未变。重新进入前，请复制保留你的修改。",
+    "内容已被别人修改，请刷新。本地 AGENT.md 仍保留，刷新前请复制你的修改。",
   agentMd: "AGENT.md",
   insertOutline: "模板",
   uploadMd: "上传",

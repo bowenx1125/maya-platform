@@ -691,9 +691,6 @@ def public_agent_editor_role(db: Session, actor: AuthContext | str, agent: Agent
         return "owner" if _agent_workspace_role(db, user_id, agent) == "owner" else None
     if agent.visibility != "public" or agent.status != "active":
         return None
-    if agent.owner_user_id is None:
-        # Legacy group Agents with no publishing account stay read-only.
-        return None
     if role == "teacher":
         # Teachers meet a student's public Agent once it is published; an
         # unpublished draft stays undiscoverable to them (pre-publication rule).

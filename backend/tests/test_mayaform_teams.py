@@ -377,6 +377,19 @@ def test_personal_teacher_public_team_creates_directory_and_invoke_grants_atomic
     )
     assert stale_update.status_code == 409
     assert stale_update.json()["code"] == "stale_revision"
+    # Refresh: re-read the Team, then the same save with the fresh revision succeeds.
+    fresh = client.get(f"/api/v1/teams/{created['id']}", headers=_headers(teacher_csrf_again))
+    assert fresh.status_code == 200, fresh.text
+    resaved = client.put(
+        f"/api/v1/teams/{created['id']}",
+        headers=_headers(teacher_csrf_again, "k3-save-after-refresh-revision-0001"),
+        json={
+            **updated_payload,
+            "expected_metadata_revision": fresh.json()["metadata_revision"],
+            "display_name": "Two perspectives, after refresh",
+        },
+    )
+    assert resaved.status_code == 200, resaved.text
 
 
 def test_student_public_team_is_not_registered_and_foreign_private_member_is_hidden(

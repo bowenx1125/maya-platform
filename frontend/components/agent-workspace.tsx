@@ -1902,7 +1902,22 @@ export function preserveDraftOnRetry(error: unknown): boolean {
 export function DraftConflictNotice() {
   const t = useT();
   return (
-    <Notice tone="warning" title={t("revisionConflict")}>
+    <Notice
+      tone="warning"
+      title={t("revisionConflict")}
+      action={
+        // A full reload re-reads the latest revision from the server (the
+        // in-memory page cache and idempotency keys go with it), so the next
+        // save carries the current expected_revision.
+        <button
+          className="inline-button"
+          type="button"
+          onClick={() => window.location.reload()}
+        >
+          {t("refreshPage")}
+        </button>
+      }
+    >
       {t("conflictDetail")}
     </Notice>
   );

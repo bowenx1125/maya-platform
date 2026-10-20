@@ -133,7 +133,17 @@ export function ErrorNotice({
       inline={inline}
       onClose={() => setDismissed(error)}
       action={
-        // Asking again for a deleted record cannot succeed.
+        // Retrying with the stale revision would only conflict again: offer
+        // a reload, which reads the latest revision from the server.
+        conflict ? (
+          <button
+            className="inline-button"
+            type="button"
+            onClick={() => window.location.reload()}
+          >
+            {t("refreshPage")}
+          </button>
+        ) : // Asking again for a deleted record cannot succeed.
         onRetry && !missing ? (
           <button className="inline-button" type="button" onClick={onRetry}>
             {t("retry")}
