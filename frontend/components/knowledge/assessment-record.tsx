@@ -13,6 +13,7 @@ import { cachedCall, requestCacheIdentity } from "../../lib/request-cache";
 import { useLocale, useT } from "../locale";
 import { useSession } from "../session-provider";
 import { IconClose } from "../quiet-icons";
+import { ASSESSMENT_COMPLETED_EVENT } from "../../lib/assessment-events";
 import { ErrorNotice } from "../ui";
 import styles from "./brainform-workspace.module.css";
 import record from "./assessment-record.module.css";
@@ -118,6 +119,14 @@ export function useAssessmentRecord(
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
+  }, [load]);
+
+  // A Team test finished in this tab (Chatform): read Record again.
+  useEffect(() => {
+    const onCompleted = () => void load();
+    window.addEventListener(ASSESSMENT_COMPLETED_EVENT, onCompleted);
+    return () =>
+      window.removeEventListener(ASSESSMENT_COMPLETED_EVENT, onCompleted);
   }, [load]);
 
   const teams = useMemo<RecordTeam[]>(() => {

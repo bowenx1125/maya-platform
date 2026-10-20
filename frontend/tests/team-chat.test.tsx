@@ -1710,6 +1710,87 @@ describe("Chatform", () => {
     ).toBe(false);
   });
 
+  // Bug (2026-10-20): the reply stream dropped, the server still finished the
+  // turn, and a red "Team chat request could not be completed" stayed on.
+  function turnFor(text: string, turnState: string) {
+    const requestId = state.api.streamTeamConversation.mock.calls[0]?.[1]
+      ?.request_id as string;
+    return {
+      id: requestId,
+      user_text: text,
+      state: turnState,
+      member_results: [],
+    };
+  }
+
+  it("clears a dropped stream's error when the reloaded turn is ready", async () => {
+    state.api.streamTeamConversation.mockRejectedValue(
+      new Error("network error"),
+    );
+    state.api.conversationSession.mockImplementation(async () => ({
+      ...teamSession,
+      revision: 1,
+      turns: [turnFor("答案一", "ready")],
+    }));
+    renderChats();
+    await startMayaTeamChat("答案一");
+    await waitFor(() =>
+      expect(state.api.conversationSession).toHaveBeenCalled(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("alert")).toBeNull();
+    const box = screen.getByRole("textbox", {
+      name: "Message",
+    }) as HTMLTextAreaElement;
+    expect(box.value).toBe("");
+  });
+
+  it("shows Scoring… for a dropped stream on a pending turn and polls until it settles", async () => {
+    state.api.streamTeamConversation.mockRejectedValue(
+      new Error("network error"),
+    );
+    let reads = 0;
+    state.api.conversationSession.mockImplementation(async () => {
+      reads += 1;
+      return {
+        ...teamSession,
+        revision: 1,
+        turns: [turnFor("答案二", reads < 2 ? "pending" : "ready")],
+      };
+    });
+    renderChats();
+    await startMayaTeamChat("答案二");
+    expect(await screen.findByText("Scoring…")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await waitFor(() => expect(screen.queryByText("Scoring…")).toBeNull(), {
+      timeout: 5000,
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(state.api.streamTeamConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells Record to read again when a Team test completes", async () => {
+    state.api.streamTeamConversation.mockRejectedValue(
+      new Error("network error"),
+    );
+    state.api.conversationSession.mockImplementation(async () => ({
+      ...teamSession,
+      revision: 1,
+      assessment_stage: "completed",
+      turns: [turnFor("最后答案", "ready")],
+    }));
+    const completed = vi.fn();
+    window.addEventListener("maya:assessment-completed", completed);
+    try {
+      renderChats();
+      await startMayaTeamChat("最后答案");
+      await waitFor(() => expect(completed).toHaveBeenCalled());
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      window.removeEventListener("maya:assessment-completed", completed);
+    }
+  });
+
   // Bug (2026-10-13): while the server picked the follow-ups the student
   // could type, and the answer landed before the follow-up appeared.
   it("keeps the message box closed while follow-ups are prepared, with no bar", async () => {
