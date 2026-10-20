@@ -7,7 +7,8 @@ import { teachingRoundLabel } from "../../../lib/debate-rounds";
 import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
 
-import { ErrorNotice, SectionCard, StatusBadge } from "../../ui";
+import { ErrorNotice, Notice, SectionCard, StatusBadge } from "../../ui";
+import { tm } from "../../../lib/i18n";
 import { IconRefresh } from "../../quiet-icons";
 import styles from "./debate-preview.module.css";
 
@@ -86,6 +87,15 @@ export function DebatePreview({
     (left, right) => left.turn_index - right.turn_index,
   );
   const background = (detail.background ?? "").trim();
+  const { locale } = useLocale();
+  // A turn whose audio failed used to show only on its own card, so a Preview
+  // where every turn failed read as still preparing. Say so at the top.
+  const audioFailed = turns.filter(
+    (turn) =>
+      !turn.audio_ready &&
+      (turn.generation_status === "failed" || Boolean(turn.safe_error_code)),
+  );
+  const firstFailed = audioFailed[0];
 
   return (
     <div className={styles.page} data-testid="debate-preview">
@@ -106,6 +116,37 @@ export function DebatePreview({
       </div>
 
       {error ? <ErrorNotice error={error} /> : null}
+
+      {firstFailed ? (
+        <Notice
+          inline
+          tone="error"
+          action={
+            onRetryTurn ? (
+              <button
+                className="inline-button"
+                type="button"
+                data-testid="preview-audio-failed-retry"
+                disabled={retryingTurnId !== null}
+                onClick={() => onRetryTurn(firstFailed.id)}
+              >
+                {locale === "zh" ? "重试" : "Retry"}
+              </button>
+            ) : null
+          }
+        >
+          <span data-testid="preview-audio-failed">
+            {tm(
+              "debatePreviewAudioFailed",
+              {
+                count: audioFailed.length,
+                code: firstFailed.safe_error_code ?? "turn_generation_failed",
+              },
+              locale,
+            )}
+          </span>
+        </Notice>
+      ) : null}
 
       {turns.length === 0 && !background ? (
         <SectionCard>

@@ -26,16 +26,48 @@ from tests.test_wave2_setup import (
 debate_app = debate_fixtures.debate_app
 
 
-def test_real_speech_without_fallback_does_not_block_debate_creation(debate_app: Any) -> None:
+def test_real_speech_without_any_voice_is_refused_with_agent_names(debate_app: Any) -> None:
+    """No ready voice and no fallback: refuse up front instead of a Preview that never speaks."""
+
     app, database, client = debate_app
     app.state.settings.tts_provider = "dashscope"
     app.state.settings.voice_provider = "dashscope"
+    app.state.settings.fallback_voice_profile_id = None
+    first, _, _ = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="First")
+    second, _, _ = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Second")
+    _, csrf = login(client)
+    body = {
+        "topic": "How should people learn together?",
+        "participants": [
+            {"agent_id": first, "stance_mode": "open"},
+            {"agent_id": second, "stance_mode": "open"},
+        ],
+        "round_count": 4,
+        "rule_set_id": "ordered_multi_expert_mutual_learning_v1",
+    }
+    response = client.post(
+        f"/api/v1/courses/{COURSE_ID}/debates",
+        headers=headers(csrf, **{"Idempotency-Key": "speech-no-fallback-draft"}),
+        json=body,
+    )
+    assert response.status_code == 422, response.text
+    error = response.json()["error"] if "error" in response.json() else response.json()
+    assert error["code"] == "agent_voice_missing"
+    assert error["details"]["agent_names"] == ["First", "Second"]
+    assert "First" in error["message"] and "Second" in error["message"]
+    with database.session() as db:
+        assert db.execute(text("SELECT count(*) FROM debates")).scalar_one() == 0
+
+
+def test_mock_speech_without_voice_still_creates_a_debate(debate_app: Any) -> None:
+    app, database, client = debate_app
+    app.state.settings.tts_provider = "mock"
     first, _, _ = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="First")
     second, _, _ = _insert_published_agent(database, group_id=GROUP_DEMO_ID, name="Second")
     _, csrf = login(client)
     response = client.post(
         f"/api/v1/courses/{COURSE_ID}/debates",
-        headers=headers(csrf, **{"Idempotency-Key": "speech-no-fallback-draft"}),
+        headers=headers(csrf, **{"Idempotency-Key": "mock-no-voice-draft"}),
         json={
             "topic": "How should people learn together?",
             "participants": [
@@ -47,8 +79,6 @@ def test_real_speech_without_fallback_does_not_block_debate_creation(debate_app:
         },
     )
     assert response.status_code == 201, response.text
-    assert all(p["voice_fallback_active"] for p in response.json()["participants"])
-    assert all(p["effective_voice_profile_id"] is None for p in response.json()["participants"])
 
 
 def test_real_voice_resolution_decrypts_custom_and_falls_back_without_fake_audio(
