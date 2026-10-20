@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
+import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
 import { useT } from "./locale";
 import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard } from "./ui";
@@ -20,7 +21,7 @@ export function AccountSettings({ onSaved }: { onSaved?: () => void }) {
 
 function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   const t = useT();
-  const { api, refresh, user } = useSession();
+  const { api, identityGeneration, refresh, user } = useSession();
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -53,7 +54,17 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
   useEffect(() => {
     if (!studentCourseIds || !currentGroupId) return;
     let active = true;
-    void Promise.all([api.registrationOptions(), api.group(currentGroupId)])
+    // The group is the page's own read too (shared cache, same key).
+    void Promise.all([
+      api.registrationOptions(),
+      cachedCall(
+        api,
+        requestCacheIdentity(user?.id, identityGeneration),
+        "group",
+        [currentGroupId],
+        () => api.group(currentGroupId),
+      ),
+    ])
       .then(([options, group]) => {
         if (!active) return;
         // The choices are the course's existing groups; the picker never
@@ -78,7 +89,7 @@ function AccountSettingsForm({ onSaved }: { onSaved?: () => void }) {
     return () => {
       active = false;
     };
-  }, [api, currentGroupId, studentCourseIds]);
+  }, [api, currentGroupId, identityGeneration, studentCourseIds, user?.id]);
   const groupChanged = groupChoice !== "" && groupChoice !== currentGroup;
 
   // The server collapses runs of spaces the same way, so a name that only

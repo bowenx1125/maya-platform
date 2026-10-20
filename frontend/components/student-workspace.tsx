@@ -148,7 +148,9 @@ export function StudentDashboard() {
       const [overviews, nextPublished] = await Promise.all([
         loadGroups(api, groupIds, voiceIdentity),
         courseId && typeof api.publishedAgents === "function"
-          ? api.publishedAgents(courseId)
+          ? cachedCall(api, voiceIdentity, "publishedAgents", [courseId], () =>
+              api.publishedAgents(courseId),
+            )
           : Promise.resolve([]),
       ]);
       setGroups(overviews);
