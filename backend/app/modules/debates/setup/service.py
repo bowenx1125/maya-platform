@@ -647,7 +647,9 @@ def _require_participant_voices(
     missing = [
         str(row.agent_name)
         for row in rows
-        if not SqlPlaybackRepository.resolve_effective_voice(db, row, settings).voice_token
+        if not SqlPlaybackRepository.resolve_effective_voice(
+            db, cast(Any, row), settings
+        ).voice_token
     ]
     if missing:
         raise validation_failure(
