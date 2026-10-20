@@ -1121,8 +1121,15 @@ def start_or_resume_attempt(
     if active is not None and active.source_conversation_id == conversation.id:
         return _context(db, active, conversation.id)
     if active is not None:
-        # Owner decision (2026-10-13): a new Chat is a new test. The unfinished
-        # one in the earlier Chat is given up, not reopened here.
+        # Owner rule (2026-10-20): never silently give up an unfinished attempt.
+        # The student chooses 继续/重新做 (see team_runtime explicit start). Only
+        # an attempt whose Chat can no longer be used (republished) is given up.
+        if attempt_can_continue(db, active):
+            raise conflict(
+                "assessment_resume_choice_required",
+                RESUME_CHOICE_PROMPT,
+                {"response_key": "assessment.restart_requires_choice"},
+            )
         _restart_in_new_chat(db, active, conversation.id)
     refresh_assessment_activity_questions(db, actor, conversation.id, activity)
     if not db.scalars(

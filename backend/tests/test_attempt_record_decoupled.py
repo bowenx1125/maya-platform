@@ -222,3 +222,30 @@ def test_rule2_completed_attempts_accumulate_and_restart_keeps_them(reentry_env:
             )
         ).all()
         assert set(done) == completed_ids and len(done) == 3
+
+
+def test_rule3_tool_start_asks_instead_of_silently_abandoning(
+    reentry_env: Any,  # noqa: F811
+) -> None:
+    from app.modules.learning.attempts import apply_assessment_decision
+    from app.modules.learning.schemas import AssessmentRuntimeDecision
+
+    ctx = _setup(reentry_env)
+    with ctx["database"].session() as db:
+        actor = get_auth_context(db, ctx["settings"], ctx["token"])
+        with pytest.raises(PlatformError) as raised:
+            apply_assessment_decision(
+                db,
+                actor,
+                ctx["new_id"],
+                user_message="开始吧",
+                decision=AssessmentRuntimeDecision(
+                    client_event_id=uuid4(), classification="start_request"
+                ),
+            )
+        assert raised.value.code == "assessment_resume_choice_required"
+        db.rollback()
+    with ctx["database"].session() as db:
+        attempt = db.get(AssessmentAttempt, ctx["attempt_id"])
+        assert attempt is not None and attempt.status == "in_progress"
+        assert len(_unfinished(db, ctx["user_id"], ctx["team_id"])) == 1

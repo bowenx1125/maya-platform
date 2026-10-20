@@ -29,6 +29,7 @@ from app.modules.learning.attempts import (
     get_assessment_runtime_context,
     mark_attempt_question_presented,
     read_attempt_answers,
+    restart_unfinished_attempt,
     start_or_resume_attempt,
     withdraw_conversation_attempts,
 )
@@ -796,16 +797,21 @@ def test_private_attempt_reentry_from_public_entry_keeps_original_visibility(
             actor_user_id=STUDENT_ID,
             visibility="public",
         )
-        # Owner decision (2026-10-13): a new Chat is a new test. It is not
-        # sent back to the unfinished one; starting gives that one up.
+        # Owner rule (2026-10-20): a start elsewhere never silently gives up
+        # the unfinished attempt; the student must choose 继续/重新做 first.
         assert get_assessment_runtime_context(db, actor, public_id) is None
+        with pytest.raises(PlatformError) as asked:
+            start_or_resume_attempt(db, actor, public_id, client_event_id=uuid4())
+        assert asked.value.code == "assessment_resume_choice_required"
+        old = db.get(AssessmentAttempt, str(original.attempt.id))
+        assert old is not None and old.status == "in_progress"
+        # 重新做 deletes it, then the fresh attempt starts here.
+        restart_unfinished_attempt(db, old)
         fresh = start_or_resume_attempt(db, actor, public_id, client_event_id=uuid4())
         assert fresh is not None and fresh.attempt.id != original.attempt.id
         assert fresh.canonical_conversation_id == UUID(public_id)
         assert fresh.redirect_to_original_conversation is False
-        old = db.get(AssessmentAttempt, str(original.attempt.id))
-        assert old is not None
-        assert (old.status, old.abandonment_reason) == ("abandoned", "user_redo")
+        assert db.get(AssessmentAttempt, str(original.attempt.id)) is None
         new = db.get(AssessmentAttempt, str(fresh.attempt.id))
         assert new is not None and new.source_conversation_id == public_id
         # The database keeps who answered, not only the account id.
