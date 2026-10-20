@@ -688,7 +688,7 @@ describe("Studyform Teams", () => {
 });
 
 describe("Studyform Team cards", () => {
-  it("lists Agents, Teams and Voices in that order", async () => {
+  it("lists the six teacher Studyform cards in DOM order", async () => {
     state.role = "teacher";
     state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
     state.api.teams.mockResolvedValue([
@@ -716,6 +716,9 @@ describe("Studyform Team cards", () => {
       "Agents",
       "Teams",
       "Voices",
+      "RAG",
+      "Knowledge",
+      "Record",
     ]);
     expect(
       screen.getByRole("link", { name: "Private circle" }).getAttribute("href"),
