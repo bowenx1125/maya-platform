@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import NoReturn, cast
 from unicodedata import normalize
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
-from sqlalchemy import and_, exists, or_, select, update
+from sqlalchemy import and_, exists, or_, select, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError
 
@@ -144,7 +145,7 @@ def _agent_name_key(name: str) -> str:
     return normalize("NFKC", name).strip().casefold()
 
 
-def _require_available_agent_name(
+def _available_agent_name(
     db: Session,
     name: str,
     *,
@@ -154,11 +155,18 @@ def _require_available_agent_name(
     visibility: str | None = None,
     current: Agent | None = None,
     recheck_namespace: bool = False,
-) -> None:
+) -> str:
+    """Return ``name`` or, when it is taken in this namespace, ``name-N``.
+
+    N is one more than the largest suffix already used for this base name
+    (minimum 2), so 'Zhu Xi' -> 'Zhu Xi-2' -> 'Zhu Xi-3'. Callers hold the
+    namespace lock (``_lock_agent_name_namespace``) so two writers cannot
+    resolve the same name.
+    """
     # Call under the Agent writer lock so two normalized names cannot both win.
     key = _agent_name_key(name)
     if current is not None and key == _agent_name_key(current.name) and not recheck_namespace:
-        return
+        return name
     statement = select(Agent.id, Agent.name).where(Agent.deleted_at.is_(None))
     if group_id is not None:
         statement = statement.where(
@@ -187,16 +195,122 @@ def _require_available_agent_name(
             Agent.owner_user_id == owner_user_id,
             Agent.course_id == course_id,
         )
-    existing = db.execute(statement)
-    if any(
-        _agent_name_key(row.name) == key and (current is None or row.id != current.id)
-        for row in existing
-    ):
-        raise conflict(
-            "agent_name_conflict",
-            "An Agent with this name already exists in this workspace. "
-            "Choose another name or delete the existing Agent first.",
+    taken = {
+        _agent_name_key(row.name)
+        for row in db.execute(statement)
+        if current is None or row.id != current.id
+    }
+    if key not in taken:
+        return name
+    base = name.strip()
+    match = _SUFFIX_RE.match(base)
+    if match and _agent_name_key(match.group(1)) + f"-{match.group(2)}" == key:
+        base = match.group(1)
+    base_key = _agent_name_key(base)
+    highest = 1
+    for existing in taken:
+        if existing == base_key:
+            continue
+        found = _SUFFIX_RE.match(existing)
+        if found and found.group(1) == base_key:
+            highest = max(highest, int(found.group(2)))
+    candidate = highest + 1
+    while _agent_name_key(f"{base}-{candidate}") in taken:
+        candidate += 1
+    return f"{base}-{candidate}"
+
+
+_SUFFIX_RE = re.compile(r"^(.*\S)-(\d{1,6})$")
+
+
+def _lock_agent_name_namespace(
+    db: Session,
+    *,
+    group_id: str | None,
+    owner_user_id: str | None,
+    course_id: str | None,
+    visibility: str | None,
+) -> None:
+    """Serialize name resolution per namespace on Postgres.
+
+    SQLite already runs these writers under ``BEGIN IMMEDIATE``. On Postgres
+    the plain ``_begin_immediate`` takes no lock, so two creates could both
+    see a name as free. A transaction advisory lock on the namespace makes
+    the check-then-write atomic; it is released at commit/rollback.
+    """
+
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    if group_id is not None:
+        scope = (
+            f"group:{group_id}:public"
+            if visibility == "public"
+            else f"group:{group_id}:private:{owner_user_id}"
         )
+    else:
+        scope = f"personal:{course_id}:{owner_user_id}"
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+        {"lock_key": f"agent-name:{scope}"},
+    )
+
+
+def _reclaim_abandoned_agent_name(
+    db: Session,
+    name: str,
+    *,
+    owner_user_id: str,
+    group_id: str | None = None,
+    course_id: str | None = None,
+    visibility: str | None = None,
+) -> None:
+    """Free a name held only by the actor's own never-written empty draft.
+
+    Creating an Agent is two requests: create the row, then save AGENT.md.
+    When the second step failed and the student left the page, the empty
+    Agent kept the name and every retry with that name hit
+    ``agent_name_conflict``. Such a row has no Markdown, no files, was never
+    published and has no history, so retiring it loses nothing.
+    """
+
+    key = _agent_name_key(name)
+    statement = select(Agent).where(
+        Agent.deleted_at.is_(None),
+        Agent.owner_user_id == owner_user_id,
+        Agent.current_published_version_id.is_(None),
+    )
+    if group_id is not None:
+        # Stay inside the exact namespace the name check uses, so a private
+        # create never touches a public draft and vice versa.
+        statement = statement.where(
+            Agent.ownership_scope == "group",
+            Agent.group_id == group_id,
+            Agent.visibility == (visibility or "private"),
+        )
+    else:
+        statement = statement.where(
+            Agent.ownership_scope == "personal", Agent.course_id == course_id
+        )
+    for candidate in db.scalars(statement).all():
+        if _agent_name_key(candidate.name) != key:
+            continue
+        versions = db.scalars(
+            select(AgentVersion).where(AgentVersion.agent_id == candidate.id)
+        ).all()
+        if any(v.state != "draft" or (v.agent_md or "").strip() for v in versions):
+            continue
+        has_documents = db.scalar(
+            select(AgentVersionDocument.document_id)
+            .where(AgentVersionDocument.agent_version_id.in_([v.id for v in versions]))
+            .limit(1)
+        )
+        if has_documents is not None or _agent_has_history(db, candidate.id):
+            continue
+        timestamp = _time()
+        candidate.deleted_at = timestamp
+        candidate.status = "archived"
+        candidate.updated_at = timestamp
+    db.flush()
 
 
 def _retire_agent_documents(db: Session, agent: Agent) -> None:
@@ -241,7 +355,16 @@ def _sync_markdown_name(
     name = agent_name_from_markdown(markdown)
     if name is None or name == agent.name:
         return
-    _require_available_agent_name(
+    _lock_agent_name_namespace(
+        db,
+        group_id=agent.group_id,
+        owner_user_id=actor_user_id,
+        course_id=agent.course_id,
+        visibility=agent.visibility,
+    )
+    # A taken heading gets a numeric suffix instead of rejecting the upload;
+    # the Markdown always saves.
+    name = _available_agent_name(
         db,
         name,
         group_id=agent.group_id,
@@ -250,6 +373,8 @@ def _sync_markdown_name(
         visibility=agent.visibility,
         current=agent,
     )
+    if name == agent.name:
+        return
     db.execute(
         update(Agent)
         .where(Agent.id == agent.id)
@@ -791,7 +916,21 @@ def create_agent(
         try:
             scoped_student_group_role(db, context, str(group_id))
             assert_claim_owned(db, record)
-            _require_available_agent_name(
+            _lock_agent_name_namespace(
+                db,
+                group_id=str(group_id),
+                owner_user_id=context.user.id,
+                course_id=None,
+                visibility=payload.visibility,
+            )
+            _reclaim_abandoned_agent_name(
+                db,
+                payload.name,
+                owner_user_id=context.user.id,
+                group_id=str(group_id),
+                visibility=payload.visibility,
+            )
+            resolved_name = _available_agent_name(
                 db,
                 payload.name,
                 group_id=str(group_id),
@@ -814,7 +953,7 @@ def create_agent(
             ownership_scope="group",
             visibility=payload.visibility,
             authorization_epoch=0,
-            name=payload.name,
+            name=resolved_name,
             description=(
                 payload.description if payload.description and payload.description.strip() else ""
             ),
@@ -919,7 +1058,17 @@ def create_course_workspace_agent(
             if course_member_role(db, context.user.id, course_key) != "teacher":
                 raise not_found()
             assert_claim_owned(db, record)
-            _require_available_agent_name(
+            _lock_agent_name_namespace(
+                db,
+                group_id=None,
+                owner_user_id=context.user.id,
+                course_id=course_key,
+                visibility=payload.visibility,
+            )
+            _reclaim_abandoned_agent_name(
+                db, payload.name, owner_user_id=context.user.id, course_id=course_key
+            )
+            resolved_name = _available_agent_name(
                 db,
                 payload.name,
                 owner_user_id=context.user.id,
@@ -938,7 +1087,7 @@ def create_course_workspace_agent(
             ownership_scope="personal",
             visibility=payload.visibility,
             authorization_epoch=0,
-            name=payload.name,
+            name=resolved_name,
             description=(
                 payload.description if payload.description and payload.description.strip() else ""
             ),

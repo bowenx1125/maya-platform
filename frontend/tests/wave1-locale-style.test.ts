@@ -49,7 +49,9 @@ describe("Wave 1A locale and V2 style boundary", () => {
     expect(statusLabel("published", "zh")).toBe("已发布");
     expect(
       localizeError({ code: "agent_name_conflict", status: 409 }, "zh"),
-    ).toBe("已有同名Agent，请换名字或先删除重复Agent。");
+    ).toBe(
+      "名字已被使用，请换一个名字，比如在后面加上你的名字或数字（如「Zhu Xi 2」）。",
+    );
   });
 
   it("keeps workspace system typography scoped and removes visible page-title styles", () => {

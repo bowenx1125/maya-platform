@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from app.core.errors import PlatformError
 from app.core.models import Agent, AgentVersion
 from app.modules.agents.router import create_agent, update_agent_draft
 from app.modules.agents.schemas import AgentCreateRequest, UpdateAgentDraftRequest
@@ -52,23 +51,40 @@ def _seed_agent(database, name, *, deleted=False, group_id=GROUP_ID):
 
 
 @pytest.mark.parametrize("name", ["Ｂｏｗｅｎ", "bowen", "  BOWEN  "])
-def test_create_rejects_normalized_duplicate_and_releases_idempotency_claim(client, name):
+def test_create_with_taken_normalized_name_gets_numeric_suffix(client, name):
     _, csrf = login(client, "bowen")
     created = _create(client, csrf, "Bowen")
     assert created.status_code == 201
-    key = str(uuid4())
-    rejected = _create(client, csrf, name, key)
-    assert rejected.status_code == 409, rejected.text
-    assert rejected.json()["code"] == "agent_name_conflict"
-    assert "delete" in rejected.json()["message"]
-    deleted = client.delete(f"/api/v1/agents/{created.json()['id']}", headers=_headers(csrf))
-    assert deleted.status_code == 204, deleted.text
-    retried = _create(client, csrf, name, key)
-    assert retried.status_code == 201, retried.text
+    filled = client.patch(
+        f"/api/v1/agent-versions/{created.json()['versions'][0]['id']}",
+        headers=_headers(csrf),
+        json={"expected_revision": 0, "agent_md": "Body"},
+    )
+    assert filled.status_code == 200, filled.text
+    second = _create(client, csrf, name)
+    assert second.status_code == 201, second.text
+    assert second.json()["name"] == f"{name.strip()}-2"
+
+
+def test_suffix_continues_after_highest_existing(client):
+    _, csrf = login(client, "bowen")
+    for _ in range(2):
+        agent = _create(client, csrf, "Zhu Xi").json()
+        client.patch(
+            f"/api/v1/agent-versions/{agent['versions'][0]['id']}",
+            headers=_headers(csrf),
+            json={"expected_revision": 0, "agent_md": "Body"},
+        )
+    third = _create(client, csrf, "Zhu Xi")
+    assert third.json()["name"] == "Zhu Xi-3"
+    explicit = _create(client, csrf, "Zhu Xi-2")
+    assert explicit.status_code == 201, explicit.text
+    assert explicit.json()["name"] == "Zhu Xi-4"
 
 
 @pytest.mark.parametrize("upload", [False, True])
-def test_markdown_conflict_preserves_both_name_and_draft(client, upload):
+def test_markdown_heading_conflict_saves_draft_with_suffixed_name(client, upload):
+    """sujindong 2026-10-19: AGENT.md headed with a taken name must still save."""
     _, csrf = login(client, "bowen")
     assert _create(client, csrf, "Taken Name").status_code == 201
     agent = _create(client, csrf, "Original").json()
@@ -90,14 +106,85 @@ def test_markdown_conflict_preserves_both_name_and_draft(client, upload):
                 "agent_md": "# taken name\nChanged content",
             },
         )
-    assert response.status_code == 409, response.text
-    assert response.json()["code"] == "agent_name_conflict"
+    assert response.status_code == 200, response.text
     with client.app.state.database.session() as db:
         saved = db.get(AgentVersion, version["id"])
-        assert saved.revision == version["revision"]
-        assert saved.agent_md == version["agent_md"]
-        assert db.get(Agent, agent["id"]).name == "Original"
-        assert db.get(Agent, agent["id"]).metadata_revision == 0
+        assert saved.revision == version["revision"] + 1
+        assert saved.agent_md == "# taken name\nChanged content"
+        assert db.get(Agent, agent["id"]).name == "taken name-2"
+
+
+def test_public_heading_owned_by_classmate_does_not_block_new_agent(client):
+    """A public sample heading owned by another student must not block save."""
+    _, other_csrf = login(client, "kaikai")
+    taken = client.post(
+        f"/api/v1/groups/{GROUP_ID}/agents",
+        headers=_headers(other_csrf),
+        json={"name": "Zhu Xi", "visibility": "public"},
+    )
+    if taken.status_code == 404:
+        pytest.skip("second student is not a member of the seed group")
+    assert taken.status_code == 201, taken.text
+    client.cookies.clear()
+    _, csrf = login(client, "bowen")
+    agent = client.post(
+        f"/api/v1/groups/{GROUP_ID}/agents",
+        headers=_headers(csrf),
+        json={"name": "Zhu Xi (Su voice)", "visibility": "public"},
+    ).json()
+    response = client.patch(
+        f"/api/v1/agent-versions/{agent['versions'][0]['id']}",
+        headers=_headers(csrf),
+        json={"expected_revision": 0, "agent_md": "# Zhu Xi\nPersona body"},
+    )
+    assert response.status_code == 200, response.text
+    with client.app.state.database.session() as db:
+        assert db.get(Agent, agent["id"]).name == "Zhu Xi-2"
+
+
+def test_retry_reclaims_own_abandoned_empty_draft_name(client):
+    _, csrf = login(client, "bowen")
+    first = _create(client, csrf, "Retry Me")
+    assert first.status_code == 201
+    retried = _create(client, csrf, "retry me")
+    assert retried.status_code == 201, retried.text
+    with client.app.state.database.session() as db:
+        old = db.get(Agent, first.json()["id"])
+        assert old.deleted_at is not None
+        assert db.get(Agent, retried.json()["id"]).deleted_at is None
+
+
+def test_retry_does_not_reclaim_other_visibility_draft(client):
+    _, csrf = login(client, "bowen")
+    public = client.post(
+        f"/api/v1/groups/{GROUP_ID}/agents",
+        headers=_headers(csrf),
+        json={"name": "Scoped", "visibility": "public"},
+    ).json()
+    private = client.post(
+        f"/api/v1/groups/{GROUP_ID}/agents",
+        headers=_headers(csrf),
+        json={"name": "Scoped", "visibility": "private"},
+    )
+    assert private.status_code == 201, private.text
+    with client.app.state.database.session() as db:
+        assert db.get(Agent, public["id"]).deleted_at is None
+
+
+def test_retry_does_not_reclaim_draft_with_content(client):
+    _, csrf = login(client, "bowen")
+    first = _create(client, csrf, "Has Content").json()
+    saved = client.patch(
+        f"/api/v1/agent-versions/{first['versions'][0]['id']}",
+        headers=_headers(csrf),
+        json={"expected_revision": 0, "agent_md": "Body without heading"},
+    )
+    assert saved.status_code == 200, saved.text
+    second = _create(client, csrf, "has content")
+    assert second.status_code == 201, second.text
+    assert second.json()["name"] == "has content-2"
+    with client.app.state.database.session() as db:
+        assert db.get(Agent, first["id"]).deleted_at is None
 
 
 def test_historical_duplicates_are_not_rewritten_and_same_name_save_is_allowed(client):
@@ -163,9 +250,10 @@ def test_concurrent_normalized_name_claims_have_one_winner(client, operations):
     b = create if operations.endswith("create") else save(second, "ＣＯＮＣＵＲＲＥＮＴ NAME")
     results = _run_race(database, a, b)
     errors = [result for result in results if isinstance(result, Exception)]
-    assert len(errors) == 1, results
-    assert isinstance(errors[0], PlatformError), results
-    assert errors[0].code == "agent_name_conflict", results
+    # Nobody fails any more: the loser gets "-2" (or, for two creates, may
+    # reclaim the winner's still-empty draft). Exactly one live Agent holds
+    # the bare normalized name either way (asserted below).
+    assert errors == [], results
     with database.session() as db:
         names = db.scalars(
             select(Agent.name).where(Agent.group_id == GROUP_ID, Agent.deleted_at.is_(None))
