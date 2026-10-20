@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { FitTitle } from "./fit-title";
 
 import styles from "./knowledge/brainform-workspace.module.css";
 import { IconClose } from "./quiet-icons";
@@ -109,7 +110,7 @@ export function VersionTile({
   return (
     <li className="agent-tile">
       <Link className="agent-tile-name text-link" href={href}>
-        {name}
+        <FitTitle text={name} />
       </Link>
       {onDelete ? (
         <button

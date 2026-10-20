@@ -4,6 +4,7 @@ import { CountUp } from "./count-up";
 import { HomeGuide } from "./home-guide";
 
 import Link from "next/link";
+import { FitTitle } from "./fit-title";
 import {
   useCallback,
   useEffect,
@@ -621,7 +622,7 @@ function PublishedAgentTile({
         className="agent-tile-name text-link"
         href={`/teacher/agents/${item.agent.id}`}
       >
-        {item.agent.name}
+        <FitTitle text={item.agent.name} />
       </Link>
       {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
       {item.author ? (

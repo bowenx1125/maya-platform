@@ -227,6 +227,9 @@
 }
 
 .rowCopy {
+  /* Basis 0 keeps the title and its icon buttons on one row (RAG matched
+     Knowledge only for short names; long filenames wrapped the buttons). */
+  flex: 1 1 0;
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -731,4 +734,8 @@
 .teacherStudyformGrid.studyformGrid[data-pane-open] [data-studyform-slot] {
   grid-column: 1 / -1;
   grid-row: auto;
+}
+
+.titleLink :global(.fit-title-text) {
+  text-align: left;
 }
