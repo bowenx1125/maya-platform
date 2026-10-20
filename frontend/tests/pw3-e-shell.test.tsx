@@ -230,7 +230,9 @@ describe("PW3-E teacher information architecture", () => {
       </AppShell>,
     );
     const nav = within(screen.getByRole("navigation"));
-    expect(nav.getByRole("link", { name: "Brainform" })).toBeTruthy();
+    // Students have no Brainform entry since 2026-10-20 (RAG and Record
+    // moved into Studyform).
+    expect(nav.queryByRole("link", { name: "Brainform" })).toBeNull();
     expect(nav.getByRole("link", { name: "New" }).getAttribute("href")).toBe(
       "/student/knowledge/new",
     );
@@ -432,14 +434,13 @@ describe("student shell navigation", () => {
     expect(navHrefs()).toEqual([
       "/student",
       "/student/groups/group-b",
-      "/student/knowledge",
       "/student/chat",
     ]);
     expect(
-      within(screen.getByRole("navigation"))
-        .getByRole("link", { name: "Brainform" })
-        .getAttribute("aria-current"),
-    ).toBe("page");
+      within(screen.getByRole("navigation")).queryByRole("link", {
+        name: "Brainform",
+      }),
+    ).toBeNull();
   });
 
   it("falls back to the only group on pages that name none", () => {

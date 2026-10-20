@@ -221,8 +221,13 @@ describe("page-load round trips", () => {
       () => <GroupWorkspace groupId="group-1" />,
       "Debate Team",
     );
-    expect(first.rounds).toBeLessThanOrEqual(2);
-    expect(soon.requests).toBe(0);
+    // Two rounds for Agents/Teams; the embedded RAG and Record cards
+    // (moved from Brainform, 2026-10-20) add their own after the group.
+    expect(first.rounds).toBeLessThanOrEqual(4);
+    // The embedded Brainform cards quietly re-check their group, as on
+    // their own page; everything else is reused.
+    expect(soon.names.every((name) => name.startsWith("group@"))).toBe(true);
+    expect(soon.requests).toBeLessThanOrEqual(1);
     expect(later.requests).toBe(first.requests);
   });
 
@@ -243,8 +248,9 @@ describe("page-load round trips", () => {
     h.pathname = "/student/knowledge";
     const { first, soon } = await visits(
       "brainform-student",
+      // Students no longer see the Knowledge card (2026-10-20).
       () => <BrainformWorkspace role="student" />,
-      "Socrates Knowledge",
+      "No RAG yet.",
     );
     expect(first.rounds).toBe(1);
     expect(first.names.filter((name) => name.startsWith("group@"))).toEqual([

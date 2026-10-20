@@ -297,15 +297,19 @@ export function AppShell({
   }[] = [
     { href: home, label: t("appName"), icon: "home" },
     { href: studyformHref, label: t("studyform"), icon: "knowledge" },
-    {
-      href: visit
-        ? `/teacher/knowledge?group_id=${visit}`
-        : teacherSurface
-          ? `/teacher/knowledge${teacherLegacyBrainform}`
-          : "/student/knowledge",
-      label: "Brainform",
-      icon: "brain",
-    },
+    // Owner request (2026-10-20): students reach RAG and Record from
+    // Studyform, so only teachers keep a Brainform entry.
+    ...(teacherSurface || visit
+      ? [
+          {
+            href: visit
+              ? `/teacher/knowledge?group_id=${visit}`
+              : `/teacher/knowledge${teacherLegacyBrainform}`,
+            label: "Brainform",
+            icon: "brain" as const,
+          },
+        ]
+      : []),
     {
       href: visit
         ? `/teacher/chat?group_id=${visit}`

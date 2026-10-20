@@ -7,7 +7,11 @@ export default async function GroupPage({
   searchParams,
 }: {
   params: Promise<{ group_id: string }>;
-  searchParams: Promise<{ mode?: string; team_id?: string }>;
+  searchParams: Promise<{
+    mode?: string;
+    team_id?: string;
+    document_id?: string;
+  }>;
 }) {
   const { group_id: groupId } = await params;
   const query = await searchParams;
@@ -18,6 +22,7 @@ export default async function GroupPage({
           groupId={groupId}
           initialMode={query.mode}
           initialTeamId={query.team_id}
+          initialDocumentId={query.document_id}
         />
       </AppShell>
     </RouteGuard>

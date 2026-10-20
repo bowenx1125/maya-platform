@@ -41,6 +41,7 @@ import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
 import { TeamEntryFlow } from "./chats/team-entry-flow";
 import { VoiceLibrary } from "./voice/voice-library";
+import { BrainformWorkspace } from "./knowledge/brainform-workspace";
 import {
   ModuleCard,
   ModuleGrid,
@@ -274,15 +275,24 @@ export function GroupWorkspace({
   focusVoices = false,
   initialMode,
   initialTeamId,
+  initialDocumentId,
 }: {
   groupId: string;
   initialVoiceCreate?: boolean;
   focusVoices?: boolean;
   initialMode?: string;
   initialTeamId?: string;
+  /** A RAG file a ?mode=rag-view / rag-edit link opens. */
+  initialDocumentId?: string;
 }) {
   const { identityGeneration, user } = useSession();
-  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}:${initialMode ?? ""}:${initialTeamId ?? ""}`;
+  // Only Team modes swap the page; RAG modes open inside the embedded
+  // Brainform cards and must not remount Studyform.
+  const pageMode =
+    initialMode === "team-new" || initialMode === "team-edit"
+      ? initialMode
+      : "";
+  const scope = `${user?.id ?? "anonymous"}:${groupId}:${identityGeneration}:${pageMode}:${initialTeamId ?? ""}`;
   return (
     <GroupWorkspaceSession
       key={scope}
@@ -291,6 +301,7 @@ export function GroupWorkspace({
       focusVoices={focusVoices}
       initialMode={initialMode}
       initialTeamId={initialTeamId}
+      initialDocumentId={initialDocumentId}
       scope={scope}
     />
   );
@@ -302,6 +313,7 @@ function GroupWorkspaceSession({
   focusVoices,
   initialMode,
   initialTeamId,
+  initialDocumentId,
   scope,
 }: {
   groupId: string;
@@ -309,9 +321,17 @@ function GroupWorkspaceSession({
   focusVoices: boolean;
   initialMode?: string;
   initialTeamId?: string;
+  initialDocumentId?: string;
   scope: string;
 }) {
   const t = useT();
+  // Team modes swap the whole page; any other mode belongs to the embedded
+  // RAG / Record cards, which open it as their own page.
+  const brainformMode =
+    initialMode === "team-new" || initialMode === "team-edit"
+      ? undefined
+      : initialMode;
+  const [brainformPane, setBrainformPane] = useState(false);
   const { api, identityGeneration, user } = useSession();
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const snapshotKey = `page:studyform-group:${groupId}`;
@@ -375,6 +395,19 @@ function GroupWorkspaceSession({
         const agentsRequest = read("agents", [groupId, true], () =>
           api.agents(groupId, true),
         );
+        if (
+          !teacherCourseIds.length &&
+          typeof api.courses === "function" &&
+          typeof api.knowledge === "function"
+        ) {
+          // The RAG and Record cards (Brainform's, embedded) mount after
+          // this page loads; warm the same cached reads now so they do not
+          // add round trips of their own (same endpoints, same cache keys).
+          void read("courses", [], () => api.courses()).catch(() => undefined);
+          void read("knowledge", [groupId], () => api.knowledge(groupId)).catch(
+            () => undefined,
+          );
+        }
         const courseRequest = groupRequest.then((nextGroup) =>
           Promise.all([
             typeof api.teams === "function"
@@ -572,7 +605,10 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
-      <ModuleGrid>
+      <ModuleGrid
+        variant={teacherIdentity ? undefined : "studyform"}
+        paneOpen={brainformPane}
+      >
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
@@ -674,6 +710,19 @@ function GroupWorkspaceSession({
           moduleCard
           initialCreate={teacherIdentity ? false : initialVoiceCreate}
         />
+        {/* Owner request (2026-10-20): Brainform's RAG and Record cards
+            moved here for students; same component, same API calls. */}
+        {teacherIdentity ? null : (
+          <BrainformWorkspace
+            role="student"
+            embedded
+            initialGroupId={groupId}
+            initialCourseId={group.course_id}
+            initialMode={brainformMode}
+            initialDocumentId={initialDocumentId}
+            onPaneChange={setBrainformPane}
+          />
+        )}
       </ModuleGrid>
       {/* A visiting teacher also sees who is in the group, how their tests
           went and what happened lately. */}
