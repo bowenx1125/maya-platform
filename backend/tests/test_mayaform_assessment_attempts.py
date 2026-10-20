@@ -114,6 +114,40 @@ def attempt_env(app_bundle: Any, client: TestClient) -> tuple[Any, Any, Any, Tes
     return app, database, settings, client
 
 
+class _LifecycleResult:
+    """Status/body pair for a direct lifecycle-action service call."""
+
+    def __init__(self, status_code: int, body: dict[str, Any]) -> None:
+        self.status_code = status_code
+        self._body = body
+        self.text = json.dumps(body)
+
+    def json(self) -> dict[str, Any]:
+        return self._body
+
+
+def _lifecycle(
+    database: Any, settings: Any, token: str, attempt_id: str, payload: dict[str, str]
+) -> _LifecycleResult:
+    """Apply one attempt lifecycle action through the service (no HTTP route)."""
+    with database.session() as db:
+        actor = _context(db, settings, token)
+        try:
+            result = apply_attempt_lifecycle_action(
+                db,
+                actor,
+                attempt_id,
+                client_event_id=UUID(payload["client_event_id"]),
+                action=payload["action"],  # type: ignore[arg-type]
+            )
+        except PlatformError as exc:
+            db.rollback()
+            return _LifecycleResult(exc.status_code, {"code": exc.code})
+        if result is None:
+            return _LifecycleResult(404, {})
+        return _LifecycleResult(200, result.model_dump(mode="json"))
+
+
 def _question_content(prompt: str, reference_answer: str, label: str = "Reasoning") -> str:
     return QuestionContent(
         kind="question",
@@ -1797,7 +1831,7 @@ def test_original_actor_can_abandon_after_question_source_revocation(attempt_env
         )
 
 
-def test_explicit_attempt_action_route_abandons_revoked_source_and_replays(
+def test_explicit_attempt_action_abandons_revoked_source_and_replays(
     attempt_env: Any,
 ) -> None:
     _app, database, settings, client = attempt_env
@@ -1819,39 +1853,29 @@ def test_explicit_attempt_action_route_abandons_revoked_source_and_replays(
 
     event_id = uuid4()
     payload = {"client_event_id": str(event_id), "action": "abandon"}
-    response = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=payload,
-    )
+    response = _lifecycle(database, settings, token, attempt_id, payload)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["response_key"] == "assessment.abandoned"
     assert body["context"]["attempt"]["status"] == "abandoned"
     assert body["context"]["current_question"] is None
 
-    replay = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=payload,
-    )
+    replay = _lifecycle(database, settings, token, attempt_id, payload)
     assert replay.status_code == 200, replay.text
     assert replay.json()["context"]["attempt"]["id"] == body["context"]["attempt"]["id"]
 
     changed_payload = {"client_event_id": str(event_id), "action": "redo"}
-    conflict_response = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=changed_payload,
-    )
+    conflict_response = _lifecycle(database, settings, token, attempt_id, changed_payload)
     assert conflict_response.status_code == 409
     assert conflict_response.json()["code"] == "idempotency_conflict"
 
-    _other_token, other_csrf = _login(client, "kaikai")
-    unauthorized = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": other_csrf},
-        json={"client_event_id": str(uuid4()), "action": "abandon"},
+    other_token, _other_csrf = _login(client, "kaikai")
+    unauthorized = _lifecycle(
+        database,
+        settings,
+        other_token,
+        attempt_id,
+        {"client_event_id": str(uuid4()), "action": "abandon"},
     )
     assert unauthorized.status_code == 404
 
@@ -1868,11 +1892,7 @@ def test_successful_noop_lifecycle_actions_are_durable_and_idempotent(attempt_en
 
     resume_event_id = uuid4()
     resume_payload = {"client_event_id": str(resume_event_id), "action": "resume"}
-    first_resume = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=resume_payload,
-    )
+    first_resume = _lifecycle(database, settings, token, attempt_id, resume_payload)
     assert first_resume.status_code == 200, first_resume.text
     assert first_resume.json()["context"]["attempt"]["status"] == "in_progress"
     with database.session() as db:
@@ -1887,26 +1907,22 @@ def test_successful_noop_lifecycle_actions_are_durable_and_idempotent(attempt_en
         assert first_event.classification == "resume_request"
         assert len(first_event.request_hash) == 64
 
-    pause = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json={"client_event_id": str(uuid4()), "action": "pause"},
+    pause = _lifecycle(
+        database, settings, token, attempt_id, {"client_event_id": str(uuid4()), "action": "pause"}
     )
     assert pause.status_code == 200, pause.text
     assert pause.json()["context"]["attempt"]["status"] == "paused"
 
-    resumed_replay = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=resume_payload,
-    )
+    resumed_replay = _lifecycle(database, settings, token, attempt_id, resume_payload)
     assert resumed_replay.status_code == 200, resumed_replay.text
     assert resumed_replay.json()["response_key"] == "assessment.resumed"
     assert resumed_replay.json()["context"]["attempt"]["status"] == "paused"
-    changed_action = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json={"client_event_id": str(resume_event_id), "action": "abandon"},
+    changed_action = _lifecycle(
+        database,
+        settings,
+        token,
+        attempt_id,
+        {"client_event_id": str(resume_event_id), "action": "abandon"},
     )
     assert changed_action.status_code == 409
     assert changed_action.json()["code"] == "idempotency_conflict"
@@ -1923,11 +1939,7 @@ def test_successful_noop_lifecycle_actions_are_durable_and_idempotent(attempt_en
 
     pause_event_id = uuid4()
     pause_payload = {"client_event_id": str(pause_event_id), "action": "pause"}
-    repeated_pause = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=pause_payload,
-    )
+    repeated_pause = _lifecycle(database, settings, token, attempt_id, pause_payload)
     assert repeated_pause.status_code == 200, repeated_pause.text
     assert repeated_pause.json()["context"]["attempt"]["status"] == "paused"
     with database.session() as db:
@@ -1941,18 +1953,12 @@ def test_successful_noop_lifecycle_actions_are_durable_and_idempotent(attempt_en
             is not None
         )
 
-    resume_again = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json={"client_event_id": str(uuid4()), "action": "resume"},
+    resume_again = _lifecycle(
+        database, settings, token, attempt_id, {"client_event_id": str(uuid4()), "action": "resume"}
     )
     assert resume_again.status_code == 200, resume_again.text
     assert resume_again.json()["context"]["attempt"]["status"] == "in_progress"
-    pause_replay = client.post(
-        f"/api/v1/learning/attempts/{attempt_id}/actions",
-        headers={"X-CSRF-Token": csrf},
-        json=pause_payload,
-    )
+    pause_replay = _lifecycle(database, settings, token, attempt_id, pause_payload)
     assert pause_replay.status_code == 200, pause_replay.text
     assert pause_replay.json()["response_key"] == "assessment.paused"
     assert pause_replay.json()["context"]["attempt"]["status"] == "in_progress"
@@ -3851,7 +3857,7 @@ def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
         _answer_current(db, actor, conversation_id, "bowen half answer")
         kept = str(started.attempt.id)
 
-    other_token, other_csrf = _login(client, "kaikai")
+    other_token, _other_csrf = _login(client, "kaikai")
     with database.session() as db:
         other_conversation, *_rest = _create_formal_conversation(
             db, actor_user_id=OTHER_STUDENT_ID, prompts=("Q1",)
@@ -3862,10 +3868,12 @@ def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
         )
         assert other is not None
         abandoned = str(other.attempt.id)
-    abandon = client.post(
-        f"/api/v1/learning/attempts/{abandoned}/actions",
-        headers={"X-CSRF-Token": other_csrf},
-        json={"client_event_id": str(uuid4()), "action": "abandon"},
+    abandon = _lifecycle(
+        database,
+        settings,
+        other_token,
+        abandoned,
+        {"client_event_id": str(uuid4()), "action": "abandon"},
     )
     assert abandon.status_code == 200, abandon.text
 

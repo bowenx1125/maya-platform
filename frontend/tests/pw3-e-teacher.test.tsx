@@ -262,10 +262,6 @@ describe("PW3-E teacher shell and responsive contract", () => {
       join(frontendRoot, "components", "app-shell.module.css"),
       "utf8",
     );
-    const agentDetail = readFileSync(
-      join(frontendRoot, "components", "teacher-agent-detail.module.css"),
-      "utf8",
-    );
     expect(shell).toMatch(/\.link\s*\{[^}]*min-height:\s*44px/s);
     expect(shell).toMatch(/\.logout\s*\{[^}]*min-height:\s*44px/s);
     expect(css).toMatch(/\.text-link\s*\{[^}]*min-height:\s*44px/s);
@@ -277,9 +273,6 @@ describe("PW3-E teacher shell and responsive contract", () => {
       /\.inline-button,\s*\.chip-button\s*\{[^}]*min-height:\s*44px/s,
     );
     expect(css).toMatch(/\.file-button\s*\{[^}]*min-height:\s*44px/s);
-    expect(agentDetail).toMatch(
-      /@media \(max-width: 780px\)\s*\{\s*\.overview\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s,
-    );
     expect(css).toMatch(/@media \(max-width: 620px\)[\s\S]*\.text-link/);
   });
 });

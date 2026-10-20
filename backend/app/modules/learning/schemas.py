@@ -131,11 +131,6 @@ class AssessmentRuntimeDecision(StrictModel):
     question_version_id: UUID | None = None
 
 
-class AssessmentLifecycleActionRequest(StrictModel):
-    client_event_id: UUID
-    action: Literal["pause", "resume", "abandon", "redo"]
-
-
 class AssessmentStudentAction(StrictModel):
     """Only a semantic action and an exact span from the stored user message."""
 

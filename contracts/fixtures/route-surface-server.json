@@ -8759,74 +8759,6 @@
         ]
       }
     },
-    "/api/v1/learning/attempts/{attempt_id}/actions": {
-      "post": {
-        "operationId": "applyAssessmentLifecycleAction",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "attempt_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Attempt Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssessmentLifecycleActionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssessmentRuntimeResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          }
-        },
-        "security": [
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "Apply Assessment Lifecycle Action Route",
-        "tags": [
-          "learning"
-        ]
-      }
-    },
     "/api/v1/learning/courses/{course_id}/assessment-attempts": {
       "get": {
         "description": "Formal attempts for a course teacher, with no group visit required.",
@@ -17767,32 +17699,6 @@
           "version_id"
         ],
         "title": "AgentChatEntry",
-        "type": "object"
-      },
-      "AssessmentLifecycleActionRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "action": {
-            "enum": [
-              "pause",
-              "resume",
-              "abandon",
-              "redo"
-            ],
-            "title": "Action",
-            "type": "string"
-          },
-          "client_event_id": {
-            "format": "uuid",
-            "title": "Client Event Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "client_event_id",
-          "action"
-        ],
-        "title": "AssessmentLifecycleActionRequest",
         "type": "object"
       },
       "AssessmentRuntimeResult": {

@@ -8,48 +8,19 @@ from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core.errors import Error, not_found
+from app.core.errors import Error
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.org.schemas import OverviewResult
 
-from .attempts import apply_attempt_lifecycle_action
 from .reports import (
     download_assessment_course_report,
     hide_course_assessment_attempt,
     list_course_assessment_attempts,
     list_my_assessment_attempts,
 )
-from .schemas import (
-    AssessmentLifecycleActionRequest,
-    AssessmentRuntimeResult,
-)
 
 router = APIRouter(prefix="/learning", tags=["learning"])
-
-
-@router.post(
-    "/attempts/{attempt_id}/actions",
-    response_model=AssessmentRuntimeResult,
-    operation_id="applyAssessmentLifecycleAction",
-    responses={404: {"model": Error}, 409: {"model": Error}},
-)
-def apply_assessment_lifecycle_action_route(
-    attempt_id: UUID,
-    payload: AssessmentLifecycleActionRequest,
-    actor: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> AssessmentRuntimeResult:
-    result = apply_attempt_lifecycle_action(
-        db,
-        actor,
-        str(attempt_id),
-        client_event_id=payload.client_event_id,
-        action=payload.action,
-    )
-    if result is None:
-        raise not_found()
-    return result
 
 
 @router.get(

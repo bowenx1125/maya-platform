@@ -2032,23 +2032,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/learning/attempts/{attempt_id}/actions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Apply Assessment Lifecycle Action Route */
-        post: operations["applyAssessmentLifecycleAction"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/learning/courses/{course_id}/assessment-attempts": {
         parameters: {
             query?: never;
@@ -4859,19 +4842,6 @@ export interface components {
              * Format: uuid
              */
             version_id: string;
-        };
-        /** AssessmentLifecycleActionRequest */
-        AssessmentLifecycleActionRequest: {
-            /**
-             * Action
-             * @enum {string}
-             */
-            action: "pause" | "resume" | "abandon" | "redo";
-            /**
-             * Client Event Id
-             * Format: uuid
-             */
-            client_event_id: string;
         };
         /** AssessmentRuntimeResult */
         AssessmentRuntimeResult: {
@@ -11151,50 +11121,6 @@ export interface operations {
                 };
             };
             /** @description Generation inputs are stale or unavailable. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    applyAssessmentLifecycleAction: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                attempt_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AssessmentLifecycleActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssessmentRuntimeResult"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Conflict */
             409: {
                 headers: {
                     [name: string]: unknown;
