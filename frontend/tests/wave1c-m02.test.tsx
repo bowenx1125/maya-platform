@@ -97,7 +97,7 @@ describe("Wave 1C presentation locale", () => {
 
   it("renders stable API error codes in the current locale", () => {
     expect(localizeError({ code: "stale_revision" }, "zh")).toContain(
-      "草稿已在其他地方更新",
+      "内容已被别人修改，请刷新",
     );
     expect(statusLabel("generating", "zh")).toBe("生成中");
   });

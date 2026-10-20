@@ -1,5 +1,6 @@
 "use client";
 
+import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import { CountUp } from "./count-up";
 import { HomeGuide } from "./home-guide";
 
@@ -484,6 +485,11 @@ export function TeacherStudyformWorkspace({
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/teacher/agents/${item.agent.id}`}
+                  title={agentLastEditedTitle(
+                    t,
+                    item.agent,
+                    item.current_version.version_label,
+                  )}
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
@@ -506,6 +512,7 @@ export function TeacherStudyformWorkspace({
                     key={agent.id}
                     name={agent.name}
                     href={`/teacher/agents/${agent.id}`}
+                    title={agentLastEditedTitle(t, agent, label)}
                     label={label}
                     pending={false}
                     visibility={agent.visibility}
@@ -620,6 +627,7 @@ function PublishedAgentTile({
       <Link
         className="agent-tile-name text-link"
         href={`/teacher/agents/${item.agent.id}`}
+        title={agentLastEditedTitle(t, item.agent)}
       >
         {item.agent.name}
       </Link>

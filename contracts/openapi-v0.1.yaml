@@ -7515,6 +7515,11 @@ components:
           - type: 'null'
     AgentSummary:
       properties:
+        can_delete:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Can Delete
         can_edit:
           title: Can Edit
           type: boolean
@@ -7534,6 +7539,11 @@ components:
             type: string
           - type: 'null'
           title: Current Published Version Id
+        current_version_label:
+          title: Current Version Label
+          type:
+          - string
+          - 'null'
         description:
           default: ''
           title: Description
@@ -7548,6 +7558,22 @@ components:
           format: uuid
           title: Id
           type: string
+        is_creator:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Creator
+        last_edited_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Last Edited At
+        last_edited_by_name:
+          title: Last Edited By Name
+          type:
+          - string
+          - 'null'
         metadata_revision:
           minimum: 0.0
           title: Metadata Revision
@@ -7587,6 +7613,11 @@ components:
       type: object
     AgentDetail:
       properties:
+        can_delete:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Can Delete
         can_edit:
           title: Can Edit
           type: boolean
@@ -7606,6 +7637,11 @@ components:
             type: string
           - type: 'null'
           title: Current Published Version Id
+        current_version_label:
+          title: Current Version Label
+          type:
+          - string
+          - 'null'
         description:
           default: ''
           title: Description
@@ -7620,6 +7656,22 @@ components:
           format: uuid
           title: Id
           type: string
+        is_creator:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Creator
+        last_edited_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Last Edited At
+        last_edited_by_name:
+          title: Last Edited By Name
+          type:
+          - string
+          - 'null'
         metadata_revision:
           minimum: 0.0
           title: Metadata Revision

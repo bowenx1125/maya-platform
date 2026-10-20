@@ -119,10 +119,16 @@ describe("G2 session and draft recovery paths", () => {
     expect(preserveDraftOnRetry(stale)).toBe(true);
     expect(preserveDraftOnRetry(otherConflict)).toBe(false);
 
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
     render(<DraftConflictNotice />);
-    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    // 2026-10-20: the notice offers a real reload, which re-reads the latest
+    // revision from the server so the next save can succeed.
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
     expect(screen.getByRole("alert").textContent).toContain("local AGENT.md");
-    expect(screen.getByRole("alert").textContent).toContain("Copy your edits");
+    expect(screen.getByRole("alert").textContent).toContain("copy your edits");
   });
 });
 

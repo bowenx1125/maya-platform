@@ -16,7 +16,7 @@ describe("Wave 1A state and permission feedback", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "Revision conflict",
     );
-    expect(screen.getByRole("alert").textContent).toContain("local text");
+    expect(screen.getByRole("alert").textContent).toContain("Please refresh");
   });
 
   it("shows indexing failure as a visible, non-success state", () => {

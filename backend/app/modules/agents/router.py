@@ -27,6 +27,7 @@ from app.core.errors import (
 )
 from app.core.models import (
     Agent,
+    AgentEditAudit,
     AgentVersion,
     AgentVersionDocument,
     CourseMember,
@@ -94,6 +95,7 @@ from app.modules.knowledge.services import (
     finish_idempotency,
     observes_group,
     parse_json_payload_hash,
+    public_agent_editor_role,
     publish_without_snapshot,
     readable_agent,
     readable_version,
@@ -438,16 +440,35 @@ def _version_dto_for_actor(
 
 
 def _student_delete_scope(db: Session, context: AuthContext, agent_id: str) -> Agent:
-    """Resolve owner access before an explicitly shared group workspace."""
+    """Creator always; a public Agent also by groupmates and course teachers.
+
+    Anyone else (other group, other course, private Agent) gets a 404 so the
+    Agent's existence is not revealed.
+    """
 
     agent = db.get(Agent, agent_id)
     if agent is None or agent.deleted_at is not None:
         raise not_found()
-    if course_member_role(db, context.user.id, agent.course_id) is None:
-        raise not_found()
-    if agent.owner_user_id != context.user.id:
-        raise not_found()
+    if public_agent_editor_role(db, context, agent) is None:
+        # Keep the historical owner path (personal teacher Agents etc.).
+        if (
+            agent.owner_user_id != context.user.id
+            or course_member_role(db, context.user.id, agent.course_id) is None
+        ):
+            raise not_found()
     return agent
+
+
+def _touch_last_editor(db: Session, agent_id: str, user_id: str) -> None:
+    """Record 「最后编辑」 without bumping any CAS revision."""
+
+    row = db.get(AgentEditAudit, agent_id)
+    if row is None:
+        row = AgentEditAudit(agent_id=agent_id)
+        db.add(row)
+    row.last_edited_by_user_id = user_id
+    row.last_edited_at = _time()
+    db.flush()
 
 
 def _agent_sources_are_public(db: Session, agent: Agent) -> bool:
@@ -874,7 +895,9 @@ def list_group_agents(
         _summary_with_metadata(
             db,
             agent,
-            include_draft=agent_role != "teacher",
+            # A teacher sees a draft only when they may edit it (public Agent
+            # of their course with no private provenance); see agent_summary.
+            include_draft=True,
             role=agent_role,
             context=context,
         )
@@ -1200,6 +1223,7 @@ def update_agent_metadata(
         current.description = description if description and description.strip() else ""
         current.metadata_revision += 1
         current.updated_at = _time()
+        _touch_last_editor(db, current.id, context.user.id)
         db.flush()
         result = _detail_with_metadata(
             db,
@@ -1273,6 +1297,12 @@ def delete_agent(
         # Keep immutable versions/snapshots for owner-only chat history. The
         # shared marker removes access from both student and teacher workspaces.
         agent.deleted_at = _time()
+        audit = db.get(AgentEditAudit, agent.id)
+        if audit is None:
+            audit = AgentEditAudit(agent_id=agent.id)
+            db.add(audit)
+        audit.deleted_by_user_id = context.user.id
+        audit.deleted_at = agent.deleted_at
         agent.status = "archived"
         agent.updated_at = agent.deleted_at
         _retire_agent_documents(db, agent)
@@ -1522,7 +1552,11 @@ def update_agent_draft(
         from app.modules.voices.service import validate_voice_binding
 
         requested_voice = str(payload.voice_profile_id) if payload.voice_profile_id else None
-        validate_voice_binding(db, context, scoped.version, requested_voice, settings)
+        # Re-saving the voice already on the draft is not a new binding: a
+        # groupmate or teacher editing a shared public Agent keeps the
+        # creator's voice without needing access to bind it themselves.
+        if requested_voice != scoped.version.voice_profile_id:
+            validate_voice_binding(db, context, scoped.version, requested_voice, settings)
         values["voice_profile_id"] = requested_voice
     changed = db.execute(
         update(AgentVersion)
@@ -1545,6 +1579,7 @@ def update_agent_draft(
             normalized_agent_md,
             actor_user_id=context.user.id,
         )
+    _touch_last_editor(db, scoped.agent.id, context.user.id)
     db.refresh(scoped.version)
     db.flush()
     return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
@@ -1621,6 +1656,7 @@ async def upload_agent_md(
         document.normalized,
         actor_user_id=context.user.id,
     )
+    _touch_last_editor(db, scoped.agent.id, context.user.id)
     db.refresh(scoped.version)
     db.flush()
     return _version_dto_for_actor(db, scoped.version, scoped.agent, context)
@@ -1831,6 +1867,7 @@ def _publish_agent_version_admitted(
             raise invalid_state("The Agent publish guard is no longer active.")
         guard.state = "committed"
         guard.updated_at = _time()
+        _touch_last_editor(db, agent.id, context.user.id)
         result = _version_dto_for_actor(db, version, agent, context)
         if generation is not None:
             result = result.model_copy(

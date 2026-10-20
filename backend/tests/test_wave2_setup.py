@@ -397,6 +397,16 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
     stale = client.patch(f"/api/v1/debates/{debate_id}", headers=headers(csrf), json=update_body)
     assert stale.status_code == 409
     assert stale.json()["code"] == "stale_revision"
+    # Refresh: re-read the Debate and save again with its current revision.
+    fresh = client.get(f"/api/v1/debates/{debate_id}")
+    assert fresh.status_code == 200
+    resaved = client.patch(
+        f"/api/v1/debates/{debate_id}",
+        headers=headers(csrf),
+        json={**update_body, "expected_revision": fresh.json()["revision"]},
+    )
+    assert resaved.status_code == 200, resaved.text
+    assert resaved.json()["revision"] == fresh.json()["revision"] + 1
 
 
 @pytest.mark.parametrize("round_count", [2, 3, 4, 5])

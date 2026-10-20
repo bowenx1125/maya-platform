@@ -81,7 +81,9 @@ const enMessages = {
   deleteChatConfirm: "Delete this entire conversation? This cannot be undone.",
   delete: "Delete",
   readOnly: "Read-only published snapshot",
-  retryConflict: "The draft changed elsewhere. Your local text is still here.",
+  retryConflict:
+    "Someone else changed this content. Please refresh. Copy any unsaved text first.",
+  refreshPage: "Refresh",
   signInContinue: "Sign in to continue.",
   sessionRequired:
     "Your session is required before Mayaform can reveal course or group content.",
@@ -272,7 +274,7 @@ const enMessages = {
   immutable: "Immutable",
   discardDraftConfirm: "Discard unsaved changes?",
   conflictDetail:
-    "Your local AGENT.md and evidence selection are unchanged. Copy your edits before reopening this page.",
+    "Someone else changed this content. Please refresh. Your local AGENT.md is still here; copy your edits before refreshing.",
   agentMd: "AGENT.md",
   insertOutline: "Template",
   uploadMd: "Upload",
@@ -534,8 +536,8 @@ const enMessages = {
   errorCsrfFailed: "This form has expired. Please try again.",
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
-  errorStaleRevision:
-    "The draft changed elsewhere. Refresh before saving again.",
+  errorStaleRevision: "Someone else changed this content. Please refresh.",
+  agentLastEditedTooltip: "Last edited: {name}, Version: {version}",
   errorStaleControlVersion:
     "The classroom state changed. Refresh and try again.",
   errorIdempotencyConflict:
@@ -984,7 +986,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   deleteChatConfirm: "删除整段对话？此操作无法撤销。",
   delete: "删除",
   readOnly: "已发布快照（只读）",
-  retryConflict: "草稿已在其他地方更新，本地文字仍然保留。",
+  retryConflict: "内容已被别人修改，请刷新。未保存的文字请先复制。",
+  refreshPage: "刷新",
   signInContinue: "登录后继续。",
   sessionRequired: "需要登录后才能查看课程或小组内容。",
   viewUnavailable: "此账号无法访问该页面。",
@@ -1167,7 +1170,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   immutable: "不可变",
   discardDraftConfirm: "放弃未保存的修改？",
   conflictDetail:
-    "本地 AGENT.md 和证据选择未变。重新进入前，请复制保留你的修改。",
+    "内容已被别人修改，请刷新。本地 AGENT.md 仍保留，刷新前请复制你的修改。",
   agentMd: "AGENT.md",
   insertOutline: "模板",
   uploadMd: "上传",
@@ -1406,7 +1409,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorCsrfFailed: "此表单已过期，请重试。",
   errorInvalidState: "当前状态不支持该操作。",
   errorVersionImmutable: "已发布版本不可变更。",
-  errorStaleRevision: "草稿已在其他地方更新，请刷新后再次保存。",
+  errorStaleRevision: "内容已被别人修改，请刷新",
+  agentLastEditedTooltip: "最新编辑：{name}，Version：{version}",
   errorStaleControlVersion: "课堂状态已变化，请刷新后重试。",
   errorIdempotencyConflict: "此请求已使用过不同的数据。",
   errorDemoRoundCountFixed: "演示固定使用两轮。",
@@ -1894,6 +1898,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   rebirth_refresh_failed: "debateRebirthRefreshFailed",
   version_immutable: "errorVersionImmutable",
   stale_revision: "errorStaleRevision",
+  stale_metadata_revision: "errorStaleRevision",
   stale_control_version: "errorStaleControlVersion",
   idempotency_conflict: "errorIdempotencyConflict",
   demo_round_count_fixed: "errorDemoRoundCountFixed",

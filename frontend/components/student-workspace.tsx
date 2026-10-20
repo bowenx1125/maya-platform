@@ -1,5 +1,6 @@
 "use client";
 
+import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -660,10 +661,12 @@ function GroupWorkspaceSession({
                   versions={versions}
                   deleting={deleting !== null}
                   onDelete={() => void deleteAgent(agent.id)}
-                  // Only the publisher may delete (the API answers 404 for
-                  // everyone else), so read-only and use-only groupmates get
-                  // no × at all, the same as a public Agent.
-                  canDelete={!teacherIdentity && agent.can_edit === true}
+                  // Creator; for a public Agent also groupmates and course
+                  // teachers (the API answers 404 for everyone else).
+                  canDelete={
+                    agent.can_delete ??
+                    (!teacherIdentity && agent.can_edit === true)
+                  }
                 />
               ))}
               {sharedAgents.map((item) => (
@@ -671,6 +674,11 @@ function GroupWorkspaceSession({
                   key={item.agent.id}
                   name={item.agent.name}
                   href={`/student/agents/${item.agent.id}`}
+                  title={agentLastEditedTitle(
+                    t,
+                    item.agent,
+                    item.current_version.version_label,
+                  )}
                   label={item.current_version.version_label}
                   pending={false}
                   visibility={item.agent.visibility}
@@ -777,6 +785,7 @@ function GroupAgentRow({
     <VersionTile
       name={agent.name}
       href={`/student/agents/${agent.id}`}
+      title={agentLastEditedTitle(t, agent, bubble.label)}
       label={bubble.label}
       pending={bubble.pending}
       visibility={agent.visibility}
