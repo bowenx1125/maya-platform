@@ -1425,6 +1425,16 @@ def _record_answer_or_skip(
     )
     db.add(record)
     db.flush()
+    if kind == "answer":
+        from .answer_guard import GuardState
+
+        state = GuardState.load(question.guard_state_json)
+        state.history.append(str(payload["answer_text"]))
+        # Persist the guard reset with the resolution, avoiding a separate write
+        # for every accepted answer while retaining rejected/confirmed history.
+        question.guard_state_json = GuardState(
+            off_topic_judged=state.off_topic_judged, history=state.history
+        ).dump()
     question.status = "resolved"
     question.resolution = "answered" if kind == "answer" else "skipped"
     question.resolved_at = timestamp
@@ -1931,8 +1941,6 @@ def _guard_free_answer(
             db.flush()
 
     def record(answer: str) -> tuple[AssessmentStudentAction, str]:
-        state.history.append(answer)
-        save(GuardState(off_topic_judged=state.off_topic_judged, history=state.history))
         return AssessmentStudentAction(classification="answer_only", answer_span=answer), answer
 
     # Rule 4: 确认 records the pending reply.
@@ -2003,8 +2011,7 @@ def _fit_answer_action_inner(
     """Hold the model's classification to the open Question.
 
     A choice or scale reply must match that question's letters or range.
-    A free-form reply is saved only when the model set relevant to true;
-    the server does not decide relevance from the wording.
+    Free-form replies follow the durable confirmation/relevance guard.
     An answer is saved in the student's own text, never a model paraphrase
     that is not in the message.
     """
@@ -2063,7 +2070,7 @@ def _edit_target(
     off-topic action with one sentence saying how to change an answer.
     """
 
-    from .answer_format import is_statement
+    from .answer_format import answer_format, fits, format_hint, is_statement
     from .answer_guard import chinese, edit_hint, edit_request
 
     request = edit_request(user_text)
@@ -2102,6 +2109,15 @@ def _edit_target(
     if not request.answer or not is_statement(request.answer):
         return AssessmentStudentAction(
             classification="off_topic", guidance=edit_hint(is_chinese, request.number)
+        )
+    if target.content_json is None:
+        return AssessmentStudentAction(
+            classification="off_topic", guidance=edit_hint(is_chinese, request.number)
+        )
+    form = answer_format(QuestionContent.model_validate_json(target.content_json).prompt)
+    if not fits(form, request.answer):
+        return AssessmentStudentAction(
+            classification="off_topic", guidance=format_hint(form, is_chinese)
         )
     return target.question_version_id, request.answer
 

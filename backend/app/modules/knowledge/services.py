@@ -682,7 +682,7 @@ def public_agent_editor_role(db: Session, actor: AuthContext | str, agent: Agent
     """
 
     user_id = _actor_user_id(actor)
-    if agent.deleted_at is not None:
+    if agent.deleted_at is not None or agent.owner_user_id is None:
         return None
     role = course_member_role(db, user_id, agent.course_id)
     if role is None:

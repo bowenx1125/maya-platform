@@ -509,3 +509,31 @@ def test_completed_attempt_answers_are_not_rescored(quiz: _Harness) -> None:
     assert quiz.answers() == before
     assert "2330034003" not in quiz.answers()
     assert reply
+
+
+@pytest.mark.parametrize(
+    ("prompt", "initial", "invalid", "valid"),
+    [
+        ("请选择一项：\nA. 第一项\nB. 第二项", "A", "Z", "B"),
+        ("请按1–4分评价", "2", "9", "3"),
+    ],
+)
+def test_earlier_answer_edits_keep_the_frozen_question_format(
+    client: TestClient,
+    database: Any,
+    app_bundle: Any,
+    monkeypatch: Any,
+    prompt: str,
+    initial: str,
+    invalid: str,
+    valid: str,
+) -> None:
+    quiz = _Harness(client, database, app_bundle, monkeypatch, (prompt, *PROMPTS[1:]))
+    answer = {"classification": "answer_only", "relevant": True}
+    quiz.send(initial, answer)
+    assert quiz.answers() == [initial]
+    quiz.send(f"修改第1题：{invalid}", OFF)
+    assert quiz.answers() == [initial]
+    assert quiz.context().progress.resolved_count == 1
+    quiz.send(f"修改第1题：{valid}", OFF)
+    assert quiz.answers() == [initial, valid]

@@ -3,54 +3,30 @@
 Maya combines Agent Markdown, RAG, classroom debate and reports. Progress authority;
 [AGENTS.md](../AGENTS.md) defines work. Latest user decisions prevail.
 
-## Approved four-round teaching flow — September 8, 2026
+## Approved four-round flow — September8, 2026
 
-New debates: exactly four rounds, two to five Agents, no round selector;
-four_round_v1/segments_v2 snapshots. Historical playback/recovery compatibility
-was waived; existing records are never silently regenerated/deleted.
+New debates: four rounds,2–5 Agents,no selector,four_round_v1/segments_v2. Preserve old
+records; historical recovery compatibility waived. Opening: independent high-priority
+own-KB evidence,culture as perspective,acknowledge gaps. Discussion: low-priority own-KB,
+address claims,ask cyclic stable Agent ID,no moderator/planner. Response: medium-priority
+retrieval on actual challenges; memory=position/change/reason/influence/unresolved_question.
+Conclusion: fresh high-priority own-KB/public speeches/memory,agreement/criticism/learning;
+freeze barrages once,answer one eligible message/Agent,never invent replies.
 
-1. Opening: independent claim/relevance from high-priority own-KB evidence;
-   culture is perspective, not proof; acknowledge missing evidence.
-2. Discussion: low-priority new own-KB retrieval; build on the opening, address
-   specific claims and ask the cyclically assigned stable Agent ID a question.
-   No moderator or question-planning model.
-3. Response: medium-priority RAG on actual round-two questions/challenges;
-   explain retained/qualified/revised positions and save concise session memory
-   in the same output.
-4. Conclusion: fresh high-priority own-KB retrieval plus public speeches/memory;
-   explain agreement, criticism and learning from another Agent. Freeze earlier
-   barrages once; answer one eligible message per Agent if available. Do not
-   invent replies; disagreement may remain.
-
-Preview retains rounds1–3 text/audio; round4 is live. Opening is independent; later
-turns see all successful predecessors, including same-round turns, after complete
-previous-round barriers. Speaking order rotates; identities/question targets stay
-fixed. Scheduling/SQL Next/input hashes/recovery share one prefix and reuse accepted
-results without charging again.
-
-| Round      | Chinese upper guidance | English upper guidance |
-| ---------- | ---------------------- | ---------------------- |
-| Opening    | 50 characters          | 80 words               |
-| Discussion | 50 characters          | 80 words               |
-| Response   | 50 characters          | 100 words              |
-| Conclusion | 100 characters         | 150 words              |
-
-Lengths guide only the System Prompt, with no minimum. Count segment text: Chinese
-nonspace characters/punctuation; English alphanumeric words with internal apostrophes/
-hyphens. Require readable nonempty paragraphs, never reject/repair/truncate/pad by
-length. Drop/ungrade bad auxiliary metadata without rejecting speech; valid bindings/
-sources stay exact. Unreadable JSON/text gets at most one authorized frozen repair;
-one-call authorization gains none, unknown acceptance is never silently resent.
-
-Questions are separate from barrage reply_to. Round3 memory contains position/change/
-reason/influence/unresolved_question, never speech/TTS/Agent.md/version/knowledge;
-round4/Report receive separate session_discussion_memory. Agents see only their own
-KB/Persona and others' public speeches, never private receipts/Persona.0024 removes
-only the speaker/snapshot FK, preserving other ownership/uniqueness constraints.
-Direct+5/contextual+2/no_match+0 measure evidence support, not accuracy.
+Preview retains rounds1–3 text/audio; round4 live. Later turns see successful predecessors
+including same-round after round barriers. Order rotates,identities/targets fixed.
+Next/scheduling/hashes/recovery reuse one accepted prefix without recharging.
+Guidance by round,Chinese chars/English words:50/80,50/80,50/100,100/150,no minimum.
+Chinese counts nonspace/punctuation; English counts alphanumerics with internal
+apostrophes/hyphens. Length never rejects/repairs/truncates/pads readable paragraphs.
+Drop bad auxiliary metadata,keep valid sources/bindings exact. Unreadable output gets
+at most one authorized frozen repair; one-call adds none; unknown acceptance never resent.
+Questions differ from reply_to; memory excludes speech/TTS/Agent.md/version/KB.
+Round4/Report get separate session_discussion_memory. Own KB/Persona only; others'
+public speeches,never private receipts/Persona.0024 drops only speaker/snapshot FK;
+other ownership/uniqueness stays. Evidence support,not accuracy:direct+5/contextual+2/no_match+0.
 [Prompts](contracts/FOUR_ROUND_PROMPTS.md)/[examples](contracts/four-round-example.json)
-support manual review of answers/new points/evidence/disagreement, without keyword/
-similarity gates.
+retain manual review,never keyword/similarity gates.
 
 ## Preserved classroom and account behavior
 
@@ -145,8 +121,7 @@ Public group visit, temporary membership removed on return) and Debates are rest
 Sidebar New/Back/Done; Back/Done only contextual. Voice New is module-right; its form
 skips the sidebar: consent creates, top-right ← cancels. Agent Voice: radio,
 None default; groupmates choose/hear ready voices; teachers never.
-Colleague Mayaform Home preserved except Components, Guide destinations and data-use
-entry moved to Brainform. All decorative heading explanations become immediate help;
+All decorative heading explanations become immediate help;
 no1500ms wait. Brainform three columns, no page title/eyebrow; RAG fully reuses original
 Knowledge view/edit/download/delete and PDF/DOCX. View/New/edit replaces main content
 in independent deep-link mode, not a bottom panel. Knowledge uses asset-name entry,
@@ -164,8 +139,7 @@ and statistics for that student, Maya Team name and time, not the raw chat.
 
 Teacher save/generate/regenerate authorizes exact Knowledge generation without a second
 confirmation page; ACL, policy, manifest, accounting, idempotency and unknown protections
-remain. Local runtime/generation/UI checks passed, without classroom load acceptance.
-The October7 review (schema0053) left Voices/help and real Team/report open.
+remain. Classroom load and real Team/report acceptance remain open.
 
 ## Current delivery closure — October7
 
@@ -221,3 +195,28 @@ October 17: Teacher Brainform Record (replaces Memory) lists assessment Teams, t
 
 October 18: A picked @mention adds a space; no All in the picker, but `@All`/bare sends reach everyone. Studyform/Brainform/Chat/Voices reads share one per-sign-in cache (6 at once, 10 s reuse, 429/503 back-off). Owner-only per-Chat Team `+` files (`0070`). Team access checks memoized per phase: 812→448 SELECTs/turn. Students use teachers' public Agents only in Teams; old chats read-only.
 Oct19: uploaded Voices are ready at once (`0073`); ▷ only listens. A Team model call writes 12 rows (was 16).
+
+## October20 review and release
+
+Base `5dd9690bfa04c7a9d2a101bdb2abce7d01e3b85a`; integrated inputs:
+
+- #225 `f2646b280663b8efc0a194b1c759cac70fd98c4e`
+- #229 `566a798f0dd368a144d7a27317f407350936eb5a`
+- #227 `bfe8187e8ed7cb77c3cebd2715f9a2a68b434500`
+- #230 `a0f2954ceff73e46afeab249f8b6487bd29f1fa6`
+- #232 `69d3218d98f920f3d99203492f660c22e2dc92c5`
+
+Answer guard/edits; public Agent editors/audit; title fit; Record independent of Chat;
+dead route cleanup. Fixed0076→0075; kept private-source/ownerless fences and editor tooltip.
+Review fixes: old-answer edits keep frozen formats; guard state saves with answers
+(25 guard +3 PostgreSQL write-count tests passed; ceilings unchanged).
+
+Held#228: injected publish RuntimeError after durable draft parking leaves the owner's
+draft superseded; no crash-recovery journal. New affected-agents routes also lack
+implemented-route registration (fixture test fails). Dependent#231 held. #215 superseded
+by#225; alternative#226 not implicitly selected. Draft#233/#97 and reimplemented
+legacy UI#38–41 excluded.
+Validation underway. Public-Agent role matrix:28 passed. Actions dispatch39449756136
+never started (billing/spending limit).
+SSH closes before key exchange:no production Git/data/container changes. Homepage200.
+Production Postgres needs backup alongside requested SQLite backup/integrity check.

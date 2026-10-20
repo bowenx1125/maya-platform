@@ -12025,15 +12025,11 @@
             "title": "Current Published Version Id"
           },
           "current_version_label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Version Label"
+            "title": "Current Version Label",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "description": {
             "default": "",
@@ -12081,15 +12077,11 @@
             "title": "Last Edited At"
           },
           "last_edited_by_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Edited By Name"
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "metadata_revision": {
             "minimum": 0,
@@ -12186,15 +12178,11 @@
             "title": "Current Published Version Id"
           },
           "current_version_label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Version Label"
+            "title": "Current Version Label",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "description": {
             "default": "",
@@ -12242,15 +12230,11 @@
             "title": "Last Edited At"
           },
           "last_edited_by_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Edited By Name"
+            "title": "Last Edited By Name",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "metadata_revision": {
             "minimum": 0,

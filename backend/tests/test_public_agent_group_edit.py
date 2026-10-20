@@ -284,3 +284,33 @@ def test_after_stale_conflict_refresh_reloads_latest_and_save_succeeds(client):
         },
     )
     assert resaved.status_code == 200, resaved.text
+
+
+@pytest.mark.parametrize("actor_id", [BOWEN_ID, KAIKAI_ID, TEACHER_ID])
+def test_ownerless_legacy_agents_stay_read_only(client, actor_id):
+    _, csrf = login(client, "bowen")
+    agent = _create(client, csrf, "Legacy read only", "public")
+    database = client.app.state.database
+    version_id = agent["versions"][0]["id"]
+    with database.session() as db:
+        row = db.get(Agent, agent["id"])
+        row.owner_user_id = None
+        row.current_published_version_id = version_id
+        version = db.get(AgentVersion, version_id)
+        version.state = "published"
+        version.published_visibility = "public"
+        db.commit()
+    context = _context(database, actor_id)
+    with database.session() as db:
+        from app.modules.knowledge.services import readable_agent
+
+        assert readable_agent(db, context, agent["id"]).agent.id == agent["id"]
+        assert public_agent_editor_role(db, context, db.get(Agent, agent["id"])) is None
+        for check in (
+            lambda: visible_student_agent(db, context, agent["id"]),
+            lambda: visible_student_version(db, context, version_id),
+            lambda: _student_delete_scope(db, context, agent["id"]),
+        ):
+            with pytest.raises(PlatformError) as caught:
+                check()
+            assert caught.value.status_code == 404
