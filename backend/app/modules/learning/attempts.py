@@ -71,38 +71,125 @@ def _active_attempt(
     team_id: str,
     recipe_id: str,
 ) -> AssessmentAttempt | None:
-    attempt = db.scalar(
+    """The learner's one unfinished attempt for this recipe, whatever its Chat.
+
+    Owner rule (2026-10-20): Chat and Record are decoupled. Deleting the Chat
+    does not end or remove the attempt; it stays in progress until the student
+    chooses to continue it or restart.
+    """
+
+    return db.scalar(
         select(AssessmentAttempt)
-        .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
         .where(
             AssessmentAttempt.actor_user_id == actor_user_id,
             AssessmentAttempt.team_id == team_id,
             AssessmentAttempt.recipe_id == recipe_id,
             AssessmentAttempt.status.in_(("in_progress", "paused")),
-            Conversation.withdrawn_at.is_(None),
         )
         .order_by(AssessmentAttempt.started_at, AssessmentAttempt.id)
     )
-    if attempt is not None:
-        return attempt
-    withdrawn = db.scalar(
-        select(AssessmentAttempt.source_conversation_id)
-        .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
+
+
+RESUME_CHOICE_PROMPT = (
+    "你有一份没做完的作答，要接着上次继续，还是重新做？请回复「继续」或「重新做」。"
+)
+_CONTINUE_CHOICE = re.compile(
+    r"^(继续|接着|继续上次|接着上次|继续上次作答|接着上次继续|continue)[。.!！]?$", re.I
+)
+_RESTART_CHOICE = re.compile(r"^(重新做|重做|重新开始|重新做测评|restart)[。.!！]?$", re.I)
+
+
+def resume_choice(message: str) -> Literal["continue", "restart"] | None:
+    text = re.sub(r"\s+", "", message or "")
+    if _CONTINUE_CHOICE.match(text):
+        return "continue"
+    if _RESTART_CHOICE.match(text):
+        return "restart"
+    return None
+
+
+def unfinished_attempt_elsewhere(
+    db: Session, *, actor_user_id: str, team_id: str, conversation_id: str
+) -> AssessmentAttempt | None:
+    """An in-progress attempt of this Team rooted in a different (often deleted) Chat."""
+
+    return db.scalar(
+        select(AssessmentAttempt)
         .where(
             AssessmentAttempt.actor_user_id == actor_user_id,
             AssessmentAttempt.team_id == team_id,
-            AssessmentAttempt.recipe_id == recipe_id,
             AssessmentAttempt.status.in_(("in_progress", "paused")),
-            Conversation.withdrawn_at.is_not(None),
+            AssessmentAttempt.source_conversation_id != conversation_id,
         )
-        .limit(1)
+        .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id.desc())
     )
-    if withdrawn is not None:
-        withdraw_conversation_attempts(db, str(withdrawn))
-        return _active_attempt(
-            db, actor_user_id=actor_user_id, team_id=team_id, recipe_id=recipe_id
+
+
+def attempt_can_continue(db: Session, attempt: AssessmentAttempt) -> bool:
+    """Whether the attempt's own Chat could take messages again once reopened."""
+
+    conversation = db.get(Conversation, attempt.source_conversation_id)
+    return (
+        conversation is not None
+        and conversation.user_id == attempt.actor_user_id
+        and _chat_still_sendable(db, attempt.actor_user_id, conversation)
+    )
+
+
+def continue_unfinished_attempt(db: Session, attempt: AssessmentAttempt) -> str | None:
+    """Reopen the attempt's own Chat so its history, answers and edits carry on.
+
+    Returns the Chat id, or None when that Chat can no longer be sent to (for
+    example the teacher republished); then only a restart is possible.
+    """
+
+    conversation = db.get(Conversation, attempt.source_conversation_id)
+    if conversation is None or conversation.user_id != attempt.actor_user_id:
+        return None
+    if not _chat_still_sendable(db, attempt.actor_user_id, conversation):
+        return None
+    if conversation.withdrawn_at is not None:
+        conversation.withdrawn_at = None
+        conversation.revision += 1
+    attempt.updated_at = _now()
+    attempt.revision += 1
+    db.add(
+        _event(
+            attempt=attempt,
+            actor_user_id=attempt.actor_user_id,
+            client_event_id=str(uuid4()),
+            event_kind="resume",
+            classification=None,
+            request_hash=_hash(
+                _canonical({"attempt_id": attempt.id, "reason": "continue_unfinished"})
+            ),
         )
-    return None
+    )
+    db.flush()
+    return conversation.id
+
+
+def restart_unfinished_attempt(db: Session, attempt: AssessmentAttempt) -> None:
+    """Owner rule: restarting deletes the unfinished attempt and its answers."""
+
+    if attempt.status not in ("in_progress", "paused"):
+        raise conflict("assessment_state_invalid", "Only an unfinished attempt can be restarted.")
+    _delete_unfinished_attempt(db, attempt)
+
+
+def is_resumed_attempt(db: Session, attempt_id: str) -> bool:
+    return (
+        db.scalar(
+            select(AssessmentAttemptEvent.id)
+            .where(
+                AssessmentAttemptEvent.attempt_id == attempt_id,
+                AssessmentAttemptEvent.event_kind == "resume",
+                AssessmentAttemptEvent.classification.is_(None),
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def find_active_assessment_conversation(
@@ -1034,8 +1121,15 @@ def start_or_resume_attempt(
     if active is not None and active.source_conversation_id == conversation.id:
         return _context(db, active, conversation.id)
     if active is not None:
-        # Owner decision (2026-10-13): a new Chat is a new test. The unfinished
-        # one in the earlier Chat is given up, not reopened here.
+        # Owner rule (2026-10-20): never silently give up an unfinished attempt.
+        # The student chooses 继续/重新做 (see team_runtime explicit start). Only
+        # an attempt whose Chat can no longer be used (republished) is given up.
+        if attempt_can_continue(db, active):
+            raise conflict(
+                "assessment_resume_choice_required",
+                RESUME_CHOICE_PROMPT,
+                {"response_key": "assessment.restart_requires_choice"},
+            )
         _restart_in_new_chat(db, active, conversation.id)
     refresh_assessment_activity_questions(db, actor, conversation.id, activity)
     if not db.scalars(
@@ -2885,44 +2979,15 @@ def _restart_in_new_chat(db: Session, attempt: AssessmentAttempt, new_conversati
 
 
 def withdraw_conversation_attempts(db: Session, conversation_id: str) -> int:
-    """End attempts rooted in a withdrawn Chat without deleting answer evidence."""
+    """Deleting a Chat leaves its attempts and per-question answers untouched.
 
-    rows = db.scalars(
-        select(AssessmentAttempt).where(
-            AssessmentAttempt.source_conversation_id == conversation_id,
-            AssessmentAttempt.status.in_(("in_progress", "paused")),
-        )
-    ).all()
-    count = 0
-    for attempt in rows:
-        timestamp = _now()
-        attempt.status = "abandoned"
-        attempt.abandoned_at = timestamp
-        attempt.abandonment_reason = "chat_withdrawn"
-        attempt.updated_at = timestamp
-        attempt.revision += 1
-        event_id = str(uuid4())
-        db.add(
-            _event(
-                attempt=attempt,
-                actor_user_id=attempt.actor_user_id,
-                client_event_id=event_id,
-                event_kind="withdraw",
-                classification=None,
-                request_hash=_hash(
-                    _canonical(
-                        {
-                            "attempt_id": attempt.id,
-                            "conversation_id": conversation_id,
-                            "reason": "chat_withdrawn",
-                        }
-                    )
-                ),
-            )
-        )
-        count += 1
-    db.flush()
-    return count
+    Owner rule (2026-10-20): Record is independent of the Chat window. An
+    unfinished attempt stays in progress so the student can later continue or
+    restart it; a completed one stays in Record.
+    """
+
+    del db, conversation_id
+    return 0
 
 
 __all__ = [

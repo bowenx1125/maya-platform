@@ -29,6 +29,7 @@ from app.modules.learning.attempts import (
     get_assessment_runtime_context,
     mark_attempt_question_presented,
     read_attempt_answers,
+    restart_unfinished_attempt,
     start_or_resume_attempt,
     withdraw_conversation_attempts,
 )
@@ -796,16 +797,21 @@ def test_private_attempt_reentry_from_public_entry_keeps_original_visibility(
             actor_user_id=STUDENT_ID,
             visibility="public",
         )
-        # Owner decision (2026-10-13): a new Chat is a new test. It is not
-        # sent back to the unfinished one; starting gives that one up.
+        # Owner rule (2026-10-20): a start elsewhere never silently gives up
+        # the unfinished attempt; the student must choose 继续/重新做 first.
         assert get_assessment_runtime_context(db, actor, public_id) is None
+        with pytest.raises(PlatformError) as asked:
+            start_or_resume_attempt(db, actor, public_id, client_event_id=uuid4())
+        assert asked.value.code == "assessment_resume_choice_required"
+        old = db.get(AssessmentAttempt, str(original.attempt.id))
+        assert old is not None and old.status == "in_progress"
+        # 重新做 deletes it, then the fresh attempt starts here.
+        restart_unfinished_attempt(db, old)
         fresh = start_or_resume_attempt(db, actor, public_id, client_event_id=uuid4())
         assert fresh is not None and fresh.attempt.id != original.attempt.id
         assert fresh.canonical_conversation_id == UUID(public_id)
         assert fresh.redirect_to_original_conversation is False
-        old = db.get(AssessmentAttempt, str(original.attempt.id))
-        assert old is not None
-        assert (old.status, old.abandonment_reason) == ("abandoned", "user_redo")
+        assert db.get(AssessmentAttempt, str(original.attempt.id)) is None
         new = db.get(AssessmentAttempt, str(fresh.attempt.id))
         assert new is not None and new.source_conversation_id == public_id
         # The database keeps who answered, not only the account id.
@@ -1658,21 +1664,13 @@ def test_abandon_and_redo_discard_learning_records_while_withdraw_keeps_them(
             user_message="Answer one stays with a withdrawn Chat.",
             decision=_answer_decision(uuid4(), other_version, "one"),
         )
-        assert withdraw_conversation_attempts(db, withdrawn_conversation) == 1
+        # Owner rule (2026-10-20): deleting the Chat keeps the attempt and answers.
+        assert withdraw_conversation_attempts(db, withdrawn_conversation) == 0
         assert learning_rows(db, str(other_started.attempt.id))[:2] == (1, 1)
         withdrawn_attempt = db.get(AssessmentAttempt, str(other_started.attempt.id))
         assert withdrawn_attempt is not None
-        assert withdrawn_attempt.status == "abandoned"
-        assert withdrawn_attempt.abandonment_reason == "chat_withdrawn"
-        assert (
-            db.scalar(
-                select(func.count(AssessmentAttemptEvent.id)).where(
-                    AssessmentAttemptEvent.attempt_id == withdrawn_attempt.id,
-                    AssessmentAttemptEvent.event_kind == "withdraw",
-                )
-            )
-            == 1
-        )
+        assert withdrawn_attempt.status == "in_progress"
+        assert withdrawn_attempt.abandonment_reason is None
 
 
 def test_original_actor_can_abandon_after_question_source_revocation(attempt_env: Any) -> None:

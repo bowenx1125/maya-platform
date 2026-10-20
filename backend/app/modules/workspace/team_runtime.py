@@ -78,6 +78,14 @@ _POST_END_NO_TASK = frozenset(
 )
 
 
+# Owner rule (2026-10-20): resume logic lives in the assessment program; the
+# prompt only learns that this attempt was resumed.
+RESUMED_ATTEMPT_NOTE = (
+    "This is a resumed attempt: its saved answers stay. Do not re-ask answered "
+    "questions; apply any change the student asks for to an earlier answer."
+)
+
+
 @dataclass(frozen=True)
 class TeamClaim:
     turn_id: str
@@ -532,6 +540,15 @@ def _active_attempt(db: Session, row: Conversation) -> AssessmentAttempt | None:
             AssessmentAttempt.status.in_(("in_progress", "paused")),
         )
     )
+
+
+def _attempt_was_resumed(db: Session, row: Conversation) -> bool:
+    attempt = _active_attempt(db, row)
+    if attempt is None:
+        return False
+    from app.modules.learning.attempts import is_resumed_attempt
+
+    return is_resumed_attempt(db, attempt.id)
 
 
 def _formal_roles_for_conversation(db: Session, row: Conversation) -> FormalRoles | None:
@@ -1710,6 +1727,7 @@ def _start_member(
             assessment_task_json=assessment_task_json,
             assessment_source_revoked=assessment_source_revoked,
             team_ruleset=team_ruleset,
+            assessment_resumed=_attempt_was_resumed(db, row) if assessment_active else False,
             speaker_name=participant.display_name,
             is_leader=participant.is_leader,
             viewer_is_teacher=_viewer_is_teacher(db, row, actor_context),
@@ -1985,6 +2003,7 @@ def _member_system(
     attempt_closed: bool = False,
     mentioned: bool = False,
     assessment_capable: bool = True,
+    assessment_resumed: bool = False,
 ) -> str:
     if not assessment_capable and not (
         assessment_source_revoked or assessment_active or assessment_purpose is not None
@@ -2085,7 +2104,8 @@ def _member_system(
             "fact sentence from the Tool receipt. The question Guide does not call a write "
             "Tool. Authorization (ACL) overrides this ledger, and this ledger overrides the "
             "Team Ruleset.\n"
-            "</active_assessment_action_protocol>"
+            + (RESUMED_ATTEMPT_NOTE + "\n" if assessment_resumed else "")
+            + "</active_assessment_action_protocol>"
         )
         message += _ruleset_precedence_block(team_ruleset)
     else:
@@ -2603,16 +2623,58 @@ def _begin_formal_attempt_on_explicit_start(
     inserts no attempt. A team that is not a formal recipe is left alone.
     """
 
+    from app.modules.learning.attempts import (
+        RESUME_CHOICE_PROMPT,
+        attempt_can_continue,
+        continue_unfinished_attempt,
+        restart_unfinished_attempt,
+        resume_choice,
+        start_or_resume_attempt,
+        unfinished_attempt_elsewhere,
+    )
+
     from .formal_assessment import is_formal_start_message
 
     if actor_context is None or actor_context.user.id != row.user_id:
         return
-    if not is_formal_start_message(message):
-        return
     if _active_attempt(db, row) is not None:
         return
-    from app.modules.learning.attempts import start_or_resume_attempt
-
+    choice = resume_choice(message)
+    if choice is None and not is_formal_start_message(message):
+        return
+    if row.team_id is None or _formal_roles_for_conversation(db, row) is None:
+        return
+    # Owner rule (2026-10-20): one unfinished attempt per student and Team.
+    # Before a second one starts, the student chooses: continue it or restart.
+    earlier = unfinished_attempt_elsewhere(
+        db, actor_user_id=row.user_id, team_id=row.team_id, conversation_id=row.id
+    )
+    if earlier is not None and not attempt_can_continue(db, earlier):
+        # Its Chat is on a revoked version (teacher republished): it cannot be
+        # continued, so the start below gives it up as before (kept in Record).
+        earlier = None
+        if choice == "continue":
+            return
+    if earlier is not None:
+        if choice is None:
+            raise conflict(
+                "assessment_resume_choice_required",
+                RESUME_CHOICE_PROMPT,
+                {"response_key": "assessment.restart_requires_choice"},
+            )
+        if choice == "continue":
+            original = continue_unfinished_attempt(db, earlier)
+            if original is not None:
+                db.commit()
+                raise conflict(
+                    "assessment_resume_original_conversation",
+                    "Continue this assessment in its original conversation.",
+                    {"response_key": "assessment.redirect", "conversation_id": original},
+                )
+            return
+        restart_unfinished_attempt(db, earlier)
+    elif choice == "continue":
+        return
     start_or_resume_attempt(db, actor_context, row.id, client_event_id=request_id)
 
 

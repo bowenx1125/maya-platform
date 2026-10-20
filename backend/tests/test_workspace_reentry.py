@@ -261,7 +261,7 @@ def test_reentry_lookup_is_scoped_to_actor_and_current_course_membership(
     assert teacher_response.json()["id"] not in {source_id, kaikai_session["id"]}
 
 
-def test_withdrawn_attempt_source_is_not_reused_for_a_new_chat(
+def test_deleted_chat_keeps_its_unfinished_attempt_for_a_new_chat(
     reentry_env: tuple[Database, Any, TestClient],
 ) -> None:
     database, settings, client = reentry_env
@@ -292,5 +292,7 @@ def test_withdrawn_attempt_source_is_not_reused_for_a_new_chat(
         attempt = db.get(AssessmentAttempt, attempt_id)
         assert source is not None and source.withdrawn_at is not None
         assert attempt is not None
-        assert attempt.status == "abandoned"
-        assert attempt.abandonment_reason == "chat_withdrawn"
+        # Owner rule (2026-10-20): deleting the Chat keeps the attempt unfinished
+        # until the student chooses to continue it or restart.
+        assert attempt.status == "paused"
+        assert attempt.abandonment_reason is None
