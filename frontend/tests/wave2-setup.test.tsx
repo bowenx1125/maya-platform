@@ -987,12 +987,15 @@ describe("Wave 2 teacher debate setup", () => {
     expect(
       screen.getByRole("button", { name: "中文" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
-      target: { value: "# 仅本场中文修改" },
-    });
+    // Ruleset chrome is on the card (edit → back → save). Left-rail Back/Done
+    // stay for the whole Debate and must not cancel/save the ruleset draft.
     const navigation = within(screen.getByRole("navigation"));
-    fireEvent.click(await navigation.findByRole("button", { name: "Back" }));
+    const main = within(screen.getByRole("main"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(navigation.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(navigation.queryByRole("button", { name: "Done" })).toBeNull();
+    // Unchanged edit → card Back discards and restores the default heading.
+    fireEvent.click(main.getByRole("button", { name: "Back" }));
     expect(create).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
     expect(screen.getByRole("heading", { name: "默认规则" })).toBeTruthy();
@@ -1004,7 +1007,9 @@ describe("Wave 2 teacher debate setup", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 仅本场中文修改" },
     });
-    fireEvent.click(await navigation.findByRole("button", { name: "Done" }));
+    // Dirty → card checkmark Save; rail Done is still hidden while editing.
+    expect(navigation.queryByRole("button", { name: "Done" })).toBeNull();
+    fireEvent.click(main.getByRole("button", { name: "Save" }));
     expect(create).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox", { name: "中文规则" })).toBeNull();
     expect(
