@@ -5,18 +5,23 @@ Agent, so a side table remembers the last editor (open-button tooltip
 「最新编辑：…，Version：1.X」) and who soft-deleted it. New table only; no
 existing row is touched.
 
-Revision ID: 0075_agent_editor_audit
-Revises: 0074_interaction_voter_key
+Revision ID: 0076_agent_editor_audit
+Revises: 0075_answer_guard_state (#225) when present, else 0074_interaction_voter_key
 Create Date: 2026-10-20
 """
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0075_agent_editor_audit"
-down_revision: str | Sequence[str] | None = "0074_interaction_voter_key"
+revision: str = "0076_agent_editor_audit"
+# 0075 is #225's answer guard; chain after it once it lands (same pattern as #233).
+_PARENTS = ("0075_answer_guard_state", "0074_interaction_voter_key")
+down_revision: str | Sequence[str] | None = next(
+    name for name in _PARENTS if (Path(__file__).parent / f"{name}.py").exists()
+)
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
