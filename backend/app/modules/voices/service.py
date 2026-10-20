@@ -496,6 +496,27 @@ def _safe_provider_error(exc: Exception) -> PlatformError:
     )
 
 
+def _unique_voice_name(
+    db: Session, display_name: str, *, group_id: str | None, user_id: str | None
+) -> str:
+    """Voice names follow the Agent rule: a taken name becomes ``name-2``, ``name-3``."""
+
+    from app.core.naming import dedup_name
+
+    if group_id is None and user_id is None:
+        return display_name
+    query = select(VoiceProfile.display_name).where(
+        VoiceProfile.status.in_(("ready", "enrolling", "validating"))
+    )
+    if group_id is not None:
+        query = query.where(VoiceProfile.scope == "group", VoiceProfile.group_id == group_id)
+    else:
+        query = query.where(
+            VoiceProfile.scope == "personal", VoiceProfile.consent_actor_user_id == user_id
+        )
+    return dedup_name(display_name, db.scalars(query).all())[:240]
+
+
 def _create_profile_and_operation(
     db: Session,
     *,
@@ -515,6 +536,9 @@ def _create_profile_and_operation(
     timestamp = now_utc()
     profile_id = str(uuid4())
     owned = group_id is not None or personal
+    display_name = _unique_voice_name(
+        db, display_name, group_id=group_id, user_id=context.user.id if personal else None
+    )
     profile = VoiceProfile(
         id=profile_id,
         scope="group" if group_id is not None else "personal" if personal else "system",

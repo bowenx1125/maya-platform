@@ -388,6 +388,27 @@ def _agent_has_history(db: Session, agent_id: str) -> bool:
     )
 
 
+def _agent_in_live_team(db: Session, agent_id: str) -> bool:
+    """True when the current version of any live Team lists this Agent."""
+
+    from app.modules.teams.models import Team, TeamVersion, TeamVersionMember
+
+    return (
+        db.scalar(
+            select(Team.id)
+            .join(
+                TeamVersion,
+                (TeamVersion.team_id == Team.id)
+                & (TeamVersion.version_seq == Team.current_version_seq),
+            )
+            .join(TeamVersionMember, TeamVersionMember.team_version_id == TeamVersion.id)
+            .where(Team.deleted_at.is_(None), TeamVersionMember.agent_id == agent_id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _begin_immediate(db: Session) -> None:
     """Start the final serialized Agent writer transaction.
 
@@ -1119,6 +1140,14 @@ def delete_agent(
             raise conflict(
                 "agent_history_retained",
                 "This Agent is used by a Debate or is being published and cannot be deleted.",
+            )
+
+        if _agent_in_live_team(db, agent.id):
+            db.rollback()
+            abandon_claim(db, record)
+            raise conflict(
+                "agent_in_team",
+                "已被放进 Team，请先修改 Team。",
             )
 
         # Keep immutable versions/snapshots for owner-only chat history. The

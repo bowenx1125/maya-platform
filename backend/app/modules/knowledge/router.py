@@ -267,6 +267,32 @@ def list_course_workspace_documents(
     return [_document_dto(document, can_manage_visibility=True) for document in documents]
 
 
+def _unique_document_filename(
+    db: Session,
+    filename: str,
+    *,
+    course_id: str,
+    group_id: str | None,
+    owner_user_id: str | None,
+) -> str:
+    """Give a RAG file a free name in its library (``notes.md`` -> ``notes-2.md``)."""
+
+    from app.core.naming import dedup_name
+
+    query = select(KnowledgeDocument.source_filename).where(
+        KnowledgeDocument.course_id == course_id,
+        KnowledgeDocument.workspace_state == "active",
+    )
+    if group_id is not None:
+        query = query.where(KnowledgeDocument.group_id == group_id)
+    else:
+        query = query.where(
+            KnowledgeDocument.group_id.is_(None),
+            KnowledgeDocument.owner_user_id == owner_user_id,
+        )
+    return dedup_name(filename, db.scalars(query).all(), keep_extension=True)
+
+
 @router.post(
     "/courses/{course_id}/workspace-documents",
     response_model=KnowledgeDocumentMutation,
@@ -597,6 +623,13 @@ async def upload_knowledge_document(
             updated_at=timestamp,
         )
         db.add(stored_file)
+        unique_filename = _unique_document_filename(
+            db,
+            document.filename,
+            course_id=resource_course_id,
+            group_id=str(group_id) if group_id is not None else None,
+            owner_user_id=None if group_id is not None else context.user.id,
+        )
         row = KnowledgeDocument(
             id=document_id,
             group_id=str(group_id) if group_id is not None else None,
@@ -605,7 +638,7 @@ async def upload_knowledge_document(
             ownership_scope="personal" if personal_workspace else "group",
             visibility=visibility,
             authorization_epoch=0,
-            source_filename=document.filename,
+            source_filename=unique_filename,
             source_owner_role=source_owner_role,
             stored_file_id=stored_file.id,
             char_count=document.char_count,
