@@ -249,3 +249,62 @@ def test_rule3_tool_start_asks_instead_of_silently_abandoning(
         attempt = db.get(AssessmentAttempt, ctx["attempt_id"])
         assert attempt is not None and attempt.status == "in_progress"
         assert len(_unfinished(db, ctx["user_id"], ctx["team_id"])) == 1
+
+
+def test_rule4_resumed_attempt_keeps_answer_editing(reentry_env: Any) -> None:  # noqa: F811
+    """With #225: 修改第N题 works on an attempt resumed via 继续."""
+
+    pytest.importorskip("app.modules.learning.answer_guard")
+    from app.modules.learning.attempts import (
+        _edit_target,
+        apply_assessment_decision,
+        get_assessment_runtime_context,
+        mark_attempt_question_presented,
+    )
+    from app.modules.learning.schemas import AssessmentRuntimeDecision
+
+    database, settings, client = reentry_env
+    user_id, token, csrf = _login(client, "bowen")
+    source_id, team_id, attempt_id, _rev = _create_attempt(
+        database,
+        settings,
+        actor_user_id=user_id,
+        actor_token=token,
+        visibility="private",
+        status="in_progress",
+    )
+    with database.session() as db:
+        actor = get_auth_context(db, settings, token)
+        context = get_assessment_runtime_context(db, actor, source_id)
+        assert context is not None and context.current_question is not None
+        version = context.current_question.question_version_id
+        mark_attempt_question_presented(db, actor, source_id, question_version_id=version)
+        recorded = apply_assessment_decision(
+            db,
+            actor,
+            source_id,
+            user_message="第一题的答案",
+            decision=AssessmentRuntimeDecision(
+                client_event_id=uuid4(),
+                classification="answer_only",
+                answer_span="第一题的答案",
+                question_version_id=version,
+            ),
+        )
+        assert recorded is not None and recorded.response_key == "assessment.answer_recorded"
+        db.commit()
+    _delete_chat(client, csrf, source_id)
+    created = _post_maya_team(client, csrf, team_id)
+    assert created.status_code == 200, created.text
+    ctx = {"settings": settings, "token": token, "new_id": created.json()["id"]}
+    with database.session() as db:
+        with pytest.raises(PlatformError) as raised:
+            _start(db, ctx, "继续")
+        assert raised.value.code == "assessment_resume_original_conversation"
+    with database.session() as db:
+        actor = get_auth_context(db, settings, token)
+        resumed = get_assessment_runtime_context(db, actor, source_id)
+        assert resumed is not None and str(resumed.attempt.id) == attempt_id
+        target = _edit_target(db, actor, source_id, "修改第1题：我认为是光合作用")
+        assert isinstance(target, tuple), target
+        assert str(target[0]) == str(version) and target[1] == "我认为是光合作用"
