@@ -444,9 +444,12 @@ export function BrainformWorkspace({
   initialMode,
   initialDocumentId,
   embedded = false,
+  onPaneChange,
 }: {
   /** Rendered inside Studyform: RAG and Record join Studyform's grid. */
   embedded?: boolean;
+  /** Embedded only: a RAG or Record page opened (true) or closed (false). */
+  onPaneChange?: (open: boolean) => void;
   role: BrainformRole;
   initialAgentId?: string;
   initialSetId?: string;
@@ -561,6 +564,7 @@ export function BrainformWorkspace({
       initialMode={initialMode}
       initialDocumentId={initialDocumentId}
       embedded={embedded}
+      onPaneChange={onPaneChange}
       identityScope={dataScope}
       ragDraftScope={JSON.stringify([
         user?.id ?? null,
@@ -602,10 +606,12 @@ function BrainformWorkspaceBody({
   initialMode,
   initialDocumentId,
   embedded = false,
+  onPaneChange,
   identityScope,
   ragDraftScope,
 }: {
   embedded?: boolean;
+  onPaneChange?: (open: boolean) => void;
   role: BrainformRole;
   courseIds: string[];
   courseId: string;
@@ -1197,6 +1203,15 @@ function BrainformWorkspaceBody({
     role,
     scopeIsCurrent,
   ]);
+
+  // Inside Studyform, an open RAG or Record pane is its own page: Studyform
+  // hides its other cards while it is open, as Brainform did.
+  const paneOpen = Boolean(pane || initialMode);
+  useEffect(() => {
+    if (!embedded) return;
+    onPaneChange?.(paneOpen);
+    if (paneOpen) window.scrollTo?.({ top: 0 });
+  }, [embedded, onPaneChange, paneOpen]);
 
   const closePane = useCallback(() => {
     operationSequence.current += 1;

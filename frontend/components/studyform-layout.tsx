@@ -8,8 +8,11 @@ import { WorkspaceIcon } from "./workspace-icon";
 export function ModuleGrid({
   children,
   variant,
+  paneOpen = false,
 }: {
   children: ReactNode;
+  /** A RAG or Record page is open: only it shows, as on Brainform. */
+  paneOpen?: boolean;
   /** "studyform": the 2-top / 3-bottom Studyform layout. */
   variant?: "studyform";
 }) {
@@ -18,6 +21,7 @@ export function ModuleGrid({
       className={
         variant === "studyform" ? styles.studyformGrid : styles.sections
       }
+      data-pane-open={paneOpen || undefined}
     >
       {children}
     </div>

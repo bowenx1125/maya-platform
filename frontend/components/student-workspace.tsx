@@ -275,12 +275,15 @@ export function GroupWorkspace({
   focusVoices = false,
   initialMode,
   initialTeamId,
+  initialDocumentId,
 }: {
   groupId: string;
   initialVoiceCreate?: boolean;
   focusVoices?: boolean;
   initialMode?: string;
   initialTeamId?: string;
+  /** A RAG file a ?mode=rag-view / rag-edit link opens. */
+  initialDocumentId?: string;
 }) {
   const { identityGeneration, user } = useSession();
   // Only Team modes swap the page; RAG modes open inside the embedded
@@ -298,6 +301,7 @@ export function GroupWorkspace({
       focusVoices={focusVoices}
       initialMode={initialMode}
       initialTeamId={initialTeamId}
+      initialDocumentId={initialDocumentId}
       scope={scope}
     />
   );
@@ -309,6 +313,7 @@ function GroupWorkspaceSession({
   focusVoices,
   initialMode,
   initialTeamId,
+  initialDocumentId,
   scope,
 }: {
   groupId: string;
@@ -316,9 +321,17 @@ function GroupWorkspaceSession({
   focusVoices: boolean;
   initialMode?: string;
   initialTeamId?: string;
+  initialDocumentId?: string;
   scope: string;
 }) {
   const t = useT();
+  // Team modes swap the whole page; any other mode belongs to the embedded
+  // RAG / Record cards, which open it as their own page.
+  const brainformMode =
+    initialMode === "team-new" || initialMode === "team-edit"
+      ? undefined
+      : initialMode;
+  const [brainformPane, setBrainformPane] = useState(false);
   const { api, identityGeneration, user } = useSession();
   const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   const snapshotKey = `page:studyform-group:${groupId}`;
@@ -579,7 +592,10 @@ function GroupWorkspaceSession({
           }
         />
       ) : null}
-      <ModuleGrid variant={teacherIdentity ? undefined : "studyform"}>
+      <ModuleGrid
+        variant={teacherIdentity ? undefined : "studyform"}
+        paneOpen={brainformPane}
+      >
         <ModuleCard
           title={t("agents")}
           labelledBy="studyform-agents"
@@ -689,6 +705,9 @@ function GroupWorkspaceSession({
             embedded
             initialGroupId={groupId}
             initialCourseId={group.course_id}
+            initialMode={brainformMode}
+            initialDocumentId={initialDocumentId}
+            onPaneChange={setBrainformPane}
           />
         )}
       </ModuleGrid>

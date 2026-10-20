@@ -631,9 +631,35 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Owner request (2026-10-20): each Studyform card keeps a fixed height
+   (two rows fill the viewport below the page title); the title and + stay
+   put while the card's body scrolls on its own. */
+.studyformGrid {
+  --studyform-card-height: max(260px, calc((100vh - 140px) / 2));
+}
+
+.studyformGrid .section {
+  display: flex;
+  flex-direction: column;
+  height: var(--studyform-card-height);
+  overflow: hidden;
+}
+
+.studyformGrid .section > .sectionHeading {
+  flex: none;
+}
+
+.studyformGrid .section > :not(.sectionHeading) {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 @media (max-width: 960px) {
   .studyformGrid {
     grid-template-columns: 1fr;
+    --studyform-card-height: min(420px, 70vh);
   }
 
   .studyformGrid > *,
@@ -643,4 +669,14 @@
     grid-column: auto;
     grid-row: auto;
   }
+}
+
+/* A RAG or Record page opened from Studyform shows on its own, the same as
+   on Brainform; the other cards stay mounted but hidden. */
+.studyformGrid[data-pane-open] > :not(.embeddedPage) {
+  display: none;
+}
+
+.studyformGrid[data-pane-open] .embeddedPage > * {
+  grid-row: auto;
 }
