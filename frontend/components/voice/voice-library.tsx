@@ -593,11 +593,20 @@ export function VoiceLibrary({
         type="button"
         disabled={!file || controlsDisabled || !canEnroll}
         aria-busy={busy || undefined}
+        aria-describedby={!file ? "voice-consent-hint" : undefined}
+        title={!file ? t("voiceSelectFileFirst") : undefined}
         onClick={() => void submitEnrollment()}
       >
         {busy ? <span className="spinner" aria-hidden="true" /> : null}
         <span>{t("voiceConsent")}</span>
       </button>
+      {/* Students read the grey button as "upload is broken" (2026-10-20):
+          say why it is waiting. */}
+      {!file ? (
+        <p id="voice-consent-hint" className={styles.consentHint}>
+          {t("voiceSelectFileFirst")}
+        </p>
+      ) : null}
     </div>
   );
 
