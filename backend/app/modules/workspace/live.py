@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Response, WebSocket, WebSocketDisconnect
@@ -27,6 +27,7 @@ from app.modules.interactions.models import ClassroomInteractionWindow
 from app.modules.interactions.tokens import issue_token
 
 from .access import course_member
+from .live_push import CourseLiveWatcher, as_message
 from .models import LivePresence
 from .schemas import LiveHeartbeat, LiveParticipant, LiveSnapshot, LiveSummary, LiveTurn
 
@@ -151,6 +152,108 @@ def live_status(
         tuple[LiveSummary | None],
         _PUBLIC.read(("live_status", str(course_id)), settings, load, what="live_status"),
     )[0]
+
+
+def _live_statuses(
+    database: Any, service: PlaybackService, courses: list[str]
+) -> dict[str, LiveSummary | None]:
+    """Live status for many courses: one presence query, then only live ones."""
+
+    now = datetime.now(UTC)
+    result: dict[str, LiveSummary | None] = {}
+    with database.session() as db:
+        rows = db.scalars(select(LivePresence).where(LivePresence.course_id.in_(courses))).all()
+        for row in rows:
+            if row.expires_at.replace(tzinfo=UTC) > now:
+                result[str(row.course_id)] = _live_status(db, service, UUID(str(row.course_id)))
+    return result
+
+
+def course_live_watcher(app: Any) -> CourseLiveWatcher:
+    """The one per-process watcher (created on first subscriber)."""
+
+    watcher = getattr(app.state, "course_live_watcher", None)
+    if watcher is None:
+        database = app.state.database
+        service = app.state.playback_service
+        watcher = CourseLiveWatcher(lambda courses: _live_statuses(database, service, courses))
+        app.state.course_live_watcher = watcher
+    return cast(CourseLiveWatcher, watcher)
+
+
+@router.websocket("/courses/{course_id}/live/events")
+async def course_live_events(websocket: WebSocket, course_id: UUID) -> None:
+    """Pushes ``{"live": LiveSummary | null}`` now and on every change.
+
+    Replaces the student shell's 5 s poll of ``GET /courses/{id}/live``.
+    Close 4429 means this process is full; the client keeps its slow poll.
+    """
+
+    await websocket.accept()
+    settings = websocket.app.state.settings
+    if not _websocket_origin_allowed(websocket, settings):
+        await websocket.close(code=4403)
+        return
+    database = websocket.app.state.database
+    service = websocket.app.state.playback_service
+    key = str(course_id)
+    recheck = float(settings.debate_ws_auth_recheck_seconds)
+    raw_token = websocket.cookies.get("maya_session")
+
+    def authorized() -> bool:
+        with database.session() as db:
+            context = get_auth_context(db, settings, raw_token)
+            if context is None:
+                return False
+            try:
+                course_member(db, context, key)
+            except PlatformError:
+                return False
+            return True
+
+    if not await asyncio.to_thread(authorized):
+        await websocket.close(code=4401)
+        return
+    watcher = course_live_watcher(websocket.app)
+    queue = await watcher.subscribe(key)
+    if queue is None:
+        await websocket.close(code=4429)
+        return
+    incoming = asyncio.create_task(websocket.receive())
+    last_authorized = time.monotonic()
+    try:
+        initial = await asyncio.to_thread(_live_statuses, database, service, [key])
+        await websocket.send_json(as_message(initial.get(key)))
+        while True:
+            timeout = max(0.05, recheck - (time.monotonic() - last_authorized))
+            change = asyncio.create_task(queue.get())
+            try:
+                done, _ = await asyncio.wait(
+                    {change, incoming}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+                )
+                if incoming in done:
+                    # Read-only: any client frame or a close ends the stream.
+                    await websocket.close(code=1000)
+                    return
+                if change in done:
+                    value = change.result()
+                    while not queue.empty():
+                        value = queue.get_nowait()
+                    await websocket.send_json(as_message(value))
+            finally:
+                change.cancel()
+                await asyncio.gather(change, return_exceptions=True)
+            if time.monotonic() - last_authorized >= recheck:
+                if not await asyncio.to_thread(authorized):
+                    await websocket.close(code=4401)
+                    return
+                last_authorized = time.monotonic()
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        incoming.cancel()
+        await asyncio.gather(incoming, return_exceptions=True)
+        await watcher.unsubscribe(key, queue)
 
 
 def _live_status(db: Session, service: PlaybackService, course_id: UUID) -> LiveSummary | None:
