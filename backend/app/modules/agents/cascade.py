@@ -420,6 +420,12 @@ def sweep_stale_agents(database: Database, settings: Settings) -> int:
                     LOGGER.exception("Agent auto-bump sweep failed agent_id=%s", agent_id)
                 finally:
                     session.close()
+            retarget_session = database.session_factory()
+            try:
+                for agent_id in _agents_with_stale_chats(retarget_session):
+                    retarget_agent_chats(retarget_session, agent_id)
+            finally:
+                retarget_session.close()
             if work:
                 LOGGER.info("Agent auto-bump sweep stale=%d published=%d", len(work), published)
             return published
@@ -428,3 +434,70 @@ def sweep_stale_agents(database: Database, settings: Settings) -> int:
                 lock_session.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _SWEEP_LOCK_KEY})
     finally:
         lock_session.close()
+
+
+def retarget_agent_chats(db: Session, agent_id: str) -> int:
+    """Move open single-Agent chats to the Agent's current published version.
+
+    Owner decision (2026-10-20): a chat in progress keeps going after any
+    version change, now talking to the new version with its full history
+    (turns belong to the conversation, so the new version sees all of them).
+    A chat mid-reply (``active_request_id``) is left for the next publish or
+    sweep. Deleted Agents are not touched: their chats already refuse to send.
+    """
+
+    from sqlalchemy import update
+
+    from app.modules.workspace.models import Conversation
+
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.deleted_at is not None or agent.status != "active":
+        return 0
+    current = (
+        db.get(AgentVersion, agent.current_published_version_id)
+        if agent.current_published_version_id
+        else None
+    )
+    if current is None or current.state != "published":
+        return 0
+    result = db.execute(
+        update(Conversation)
+        .where(
+            Conversation.entry_kind == "agent",
+            Conversation.withdrawn_at.is_(None),
+            Conversation.active_request_id.is_(None),
+            Conversation.agent_version_id != current.id,
+            Conversation.agent_version_id.in_(
+                select(AgentVersion.id).where(AgentVersion.agent_id == agent.id)
+            ),
+        )
+        .values(
+            agent_version_id=current.id,
+            snapshot_id=current.knowledge_snapshot_id,
+            agent_name_snapshot=agent.name,
+            agent_authorization_epoch=agent.authorization_epoch,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+def _agents_with_stale_chats(db: Session) -> list[str]:
+    from app.modules.workspace.models import Conversation
+
+    return list(
+        db.scalars(
+            select(Agent.id)
+            .join(AgentVersion, AgentVersion.agent_id == Agent.id)
+            .join(Conversation, Conversation.agent_version_id == AgentVersion.id)
+            .where(
+                Agent.deleted_at.is_(None),
+                Agent.status == "active",
+                Conversation.entry_kind == "agent",
+                Conversation.withdrawn_at.is_(None),
+                AgentVersion.id != Agent.current_published_version_id,
+            )
+            .distinct()
+        ).all()
+    )
