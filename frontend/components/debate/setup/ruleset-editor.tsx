@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { ReportMarkdown } from "../../report/report-markdown";
-import { IconEdit } from "../../quiet-icons";
+import { IconArrowLeft, IconCheck, IconEdit } from "../../quiet-icons";
 import { SectionCard } from "../../ui";
-import { WorkspaceAction } from "../../workspace-actions";
 import styles from "./ruleset-editor.module.css";
 import sectionStyles from "./create-section.module.css";
 
@@ -28,6 +27,8 @@ export function RulesetEditor({
   const [mode, setMode] = useState<"details" | "edit">("details");
   const [draft, setDraft] = useState(prompts);
   const editing = mode === "edit";
+  // Dirty only when the visible language's text changed — drives back→checkmark.
+  const dirty = editing && draft[language] !== prompts[language];
 
   function save() {
     if (disabled) return;
@@ -42,6 +43,8 @@ export function RulesetEditor({
     onEditingChange(false);
   }
 
+  // Ruleset chrome stays on this card: edit → back → checkmark when dirty.
+  // Do not register left-rail Back/Done here — those belong to the whole Debate.
   return (
     <SectionCard
       title="Debate Ruleset"
@@ -67,20 +70,16 @@ export function RulesetEditor({
             ))}
           </div>
           {editing ? (
-            <>
-              <WorkspaceAction
-                name="back"
-                disabled={disabled}
-                priority={10}
-                onClick={cancel}
-              />
-              <WorkspaceAction
-                name="done"
-                disabled={disabled}
-                priority={10}
-                onClick={save}
-              />
-            </>
+            <button
+              type="button"
+              className={`${styles.action} ${styles.iconAction}`}
+              disabled={disabled}
+              aria-label={dirty ? "Save" : "Back"}
+              data-ui-guide={dirty ? "debate.rulesetSave" : "debate.rulesetBack"}
+              onClick={dirty ? save : cancel}
+            >
+              {dirty ? <IconCheck /> : <IconArrowLeft />}
+            </button>
           ) : (
             <button
               type="button"

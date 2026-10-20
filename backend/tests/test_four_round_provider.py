@@ -118,7 +118,7 @@ def test_four_round_wire_requires_explicit_field_consent_and_versions_recovery()
     assert request.prompt_contract_version == FOUR_ROUND_SEGMENT_PROMPT_VERSION
     assert segment_prompt_version(_snapshot()) == SEGMENT_PROMPT_VERSION
     assert json.loads(request.user_message.content)["discussion"]["self_id"] == PUBLIC_ID
-    assert "320 words" in request.system_message.content
+    assert "80 words" in request.system_message.content
     assert set(request.body["response_format"]["json_schema"]["schema"]["properties"]) == {
         "segments",
         "question",
