@@ -8,14 +8,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.errors import Error, conflict
+from app.core.errors import Error
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 
-from .models import CivilizationReportRevision
-from .schemas import ContinueRealReportRequest, Report, ReportRevision, ReportRevisionSummary
+from .schemas import Report, ReportRevision, ReportRevisionSummary
 from .service import (
-    continue_real_report_revision,
     download_current_report,
     get_current_report,
     get_report_revision,
@@ -73,51 +71,6 @@ def regenerate_report_route(
     if callable(wake):
         wake(str(debate_id))
     return result
-
-
-@router.post(
-    "/debates/{debate_id}/report/revisions/{revision_id}/continue",
-    response_model=ReportRevision,
-    status_code=202,
-    operation_id="continueRealReport",
-    responses={403: {"model": Error}, 404: {"model": Error}, 409: {"model": Error}},
-)
-def continue_real_report_route(
-    debate_id: UUID,
-    revision_id: UUID,
-    payload: ContinueRealReportRequest,
-    request: Request,
-    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-) -> ReportRevision:
-    revision = db.get(CivilizationReportRevision, str(revision_id))
-    if revision is None or revision.debate_id != str(debate_id):
-        from app.core.errors import not_found
-
-        raise not_found()
-    get_report_revision(
-        db,
-        actor_user_id=context.user.id,
-        debate_id=str(debate_id),
-        revision_id=str(revision_id),
-    )
-    runtime = getattr(request.app.state, "report_runtime", None)
-    if runtime is None:
-        raise conflict("report_provider_unavailable", "Real Report is not configured.")
-    continue_real_report_revision(
-        db,
-        str(revision_id),
-        manifest_hash=payload.manifest_hash,
-        call_no=payload.call_no,
-        runtime=runtime,
-    )
-    return get_report_revision(
-        db,
-        actor_user_id=context.user.id,
-        debate_id=str(debate_id),
-        revision_id=str(revision_id),
-    )
 
 
 @router.get(

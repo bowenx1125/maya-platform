@@ -73,37 +73,6 @@ describe("PlatformApi Brainform actions", () => {
     );
   });
 
-  it("posts an idempotent lifecycle action to the current assessment attempt", async () => {
-    const result = { response_key: "assessment.paused" };
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify(result), { status: 200 }));
-    const api = new PlatformApi({
-      baseUrl: "/api/v1",
-      csrfToken: "csrf-token",
-    });
-    const body = {
-      client_event_id: "11111111-1111-4111-8111-111111111111",
-      action: "pause" as const,
-    };
-
-    expect(await api.assessmentAttemptAction("attempt-1", body)).toEqual(
-      result,
-    );
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      "/api/v1/learning/attempts/attempt-1/actions",
-    );
-    expect(fetchMock.mock.calls[0][1]).toMatchObject({
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": "csrf-token",
-      },
-    });
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(body);
-  });
-
   it("renames a Markdown source through metadata CAS rather than replacing its bytes", async () => {
     const document = {
       id: "document-1",
@@ -172,16 +141,6 @@ describe("PlatformApi Brainform actions", () => {
       can_edit: true,
       created_at: "2026-10-07T00:00:00Z",
     };
-    const assetVersions = {
-      asset_id: "asset-1",
-      audience: "student",
-      versions: [],
-    };
-    const graph = {
-      set_id: "set-1",
-      nodes: [],
-      edges: [],
-    };
     const savedMarkdown = {
       ...markdown,
       version_seq: 5,
@@ -194,12 +153,6 @@ describe("PlatformApi Brainform actions", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(markdown), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(assetVersions), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(graph), { status: 200 }),
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(savedMarkdown), { status: 200 }),
@@ -218,10 +171,6 @@ describe("PlatformApi Brainform actions", () => {
       canonical_set_id: "set-1",
       version_seq: 4,
     });
-    expect(await api.knowledgeSetAssetVersions("asset-1")).toEqual(
-      assetVersions,
-    );
-    expect(await api.knowledgeSetGraph("set-1")).toEqual(graph);
 
     const idempotency = createIdempotencyHandle();
     const idempotencyKey = idempotency.key;
@@ -233,17 +182,17 @@ describe("PlatformApi Brainform actions", () => {
       ),
     ).toMatchObject({ canonical_set_id: "set-1", version_seq: 5 });
 
-    expect(new URL(String(fetchMock.mock.calls[4]?.[0])).pathname).toBe(
+    expect(new URL(String(fetchMock.mock.calls[2]?.[0])).pathname).toBe(
       "/api/v1/knowledge-sets/set-1/markdown",
     );
-    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
       method: "PUT",
       headers: {
         "Idempotency-Key": idempotencyKey,
         "X-CSRF-Token": "csrf-token",
       },
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body))).toEqual({
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
       expected_version_seq: 4,
       markdown: "# Updated",
     });

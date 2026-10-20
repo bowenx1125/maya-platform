@@ -442,10 +442,6 @@ export type DemoRuntimeStatus = {
 };
 export type DebateDraftRequest =
   operations["createDebate"]["requestBody"]["content"]["application/json"];
-export type ContinueRealReportRequest =
-  operations["continueRealReport"]["requestBody"]["content"]["application/json"];
-export type ContinueRealReportResponse =
-  operations["continueRealReport"]["responses"][202]["content"]["application/json"];
 export type DebateDraftUpdateRequest =
   operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
 export type AdvancePlaybackRequest =
@@ -1330,16 +1326,6 @@ export class PlatformApi {
     );
   }
 
-  assessmentAttemptAction(
-    attemptId: string,
-    body: { client_event_id: string; action: AssessmentLifecycleAction },
-  ): Promise<AssessmentRuntimeResult> {
-    return this.postJson(
-      `learning/attempts/${encodeURIComponent(attemptId)}/actions`,
-      body,
-    );
-  }
-
   async streamTeamConversation(
     id: string,
     body: {
@@ -1677,28 +1663,6 @@ export class PlatformApi {
       );
     }
     return resultFor(session);
-  }
-
-  providerSettings(courseId: string): Promise<ProviderSettings> {
-    return this.getJson(`courses/${courseId}/provider-settings`);
-  }
-
-  updateProviderSettings(
-    courseId: string,
-    body: components["schemas"]["UpdateProviderSettings"],
-  ): Promise<ProviderSettings> {
-    return this.postJson(`courses/${courseId}/provider-settings`, body);
-  }
-
-  checkProvider(
-    courseId: string,
-    component: DemoComponentKey,
-    body: components["schemas"]["CheckProvider"],
-  ): Promise<ProviderSettings> {
-    return this.postJson(
-      `courses/${courseId}/provider-settings/${component}/check`,
-      body,
-    );
   }
 
   classroomLive(courseId: string): Promise<LiveSummary | null> {
@@ -2044,26 +2008,6 @@ export class PlatformApi {
     return unwrap(result);
   }
 
-  async compilePersona(
-    versionId: string,
-    expectedRevision: number,
-  ): Promise<PersonaCompileResponse> {
-    return this.postJson<PersonaCompileResponse>(
-      `agent-versions/${versionId}/persona/compile`,
-      { expected_revision: expectedRevision },
-    );
-  }
-
-  async confirmPersona(
-    versionId: string,
-    body: ConfirmPersonaRequest,
-  ): Promise<AgentVersion> {
-    return this.postJson<AgentVersion>(
-      `agent-versions/${versionId}/persona/confirm`,
-      body,
-    );
-  }
-
   async getProviderDataCallDisclosure(
     manifestHash: string,
   ): Promise<ProviderDataCallDisclosureResponse> {
@@ -2325,21 +2269,6 @@ export class PlatformApi {
     );
   }
 
-  async regenerateKnowledgeMarkdown(
-    setId: string,
-    actionId: string,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeRegeneration> {
-    return commitMutation(options.idempotency, (key) =>
-      this.mutateJson(
-        "POST",
-        `knowledge-sets/${encodeURIComponent(setId)}/regenerate`,
-        { action_id: actionId },
-        key,
-      ),
-    );
-  }
-
   async updateKnowledgeSet(
     setId: string,
     body: UpdateKnowledgeSetRequest,
@@ -2378,127 +2307,6 @@ export class PlatformApi {
       });
       return unwrap(result);
     });
-  }
-
-  async replaceKnowledgeSetSources(
-    setId: string,
-    body: ReplaceKnowledgeSetSourcesRequest,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeSetDetail> {
-    return commitMutation(options.idempotency, async (key) => {
-      const result = await this.client.PUT("/knowledge-sets/{set_id}/sources", {
-        params: {
-          path: { set_id: setId },
-          header: {
-            "Idempotency-Key": key,
-            "X-CSRF-Token": this.csrfToken ?? "",
-          },
-        },
-        body,
-      });
-      return unwrap(result);
-    });
-  }
-
-  async removeKnowledgeSetSource(
-    setId: string,
-    bindingId: string,
-    body: components["schemas"]["RemoveKnowledgeSetSourceRequest"],
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeSetDetail> {
-    return commitMutation(options.idempotency, async (key) => {
-      const result = await this.client.DELETE(
-        "/knowledge-sets/{set_id}/sources/{binding_id}",
-        {
-          params: {
-            path: { set_id: setId, binding_id: bindingId },
-            header: {
-              "Idempotency-Key": key,
-              "X-CSRF-Token": this.csrfToken ?? "",
-            },
-          },
-          body,
-        },
-      );
-      return unwrap(result);
-    });
-  }
-
-  async knowledgeSetAssets(
-    setId: string,
-    kind?: "concept" | "question" | "note",
-  ): Promise<KnowledgeAsset[]> {
-    return unwrap(
-      await this.client.GET("/knowledge-sets/{set_id}/assets", {
-        params: { path: { set_id: setId }, query: kind ? { kind } : {} },
-      }),
-    );
-  }
-
-  async knowledgeSetAsset(assetId: string): Promise<KnowledgeAsset> {
-    return unwrap(
-      await this.client.GET("/knowledge-assets/{asset_id}", {
-        params: { path: { asset_id: assetId } },
-      }),
-    );
-  }
-
-  async createKnowledgeSetAsset(
-    setId: string,
-    body: KnowledgeAssetRequest,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeAssetFull> {
-    return commitMutation(options.idempotency, async (key) => {
-      const result = await this.client.POST("/knowledge-sets/{set_id}/assets", {
-        params: {
-          path: { set_id: setId },
-          header: {
-            "Idempotency-Key": key,
-            "X-CSRF-Token": this.csrfToken ?? "",
-          },
-        },
-        body,
-      });
-      return unwrap(result);
-    });
-  }
-
-  async updateKnowledgeSetAsset(
-    assetId: string,
-    body: UpdateKnowledgeAssetRequest,
-    options: IdempotentMutationOptions = {},
-  ): Promise<KnowledgeAssetFull> {
-    return commitMutation(options.idempotency, async (key) => {
-      const result = await this.client.PATCH("/knowledge-assets/{asset_id}", {
-        params: {
-          path: { asset_id: assetId },
-          header: {
-            "Idempotency-Key": key,
-            "X-CSRF-Token": this.csrfToken ?? "",
-          },
-        },
-        body,
-      });
-      return unwrap(result);
-    });
-  }
-
-  async knowledgeSetAssetVersions(
-    assetId: string,
-  ): Promise<KnowledgeAssetVersions> {
-    return unwrap(
-      await this.client.GET("/knowledge-assets/{asset_id}/versions", {
-        params: { path: { asset_id: assetId } },
-      }),
-    );
-  }
-
-  async knowledgeSetGraph(setId: string): Promise<KnowledgeGraph> {
-    return unwrap(
-      await this.client.GET("/knowledge-sets/{set_id}/graph", {
-        params: { path: { set_id: setId } },
-      }),
-    );
   }
 
   async agentKnowledgeSets(agentId: string): Promise<AgentKnowledgeSets> {
@@ -2825,14 +2633,6 @@ export class PlatformApi {
     });
   }
 
-  async voiceProfile(profileId: string): Promise<VoiceProfile> {
-    return unwrap(
-      await this.client.GET("/voice-profiles/{voice_profile_id}", {
-        params: { path: { voice_profile_id: profileId } },
-      }),
-    );
-  }
-
   async renameVoiceProfile(
     profileId: string,
     sourceFilename: string,
@@ -2872,17 +2672,6 @@ export class PlatformApi {
   async createVoicePreview(profileId: string): Promise<PlaybackResource> {
     return unwrap(
       await this.client.POST("/voice-profiles/{voice_profile_id}/preview", {
-        params: {
-          path: { voice_profile_id: profileId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-      }),
-    );
-  }
-
-  async confirmVoiceProfile(profileId: string): Promise<VoiceProfile> {
-    return unwrap(
-      await this.client.POST("/voice-profiles/{voice_profile_id}/confirm", {
         params: {
           path: { voice_profile_id: profileId },
           header: { "X-CSRF-Token": this.csrfToken ?? "" },
@@ -3078,25 +2867,6 @@ export class PlatformApi {
           body,
         }),
       ),
-    );
-  }
-
-  /**
-   * Recover one stuck classroom playback so its course is not blocked by it.
-   *
-   * The confirmation is a literal `true` in the body rather than a flag the
-   * caller can forget: recovery is deliberate, and the server refuses anything
-   * else.
-   */
-  async releaseDebate(debateId: string): Promise<DebatePlaybackState> {
-    return unwrap(
-      await this.client.POST("/debates/{debate_id}/release", {
-        params: {
-          path: { debate_id: debateId },
-          header: { "X-CSRF-Token": this.csrfToken ?? "" },
-        },
-        body: { confirm_release: true },
-      }),
     );
   }
 
@@ -3330,38 +3100,6 @@ export class PlatformApi {
         },
       )) as unknown as ClientResult<ReportRevision>,
     );
-  }
-
-  async continueRealReport(
-    debateId: string,
-    revisionId: string,
-    body: ContinueRealReportRequest,
-  ): Promise<ContinueRealReportResponse> {
-    const response = await unwrap(
-      await this.client.POST(
-        "/debates/{debate_id}/report/revisions/{revision_id}/continue",
-        {
-          params: {
-            path: { debate_id: debateId, revision_id: revisionId },
-            header: { "X-CSRF-Token": this.csrfToken ?? "" },
-          },
-          body,
-        },
-      ),
-    );
-    switch (response.status) {
-      case "generating":
-        return {
-          ...response,
-          english_markdown: null,
-          word_count: null,
-          safe_error_code: null,
-        };
-      case "ready":
-        return { ...response, safe_error_code: null };
-      case "failed":
-        return { ...response, english_markdown: null, word_count: null };
-    }
   }
 
   async downloadCurrentReport(

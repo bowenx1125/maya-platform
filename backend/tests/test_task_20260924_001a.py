@@ -128,23 +128,6 @@ def test_dashscope_key_not_in_public_dto(
     assert "api_key" not in schemas
     assert secret not in schemas
 
-    client, _database, _settings = voice_app
-    client.app.state.settings = client.app.state.settings.model_copy(
-        update={"dashscope_api_key": secret}
-    )
-    _user, csrf = login(client)
-    settings_response = client.get(f"/api/v1/courses/{COURSE_ID}/provider-settings")
-    assert settings_response.status_code == 200
-    assert secret not in settings_response.text
-    assert "api_key" not in settings_response.json()
-    saved = client.post(
-        f"/api/v1/courses/{COURSE_ID}/provider-settings",
-        headers={"X-CSRF-Token": csrf},
-        json={"expected_revision": settings_response.json()["revision"], "api_key": secret},
-    )
-    assert saved.status_code == 200, saved.text
-    assert secret not in saved.text
-
 
 def test_enroll_ready_encrypts_external_id(
     voice_app: tuple[TestClient, Database, Settings],

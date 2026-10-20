@@ -38,7 +38,6 @@ from app.modules.knowledge_sets.schemas import (
     KnowledgeAssetVersionHistoryFull,
     KnowledgeAssetVersionHistoryStudent,
     KnowledgeGenerationStatus,
-    KnowledgeGraph,
     KnowledgeMarkdownDocument,
     KnowledgeSetDetail,
     KnowledgeSetRevocation,
@@ -660,20 +659,6 @@ def list_knowledge_set_asset_versions(
         asset_id=UUID(resolved_asset_id),
         versions=cast(list[AssetVersionFullDTO], versions),
     )
-
-
-@router.get(
-    "/knowledge-sets/{set_id}/graph",
-    response_model=KnowledgeGraph,
-    operation_id="getKnowledgeSetGraph",
-    responses={404: {"model": Error, "description": "Knowledge Set not found."}},
-)
-def get_knowledge_set_graph(
-    set_id: UUID,
-    context: AuthContext = Depends(require_auth),
-    db: Session = Depends(get_db),
-) -> KnowledgeGraph:
-    return service.get_knowledge_graph(db, context, str(set_id))
 
 
 @router.get(
