@@ -227,6 +227,16 @@ def _demote_to_preview_ready(database: Database, profile_id: str) -> None:
         session.commit()
 
 
+def _promote_ready(database: Database, profile_id: str) -> None:
+    """The confirm route is gone; put a demoted profile back to ready."""
+
+    with database.session() as session:
+        row = session.get(VoiceProfile, profile_id)
+        assert row is not None and row.status == "preview_ready"
+        row.status = "ready"
+        session.commit()
+
+
 def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
@@ -291,14 +301,6 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
     }
     assert "no-store" in cache_directives
 
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile['id']}/confirm",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
-    )
-    # An older client's confirm of a ready voice is a harmless no-op that
-    # leaves the preview playable.
-    assert confirmed.status_code == 200
-    assert confirmed.json()["status"] == "ready"
     assert client.get(preview.json()["playback_url"]).status_code == 200
 
     deleted = client.delete(
@@ -335,11 +337,6 @@ def test_agent_draft_avatar_and_voice_binding_tri_state(
         headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
     )
     assert preview.status_code == 200, preview.text
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile_id}/confirm",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
-    )
-    assert confirmed.status_code == 200
 
     avatar = {
         "template_id": "maya-warm-scholar",
@@ -448,12 +445,8 @@ def test_group_voice_is_owner_private_within_the_same_group(
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() != []
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
     assert client.get(media_url).status_code == 200
-    # Confirmation requires the live preview; bind needs the ready status.
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile_id}/confirm",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": csrf},
-    )
-    assert confirmed.status_code == 200, confirmed.text
+    # Binding needs the ready status.
+    _promote_ready(database, profile_id)
     version = client.post(
         f"/api/v1/groups/{GROUP_A}/agents",
         headers=_headers(csrf, "owner-voice-agent-001"),

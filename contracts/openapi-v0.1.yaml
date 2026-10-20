@@ -2091,60 +2091,6 @@ paths:
                 type: string
         '404':
           $ref: '#/components/responses/Error'
-  /agent-versions/{version_id}/persona/compile:
-    parameters:
-    - $ref: '#/components/parameters/VersionId'
-    post:
-      tags:
-      - Agents
-      operationId: compileAgentPersona
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CompilePersonaRequest'
-      responses:
-        '200':
-          description: Deterministic Persona preview.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PersonaCompileResponse'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
-          $ref: '#/components/responses/Error'
-  /agent-versions/{version_id}/persona/confirm:
-    parameters:
-    - $ref: '#/components/parameters/VersionId'
-    post:
-      tags:
-      - Agents
-      operationId: confirmAgentPersona
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfirmPersonaRequest'
-      responses:
-        '200':
-          description: Persona confirmed for the exact draft.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentVersion'
-        '403':
-          $ref: '#/components/responses/Error'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
-          $ref: '#/components/responses/Error'
   /agent-versions/{version_id}/knowledge-documents:
     parameters:
     - $ref: '#/components/parameters/VersionId'
@@ -2530,26 +2476,6 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
         '503':
-          $ref: '#/components/responses/Error'
-  /voice-profiles/{voice_profile_id}/confirm:
-    parameters:
-    - $ref: '#/components/parameters/VoiceProfileId'
-    post:
-      tags:
-      - Voices
-      operationId: confirmVoiceProfile
-      parameters:
-      - $ref: '#/components/parameters/CsrfToken'
-      responses:
-        '200':
-          description: Preview accepted; status ready.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoiceProfile'
-        '404':
-          $ref: '#/components/responses/Error'
-        '409':
           $ref: '#/components/responses/Error'
   /courses/{course_id}/published-agents:
     parameters:

@@ -80,12 +80,6 @@ def _ready_profile(client: TestClient, csrf: str, key: str) -> str:
         headers={"X-CSRF-Token": csrf},
     )
     assert preview.status_code == 200, preview.text
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile_id}/confirm",
-        headers={"X-CSRF-Token": csrf},
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["status"] == "ready"
     return str(profile_id)
 
 
@@ -149,12 +143,6 @@ def test_enroll_ready_encrypts_external_id(
         ).status_code
         == 200
     )
-    confirmed = client.post(
-        f"/api/v1/voice-profiles/{profile_id}/confirm",
-        headers={"X-CSRF-Token": csrf},
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["status"] == "ready"
     with database.session() as session:
         row = session.get(VoiceProfile, profile_id)
         assert row is not None
@@ -171,7 +159,6 @@ def test_enroll_ready_encrypts_external_id(
         )
     assert plain
     assert plain.encode() not in (row.external_id_encrypted or b"")
-    assert plain not in confirmed.text
     assert plain not in enrolled.text
 
 

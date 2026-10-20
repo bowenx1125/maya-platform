@@ -22,7 +22,6 @@ const api = {
   voiceProfiles: vi.fn(),
   enrollVoice: vi.fn(),
   createVoicePreview: vi.fn(),
-  confirmVoiceProfile: vi.fn(),
   deleteVoiceProfile: vi.fn(),
   renameVoiceProfile: vi.fn(),
 };
@@ -544,7 +543,6 @@ describe("M08 voice library", () => {
       "/api/v1/voice-previews/preview-1/media",
     );
     fireEvent.ended(document.querySelector("audio")!);
-    expect(api.confirmVoiceProfile).not.toHaveBeenCalled();
   });
 });
 

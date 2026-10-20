@@ -90,7 +90,7 @@ from sqlalchemy import Table, func, select, update
 
 from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
-from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _confirm_persona, _headers
+from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _headers
 
 
 @dataclass(frozen=True)
@@ -971,7 +971,6 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
         },
     )
     assert uploaded.status_code == 201, uploaded.text
-    _confirm_persona(client, csrf, version_id, expected_revision=2)
 
     config = DashScopeEmbeddingConfig(
         api_key="fixture-secret-never-enters-payload",
@@ -1119,7 +1118,10 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
         assert snapshot.embedding_policy_version == REAL_EMBEDDING_POLICY_VERSION
         version = db.get(AgentVersion, version_id)
         group = db.get(Group, GROUP_DEMO_ID)
-        assert version is not None and version.persona_spec_hash
+        assert version is not None
+        # Persona compile/confirm routes are gone; an unconfirmed version
+        # binds its raw AGENT.md hash, as the product runtime does.
+        persona_hash = version.persona_spec_hash or markdown_hash(version.agent_md)
         assert group is not None
         query_plan = ensure_real_query_export_manifest(
             database,
@@ -1132,7 +1134,7 @@ def test_student_publish_route_requires_exact_teacher_confirmation_then_publishe
             snapshot_id=snapshot.id,
             identity=persisted_snapshot_identity(snapshot),
             transcript_hash="b" * 64,
-            persona_spec_hash=version.persona_spec_hash,
+            persona_spec_hash=persona_hash,
             subqueries=(("viewpoint", "  accountable recommendation governance  "),),
             policy=policy,
         )

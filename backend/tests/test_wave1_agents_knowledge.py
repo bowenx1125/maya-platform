@@ -62,35 +62,6 @@ def _assert_business_error(response: Any, code: str) -> dict[str, Any]:
     return body
 
 
-def _confirm_persona(
-    client: TestClient,
-    csrf: str,
-    version_id: str,
-    expected_revision: int,
-) -> dict[str, Any]:
-    """Compile and confirm a post-activation draft before publishing it."""
-
-    compiled = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/compile",
-        headers=_headers(csrf),
-        json={"expected_revision": expected_revision},
-    )
-    assert compiled.status_code == 200, compiled.text
-    body = compiled.json()
-    confirmed = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/confirm",
-        headers=_headers(csrf),
-        json={
-            "expected_revision": expected_revision,
-            "raw_agent_md_hash": body["raw_agent_md_hash"],
-            "persona_spec_hash": body["persona_spec_hash"],
-            "compiler_version": "persona_template_v1",
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
-    return body
-
-
 def _insert_over_limit_document(
     database: Database,
     data_root: Path,
@@ -208,8 +179,6 @@ def test_wave1_student_flow_snapshot_teacher_projection_and_404(
     )
     assert replay.status_code == 201
     assert replay.json() == mutation
-
-    _confirm_persona(client, csrf, version_id, expected_revision=2)
 
     chat = client.post(
         f"/api/v1/agent-versions/{version_id}/chat",
@@ -504,7 +473,6 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
             files={"file": ("lesson.md", b"# Lesson", "text/markdown")},
         )
         assert uploaded.status_code == 201, uploaded.text
-        _confirm_persona(client, csrf, version_id, expected_revision=2)
         published = client.post(
             f"/api/v1/agent-versions/{version_id}/publish",
             headers=_headers(csrf, **{"Idempotency-Key": "cross-snapshot-publish-001"}),

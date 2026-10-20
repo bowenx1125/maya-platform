@@ -51,7 +51,6 @@ function freshApi() {
     personalVoiceProfiles: vi.fn(),
     enrollVoice: vi.fn(),
     createVoicePreview: vi.fn(),
-    confirmVoiceProfile: vi.fn(),
     deleteVoiceProfile: vi.fn(),
     renameVoiceProfile: vi.fn(),
   };

@@ -30,7 +30,6 @@ from next_wave_real_sessions import (  # noqa: E402
     WireResponse,
 )
 from next_wave_session_authoring import (  # noqa: E402
-    PERSONA_COMPILER_VERSION,
     AuthoringFailure,
     author_session_agents,
 )
@@ -107,26 +106,6 @@ class _AuthoringTransport:
             assert isinstance(payload, dict)
             state.revision = int(payload["expected_revision"]) + 1
             return WireResponse(200, self._version(state), {})
-        if method == "POST" and path.endswith("/persona/compile"):
-            assert isinstance(payload, dict)
-            assert payload["expected_revision"] == state.revision
-            return WireResponse(
-                200,
-                {
-                    "version_id": version_id,
-                    "revision": state.revision,
-                    "compiled": True,
-                    "raw_agent_md_hash": "sha256:" + "c" * 64,
-                    "persona_spec_hash": "d" * 64,
-                    "compiler_version": PERSONA_COMPILER_VERSION,
-                    "persona_spec": {"schema_version": "persona_spec_v2"},
-                },
-                {},
-            )
-        if method == "POST" and path.endswith("/persona/confirm"):
-            assert isinstance(payload, dict)
-            assert payload["expected_revision"] == state.revision
-            return WireResponse(200, {**self._version(state), "persona_confirmed": True}, {})
         if method == "POST" and path.endswith("/publish"):
             assert isinstance(payload, dict)
             assert payload["expected_revision"] == state.revision
@@ -248,12 +227,13 @@ def test_authoring_multipart_preserves_bytes_content_type_and_dynamic_revision()
     assert all(item["file_content"] == CORPUS for item in uploads)
     assert all(item["content_type"] == "text/markdown" for item in uploads)
     assert all(item["fields"]["expected_revision"] == "1" for item in uploads)
-    compile_payloads = [
+    publish_payloads = [
         item["payload"]
         for item in transport.calls
-        if item["kind"] == "request" and item["path"].endswith("/persona/compile")
+        if item["kind"] == "request" and item["path"].endswith("/publish")
     ]
-    assert all(payload["expected_revision"] == 2 for payload in compile_payloads)
+    assert publish_payloads
+    assert all(payload["expected_revision"] == 2 for payload in publish_payloads)
 
 
 def test_runner_preserves_partial_audit_and_stops_real_cases_after_authoring_failure(

@@ -81,25 +81,6 @@ def test_student_cannot_mutate_any_baseline_agent_or_source_entrypoint(
             )
         )
         _assert_baseline_rejected(
-            client.post(
-                f"{version_url}/persona/compile",
-                headers=_headers(csrf),
-                json={"expected_revision": 1},
-            )
-        )
-        _assert_baseline_rejected(
-            client.post(
-                f"{version_url}/persona/confirm",
-                headers=_headers(csrf),
-                json={
-                    "expected_revision": 1,
-                    "raw_agent_md_hash": "sha256:" + "0" * 64,
-                    "persona_spec_hash": "0" * 64,
-                    "compiler_version": "persona_template_v1",
-                },
-            )
-        )
-        _assert_baseline_rejected(
             client.patch(
                 version_url,
                 headers=_headers(csrf),

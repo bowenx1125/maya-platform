@@ -90,32 +90,6 @@ def _upload(
     return cast(dict[str, Any], response.json())
 
 
-def _confirm_persona(
-    client: TestClient,
-    csrf: str,
-    version_id: str,
-    expected_revision: int,
-) -> None:
-    compiled = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/compile",
-        headers=_headers(csrf),
-        json={"expected_revision": expected_revision},
-    )
-    assert compiled.status_code == 200, compiled.text
-    body = compiled.json()
-    confirmed = client.post(
-        f"/api/v1/agent-versions/{version_id}/persona/confirm",
-        headers=_headers(csrf),
-        json={
-            "expected_revision": expected_revision,
-            "raw_agent_md_hash": body["raw_agent_md_hash"],
-            "persona_spec_hash": body["persona_spec_hash"],
-            "compiler_version": "persona_template_v1",
-        },
-    )
-    assert confirmed.status_code == 200, confirmed.text
-
-
 def _prepare_publishable_draft(
     client: TestClient,
     csrf: str,
@@ -144,7 +118,6 @@ def _prepare_publishable_draft(
         b"# Race\n\nEvidence",
         1,
     )
-    _confirm_persona(client, csrf, version_id, expected_revision=2)
     return agent_id, version_id, uploaded
 
 
@@ -541,7 +514,6 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
         2,
         visibility="public",
     )
-    _confirm_persona(client, csrf, version_id, expected_revision=3)
     published = client.post(
         f"/api/v1/agent-versions/{version_id}/publish",
         headers=_headers(csrf, **{"Idempotency-Key": "download-publish-123456"}),
@@ -1144,7 +1116,6 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
         )
         assert next_version.status_code == 201, next_version.text
         second_version = next_version.json()["id"]
-        _confirm_persona(client, csrf, second_version, expected_revision=0)
         second_published = client.post(
             f"/api/v1/agent-versions/{second_version}/publish",
             headers=_headers(csrf, **{"Idempotency-Key": "fingerprint-publish-two"}),

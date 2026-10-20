@@ -80,8 +80,9 @@ try {
   // teacher deleting a Record attempt adds one; Team version lists, assessment
   // activity lists and course-report creation had no caller and are gone;
   // course provider settings (three), the Knowledge graph, Real Report
-  // continue and pending report manifests had no caller and are gone.
-  if (platformOperationCount !== 161 || placeholderCount !== 0) {
+  // continue and pending report manifests had no caller and are gone;
+  // Persona compile/confirm and voice confirm had no caller and are gone.
+  if (platformOperationCount !== 158 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

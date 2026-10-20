@@ -104,9 +104,6 @@ beforeEach(() => {
     groups: vi.fn().mockResolvedValue([]),
     workspaceAgents: vi.fn().mockResolvedValue([]),
     debates: vi.fn().mockResolvedValue([]),
-    providerSettings: vi.fn(),
-    updateProviderSettings: vi.fn(),
-    checkProvider: vi.fn(),
     classroomLive: vi.fn().mockResolvedValue({
       debate_id: "debate",
       course_id: "course",
@@ -1561,9 +1558,6 @@ describe("teacher workspace access", () => {
     expect(screen.queryByRole("button", { name: "Check" })).toBeNull();
     expect(screen.queryByLabelText("DashScope API Key")).toBeNull();
     expect(screen.queryByRole("combobox", { name: /mode/i })).toBeNull();
-    expect(state.api.providerSettings).not.toHaveBeenCalled();
-    expect(state.api.updateProviderSettings).not.toHaveBeenCalled();
-    expect(state.api.checkProvider).not.toHaveBeenCalled();
   });
 });
 

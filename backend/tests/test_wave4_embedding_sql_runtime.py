@@ -57,7 +57,7 @@ from sqlalchemy import select
 
 from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
-from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _confirm_persona, _headers
+from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _headers
 
 
 def _digest(value: str) -> str:
@@ -442,12 +442,11 @@ def test_sql_publisher_commits_real_vector_snapshot_and_operation_success_atomic
         },
     )
     assert uploaded.status_code == 201, uploaded.text
-    _confirm_persona(client, csrf, version_id, expected_revision=2)
 
     data_root = settings.resolved_data_root
     with database.session() as db:
         version = db.get(AgentVersion, version_id)
-        assert version is not None and version.persona_spec_hash
+        assert version is not None
         agent_row = db.get(Agent, version.agent_id)
         assert agent_row is not None
         documents = list(

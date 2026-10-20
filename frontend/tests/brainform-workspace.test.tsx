@@ -208,14 +208,6 @@ beforeEach(() => {
       .fn()
       .mockResolvedValue({ ...source, source_filename: "renamed.md" }),
     replaceKnowledgeDocument: vi.fn(),
-    regenerateKnowledgeMarkdown: vi.fn().mockResolvedValue({
-      action_id: "11111111-1111-4111-8111-111111111111",
-      agent_id: "agent-1",
-      canonical_set_id: "set-1",
-      run_id: "run-1",
-      job_id: "job-1",
-      state: "pending",
-    }),
     knowledgeGenerationJob: vi.fn().mockResolvedValue({
       run_id: "run-1",
       job_id: "job-1",
@@ -1462,7 +1454,6 @@ describe("Brainform workspace actions", () => {
         expect.objectContaining({ idempotency: expect.any(Object) }),
       ),
     );
-    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
   });
 
   it("keeps an uncertain canonical Markdown key for unchanged text and rotates it after edits", async () => {
@@ -1704,7 +1695,6 @@ describe("Brainform workspace actions", () => {
     expect(
       screen.queryByRole("link", { name: "Open provider disclosure" }),
     ).toBeNull();
-    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-1"),
     );
@@ -1735,19 +1725,15 @@ describe("Brainform workspace actions", () => {
     );
     const alert = message.closest('[role="alert"]') as HTMLElement;
     expect(alert).toBeTruthy();
-    const mutations = [
-      state.api.regenerateKnowledgeMarkdown,
-      state.api.saveKnowledgeMarkdown,
-    ].map((mock) => mock.mock.calls.length);
+    const mutations = [state.api.saveKnowledgeMarkdown].map(
+      (mock) => mock.mock.calls.length,
+    );
     fireEvent.click(within(alert).getByRole("button", { name: "Dismiss" }));
     expect(
       screen.queryByText("Generation did not complete: acceptance unknown."),
     ).toBeNull();
     expect(
-      [
-        state.api.regenerateKnowledgeMarkdown,
-        state.api.saveKnowledgeMarkdown,
-      ].map((mock) => mock.mock.calls.length),
+      [state.api.saveKnowledgeMarkdown].map((mock) => mock.mock.calls.length),
     ).toEqual(mutations);
   });
 
@@ -1810,7 +1796,6 @@ describe("Brainform workspace actions", () => {
         expect.objectContaining({ idempotency: expect.any(Object) }),
       ),
     );
-    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
   });
 
   it("hydrates a current generation failure without showing extra confirmation UI", async () => {
@@ -1854,7 +1839,6 @@ describe("Brainform workspace actions", () => {
       screen.queryByRole("link", { name: "Open provider disclosure" }),
     ).toBeNull();
     expect(state.api.knowledgeGenerationJob).toHaveBeenCalledWith("job-2");
-    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
   });
 
   it("keeps a late old Job response from replacing the newer generation status", async () => {
@@ -1955,7 +1939,6 @@ describe("Brainform workspace actions", () => {
     expect(
       screen.queryByRole("link", { name: "Open provider disclosure" }),
     ).toBeNull();
-    expect(state.api.regenerateKnowledgeMarkdown).not.toHaveBeenCalled();
   });
 
   it("opens the same canonical Markdown document from an Agent-specific entry", async () => {

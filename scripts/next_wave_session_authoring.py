@@ -584,39 +584,6 @@ def _version_response(
     return body, _revision(body.get("revision"))
 
 
-def _compiled_response(
-    value: object, expected_version_id: str
-) -> tuple[dict[str, object], int]:
-    body = _mapping(value, "persona_compile_response_invalid")
-    returned_id = _required_id(
-        body.get("version_id") or body.get("id"), "version_id_invalid"
-    )
-    if returned_id != expected_version_id:
-        raise AuthoringFailure("version_id_mismatch")
-    if body.get("compiled") is not True:
-        raise AuthoringFailure("persona_compile_failed")
-    _required_raw_sha(body.get("raw_agent_md_hash"))
-    _required_sha(body.get("persona_spec_hash"), "persona_spec_hash_invalid")
-    compiler = _required_text(body.get("compiler_version"), "persona_compiler_invalid")
-    if compiler != PERSONA_COMPILER_VERSION:
-        raise AuthoringFailure("persona_compiler_invalid")
-    spec = body.get("persona_spec")
-    if not isinstance(spec, Mapping) or spec.get("schema_version") != "persona_spec_v2":
-        raise AuthoringFailure("persona_spec_invalid")
-    return body, _revision(body.get("revision"))
-
-
-def _confirmed_response(
-    value: object, expected_version_id: str
-) -> tuple[dict[str, object], int]:
-    body, revision = _version_response(
-        value, expected_version_id, code="persona_confirm_response_invalid"
-    )
-    if body.get("persona_confirmed") is not True:
-        raise AuthoringFailure("persona_not_confirmed")
-    return body, revision
-
-
 def _published_response(
     value: object,
     expected_version_id: str,
@@ -905,44 +872,6 @@ def author_session_agents(
         )
         _, revision = cast(tuple[dict[str, object], int], uploaded)
 
-        compiled = recorder.run(
-            f"slot_{slot_index + 1}.persona_compile",
-            lambda version_id=version_id, revision=revision, slot=slot_index: (
-                _compiled_response(
-                    _call(
-                        resolved_student,
-                        "POST",
-                        f"/api/v1/agent-versions/{version_id}/persona/compile",
-                        payload={"expected_revision": revision},
-                        idempotency_key=keys.new("persona-compile", slot),
-                    ),
-                    version_id,
-                )
-            ),
-        )
-        compiled_body, revision = cast(tuple[dict[str, object], int], compiled)
-
-        confirmed = recorder.run(
-            f"slot_{slot_index + 1}.persona_confirm",
-            lambda version_id=version_id, revision=revision, compiled_body=compiled_body, slot=slot_index: (
-                _confirmed_response(
-                    _call(
-                        resolved_student,
-                        "POST",
-                        f"/api/v1/agent-versions/{version_id}/persona/confirm",
-                        payload={
-                            "expected_revision": revision,
-                            "raw_agent_md_hash": compiled_body["raw_agent_md_hash"],
-                            "persona_spec_hash": compiled_body["persona_spec_hash"],
-                            "compiler_version": compiled_body["compiler_version"],
-                        },
-                        idempotency_key=keys.new("persona-confirm", slot),
-                    ),
-                    version_id,
-                )
-            ),
-        )
-        _, revision = cast(tuple[dict[str, object], int], confirmed)
 
         publish_started = time.monotonic()
         try:

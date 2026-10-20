@@ -811,42 +811,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/agent-versions/{version_id}/persona/compile": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["compileAgentPersona"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent-versions/{version_id}/persona/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["confirmAgentPersona"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/agent-versions/{version_id}/knowledge-documents": {
         parameters: {
             query?: never;
@@ -1023,24 +987,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["createVoicePreview"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/voice-profiles/{voice_profile_id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                voice_profile_id: components["parameters"]["VoiceProfileId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["confirmVoiceProfile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8097,69 +8043,6 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
-    compileAgentPersona: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CompilePersonaRequest"];
-            };
-        };
-        responses: {
-            /** @description Deterministic Persona preview. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PersonaCompileResponse"];
-                };
-            };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
-    confirmAgentPersona: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                version_id: components["parameters"]["VersionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfirmPersonaRequest"];
-            };
-        };
-        responses: {
-            /** @description Persona confirmed for the exact draft. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentVersion"];
-                };
-            };
-            403: components["responses"]["Error"];
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
-        };
-    };
     setAgentVersionDocuments: {
         parameters: {
             query?: never;
@@ -8580,33 +8463,6 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             503: components["responses"]["Error"];
-        };
-    };
-    confirmVoiceProfile: {
-        parameters: {
-            query?: never;
-            header: {
-                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
-                "X-CSRF-Token": components["parameters"]["CsrfToken"];
-            };
-            path: {
-                voice_profile_id: components["parameters"]["VoiceProfileId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Preview accepted; status ready. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VoiceProfile"];
-                };
-            };
-            404: components["responses"]["Error"];
-            409: components["responses"]["Error"];
         };
     };
     listPublishedAgentsForTeacher: {
