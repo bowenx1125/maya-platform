@@ -3145,3 +3145,16 @@ dd {
     transition: none;
   }
 }
+
+/* Title-button text (shared FitTitle): two lines at most inside the button's
+   size tier; the font steps down to fit and the ellipsis is the last resort. */
+.fit-title-text {
+  display: -webkit-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}

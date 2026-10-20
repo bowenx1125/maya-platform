@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { FitTitle } from "../fit-title";
 import { DismissibleAlert } from "../dismissible-alert";
 import {
   isAmbiguousMutationFailure,
@@ -120,7 +121,7 @@ function TitleButton({
         onRename();
       }}
     >
-      {title}
+      <FitTitle text={title} />
     </button>
   );
 }

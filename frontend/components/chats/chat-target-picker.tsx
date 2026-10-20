@@ -1,5 +1,6 @@
 "use client";
 
+import { FitTitle } from "../fit-title";
 import type { ChatAgent } from "../../lib/api";
 import { useT } from "../locale";
 import { IconCheck } from "../quiet-icons";
@@ -49,7 +50,9 @@ export function ChatTargetPicker({
           disabled={disabled || unavailable}
           onClick={() => onPick(picked ? "" : key)}
         >
-          <span className="agent-tile-name">{name}</span>
+          <span className="agent-tile-name">
+            <FitTitle text={name} />
+          </span>
           {label ? (
             <span className="agent-pill" data-visibility={visibility}>
               {label}
