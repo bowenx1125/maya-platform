@@ -1801,13 +1801,67 @@ def _student_guidance(value: str | None) -> str | None:
     return text[:400]
 
 
+def _pending_confirmed_answer(
+    db: Session, conversation_id: str, turn: ConversationTurn | None, presented_at: Any
+) -> str | None:
+    """The previous message, when the student was asked to confirm it as an answer.
+
+    Read from the saved turns themselves, so it survives a refresh and needs
+    no extra state: the turn just before this one must be after the question
+    was shown, be a plain statement, and have been answered with the confirm
+    prompt.
+    """
+
+    from app.modules.workspace.models import TeamTurnResult
+
+    from .answer_format import is_statement
+    from .answer_guard import asked_to_confirm, is_confirm_only
+
+    if turn is None or presented_at is None:
+        return None
+    previous = db.scalar(
+        select(ConversationTurn).where(
+            ConversationTurn.conversation_id == conversation_id,
+            ConversationTurn.position == turn.position - 1,
+        )
+    )
+    if previous is None or previous.created_at < presented_at:
+        return None
+    text = (previous.user_text or "").strip()
+    if not text or is_confirm_only(text) or not is_statement(text):
+        return None
+    replies = [previous.assistant_text] + list(
+        db.scalars(
+            select(TeamTurnResult.assistant_text).where(TeamTurnResult.turn_id == previous.id)
+        )
+    )
+    return text if asked_to_confirm(replies) else None
+
+
 def _fit_answer_action(
     db: Session,
     actor: AuthContext,
     conversation_id: str,
     user_text: str,
     action: AssessmentStudentAction,
-) -> AssessmentStudentAction:
+    turn: ConversationTurn | None = None,
+) -> tuple[AssessmentStudentAction, str]:
+    """Return the fitted action and the message its answer span is taken from."""
+
+    fitted = _fit_answer_action_inner(db, actor, conversation_id, user_text, action, turn)
+    if isinstance(fitted, tuple):
+        return fitted
+    return fitted, user_text
+
+
+def _fit_answer_action_inner(
+    db: Session,
+    actor: AuthContext,
+    conversation_id: str,
+    user_text: str,
+    action: AssessmentStudentAction,
+    turn: ConversationTurn | None,
+) -> AssessmentStudentAction | tuple[AssessmentStudentAction, str]:
     """Hold the model's classification to the open Question.
 
     A choice or scale reply must match that question's letters or range.
@@ -1829,15 +1883,81 @@ def _fit_answer_action(
     ):
         return action
     from .answer_format import answer_format, fits, is_statement
+    from .answer_guard import (
+        asked_to_confirm,
+        chinese,
+        collects_info,
+        confirm_prompt,
+        is_confirm_only,
+        is_skip_only,
+    )
 
     text = user_text.strip()
-    form = answer_format(context.current_question.prompt)
+    prompt = context.current_question.prompt
+    form = answer_format(prompt)
+    # An explicit skip word on its own is a skip, whatever the model said.
+    if is_skip_only(text):
+        return AssessmentStudentAction(classification="skip_request")
     if form.kind == "free":
+        presented_at = next(
+            (
+                row.presented_at
+                for row in _attempt_question_rows(db, str(context.attempt.id))
+                if row.question_version_id == str(context.current_question.question_version_id)
+            ),
+            None,
+        )
+        if is_confirm_only(text):
+            pending = _pending_confirmed_answer(db, conversation_id, turn, presented_at)
+            if pending is not None:
+                return (
+                    AssessmentStudentAction(classification="answer_only", answer_span=pending),
+                    pending,
+                )
         if action.classification in _ANSWER_CLASSES and action.relevant is True:
             span = action.answer_span or ""
             if not span.strip() or span not in user_text:
                 return action.model_copy(update={"answer_span": text})
             return action
+        statement = is_statement(text) and not is_confirm_only(text)
+        # A question that only collects a fact takes any plain statement.
+        if (
+            statement
+            and collects_info(prompt)
+            and action.classification in _ANSWER_CLASSES | {"off_topic"}
+        ):
+            return AssessmentStudentAction(classification="answer_only", answer_span=text)
+        if action.classification in _ANSWER_CLASSES and statement:
+            # The model called it an answer but not relevant: unsure. Ask once;
+            # a re-entered reply right after the prompt is taken as meant.
+            previous_asked = False
+            if turn is not None:
+                from app.modules.workspace.models import TeamTurnResult
+
+                previous = db.scalar(
+                    select(ConversationTurn).where(
+                        ConversationTurn.conversation_id == conversation_id,
+                        ConversationTurn.position == turn.position - 1,
+                    )
+                )
+                if previous is not None and (
+                    presented_at is None or previous.created_at >= presented_at
+                ):
+                    previous_asked = asked_to_confirm(
+                        [previous.assistant_text]
+                        + list(
+                            db.scalars(
+                                select(TeamTurnResult.assistant_text).where(
+                                    TeamTurnResult.turn_id == previous.id
+                                )
+                            )
+                        )
+                    )
+            if previous_asked:
+                return AssessmentStudentAction(classification="answer_only", answer_span=text)
+            return AssessmentStudentAction(
+                classification="off_topic", guidance=confirm_prompt(chinese(prompt))
+            )
         if action.classification in _ANSWER_CLASSES:
             return AssessmentStudentAction(classification="off_topic", guidance=guidance)
         return action
@@ -1852,6 +1972,60 @@ def _fit_answer_action(
     if fits(form, text) and is_statement(text):
         return AssessmentStudentAction(classification="answer_only", answer_span=text)
     return action
+
+
+def _edit_target(
+    db: Session, actor: AuthContext, conversation_id: str, user_text: str
+) -> tuple[str, str] | AssessmentStudentAction | None:
+    """A "修改第N题：新答案" request: (question version id, new answer span).
+
+    Only while the attempt is in progress and not yet handed to scoring; the
+    replaced record stays as history and the question's effective answer
+    becomes the new one. A request the server cannot apply comes back as an
+    off-topic action with one sentence saying how to change an answer.
+    """
+
+    from .answer_format import is_statement
+    from .answer_guard import chinese, edit_hint, edit_request
+
+    request = edit_request(user_text)
+    if request is None:
+        return None
+    context = get_assessment_runtime_context(db, actor, conversation_id)
+    if context is None or context.attempt.status != "in_progress":
+        return None
+    rows = [row for row in _attempt_question_rows(db, str(context.attempt.id)) if row.required]
+    prompt = context.current_question.prompt if context.current_question else ""
+    is_chinese = chinese(prompt) or chinese(user_text)
+    if (
+        getattr(db.get(AssessmentAttempt, str(context.attempt.id)), "submitted_at", None)
+        is not None
+        or context.current_question is None
+        or all(row.status == "resolved" for row in rows)
+    ):
+        return AssessmentStudentAction(
+            classification="off_topic",
+            guidance=(
+                "这一轮已经交给评分，不能再修改答案。"
+                if is_chinese
+                else "This round has gone to scoring; answers can no longer be changed."
+            ),
+        )
+    target = next((row for row in rows if row.ordinal + 1 == request.number), None)
+    if (
+        target is None
+        or target.presented_at is None
+        or target.status != "resolved"
+        or target.question_version_id is None
+    ):
+        return AssessmentStudentAction(
+            classification="off_topic", guidance=edit_hint(is_chinese, request.number)
+        )
+    if not request.answer or not is_statement(request.answer):
+        return AssessmentStudentAction(
+            classification="off_topic", guidance=edit_hint(is_chinese, request.number)
+        )
+    return target.question_version_id, request.answer
 
 
 def apply_assessment_action(
@@ -1927,10 +2101,23 @@ def apply_assessment_action(
     activity = ensure_assessment_activity(db, actor, conversation.id)
     if activity is None:
         return None
-    action = _fit_answer_action(db, actor, conversation.id, turn.user_text, action)
+    user_message = turn.user_text
+    edit_version = _edit_target(db, actor, conversation.id, turn.user_text)
+    if isinstance(edit_version, AssessmentStudentAction):
+        action = edit_version
+        edit_version = None
+    elif edit_version is not None:
+        version_target, span = edit_version
+        action = AssessmentStudentAction(classification="answer_only", answer_span=span)
+    else:
+        action, user_message = _fit_answer_action(
+            db, actor, conversation.id, turn.user_text, action, turn
+        )
 
     version_id: UUID | None = None
-    if action.classification in {
+    if edit_version is not None:
+        version_id = UUID(version_target)
+    elif action.classification in {
         "answer_only",
         "answer_with_restricted_request",
         "skip_request",
@@ -1962,7 +2149,7 @@ def apply_assessment_action(
         db,
         actor,
         conversation.id,
-        user_message=turn.user_text,
+        user_message=user_message,
         decision=AssessmentRuntimeDecision(
             client_event_id=event_id,
             classification=action.classification,
