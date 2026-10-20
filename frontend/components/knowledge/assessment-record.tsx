@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import type { OverviewResult } from "../../lib/api/platform";
+import { cachedCall, requestCacheIdentity } from "../../lib/request-cache";
 import { useLocale, useT } from "../locale";
 import { useSession } from "../session-provider";
 import { IconClose } from "../quiet-icons";
@@ -36,6 +37,42 @@ export type RecordTeam = {
 // loaded. The last list per course shows at once and refreshes behind it.
 const lastAttempts = new Map<string, OverviewResult[]>();
 
+type AttemptsApi = {
+  myAssessmentAttempts: (courseId: string) => Promise<OverviewResult[]>;
+  courseAssessmentAttempts: (courseId: string) => Promise<OverviewResult[]>;
+};
+
+/**
+ * Record's read through the shared request cache (same endpoints), so a page
+ * that knows Record will mount (Studyform) can start it early and Record
+ * joins that read instead of sending its own after the page paints.
+ */
+export function assessmentAttemptsRead(
+  api: AttemptsApi,
+  identity: string | null,
+  scope: RecordScope,
+  courseId: string,
+  refresh = false,
+): Promise<OverviewResult[]> {
+  return scope === "own"
+    ? cachedCall(
+        api,
+        identity,
+        "myAssessmentAttempts",
+        [courseId],
+        () => api.myAssessmentAttempts(courseId),
+        { refresh },
+      )
+    : cachedCall(
+        api,
+        identity,
+        "courseAssessmentAttempts",
+        [courseId],
+        () => api.courseAssessmentAttempts(courseId),
+        { refresh },
+      );
+}
+
 /**
  * Every formal attempt in the course, grouped by the assessment Team's name,
  * most recently active Team first. Attempts inside a Team read by student.
@@ -46,7 +83,8 @@ export function useAssessmentRecord(
   enabled: boolean,
   scope: RecordScope = "course",
 ) {
-  const { api, user } = useSession();
+  const { api, identityGeneration, user } = useSession();
+  const cacheIdentity = requestCacheIdentity(user?.id, identityGeneration);
   // Per signed-in user: report links are each teacher's own, answers each
   // student's own.
   const cacheKey = `${scope}:${user?.id ?? ""}:${courseId}`;
@@ -55,20 +93,27 @@ export function useAssessmentRecord(
   );
   const [error, setError] = useState<unknown>(null);
 
-  const load = useCallback(async () => {
-    if (!enabled || !courseId) return;
-    setError(null);
-    try {
-      const next =
-        scope === "own"
-          ? await api.myAssessmentAttempts(courseId)
-          : await api.courseAssessmentAttempts(courseId);
-      lastAttempts.set(cacheKey, next);
-      setAttempts(next);
-    } catch (cause) {
-      setError(cause);
-    }
-  }, [api, cacheKey, courseId, enabled, scope]);
+  const load = useCallback(
+    async (refresh = false) => {
+      if (!enabled || !courseId) return;
+      setError(null);
+      try {
+        // Through the shared cache so Studyform's own load can warm it.
+        const next = await assessmentAttemptsRead(
+          api,
+          cacheIdentity,
+          scope,
+          courseId,
+          refresh,
+        );
+        lastAttempts.set(cacheKey, next);
+        setAttempts(next);
+      } catch (cause) {
+        setError(cause);
+      }
+    },
+    [api, cacheIdentity, cacheKey, courseId, enabled, scope],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -101,7 +146,7 @@ export function useAssessmentRecord(
       .sort((left, right) => right.latest.localeCompare(left.latest));
   }, [attempts, scope]);
 
-  return { teams, loaded: attempts !== null, error, reload: load };
+  return { teams, loaded: attempts !== null, error, reload: () => load(true) };
 }
 
 function useWhen() {

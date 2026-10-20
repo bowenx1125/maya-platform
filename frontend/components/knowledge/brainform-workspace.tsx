@@ -971,12 +971,16 @@ function BrainformWorkspaceBody({
             loadRagDocuments(courseId, refresh).then((documents) =>
               documents.filter((document) => document.visibility !== "private"),
             ),
-            read(
-              "brainformKnowledge",
-              [courseId],
-              () => api.brainformKnowledge(courseId),
-              refresh,
-            ),
+            // Students no longer see Knowledge (owner request 2026-10-20);
+            // its list is the slowest read here, so they skip it.
+            embedded && role === "student"
+              ? Promise.resolve<BrainformKnowledge[]>([])
+              : read(
+                  "brainformKnowledge",
+                  [courseId],
+                  () => api.brainformKnowledge(courseId),
+                  refresh,
+                ),
             read(
               "chatAgents",
               [courseId],
@@ -2407,9 +2411,15 @@ function BrainformWorkspaceBody({
       {!courseId ? (
         <p className={styles.empty}>{t("brainformUnavailable")}</p>
       ) : null}
-      {loading && courseId ? <LoadingCard /> : null}
+      {loading && courseId && !embedded ? <LoadingCard /> : null}
 
-      {!pane && !initialMode && !loading && !loadError && courseId ? (
+      {/* Embedded in Studyform each card paints on its own: RAG shows a
+          loading line while its list arrives, Record never waits for it. */}
+      {!pane &&
+      !initialMode &&
+      (!loading || embedded) &&
+      !loadError &&
+      courseId ? (
         <div className={embedded ? styles.embeddedSections : styles.sections}>
           <section
             className={styles.section}
@@ -2438,7 +2448,11 @@ function BrainformWorkspaceBody({
                 <span className={styles.count}>{ragDocuments.length}</span>
               )}
             </div>
-            {ragDocuments.length ? (
+            {loading && !ragDocuments.length ? (
+              <p className={styles.empty} aria-busy="true">
+                {t("loading")}
+              </p>
+            ) : ragDocuments.length ? (
               <ul className={styles.list}>
                 {ragDocuments.map((document) => {
                   const canEdit = document.can_manage_visibility;
