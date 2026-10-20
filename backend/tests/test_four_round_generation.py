@@ -102,7 +102,7 @@ def test_complete_four_round_lesson_freezes_inputs_and_preserves_metadata(
         snapshot = llm.snapshots[-1]
         # The backend no longer bounds a speech; the round guidance exists only
         # in the Prompt, so this asserts readable output inside that guidance.
-        guidance = {"zh": [500, 450, 550, 650], "en": [320, 280, 350, 420]}
+        guidance = {"zh": [500, 450, 550, 650], "en": [80, 80, 100, 150]}
         high = guidance[language][entry.round_no - 1]
         assert 0 < body_count(final.speech, language) <= high
         assert final.attempt == 1
