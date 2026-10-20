@@ -213,6 +213,19 @@
   color: var(--indigo-dark, #303c66);
 }
 
+/* Richer 2D bar replaces the plain list when WebGL fails. */
+.sceneFallback[data-scene-fallback="avatar-bar"] {
+  display: block;
+  padding: 0;
+  background: transparent;
+  text-align: initial;
+}
+
+.sceneFallback[data-scene-fallback="avatar-bar"] > * {
+  position: absolute;
+  inset: 0;
+}
+
 .namePlate {
   position: absolute;
   z-index: 3;
