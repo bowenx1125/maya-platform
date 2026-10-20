@@ -224,6 +224,25 @@ class TeacherGroupAccess(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class AgentEditAudit(Base):
+    """Who last edited / deleted an Agent (0075).
+
+    Public Agents are edited by groupmates and course teachers too. Kept off
+    the ``agents`` row so older migration fixtures stay valid; plain ids (no
+    FK to users) so audit never blocks an account removal.
+    """
+
+    __tablename__ = "agent_edit_audit"
+
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_edited_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Agent(Base):
     __tablename__ = "agents"
 

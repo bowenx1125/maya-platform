@@ -2975,6 +2975,8 @@ export interface components {
         };
         /** AgentSummary */
         AgentSummary: {
+            /** Can Delete */
+            can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
             /**
@@ -2986,6 +2988,8 @@ export interface components {
             current_draft_version_id?: string | null;
             /** Current Published Version Id */
             current_published_version_id?: string | null;
+            /** Current Version Label */
+            current_version_label?: string | null;
             /**
              * Description
              * @default
@@ -2998,6 +3002,12 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Creator */
+            is_creator?: boolean | null;
+            /** Last Edited At */
+            last_edited_at?: string | null;
+            /** Last Edited By Name */
+            last_edited_by_name?: string | null;
             /** Metadata Revision */
             metadata_revision: number;
             /** Name */
@@ -3020,6 +3030,8 @@ export interface components {
         };
         /** AgentDetail */
         AgentDetail: {
+            /** Can Delete */
+            can_delete?: boolean | null;
             /** Can Edit */
             can_edit: boolean;
             /**
@@ -3031,6 +3043,8 @@ export interface components {
             current_draft_version_id?: string | null;
             /** Current Published Version Id */
             current_published_version_id?: string | null;
+            /** Current Version Label */
+            current_version_label?: string | null;
             /**
              * Description
              * @default
@@ -3043,6 +3057,12 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Creator */
+            is_creator?: boolean | null;
+            /** Last Edited At */
+            last_edited_at?: string | null;
+            /** Last Edited By Name */
+            last_edited_by_name?: string | null;
             /** Metadata Revision */
             metadata_revision: number;
             /** Name */

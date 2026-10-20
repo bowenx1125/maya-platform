@@ -32,7 +32,7 @@ class AgentSummary(BaseModel):
     course_id: UUID
     ownership_scope: Literal["group", "personal"]
     visibility: Literal["private", "public"]
-    # True only for the account that published this Agent. Public use is read-only.
+    # Creator; for a public Agent also same-group students and course teachers.
     can_edit: bool
     name: str
     description: str = ""
@@ -40,6 +40,14 @@ class AgentSummary(BaseModel):
     status: Literal["active", "archived"]
     current_published_version_id: UUID | None = None
     current_draft_version_id: UUID | None = None
+    # Creator, same-group student (public only) or course teacher (public only).
+    can_delete: bool | None = None
+    is_creator: bool | None = None
+    last_edited_by_name: str | None = None
+    last_edited_at: datetime | None = None
+    # Label of the current published version (e.g. "1.2"), for the open
+    # button's hover tooltip 「最新编辑：…，Version：1.X」.
+    current_version_label: str | None = None
 
 
 class KnowledgeGenerationIntent(BaseModel):

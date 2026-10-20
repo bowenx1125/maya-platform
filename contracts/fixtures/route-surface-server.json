@@ -12048,6 +12048,17 @@
       },
       "AgentSummary": {
         "properties": {
+          "can_delete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Delete"
+          },
           "can_edit": {
             "title": "Can Edit",
             "type": "boolean"
@@ -12081,6 +12092,17 @@
             ],
             "title": "Current Published Version Id"
           },
+          "current_version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Label"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -12102,6 +12124,40 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "is_creator": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Creator"
+          },
+          "last_edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited At"
+          },
+          "last_edited_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited By Name"
           },
           "metadata_revision": {
             "minimum": 0,
@@ -12153,6 +12209,17 @@
       },
       "AgentDetail": {
         "properties": {
+          "can_delete": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Delete"
+          },
           "can_edit": {
             "title": "Can Edit",
             "type": "boolean"
@@ -12186,6 +12253,17 @@
             ],
             "title": "Current Published Version Id"
           },
+          "current_version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Label"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -12207,6 +12285,40 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "is_creator": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Creator"
+          },
+          "last_edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited At"
+          },
+          "last_edited_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Edited By Name"
           },
           "metadata_revision": {
             "minimum": 0,

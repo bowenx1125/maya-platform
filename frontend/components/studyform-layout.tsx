@@ -95,9 +95,12 @@ export function VersionTile({
   deleting = false,
   onDelete,
   deleteLabel,
+  title,
 }: {
   name: string;
   href: string;
+  /** Hover tooltip on the open link, e.g. 「最新编辑：…，Version：1.X」. */
+  title?: string;
   label: string;
   pending: boolean;
   visibility?: "private" | "public";
@@ -108,7 +111,7 @@ export function VersionTile({
   // Green/grey pills carry Private or Public; the name stays a text link.
   return (
     <li className="agent-tile">
-      <Link className="agent-tile-name text-link" href={href}>
+      <Link className="agent-tile-name text-link" href={href} title={title}>
         {name}
       </Link>
       {onDelete ? (

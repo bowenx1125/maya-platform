@@ -534,8 +534,8 @@ const enMessages = {
   errorCsrfFailed: "This form has expired. Please try again.",
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
-  errorStaleRevision:
-    "The draft changed elsewhere. Refresh before saving again.",
+  errorStaleRevision: "Someone else changed this content. Please refresh.",
+  agentLastEditedTooltip: "Last edited: {name}, Version: {version}",
   errorStaleControlVersion:
     "The classroom state changed. Refresh and try again.",
   errorIdempotencyConflict:
@@ -1405,7 +1405,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorCsrfFailed: "此表单已过期，请重试。",
   errorInvalidState: "当前状态不支持该操作。",
   errorVersionImmutable: "已发布版本不可变更。",
-  errorStaleRevision: "草稿已在其他地方更新，请刷新后再次保存。",
+  errorStaleRevision: "内容已被别人修改，请刷新",
+  agentLastEditedTooltip: "最新编辑：{name}，Version：{version}",
   errorStaleControlVersion: "课堂状态已变化，请刷新后重试。",
   errorIdempotencyConflict: "此请求已使用过不同的数据。",
   errorDemoRoundCountFixed: "演示固定使用两轮。",
@@ -1891,6 +1892,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   rebirth_refresh_failed: "debateRebirthRefreshFailed",
   version_immutable: "errorVersionImmutable",
   stale_revision: "errorStaleRevision",
+  stale_metadata_revision: "errorStaleRevision",
   stale_control_version: "errorStaleControlVersion",
   idempotency_conflict: "errorIdempotencyConflict",
   demo_round_count_fixed: "errorDemoRoundCountFixed",
