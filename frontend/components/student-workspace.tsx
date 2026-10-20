@@ -86,10 +86,17 @@ async function loadGroups(
 ): Promise<GroupOverview[]> {
   return Promise.all(
     groupIds.map(async (groupId) => {
+      // Through the shared cache with Studyform's own keys: opening a group
+      // from here reuses these reads instead of asking again.
+      const identity = voiceIdentity;
       const [group, agents, knowledge, voices] = await Promise.all([
-        api.group(groupId),
-        api.agents(groupId, true),
-        api.knowledge(groupId),
+        cachedCall(api, identity, "group", [groupId], () => api.group(groupId)),
+        cachedCall(api, identity, "agents", [groupId, true], () =>
+          api.agents(groupId, true),
+        ),
+        cachedCall(api, identity, "knowledge", [groupId], () =>
+          api.knowledge(groupId),
+        ),
         // Also warms the Studyform voice list for this group.
         fetchVoiceList(api, voiceIdentity, "group", groupId, { reuse: true }),
       ]);
@@ -141,7 +148,9 @@ export function StudentDashboard() {
       const [overviews, nextPublished] = await Promise.all([
         loadGroups(api, groupIds, voiceIdentity),
         courseId && typeof api.publishedAgents === "function"
-          ? api.publishedAgents(courseId)
+          ? cachedCall(api, voiceIdentity, "publishedAgents", [courseId], () =>
+              api.publishedAgents(courseId),
+            )
           : Promise.resolve([]),
       ]);
       setGroups(overviews);
