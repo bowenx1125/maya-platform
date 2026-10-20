@@ -615,7 +615,7 @@
   grid-row: 2;
 }
 
-.studyformGrid > #studyform-voices {
+.studyformGrid > :global(#studyform-voices) {
   grid-column: 3 / 5;
   grid-row: 2;
   min-width: 0;
