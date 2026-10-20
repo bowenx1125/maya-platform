@@ -30,10 +30,10 @@ results without charging again.
 
 | Round      | Chinese upper guidance | English upper guidance |
 | ---------- | ---------------------- | ---------------------- |
-| Opening    | 50 characters          | 320 words              |
-| Discussion | 50 characters          | 280 words              |
-| Response   | 50 characters          | 350 words              |
-| Conclusion | 100 characters         | 420 words              |
+| Opening    | 50 characters          | 80 words               |
+| Discussion | 50 characters          | 80 words               |
+| Response   | 50 characters          | 100 words              |
+| Conclusion | 100 characters         | 150 words              |
 
 Lengths guide only the System Prompt, with no minimum. Count segment text: Chinese
 nonspace characters/punctuation; English alphanumeric words with internal apostrophes/

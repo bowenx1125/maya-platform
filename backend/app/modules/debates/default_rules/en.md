@@ -63,10 +63,10 @@ When frozen classroom messages exist, each Agent substantively answers at least 
 
 | Round | Maximum English body length |
 | ----- | --------------------------- |
-| 1     | 320 words                   |
-| 2     | 280 words                   |
-| 3     | 350 words                   |
-| 4     | 420 words                   |
+| 1     | 80 words                    |
+| 2     | 80 words                    |
+| 3     | 100 words                   |
+| 4     | 150 words                   |
 
 Count alphanumeric words, keeping internal apostrophes and hyphens within one word. Count only displayed paragraph text, excluding source IDs, routing and discussion memory. There is no minimum and no need to fill the allowance. Do not pad, append templates or truncate the speech.
 

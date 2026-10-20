@@ -44,7 +44,7 @@ function Harness({ saved = vi.fn(), editing = vi.fn() } = {}) {
 }
 
 describe("per-debate Markdown rules editor", () => {
-  it("shows only the selected language and preserves edits across language switches", async () => {
+  it("edits and saves via card icons without taking left-rail Back/Done", async () => {
     const saved = vi.fn();
     const editing = vi.fn();
     render(<Harness saved={saved} editing={editing} />);
@@ -60,26 +60,34 @@ describe("per-debate Markdown rules editor", () => {
       (screen.getByRole("button", { name: "English" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
-    expect(screen.queryByText("Prompt CN")).toBeNull();
-    expect(screen.queryByText("Prompt EN")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(editing).toHaveBeenLastCalledWith(true);
     const navigation = within(screen.getByRole("navigation"));
     const main = within(screen.getByRole("main"));
-    const back = await navigation.findByRole("button", { name: "Back" });
-    const done = await navigation.findByRole("button", { name: "Done" });
-    expect(main.queryByRole("button", { name: "Back" })).toBeNull();
-    expect(main.queryByRole("button", { name: "Done" })).toBeNull();
+    // Ruleset Back lives on the card; left rail must not own ruleset save/cancel.
+    expect(navigation.queryByRole("button", { name: "Back" })).toBeNull();
+    expect(navigation.queryByRole("button", { name: "Done" })).toBeNull();
+    const back = main.getByRole("button", { name: "Back" });
+    expect(main.queryByRole("button", { name: "Save" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "English" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+    // Unchanged edit → Back exits without saving.
+    fireEvent.click(back);
+    expect(editing).toHaveBeenLastCalledWith(false);
+    expect(saved).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByRole("textbox", { name: "中文规则" }), {
       target: { value: "# 本场新规则\n\n给一个例子。" },
     });
     expect(saved).not.toHaveBeenCalled();
-    expect((back as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(done);
+    // Dirty → icon becomes Save (checkmark).
+    const save = main.getByRole("button", { name: "Save" });
+    expect(main.queryByRole("button", { name: "Back" })).toBeNull();
+    fireEvent.click(save);
     expect(editing).toHaveBeenLastCalledWith(false);
     expect(saved).toHaveBeenCalledWith({
       zh: "# 本场新规则\n\n给一个例子。",

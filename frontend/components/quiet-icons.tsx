@@ -151,6 +151,26 @@ export function IconArrowRight({ size = 16 }: { size?: number }) {
   );
 }
 
+/** Return / back: mirror of IconArrowRight for inline cancel chrome. */
+export function IconArrowLeft({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M19 12H5" />
+      <path d="m11 6-6 6 6 6" />
+    </svg>
+  );
+}
+
 export function IconRefresh({ size = 16 }: { size?: number }) {
   return (
     <svg
