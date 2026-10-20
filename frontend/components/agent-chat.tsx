@@ -2948,7 +2948,11 @@ function AgentChatScope({
             className={styles.conversation}
             data-blank={!activeSession && !pendingMessage ? "true" : undefined}
           >
-            {!hasTarget ? null : (
+            {!hasTarget ? (
+              // A blank pane read as "still loading" (2026-10-20 audit):
+              // say what to do instead.
+              <p className={styles.blankHint}>{t("chatPickOrNew")}</p>
+            ) : (
               <>
                 <header className={styles.chatHeader}>
                   <div className={styles.chatTitle}>
