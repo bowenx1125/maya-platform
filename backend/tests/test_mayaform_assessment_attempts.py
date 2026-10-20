@@ -2647,7 +2647,15 @@ def test_teacher_knowledge_update_requires_reanswer_after_real_rag_source_replac
             "Idempotency-Key": f"maya-rag-hide-{uuid4()}",
         },
     )
-    assert hidden.status_code == 200, hidden.text
+    # The file is in a live Agent's current release, so the library refuses to
+    # hide it.  Hide it directly to keep exercising the runtime fence.
+    assert hidden.status_code == 409, hidden.text
+    hidden_error = hidden.json().get("error", hidden.json())
+    assert hidden_error["code"] == "document_in_use_by_published_agent"
+    with database.session() as db:
+        hidden_document = db.get(KnowledgeDocument, document_id)
+        assert hidden_document is not None
+        hidden_document.workspace_state = "hidden"
     with database.session() as db:
         actor = _service_actor(db, settings, STUDENT_ID)
         with pytest.raises(PlatformError) as hidden_denied:

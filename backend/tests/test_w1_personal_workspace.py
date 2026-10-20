@@ -942,3 +942,66 @@ def test_legacy_group_agent_binds_entered_teachers_public_group_source_only(
         },
     )
     assert cross_group_link.status_code == 404
+
+
+def test_hiding_rag_used_by_live_published_agent_is_refused_and_agent_stays_usable(
+    client: TestClient,
+) -> None:
+    """Deleting a duplicate library copy must not silently disable a live Agent.
+
+    Production 2026-10-20: a student re-uploaded the same RAG file several times
+    and deleted the oldest copy, which the published Agent's snapshot used; the
+    Agent then showed as unavailable for everyone.
+    """
+
+    _owner, owner_csrf = login(client, "bowen")
+    created = client.post(
+        f"/api/v1/groups/{GROUP_ID}/agents",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-live-rag-hide-agent-001"}),
+        json={"name": "Live Rag Hide Probe", "visibility": "public"},
+    )
+    assert created.status_code == 201, created.text
+    agent_id = created.json()["id"]
+    version_id = created.json()["versions"][0]["id"]
+    edited = client.patch(
+        f"/api/v1/agent-versions/{version_id}",
+        headers=_headers(owner_csrf),
+        json={"expected_revision": 0, "agent_md": "# Live Rag Hide Probe\n\nShared Agent."},
+    )
+    assert edited.status_code == 200, edited.text
+    uploaded = client.post(
+        f"/api/v1/groups/{GROUP_ID}/knowledge-documents",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-live-rag-hide-source-001"}),
+        data={
+            "target_agent_version_id": version_id,
+            "expected_revision": "1",
+            "visibility": "public",
+        },
+        files={"file": ("live-rag.md", b"# Live rag\n\nLIVE_RAG_CANARY", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    source_id = uploaded.json()["document"]["id"]
+    published = client.post(
+        f"/api/v1/agent-versions/{version_id}/publish",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-live-rag-hide-publish-001"}),
+        json={"expected_revision": 2},
+    )
+    assert published.status_code == 200, published.text
+
+    refused = client.post(
+        f"/api/v1/knowledge-documents/{source_id}/hide",
+        headers=_headers(owner_csrf, **{"Idempotency-Key": "w1-live-rag-hide-hide-0001"}),
+    )
+    assert refused.status_code == 409, refused.text
+    body = refused.json()
+    error = body.get("error", body)
+    assert error["code"] == "document_in_use_by_published_agent"
+    assert error["details"]["agent_names"] == ["Live Rag Hide Probe"]
+
+    source = client.get(f"/api/v1/knowledge-documents/{source_id}")
+    assert source.status_code == 200, source.text
+    assert source.json()["workspace_state"] == "active"
+    _teacher, _teacher_csrf = login(client, "maya")
+    directory = client.get(f"/api/v1/courses/{COURSE_ID}/chat-agents")
+    row = next(item for item in directory.json() if item["agent_id"] == agent_id)
+    assert row["available"] is True

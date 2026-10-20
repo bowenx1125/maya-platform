@@ -347,7 +347,7 @@ const enMessages = {
     "Open a personal Chat context and ask what it remembers.",
   brainformRagEmpty: "No RAG yet.",
   brainformRagHideConfirm:
-    "Hide {filename} from Brainform? Published Agent snapshots and retained Knowledge versions remain available.",
+    "Hide {filename} from Brainform? Chats you already had keep their history.",
   brainformRagFileStaged:
     "{filename} is selected. It will be imported when you save.",
   brainformAgentsUsingKnowledge: "Agents using this Knowledge",
@@ -529,6 +529,8 @@ const enMessages = {
     "Private or Public is chosen when the Agent is created and does not change.",
   errorRagFollowsAgent:
     "RAG added to an Agent is Private or Public like the Agent.",
+  errorRagInPublishedAgent:
+    "This file is used by a published Agent, so it can't be deleted. Publish a new version of that Agent without this file, or delete the Agent, first.",
   errorTeamMemberSourceUnavailable:
     "This Agent's RAG was removed from the library. Open the Agent, choose active RAG, and publish again before adding it to a Team.",
   errorCsrfFailed: "This form has expired. Please try again.",
@@ -1238,7 +1240,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   brainformMemoryIntro: "进入个人聊天上下文并询问它记得什么。",
   brainformRagEmpty: "还没有 RAG。",
   brainformRagHideConfirm:
-    "从 Brainform 隐藏 {filename}？已发布的 Agent 快照和保留的 Knowledge 版本仍然可用。",
+    "从 Brainform 隐藏 {filename}？已有的聊天记录会保留。",
   brainformRagFileStaged: "已选择 {filename}。保存时才会导入。",
   brainformAgentsUsingKnowledge: "正在使用此 Knowledge 的 Agents",
   brainformKnowledgeFirstVersionEmpty:
@@ -1400,6 +1402,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorNetwork: "无法连接 Maya。请检查网络后重试。",
   errorAgentVisibilityLocked: "Agent 的私有或公开在创建时选定，之后不能更改。",
   errorRagFollowsAgent: "添加到 Agent 的 RAG 与该 Agent 同为私有或公开。",
+  errorRagInPublishedAgent:
+    "这个文件正被已发布的 Agent 使用，不能删除。请先给那个 Agent 发布一个不用这个文件的新版本，或者删除那个 Agent。",
   errorTeamMemberSourceUnavailable:
     "该 Agent 的 RAG 已从资料库移除。请打开 Agent，选择有效的 RAG 并重新发布后再加入 Team。",
   errorCsrfFailed: "此表单已过期，请重试。",
@@ -1901,6 +1905,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   agent_archived: "errorAgentArchived",
   agent_visibility_locked: "errorAgentVisibilityLocked",
   document_visibility_follows_agent: "errorRagFollowsAgent",
+  document_in_use_by_published_agent: "errorRagInPublishedAgent",
   team_member_source_unavailable: "errorTeamMemberSourceUnavailable",
   cross_group_reference: "errorCrossGroupReference",
   agent_md_missing: "blockAgentMdMissing",

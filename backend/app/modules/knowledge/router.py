@@ -1154,6 +1154,36 @@ def hide_knowledge_document(
     if enabled is not None:
         abandon_claim(db, record)
         raise invalid_state("An enabled draft document cannot be deleted.")
+    # Chat, Team and Debate runtimes only serve a published snapshot while its
+    # library sources are still active, so hiding a file that a live Agent's
+    # current release uses would silently make that Agent unavailable to
+    # everyone.  Refuse instead; the owner republishes without the file (or
+    # deletes the Agent) first.
+    live_agent_names = list(
+        db.scalars(
+            select(Agent.name)
+            .join(AgentVersion, AgentVersion.id == Agent.current_published_version_id)
+            .join(
+                SnapshotDocument,
+                SnapshotDocument.snapshot_id == AgentVersion.knowledge_snapshot_id,
+            )
+            .where(
+                SnapshotDocument.document_id == scoped.document.id,
+                Agent.deleted_at.is_(None),
+                Agent.status == "active",
+            )
+            .distinct()
+            .order_by(Agent.name)
+        ).all()
+    )
+    if live_agent_names:
+        abandon_claim(db, record)
+        raise conflict(
+            "document_in_use_by_published_agent",
+            "This file is used by a published Agent's current release and cannot be "
+            "deleted. Publish a version without it, or delete that Agent, first.",
+            {"agent_names": live_agent_names},
+        )
     # Drop draft-only disabled links so a deleted library file cannot linger in
     # draft selections.  Published and superseded version links stay untouched.
     draft_ids = list(
