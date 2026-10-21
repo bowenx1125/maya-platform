@@ -12,21 +12,32 @@ version and snapshot and are never touched.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
-from app.core.models import Agent, AgentVersion, AgentVersionDocument, User
+from app.core.models import (
+    Agent,
+    AgentVersion,
+    AgentVersionDocument,
+    FileOperation,
+    KnowledgeDocument,
+    User,
+)
+from app.core.sqlutil import begin_immediate
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +67,7 @@ def affected_agents(
     *,
     document_ids: Iterable[str] = (),
     voice_profile_ids: Iterable[str] = (),
+    viewer_user_id: str | None = None,
 ) -> list[AffectedAgent]:
     """Live Agents whose current published version uses any given file or Voice."""
 
@@ -83,6 +95,17 @@ def affected_agents(
             found[agent.id] = AffectedAgent(
                 agent.id, agent.name, agent.owner_user_id, version.version_seq
             )
+    if viewer_user_id is not None:
+        from app.modules.knowledge.services import can_use_agent
+
+        # Source ownership does not grant visibility into another owner's
+        # private Agent. Background cascades still need the full affected set.
+        found = {
+            agent_id: item
+            for agent_id, item in found.items()
+            if (agent := db.get(Agent, agent_id)) is not None
+            and can_use_agent(db, viewer_user_id, agent)
+        }
     return sorted(found.values(), key=lambda item: (item.name.casefold(), item.agent_id))
 
 
@@ -95,7 +118,113 @@ def _owner_context(db: Session, agent: Agent) -> Any:
     return AuthContext("", None, owner, "")  # type: ignore[arg-type]
 
 
+@contextmanager
+def _cascade_lock(db: Session, settings: Settings, agent_id: str) -> Iterator[bool]:
+    # Publish commits in several transactions. A transaction lock cannot keep
+    # a second replica or the recovery sweep out for the whole operation.
+    if db.get_bind().dialect.name == "postgresql":
+        with Session(bind=db.get_bind()) as lock_db:
+            key = {"key": f"agent-cascade:{agent_id}"}
+            acquired = bool(
+                lock_db.scalar(text("SELECT pg_try_advisory_lock(hashtext(:key))"), key)
+            )
+            try:
+                yield acquired
+            finally:
+                if acquired:
+                    lock_db.execute(text("SELECT pg_advisory_unlock(hashtext(:key))"), key)
+        return
+    from app.modules.voices.lease_lock import lock_exclusive, unlock
+
+    folder = settings.resolved_data_root / "agent-cascade-locks"
+    folder.mkdir(parents=True, exist_ok=True)
+    with (folder / f"{UUID(agent_id)}.lock").open("a+b") as handle:
+        try:
+            lock_exclusive(handle)
+        except OSError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            unlock(handle)
+
+
+def _finish_cascade(db: Session, operation_id: str) -> None:
+    db.rollback()
+    begin_immediate(db)
+    operation = db.get(FileOperation, operation_id)
+    if operation is None or operation.state != "prepared":
+        db.rollback()
+        return
+    candidate = db.get(AgentVersion, operation.request_id)
+    published = (
+        candidate is not None
+        and candidate.state in {"published", "superseded"}
+        and candidate.published_at is not None
+    )
+    if not published:
+        _retire_failed_draft(db, operation.request_id)
+    for parked in db.scalars(
+        select(FileOperation).where(
+            FileOperation.operation_kind == "agent_cascade_park",
+            FileOperation.request_id == operation.request_id,
+            FileOperation.state == "prepared",
+        )
+    ).all():
+        _restore_parked_draft(db, operation.entity_id, parked.entity_id)
+        parked.state = "committed" if published else "recovered"
+    operation.state = "committed" if published else "recovered"
+    operation.safe_error_code = None if published else "agent_auto_publish_failed"
+    operation.updated_at = datetime.now(UTC)
+    db.commit()
+    if not published:
+        LOGGER.warning(
+            "Agent auto-bump stopped agent_id=%s operation_id=%s code=agent_auto_publish_failed",
+            operation.entity_id,
+            operation_id,
+        )
+
+
+def _recover_cascades(db: Session, settings: Settings, agent_id: str | None = None) -> None:
+    query = select(FileOperation.id, FileOperation.entity_id).where(
+        FileOperation.operation_kind == "agent_cascade_publish",
+        FileOperation.state == "prepared",
+    )
+    if agent_id is not None:
+        query = query.where(FileOperation.entity_id == agent_id)
+    rows = db.execute(query).all()
+    db.rollback()
+    for operation_id, owner_id in rows:
+        with _cascade_lock(db, settings, owner_id) as acquired:
+            if acquired:
+                _finish_cascade(db, operation_id)
+
+
 def bump_agent(
+    db: Session,
+    settings: Settings,
+    agent_id: str,
+    *,
+    drop_document_ids: Iterable[str] = (),
+    drop_voice_profile_ids: Iterable[str] = (),
+    refresh_document_ids: Iterable[str] = (),
+) -> str | None:
+    _recover_cascades(db, settings, agent_id)
+    with _cascade_lock(db, settings, agent_id) as acquired:
+        if not acquired:
+            return None
+        return _bump_agent_locked(
+            db,
+            settings,
+            agent_id,
+            drop_document_ids=drop_document_ids,
+            drop_voice_profile_ids=drop_voice_profile_ids,
+            refresh_document_ids=refresh_document_ids,
+        )
+
+
+def _bump_agent_locked(
     db: Session,
     settings: Settings,
     agent_id: str,
@@ -144,6 +273,44 @@ def bump_agent(
         LOGGER.warning("Agent auto-bump skipped: owner inactive agent_id=%s", agent_id)
         return None
 
+    sources = list(
+        db.execute(
+            select(
+                KnowledgeDocument.id,
+                KnowledgeDocument.stored_file_id,
+                KnowledgeDocument.index_revision,
+            )
+            .where(KnowledgeDocument.id.in_(drop_docs | refresh_docs))
+            .order_by(KnowledgeDocument.id)
+        ).tuples()
+    )
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            [
+                current.id,
+                sorted(drop_docs),
+                sorted(drop_voices),
+                sorted(refresh_docs),
+                [list(row) for row in sources],
+            ],
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    # An interrupted real publication may already have reached the supplier.
+    # Keep its durable outcome; the periodic sweep must never authorize a
+    # fresh paid retry of the same source change.
+    if (
+        db.scalar(
+            select(FileOperation.id).where(
+                FileOperation.operation_kind == "agent_cascade_publish",
+                FileOperation.entity_id == agent_id,
+                FileOperation.expected_sha256 == fingerprint,
+            )
+        )
+        is not None
+    ):
+        return None
+
     max_seq = (
         db.scalar(
             select(func.max(AgentVersion.version_seq)).where(AgentVersion.agent_id == agent.id)
@@ -175,6 +342,8 @@ def bump_agent(
             changed = True
         if changed:
             draft.revision = draft.revision + 1
+            if draft.persona_confirmation_revision is not None:
+                draft.persona_confirmation_revision = draft.revision
             draft.updated_at = timestamp
         # The state CHECK allows only draft/published/superseded; a superseded
         # row with no published_at is the transient parking spot.
@@ -193,7 +362,9 @@ def bump_agent(
         persona_spec_hash=current.persona_spec_hash,
         persona_compiler_version=current.persona_compiler_version,
         persona_diagnostics_json=current.persona_diagnostics_json,
-        persona_confirmation_revision=None,
+        persona_confirmation_revision=(
+            0 if current.persona_confirmation_revision is not None else None
+        ),
         student_confirmed_at=current.student_confirmed_at,
         persona_confirming_user_id=current.persona_confirming_user_id,
         persona_required=current.persona_required,
@@ -221,8 +392,32 @@ def bump_agent(
             )
         )
         order += 1
-    db.commit()
     version_id = version.id
+    operation = FileOperation(
+        id=str(uuid4()),
+        operation_kind="agent_cascade_publish",
+        entity_id=agent_id,
+        request_id=version_id,
+        expected_sha256=fingerprint,
+        state="prepared",
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    db.add(operation)
+    if parked_id is not None:
+        db.add(
+            FileOperation(
+                id=str(uuid4()),
+                operation_kind="agent_cascade_park",
+                entity_id=parked_id,
+                request_id=version_id,
+                state="prepared",
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+    db.commit()
+    operation_id = operation.id
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
     try:
         _publish_agent_version_admitted(
@@ -237,10 +432,12 @@ def bump_agent(
     except PlatformError as error:
         db.rollback()
         LOGGER.warning("Agent auto-bump publish failed agent_id=%s code=%s", agent_id, error.code)
-        _discard_failed_draft(db, version_id)
-        _restore_parked_draft(db, agent_id, parked_id)
+        _finish_cascade(db, operation_id)
         return None
-    _restore_parked_draft(db, agent_id, parked_id)
+    except Exception:
+        _finish_cascade(db, operation_id)
+        raise
+    _finish_cascade(db, operation_id)
     return version_id
 
 
@@ -260,18 +457,17 @@ def _restore_parked_draft(db: Session, agent_id: str, parked_id: str | None) -> 
     )
     draft.state = "draft"
     draft.version_seq = max_seq + 1
-    db.commit()
+    db.flush()
 
 
-def _discard_failed_draft(db: Session, version_id: str) -> None:
+def _retire_failed_draft(db: Session, version_id: str) -> None:
     leftover = db.get(AgentVersion, version_id)
     if leftover is not None and leftover.state == "draft":
-        for rel in db.scalars(
-            select(AgentVersionDocument).where(AgentVersionDocument.agent_version_id == version_id)
-        ).all():
-            db.delete(rel)
-        db.delete(leftover)
-        db.commit()
+        # A failed publication may already own a snapshot or provider ledger.
+        # Retain those references while releasing the unique editable slot.
+        leftover.state = "superseded"
+        leftover.updated_at = datetime.now(UTC)
+        db.flush()
 
 
 def cascade_removed_sources(
@@ -398,6 +594,7 @@ def sweep_stale_agents(database: Database, settings: Settings) -> int:
         try:
             scan = database.session_factory()
             try:
+                _recover_cascades(scan, settings)
                 work = stale_agents(scan)
             finally:
                 scan.close()

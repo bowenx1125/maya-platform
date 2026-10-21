@@ -32,12 +32,14 @@ def _upload(client: TestClient, csrf: str, name: str, body: bytes, key: str) -> 
     return str(uploaded.json()["document"]["id"])
 
 
-def _agent_with_docs(client: TestClient, csrf: str, name: str, doc_ids: list[str]) -> str:
+def _agent_with_docs(
+    client: TestClient, csrf: str, name: str, doc_ids: list[str], *, visibility: str = "public"
+) -> str:
     key = name.lower().replace(" ", "-")
     created = client.post(
         f"/api/v1/groups/{GROUP_ID}/agents",
         headers=_h(csrf, f"cascade-{key}-create-0001"),
-        json={"name": name, "visibility": "public"},
+        json={"name": name, "visibility": visibility},
     )
     assert created.status_code == 201, created.text
     agent_id = created.json()["id"]

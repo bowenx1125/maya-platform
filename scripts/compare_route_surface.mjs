@@ -60,6 +60,8 @@ const implementedOperationIds = new Set([
   "listCourseWorkspaceDocuments",
   "uploadCourseWorkspaceDocument",
   "getKnowledgeDocument",
+  "listKnowledgeDocumentAffectedAgents",
+  "listVoiceProfileAffectedAgents",
   "updateKnowledgeDocumentVisibility",
   "replaceKnowledgeDocument",
   "downloadKnowledgeDocument",

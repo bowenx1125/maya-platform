@@ -71,6 +71,8 @@ def recover_file_operations(
                 "debate_turn_tts",
                 "debate_cleanup_voice_v1",
                 "debate_cleanup_all_v1",
+                "agent_cascade_publish",
+                "agent_cascade_park",
             )
         ),
     )

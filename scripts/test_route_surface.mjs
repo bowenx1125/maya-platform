@@ -83,7 +83,7 @@ try {
   // continue and pending report manifests had no caller and are gone;
   // Persona compile/confirm and voice confirm had no caller and are gone;
   // the Record attempt lifecycle-action route had no caller and is gone.
-  if (platformOperationCount !== 157 || placeholderCount !== 0) {
+  if (platformOperationCount !== 159 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

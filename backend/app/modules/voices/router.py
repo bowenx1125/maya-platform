@@ -311,7 +311,9 @@ def list_voice_profile_affected_agents(
     scoped = visible_student_voice(db, context, str(voice_profile_id))
     return [
         AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
-        for item in affected_agents(db, voice_profile_ids=[scoped.profile.id])
+        for item in affected_agents(
+            db, voice_profile_ids=[scoped.profile.id], viewer_user_id=context.user.id
+        )
     ]
 
 

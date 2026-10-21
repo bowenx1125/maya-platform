@@ -3074,6 +3074,70 @@
         }
       }
     },
+    "/api/v1/knowledge-documents/{document_id}/affected-agents": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DocumentId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Knowledge"
+        ],
+        "operationId": "listKnowledgeDocumentAffectedAgents",
+        "description": "Live Agents that get a new version when this file is deleted.",
+        "responses": {
+          "200": {
+            "description": "Affected Agents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AffectedAgent"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/voice-profiles/{voice_profile_id}/affected-agents": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/VoiceProfileId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Voices"
+        ],
+        "operationId": "listVoiceProfileAffectedAgents",
+        "description": "Live Agents that get a new version when this Voice is deleted.",
+        "responses": {
+          "200": {
+            "description": "Affected Agents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AffectedAgent"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/agents": {
       "parameters": [
         {
@@ -11775,6 +11839,23 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "AffectedAgent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_id",
+          "name"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

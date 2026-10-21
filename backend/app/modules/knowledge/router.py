@@ -1370,7 +1370,9 @@ def list_knowledge_document_affected_agents(
     scoped = visible_mutable_document(db, context, str(document_id))
     return [
         AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
-        for item in affected_agents(db, document_ids=[scoped.document.id])
+        for item in affected_agents(
+            db, document_ids=[scoped.document.id], viewer_user_id=context.user.id
+        )
     ]
 
 

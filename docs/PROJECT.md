@@ -241,14 +241,16 @@ dead-route cleanup. Fixed0076→0075; private-source/ownerless fences/editor too
 kept. Old-answer edits retain frozen formats; guard state saves with answers:
 25 guard+3 PostgreSQL write-count tests passed,ceilings unchanged.
 
-Held#228: injected publish RuntimeError after durable draft parking leaves owner's
-draft superseded,no crash-recovery journal; new affected-agents routes lack
-implemented-route registration,fixture test fails. Dependent#231 held.
-#215 superseded by#225; alternative#226 not selected. Draft#233/#97 and reimplemented
-legacy UI#38–41 excluded. Validated: backend2849/45 skipped (Linux import27 included),
-Postgres40,frontend1010/1 skipped; types/lint/build/contracts/migrations passed.
-Actions39449756136 billing-blocked; SSH closes pre-authentication,no production change.
-Back up Postgres+SQLite before rebuild.
+Additional inputs (pending full revalidation):
+#228 `4560e3cf0e64e5e86d42581fe7bbabc5faa2caec`,
+#231 `c41062b2ffc4f259be86088671475503c5f573f2`;
+main `8e59881ecf110e1ae1e0ef70078a7f0a00002780`.
+Cascade fixes: durable recovery/replica lock, retained failure references,
+no auto-retry, coherent Persona confirmation, private-name filtering;159 routes.
+#215 superseded; alternative#226, legacy#38–41 and drafts#233/#97 excluded.
+First five: backend2849/45 skip,Postgres40,frontend1010/1 skip; other gates passed.
+Actions39546479628 billing-blocked. This executor's SSH closes pre-authentication;
+no server changes by this executor. Latest production results follow.
 
 ## October21 PR review and release
 
