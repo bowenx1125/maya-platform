@@ -216,7 +216,7 @@ draft superseded; no crash-recovery journal. New affected-agents routes also lac
 implemented-route registration (fixture test fails). Dependent#231 held. #215 superseded
 by#225; alternative#226 not implicitly selected. Draft#233/#97 and reimplemented
 legacy UI#38–41 excluded.
-Validation underway. Public-Agent role matrix:28 passed. Actions dispatch39449756136
-never started (billing/spending limit).
-SSH closes before key exchange:no production Git/data/container changes. Homepage200.
-Production Postgres needs backup alongside requested SQLite backup/integrity check.
+Validated: backend2849 passed/45 skipped (Linux document import27 included);
+Postgres40; frontend1010/1 skipped; types/lint/build/contracts/migrations passed.
+Actions39449756136 blocked by billing. SSH closes before authentication;
+no production changes. Back up Postgres and SQLite before rebuild.
