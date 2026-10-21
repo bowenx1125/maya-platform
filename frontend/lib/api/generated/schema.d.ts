@@ -715,6 +715,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/knowledge-documents/{document_id}/affected-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: components["parameters"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        /** @description Live Agents that get a new version when this file is deleted. */
+        get: operations["listKnowledgeDocumentAffectedAgents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/voice-profiles/{voice_profile_id}/affected-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voice_profile_id: components["parameters"]["VoiceProfileId"];
+            };
+            cookie?: never;
+        };
+        /** @description Live Agents that get a new version when this Voice is deleted. */
+        get: operations["listVoiceProfileAffectedAgents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/groups/{group_id}/agents": {
         parameters: {
             query?: never;
@@ -2875,6 +2913,11 @@ export interface components {
             display_name?: string | null;
             group_name?: string | null;
             status?: string | null;
+        };
+        AffectedAgent: {
+            /** Format: uuid */
+            agent_id: string;
+            name: string;
         };
         /** KnowledgeDocument */
         KnowledgeDocument: {
@@ -7734,6 +7777,52 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    listKnowledgeDocumentAffectedAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: components["parameters"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Affected Agents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffectedAgent"][];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    listVoiceProfileAffectedAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                voice_profile_id: components["parameters"]["VoiceProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Affected Agents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffectedAgent"][];
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     listGroupAgents: {

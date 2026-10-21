@@ -221,6 +221,19 @@ def _bootstrap_accounts(database: Database, settings: Settings) -> None:
             seed_demo_data(session)
 
 
+async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
+    """Startup + every 5 min: finish Agent auto-publishes a restart lost."""
+
+    from app.modules.agents.cascade import sweep_stale_agents
+
+    while True:
+        try:
+            await asyncio.to_thread(sweep_stale_agents, database, settings)
+        except Exception:  # noqa: BLE001 - a sweep failure must not kill the loop
+            logging.getLogger(__name__).exception("Agent auto-bump sweep crashed")
+        await asyncio.sleep(300)
+
+
 async def _reclaim_orphans_later(database: Any, snapshot: dict[str, Any]) -> None:
     """After the grace, fail only the Debate/report jobs whose owner died."""
 
@@ -382,6 +395,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         orphan_task: asyncio.Task[None] | None = None
+        cascade_task: asyncio.Task[None] | None = None
         limiter = anyio.to_thread.current_default_thread_limiter()
         # Sync handlers and admission waits run in this pool. AnyIO's default
         # 40 threads would be gone at 48 admitted requests plus waiters, and
@@ -510,6 +524,9 @@ def create_app(
                     knowledge_generation_tasks.schedule_pending()
                     assessment_finalizer.recover()
                     assessment_finalizer.start_sweeper()
+                    cascade_task = asyncio.create_task(
+                        _agent_cascade_sweeper(runtime_database, runtime_settings)
+                    )
             else:
                 logger.info("Background recovery is owned by another backend replica")
         try:
@@ -517,6 +534,8 @@ def create_app(
         finally:
             if orphan_task is not None:
                 orphan_task.cancel()
+            if cascade_task is not None:
+                cascade_task.cancel()
             if presence is not None:
                 presence.close()
             assessment_finalizer.close()

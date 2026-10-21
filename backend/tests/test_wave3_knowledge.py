@@ -543,7 +543,7 @@ def test_published_agent_rag_and_sources_use_server_names_and_scope(
     assert len(documents) == 2
     for document, expected_base in zip(
         documents,
-        ("same", "same"),
+        ("same", "same-2"),  # RAG names now get -2/-3 dedup on upload
         strict=True,
     ):
         source = client.get(
@@ -1204,4 +1204,12 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
             assert old_document is not None and old_document.workspace_state == "active"
             assert old_document.content_version_seq == 2
         after = _release_fingerprint(database, settings.resolved_data_root, first_agent)
-        assert after == before
+        # Editing a used RAG file now auto-publishes a new Agent version
+        # (owner decision 2026-10-20). Every frozen release row the Debate
+        # relies on is still there unchanged; only new rows are added.
+        for key, rows in before.items():
+            if key == "versions":
+                # The previous published version becomes superseded.
+                assert {row[0] for row in rows} <= {row[0] for row in after[key]}
+            else:
+                assert set(rows) <= set(after[key]), key

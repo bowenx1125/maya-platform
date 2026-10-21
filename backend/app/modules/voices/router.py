@@ -7,14 +7,20 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError, validation_failure
-from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
+from app.modules.auth.dependencies import (
+    get_database,
+    get_db,
+    require_auth,
+    require_authenticated_mutation,
+)
 from app.modules.auth.service import AuthContext
+from app.modules.knowledge.schemas import AffectedAgentDTO
 from app.modules.voices.schemas import (
     PlaybackResource,
     RenameVoiceProfileRequest,
@@ -248,12 +254,19 @@ def rename_voice_profile_route(
 )
 def delete_voice_profile_route(
     voice_profile_id: UUID,
+    background: BackgroundTasks,
+    request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> VoiceProfileResponse:
+    from app.modules.agents.cascade import affected_agents, cascade_removed_sources
+
+    affected_ids = [
+        item.agent_id for item in affected_agents(db, voice_profile_ids=[str(voice_profile_id)])
+    ]
     try:
         result = delete_voice_profile(
             db,
@@ -266,7 +279,40 @@ def delete_voice_profile_route(
         raise
     except (RuntimeError, OSError) as exc:
         raise _safe_provider_failure("delete") from exc
+    if affected_ids:
+        # Owner decision (2026-10-20): Agents using this Voice get a new
+        # version without it and stay usable (silent in Immerse).
+        background.add_task(
+            cascade_removed_sources,
+            get_database(request),
+            settings,
+            agent_ids=affected_ids,
+            voice_profile_ids=[str(voice_profile_id)],
+        )
     return result
+
+
+@router.get(
+    "/voice-profiles/{voice_profile_id}/affected-agents",
+    response_model=list[AffectedAgentDTO],
+    operation_id="listVoiceProfileAffectedAgents",
+    responses={404: {"model": Error, "description": "Voice profile not found."}},
+)
+def list_voice_profile_affected_agents(
+    voice_profile_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[AffectedAgentDTO]:
+    """Live Agents that would get a new version if this Voice were deleted."""
+
+    from app.modules.agents.cascade import affected_agents
+    from app.modules.voices.service import visible_student_voice
+
+    scoped = visible_student_voice(db, context, str(voice_profile_id))
+    return [
+        AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
+        for item in affected_agents(db, voice_profile_ids=[scoped.profile.id])
+    ]
 
 
 @router.post(

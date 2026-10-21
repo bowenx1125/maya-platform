@@ -1839,6 +1839,44 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
+  /knowledge-documents/{document_id}/affected-agents:
+    parameters:
+    - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags:
+      - Knowledge
+      operationId: listKnowledgeDocumentAffectedAgents
+      description: Live Agents that get a new version when this file is deleted.
+      responses:
+        '200':
+          description: Affected Agents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AffectedAgent'
+        '404':
+          $ref: '#/components/responses/Error'
+  /voice-profiles/{voice_profile_id}/affected-agents:
+    parameters:
+    - $ref: '#/components/parameters/VoiceProfileId'
+    get:
+      tags:
+      - Voices
+      operationId: listVoiceProfileAffectedAgents
+      description: Live Agents that get a new version when this Voice is deleted.
+      responses:
+        '200':
+          description: Affected Agents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AffectedAgent'
+        '404':
+          $ref: '#/components/responses/Error'
   /groups/{group_id}/agents:
     parameters:
     - $ref: '#/components/parameters/GroupId'
@@ -7319,6 +7357,18 @@ components:
           type:
           - string
           - 'null'
+    AffectedAgent:
+      type: object
+      additionalProperties: false
+      required:
+      - agent_id
+      - name
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        name:
+          type: string
     KnowledgeDocument:
       properties:
         authorization_epoch:

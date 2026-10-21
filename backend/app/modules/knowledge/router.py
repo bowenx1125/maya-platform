@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response
 from sqlalchemy import case, delete, or_, select, update
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -47,7 +47,12 @@ from app.modules.agents.schemas import (
     RagPreview,
     SetDocumentsRequest,
 )
-from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
+from app.modules.auth.dependencies import (
+    get_database,
+    get_db,
+    require_auth,
+    require_authenticated_mutation,
+)
 from app.modules.auth.service import AuthContext
 from app.modules.demo_baseline.service import (
     reject_baseline_document_mutation,
@@ -74,7 +79,11 @@ from app.modules.knowledge.markdown import (
 )
 from app.modules.knowledge.multipart import UploadTooLargeError, integer_field, parse_upload
 from app.modules.knowledge.replacement import replace_document_copy_on_write
-from app.modules.knowledge.schemas import JobStatus, UpdateKnowledgeDocumentVisibility
+from app.modules.knowledge.schemas import (
+    AffectedAgentDTO,
+    JobStatus,
+    UpdateKnowledgeDocumentVisibility,
+)
 from app.modules.knowledge.schemas import KnowledgeDocument as KnowledgeDocumentDTO
 from app.modules.knowledge.services import (
     _document_dto,
@@ -265,6 +274,32 @@ def list_course_workspace_documents(
         .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
     ).all()
     return [_document_dto(document, can_manage_visibility=True) for document in documents]
+
+
+def _unique_document_filename(
+    db: Session,
+    filename: str,
+    *,
+    course_id: str,
+    group_id: str | None,
+    owner_user_id: str | None,
+) -> str:
+    """Give a RAG file a free name in its library (``notes.md`` -> ``notes-2.md``)."""
+
+    from app.core.naming import dedup_name
+
+    query = select(KnowledgeDocument.source_filename).where(
+        KnowledgeDocument.course_id == course_id,
+        KnowledgeDocument.workspace_state == "active",
+    )
+    if group_id is not None:
+        query = query.where(KnowledgeDocument.group_id == group_id)
+    else:
+        query = query.where(
+            KnowledgeDocument.group_id.is_(None),
+            KnowledgeDocument.owner_user_id == owner_user_id,
+        )
+    return dedup_name(filename, db.scalars(query).all(), keep_extension=True)
 
 
 @router.post(
@@ -597,6 +632,13 @@ async def upload_knowledge_document(
             updated_at=timestamp,
         )
         db.add(stored_file)
+        unique_filename = _unique_document_filename(
+            db,
+            document.filename,
+            course_id=resource_course_id,
+            group_id=str(group_id) if group_id is not None else None,
+            owner_user_id=None if group_id is not None else context.user.id,
+        )
         row = KnowledgeDocument(
             id=document_id,
             group_id=str(group_id) if group_id is not None else None,
@@ -605,7 +647,7 @@ async def upload_knowledge_document(
             ownership_scope="personal" if personal_workspace else "group",
             visibility=visibility,
             authorization_epoch=0,
-            source_filename=document.filename,
+            source_filename=unique_filename,
             source_owner_role=source_owner_role,
             stored_file_id=stored_file.id,
             char_count=document.char_count,
@@ -753,6 +795,7 @@ async def upload_knowledge_document(
 )
 async def replace_knowledge_document(
     document_id: UUID,
+    background: BackgroundTasks,
     request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
@@ -830,6 +873,11 @@ async def replace_knowledge_document(
         # ``replace_document_copy_on_write`` re-captures this source and all
         # draft references after the claim, stages/indexes/promotes bytes via
         # its typed journal, and owns the final BEGIN IMMEDIATE transaction.
+        from app.modules.agents.cascade import affected_agents, cascade_removed_sources
+
+        edited_agent_ids = [
+            item.agent_id for item in affected_agents(db, document_ids=[str(document_id)])
+        ]
         db.rollback()
         enqueued_run_ids: list[str] = []
         new_document, _affected_versions, _operation_id = replace_document_copy_on_write(
@@ -854,6 +902,16 @@ async def replace_knowledge_document(
         db.flush()
         db.commit()
         saga_checkpoint("replace.after_final_commit")
+        if edited_agent_ids:
+            # Owner decision (2026-10-20): editing a RAG file also publishes
+            # a new version of every live Agent using it.
+            background.add_task(
+                cascade_removed_sources,
+                get_database(request),
+                settings,
+                agent_ids=edited_agent_ids,
+                refreshed_document_ids=[str(document_id)],
+            )
         if not settings.is_test:
             task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
             if task_manager is not None:
@@ -1119,10 +1177,13 @@ def reindex_knowledge_document(
 )
 def hide_knowledge_document(
     document_id: UUID,
+    background: BackgroundTasks,
+    request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> KnowledgeDocumentDTO:
     """Remove a source from the working Knowledge library.
 
@@ -1151,9 +1212,14 @@ def hide_knowledge_document(
             AgentVersion.state == "draft",
         )
     )
-    if enabled is not None:
-        abandon_claim(db, record)
-        raise invalid_state("An enabled draft document cannot be deleted.")
+    # Owner decision (2026-10-20): deleting a file also drops it from drafts
+    # and auto-publishes every live Agent that uses it (agents/cascade.py).
+    del enabled
+    from app.modules.agents.cascade import affected_agents, cascade_removed_sources
+
+    affected_ids = [
+        item.agent_id for item in affected_agents(db, document_ids=[scoped.document.id])
+    ]
     # Drop draft-only disabled links so a deleted library file cannot linger in
     # draft selections.  Published and superseded version links stay untouched.
     draft_ids = list(
@@ -1259,7 +1325,37 @@ def hide_knowledge_document(
     saga_checkpoint("hide_knowledge_document.before_final_commit")
     db.commit()
     saga_checkpoint("hide_knowledge_document.after_final_commit")
+    if affected_ids:
+        background.add_task(
+            cascade_removed_sources,
+            get_database(request),
+            settings,
+            agent_ids=affected_ids,
+            document_ids=[str(document_id)],
+        )
     return result
+
+
+@router.get(
+    "/knowledge-documents/{document_id}/affected-agents",
+    response_model=list[AffectedAgentDTO],
+    operation_id="listKnowledgeDocumentAffectedAgents",
+    responses={404: {"model": Error, "description": "Document not found."}},
+)
+def list_knowledge_document_affected_agents(
+    document_id: UUID,
+    context: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[AffectedAgentDTO]:
+    """Live Agents that would get a new version if this file were deleted."""
+
+    from app.modules.agents.cascade import affected_agents
+
+    scoped = visible_mutable_document(db, context, str(document_id))
+    return [
+        AffectedAgentDTO(agent_id=UUID(item.agent_id), name=item.name)
+        for item in affected_agents(db, document_ids=[scoped.document.id])
+    ]
 
 
 @router.put(
