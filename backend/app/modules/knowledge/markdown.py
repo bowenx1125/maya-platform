@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 TOKEN_RE = re.compile(r"\S+")
 EMBED_TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
+INVALID_MARKDOWN_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]")
 EMBEDDING_DIMENSION = 256
 EMBEDDING_KEY = "mock-sha256-v1"
 MAX_CHUNK_UTF8_BYTES = 15_000
@@ -40,6 +41,15 @@ class Chunk:
     embedding: bytes
 
 
+def validate_markdown_characters(text: str) -> None:
+    match = INVALID_MARKDOWN_CHAR_RE.search(text)
+    if match is not None:
+        reason = (
+            "invalid_utf8" if 0xD800 <= ord(match.group()) <= 0xDFFF else "invalid_control_chars"
+        )
+        raise MarkdownInputError(reason)
+
+
 def normalize_markdown(filename: str, data: bytes) -> MarkdownDocument:
     if not filename or "/" in filename or "\\" in filename:
         raise MarkdownInputError("invalid_filename")
@@ -54,6 +64,7 @@ def normalize_markdown(filename: str, data: bytes) -> MarkdownDocument:
     if text.startswith("\ufeff"):
         text = text[1:]
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    validate_markdown_characters(text)
     if not text.strip():
         raise MarkdownInputError("empty_markdown")
     return MarkdownDocument(

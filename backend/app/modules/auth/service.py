@@ -9,7 +9,7 @@ import json
 import secrets
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -33,7 +33,6 @@ from app.modules.auth.models import DemoAccountBinding
 from app.seed import GROUP_DEMO_ID
 
 SESSION_COOKIE_NAME = "maya_session"
-SESSION_TTL = timedelta(hours=12)
 
 
 def utc_now() -> datetime:
@@ -576,7 +575,7 @@ def create_rotated_session(
         id_hash=session_hash(raw_token),
         user_id=user.id,
         csrf_hash=csrf_hash(raw_csrf),
-        expires_at=timestamp + SESSION_TTL,
+        expires_at=timestamp + settings.session_ttl,
         created_at=timestamp,
         revoked_at=None,
     )

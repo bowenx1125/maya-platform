@@ -7,9 +7,9 @@ logins within ~4 s: each one passed adaptive admission against the
 pre-burst MemAvailable (~1.5 GB) and then allocated 64 MiB at once, so host
 MemAvailable fell to 463 MB before any pressure sample could see it.
 
-This gate bounds that burst to ``AUTH_HASH_CONCURRENCY`` (default 3) hashes
-per process: 2 replicas x 3 x 64 MiB = 384 MiB worst case instead of
-N x 64 MiB. It wraps only the Argon2 call itself (not the DB work or the
+This gate bounds that burst to ``AUTH_HASH_CONCURRENCY`` (default 2) hashes
+per process, roughly the classroom host's CPU core count. It wraps only the
+Argon2 call itself (not the DB work or the
 session write). Callers are synchronous FastAPI handlers that already run in
 the threadpool, so blocking here never stalls the event loop. A waiter only
 waits for what is left of the request's single adaptive-admission deadline

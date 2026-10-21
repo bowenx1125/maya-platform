@@ -174,9 +174,16 @@ def test_production_compose_requires_dedicated_data_and_config_roots() -> None:
     assert "replicas: ${BACKEND_REPLICAS:-2}" in compose
     assert 'command: ["postgres", "-c", "max_connections=200"]' in compose
     assert "ADAPTIVE_ADMISSION_MAX_IN_FLIGHT:" in compose
+    assert "AUTH_HASH_CONCURRENCY: ${AUTH_HASH_CONCURRENCY:-2}" in compose
     assert "DATA_ROOT: /app/data" in compose
     assert "./data:/app/data" not in compose
     assert "./backend/config:/app/config" not in compose
+
+
+def test_compose_passes_session_lifetime_to_backend() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    compose = (repo_root / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}" in compose
 
 
 @pytest.mark.parametrize(

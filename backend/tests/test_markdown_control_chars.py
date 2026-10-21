@@ -1,0 +1,75 @@
+import pytest
+from app.core.errors import PlatformError
+from app.modules.knowledge.markdown import (
+    MarkdownInputError,
+    normalize_markdown,
+    validate_markdown_characters,
+)
+from app.modules.knowledge.router import _raise_knowledge_import_failure
+
+
+def test_normalize_markdown_rejects_c0_control_chars() -> None:
+    with pytest.raises(MarkdownInputError, match="^invalid_control_chars$"):
+        normalize_markdown("lesson.md", b"# title\x00\x01\x02\n")
+
+
+@pytest.mark.parametrize(
+    "character", ["\x08", "\x0b", "\x0c", "\x0e", "\x1f", "\x7f", "\x85", "\x9f"]
+)
+def test_markdown_rejects_control_characters_at_text_edges(character: str) -> None:
+    with pytest.raises(MarkdownInputError, match="^invalid_control_chars$"):
+        normalize_markdown("lesson.md", f"{character}中文 lesson{character}".encode())
+
+
+@pytest.mark.parametrize("character", ["\r", "\n", "\t"])
+def test_editor_character_validation_allows_markdown_whitespace(character: str) -> None:
+    validate_markdown_characters(f"中文 lesson{character}next")
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [("\x00\ud800", "invalid_control_chars"), ("\ud800\x00", "invalid_utf8")],
+)
+def test_character_validation_reports_first_invalid_character(text: str, reason: str) -> None:
+    with pytest.raises(MarkdownInputError, match=f"^{reason}$"):
+        validate_markdown_characters(text)
+
+
+def test_normalize_markdown_allows_newlines_and_tabs() -> None:
+    document = normalize_markdown("lesson.md", b"# title\n\tbody\n")
+
+    assert document.normalized == "# title\n\tbody\n"
+
+
+def test_normalize_markdown_converts_crlf_before_control_validation() -> None:
+    document = normalize_markdown("lesson.md", b"# title\r\n\tbody\r\n")
+
+    assert document.normalized == "# title\n\tbody\n"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["invalid", "invalid_filename", "invalid_utf8", "empty_markdown", "invalid_control_chars"],
+)
+def test_markdown_import_failure_uses_markdown_copy(reason: str) -> None:
+    with pytest.raises(PlatformError) as raised:
+        _raise_knowledge_import_failure(reason)
+
+    assert raised.value.status_code == 422
+    assert raised.value.code == "knowledge_import_invalid"
+    assert raised.value.details["reason"] == reason
+    message = raised.value.message.casefold()
+    assert "markdown" in message
+    assert "pdf" not in message
+    assert "word" not in message
+
+
+@pytest.mark.parametrize("reason", ["invalid_pdf", "invalid_docx"])
+def test_invalid_document_import_copy_still_mentions_pdf_word(reason: str) -> None:
+    with pytest.raises(PlatformError) as raised:
+        _raise_knowledge_import_failure(reason)
+
+    assert raised.value.status_code == 422
+    assert raised.value.code == "knowledge_import_invalid"
+    assert "pdf" in raised.value.message.casefold()
+    assert "word" in raised.value.message.casefold()

@@ -43,8 +43,8 @@ def test_capacity_defaults_and_untouched_limits() -> None:
     assert 20 * per_turn <= s.adaptive_admission_max_units
     assert 20 * 2 <= s.adaptive_admission_max_in_flight
     assert s.llm_admission_limit == 8
-    # Explicitly unchanged.
-    assert s.auth_hash_concurrency == 3
+    # M3 moved the default to 2 (memory protection ≈ CPU cores).
+    assert s.auth_hash_concurrency == 2
     assert (POSTGRES_POOL_SIZE, POSTGRES_MAX_OVERFLOW) == (15, 25)
     assert 2 * (POSTGRES_POOL_SIZE + POSTGRES_MAX_OVERFLOW) <= 200 - 100
 

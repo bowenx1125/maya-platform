@@ -333,7 +333,7 @@ def test_health_admission_exposes_limits_and_timing(client) -> None:  # type: ig
     assert body["backstops"]["llm_admission_limit"] == 8
     assert body["backstops"]["write_guard_limit"] == 8
     assert body["backstops"]["create_admission_limit"] == 8
-    assert body["backstops"]["auth_hash_concurrency"] == 3
+    assert body["backstops"]["auth_hash_concurrency"] == 2
     assert body["backstops_enabled"] == {
         "llm_admission": True,
         "write_guard": True,

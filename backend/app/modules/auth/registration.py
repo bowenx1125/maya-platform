@@ -306,25 +306,82 @@ def username_exists(db: Session, settings: Settings, username: str) -> bool:
     )
 
 
-def verify_database_password(db: Session, username: str, password: str) -> tuple[bool, str | None]:
-    """Return whether the database owns this name and its id when valid."""
+# Computed lazily on first unknown-username login and reused for the process
+# lifetime: Argon2 parameters are frozen, so one hash is representative. It
+# equalizes timing so a missing credential row costs the same CPU work as a
+# real verify and does not reveal whether a name exists in the database.
+_DUMMY_HASH: str | None = None
 
-    credential = db.scalar(
-        select(UserCredential).join(User).where(User.username_key == username_key(username))
-    )
-    if credential is None:
-        return False, None
+
+def _dummy_hash() -> str:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = _hasher().hash("maya-dummy-password-for-unknown-users")
+    assert _DUMMY_HASH is not None
+    return _DUMMY_HASH
+
+
+def lock_password_identity(db: Session, user_id: str) -> None:
+    # The User row also exists before a catalog account creates its first
+    # database credential, so both credential sources share this fence.
+    begin_immediate(db)
+    db.scalar(select(User.id).where(User.id == user_id).with_for_update())
+
+
+def verify_database_password(
+    db: Session,
+    username: str,
+    password: str,
+    settings: Settings | None = None,
+) -> tuple[bool, str | None]:
+    """Return whether the database owns this name and its id when valid.
+
+    The pooled connection is released (rollback checks it back in) before any
+    Argon2 work runs, so a burst of logins never holds connections while
+    burning the 64 MiB hash memory.
+    """
+
+    row = db.execute(
+        select(UserCredential.user_id, UserCredential.password_hash)
+        .join(User, User.id == UserCredential.user_id)
+        .where(User.username_key == username_key(username))
+    ).first()
+    # Plain values only: no ORM attribute may be touched after the rollback
+    # below expires the session's transaction state.
+    credential_user_id: str | None = None
+    stored_hash: str | None = None
+    if row is not None:
+        credential_user_id, stored_hash = row
+    db.rollback()
     # The gate sits outside the try: a hash-gate busy 503 must surface as
     # "busy, retry", never be swallowed into a wrong-password answer.
-    with hash_slot():
+    with hash_slot(settings):
+        if stored_hash is None:
+            # Unknown to the database: still burn one Argon2 verify so timing
+            # matches the known-name path.
+            try:
+                _hasher().verify(password, _dummy_hash())
+            except Exception:
+                pass
+            return False, None
         try:
-            if _hasher().verify(password, credential.password_hash):
-                return True, credential.user_id
+            valid = _hasher().verify(password, stored_hash)
         except Exception:
             # A corrupt stored hash fails closed without surfacing the hash or the
             # backend exception at the API boundary.
             return True, None
-    return True, None
+    if not valid or credential_user_id is None:
+        return True, None
+    # A password reset can commit while this request waits or hashes. Keep
+    # the verified credential locked through session creation: a later reset
+    # must see and revoke that session, not miss an uncommitted login.
+    lock_password_identity(db, credential_user_id)
+    current_hash = db.scalar(
+        select(UserCredential.password_hash)
+        .where(UserCredential.user_id == credential_user_id)
+        .with_for_update(of=UserCredential)
+    )
+    return True, credential_user_id if current_hash == stored_hash else None
 
 
 # A reset password is handed over verbally in class, so it is generated from
@@ -360,8 +417,13 @@ def reset_student_password(
             "This account is provisioned by the Demo catalog and has no resettable password.",
         )
     password = validate_password(new_password) if new_password else generate_reset_password()
-    credential.password_hash = run_hash(lambda: _hasher().hash(password))
+    password_hash = run_hash(lambda: _hasher().hash(password))
+    lock_password_identity(db, target.id)
+    credential.password_hash = password_hash
     credential.updated_at = datetime.now(UTC)
+    # Acquire the credential writer lock before reading sessions, so a login
+    # that held it first is committed and visible to this revocation.
+    db.flush()
     # Any session opened with the old password stops being usable. A reset is
     # normally requested because the student lost control of the account.
     revoke_user_sessions(db, target.id, credential.updated_at)
