@@ -250,24 +250,45 @@ Postgres40,frontend1010/1 skipped; types/lint/build/contracts/migrations passed.
 Actions39449756136 billing-blocked; SSH closes pre-authentication,no production change.
 Back up Postgres+SQLite before rebuild.
 
-## October21 local PR review
+## October21 PR review and release
 
-Base0829e2ddf4c1a5c86e9a252264024afe31b699e1; inputs
+Base0829e2ddf4c1a5c86e9a252264024afe31b699e1; integrated inputs
 #234 7f4c8fff9d758cce4cc81fe765e2bc876db0cc2b and
 #235 a04c2ea4cd8a69e8a0d424f12e05ec350c781e31.
-Compose now passes TTL30 and hash cap2/process (two replicas=4 hashes).
+Compose passes TTL30 and hash cap2/process (two replicas=4 hashes).
 Existing password-reset/catalog-change login races reproduced and fenced by User
 locks, post-hash credential recheck and credential flush before session revocation.
 RAG four-entry bad→same-name-good recovery passed. Agent/Knowledge editor NUL and
-surrogate bypasses now reject before persistence; blank drafts remain valid.
+surrogate bypasses reject before persistence; blank drafts remain valid.
 Markdown UI errors no longer become PDF/Word guidance. Knowledge PUT adds declared
 422; frozen schema/hash/types/fixture updated. Character validation preserves all
 Unicode decisions; 10.5M-character local microbenchmark0.446→0.024s, not server load.
-No main merge, deployment or Provider calls. Linux/Postgres and two-core load remain
-unaccepted: Docker startup blocked; no safety check weakened.
 
-Local verification: backend2797 pass/45 skip;95 failures plus one teardown error
-reproduced on unmodified0829e2dd (Windows permissions/tools/asyncio/OCR). Updated
-M3 health fixture3→2 and shortened attachment case IDs without removing assertions.
-Frontend1017 pass/1 skip; types,lint(5 existing warnings),Ruff573,mypy286,
-157-route comparison,contracts,format and generated-secret probe passed.
+Windows backend2797 pass/45 skip;95 failures plus one teardown error reproduced
+on unmodified0829e2dd (permissions/tools/asyncio/OCR). Linux candidate verification
+covered143 unique nodes, including all95 Windows failures (115 initial passes +29
+recovery passes -1 repeat). The initial test container exceeded768MiB; recovery
+used disk scratch space and Git LF scripts instead of the bundle's CRLF copy.
+No assertion weakened. Isolated PG16:15 passed, including real row-lock
+waits, hash-time pool checkedout=0 and import/editor recovery. External socket
+attempts0; temporary containers/networks removed. Cross-platform backend coverage
+2892 pass/45 skip; not a single full Linux run. Frontend1017 pass/1 skip; types,
+lint(5 existing warnings),Ruff573,mypy286,157-route comparison,contracts,format and
+generated-secret probe passed. M3 fixture3→2; attachment test IDs shortened only.
+
+User-authorized code release9c68d42b0b1b618fabeb8fc22237c8586152a52e pushed to
+GitHub main first, then server bare main and clean fast-forward from5dd9690b.
+Built with the production Compose profile; existing main changes include0075/0076.
+Pre-release backups maya-20261021T093817Z-pre-9c68d42b.sqlite3 (backup API,
+integrity_check=ok) and matching .pgdump (archive readable). Previous images kept
+for recovery. Both backend replicas ready200, frontend/backend/Postgres healthy;
+gateway/autoheal running, schema0076_agent_editor_audit matches ALEMBIC_HEAD,
+public HTTPS200, frontend build9c68d42b; effective TTL30/hash cap2 confirmed.
+
+Live smoke: one synthetic account's10 simultaneous logins all200,max1078ms;
+30-day session cookie/expiry, invalid editor NUL/surrogate422 then valid save passed.
+Exact owner/id/content verification preceded API cleanup; the synthetic Agent
+was deleted (GET404). Both synthetic accounts inactive,
+all their sessions revoked; teacher test sessions logged out. Audit rows retained.
+Provider charged-request total14242 before/after; no real Provider calls.
+Two-core50-distinct-user capacity and month-long real-session retention untested.
