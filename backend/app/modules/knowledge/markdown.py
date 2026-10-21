@@ -54,6 +54,11 @@ def normalize_markdown(filename: str, data: bytes) -> MarkdownDocument:
     if text.startswith("\ufeff"):
         text = text[1:]
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if any(
+        unicodedata.category(char) == "Cc" and char not in {"\n", "\t"}
+        for char in text
+    ):
+        raise MarkdownInputError("invalid_control_chars")
     if not text.strip():
         raise MarkdownInputError("empty_markdown")
     return MarkdownDocument(
