@@ -110,7 +110,7 @@ def _set_session_cookie(
         httponly=True,
         secure=settings.cookie_secure(request.url.scheme),
         samesite="lax",
-        max_age=12 * 60 * 60,
+        max_age=int(settings.session_ttl.total_seconds()),
         path="/",
     )
 
@@ -234,7 +234,9 @@ def _login_admitted(
             )
         # The read-only catalog stays authoritative for provisioned identities;
         # self-registered accounts resolve from the database source after a miss.
-        database_owned, user_id = verify_database_password(db, payload.username, payload.password)
+        database_owned, user_id = verify_database_password(
+            db, payload.username, payload.password, settings
+        )
         if not database_owned:
             user_id = verify_password(settings, payload.username, payload.password)
         if user_id is None:

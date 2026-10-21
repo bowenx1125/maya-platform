@@ -306,20 +306,60 @@ def username_exists(db: Session, settings: Settings, username: str) -> bool:
     )
 
 
-def verify_database_password(db: Session, username: str, password: str) -> tuple[bool, str | None]:
-    """Return whether the database owns this name and its id when valid."""
+# Computed lazily on first unknown-username login and reused for the process
+# lifetime: Argon2 parameters are frozen, so one hash is representative. It
+# equalizes timing so a missing credential row costs the same CPU work as a
+# real verify and does not reveal whether a name exists in the database.
+_DUMMY_HASH: str | None = None
 
-    credential = db.scalar(
-        select(UserCredential).join(User).where(User.username_key == username_key(username))
-    )
-    if credential is None:
-        return False, None
+
+def _dummy_hash() -> str:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = _hasher().hash("maya-dummy-password-for-unknown-users")
+    assert _DUMMY_HASH is not None
+    return _DUMMY_HASH
+
+
+def verify_database_password(
+    db: Session,
+    username: str,
+    password: str,
+    settings: Settings | None = None,
+) -> tuple[bool, str | None]:
+    """Return whether the database owns this name and its id when valid.
+
+    The pooled connection is released (rollback checks it back in) before any
+    Argon2 work runs, so a burst of logins never holds connections while
+    burning the 64 MiB hash memory.
+    """
+
+    row = db.execute(
+        select(UserCredential.user_id, UserCredential.password_hash)
+        .join(User, User.id == UserCredential.user_id)
+        .where(User.username_key == username_key(username))
+    ).first()
+    # Plain values only: no ORM attribute may be touched after the rollback
+    # below expires the session's transaction state.
+    credential_user_id: str | None = None
+    stored_hash: str | None = None
+    if row is not None:
+        credential_user_id, stored_hash = row
+    db.rollback()
     # The gate sits outside the try: a hash-gate busy 503 must surface as
     # "busy, retry", never be swallowed into a wrong-password answer.
-    with hash_slot():
+    with hash_slot(settings):
+        if stored_hash is None:
+            # Unknown to the database: still burn one Argon2 verify so timing
+            # matches the known-name path.
+            try:
+                _hasher().verify(password, _dummy_hash())
+            except Exception:
+                pass
+            return False, None
         try:
-            if _hasher().verify(password, credential.password_hash):
-                return True, credential.user_id
+            if _hasher().verify(password, stored_hash):
+                return True, credential_user_id
         except Exception:
             # A corrupt stored hash fails closed without surfacing the hash or the
             # backend exception at the API boundary.

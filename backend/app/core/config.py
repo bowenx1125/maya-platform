@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
+from datetime import timedelta
 from functools import lru_cache
 from ipaddress import ip_address, ip_network
 from pathlib import Path
@@ -62,6 +63,10 @@ class Settings(BaseSettings):
         default=False, validation_alias="PROVIDER_STANDING_CONSENT"
     )
     session_secret: str | None = Field(default=None, validation_alias="SESSION_SECRET")
+    # Classroom sessions are meant to outlive a single lesson: 30 days by
+    # default (configurable up to a semester) instead of forcing re-login
+    # every lesson.
+    session_ttl_days: int = Field(default=30, ge=1, le=400, validation_alias="SESSION_TTL_DAYS")
     classroom_public_base_url: str | None = Field(
         default=None,
         validation_alias="CLASSROOM_PUBLIC_BASE_URL",
@@ -184,10 +189,11 @@ class Settings(BaseSettings):
         default=2, ge=1, le=60, validation_alias="AUTH_LOGIN_QUEUE_RETRY_SECONDS"
     )
     # Concurrent Argon2 hash / verify calls per process (app/core/hash_gate.py).
-    # Each call allocates memory_cost (64 MiB) at once; 2 replicas x 3 x 64 MiB
-    # = 384 MiB worst case. 0 disables the cap.
+    # This is memory protection, not a business rate limit: each in-flight call
+    # allocates memory_cost (64 MiB) at once, so the default is roughly the CPU
+    # core count (2 on the classroom host). 0 disables the cap.
     auth_hash_concurrency: int = Field(
-        default=3, ge=0, le=64, validation_alias="AUTH_HASH_CONCURRENCY"
+        default=2, ge=0, le=64, validation_alias="AUTH_HASH_CONCURRENCY"
     )
     # Unified pressure signal (app/core/adaptive_admission.py). Below this
     # MemAvailable floor (MiB) or at/above the 1m load reject threshold, new
@@ -624,6 +630,12 @@ class Settings(BaseSettings):
         if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value.strip()) is None:
             raise ValueError("provider slice policy hash must be a lowercase SHA-256 value")
         return value.strip()
+
+    @property
+    def session_ttl(self) -> timedelta:
+        """Return the configured session lifetime."""
+
+        return timedelta(days=self.session_ttl_days)
 
     @property
     def is_test(self) -> bool:

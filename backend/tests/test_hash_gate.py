@@ -1,17 +1,21 @@
-"""Argon2 concurrency cap (AUTH_HASH_CONCURRENCY, default 3 per process)."""
+"""Argon2 concurrency cap (AUTH_HASH_CONCURRENCY, default 2 per process)."""
 
 from __future__ import annotations
 
 import threading
 import time
 from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from app.core import adaptive_admission as aa
 from app.core import hash_gate
 from app.core.config import Settings
 from app.core.errors import PlatformError
+from app.core.models import Base, User
 from app.modules.auth import registration
+from app.modules.auth.models import UserCredential
 from pwdlib import PasswordHash
 
 
@@ -28,8 +32,10 @@ def _settings(**overrides: object) -> Settings:
     return Settings(**overrides)  # type: ignore[arg-type]
 
 
-def test_default_cap_is_three() -> None:
-    assert Settings().auth_hash_concurrency == 3
+def test_default_cap_is_two() -> None:
+    # Memory protection, not a rate limit: ~64 MiB per in-flight Argon2, so the
+    # default tracks the classroom host's CPU cores.
+    assert Settings().auth_hash_concurrency == 2
 
 
 def test_parallel_hashes_never_exceed_cap() -> None:
@@ -138,17 +144,147 @@ def test_busy_is_not_swallowed_as_wrong_password(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(registration, "hash_slot", contextmanager(busy))
 
-    class _Credential:
-        password_hash = "x"
-        user_id = "u"
+    class _Row(tuple):  # mimics a (user_id, password_hash) result row
+        pass
+
+    class _Result:
+        def first(self) -> _Row:
+            return _Row(("u", "x"))
 
     class _Db:
-        def scalar(self, _stmt: object) -> _Credential:
-            return _Credential()
+        def execute(self, _stmt: object) -> _Result:
+            return _Result()
+
+        def rollback(self) -> None:
+            pass
 
     with pytest.raises(PlatformError) as excinfo:
         registration.verify_database_password(_Db(), "someone", "pw")  # type: ignore[arg-type]
     assert excinfo.value.status_code == 503
+
+
+def test_rollback_releases_connection_before_argon2_verify(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pooled connection is checked in before any Argon2 work runs."""
+
+    events: list[str] = []
+    real = PasswordHash.recommended()
+
+    class _Observed:
+        def verify(self, password: str, hash_value: str) -> bool:
+            events.append("verify")
+            return real.verify(password, hash_value)
+
+    monkeypatch.setattr(registration, "_hasher", lambda: _Observed())
+
+    class _Result:
+        def first(self) -> tuple[str, str] | None:
+            return ("user-id", real.hash("demo-password-123"))
+
+    class _Db:
+        def execute(self, _stmt: object) -> _Result:
+            return _Result()
+
+        def rollback(self) -> None:
+            events.append("rollback")
+
+    ok, user_id = registration.verify_database_password(_Db(), "someone", "demo-password-123")
+    assert ok is True
+    assert user_id == "user-id"
+    # rollback must precede the first verify call, not merely happen somewhere.
+    assert events == ["rollback", "verify"]
+
+
+def test_unknown_username_still_runs_dummy_argon2_after_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing credential row burns the same Argon2 work, after rollback."""
+
+    verify_calls: list[str] = []
+    real = PasswordHash.recommended()
+
+    class _Observed:
+        def verify(self, password: str, hash_value: str) -> bool:
+            verify_calls.append(hash_value)
+            return real.verify(password, hash_value)
+
+    monkeypatch.setattr(registration, "_hasher", lambda: _Observed())
+    monkeypatch.setattr(registration, "_DUMMY_HASH", real.hash("seeded-dummy"))
+
+    rollbacks: list[bool] = []
+
+    class _Result:
+        def first(self) -> None:
+            return None
+
+    class _Db:
+        def execute(self, _stmt: object) -> _Result:
+            return _Result()
+
+        def rollback(self) -> None:
+            rollbacks.append(True)
+
+    ok, user_id = registration.verify_database_password(_Db(), "nobody", "whatever")
+    assert ok is False
+    assert user_id is None
+    assert rollbacks == [True]
+    # Exactly one dummy verify ran, and the dummy hash was precomputed so no
+    # Argon2 hash ran inside the gate either.
+    assert len(verify_calls) == 1
+
+
+def test_verify_runs_with_pool_connection_checked_out_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """While Argon2 verify runs, the engine pool reports zero checked-out."""
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import QueuePool
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'pool.sqlite3'}", poolclass=QueuePool)
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    password_hash = PasswordHash.recommended().hash("demo-password-123")
+    with factory() as seed_session:
+        seed_session.add(
+            User(
+                id="pool-user",
+                username="pool-user",
+                display_name="Pool User",
+                status="active",
+                created_at=datetime.now(UTC),
+            )
+        )
+        seed_session.add(
+            UserCredential(
+                user_id="pool-user",
+                username="pool-user",
+                password_hash=password_hash,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        seed_session.commit()
+
+    pool = engine.pool
+    assert isinstance(pool, QueuePool)
+    observed: list[int] = []
+    real = PasswordHash.recommended()
+
+    class _Observed:
+        def verify(self, password: str, hash_value: str) -> bool:
+            observed.append(int(pool.checkedout()))
+            return real.verify(password, hash_value)
+
+    monkeypatch.setattr(registration, "_hasher", lambda: _Observed())
+    session = factory()
+    ok, _user_id = registration.verify_database_password(session, "pool-user", "demo-password-123")
+    session.close()
+    engine.dispose()
+    assert ok is True
+    assert observed and observed[0] == 0
 
 
 def test_zero_disables_cap() -> None:
