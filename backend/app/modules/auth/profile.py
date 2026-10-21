@@ -16,7 +16,11 @@ from app.core.identity import group_name_key
 from app.core.models import CourseMember, Group, User
 from app.modules.auth.credentials import verify_password
 from app.modules.auth.models import DemoAccountBinding, UserCredential
-from app.modules.auth.registration import DISPLAY_NAME_MAX, validate_password
+from app.modules.auth.registration import (
+    DISPLAY_NAME_MAX,
+    lock_password_identity,
+    validate_password,
+)
 from app.modules.auth.service import revoke_user_sessions
 from app.modules.org.roster import move_to_group
 
@@ -123,8 +127,9 @@ def change_password(
     """Change one authenticated account's password and keep this session alive."""
 
     credential = db.scalar(select(UserCredential).where(UserCredential.user_id == user.id))
-    if credential is not None:
-        valid_current = _password_matches(credential.password_hash, current_password)
+    stored_hash = credential.password_hash if credential is not None else None
+    if stored_hash is not None:
+        valid_current = _password_matches(stored_hash, current_password)
     else:
         valid_current = verify_password(settings, user.username, current_password) == user.id
     if not valid_current:
@@ -137,6 +142,16 @@ def change_password(
     password = validate_password(new_password)
     now = datetime.now(UTC)
     password_hash = run_hash(lambda: PasswordHash.recommended().hash(password), settings)
+    lock_password_identity(db, user.id)
+    current_hash = db.scalar(
+        select(UserCredential.password_hash).where(UserCredential.user_id == user.id)
+    )
+    if current_hash != stored_hash:
+        raise PlatformError(
+            "password_incorrect",
+            "That password does not match this account.",
+            401,
+        )
     if credential is None:
         credential = UserCredential(
             user_id=user.id,
@@ -151,6 +166,9 @@ def change_password(
         credential.password_hash = password_hash
         credential.updated_at = now
 
+    # Publish the credential write before looking up sessions: a concurrent
+    # login holds this row until its new session can be revoked here.
+    db.flush()
     revoke_user_sessions(
         db,
         user.id,

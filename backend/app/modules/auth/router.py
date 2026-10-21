@@ -33,6 +33,7 @@ from app.modules.auth.dependencies import (
     require_demo_quick_login,
     require_same_origin,
 )
+from app.modules.auth.models import UserCredential
 from app.modules.auth.profile import (
     change_group,
     change_password,
@@ -41,6 +42,7 @@ from app.modules.auth.profile import (
 )
 from app.modules.auth.registration import (
     hash_registration_password,
+    lock_password_identity,
     normalize_display_name,
     normalize_group_name,
     normalize_username,
@@ -239,6 +241,12 @@ def _login_admitted(
         )
         if not database_owned:
             user_id = verify_password(settings, payload.username, payload.password)
+            if user_id is not None:
+                lock_password_identity(db, user_id)
+                # A catalog password stops working as soon as the account
+                # saves its own credential, including during this verify.
+                if db.get(UserCredential, user_id) is not None:
+                    user_id = None
         if user_id is None:
             failed = True
             # Which half was wrong is reported on purpose. A student who has

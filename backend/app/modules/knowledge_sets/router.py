@@ -15,6 +15,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
+from app.modules.knowledge.markdown import MarkdownInputError, validate_markdown_characters
 from app.modules.knowledge.services import (
     abandon_claim,
     assert_claim_owned,
@@ -224,6 +225,7 @@ def get_knowledge_markdown(
         200: {"model": KnowledgeMarkdownDocument, "description": "Markdown version saved."},
         404: {"model": Error, "description": "Knowledge document not found."},
         409: {"model": Error, "description": "Markdown version is stale."},
+        422: {"model": Error, "description": "Markdown content is invalid."},
     },
 )
 def save_knowledge_markdown(
@@ -234,6 +236,15 @@ def save_knowledge_markdown(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> KnowledgeMarkdownDocument:
+    try:
+        validate_markdown_characters(payload.markdown)
+    except MarkdownInputError as exc:
+        raise PlatformError(
+            "knowledge_import_invalid",
+            "The Markdown content is not valid.",
+            422,
+            {"reason": str(exc)},
+        ) from None
     return _idempotent_mutation(
         db,
         context,

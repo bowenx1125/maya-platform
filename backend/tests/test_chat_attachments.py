@@ -150,6 +150,7 @@ def test_another_user_cannot_list_upload_or_delete(client: TestClient, database:
             "chat_attachment_too_large",
         ),
     ],
+    ids=["executable", "image", "empty", "invalid-json", "invalid-encoding", "oversized"],
 )
 def test_refused_files_store_nothing(
     client: TestClient, database: Database, name: str, content: bytes, status: int, code: str

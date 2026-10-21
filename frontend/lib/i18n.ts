@@ -289,6 +289,8 @@ const enMessages = {
   knowledgeUploadPending: "Uploading and indexing the Markdown file…",
   knowledgeImportInvalid:
     "Use a readable PDF, Word (.docx), or UTF-8 Markdown. Scanned PDF pages use local OCR, and extracted text is marked as “OCR-generated text.” Images embedded in DOCX are not OCR-processed.",
+  knowledgeMarkdownInvalid:
+    "Use readable UTF-8 Markdown without invalid control characters.",
   knowledgeImportTooLarge:
     "This PDF/DOCX exceeds an import resource limit: 10 MiB per file, 200 pages per PDF, 50 scanned pages for OCR, or a PDF/DOCX parser safety limit. If the text is readable, extract it and import it as UTF-8 Markdown.",
   knowledgeImportNoText:
@@ -1185,6 +1187,8 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   knowledgeUploadPending: "正在上传并索引 Markdown 文件…",
   knowledgeImportInvalid:
     "请上传可读取的 PDF、Word（.docx）或 UTF-8 Markdown。扫描 PDF 页使用本地 OCR，提取的文字会标记为“由 OCR 生成的文字”；DOCX 内嵌图片不会进行 OCR。",
+  knowledgeMarkdownInvalid:
+    "请使用可读取的 UTF-8 Markdown，并移除无效控制字符。",
   knowledgeImportTooLarge:
     "此 PDF/DOCX 超出导入资源限制：单个文件 10 MiB、PDF 200 页、扫描页 OCR 50 页或 PDF/DOCX 解析安全限制。若内容可读，请提取文本并改用 UTF-8 Markdown 导入。",
   knowledgeImportNoText:
@@ -1973,6 +1977,18 @@ export function localizeError(
       status?: unknown;
       details?: unknown;
     };
+    if (
+      (candidate.code === "knowledge_import_invalid" ||
+        candidate.code === "file_operation_failed") &&
+      candidate.details &&
+      typeof candidate.details === "object" &&
+      "reason" in candidate.details &&
+      (candidate.details.reason === "invalid_utf8" ||
+        candidate.details.reason === "empty_markdown" ||
+        candidate.details.reason === "invalid_control_chars")
+    ) {
+      return t("knowledgeMarkdownInvalid", locale);
+    }
     if (
       candidate.code === "auth_login_queued" &&
       candidate.details &&

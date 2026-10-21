@@ -71,4 +71,4 @@ def test_health_admission_includes_usage(client) -> None:  # type: ignore[no-unt
     assert set(usage) == {"llm_admission", "write_guard", "create_admission", "auth_hash"}
     for gate in usage.values():
         assert set(gate) == {"limit", "enabled", "in_flight", "waiters"}
-    assert usage["auth_hash"]["limit"] == 3
+    assert usage["auth_hash"]["limit"] == 2

@@ -54,9 +54,7 @@ def _seed_session(database: Database, user: User, settings: Settings) -> str:
     return raw_token
 
 
-def test_default_session_survives_29_days_and_dies_by_31(
-    database: Database, user: User
-) -> None:
+def test_default_session_survives_29_days_and_dies_by_31(database: Database, user: User) -> None:
     settings = _settings(database)
     raw_token = _seed_session(database, user, settings)
 

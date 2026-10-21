@@ -8658,6 +8658,16 @@
               }
             },
             "description": "Markdown version is stale."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Markdown content is invalid."
           }
         },
         "security": [

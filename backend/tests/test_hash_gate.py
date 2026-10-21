@@ -170,6 +170,7 @@ def test_rollback_releases_connection_before_argon2_verify(
 
     events: list[str] = []
     real = PasswordHash.recommended()
+    stored_hash = real.hash("demo-password-123")
 
     class _Observed:
         def verify(self, password: str, hash_value: str) -> bool:
@@ -177,14 +178,21 @@ def test_rollback_releases_connection_before_argon2_verify(
             return real.verify(password, hash_value)
 
     monkeypatch.setattr(registration, "_hasher", lambda: _Observed())
+    monkeypatch.setattr(
+        registration, "lock_password_identity", lambda _db, _user_id: events.append("writer_lock")
+    )
 
     class _Result:
         def first(self) -> tuple[str, str] | None:
-            return ("user-id", real.hash("demo-password-123"))
+            return ("user-id", stored_hash)
 
     class _Db:
         def execute(self, _stmt: object) -> _Result:
             return _Result()
+
+        def scalar(self, _stmt: object) -> str:
+            events.append("credential_recheck")
+            return stored_hash
 
         def rollback(self) -> None:
             events.append("rollback")
@@ -193,7 +201,7 @@ def test_rollback_releases_connection_before_argon2_verify(
     assert ok is True
     assert user_id == "user-id"
     # rollback must precede the first verify call, not merely happen somewhere.
-    assert events == ["rollback", "verify"]
+    assert events == ["rollback", "verify", "writer_lock", "credential_recheck"]
 
 
 def test_unknown_username_still_runs_dummy_argon2_after_rollback(

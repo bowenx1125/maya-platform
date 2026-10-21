@@ -72,7 +72,11 @@ from app.modules.demo_baseline.service import (
     reject_baseline_version_mutation,
 )
 from app.modules.knowledge.files import content_disposition, frozen_download_filename
-from app.modules.knowledge.markdown import MarkdownInputError, normalize_markdown
+from app.modules.knowledge.markdown import (
+    MarkdownInputError,
+    normalize_markdown,
+    validate_markdown_characters,
+)
 from app.modules.knowledge.multipart import integer_field, parse_upload
 from app.modules.knowledge.providers.product_publication import (
     ProductPublicationError,
@@ -1522,6 +1526,14 @@ def update_agent_draft(
     raw_changed = False
     if "agent_md" in payload.model_fields_set:
         normalized_agent_md = payload.agent_md.replace("\r\n", "\n").replace("\r", "\n")
+        try:
+            validate_markdown_characters(normalized_agent_md)
+        except MarkdownInputError as exc:
+            raise validation_failure(
+                "The AGENT.md text is not valid.",
+                {"reason": str(exc)},
+                code="file_operation_failed",
+            ) from None
         raw_changed = normalized_agent_md != scoped.version.agent_md
         values["agent_md"] = normalized_agent_md
         values["raw_agent_md_hash"] = raw_agent_md_hash(normalized_agent_md)

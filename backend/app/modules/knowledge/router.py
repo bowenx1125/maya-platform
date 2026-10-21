@@ -158,10 +158,22 @@ def _raise_knowledge_import_failure(reason: str) -> None:
             details=details,
             code="knowledge_import_no_text",
         )
-    if reason in {"invalid_pdf", "invalid_docx", "invalid_filename", "invalid"}:
+    if reason in {"invalid_pdf", "invalid_docx"}:
         raise validation_failure(
             "The document could not be read as a valid PDF/Word file. "
             "Keep the original and upload converted Markdown.",
+            details=details,
+            code="knowledge_import_invalid",
+        )
+    if reason in {
+        "invalid",
+        "invalid_filename",
+        "invalid_utf8",
+        "empty_markdown",
+        "invalid_control_chars",
+    }:
+        raise validation_failure(
+            "The Markdown document is not valid.",
             details=details,
             code="knowledge_import_invalid",
         )
@@ -445,7 +457,9 @@ async def upload_knowledge_document(
             document = normalize_markdown(filename, content)
         except KnowledgeImportError as exc:
             _raise_knowledge_import_failure(exc.reason)
-        except (MarkdownInputError, UnicodeDecodeError, ValueError):
+        except MarkdownInputError as exc:
+            _raise_knowledge_import_failure(str(exc))
+        except (UnicodeDecodeError, ValueError):
             _raise_knowledge_import_failure("invalid")
         timestamp = _now()
         document_id = str(uuid4())
@@ -788,7 +802,9 @@ async def replace_knowledge_document(
         expected_index_revision = integer_field(fields, "expected_index_revision", required=True)
     except KnowledgeImportError as exc:
         _raise_knowledge_import_failure(exc.reason)
-    except (ValueError, MarkdownInputError, UnicodeDecodeError):
+    except MarkdownInputError as exc:
+        _raise_knowledge_import_failure(str(exc))
+    except (ValueError, UnicodeDecodeError):
         raise validation_failure(
             "The Markdown replacement is not valid.", code="file_operation_failed"
         ) from None

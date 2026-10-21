@@ -5,6 +5,37 @@ import { describe, expect, it } from "vitest";
 import { localizeError, statusLabel, t } from "../lib/i18n";
 
 describe("Wave 1A locale and V2 style boundary", () => {
+  it.each(["invalid_utf8", "empty_markdown", "invalid_control_chars"])(
+    "gives Markdown-specific recovery for %s",
+    (reason) => {
+      for (const code of [
+        "knowledge_import_invalid",
+        "file_operation_failed",
+      ]) {
+        const error = { code, status: 422, details: { reason } };
+        for (const locale of ["en", "zh"] as const) {
+          const message = localizeError(error, locale);
+          expect(message).toContain("UTF-8 Markdown");
+          expect(message).not.toMatch(/PDF|Word|OCR/);
+        }
+      }
+    },
+  );
+
+  it.each(["invalid_pdf", "invalid_docx", "invalid_filename", "invalid"])(
+    "keeps format-neutral import guidance for %s",
+    (reason) => {
+      for (const locale of ["en", "zh"] as const) {
+        expect(
+          localizeError(
+            { code: "knowledge_import_invalid", details: { reason } },
+            locale,
+          ),
+        ).toBe(t("knowledgeImportInvalid", locale));
+      }
+    },
+  );
+
   it("shows the actual authentication recovery delay in the existing error text", () => {
     const error = {
       code: "auth_rate_limited",
