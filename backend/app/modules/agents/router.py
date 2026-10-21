@@ -1725,6 +1725,10 @@ def _publish_agent_version_admitted(
         from app.modules.teams.service import follow_published_agent
 
         follow_published_agent(db, agent.id)
+        # Open chats with this Agent move to the new version (history kept).
+        from app.modules.agents.cascade import retarget_agent_chats
+
+        retarget_agent_chats(db, agent.id)
         if generation is not None and not settings.is_test:
             task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
             if task_manager is not None:
