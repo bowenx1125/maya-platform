@@ -100,7 +100,7 @@ export function VersionTile({
 }: {
   name: string;
   href: string;
-  /** Hover tooltip on the open link, e.g. 「最新编辑：…，Version：1.X」. */
+  /** Immediate hover help: latest version and last editor. */
   title?: string;
   label: string;
   pending: boolean;
@@ -112,7 +112,12 @@ export function VersionTile({
   // Green/grey pills carry Private or Public; the name stays a text link.
   return (
     <li className="agent-tile">
-      <Link className="agent-tile-name text-link" href={href} title={title}>
+      <Link
+        className="agent-tile-name text-link"
+        href={href}
+        data-ui-guide={title ? "agent.lastEdited" : undefined}
+        data-ui-guide-text={title}
+      >
         <FitTitle text={name} />
       </Link>
       {onDelete ? (

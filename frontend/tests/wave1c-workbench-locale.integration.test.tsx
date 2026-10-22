@@ -223,7 +223,6 @@ function makeApi() {
       }),
     ),
     publish: vi.fn(),
-    testChat: vi.fn(),
   };
   return { api, version, document };
 }

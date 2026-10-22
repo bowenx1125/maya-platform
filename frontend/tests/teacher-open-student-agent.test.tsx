@@ -91,7 +91,8 @@ function renderAsCourseTeacher() {
     version: vi.fn(async () => published),
     agent: vi.fn(async () => agent),
     versions: vi.fn(async () => [published]),
-    // The group library stays closed to a teacher who has not joined.
+    // A teacher who has not entered the group still gets 404. Entering would
+    // return the member library; this fallback only covers the closed case.
     knowledge: vi.fn(async () => {
       throw notFound();
     }),

@@ -77,6 +77,10 @@ export const uiGuideCopy = {
     en: "Choose RAG source files and existing Knowledge that this Agent can use.",
     zh: "选择此 Agent 可使用的 RAG 来源和现有 Knowledge。",
   },
+  "agent.lastEdited": {
+    en: "Latest version and last editor.",
+    zh: "最新版本和最新编辑者。",
+  },
   "agent.visibility": {
     en: "A Public personal Agent is shareable, but course students do not get access automatically. They need a separate invocation grant to use it; its prompt and sources remain visible only to its owner.",
     zh: "个人 Agent 设为公开后可分享，但课程学生不会自动获得访问权限。学生需要单独的调用授权才能使用；提示词和来源仍只有所有者可见。",

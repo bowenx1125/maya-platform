@@ -99,7 +99,6 @@ from app.modules.knowledge.services import (
     finish_idempotency,
     job_dto,
     load_file_operation,
-    observes_group,
     parse_json_payload_hash,
     rag_preview,
     recover_operation_now,
@@ -238,20 +237,22 @@ def list_knowledge_documents(
     db: Session = Depends(get_db),
 ) -> list[KnowledgeDocumentDTO]:
     scoped_student_group_role(db, context, str(group_id))
-    # A teacher looking round the group reads its members' private sources
-    # too; only their owners can change them.
-    query = select(KnowledgeDocument).where(
-        KnowledgeDocument.group_id == str(group_id),
-        KnowledgeDocument.workspace_state == "active",
-    )
-    if not observes_group(db, context.user.id, str(group_id)):
-        query = query.where(
+    # Entering the group makes a course teacher a temporary member, so the
+    # library is the one groupmates browse: their own files and public files.
+    # Another student's private file stays with that student. Private Agents
+    # are a separate visit and stay readable without becoming editable.
+    docs = db.scalars(
+        select(KnowledgeDocument)
+        .where(
+            KnowledgeDocument.group_id == str(group_id),
+            KnowledgeDocument.workspace_state == "active",
             or_(
                 KnowledgeDocument.owner_user_id == context.user.id,
                 KnowledgeDocument.visibility == "public",
-            )
+            ),
         )
-    docs = db.scalars(query.order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)).all()
+        .order_by(KnowledgeDocument.created_at, KnowledgeDocument.id)
+    ).all()
     return [
         _document_dto(
             document,
@@ -388,8 +389,9 @@ async def upload_knowledge_document(
         ) from None
     # A target draft keeps the original Wave 1A CAS contract.  Omitting it
     # creates a group-library document only; in particular it does not create
-    # or enable an AgentVersion relation.  Teachers retain read-only access to
-    # this endpoint and therefore cannot use the standalone create path.
+    # or enable an AgentVersion relation.  An entered teacher is a temporary
+    # member and uploads on this path the same way a groupmate does.  A teacher
+    # who has not entered never reaches it.
     if target_id is not None:
         reject_baseline_version_mutation(target_id)
     scoped = visible_student_version(db, context, target_id) if target_id else None

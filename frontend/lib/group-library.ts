@@ -1,10 +1,10 @@
 import { PlatformApiError, type KnowledgeDocument } from "./api";
 
 /**
- * A course teacher edits a student's public Agent (PR #229) without joining
- * its group, while the group library stays closed (404) to a teacher who has
- * not joined. The Agent editor then offers only the sources already bound to
- * the version instead of failing the whole load as "Agent not found".
+ * The group library is a membership resource. A course teacher who has entered
+ * the group is a temporary member and receives the same library as a groupmate.
+ * A teacher who has not entered still gets 404; the editor then keeps the
+ * version's bound sources instead of failing the whole load.
  */
 export function groupLibraryOrClosed(
   library: Promise<KnowledgeDocument[]>,

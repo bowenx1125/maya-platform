@@ -623,12 +623,14 @@ function PublishedAgentTile({
     Boolean(item.agent.current_draft_version_id) &&
     item.agent.current_draft_version_id !==
       item.agent.current_published_version_id;
+  const edited = agentLastEditedTitle(t, item.agent);
   return (
     <div className="agent-tile" data-agent-row={item.agent.id}>
       <Link
         className="agent-tile-name text-link"
         href={`/teacher/agents/${item.agent.id}`}
-        title={agentLastEditedTitle(t, item.agent)}
+        data-ui-guide={edited ? "agent.lastEdited" : undefined}
+        data-ui-guide-text={edited}
       >
         <FitTitle text={item.agent.name} />
       </Link>

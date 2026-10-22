@@ -71,7 +71,6 @@ export type KnowledgeDocumentMutation = {
   agent_version: AgentVersion | null;
 };
 export type RagPreview = components["schemas"]["RagPreview"];
-export type TestChatResponse = components["schemas"]["TestChatResponse"];
 export type PersonaPreviewSpec = {
   schema_version?: string;
   identity: {
@@ -1319,7 +1318,7 @@ export class PlatformApi {
   controlConversationTurn(
     conversationId: string,
     turnId: string,
-    action: "pause" | "stop" | "resume",
+    action: "pause" | "resume",
   ): Promise<ConversationSession> {
     return this.postJson(
       `conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}:${action}`,
@@ -2149,20 +2148,6 @@ export class PlatformApi {
         body: form as unknown as never,
       },
     );
-    return unwrap(result);
-  }
-
-  async testChat(
-    versionId: string,
-    message: string,
-  ): Promise<TestChatResponse> {
-    const result = await this.client.POST("/agent-versions/{version_id}/chat", {
-      params: {
-        path: { version_id: versionId },
-        header: { "X-CSRF-Token": this.csrfToken ?? "" },
-      },
-      body: { message },
-    });
     return unwrap(result);
   }
 

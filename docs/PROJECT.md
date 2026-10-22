@@ -265,15 +265,9 @@ Markdown UI errors no longer become PDF/Word guidance. Knowledge PUT adds declar
 422; frozen schema/hash/types/fixture updated. Character validation preserves all
 Unicode decisions;
 
-Windows backend2797 pass/45 skip;95 failures plus one teardown error reproduced
-on unmodified0829e2dd (permissions/tools/asyncio/OCR). Linux candidate verification
-covered143 unique nodes, including all95 Windows failures (115 initial passes +29
-recovery passes -1 repeat).
-No assertion weakened. Isolated PG16:15 passed, including real row-lock
-waits, hash-time pool checkedout=0 and import/editor recovery. Cross-platform backend coverage
-2892 pass/45 skip; not a single full Linux run. Frontend1017 pass/1 skip; types,
-lint(5 existing warnings),Ruff573,mypy286,157-route comparison,contracts,format and
-generated-secret probe passed.
+Windows backend2797/45 skip;95 failures reproduced on unmodified0829e2dd.
+Linux covered those95. PG16:15 passed. Cross-platform 2892/45 skip.
+Frontend1017/1 skip. No assertion weakened.
 
 User-authorized code release9c68d42b0b1b618fabeb8fc22237c8586152a52e pushed to
 GitHub main first, then server bare main and clean fast-forward from5dd9690b.
@@ -293,10 +287,14 @@ Two-core50-distinct-user capacity and month-long real-session retention untested
 
 ## October22 shared Agent editing
 
-Public Agent editors(creator,groupmates,course teachers) now open and edit end to
-end: editor treats the closed group library(404 to unjoined teachers) as empty;
-shared editors may rebind Knowledge Sets(unreadable bindings kept). Private stays
-creator-only(teacher group-visit observer read unchanged). Done sends
-expected_base_version_id; a stale base gets409 stale_base_version, edits kept in
-localStorage per Agent+user, restored after refresh, cleared on Done. Tooltip:
-latest V1.x+last editor(creator before any edit).
+Public Agent editors(creator,groupmates,course teachers) open and edit end to
+end. Entering a group is a temporary membership: that teacher browses and uploads
+the group library as a groupmate(own+public files; another student's private file
+stays hidden). Unjoined teachers still get library 404; the editor treats it as
+empty and keeps bound sources. Private Agents stay creator-only to edit; a visit
+still reads them. Shared editors rebind Knowledge Sets(unreadable bindings kept).
+Done sends expected_base_version_id; stale base is 409 stale_base_version, edits
+kept in localStorage per Agent+user, restored after refresh, cleared on Done.
+Hover uses the immediate guide tooltip(latest V1.x and last editor; creator before any edit).
+Removed uncalled POST /conversations/{id}/turns/{turn_id}:stop and client method testChat.
+Kept /debates/{id}/release, the playback_reset CLI, and the dual-account smoke.

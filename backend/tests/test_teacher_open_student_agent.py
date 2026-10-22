@@ -6,9 +6,11 @@ AND edit it (detail, versions, next version, draft save, Knowledge Set
 binding, Done/publish).  A teacher of another course and a student of another
 group get 404 everywhere.
 
-The editor also loads the group Markdown library, which stays 404 to a
-course teacher who has not joined the group (teacher group-visit rule); the
-frontend copes with that 404 (see frontend/tests/teacher-open-student-agent).
+The editor also loads the group Markdown library. A teacher who has entered
+the group is a temporary member and browses and uploads that library the way
+a groupmate does. It stays 404 until they enter; the frontend copes with that
+404 (see frontend/tests/teacher-open-student-agent). Private Agents stay
+readable on a visit and creator-only to edit.
 
 Concurrent Done: the first editor publishes; the second, still based on the
 older published version, is rejected with 409 stale_base_version.
@@ -192,6 +194,89 @@ def test_course_teacher_cannot_browse_unjoined_group_library(client):
     assert client.get(f"/api/v1/agents/{agent_id}").status_code == 200
     library = client.get(f"/api/v1/groups/{GROUP_ID}/knowledge-documents")
     assert library.status_code == 404
+
+
+def test_entered_teacher_browses_and_uploads_the_library_like_a_groupmate(client):
+    """Join is a temporary membership for the group library.
+
+    Public Agents stay editable. Private Agents stay readable and not editable.
+    Another student's private file stays hidden. Leaving closes the library.
+    """
+
+    public_id, public_version, _ = _published_student_agent(client, "public")
+    private_id, _, _ = _published_student_agent(client, "private")
+    _, student_csrf = login(client, "bowen")
+    library = f"/api/v1/groups/{GROUP_ID}/knowledge-documents"
+    shared = client.post(
+        library,
+        headers=_headers(student_csrf),
+        data={"visibility": "public"},
+        files={"file": ("shared.md", b"# Shared\n\npublic notes", "text/markdown")},
+    )
+    assert shared.status_code == 201, shared.text
+    secret = client.post(
+        library,
+        headers=_headers(student_csrf),
+        data={"visibility": "private"},
+        files={"file": ("secret.md", b"# Secret\n\nprivate notes", "text/markdown")},
+    )
+    assert secret.status_code == 201, secret.text
+    shared_id = shared.json()["document"]["id"]
+    secret_id = secret.json()["document"]["id"]
+
+    _, teacher_csrf = login(client, "maya")
+    assert client.get(library).status_code == 404
+    refused = client.post(
+        library,
+        headers=_headers(teacher_csrf),
+        data={"visibility": "public"},
+        files={"file": ("nope.md", b"# Nope\n", "text/markdown")},
+    )
+    assert refused.status_code == 404
+
+    joined = client.post(
+        f"/api/v1/groups/{GROUP_ID}/membership",
+        headers={"Origin": "http://testserver", "X-CSRF-Token": teacher_csrf},
+    )
+    assert joined.status_code == 200, joined.text
+    listed = {item["id"] for item in client.get(library).json()}
+    assert shared_id in listed
+    assert secret_id not in listed
+    assert client.get(f"/api/v1/knowledge-documents/{secret_id}").status_code == 404
+
+    uploaded = client.post(
+        library,
+        headers=_headers(teacher_csrf),
+        data={"visibility": "public"},
+        files={"file": ("teacher.md", b"# Teacher\n\nadded in the visit", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    teacher_doc_id = uploaded.json()["document"]["id"]
+    listed = {item["id"] for item in client.get(library).json()}
+    assert {shared_id, teacher_doc_id} <= listed
+    assert secret_id not in listed
+
+    detail = client.get(f"/api/v1/agents/{public_id}")
+    assert detail.status_code == 200 and detail.json()["can_edit"] is True
+    edited = _edit_and_publish(client, teacher_csrf, public_id, public_version, "\nteacher member")
+    assert edited.status_code == 200, edited.text
+
+    private = client.get(f"/api/v1/agents/{private_id}")
+    assert private.status_code == 200 and private.json()["can_edit"] is False
+    denied = client.post(
+        f"/api/v1/agents/{private_id}/versions",
+        headers=_headers(teacher_csrf),
+    )
+    assert denied.status_code == 404
+
+    assert (
+        client.delete(
+            f"/api/v1/groups/{GROUP_ID}/membership",
+            headers={"Origin": "http://testserver", "X-CSRF-Token": teacher_csrf},
+        ).status_code
+        == 204
+    )
+    assert client.get(library).status_code == 404
 
 
 def test_second_done_on_a_stale_base_is_rejected(client):

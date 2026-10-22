@@ -1890,42 +1890,6 @@ def pause_team_conversation_turn(
 
 
 @router.post(
-    "/conversations/{conversation_id}/turns/{turn_id}:stop",
-    response_model=ConversationSession,
-    operation_id="stopTeamConversationTurnOutput",
-    responses={409: {"model": Error}},
-)
-def stop_team_conversation_turn_output(
-    conversation_id: UUID,
-    turn_id: UUID,
-    context: AuthContext = Depends(require_authenticated_mutation),
-    db: Session = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-) -> ConversationSession:
-    row = owned_conversation(db, context, str(conversation_id))
-    if row.entry_kind == "agent":
-        pause_chat_turn(
-            db,
-            conversation_id=row.id,
-            actor_context=context,
-            turn_id=str(turn_id),
-            stopped=True,
-        )
-        db.expire_all()
-        return session_view(db, owned_conversation(db, context, row.id), context, settings)
-    pause_team_turn(
-        db,
-        conversation_id=row.id,
-        actor_id=context.user.id,
-        turn_id=str(turn_id),
-        stopped=True,
-        actor_context=context,
-    )
-    db.expire_all()
-    return session_view(db, owned_conversation(db, context, row.id), context, settings)
-
-
-@router.post(
     "/conversations/{conversation_id}/turns/{turn_id}:resume",
     response_model=ConversationSession,
     operation_id="resumeTeamConversationTurn",

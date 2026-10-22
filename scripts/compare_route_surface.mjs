@@ -136,7 +136,6 @@ const implementedOperationIds = new Set([
   "renameKnowledgeDocument",
   "resumeTeamConversationTurn",
   "saveKnowledgeMarkdown",
-  "stopTeamConversationTurnOutput",
   "updateCurrentUser",
   "closeInteraction",
   "confirmProviderDataCallDisclosure",
