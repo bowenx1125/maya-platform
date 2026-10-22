@@ -99,9 +99,11 @@ def test_the_whole_workspace_opens_and_closes_with_the_visit(app_factory: Any) -
     surfaces = [
         f"/api/v1/agents/{agent['id']}",
         f"/api/v1/agent-versions/{version_id}",
-        f"/api/v1/groups/{group_id}/voice-profiles",
         f"/api/v1/groups/{group_id}/knowledge-documents",
     ]
+    # A course teacher lists the group's shared voices read-only with or
+    # without entering (owner decision 2026-10-23).
+    voices = f"/api/v1/groups/{group_id}/voice-profiles"
     listing = f"/api/v1/groups/{group_id}/agents"
 
     with TestClient(app) as teacher:
@@ -114,6 +116,7 @@ def test_the_whole_workspace_opens_and_closes_with_the_visit(app_factory: Any) -
         assert teacher.get(listing).json() == []
         for url in surfaces:
             assert teacher.get(url).status_code == 404, url
+        assert teacher.get(voices).status_code == 200
 
         assert teacher.post(membership, headers=headers).status_code == 200
         assert [row["id"] for row in teacher.get(listing).json()] == [agent["id"]]

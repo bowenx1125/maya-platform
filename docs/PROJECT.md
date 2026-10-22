@@ -106,7 +106,7 @@ production,otherwise Teachers confirm at the unlinked approvals route. Teacher
 Accounts read-only Public-group visits remove temporary membership on return;
 Debates restored. Sidebar New/Back/Done; Back/Done contextual. Voice New is module-right,
 no sidebar; consent creates,top-right ← cancels. Agent Voice radio defaults None;
-groupmates choose/hear ready voices,teachers never. Heading explanations become immediate help,no1500ms wait. Brainform: three columns,no title/eyebrow; RAG reuses
+groupmates choose/hear ready voices;course teachers list them read-only,never hear/bind. Heading explanations become immediate help,no1500ms wait. Brainform: three columns,no title/eyebrow; RAG reuses
 Knowledge view/edit/download/delete,PDF/DOCX. View/New/edit replaces main content
 with independent deep links,no bottom panel. Knowledge:asset-name entry,authorized Agent consumers,one canonical editor;
 Agent Knowledge entry stays.

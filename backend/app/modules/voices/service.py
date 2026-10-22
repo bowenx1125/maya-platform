@@ -256,10 +256,11 @@ def list_group_voices(
     db: Session, context: AuthContext, group_id: str
 ) -> list[VoiceProfileResponse]:
     # A student sees their own voices and the ready voices of the group's other
-    # students, which they may choose but not manage. A teacher on an Accounts
-    # visit is not a groupmate and sees only their own (none).
-    authorized = db.execute(
-        select(WorkspaceMember.user_id, CourseMember.role)
+    # students, which they may choose but not manage. A teacher of the course,
+    # whether or not they entered the group, may edit the group's public Agents
+    # and so sees the same ready voices, read-only.
+    member = db.execute(
+        select(WorkspaceMember.user_id)
         .join(Group, Group.id == WorkspaceMember.group_id)
         .join(CourseMember, CourseMember.course_id == Group.course_id)
         .where(
@@ -268,15 +269,20 @@ def list_group_voices(
             CourseMember.user_id == context.user.id,
         )
     ).first()
-    if authorized is None:
-        raise not_found()
-    shared = (
-        and_(
-            VoiceProfile.status == "ready",
-            VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, group_id)),
+    course_teacher = db.execute(
+        select(CourseMember.user_id)
+        .join(Group, Group.course_id == CourseMember.course_id)
+        .where(
+            Group.id == group_id,
+            CourseMember.user_id == context.user.id,
+            CourseMember.role == "teacher",
         )
-        if authorized.role == "student"
-        else false()
+    ).first()
+    if member is None and course_teacher is None:
+        raise not_found()
+    shared = and_(
+        VoiceProfile.status == "ready",
+        VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, group_id)),
     )
     profiles = db.scalars(
         select(VoiceProfile)

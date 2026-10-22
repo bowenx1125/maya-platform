@@ -223,9 +223,7 @@ export function TeacherDashboard() {
                 key={item.agent.id}
                 deleting={deleting !== null}
                 onDelete={
-                  // Only the publisher may delete; other viewers see the
-                  // version pill without the × (the API rejects them).
-                  item.author?.user_id === user?.id
+                  (item.agent.can_delete ?? item.author?.user_id === user?.id)
                     ? () => void deleteAgent(item.agent.id)
                     : undefined
                 }
@@ -497,7 +495,7 @@ export function TeacherStudyformWorkspace({
                   deleting={deletingId !== null}
                   deleteLabel={t("deleteAgent")}
                   onDelete={
-                    item.author?.user_id === user?.id
+                    (item.agent.can_delete ?? item.author?.user_id === user?.id)
                       ? () => void deletePersonalAgent(item.agent.id)
                       : undefined
                   }
