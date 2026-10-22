@@ -88,10 +88,11 @@ Done→owner-only Chat. Brainform:no disclosure entry; `PROVIDER_STANDING_CONSEN
 covers classroom/prod,else unlinked Teacher approvals. Teacher Accounts Public-
 group read-only visits remove temp membership on return; Debates restored.
 Sidebar New/Back/Done contextual. Voice New module-right,no sidebar; consent→create,
-top-right←cancel. Agent Voice=None; only groupmates choose/hear ready voices. Immediate
-heading help. Brainform:3 columns,no title/eyebrow; RAG uses Knowledge view/edit/download/
-delete,PDF/DOCX. View/New/edit replaces content,deep links,no bottom panel. Knowledge:
-asset-name entry,authorized Agent consumers,one canonical editor; Agent entry stays.
+top-right←cancel. Agent Voice=None; groupmates choose/hear ready voices,teachers list
+read-only,never hear/bind. Immediate heading help. Brainform:3 columns,no title/eyebrow;
+RAG uses Knowledge view/edit/download/delete,PDF/DOCX. View/New/edit replaces content,
+deep links,no bottom panel. Knowledge:asset-name entry,authorized Agent consumers,
+one canonical editor; Agent entry stays.
 
 Create AI Knowledge/New Agent unified,Private/Public labels only; Brainform:RAG/
 Knowledge. Teacher Agent Tool→Knowledge question bank/graph; others carry Knowledge/

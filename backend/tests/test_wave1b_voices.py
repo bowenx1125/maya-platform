@@ -1261,10 +1261,13 @@ def test_voice_permissions_are_same_group_students_only(
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() == []
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
 
-    # The teacher is not a group member and receives the same not-found
-    # response; the profile is not disclosed through list/detail/delete/media.
+    # The teacher is not a group member. The group list answers a course
+    # teacher (owner decision 2026-10-23) but holds only ready voices, so this
+    # one is not disclosed through list/detail/delete/media.
     teacher_user, teacher = login(client, "maya")
-    assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").status_code == 404
+    teacher_list = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
+    assert teacher_list.status_code == 200
+    assert teacher_list.json() == []
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
     assert (
         client.delete(
@@ -2656,8 +2659,9 @@ def test_teachers_and_outsiders_never_hear_or_bind_a_students_voice(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
     # Owner decision (2026-10-18): only students of the same group share
-    # voices. A teacher, even after entering the group, neither lists, plays
-    # nor binds a student's voice.
+    # voices. Owner decision (2026-10-23): a course teacher lists them
+    # read-only (they edit the group's public Agents) but neither plays nor
+    # binds a student's voice.
     client, database, _settings = voice_client
     csrf = login(client, "bowen")[1]
     enrolled = client.post(
@@ -2694,7 +2698,8 @@ def test_teachers_and_outsiders_never_hear_or_bind_a_students_voice(
     assert entered.status_code == 200, entered.text
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
     assert listed.status_code == 200
-    assert profile_id not in [item["id"] for item in listed.json()]
+    shown = {item["id"]: item for item in listed.json()}
+    assert shown[profile_id]["can_manage"] is False
     assert (
         client.post(
             f"/api/v1/voice-profiles/{profile_id}/preview",
