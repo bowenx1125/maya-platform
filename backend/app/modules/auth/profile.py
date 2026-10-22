@@ -126,12 +126,17 @@ def change_password(
 ) -> None:
     """Change one authenticated account's password and keep this session alive."""
 
-    credential = db.scalar(select(UserCredential).where(UserCredential.user_id == user.id))
-    stored_hash = credential.password_hash if credential is not None else None
+    user_id, username = user.id, user.username
+    stored_hash = db.scalar(
+        select(UserCredential.password_hash).where(UserCredential.user_id == user_id)
+    )
+    # Hash waiters must not occupy the connection pool. Snapshot plain values
+    # first because rollback expires the authenticated User as well.
+    db.rollback()
     if stored_hash is not None:
         valid_current = _password_matches(stored_hash, current_password)
     else:
-        valid_current = verify_password(settings, user.username, current_password) == user.id
+        valid_current = verify_password(settings, username, current_password) == user_id
     if not valid_current:
         raise PlatformError(
             "password_incorrect",
@@ -142,10 +147,9 @@ def change_password(
     password = validate_password(new_password)
     now = datetime.now(UTC)
     password_hash = run_hash(lambda: PasswordHash.recommended().hash(password), settings)
-    lock_password_identity(db, user.id)
-    current_hash = db.scalar(
-        select(UserCredential.password_hash).where(UserCredential.user_id == user.id)
-    )
+    lock_password_identity(db, user_id)
+    credential = db.get(UserCredential, user_id, populate_existing=True)
+    current_hash = credential.password_hash if credential is not None else None
     if current_hash != stored_hash:
         raise PlatformError(
             "password_incorrect",
@@ -154,7 +158,7 @@ def change_password(
         )
     if credential is None:
         credential = UserCredential(
-            user_id=user.id,
+            user_id=user_id,
             username=user.username,
             password_hash=password_hash,
             created_at=now,
@@ -171,7 +175,7 @@ def change_password(
     db.flush()
     revoke_user_sessions(
         db,
-        user.id,
+        user_id,
         now,
         except_session_id_hash=current_session_id_hash,
     )

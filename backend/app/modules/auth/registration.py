@@ -410,15 +410,27 @@ def reset_student_password(
     the caller is told that explicitly instead of silently doing nothing.
     """
 
-    credential = db.scalar(select(UserCredential).where(UserCredential.user_id == target.id))
-    if credential is None:
+    user_id = target.id
+    credential_id = db.scalar(
+        select(UserCredential.user_id).where(UserCredential.user_id == user_id)
+    )
+    if credential_id is None:
         raise unprocessable(
             "reset_not_supported",
             "This account is provisioned by the Demo catalog and has no resettable password.",
         )
     password = validate_password(new_password) if new_password else generate_reset_password()
+    # Authorization and credential existence have been checked; release the
+    # read connection while the bounded hash queue waits and runs.
+    db.rollback()
     password_hash = run_hash(lambda: _hasher().hash(password))
-    lock_password_identity(db, target.id)
+    lock_password_identity(db, user_id)
+    credential = db.get(UserCredential, user_id, populate_existing=True)
+    if credential is None:
+        raise unprocessable(
+            "reset_not_supported",
+            "This account is provisioned by the Demo catalog and has no resettable password.",
+        )
     credential.password_hash = password_hash
     credential.updated_at = datetime.now(UTC)
     # Acquire the credential writer lock before reading sessions, so a login
@@ -426,6 +438,6 @@ def reset_student_password(
     db.flush()
     # Any session opened with the old password stops being usable. A reset is
     # normally requested because the student lost control of the account.
-    revoke_user_sessions(db, target.id, credential.updated_at)
+    revoke_user_sessions(db, user_id, credential.updated_at)
     db.flush()
     return password
