@@ -318,5 +318,5 @@ production URL. 0077 sqlite downgrade drops new tables; re-upgrade tolerates
 that. 0078 restores the 0045 revision triggers; a detached chat refuses
 downgrade.
 
-Checks before rebase: pytest 2988 passed/23 skipped, Postgres 16.
+Checks: 2992 passed, 23 skipped, Postgres 16. Flake reran ok.
 Frontend 1045/1; tsc 0; Ruff/mypy.
