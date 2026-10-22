@@ -26,6 +26,7 @@ import {
   type KnowledgeSnapshot,
   type RagPreview,
 } from "../lib/api";
+import { groupLibraryOrClosed } from "../lib/group-library";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
@@ -603,7 +604,7 @@ export function AgentWorkbench({
           nextLibrarySetIds,
         ] = await Promise.all([
           nextAgent.group_id
-            ? api.knowledge(nextAgent.group_id)
+            ? groupLibraryOrClosed(api.knowledge(nextAgent.group_id))
             : api.workspaceDocuments(nextAgent.course_id),
           // Preview is draft-only. A published version is the editor baseline
           // until Done, and its preview request is a not-found.

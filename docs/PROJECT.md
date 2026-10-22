@@ -250,8 +250,7 @@ no auto-retry, coherent Persona confirmation, private-name filtering;159 routes.
 #215 superseded; alternative#226, legacy#38–41 and drafts#233/#97 excluded.
 Validated5df2066b: backend2910/52 skip (Linux27),PG gate54,frontend1019/1 skip.
 Types/lint/build/contracts/migrations/boundary passed; providers mocked.
-Actions39546479628 billing-blocked. This executor's SSH closes pre-authentication;
-no server changes by this executor. Latest production results follow.
+Actions39546479628 billing-blocked. Latest production results follow.
 
 ## October21 PR review and release
 
@@ -265,19 +264,17 @@ RAG four-entry bad→same-name-good recovery passed. Agent/Knowledge editor NUL 
 surrogate bypasses reject before persistence; blank drafts remain valid.
 Markdown UI errors no longer become PDF/Word guidance. Knowledge PUT adds declared
 422; frozen schema/hash/types/fixture updated. Character validation preserves all
-Unicode decisions; 10.5M-character local microbenchmark0.446→0.024s, not server load.
+Unicode decisions;
 
 Windows backend2797 pass/45 skip;95 failures plus one teardown error reproduced
 on unmodified0829e2dd (permissions/tools/asyncio/OCR). Linux candidate verification
 covered143 unique nodes, including all95 Windows failures (115 initial passes +29
-recovery passes -1 repeat). The initial test container exceeded768MiB; recovery
-used disk scratch space and Git LF scripts instead of the bundle's CRLF copy.
+recovery passes -1 repeat).
 No assertion weakened. Isolated PG16:15 passed, including real row-lock
-waits, hash-time pool checkedout=0 and import/editor recovery. External socket
-attempts0; temporary containers/networks removed. Cross-platform backend coverage
+waits, hash-time pool checkedout=0 and import/editor recovery. Cross-platform backend coverage
 2892 pass/45 skip; not a single full Linux run. Frontend1017 pass/1 skip; types,
 lint(5 existing warnings),Ruff573,mypy286,157-route comparison,contracts,format and
-generated-secret probe passed. M3 fixture3→2; attachment test IDs shortened only.
+generated-secret probe passed.
 
 User-authorized code release9c68d42b0b1b618fabeb8fc22237c8586152a52e pushed to
 GitHub main first, then server bare main and clean fast-forward from5dd9690b.
@@ -295,3 +292,11 @@ was deleted (GET404). Both synthetic accounts inactive,
 all their sessions revoked; teacher test sessions logged out. Audit rows retained.
 Provider charged-request total14242 before/after; no real Provider calls.
 Two-core50-distinct-user capacity and month-long real-session retention untested.
+
+## October22 teacher Agent hotfix
+
+Course teachers opening a student's public Agent (#229) saw "deleted or no longer
+shared": the editor also loads the group library, which stays 404 to a teacher
+who has not joined. The editor now treats that 404 as an empty library and keeps
+the version's bound sources; backend permissions unchanged. Regression tests:
+backend teacher open/next-version/save, frontend editor load.
