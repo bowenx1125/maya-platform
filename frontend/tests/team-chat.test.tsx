@@ -1105,6 +1105,60 @@ describe("Chatform", () => {
     expect(state.api.mayaTeams).toHaveBeenCalledWith("course");
   });
 
+  it("keeps earlier turns when a Team chat reloads on a newer version", async () => {
+    const history = {
+      ...teamSession,
+      team: {
+        ...teamSession.team,
+        version_id: "team-version-9",
+        name: "Reasoning circle",
+        members: [
+          ...teamSession.team.members,
+          {
+            id: "participant-new",
+            name: "New Member",
+            avatar_config: {},
+            position: 3,
+            is_leader: false,
+            available: true,
+          },
+        ],
+      },
+      turns: [
+        {
+          id: "kept-turn",
+          user_text: "A kept Team question",
+          state: "ready",
+          routing: { mode: "auto", participant_ids: [] },
+          member_results: [
+            {
+              id: "kept-result",
+              participant_id: "participant-new",
+              speaker_name: "New Member",
+              ordinal: 0,
+              state: "ready",
+              assistant_text: "A kept answer",
+              sources: [],
+              safe_error_code: null,
+            },
+          ],
+        },
+      ],
+    };
+    state.api.conversationSessions.mockResolvedValue([history]);
+    state.api.conversationSession.mockResolvedValue(history);
+    renderChats();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "A kept Team question" }),
+    );
+    const log = await screen.findByRole("log");
+    expect(within(log).getByText("A kept Team question")).toBeTruthy();
+    expect(within(log).getByText("A kept answer")).toBeTruthy();
+    expect(
+      within(log).getByRole("heading", { name: "New Member" }),
+    ).toBeTruthy();
+  });
+
   it("explains under the latest message that a member Agent was deleted", async () => {
     const history = {
       ...teamSession,

@@ -638,18 +638,8 @@ def test_flash_target_model_refuses_clone_before_dispatch(
     assert body["code"] == "voice_clone_refused"
     assert provider.enroll_calls == 0
     with database.session() as session:
-        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
-        assert profile is not None
-        assert profile.status == "failed"
-        assert profile.safe_error_code == "voice_clone_refused"
-        operation = session.scalar(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile.id,
-            )
-        )
-        assert operation is not None
-        assert operation.state == "failed"
-        assert operation.safe_error_code == "voice_clone_refused"
+        assert session.scalar(select(VoiceProfile.id)) is None
+        assert session.scalar(select(VoiceProviderOperation.id)) is None
 
 
 def test_typed_clone_refusal_after_dispatch_stays_terminal(
@@ -676,7 +666,7 @@ def test_typed_clone_refusal_after_dispatch_stays_terminal(
     with database.session() as session:
         profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
         assert profile is not None
-        assert profile.status == "failed"
+        assert profile.status == "deleted"
         assert profile.safe_error_code == "voice_clone_refused"
         operation = session.scalar(
             select(VoiceProviderOperation).where(
@@ -685,6 +675,7 @@ def test_typed_clone_refusal_after_dispatch_stays_terminal(
         )
         assert operation is not None
         assert operation.state == "failed"
+        assert operation.charged_request_count == 1
         # Same-key retry must stay refused, not re-dispatch.
         record = session.scalar(
             select(IdempotencyRecord).where(

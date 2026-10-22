@@ -199,50 +199,36 @@ uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (wa
 
 ## Oct20 review and release
 
-Base `5dd9690bfa04c7a9d2a101bdb2abce7d01e3b85a`; integrated inputs:
-
-- #225 `f2646b280663b8efc0a194b1c759cac70fd98c4e`
-- #229 `566a798f0dd368a144d7a27317f407350936eb5a`
-- #227 `bfe8187e8ed7cb77c3cebd2715f9a2a68b434500`
-- #230 `a0f2954ceff73e46afeab249f8b6487bd29f1fa6`
-- #232 `69d3218d98f920f3d99203492f660c22e2dc92c5`
-
-Answer guard/edits,public Agent editors/audit,title fit,Chat-independent Record,dead
-routes;fixed0076→0075. Private-source/ownerless fences/editor tooltip stay. Old-answer
-formats frozen,guard state saved;guard/PG write-count tests passed,ceilings same.
-
-Reviewed inputs:
-#228 `4560e3cf0e64e5e86d42581fe7bbabc5faa2caec`,
-#231 `c41062b2ffc4f259be86088671475503c5f573f2`;
-main `8e59881ecf110e1ae1e0ef70078a7f0a00002780`.
-Cascade:durable recovery/replica lock,failure refs,no auto-retry,Persona confirm,
-private-name filtering;159 routes.
-#215 superseded; alternative#226, legacy#38–41 and drafts#233/#97 excluded.
-5df2066b:mock backend/PG/frontend and build/contract gates passed.
-Actions39546479628 billing-blocked.
+Base 5dd9690b; integrated #225 f2646b28, #229 566a798f, #227 bfe8187e, #230 a0f2954c,
+#232 69d3218d. Answer guard/edits, public Agent editors/audit, title fit,
+Chat-independent Record, dead routes; fixed 0076→0075. Private-source/ownerless
+fences/editor tooltip stay. Old-answer formats frozen, guard state saved;
+guard/PG write-count tests passed, ceilings same. Reviewed #228 4560e3cf, #231
+c41062b2; main 8e59881e. Cascade: durable recovery/replica lock, failure refs, no
+auto-retry, Persona confirm, private-name filtering; 159 routes. #215 superseded;
+alternative #226, legacy #38–41 and drafts #233/#97 excluded. 5df2066b: mock
+backend/PG/frontend and build/contract gates passed. Actions 39546479628
+billing-blocked.
 
 ## Oct21 PR review and release
 
-Base0829e2ddf4c1a5c86e9a252264024afe31b699e1; integrated
-#234 7f4c8fff9d758cce4cc81fe765e2bc876db0cc2b,
-#235 a04c2ea4cd8a69e8a0d424f12e05ec350c781e31.
-Compose TTL30,hash cap2/process (2 replicas=4). User lock/post-hash recheck fences
-reset/catalog-change login races. Four RAG entries:bad→same-name-good passed.
-Agent/Knowledge editors reject NUL/surrogates before persistence,allow blank drafts.
-Markdown errors keep Markdown guidance; Knowledge PUT422/schema/hash/types/fixture
-updated; Unicode validation equivalent.
+Base 0829e2dd; integrated #234 7f4c8fff, #235 a04c2ea4. Compose TTL 30, hash cap
+2/process (2 replicas=4). User lock/post-hash recheck fences reset/catalog-change
+login races. Four RAG entries: bad→same-name-good passed. Agent/Knowledge editors
+reject NUL/surrogates before persistence, allow blank drafts. Markdown errors keep
+Markdown guidance; Knowledge PUT 422/schema/hash/types/fixture updated.
 
-Backend Windows+Linux:2892/45skip;95 Windows failures reproduced on base,covered on
-Linux. PG16:15;frontend1017/1skip;assertions kept.
+Backend Windows+Linux: 2892/45 skip; 95 Windows failures reproduced on base,
+covered on Linux. PG16: 15; frontend 1017/1 skip; assertions kept.
 
-Release9c68d42b0b1b618fabeb8fc22237c8586152a52e:GitHub→bare→FF from5dd9690b;
-Compose built0075/0076. Backup maya-20261021T093817Z-pre-9c68d42b.sqlite3 API/
-integrity=ok,matching .pgdump readable,old images kept. Both ready200,containers
-healthy,0076_agent_editor_audit=ALEMBIC_HEAD;public200/frontend9c68d42b/TTL30/hash2.
-
-Live:10 logins200(max1078ms),30-day cookie,NUL422. Synthetic Agent GET404,2 test
-accounts inactive/sessions revoked,teacher sessions logged out,audit kept. Charged
-14242 before/after;0 real Provider calls. Month-long retention not yet observed.
+Release 9c68d42b: GitHub→bare→FF from 5dd9690b; Compose built 0075/0076. Backup
+maya-20261021T093817Z-pre-9c68d42b.sqlite3 API/integrity=ok, matching .pgdump
+readable, old images kept. Both ready 200, containers healthy,
+0076_agent_editor_audit=ALEMBIC_HEAD; public 200/frontend 9c68d42b/TTL 30/hash 2.
+Live: 10 logins 200 (max 1078ms), 30-day cookie, NUL 422. Synthetic Agent GET 404,
+2 test accounts inactive/sessions revoked, teacher sessions logged out, audit kept.
+Charged 14242 before/after; 0 real Provider calls. Month-long retention not yet
+observed.
 
 ## Oct22 shared Agent editing
 
@@ -271,19 +257,13 @@ at once,stale loads cannot unlock successors. Seven list reads abort fetch/body
 after60s,releasing cache slots. Mock30s:five endpoints105→10 calls,initial pending
 reads4→1. Synthetic results,not classroom capacity.
 
-Self-run CI:frontend1045/1skip,build/typecheck/lint,Ruff/format/mypy,158-route contracts,
-Latin/Prettier/boundary probe passed. Windows backend2840/52skip;95 base failures+2
-zero-TTL clock flakes covered in Linux. Draft history fixture corrected to owner-only;
-final new23 passed. PG105 passed after temp disk recovery;POSIX boundary/reset
-passed. Actions39809567546 billing-blocked before steps.0 real Provider calls;
-classroom capacity open.
+Self-run CI passed (frontend, Ruff/format/mypy, contracts, POSIX). Windows 2840/52
+skip; Linux cleared the 95 base failures. Actions 39809567546 billing-blocked.
+0 real Provider calls. Charged 14331 unchanged.
 
-Oct23 #237:build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7; GitHub→bare→FF from6b1c2a88.
-Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 API/integrity=ok,matching .pgdump
-readable,old images kept. Both ready200,containers healthy,0076_agent_editor_audit
-matches,public200/frontend build match. Live password change/reset:current session
-retained,old sessions/password rejected,new password accepted;test account inactive/
-sessions closed. Charged14331 unchanged;0 real Provider calls.
+Oct23 #237:build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7 from6b1c2a88. Backup
+maya-20261022T155951Z-pre-82d68ffa integrity=ok. Ready200, schema0076, public200.
+Password change/reset kept the current session and rejected the old password.
 
 ## Oct23 isolated 50-user concurrency
 
@@ -293,12 +273,10 @@ identities/cookie rotation/revocation passed. Agent50 and two-member Team50 pass
 SSE+persistence,replay/same-session races/foreign-account denial. Four upload entries:
 200 NUL422 followed by200 same-name201; hash/owner/revision checked,0 retries.
 
-Found PG READ COMMITTED race:3/50 Team streams emitted done with stale state despite
-50 persisted ready. Poll now uses one REPEATABLE READ snapshot; connection isolation
-resets on return. Fixed rerun:50/50 ready; forced two-connection regression fails on
-base and passes after fix,plus pool-reset/preexisting-transaction checks. SQLite
-poll regressions pass. This measures HTTP/DB/Mock work,not real-model capacity.
-Scripts load_auth_http/load_chat_http/load_upload_http retain reproducible checks.
+PG READ COMMITTED race:3/50 Team streams emitted done with stale state. Poll now
+uses one REPEATABLE READ snapshot; isolation resets on return. Rerun 50/50 ready.
+SQLite poll regressions pass. Measures HTTP/DB/Mock, not real-model capacity.
+Scripts load_auth_http/load_chat_http/load_upload_http keep the checks.
 
 Release #239:aa6d6ffd33239110bc57fc8db0cfb963a8f7cfac,GitHub→bare→FF from68c972f2.
 Backup maya-20261022T165903Z-pre-aa6d6ffd.sqlite3 API/integrity=ok;matching .pgdump
@@ -306,6 +284,23 @@ readable,old images kept. Both ready200,containers healthy,schema0076 matches,
 frontend build matches,public200. Load-test probes all200;Compose replacement had
 6 consecutive502 probes (~12s),then recovered. Isolated accounts/data/stack removed.
 
-Self-run:2847 Windows passes;95 failures cleared on Linux (4 shell cases needed LF).
+Self-run:2847 Windows passes;95 Linux failures cleared (4 shell cases needed LF).
 60 skipped;frontend1045;Ruff/format/mypy/contracts/POSIX passed.
 Actions39818125728 billing-blocked before steps.
+
+## Oct22 team chats and junk
+
+Open Team chats follow the current Team version on save and on
+`follow_published_agent`. A mid-reply chat waits for the existing 5-minute sweep.
+Turns stay on the conversation; a member who spoke keeps the same participant row.
+In-progress and paused formal attempts stay on their starting version. No migration;
+head stays 0076.
+
+A new RAG upload that never indexes returns 503 `provider_unavailable` and is not
+stored. Startup recovery and that sweep delete failed documents with
+`index_revision == 0`, file included. A failed reindex that already had an index
+stays. Startup-recovery test now expects the never-indexed row gone. Uncharged
+`voice_clone_refused` profiles are deleted; a charged refusal is `deleted` and
+keeps its operation. The same key still replays 422. Empty owner drafts older than
+1 hour, with no content and no Team/Debate/chat/generation/memory reference, are
+hard-deleted by the sweep. Same-name reclaim stays a soft delete.

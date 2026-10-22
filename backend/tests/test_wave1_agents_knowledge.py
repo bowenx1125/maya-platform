@@ -582,9 +582,16 @@ def test_wave1_snapshot_chunk_cannot_cross_snapshot_source(app_factory: Any) -> 
             raise AssertionError("cross-snapshot chunk relation was accepted")
 
 
-def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
+def test_wave1_startup_recovery_drops_never_indexed_uploads(
     app_factory: Any,
 ) -> None:
+    """A crash before the first index leaves nothing to keep.
+
+    Owner decision (2026-10-22): failed uploads with ``index_revision == 0``
+    are deleted, file included. A reindex that already had a completed index
+    stays failed so the previous index can be read. The old contract kept
+    both rows as failed.
+    """
     app, database, settings = app_factory()
     with TestClient(app):
         pass
@@ -593,8 +600,13 @@ def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
     stored_file_id = str(uuid4())
     job_id = str(uuid4())
     source = settings.resolved_data_root / "groups" / GROUP_DEMO_ID / "recovery.md"
+    kept_path = settings.resolved_data_root / "groups" / GROUP_DEMO_ID / "kept.md"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(b"# recovery")
+    kept_path.write_bytes(b"# kept")
+    kept_document_id = str(uuid4())
+    kept_file_id = str(uuid4())
+    kept_job_id = str(uuid4())
     with database.session() as session:
         session.add(
             StoredFile(
@@ -636,16 +648,60 @@ def test_wave1_startup_recovery_marks_document_failed_and_job_interrupted(
                 updated_at=timestamp,
             )
         )
+        session.add(
+            StoredFile(
+                id=kept_file_id,
+                kind="markdown",
+                relative_path=f"groups/{GROUP_DEMO_ID}/kept.md",
+                sha256="1" * 64,
+                size_bytes=6,
+                state="active",
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        session.flush()
+        session.add(
+            KnowledgeDocument(
+                id=kept_document_id,
+                group_id=GROUP_DEMO_ID,
+                source_filename="kept.md",
+                stored_file_id=kept_file_id,
+                char_count=6,
+                index_status="indexing",
+                index_revision=1,
+                workspace_state="active",
+                content_hash="1" * 64,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
+        session.flush()
+        session.add(
+            Job(
+                id=kept_job_id,
+                document_id=kept_document_id,
+                operation="reindex_document",
+                state="running",
+                attempt=1,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+        )
     restarted = app_factory()
     with TestClient(restarted[0]):
         pass
     with database.session() as session:
-        document = session.get(KnowledgeDocument, document_id)
-        job = session.get(Job, job_id)
-        assert document is not None and document.index_status == "failed"
-        assert document.safe_error_code == "provider_unavailable"
-        assert job is not None and job.state == "interrupted"
-        assert job.safe_error_code == "provider_unavailable"
+        assert session.get(KnowledgeDocument, document_id) is None
+        assert session.get(Job, job_id) is None
+        assert session.get(StoredFile, stored_file_id) is None
+        assert not source.exists()
+        kept = session.get(KnowledgeDocument, kept_document_id)
+        kept_job = session.get(Job, kept_job_id)
+        assert kept is not None and kept.index_status == "failed"
+        assert kept.safe_error_code == "provider_unavailable"
+        assert kept_job is not None and kept_job.state == "interrupted"
+        assert kept_path.read_bytes() == b"# kept"
 
 
 def test_wave1_explicit_business_422_codes_are_not_transport_malformed_request(

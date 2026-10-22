@@ -553,9 +553,9 @@ async def upload_knowledge_document(
         )
         saga_checkpoint("upload.staged")
 
-        # Build the full replacement before any final DB mutation.  A failed
-        # provider/index calculation therefore cannot erase an existing
-        # index; a newly uploaded document simply commits as failed below.
+        # Index before promote. A new upload that never indexes is not kept:
+        # the request fails and recovery removes the staged file. Reindex of
+        # an existing document is a different route and keeps the previous index.
         chunks = None
         index_attempts = 0
         for attempt in range(2):
@@ -567,6 +567,12 @@ async def upload_knowledge_document(
                 if attempt == 1:
                     chunks = None
         assert_claim_owned(db, record)
+        if chunks is None:
+            raise PlatformError(
+                "provider_unavailable",
+                "This file could not be indexed, so it was not kept.",
+                503,
+            )
         promote_atomic(settings.resolved_data_root, staging_path, relative_path)
         remove_empty_directory(settings.resolved_data_root, staging_root)
         verify_staged(

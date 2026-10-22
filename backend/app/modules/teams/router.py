@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from typing import Any, cast
 from uuid import UUID
@@ -32,6 +33,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["teams"])
+LOGGER = logging.getLogger(__name__)
 
 
 def _idempotent_mutation[T: BaseModel](
@@ -232,7 +234,7 @@ def save_team_version(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> TeamDetail:
-    return _idempotent_mutation(
+    result = _idempotent_mutation(
         db,
         context,
         operation_id="saveTeamVersion",
@@ -244,3 +246,11 @@ def save_team_version(
         operation=lambda: service.save_team_version(db, context, str(team_id), payload),
         replay=lambda body: _replay_team_detail(db, context, body),
     )
+    # The save has committed. A chat that was mid-reply stays for the sweep.
+    try:
+        from app.modules.teams.retarget import retarget_team_chats
+
+        retarget_team_chats(db, str(team_id))
+    except Exception:  # noqa: BLE001
+        LOGGER.exception("Team chat retarget failed team_id=%s", team_id)
+    return result

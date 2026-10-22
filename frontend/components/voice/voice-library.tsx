@@ -111,9 +111,18 @@ function enrollmentCreated(profile: VoiceProfile | null | undefined): boolean {
   );
 }
 
-// A deleted voice stays on the server for its audit trail only.
+// A deleted voice stays on the server for its audit trail only. A refused
+// clone is removed server-side; hide it here too so a list read before that
+// sweep does not leave a card.
 function listedVoices(profiles: VoiceProfile[]): ListedVoice[] {
-  return profiles.filter((profile) => profile.status !== "deleted");
+  return profiles.filter(
+    (profile) =>
+      profile.status !== "deleted" &&
+      !(
+        profile.status === "failed" &&
+        profile.safe_error_code === "voice_clone_refused"
+      ),
+  );
 }
 
 function previewIsCurrent(expiresAt: string): boolean {

@@ -481,6 +481,45 @@ describe("M08 voice library", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 
+  it("does not list a refused or deleted voice card", async () => {
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "voice-ready",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "ready.wav",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "voice-refused",
+        scope: "group",
+        group_id: "group-a",
+        status: "failed",
+        source_filename: "refused.wav",
+        safe_error_code: "voice_clone_refused",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: "voice-deleted",
+        scope: "group",
+        group_id: "group-a",
+        status: "deleted",
+        source_filename: "deleted.wav",
+        safe_error_code: "voice_clone_refused",
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+    render(
+      <AppShell role="student">
+        <VoiceLibrary groupId="group-a" />
+      </AppShell>,
+    );
+    expect(await screen.findByRole("button", { name: "ready.wav" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "refused.wav" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "deleted.wav" })).toBeNull();
+  });
+
   it("shows refuse-clone error without Retry and without Created", async () => {
     api.voiceProfiles.mockResolvedValue([]);
     api.enrollVoice.mockRejectedValue(
