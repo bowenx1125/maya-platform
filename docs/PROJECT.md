@@ -278,3 +278,19 @@ only for the latest turn,and skips the discarded Agent projection for Teams.
 Synthetic 1/20/100-turn assessment projection SELECTs:5/81/401 to 5/5/5; full DTO
 parity checked. Thirteen tests retain owner-only history,receipt ordering,completed
 Boundary precedence and paused/completed/abandoned state. No schema change.
+
+Brainform automatic refresh waits for all reads in the current load,including
+nested group reads; explicit mutations still refresh immediately and stale loads
+cannot unlock newer ones. Seven list-read methods abort fetch/body after60s and
+release cache slots. Mock30s responses:five list endpoints105 to10 total calls;
+initial pending reads4 to1. These are synthetic measurements,not classroom capacity.
+
+Self-run checks (Actions billing-blocked): frontend1045 passed/1 skipped,build,
+typecheck,lint; Ruff/format/mypy,contracts158 routes,Latin tables,Prettier,boundary
+probe passed. Backend Windows full:2840 passed/52 skipped;95 old failures reproduced
+on clean base,2 zero-TTL clock flakes passed on rerun. Those97 passed in isolated
+Linux after correcting temporary shell-file line endings. One draft history fixture
+was corrected to the existing owner-only contract; final new regressions23 passed
+(SQLite+PG). PG-related105 passed across initial/recovery runs after replacing a
+full temporary DB volume. POSIX boundary/reset checks passed in Linux. No real
+Provider calls; long classroom capacity and live provider behavior remain untested.

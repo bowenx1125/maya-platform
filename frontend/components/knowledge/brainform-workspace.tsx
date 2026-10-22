@@ -795,7 +795,11 @@ function BrainformWorkspaceBody({
   );
 
   const loadRagDocuments = useCallback(
-    async (activeCourseId: string, refresh = false) => {
+    async (
+      activeCourseId: string,
+      refresh: boolean,
+      startedReads: Promise<unknown>[],
+    ) => {
       if (initialGroupId) {
         if (
           role === "student" &&
@@ -812,7 +816,8 @@ function BrainformWorkspaceBody({
           () => api.knowledge(initialGroupId),
           refresh,
         );
-        documents.catch(() => undefined);
+        // A group refusal can finish this loader before its file read settles.
+        startedReads.push(documents);
         const group = await read(
           "group",
           [initialGroupId],
@@ -940,6 +945,7 @@ function BrainformWorkspaceBody({
   );
 
   const refreshingSnapshot = useRef(Boolean(snapshot));
+  const pendingWorkspaceLoad = useRef<number | null>(null);
   // Every reload (after a change, the polling below) asks the server; only
   // the first load of a visit reuses reads under FRESH_MS old or in flight.
   const loadWorkspace = useCallback(
@@ -964,33 +970,38 @@ function BrainformWorkspaceBody({
         setLoadError(null);
       }
       const generation = requestCacheGeneration(api);
+      pendingWorkspaceLoad.current = sequence;
+      let settledReads: Promise<unknown> | undefined;
       try {
+        const ragReads: Promise<unknown>[] = [];
+        const reads = [
+          read("courses", [], () => api.courses(), refresh),
+          // A private Agent's files live only inside that Agent; Brainform is
+          // the group's shared library of public Agents' RAG.
+          loadRagDocuments(courseId, refresh, ragReads).then((documents) =>
+            documents.filter((document) => document.visibility !== "private"),
+          ),
+          // Students no longer see Knowledge (owner request 2026-10-20);
+          // its list is the slowest read here, so they skip it.
+          embedded && role === "student"
+            ? Promise.resolve<BrainformKnowledge[]>([])
+            : read(
+                "brainformKnowledge",
+                [courseId],
+                () => api.brainformKnowledge(courseId),
+                refresh,
+              ),
+          read(
+            "chatAgents",
+            [courseId],
+            () => api.chatAgents(courseId),
+            refresh,
+          ),
+          loadGroups(courseId, refresh),
+        ] as const;
+        settledReads = Promise.allSettled([...reads, ...ragReads]);
         const [courseRows, nextRag, nextKnowledge, nextAgents, nextGroups] =
-          await Promise.all([
-            read("courses", [], () => api.courses(), refresh),
-            // A private Agent's files live only inside that Agent; Brainform is
-            // the group's shared library of public Agents' RAG.
-            loadRagDocuments(courseId, refresh).then((documents) =>
-              documents.filter((document) => document.visibility !== "private"),
-            ),
-            // Students no longer see Knowledge (owner request 2026-10-20);
-            // its list is the slowest read here, so they skip it.
-            embedded && role === "student"
-              ? Promise.resolve<BrainformKnowledge[]>([])
-              : read(
-                  "brainformKnowledge",
-                  [courseId],
-                  () => api.brainformKnowledge(courseId),
-                  refresh,
-                ),
-            read(
-              "chatAgents",
-              [courseId],
-              () => api.chatAgents(courseId),
-              refresh,
-            ),
-            loadGroups(courseId, refresh),
-          ]);
+          await Promise.all(reads);
         if (!scopeIsCurrent(scope) || sequence !== loadSequence.current) return;
         const data: BrainformSnapshot = {
           courseRows,
@@ -1023,6 +1034,11 @@ function BrainformWorkspaceBody({
         if (scopeIsCurrent(scope) && sequence === loadSequence.current) {
           setLoading(false);
         }
+        // A refused list must not restart polling while sibling reads still
+        // hold cache slots; their fetch deadlines settle this batch as well.
+        await settledReads;
+        if (pendingWorkspaceLoad.current === sequence)
+          pendingWorkspaceLoad.current = null;
       }
     },
     [
@@ -1057,7 +1073,13 @@ function BrainformWorkspaceBody({
     const scope = identityScope;
     const timer = window.setInterval(
       () => {
-        if (document.visibilityState === "hidden" || !scopeIsCurrent(scope))
+        // Explicit saves may supersede a slow read; only the latest load
+        // blocks automatic refreshes, so an old hung request cannot stall them.
+        if (
+          document.visibilityState === "hidden" ||
+          !scopeIsCurrent(scope) ||
+          pendingWorkspaceLoad.current !== null
+        )
           return;
         void loadWorkspace(true);
       },

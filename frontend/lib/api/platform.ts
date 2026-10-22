@@ -885,6 +885,20 @@ export class PlatformApi {
     }
   }
 
+  private async readWithTimeout<T>(
+    read: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    // These list reads feed automatic refreshes. Abort the underlying fetch
+    // (including its body), so a stalled read cannot retain a cache slot forever.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+    try {
+      return await read(controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   setCsrfToken(token: string | undefined): void {
     this.csrfToken = token;
     this.client.setCsrfToken(token);
@@ -973,13 +987,14 @@ export class PlatformApi {
     return payload as T;
   }
 
-  private async getJson<T>(path: string): Promise<T> {
+  private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     const separator = this.baseUrl.endsWith("/") ? "" : "/";
     const response = await this.trackedFetch(
       `${this.baseUrl}${separator}${path.replace(/^\/+/, "")}`,
       {
         method: "GET",
         credentials: "include",
+        signal,
         headers: {
           "X-CSRF-Token": this.csrfToken ?? "",
         },
@@ -1215,11 +1230,15 @@ export class PlatformApi {
   }
 
   async courses(): Promise<Course[]> {
-    return unwrap(await this.client.GET("/courses"));
+    return this.readWithTimeout(async (signal) =>
+      unwrap(await this.client.GET("/courses", { signal })),
+    );
   }
 
   chatAgents(courseId: string): Promise<ChatAgent[]> {
-    return this.getJson(`courses/${courseId}/chat-agents`);
+    return this.readWithTimeout((signal) =>
+      this.getJson(`courses/${courseId}/chat-agents`, signal),
+    );
   }
 
   conversations(): Promise<ConversationSession[]> {
@@ -1730,18 +1749,24 @@ export class PlatformApi {
   }
 
   async groups(courseId: string): Promise<Group[]> {
-    return unwrap(
-      await this.client.GET("/courses/{course_id}/groups", {
-        params: { path: { course_id: courseId } },
-      }),
+    return this.readWithTimeout(async (signal) =>
+      unwrap(
+        await this.client.GET("/courses/{course_id}/groups", {
+          params: { path: { course_id: courseId } },
+          signal,
+        }),
+      ),
     );
   }
 
   async group(groupId: string): Promise<GroupDetail> {
-    return unwrap(
-      await this.client.GET("/groups/{group_id}", {
-        params: { path: { group_id: groupId } },
-      }),
+    return this.readWithTimeout(async (signal) =>
+      unwrap(
+        await this.client.GET("/groups/{group_id}", {
+          params: { path: { group_id: groupId } },
+          signal,
+        }),
+      ),
     );
   }
 
@@ -2184,10 +2209,13 @@ export class PlatformApi {
   }
 
   async knowledge(groupId: string): Promise<KnowledgeDocument[]> {
-    return unwrap(
-      await this.client.GET("/groups/{group_id}/knowledge-documents", {
-        params: { path: { group_id: groupId } },
-      }),
+    return this.readWithTimeout(async (signal) =>
+      unwrap(
+        await this.client.GET("/groups/{group_id}/knowledge-documents", {
+          params: { path: { group_id: groupId } },
+          signal,
+        }),
+      ),
     );
   }
 
@@ -2241,8 +2269,11 @@ export class PlatformApi {
   }
 
   async brainformKnowledge(courseId: string): Promise<BrainformKnowledge[]> {
-    return this.getJson(
-      `courses/${encodeURIComponent(courseId)}/brainform/knowledge`,
+    return this.readWithTimeout((signal) =>
+      this.getJson(
+        `courses/${encodeURIComponent(courseId)}/brainform/knowledge`,
+        signal,
+      ),
     );
   }
 
@@ -2337,10 +2368,13 @@ export class PlatformApi {
   }
 
   async workspaceDocuments(courseId: string): Promise<KnowledgeDocument[]> {
-    return unwrap(
-      await this.client.GET("/courses/{course_id}/workspace-documents", {
-        params: { path: { course_id: courseId } },
-      }),
+    return this.readWithTimeout(async (signal) =>
+      unwrap(
+        await this.client.GET("/courses/{course_id}/workspace-documents", {
+          params: { path: { course_id: courseId } },
+          signal,
+        }),
+      ),
     );
   }
 
