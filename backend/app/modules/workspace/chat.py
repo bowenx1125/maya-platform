@@ -4,7 +4,7 @@ import logging
 import math
 import re
 import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
@@ -870,17 +870,28 @@ def _generate_reply_body(
 
 
 def _assessment_result_for_turn(
-    db: Session, conversation_id: str, turn_id: str, actor_user_id: str
+    db: Session,
+    conversation_id: str,
+    turn_id: str,
+    actor_user_id: str,
+    *,
+    receipt_values: Iterable[str] | None = None,
+    completed_calls: Iterable[tuple[str, str]] | None = None,
+    refresh_lifecycle: bool = True,
 ) -> AssessmentRuntimeResult | None:
-    values = db.scalars(
-        select(RuntimeToolReceipt.result_json)
-        .where(
-            RuntimeToolReceipt.conversation_id == conversation_id,
-            RuntimeToolReceipt.turn_id == turn_id,
-            RuntimeToolReceipt.actor_user_id == actor_user_id,
-            RuntimeToolReceipt.tool_name == "assessment_action",
+    values = (
+        receipt_values
+        if receipt_values is not None
+        else db.scalars(
+            select(RuntimeToolReceipt.result_json)
+            .where(
+                RuntimeToolReceipt.conversation_id == conversation_id,
+                RuntimeToolReceipt.turn_id == turn_id,
+                RuntimeToolReceipt.actor_user_id == actor_user_id,
+                RuntimeToolReceipt.tool_name == "assessment_action",
+            )
+            .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
         )
-        .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
     )
     projection: AssessmentRuntimeResult | None = None
     for raw in values:
@@ -901,21 +912,25 @@ def _assessment_result_for_turn(
         project_completed_assessment_for_boundary_call,
     )
 
-    boundary_calls = db.execute(
-        select(TeamProviderCall.id, RuntimeToolReceipt.tool_call_id)
-        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
-        .join(
-            RuntimeToolReceipt,
-            RuntimeToolReceipt.model_operation_id == TeamProviderCall.operation_id,
-        )
-        .where(
-            TeamTurnResult.turn_id == turn_id,
-            RuntimeToolReceipt.conversation_id == conversation_id,
-            RuntimeToolReceipt.turn_id == turn_id,
-            RuntimeToolReceipt.actor_user_id == actor_user_id,
-            RuntimeToolReceipt.tool_name == "update_learning_boundary",
-        )
-        .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
+    boundary_calls = (
+        completed_calls
+        if completed_calls is not None
+        else db.execute(
+            select(TeamProviderCall.id, RuntimeToolReceipt.tool_call_id)
+            .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
+            .join(
+                RuntimeToolReceipt,
+                RuntimeToolReceipt.model_operation_id == TeamProviderCall.operation_id,
+            )
+            .where(
+                TeamTurnResult.turn_id == turn_id,
+                RuntimeToolReceipt.conversation_id == conversation_id,
+                RuntimeToolReceipt.turn_id == turn_id,
+                RuntimeToolReceipt.actor_user_id == actor_user_id,
+                RuntimeToolReceipt.tool_name == "update_learning_boundary",
+            )
+            .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
+        ).tuples()
     )
     for model_call_id, tool_call_id in boundary_calls:
         completed = project_completed_assessment_for_boundary_call(
@@ -927,6 +942,8 @@ def _assessment_result_for_turn(
         )
         if completed is not None:
             return completed
+    if not refresh_lifecycle:
+        return projection
     return (
         project_attempt_lifecycle_for_latest_turn(
             db,
@@ -937,6 +954,54 @@ def _assessment_result_for_turn(
         )
         or projection
     )
+
+
+def _assessment_results_for_history(
+    db: Session, conversation: Conversation, turns: list[ConversationTurn]
+) -> dict[str, AssessmentRuntimeResult | None]:
+    if not turns:
+        return {}
+    receipts: dict[str, list[str]] = {}
+    for turn_id, value in db.execute(
+        select(RuntimeToolReceipt.turn_id, RuntimeToolReceipt.result_json)
+        .where(
+            RuntimeToolReceipt.conversation_id == conversation.id,
+            RuntimeToolReceipt.actor_user_id == conversation.user_id,
+            RuntimeToolReceipt.tool_name == "assessment_action",
+        )
+        .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
+    ):
+        receipts.setdefault(turn_id, []).append(value)
+    completed_calls: dict[str, list[tuple[str, str]]] = {}
+    for turn_id, model_call_id, tool_call_id in db.execute(
+        select(RuntimeToolReceipt.turn_id, TeamProviderCall.id, RuntimeToolReceipt.tool_call_id)
+        .join(
+            TeamProviderCall, RuntimeToolReceipt.model_operation_id == TeamProviderCall.operation_id
+        )
+        .join(TeamTurnResult, TeamTurnResult.id == TeamProviderCall.result_id)
+        .where(
+            TeamTurnResult.turn_id == RuntimeToolReceipt.turn_id,
+            RuntimeToolReceipt.conversation_id == conversation.id,
+            RuntimeToolReceipt.actor_user_id == conversation.user_id,
+            RuntimeToolReceipt.tool_name == "update_learning_boundary",
+        )
+        .order_by(RuntimeToolReceipt.created_at.desc(), RuntimeToolReceipt.id.desc())
+    ):
+        completed_calls.setdefault(turn_id, []).append((model_call_id, tool_call_id))
+    # Only the newest turn reflects current lifecycle state; historical receipts
+    # keep their original projection and still honor completed Boundary calls.
+    return {
+        turn.id: _assessment_result_for_turn(
+            db,
+            conversation.id,
+            turn.id,
+            conversation.user_id,
+            receipt_values=receipts.get(turn.id, ()),
+            completed_calls=completed_calls.get(turn.id, ()),
+            refresh_lifecycle=turn.id == turns[-1].id,
+        )
+        for turn in turns
+    }
 
 
 def store_assistant_text(
@@ -1237,38 +1302,12 @@ def session_view(
     ):
         raise not_found()
     read_only = conversation.user_id != context.user.id
-    turns = db.scalars(
-        select(ConversationTurn)
-        .where(ConversationTurn.conversation_id == conversation.id)
-        .order_by(ConversationTurn.position, ConversationTurn.id)
-    ).all()
-    visible_turns = [
-        ChatTurn(
-            id=UUID(turn.id),
-            user_text=turn.user_text,
-            assistant_text=turn.assistant_text,
-            mode=cast(Literal["real", "mock"], turn.mode),
-            state=cast(
-                Literal["pending", "ready", "partial", "failed", "acceptance_unknown", "paused"],
-                turn.state,
-            ),
-            # Public transcript access does not grant access to its raw RAG.
-            sources=[] if read_only else json.loads(turn.sources_json),
-            safe_error_code=turn.safe_error_code,
-            assessment_result=(
-                None
-                if read_only
-                else _assessment_result_for_turn(db, conversation.id, turn.id, conversation.user_id)
-            ),
-        )
-        for turn in turns
-    ]
     if conversation.entry_kind != "agent":
         view = team_session_view(
             db,
             conversation,
             context,
-            visible_turns,
+            [],
             runtime_available=settings is not None
             and settings.llm_provider in {"mock", "dashscope"},
         )
@@ -1295,6 +1334,31 @@ def session_view(
                     }
                 )
         return view
+    turns = db.scalars(
+        select(ConversationTurn)
+        .where(ConversationTurn.conversation_id == conversation.id)
+        .order_by(ConversationTurn.position, ConversationTurn.id)
+    ).all()
+    assessments = (
+        {} if read_only else _assessment_results_for_history(db, conversation, list(turns))
+    )
+    visible_turns = [
+        ChatTurn(
+            id=UUID(turn.id),
+            user_text=turn.user_text,
+            assistant_text=turn.assistant_text,
+            mode=cast(Literal["real", "mock"], turn.mode),
+            state=cast(
+                Literal["pending", "ready", "partial", "failed", "acceptance_unknown", "paused"],
+                turn.state,
+            ),
+            # Public transcript access does not grant access to its raw RAG.
+            sources=[] if read_only else json.loads(turn.sources_json),
+            safe_error_code=turn.safe_error_code,
+            assessment_result=assessments.get(turn.id),
+        )
+        for turn in turns
+    ]
     version = db.get(AgentVersion, conversation.agent_version_id)
     agent = db.get(Agent, version.agent_id) if version else None
     if version is None or agent is None:

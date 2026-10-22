@@ -272,3 +272,9 @@ release the read transaction before hash queue/CPU work,then lock User and rerea
 credentials before writing/revoking sessions. Single-slot pool tests observe zero
 checked-out connections during queued and running hashes; unrelated queries pass.
 Concurrent credential replacement remains fenced. SQLite+isolated PG:10 passed.
+
+Chat history batches assessment receipts and Boundary call IDs,refreshes lifecycle
+only for the latest turn,and skips the discarded Agent projection for Teams.
+Synthetic 1/20/100-turn assessment projection SELECTs:5/81/401 to 5/5/5; full DTO
+parity checked. Thirteen tests retain owner-only history,receipt ordering,completed
+Boundary precedence and paused/completed/abandoned state. No schema change.
