@@ -4927,9 +4927,16 @@ def project_team_turn(db: Session, turn: ConversationTurn, *, read_only: bool) -
 
 
 def _begin_consistent_read(db: Session) -> None:
-    """Make SQLite multi-query event projections use one committed snapshot."""
-    if db.get_bind().dialect.name == "sqlite":
+    """Keep events and their projected state in one committed snapshot."""
+    dialect = db.get_bind().dialect.name
+    if dialect == "sqlite":
         db.connection().exec_driver_sql("BEGIN")
+    elif dialect == "postgresql":
+        if db.in_transaction():
+            raise RuntimeError("Team polling snapshot must start before database reads.")
+        # READ COMMITTED can see a new turn_done after loading the old pending
+        # turn. Set isolation on this checkout; pool return restores the default.
+        db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
 
 
 def poll_team_events(
