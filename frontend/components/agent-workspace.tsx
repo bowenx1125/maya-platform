@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
-import { createPortal } from "react-dom";
 
 import {
   isAmbiguousMutationFailure,
@@ -45,8 +44,14 @@ import {
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { ModuleUpload } from "./studyform-layout";
-import { IconClose, IconDownload, IconEye, IconUpload } from "./quiet-icons";
+import { IconDownload, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
+import {
+  downloadText,
+  KnowledgeCheckOverlay,
+  KnowledgeRowActions,
+  useKnowledgeCheck,
+} from "./knowledge-check";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import {
@@ -385,6 +390,10 @@ export function AgentWorkbench({
   const saving = savingRequest?.scope === workbenchScope;
   const publishing = publishingRequest?.scope === workbenchScope;
   const editingLocked = saving || publishing;
+  // View/download in Brainform reads the server copy, as read-only mode does;
+  // it never edits RAG and stays usable while editing is locked by publish.
+  const knowledgeCheck = useKnowledgeCheck();
+  const knowledgeCheckDisabled = saving || knowledgeCheck.busy;
   const [error, setError] = useState<unknown>(null);
   // Shown only after Done on create; empty name / AGENT.md stay quiet until then.
   const [submitHint, setSubmitHint] = useState("");
@@ -1691,6 +1700,13 @@ export function AgentWorkbench({
               />
             }
           >
+            {knowledgeCheck.error ? (
+              <ErrorNotice inline error={knowledgeCheck.error} />
+            ) : null}
+            <KnowledgeCheckOverlay
+              check={knowledgeCheck.check}
+              onClose={knowledgeCheck.closeCheck}
+            />
             <div className="brainform-source-group">
               <h3>{t("rag")}</h3>
               {saving && pendingKnowledgeUpload ? (
@@ -1803,8 +1819,8 @@ export function AgentWorkbench({
                           <strong>{document.source_filename}</strong>
                         </span>
                       </label>
-                      {document.index_status === "ready" ? null : (
-                        <div className="row-actions">
+                      <div className="row-actions">
+                        {document.index_status === "ready" ? null : (
                           <StatusBadge
                             status={document.index_status}
                             tone={
@@ -1813,8 +1829,27 @@ export function AgentWorkbench({
                                 : "warn"
                             }
                           />
-                        </div>
-                      )}
+                        )}
+                        <KnowledgeRowActions
+                          name={document.source_filename}
+                          disabled={
+                            knowledgeCheckDisabled ||
+                            document.workspace_state === "hidden"
+                          }
+                          onView={() =>
+                            void knowledgeCheck.viewMarkdown(
+                              document.source_filename,
+                              loadDocumentMarkdown(api, document),
+                            )
+                          }
+                          onDownload={() =>
+                            void knowledgeCheck.downloadMarkdown(
+                              document.source_filename,
+                              loadDocumentMarkdown(api, document),
+                            )
+                          }
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1850,6 +1885,24 @@ export function AgentWorkbench({
                           <strong>{set.display_name}</strong>
                         </span>
                       </label>
+                      <div className="row-actions">
+                        <KnowledgeRowActions
+                          name={set.display_name}
+                          disabled={knowledgeCheckDisabled}
+                          onView={() =>
+                            void knowledgeCheck.viewMarkdown(
+                              set.display_name,
+                              loadSetMarkdown(api, set.id),
+                            )
+                          }
+                          onDownload={() =>
+                            void knowledgeCheck.downloadMarkdown(
+                              `${set.display_name}.md`,
+                              loadSetMarkdown(api, set.id),
+                            )
+                          }
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1995,13 +2048,8 @@ export function AgentReadOnly({
   const t = useT();
   const { api } = useSession();
   const [sets, setSets] = useState<KnowledgeSetSummary[]>([]);
-  const [check, setCheck] = useState<{
-    title: string;
-    markdown: string;
-  } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const { check, busy, error, viewMarkdown, downloadMarkdown, closeCheck } =
+    useKnowledgeCheck();
 
   useEffect(() => {
     let active = true;
@@ -2017,45 +2065,7 @@ export function AgentReadOnly({
     };
   }, [agent.id, api]);
 
-  useEffect(() => {
-    if (!check) return;
-    closeRef.current?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setCheck(null);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [check]);
-
-  async function viewMarkdown(title: string, load: () => Promise<string>) {
-    setBusy(true);
-    setError(null);
-    try {
-      setCheck({ title, markdown: await load() });
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function downloadMarkdown(
-    filename: string,
-    load: () => Promise<string>,
-  ) {
-    setBusy(true);
-    setError(null);
-    try {
-      downloadText(await load(), filename);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const documents = version.enabled_documents ?? [];
-  const checkRoot = typeof document === "undefined" ? null : document.body;
 
   return (
     <>
@@ -2103,50 +2113,22 @@ export function AgentReadOnly({
                       </small>
                     </span>
                     <div className="row-actions">
-                      <button
-                        className="icon-action"
-                        type="button"
+                      <KnowledgeRowActions
+                        name={document.source_filename}
                         disabled={busy}
-                        aria-label={t("brainformViewRagNamed", {
-                          name: document.source_filename,
-                        })}
-                        onClick={() =>
+                        onView={() =>
                           void viewMarkdown(
                             document.source_filename,
-                            async () => {
-                              const downloaded = await api.downloadKnowledge(
-                                document.id,
-                                document.source_filename,
-                              );
-                              return downloaded.content;
-                            },
+                            loadDocumentMarkdown(api, document),
                           )
                         }
-                      >
-                        <IconEye />
-                      </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        disabled={busy}
-                        aria-label={t("brainformDownloadRagNamed", {
-                          name: document.source_filename,
-                        })}
-                        onClick={() =>
+                        onDownload={() =>
                           void downloadMarkdown(
                             document.source_filename,
-                            async () => {
-                              const downloaded = await api.downloadKnowledge(
-                                document.id,
-                                document.source_filename,
-                              );
-                              return downloaded.content;
-                            },
+                            loadDocumentMarkdown(api, document),
                           )
                         }
-                      >
-                        <IconDownload />
-                      </button>
+                      />
                     </div>
                   </div>
                 ))}
@@ -2165,45 +2147,22 @@ export function AgentReadOnly({
                       <strong>{set.display_name}</strong>
                     </span>
                     <div className="row-actions">
-                      <button
-                        className="icon-action"
-                        type="button"
+                      <KnowledgeRowActions
+                        name={set.display_name}
                         disabled={busy}
-                        aria-label={t("brainformViewRagNamed", {
-                          name: set.display_name,
-                        })}
-                        onClick={() =>
-                          void viewMarkdown(set.display_name, async () => {
-                            const document = await api.knowledgeMarkdown(
-                              set.id,
-                            );
-                            return document.markdown;
-                          })
-                        }
-                      >
-                        <IconEye />
-                      </button>
-                      <button
-                        className="icon-action"
-                        type="button"
-                        disabled={busy}
-                        aria-label={t("brainformDownloadRagNamed", {
-                          name: set.display_name,
-                        })}
-                        onClick={() =>
-                          void downloadMarkdown(
-                            `${set.display_name}.md`,
-                            async () => {
-                              const document = await api.knowledgeMarkdown(
-                                set.id,
-                              );
-                              return document.markdown;
-                            },
+                        onView={() =>
+                          void viewMarkdown(
+                            set.display_name,
+                            loadSetMarkdown(api, set.id),
                           )
                         }
-                      >
-                        <IconDownload />
-                      </button>
+                        onDownload={() =>
+                          void downloadMarkdown(
+                            `${set.display_name}.md`,
+                            loadSetMarkdown(api, set.id),
+                          )
+                        }
+                      />
                     </div>
                   </div>
                 ))}
@@ -2219,35 +2178,39 @@ export function AgentReadOnly({
           />
         </SectionCard>
       </div>
-      {check && checkRoot
-        ? createPortal(
-            <div className="knowledge-check" onClick={() => setCheck(null)}>
-              <div
-                className="knowledge-check-card"
-                role="dialog"
-                aria-modal="true"
-                aria-label={check.title}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <button
-                  ref={closeRef}
-                  className="icon-action knowledge-check-close"
-                  type="button"
-                  aria-label={t("knowledgeCheckClose")}
-                  onClick={() => setCheck(null)}
-                >
-                  <IconClose />
-                </button>
-                <ReportMarkdown label={check.title}>
-                  {check.markdown}
-                </ReportMarkdown>
-              </div>
-            </div>,
-            checkRoot,
-          )
-        : null}
+      <KnowledgeCheckOverlay check={check} onClose={closeCheck} />
     </>
   );
+}
+
+type KnowledgeCheckApi = {
+  downloadKnowledge(
+    documentId: string,
+    filename: string,
+  ): Promise<{ content: string }>;
+  knowledgeMarkdown(setId: string): Promise<{ markdown: string }>;
+};
+
+/** The server copy of a RAG file, the same text read-only Brainform shows. */
+function loadDocumentMarkdown(
+  api: KnowledgeCheckApi,
+  document: { id: string; source_filename: string },
+) {
+  return async () => {
+    const downloaded = await api.downloadKnowledge(
+      document.id,
+      document.source_filename,
+    );
+    return downloaded.content;
+  };
+}
+
+/** The saved Markdown of a Knowledge Set, as read-only Brainform shows it. */
+function loadSetMarkdown(api: KnowledgeCheckApi, setId: string) {
+  return async () => {
+    const document = await api.knowledgeMarkdown(setId);
+    return document.markdown;
+  };
 }
 
 function ReadOnlyVersion({
@@ -2573,14 +2536,4 @@ function StudentSnapshot({ snapshotId }: { snapshotId: string }) {
       )}
     </SectionCard>
   );
-}
-
-function downloadText(content: string, filename: string) {
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }

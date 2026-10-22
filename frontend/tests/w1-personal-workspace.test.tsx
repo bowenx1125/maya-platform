@@ -241,6 +241,107 @@ describe("W1 teacher personal workspace", () => {
     expect(within(other as HTMLElement).getByText("V1.0")).toBeTruthy();
   });
 
+  it("lets a course teacher delete a student's public Agent the API allows", async () => {
+    // PR #229: a course teacher who never entered the group may delete a
+    // student's published public Agent; the × follows the server's can_delete.
+    const tile = (id: string, name: string, canDelete: boolean) => ({
+      agent: personalAgent({
+        id,
+        name,
+        group_id: "group-1",
+        ownership_scope: "group",
+        visibility: "public",
+        can_edit: canDelete,
+        can_delete: canDelete,
+        current_published_version_id: `${id}-v`,
+      }),
+      author: { user_id: "student-1", display_name: "Bowen", avatar: null },
+      current_version: { ...draft(privateDocument()), id: `${id}-v` },
+      group_name: "Group 1",
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = {
+      courses: vi
+        .fn()
+        .mockResolvedValue([
+          { id: courseId, code: "MAYA-101", name: "Cultural exchange" },
+        ]),
+      publishedAgents: vi
+        .fn()
+        .mockResolvedValue([
+          tile("student", "Student Lens", true),
+          tile("locked", "Locked Lens", false),
+        ]),
+      debates: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([]),
+      deleteAgent: vi.fn().mockResolvedValue(undefined),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <TeacherDashboard />
+      </LocaleProvider>,
+    );
+    await screen.findByRole("link", { name: "Student Lens" });
+    const student = document.querySelector('[data-agent-row="student"]')!;
+    const locked = document.querySelector('[data-agent-row="locked"]')!;
+    expect(
+      within(locked as HTMLElement).queryByRole("button", { name: "Delete" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(student as HTMLElement).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(api.deleteAgent).toHaveBeenCalledWith("student"),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: "Student Lens" })).toBeNull(),
+    );
+  });
+
+  it("shows Delete on Studyform for a student's public Agent with can_delete", async () => {
+    const studentAgent = {
+      agent: personalAgent({
+        id: "student",
+        name: "Student Lens",
+        group_id: "group-1",
+        ownership_scope: "group",
+        visibility: "public",
+        can_edit: true,
+        can_delete: true,
+        current_published_version_id: "student-v",
+        current_draft_version_id: null,
+      }),
+      author: { user_id: "student-1", display_name: "Bowen", avatar: null },
+      current_version: {
+        id: "student-v",
+        version_label: "V1.0",
+        state: "published",
+      },
+      group_name: "Group 1",
+    };
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = {
+      publishedAgents: vi.fn().mockResolvedValue([studentAgent]),
+      chatAgents: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([]),
+      deleteAgent: vi.fn().mockResolvedValue(undefined),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <LocaleProvider initialLocale="en">
+        <AppShell role="teacher">
+          <TeacherStudyformWorkspace />
+        </AppShell>
+      </LocaleProvider>,
+    );
+    await screen.findByRole("link", { name: "Student Lens" });
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(api.deleteAgent).toHaveBeenCalledWith("student"),
+    );
+  });
+
   it("preserves the colleague Home without loading personal Agent lists", async () => {
     const api = {
       courses: vi
