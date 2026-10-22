@@ -271,19 +271,13 @@ at once,stale loads cannot unlock successors. Seven list reads abort fetch/body
 after60s,releasing cache slots. Mock30s:five endpoints105→10 calls,initial pending
 reads4→1. Synthetic results,not classroom capacity.
 
-Self-run CI:frontend1045/1skip,build/typecheck/lint,Ruff/format/mypy,158-route contracts,
-Latin/Prettier/boundary probe passed. Windows backend2840/52skip;95 base failures+2
-zero-TTL clock flakes covered in Linux. Draft history fixture corrected to owner-only;
-final new23 passed. PG105 passed after temp disk recovery;POSIX boundary/reset
-passed. Actions39809567546 billing-blocked before steps.0 real Provider calls;
-classroom capacity open.
+Self-run:FE1045/1skip;BE2840/52skip+new23;PG105. Windows95 base fails+2 clock flakes covered Linux;POSIX boundary/reset passed. Build/type/lint,Ruff/format/mypy,158 routes,Latin/Prettier/boundary passed;owner-only draft fix. Actions39809567546 billing-blocked;0 Provider calls;capacity open.
 
 Oct23 #237:build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7; GitHub→bare→FF from6b1c2a88.
 Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 API/integrity=ok,matching .pgdump
 readable,old images kept. Both ready200,containers healthy,0076_agent_editor_audit
 matches,public200/frontend build match. Live password change/reset:current session
-retained,old sessions/password rejected,new password accepted;test account inactive/
-sessions closed. Charged14331 unchanged;0 real Provider calls.
+retained,old sessions/password rejected,new accepted;test account deleted:credential,4 sessions,course/group memberships. Backup maya-20261022T225246Z-pre-test-account-delete.sqlite3 used SQLite API;integrity=ok,matching PostgreSQL dump readable. Base origin/main@60c6ed1a. Charged14331 unchanged;0 real calls.
 
 ## Oct23 isolated 50-user concurrency
 
