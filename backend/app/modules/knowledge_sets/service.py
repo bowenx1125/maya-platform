@@ -18,6 +18,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, invalid_state, not_found, stale_revision, unprocessable
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -461,7 +462,7 @@ def _source_dto(
     document = db.get(KnowledgeDocument, source.document_id)
     return KnowledgeSetSourceDTO(
         id=_uid(source.id),
-        document_id=_uid(source.document_id),
+        document_id=_uid(live_link(source.document_id, "file")),
         source_filename=source.source_filename,
         char_count=document.char_count if document is not None else 0,
         content_hash=source.source_content_hash,
@@ -1959,7 +1960,7 @@ def enqueue_brainform_regeneration(
     )
     return RegenerateKnowledgeResponse(
         action_id=UUID(queued.action_id or queued.run.action_id),
-        agent_id=_uid(queued.run.agent_id),
+        agent_id=_uid(live_link(queued.run.agent_id, "Agent")),
         canonical_set_id=_uid(queued.run.knowledge_set_id),
         run_id=_uid(queued.run.id),
         job_id=_uid(queued.job.id),
@@ -2108,26 +2109,9 @@ def delete_knowledge_set(
     next_metadata_revision = expected_metadata_revision + 1
     next_content_revision = expected_content_revision + 1
     next_authorization_epoch = row.authorization_epoch + 1
-    result = db.execute(
-        update(KnowledgeSet)
-        .where(
-            KnowledgeSet.id == set_id,
-            KnowledgeSet.owner_user_id == context.user.id,
-            KnowledgeSet.metadata_revision == expected_metadata_revision,
-            KnowledgeSet.content_revision == expected_content_revision,
-            KnowledgeSet.deleted_at.is_(None),
-        )
-        .values(
-            metadata_revision=next_metadata_revision,
-            content_revision=next_content_revision,
-            authorization_epoch=next_authorization_epoch,
-            deleted_at=revoked_at,
-            updated_at=revoked_at,
-        )
-        .execution_options(synchronize_session=False)
-    )
-    if getattr(result, "rowcount", 0) != 1:
-        raise stale_revision(_current_metadata_revision(db, set_id))
+    from app.modules.real_delete import hard_delete_knowledge_set
+
+    hard_delete_knowledge_set(db, row, None)
     return KnowledgeSetRevocation(
         id=_uid(set_id),
         metadata_revision=next_metadata_revision,
@@ -2143,9 +2127,10 @@ def replay_knowledge_set_revocation(
     receipt: KnowledgeSetRevocation,
 ) -> KnowledgeSetRevocation:
     row = db.get(KnowledgeSet, str(receipt.id))
+    if row is None:
+        return receipt
     if (
-        row is None
-        or row.deleted_at is None
+        row.deleted_at is None
         or row.owner_user_id != context.user.id
         or course_member_role(db, context.user.id, row.course_id) is None
         or (

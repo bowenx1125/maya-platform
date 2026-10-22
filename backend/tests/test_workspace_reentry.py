@@ -290,9 +290,10 @@ def test_deleted_chat_keeps_its_unfinished_attempt_for_a_new_chat(
     with database.session() as db:
         source = db.get(Conversation, source_id)
         attempt = db.get(AssessmentAttempt, attempt_id)
-        assert source is not None and source.withdrawn_at is not None
+        assert source is None
         assert attempt is not None
-        # Owner rule (2026-10-20): deleting the Chat keeps the attempt unfinished
-        # until the student chooses to continue it or restart.
+        # Deleting the Chat removes the transcript and keeps the attempt
+        # unfinished until the student chooses to continue it or restart.
         assert attempt.status == "paused"
+        assert attempt.source_conversation_id is None
         assert attempt.abandonment_reason is None

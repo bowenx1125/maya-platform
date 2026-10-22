@@ -70,7 +70,6 @@ from app.seed import BOWEN_ID, JADE_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select, text
-from sqlalchemy.exc import IntegrityError
 from starlette.requests import Request
 
 from tests.conftest import login, make_foreign_group
@@ -967,34 +966,11 @@ def test_delete_different_idempotency_key_takes_over_an_abandoned_delete(
     assert taken_over.status_code == 200, taken_over.text
     assert taken_over.json()["status"] == "deleted"
     assert provider.delete_calls == 1
+    # The takeover finished the supplier delete, so the profile and its
+    # operation ledger are gone. One delete operation per profile is still
+    # enforced by uq_voice_provider_operations_profile_delete.
     with database.session() as session:
-        operations = session.scalars(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile["id"],
-                VoiceProviderOperation.operation_type == "delete",
-            )
-        ).all()
-        assert len(operations) == 1
-        assert operations[0].state == "succeeded"
-        assert operations[0].attempt == 2
-        session.add(
-            VoiceProviderOperation(
-                id="13131313-1313-4313-8313-131313131313",
-                profile_id=profile["id"],
-                operation_type="delete",
-                profile_scope="group",
-                state="prepared",
-                attempt=1,
-                claim_token="competing-delete-worker",
-                request_hash="e" * 64,
-                provider_deadline=timestamp + timedelta(seconds=30),
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
-        )
-        with pytest.raises(IntegrityError):
-            session.flush()
-        session.rollback()
+        assert session.get(VoiceProfile, profile["id"]) is None
 
 
 def test_delete_two_live_requests_issue_exactly_one_provider_command(
@@ -1068,14 +1044,7 @@ def test_delete_two_live_requests_issue_exactly_one_provider_command(
     assert responses["second"].json()["status"] == "deleted"
     assert provider.delete_calls == 1
     with database.session() as session:
-        operations = session.scalars(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile["id"],
-                VoiceProviderOperation.operation_type == "delete",
-            )
-        ).all()
-        assert len(operations) == 1
-        assert operations[0].state == "succeeded"
+        assert session.get(VoiceProfile, profile["id"]) is None
 
 
 def test_voice_routes_emit_only_frozen_negative_statuses(
@@ -2212,6 +2181,7 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
         assert {item["name"] for item in schema.get_foreign_keys("voice_profiles")} == {
             "fk_voice_profiles_consent_actor",
             "fk_voice_profiles_group",
+            "fk_voice_profiles_sample",
         }
         assert {item["name"] for item in schema.get_foreign_keys("voice_provider_operations")} == {
             "fk_voice_provider_operations_idempotency",

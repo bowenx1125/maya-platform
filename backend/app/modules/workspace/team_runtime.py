@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, object_session
 
 from app.core.config import Settings
 from app.core.errors import PlatformError, conflict, not_found
+from app.core.links import live_link
 from app.core.message_timing import message_timing, set_outcome
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.read_memo import forget_request_reads, memoized, request_read_memo
@@ -263,7 +264,7 @@ def _read_validate_members(
         db,
         row.user_id,
         frozen_team_selection(db, row),
-        {participant.team_member_id for participant in participants},
+        {live_link(participant.team_member_id, "Team member") for participant in participants},
     )
 
 
@@ -1754,7 +1755,7 @@ def _start_member(
             result_id=result_id,
             claim_token=token,
             participant_id=participant.id,
-            agent_version_id=participant.agent_version_id,
+            agent_version_id=live_link(participant.agent_version_id, "Agent version"),
             speaker_name=participant.display_name,
             message=message,
             history=history,
@@ -1812,7 +1813,7 @@ def _assessment_request_context(
                 turn_id=turn.id,
                 result_id=result_id,
                 participant_id=participant.id,
-                team_member_id=participant.team_member_id,
+                team_member_id=live_link(participant.team_member_id, "Team member"),
                 source_error_code=cast(
                     Literal[
                         "assessment_resource_revoked",
@@ -2625,10 +2626,12 @@ def _begin_formal_attempt_on_explicit_start(
 
     from app.modules.learning.attempts import (
         RESUME_CHOICE_PROMPT,
+        adopt_unfinished_attempt,
         attempt_can_continue,
         continue_unfinished_attempt,
         restart_unfinished_attempt,
         resume_choice,
+        source_chat_missing,
         start_or_resume_attempt,
         unfinished_attempt_elsewhere,
     )
@@ -2649,7 +2652,19 @@ def _begin_formal_attempt_on_explicit_start(
     earlier = unfinished_attempt_elsewhere(
         db, actor_user_id=row.user_id, team_id=row.team_id, conversation_id=row.id
     )
-    if earlier is not None and not attempt_can_continue(db, earlier):
+    if earlier is not None and source_chat_missing(db, earlier):
+        if choice is None:
+            raise conflict(
+                "assessment_resume_choice_required",
+                RESUME_CHOICE_PROMPT,
+                {"response_key": "assessment.restart_requires_choice"},
+            )
+        if choice == "continue":
+            adopt_unfinished_attempt(db, earlier, row.id)
+            return
+        restart_unfinished_attempt(db, earlier)
+        earlier = None
+    elif earlier is not None and not attempt_can_continue(db, earlier):
         # Its Chat is on a revoked version (teacher republished): it cannot be
         # continued, so the start below gives it up as before (kept in Record).
         earlier = None
@@ -3832,7 +3847,7 @@ def _selected_binding_ids(db: Session, row: Conversation, turn: ConversationTurn
         selected = participants
     if not selected:
         raise not_found()
-    return {member.team_member_id for member in selected}
+    return {live_link(member.team_member_id, "Team member") for member in selected}
 
 
 def _runtime_tools(

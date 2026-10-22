@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -68,6 +68,8 @@ def _validated_activity(
     )
     if activity is None:
         raise not_found()
+    if activity.team_id is None and (activity.team_name_snapshot or "").strip():
+        return activity
     publication, team, version = db.execute(
         select(CourseTeamPublication, Team, TeamVersion)
         .join(Team, Team.id == CourseTeamPublication.team_id)
@@ -227,19 +229,28 @@ def _authorized_activities(
             )
         except PlatformError:
             continue
-        team_version = db.get(TeamVersion, activity.team_version_id)
+        team_version = (
+            db.get(TeamVersion, activity.team_version_id) if activity.team_version_id else None
+        )
         if team_version is not None:
-            output.append(
-                (
-                    AssessmentActivityListItem(
-                        id=UUID(activity.id),
-                        name=_activity_label(db, activity, team_version),
-                        team_name=team_version.display_name,
-                        created_at=activity.created_at,
-                    ),
-                    activity,
-                )
+            label = _activity_label(db, activity, team_version)
+            team_name = team_version.display_name
+        elif (activity.team_name_snapshot or "").strip():
+            label = activity.team_name_snapshot.strip()
+            team_name = label
+        else:
+            continue
+        output.append(
+            (
+                AssessmentActivityListItem(
+                    id=UUID(activity.id),
+                    name=label,
+                    team_name=team_name,
+                    created_at=activity.created_at,
+                ),
+                activity,
             )
+        )
     return output
 
 
@@ -255,10 +266,38 @@ def list_authorized_assessment_activities(
 
 
 def _eligible_attempts(db: Session, activity: AssessmentActivity) -> list[AssessmentAttempt]:
+    """Formal attempts whose answers still belong to this activity.
+
+    A live chat must still be that activity's published Team chat. Deleting
+    the chat clears ``source_conversation_id`` and the attempt stays. Deleting
+    the Team clears the activity's team id; the attempt keeps the id it was
+    taken against and the name stored on the activity.
+    """
+
+    conversation_is_this_activity = [
+        Conversation.user_id == AssessmentAttempt.actor_user_id,
+        Conversation.course_id == activity.course_id,
+        Conversation.origin == "published_course_team",
+        Conversation.entry_kind == "maya_team",
+        Conversation.chat_visibility == AssessmentAttempt.chat_visibility,
+    ]
+    if activity.publication_id is not None:
+        conversation_is_this_activity.append(Conversation.publication_id == activity.publication_id)
+    if activity.team_id is not None:
+        conversation_is_this_activity.append(Conversation.team_id == activity.team_id)
+    if activity.team_version_id is not None:
+        conversation_is_this_activity.append(
+            Conversation.team_version_id == activity.team_version_id
+        )
+    team_match = (
+        AssessmentAttempt.team_id == activity.team_id
+        if activity.team_id is not None
+        else AssessmentAttempt.team_id.is_not(None)
+    )
     return list(
         db.scalars(
             select(AssessmentAttempt)
-            .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
+            .outerjoin(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
             .join(
                 CourseMember,
                 (CourseMember.course_id == activity.course_id)
@@ -267,17 +306,12 @@ def _eligible_attempts(db: Session, activity: AssessmentActivity) -> list[Assess
             .join(User, User.id == AssessmentAttempt.actor_user_id)
             .where(
                 AssessmentAttempt.activity_id == activity.id,
-                AssessmentAttempt.team_id == activity.team_id,
+                team_match,
                 AssessmentAttempt.recipe_id == activity.recipe_id,
-                AssessmentAttempt.chat_visibility == Conversation.chat_visibility,
-                Conversation.user_id == AssessmentAttempt.actor_user_id,
-                Conversation.course_id == activity.course_id,
-                Conversation.origin == "published_course_team",
-                Conversation.entry_kind == "maya_team",
-                Conversation.publication_id == activity.publication_id,
-                Conversation.team_id == activity.team_id,
-                Conversation.team_version_id == activity.team_version_id,
-                # Record is independent of the Chat window (owner, 2026-10-20).
+                or_(
+                    AssessmentAttempt.source_conversation_id.is_(None),
+                    and_(*conversation_is_this_activity),
+                ),
                 CourseMember.course_id == activity.course_id,
                 CourseMember.user_id == AssessmentAttempt.actor_user_id,
                 CourseMember.role == "student",
@@ -858,10 +892,16 @@ def _attempt_rows(
     ):
         report_path: str | None = None
         report_read = False
-        publication = db.get(CourseTeamPublication, activity.publication_id)
-        team_version = db.get(TeamVersion, activity.team_version_id)
+        publication = (
+            db.get(CourseTeamPublication, activity.publication_id)
+            if activity.publication_id
+            else None
+        )
+        team_version = (
+            db.get(TeamVersion, activity.team_version_id) if activity.team_version_id else None
+        )
         for attempt in _eligible_attempts(db, activity):
-            # A deleted chat abandons its attempt; a teacher's delete hides it.
+            # A teacher's delete hides the attempt. Deleting the chat does not.
             if attempt.status == "abandoned" or attempt.teacher_hidden_at is not None:
                 continue
             group = group_of(attempt.actor_user_id)
@@ -1012,16 +1052,18 @@ def list_my_assessment_attempts(
     attempts = db.scalars(
         select(AssessmentAttempt)
         .join(AssessmentActivity, AssessmentActivity.id == AssessmentAttempt.activity_id)
-        .join(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
+        .outerjoin(Conversation, Conversation.id == AssessmentAttempt.source_conversation_id)
         .where(
             AssessmentAttempt.actor_user_id == own_id,
             # A teacher's Record delete hides the attempt here too.
             AssessmentAttempt.teacher_hidden_at.is_(None),
             AssessmentAttempt.status.in_(("in_progress", "paused", "completed")),
             AssessmentActivity.course_id == course_id,
-            Conversation.user_id == own_id,
-            Conversation.course_id == course_id,
             # A deleted Chat keeps its attempt in Record (owner, 2026-10-20).
+            or_(
+                AssessmentAttempt.source_conversation_id.is_(None),
+                and_(Conversation.user_id == own_id, Conversation.course_id == course_id),
+            ),
         )
         .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id)
     ).all()
@@ -1035,19 +1077,33 @@ def list_my_assessment_attempts(
     results: list[dict[str, Any]] = []
     for attempt in attempts:
         activity = db.get(AssessmentActivity, attempt.activity_id)
-        team_version = db.get(TeamVersion, activity.team_version_id) if activity else None
-        if activity is None or team_version is None:
+        team_version = (
+            db.get(TeamVersion, activity.team_version_id)
+            if activity is not None and activity.team_version_id
+            else None
+        )
+        if activity is None or (
+            team_version is None and not (activity.team_name_snapshot or "").strip()
+        ):
             continue
         sheet = attempt_answer_sheet(db, attempt)
         if sheet["phase"] not in _TEACHER_PHASES:
             continue
+        team_name = (
+            team_version.display_name
+            if team_version is not None
+            else activity.team_name_snapshot.strip()
+        )
+        test_name = (
+            _activity_label(db, activity, team_version) if team_version is not None else team_name
+        )
         results.append(
             {
                 "attempt_id": attempt.id,
                 "user_id": attempt.actor_user_id,
                 "student_name": sheet["student_name"],
-                "test_name": _activity_label(db, activity, team_version),
-                "team_name": team_version.display_name,
+                "test_name": test_name,
+                "team_name": team_name,
                 "status": attempt.status,
                 "phase": sheet["phase"],
                 "conversation_id": attempt.source_conversation_id,

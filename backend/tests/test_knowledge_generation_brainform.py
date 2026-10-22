@@ -2153,8 +2153,8 @@ def test_hide_edited_unbound_rag_soft_hides_but_preserves_source_versions(
             .where(KnowledgeDocumentVersion.document_id == source["id"])
             .order_by(KnowledgeDocumentVersion.version_seq)
         ).all()
-        assert document is not None and document.workspace_state == "hidden"
-        assert [version.version_seq for version in versions] == [1, 2]
+        assert document is None
+        assert versions == []
 
 
 def test_unbound_legacy_projection_stays_blocked_after_source_withdrawal(

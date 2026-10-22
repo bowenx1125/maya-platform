@@ -11,6 +11,7 @@ from typing import Literal, cast
 from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError, conflict, not_found, stale_revision, unprocessable
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -77,6 +78,12 @@ def now_utc() -> datetime:
 
 def _uid(value: str) -> UUID:
     return UUID(value)
+
+
+def _required_set_id(value: str | None) -> str:
+    if value is None:
+        raise not_found()
+    return value
 
 
 def _actor_id(actor: AuthContext | str) -> str:
@@ -746,8 +753,8 @@ def _team_member_dto(row: TeamVersionMember) -> TeamMemberDTO:
         avatar = {}
     return TeamMemberDTO(
         id=_uid(row.id),
-        agent_id=_uid(row.agent_id),
-        agent_version_id=_uid(row.agent_version_id),
+        agent_id=_uid(live_link(row.agent_id, "Agent")),
+        agent_version_id=_uid(live_link(row.agent_version_id, "Agent version")),
         display_name=row.display_name,
         avatar_config=cast(dict[str, object], avatar),
         position=row.position,
@@ -815,7 +822,9 @@ def get_team_detail(db: Session, actor: AuthContext | str, team_id: str) -> Team
         created_at=team.created_at,
         updated_at=team.updated_at,
         members=[_team_member_dto(row) for row in _member_rows(db, version.id)],
-        shared_knowledge_set_ids=[_uid(row.knowledge_set_id) for row in _set_rows(db, version.id)],
+        shared_knowledge_set_ids=[
+            _uid(_required_set_id(row.knowledge_set_id)) for row in _set_rows(db, version.id)
+        ],
         shared_knowledge_sets=_shared_knowledge_set_dtos(db, version.id),
         publication_state=_publication_state(db, team, version),  # type: ignore[arg-type]
     )
@@ -1014,8 +1023,8 @@ def _publish_eligible_team(
                 publication_id=publication.id,
                 team_version_id=version.id,
                 team_member_id=member.id,
-                agent_id=member.agent_id,
-                agent_version_id=member.agent_version_id,
+                agent_id=live_link(member.agent_id, "Agent"),
+                agent_version_id=live_link(member.agent_version_id, "Agent version"),
                 authorization_epoch=team.authorization_epoch,
                 created_at=timestamp,
             )
@@ -1142,14 +1151,12 @@ def save_team_version(
 
 
 def delete_team(db: Session, actor: AuthContext, team_id: str) -> None:
-    """Hide a Team from Studyform and the Maya directory. Chats keep their snapshot."""
+    """Remove a Team. Chats stay readable under the snapshotted name and stop."""
 
     team = _get_team_for_owner(db, actor, team_id)
-    timestamp = now_utc()
-    _revoke_publications(db, team.id, timestamp)
-    team.deleted_at = timestamp
-    team.updated_at = timestamp
-    db.flush()
+    from app.modules.real_delete import hard_delete_team
+
+    hard_delete_team(db, team)
 
 
 def list_course_teams(
@@ -1341,8 +1348,8 @@ def resolve_chat_entry(
         resolved_members.append(
             FrozenTeamMember(
                 binding_id=member.id,
-                agent_id=member.agent_id,
-                agent_version_id=member.agent_version_id,
+                agent_id=live_link(member.agent_id, "Agent"),
+                agent_version_id=live_link(member.agent_version_id, "Agent version"),
                 position=member.position,
                 is_leader=member.is_leader,
                 display_name=dto.display_name,
@@ -1357,7 +1364,7 @@ def resolve_chat_entry(
             leader_id = member.id
     if leader_id is None or len(resolved_members) < 2:
         raise not_found()
-    shared_sets = [row.knowledge_set_id for row in _set_rows(db, version.id)]
+    shared_sets = [_required_set_id(row.knowledge_set_id) for row in _set_rows(db, version.id)]
     resource_owner_id = publication.publisher_user_id if publication else user_id
     if requested_targets:
         _validate_shared_sets_current(db, team, version, resource_owner_id)
@@ -1460,7 +1467,7 @@ def _validate_member_current(
         db,
         resource_owner_id,
         cast(list[dict[str, object]], source_fences),
-        agent_version_id=member.agent_version_id,
+        agent_version_id=live_link(member.agent_version_id, "Agent version"),
         course_id=team.course_id,
     ):
         raise _member_unavailable(team, member, "rag_source_changed_or_hidden")

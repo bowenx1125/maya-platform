@@ -323,6 +323,29 @@ class SqlPlaybackRepository(PlaybackRepository):
                 return None
             return token, model
 
+        from app.modules.debates.voice_clones import resolve_debate_clone, source_voice_id
+
+        # The Debate's own clone first (2026-10-20); until it is ready, the
+        # platform Voice it was copied from, while that still exists.
+        source_id = source_voice_id(participant)
+        debate_id = getattr(participant, "debate_id", None)
+        # NULL once the platform Voice is deleted (the turn's FK is SET NULL).
+        live_profile = getattr(participant, "effective_voice_profile_id", None)
+        if source_id and debate_id:
+            if getattr(settings, "tts_provider", "mock") == "mock":
+                clone = db.execute(
+                    text(
+                        "SELECT target_model_key FROM debate_voice_clones WHERE "
+                        "debate_id=:d AND source_voice_profile_id=:v AND status='ready'"
+                    ),
+                    {"d": debate_id, "v": source_id},
+                ).first()
+                if clone is not None:
+                    return ResolvedTurnVoice(
+                        "platform_profile", live_profile, f"clone:{source_id}", str(clone[0])
+                    )
+            elif owned := resolve_debate_clone(db, str(debate_id), source_id, settings):
+                return ResolvedTurnVoice("platform_profile", live_profile, *owned)
         frozen_id = getattr(participant, "effective_voice_profile_id", None)
         if getattr(participant, "effective_voice_kind", None) == "platform_profile" and (
             ready := ready_profile(frozen_id)

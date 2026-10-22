@@ -18,6 +18,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
+from app.modules.real_delete_checks import (
+    ATTEMPT_ABANDON_REASON_CHECK,
+    ATTEMPT_QUESTION_SNAPSHOT_CHECK,
+    LEARNING_REVISION_EXECUTOR_CHECK,
+    LEARNING_TEAM_ORIGIN_CHECK,
+)
 
 
 class LearningRecord(Base):
@@ -26,9 +32,12 @@ class LearningRecord(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     team_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     team_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    team_name_snapshot: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
     origin: Mapped[str] = mapped_column(String(32), nullable=False)
     chat_visibility: Mapped[str] = mapped_column(String(16), nullable=False)
     activity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -52,12 +61,7 @@ class LearningRecord(Base):
             "chat_visibility IN ('private', 'public')",
             name="ck_learning_records_chat_visibility",
         ),
-        CheckConstraint(
-            "((origin = 'single_agent' AND team_id IS NULL AND team_version_id IS NULL) OR "
-            "(origin IN ('custom_team', 'published_course_team') AND team_id IS NOT NULL "
-            "AND team_version_id IS NOT NULL))",
-            name="ck_learning_records_team_origin",
-        ),
+        CheckConstraint(LEARNING_TEAM_ORIGIN_CHECK, name="ck_learning_records_team_origin"),
         CheckConstraint("length(payload_hash) = 64", name="ck_learning_records_payload_hash"),
         ForeignKeyConstraint(
             ["actor_user_id"], ["users.id"], ondelete="RESTRICT", name="fk_learning_records_actor"
@@ -68,7 +72,7 @@ class LearningRecord(Base):
         ForeignKeyConstraint(
             ["conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_records_conversation",
         ),
         ForeignKeyConstraint(
@@ -80,7 +84,7 @@ class LearningRecord(Base):
         ForeignKeyConstraint(
             ["team_id", "team_version_id"],
             ["team_versions.team_id", "team_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_records_team_version",
         ),
         UniqueConstraint(
@@ -106,7 +110,7 @@ class LearningAssessment(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     owner_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    created_conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     attempt_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     current_revision_seq: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -129,7 +133,7 @@ class LearningAssessment(Base):
         ForeignKeyConstraint(
             ["created_conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_assessments_conversation",
         ),
         UniqueConstraint("attempt_id", name="uq_learning_assessments_attempt"),
@@ -146,9 +150,12 @@ class LearningAssessmentRevision(Base):
     previous_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     team_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     team_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    team_name_snapshot: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
     origin: Mapped[str] = mapped_column(String(32), nullable=False)
     chat_visibility: Mapped[str] = mapped_column(String(16), nullable=False)
     activity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -173,23 +180,7 @@ class LearningAssessmentRevision(Base):
             name="ck_learning_assessment_revision_source",
         ),
         CheckConstraint(
-            "(revision_source='user_authored' AND attempt_id IS NULL "
-            "AND evaluator_team_member_id IS NULL AND evaluator_agent_version_id IS NULL "
-            "AND editor_team_member_id IS NULL AND editor_agent_version_id IS NULL "
-            "AND source_model_call_id IS NULL AND source_tool_call_id IS NULL) OR "
-            "(revision_source='model_evaluation' AND attempt_id IS NOT NULL "
-            "AND evaluator_team_member_id IS NOT NULL AND evaluator_agent_version_id IS NOT NULL "
-            "AND editor_team_member_id IS NULL AND editor_agent_version_id IS NULL "
-            "AND source_model_call_id IS NOT NULL AND source_tool_call_id IS NOT NULL) OR "
-            "(revision_source='practice_agent_edit' AND attempt_id IS NULL "
-            "AND evaluator_team_member_id IS NULL AND evaluator_agent_version_id IS NULL "
-            "AND editor_agent_version_id IS NOT NULL "
-            "AND ((origin='single_agent' AND team_id IS NULL AND team_version_id IS NULL "
-            "AND editor_team_member_id IS NULL) OR "
-            "(origin IN ('custom_team', 'published_course_team') "
-            "AND team_id IS NOT NULL AND team_version_id IS NOT NULL "
-            "AND editor_team_member_id IS NOT NULL)) "
-            "AND source_model_call_id IS NOT NULL AND source_tool_call_id IS NOT NULL)",
+            LEARNING_REVISION_EXECUTOR_CHECK,
             name="ck_learning_assessment_revision_executor_provenance",
         ),
         CheckConstraint(
@@ -201,10 +192,7 @@ class LearningAssessmentRevision(Base):
             name="ck_learning_assessment_revision_chat_visibility",
         ),
         CheckConstraint(
-            "((origin = 'single_agent' AND team_id IS NULL AND team_version_id IS NULL) OR "
-            "(origin IN ('custom_team', 'published_course_team') AND team_id IS NOT NULL "
-            "AND team_version_id IS NOT NULL))",
-            name="ck_learning_assessment_revision_team_origin",
+            LEARNING_TEAM_ORIGIN_CHECK, name="ck_learning_assessment_revision_team_origin"
         ),
         CheckConstraint("length(content_hash) = 64", name="ck_learning_assessment_revision_hash"),
         ForeignKeyConstraint(
@@ -234,13 +222,13 @@ class LearningAssessmentRevision(Base):
         ForeignKeyConstraint(
             ["conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_assessment_revision_conversation",
         ),
         ForeignKeyConstraint(
             ["team_id", "team_version_id"],
             ["team_versions.team_id", "team_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_assessment_revision_team_version",
         ),
         UniqueConstraint(
@@ -256,7 +244,7 @@ class LearningAssessmentMutation(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     client_event_id: Mapped[str] = mapped_column(String(36), nullable=False)
     operation: Mapped[str] = mapped_column(String(8), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -278,7 +266,7 @@ class LearningAssessmentMutation(Base):
         ForeignKeyConstraint(
             ["conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_assessment_mutation_conversation",
         ),
         ForeignKeyConstraint(
@@ -312,10 +300,10 @@ class LearningAssessmentResourceGrant(Base):
     assessment_id: Mapped[str] = mapped_column(String(36), nullable=False)
     owner_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     participant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     team_member_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     agent_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     operation: Mapped[str] = mapped_column(String(8), nullable=False, default="edit")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -352,7 +340,7 @@ class LearningAssessmentResourceGrant(Base):
         ForeignKeyConstraint(
             ["conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_assessment_grant_conversation",
         ),
         ForeignKeyConstraint(
@@ -370,7 +358,7 @@ class LearningAssessmentResourceGrant(Base):
         ForeignKeyConstraint(
             ["agent_version_id"],
             ["agent_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_assessment_grant_agent_version",
         ),
         UniqueConstraint(
@@ -393,15 +381,18 @@ class AssessmentActivity(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    team_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    team_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    publication_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    team_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    team_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    team_name_snapshot: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    publication_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     recipe_id: Mapped[str] = mapped_column(String(120), nullable=False)
-    recipe_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    evaluator_team_member_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    evaluator_agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    boundary_team_member_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    boundary_agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    recipe_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    evaluator_team_member_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    evaluator_agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    boundary_team_member_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    boundary_agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     publisher_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     questions_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     question_selection_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -420,43 +411,43 @@ class AssessmentActivity(Base):
         ForeignKeyConstraint(
             ["team_id", "team_version_id"],
             ["team_versions.team_id", "team_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_team_version",
         ),
         ForeignKeyConstraint(
             ["publication_id"],
             ["course_team_publications.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_publication",
         ),
         ForeignKeyConstraint(
             ["recipe_version_id"],
             ["agent_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_recipe_version",
         ),
         ForeignKeyConstraint(
             ["team_version_id", "evaluator_team_member_id"],
             ["team_version_members.team_version_id", "team_version_members.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_evaluator_member",
         ),
         ForeignKeyConstraint(
             ["team_version_id", "boundary_team_member_id"],
             ["team_version_members.team_version_id", "team_version_members.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_boundary_member",
         ),
         ForeignKeyConstraint(
             ["evaluator_agent_version_id"],
             ["agent_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_evaluator_version",
         ),
         ForeignKeyConstraint(
             ["boundary_agent_version_id"],
             ["agent_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_boundary_version",
         ),
         ForeignKeyConstraint(
@@ -485,9 +476,9 @@ class AssessmentActivityQuestion(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     activity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     selection_revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    knowledge_set_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    question_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    knowledge_set_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    question_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     required: Mapped[bool] = mapped_column(nullable=False, default=True)
@@ -507,7 +498,7 @@ class AssessmentActivityQuestion(Base):
         ForeignKeyConstraint(
             ["asset_id", "knowledge_set_id"],
             ["knowledge_assets.id", "knowledge_assets.knowledge_set_id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_question_asset",
         ),
         UniqueConstraint(
@@ -526,7 +517,7 @@ class AssessmentActivityQuestion(Base):
         ForeignKeyConstraint(
             ["question_version_id"],
             ["knowledge_asset_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_activity_question_version",
         ),
         Index(
@@ -547,9 +538,12 @@ class AssessmentAttempt(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     activity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     team_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    team_name_snapshot: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
     recipe_id: Mapped[str] = mapped_column(String(120), nullable=False)
     actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    source_conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     chat_visibility: Mapped[str] = mapped_column(String(16), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -601,17 +595,12 @@ class AssessmentAttempt(Base):
             name="ck_assessment_attempt_abandonment_reason",
         ),
         CheckConstraint(
-            "abandonment_reason IS NULL OR abandonment_reason IN "
-            "('user_redo', 'user_abandoned', 'chat_withdrawn')",
+            ATTEMPT_ABANDON_REASON_CHECK,
             name="ck_assessment_attempt_abandonment_reason_kind",
         ),
         ForeignKeyConstraint(
-            ["activity_id", "team_id", "recipe_id"],
-            [
-                "assessment_activities.id",
-                "assessment_activities.team_id",
-                "assessment_activities.recipe_id",
-            ],
+            ["activity_id"],
+            ["assessment_activities.id"],
             ondelete="RESTRICT",
             name="fk_assessment_attempt_activity",
         ),
@@ -621,7 +610,7 @@ class AssessmentAttempt(Base):
         ForeignKeyConstraint(
             ["source_conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_attempt_conversation",
         ),
         UniqueConstraint("id", "activity_id", name="uq_assessment_attempt_activity_scope"),
@@ -677,11 +666,7 @@ class AssessmentAttemptQuestion(Base):
             name="ck_assessment_attempt_question_status",
         ),
         CheckConstraint(
-            "(status='not_presented' AND presented_at IS NULL AND question_version_id IS NULL "
-            "AND content_json IS NULL AND content_hash IS NULL) OR "
-            "(status IN ('presented', 'resolved') AND presented_at IS NOT NULL "
-            "AND question_version_id IS NOT NULL AND content_json IS NOT NULL "
-            "AND length(content_hash)=64)",
+            ATTEMPT_QUESTION_SNAPSHOT_CHECK,
             name="ck_assessment_attempt_question_snapshot",
         ),
         CheckConstraint(
@@ -710,7 +695,7 @@ class AssessmentAttemptQuestion(Base):
         ForeignKeyConstraint(
             ["question_version_id"],
             ["knowledge_asset_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_assessment_attempt_question_version",
         ),
         ForeignKeyConstraint(
@@ -1009,7 +994,7 @@ class LearningBoundary(Base):
     activity_id: Mapped[str] = mapped_column(String(36), nullable=False)
     owner_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     current_revision_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -1043,7 +1028,7 @@ class LearningBoundary(Base):
         ForeignKeyConstraint(
             ["conversation_id"],
             ["agent_conversations.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_boundary_conversation",
         ),
         UniqueConstraint("attempt_id", name="uq_learning_boundary_attempt"),
@@ -1063,8 +1048,8 @@ class LearningBoundaryRevision(Base):
     revision_seq: Mapped[int] = mapped_column(Integer, nullable=False)
     previous_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     actor_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    summarizer_team_member_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    summarizer_agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    summarizer_team_member_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    summarizer_agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     source_model_call_id: Mapped[str] = mapped_column(String(36), nullable=False)
     source_tool_call_id: Mapped[str] = mapped_column(String(120), nullable=False)
     content_json: Mapped[str] = mapped_column(Text, nullable=False)
@@ -1095,13 +1080,13 @@ class LearningBoundaryRevision(Base):
         ForeignKeyConstraint(
             ["summarizer_team_member_id"],
             ["team_version_members.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_boundary_revision_member",
         ),
         ForeignKeyConstraint(
             ["summarizer_agent_version_id"],
             ["agent_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_learning_boundary_revision_agent_version",
         ),
         UniqueConstraint(

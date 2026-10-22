@@ -732,6 +732,18 @@ def test_deleted_published_team_chat_remains_readable(
     opened = client.get(f"/api/v1/conversations/{session['id']}")
     assert opened.status_code == 200, opened.text
     assert opened.json()["team"]["name"] == session["team"]["name"]
+    assert opened.json()["can_send"] is False
+    refused = client.post(
+        f"/api/v1/conversations/{session['id']}/messages:stream",
+        headers={**_headers(student_csrf), "Accept": "text/event-stream"},
+        json={
+            "request_id": str(uuid4()),
+            "expected_revision": opened.json()["revision"],
+            "message": "hi",
+        },
+    )
+    assert refused.status_code == 409
+    assert refused.json()["code"] == "team_deleted"
 
 
 def test_a_chat_says_its_publisher_deleted_the_agent_or_a_team_member(

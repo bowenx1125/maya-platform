@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 from typing import NoReturn, cast
@@ -123,6 +124,8 @@ from app.modules.org.access import WorkspaceMember
 from app.providers.control_repository import ProviderRepository
 from app.providers.factory import embedding_provider as select_embedding_provider
 from app.providers.standing_consent import apply_standing_provider_consent
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Agents"])
 
@@ -312,43 +315,10 @@ def _reclaim_abandoned_agent_name(
         )
         if has_documents is not None or _agent_has_history(db, candidate.id):
             continue
-        timestamp = _time()
-        candidate.deleted_at = timestamp
-        candidate.status = "archived"
-        candidate.updated_at = timestamp
+        from app.modules.real_delete import hard_delete_agent
+
+        hard_delete_agent(db, candidate, None)
     db.flush()
-
-
-def _retire_agent_documents(db: Session, agent: Agent) -> None:
-    """Take a deleted Agent's own RAG files out of the library with it.
-
-    Only files its owner uploaded and no other live Agent uses leave; another
-    Agent's binding keeps a shared file listed. This is the same library-only
-    hide as deleting the file itself, so frozen snapshots behind chat history
-    keep their copies.
-    """
-
-    own_version_ids = select(AgentVersion.id).where(AgentVersion.agent_id == agent.id)
-    used_elsewhere = (
-        select(AgentVersionDocument.document_id)
-        .join(AgentVersion, AgentVersion.id == AgentVersionDocument.agent_version_id)
-        .join(Agent, Agent.id == AgentVersion.agent_id)
-        .where(Agent.id != agent.id, Agent.deleted_at.is_(None))
-    )
-    db.execute(
-        update(KnowledgeDocument)
-        .where(
-            KnowledgeDocument.id.in_(
-                select(AgentVersionDocument.document_id).where(
-                    AgentVersionDocument.agent_version_id.in_(own_version_ids)
-                )
-            ),
-            KnowledgeDocument.id.not_in(used_elsewhere),
-            KnowledgeDocument.owner_user_id == agent.owner_user_id,
-            KnowledgeDocument.workspace_state == "active",
-        )
-        .values(workspace_state="hidden", updated_at=_time())
-    )
 
 
 def _sync_markdown_name(
@@ -524,18 +494,7 @@ def _agent_has_history(db: Session, agent_id: str) -> bool:
             IdempotencyRecord.state == "pending",
         )
     )
-    if publish_guard is not None:
-        return True
-
-    # Debate models are a vertical Wave 2 module.  Importing lazily keeps the
-    # earlier isolated Agent/schema tests free of a circular module import,
-    # while production and migration schemas always register this table.
-    from app.modules.debates.models import DebateParticipant
-
-    return (
-        db.scalar(select(DebateParticipant.id).where(DebateParticipant.agent_id == agent_id))
-        is not None
-    )
+    return publish_guard is not None
 
 
 def _agent_in_live_team(db: Session, agent_id: str) -> bool:
@@ -1284,8 +1243,12 @@ def delete_agent(
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> Response:
-    """Remove a shared Agent unless a Debate or active publish binds it.
+    """Remove a shared Agent unless a publish is in flight.
+
+    Debates keep their own copy, so a Debate does not block this. Chats stay
+    readable under the snapshotted name and cannot continue.
 
     The final eligibility query and delete run under one ``BEGIN IMMEDIATE``
     transaction.  SQLite's writer lock therefore serializes this operation
@@ -1316,7 +1279,7 @@ def delete_agent(
             abandon_claim(db, record)
             raise conflict(
                 "agent_history_retained",
-                "This Agent is used by a Debate or is being published and cannot be deleted.",
+                "This Agent is being published and cannot be deleted.",
             )
 
         if _agent_in_live_team(db, agent.id):
@@ -1327,19 +1290,9 @@ def delete_agent(
                 "已被放进 Team，请先修改 Team。",
             )
 
-        # Keep immutable versions/snapshots for owner-only chat history. The
-        # shared marker removes access from both student and teacher workspaces.
-        agent.deleted_at = _time()
-        audit = db.get(AgentEditAudit, agent.id)
-        if audit is None:
-            audit = AgentEditAudit(agent_id=agent.id)
-            db.add(audit)
-        audit.deleted_by_user_id = context.user.id
-        audit.deleted_at = agent.deleted_at
-        agent.status = "archived"
-        agent.updated_at = agent.deleted_at
-        _retire_agent_documents(db, agent)
-        db.flush()
+        from app.modules.real_delete import hard_delete_agent
+
+        hard_delete_agent(db, agent, settings.resolved_data_root)
         finish_idempotency(db, record, 204, {})
         saga_checkpoint("delete_agent.before_final_commit")
         db.commit()
@@ -1960,8 +1913,15 @@ def _publish_agent_version_admitted(
         follow_published_agent(db, agent.id)
         # Open chats with this Agent move to the new version (history kept).
         from app.modules.agents.cascade import retarget_agent_chats
+        from app.modules.real_delete import prune_agent_versions
 
         retarget_agent_chats(db, agent.id)
+        try:
+            prune_agent_versions(db, agent.id, settings.resolved_data_root)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("agent_version_prune_failed agent_id=%s", agent.id)
         if generation is not None and not settings.is_test:
             task_manager = getattr(request.app.state, "knowledge_generation_task_manager", None)
             if task_manager is not None:

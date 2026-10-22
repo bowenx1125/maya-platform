@@ -22,6 +22,7 @@ from app.core.errors import PlatformError, not_found
 from app.core.models import IdempotencyRecord, VoiceProfile, VoiceProviderOperation
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
+    abandon_claim,
     assert_claim_owned,
     claim_idempotency,
     finish_idempotency,
@@ -164,7 +165,7 @@ def _enrollment_unresolved(db: Session, profile: VoiceProfile) -> bool:
             select(VoiceProviderOperation.id).where(
                 VoiceProviderOperation.profile_id == profile.id,
                 VoiceProviderOperation.operation_type == "enroll",
-                VoiceProviderOperation.state.in_(("dispatched", "reconciling", "outcome_unknown")),
+                VoiceProviderOperation.state.in_(("dispatched", "reconciling")),
             )
         )
         is not None
@@ -202,6 +203,26 @@ def _remote_voice_ids(
     return list(result.matches), result.visibility_known
 
 
+def _delete_is_settled(db: Session, profile: VoiceProfile) -> bool:
+    """True once no later supplier create can resurrect this voice.
+
+    An unresolved enrollment, or a delete the supplier has not confirmed, keeps
+    the row so a later delete can finish the cleanup. A confirmed delete removes
+    the row and its sample.
+    """
+
+    if _enrollment_unresolved(db, profile):
+        return False
+    operation = db.scalar(
+        select(VoiceProviderOperation.id).where(
+            VoiceProviderOperation.profile_id == profile.id,
+            VoiceProviderOperation.operation_type == "delete",
+            VoiceProviderOperation.state != "succeeded",
+        )
+    )
+    return operation is None
+
+
 def delete_voice_profile(
     db: Session,
     context: AuthContext,
@@ -222,12 +243,8 @@ def delete_voice_profile(
     a later delete (or enrollment completion) can finish the cleanup.
     """
 
-    scoped = visible_student_voice(db, context, profile_id)
-    profile = scoped.profile
-    # A preset is a published supplier name, not an enrolled clone. Students
-    # cannot delete it, and this path must not ask the clone API about it.
-    if is_preset_profile(profile) or profile.scope not in {"group", "personal"}:
-        raise not_found()
+    # Claim before the lookup so a completed delete still replays after the
+    # row is gone. A new key for a missing voice abandons the claim and 404s.
     body_hash = _delete_operation_hash(context, profile_id)
     try:
         record, replay = claim_idempotency(
@@ -247,6 +264,17 @@ def delete_voice_profile(
     if replay is not None:
         return replay
     assert_claim_owned(db, record)
+    try:
+        scoped = visible_student_voice(db, context, profile_id)
+    except PlatformError:
+        abandon_claim(db, record)
+        raise
+    profile = scoped.profile
+    # A preset is a published supplier name, not an enrolled clone. Students
+    # cannot delete it, and this path must not ask the clone API about it.
+    if is_preset_profile(profile) or profile.scope not in {"group", "personal"}:
+        abandon_claim(db, record)
+        raise not_found()
     # A supplier lookup plus delete can outlast the default 10 s lease.
     renew_idempotency_lease(db, record, lease_seconds=DELETE_LEASE_SECONDS)
     profile_id = profile.id
@@ -257,9 +285,25 @@ def delete_voice_profile(
     from app.providers.factory import voice_provider
 
     provider_instance = provider or voice_provider(settings)
+    from app.modules.agents.cascade import affected_agents, bump_agent
 
-    def finish(result_profile: VoiceProfile) -> Any:
+    for item in affected_agents(db, voice_profile_ids=[profile.id]):
+        try:
+            bump_agent(db, settings, item.agent_id, drop_voice_profile_ids=[profile.id])
+        except Exception:
+            LOGGER.exception("voice_delete_cascade_failed agent_id=%s", item.agent_id)
+            db.rollback()
+    current = db.get(VoiceProfile, profile_id)
+    if current is None:
+        raise not_found()
+    profile = current
+
+    def finish(result_profile: VoiceProfile, *, remove: bool = True) -> Any:
         result = voice_profile_dto(result_profile)
+        if remove and _delete_is_settled(db, result_profile):
+            from app.modules.real_delete import hard_delete_voice
+
+            hard_delete_voice(db, result_profile, settings.resolved_data_root)
         finish_idempotency(db, record, 200, result.model_dump(mode="json"))
         db.commit()
         return result
@@ -272,11 +316,25 @@ def delete_voice_profile(
         )
         .order_by(VoiceProviderOperation.created_at)
     )
+    enrollment_unknown = (
+        db.scalar(
+            select(VoiceProviderOperation.id).where(
+                VoiceProviderOperation.profile_id == profile.id,
+                VoiceProviderOperation.operation_type == "enroll",
+                VoiceProviderOperation.state == "outcome_unknown",
+            )
+        )
+        is not None
+    )
     if (
         operation is not None
         and operation.state == "succeeded"
         and not _enrollment_unresolved(db, profile)
+        and not enrollment_unknown
     ):
+        # A delete that succeeded while enrollment was still in flight found
+        # nothing. Once that enrollment is outcome_unknown the supplier voice
+        # may exist, so a later delete has to look again.
         _soft_delete(db, profile, settings)
         return finish(profile)
     if operation is None and profile.status == "deleted":
@@ -290,7 +348,7 @@ def delete_voice_profile(
         # repeat delete is idempotent: the card goes, and the live request
         # keeps the single supplier command.
         _soft_delete(db, profile, settings)
-        return finish(profile)
+        return finish(profile, remove=False)
 
     timestamp = now_utc()
     if operation is None:
@@ -319,7 +377,7 @@ def delete_voice_profile(
             if current is None:
                 raise not_found() from None
             _soft_delete(db, current, settings)
-            return finish(current)
+            return finish(current, remove=False)
     else:
         # Take over an abandoned delete (its request died or timed out),
         # including one stuck in outcome_unknown.

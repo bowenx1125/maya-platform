@@ -2066,6 +2066,9 @@ async def delete_all(
         _detach_surviving_run_operations(db, graph)
         _stored_file_survivor_check(db, graph)
         deleted_rows = _delete_graph(db, graph, captured_triggers)
+        from app.modules.debates.owned_copies import delete_debate_knowledge
+
+        delete_debate_knowledge(db, debate_id, root)
         base_result = DeleteAllResult(
             debate_id=str(debate_id),
             revision=int(debate.revision),

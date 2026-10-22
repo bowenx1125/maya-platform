@@ -26,6 +26,7 @@ from app.core.models import (
     VoiceProviderOperation,
 )
 from app.modules.auth.service import AuthContext
+from app.modules.debates.voice_clones import retain_voice_sample
 from app.modules.knowledge.services import (
     assert_claim_owned,
     claim_idempotency,
@@ -735,26 +736,39 @@ def _settle_profile_status(
     return False
 
 
-def _cleanup_deleted_enrollment(profile: VoiceProfile, provider: VoiceCloneProvider | None) -> None:
-    """Best effort: remove a voice the supplier may have created for a deleted card."""
+def _cleanup_deleted_enrollment(profile: VoiceProfile, provider: VoiceCloneProvider | None) -> bool:
+    """Remove a voice the supplier may have created for a deleted card.
+
+    True only when that supplier voice is confirmed gone. An ambiguous or
+    failed lookup keeps the row so a later delete can look again.
+    """
 
     if provider is None:
-        return
+        return False
     try:
         found = provider.exists(profile.recovery_name, target_model_key=profile.target_model_key)
         # More than one match is ambiguous; never delete a voice that may
         # belong to another profile.
         if found.visibility_known and len(found.matches) == 1:
             provider.delete(found.matches[0], target_model_key=profile.target_model_key)
-            return
+            return True
         if not found.matches and found.visibility_known:
-            return
+            return True
     except VoiceProviderError:
         pass
     LOGGER.warning(
         "Deleted voice may be left at the supplier for later cleanup profile_id=%s",
         profile.id,
     )
+    return False
+
+
+def _retire_deleted_voice(db: Session, profile: VoiceProfile, settings: Settings) -> None:
+    """Drop a deleted card once no supplier voice can come back for it."""
+
+    from app.modules.real_delete import hard_delete_voice
+
+    hard_delete_voice(db, profile, settings.resolved_data_root)
 
 
 def _store_enrollment_success(
@@ -806,14 +820,19 @@ def _store_enrollment_success(
             safe_error_code=None if succeeded else "voice_enrollment_failed",
             output_bytes=result.output_bytes,
         )
+        removed = not valid_external_id
         if valid_external_id and provider is not None:
             try:
                 provider.delete(result.external_voice_id, target_model_key=profile.target_model_key)
+                removed = True
             except VoiceProviderError:
                 LOGGER.warning(
                     "Deleted voice left at the supplier for later cleanup profile_id=%s",
                     profile.id,
                 )
+        if removed:
+            # The caller builds the response from this instance, then drops the row.
+            profile.__dict__["_retire_deleted_voice"] = True
         return profile
     profile.updated_at = now_utc()
     _finish_operation(
@@ -1030,6 +1049,8 @@ def enroll_voice(
                 _claim_provider_operation(db, operation, record.claim_token)
                 if _reconcile_enrollment(db, profile, operation, provider_instance, settings):
                     result = voice_profile_dto(profile)
+                    if profile.__dict__.get("_retire_deleted_voice"):
+                        _retire_deleted_voice(db, profile, settings)
                     finish_idempotency(db, record, 202, result.model_dump(mode="json"))
                     db.commit()
                     return result
@@ -1105,18 +1126,31 @@ def enroll_voice(
                 language=provider_language,
             )
         except VoiceProviderTimeout as exc:
-            if not _settle_profile_status(db, profile, "outcome_unknown", "provider_unavailable"):
-                _cleanup_deleted_enrollment(profile, provider_instance)
+            already_deleted = not _settle_profile_status(
+                db, profile, "outcome_unknown", "provider_unavailable"
+            )
+            supplier_gone = False
+            if already_deleted:
+                supplier_gone = _cleanup_deleted_enrollment(profile, provider_instance)
             _finish_operation(
                 db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
             )
+            if supplier_gone:
+                _retire_deleted_voice(db, profile, settings)
+                db.commit()
             raise _safe_provider_error(exc) from exc
         except VoiceCloneRefusedError as exc:
             # A typed refusal is deterministic, never ambiguous: the profile
             # fails closed and no provider fallback or automatic retry may
-            # re-issue this enrollment.
-            _settle_profile_status(db, profile, "failed", "voice_clone_refused")
+            # re-issue this enrollment. A card already deleted during the call
+            # had no supplier voice, so the row goes with the refusal.
+            already_deleted = not _settle_profile_status(
+                db, profile, "failed", "voice_clone_refused"
+            )
             _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
+            if already_deleted:
+                _retire_deleted_voice(db, profile, settings)
+                db.commit()
             raise _safe_provider_error(exc) from exc
         except VoiceProviderError as exc:
             # Once the durable dispatch row is committed, a generic provider
@@ -1124,11 +1158,18 @@ def enroll_voice(
             # accepted/charged even when the client saw an error.  Keep the
             # operation in reconciliation rather than allowing a same-key
             # retry to issue a second create blindly.
-            if not _settle_profile_status(db, profile, "outcome_unknown", "provider_unavailable"):
-                _cleanup_deleted_enrollment(profile, provider_instance)
+            already_deleted = not _settle_profile_status(
+                db, profile, "outcome_unknown", "provider_unavailable"
+            )
+            supplier_gone = False
+            if already_deleted:
+                supplier_gone = _cleanup_deleted_enrollment(profile, provider_instance)
             _finish_operation(
                 db, operation, state="outcome_unknown", safe_error_code="provider_unavailable"
             )
+            if supplier_gone:
+                _retire_deleted_voice(db, profile, settings)
+                db.commit()
             raise _safe_provider_error(exc) from exc
         try:
             assert_claim_owned(db, record)
@@ -1142,6 +1183,22 @@ def enroll_voice(
         _store_enrollment_success(
             db, profile, operation, provider_result, settings, provider=provider_instance
         )
+        if profile.__dict__.get("_retire_deleted_voice"):
+            result = voice_profile_dto(profile)
+            _retire_deleted_voice(db, profile, settings)
+            if not claim_lost:
+                finish_idempotency(db, record, 202, result.model_dump(mode="json"))
+            db.commit()
+            return result
+        if profile.status == "ready":
+            # Kept so each Debate can create its own independent clone.
+            try:
+                with db.begin_nested():
+                    retain_voice_sample(
+                        db, settings.resolved_data_root, profile, normalized, provider_language
+                    )
+            except Exception:  # noqa: BLE001 - the Voice itself is fine
+                LOGGER.warning("voice_sample_retain_failed profile=%s", profile.id)
         result = voice_profile_dto(profile)
         if not claim_lost:
             finish_idempotency(db, record, 202, result.model_dump(mode="json"))

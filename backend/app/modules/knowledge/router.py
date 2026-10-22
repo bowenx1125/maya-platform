@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -30,9 +31,7 @@ from app.core.models import (
     FileReference,
     Group,
     Job,
-    KnowledgeChunk,
     KnowledgeDocument,
-    KnowledgeDocumentChunk,
     SnapshotDocument,
     StoredFile,
 )
@@ -114,7 +113,8 @@ from app.modules.knowledge.services import (
     visible_student_document,
     visible_student_version,
 )
-from app.modules.knowledge_sets.models import KnowledgeDocumentVersion, KnowledgeSetSource
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Knowledge"])
 KNOWLEDGE_UPLOAD_LEASE_SECONDS = 90
@@ -1195,8 +1195,6 @@ def reindex_knowledge_document(
 )
 def hide_knowledge_document(
     document_id: UUID,
-    background: BackgroundTasks,
-    request: Request,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
@@ -1233,7 +1231,7 @@ def hide_knowledge_document(
     # Owner decision (2026-10-20): deleting a file also drops it from drafts
     # and auto-publishes every live Agent that uses it (agents/cascade.py).
     del enabled
-    from app.modules.agents.cascade import affected_agents, cascade_removed_sources
+    from app.modules.agents.cascade import affected_agents
 
     affected_ids = [
         item.agent_id for item in affected_agents(db, document_ids=[scoped.document.id])
@@ -1259,98 +1257,35 @@ def hide_knowledge_document(
                 AgentVersionDocument.agent_version_id.in_(draft_ids),
             )
         )
-    snapshot_bound = (
-        db.scalar(
-            select(KnowledgeDocumentVersion.id)
-            .where(KnowledgeDocumentVersion.document_id == scoped.document.id)
-            .limit(1)
-        )
-        is not None
-        or db.scalar(
-            select(KnowledgeSetSource.id)
-            .where(KnowledgeSetSource.document_id == scoped.document.id)
-            .limit(1)
-        )
-        is not None
-        or db.scalar(
-            select(SnapshotDocument.id)
-            .where(SnapshotDocument.document_id == scoped.document.id)
-            .limit(1)
-        )
-        is not None
-        or db.scalar(
-            select(KnowledgeChunk.id)
-            .where(KnowledgeChunk.document_id == scoped.document.id)
-            .limit(1)
-        )
-        is not None
-        or db.scalar(
-            select(AgentVersionDocument.agent_version_id)
-            .join(AgentVersion, AgentVersion.id == AgentVersionDocument.agent_version_id)
-            .where(
-                AgentVersionDocument.document_id == scoped.document.id,
-                AgentVersion.state.in_(("published", "superseded")),
-            )
-            .limit(1)
-        )
-        is not None
-    )
-    if snapshot_bound:
-        # Library removal only.  Snapshot rows keep their lineage FK and their
-        # own frozen file bytes; neither is rewritten here.
-        scoped.document.workspace_state = "hidden"
-        scoped.document.updated_at = _now()
-        result = _document_dto(
-            scoped.document,
-            can_manage_visibility=scoped.document.owner_user_id == context.user.id,
-        )
-    else:
-        result = _document_dto(
-            scoped.document,
-            can_manage_visibility=scoped.document.owner_user_id == context.user.id,
-        )
-        result = result.model_copy(update={"workspace_state": "hidden"})
-        stored_file_id = scoped.document.stored_file_id
-        db.execute(
-            delete(KnowledgeDocumentChunk).where(
-                KnowledgeDocumentChunk.document_id == scoped.document.id
-            )
-        )
-        db.execute(
-            delete(AgentVersionDocument).where(
-                AgentVersionDocument.document_id == scoped.document.id
-            )
-        )
-        db.delete(scoped.document)
-        remaining = db.scalar(
-            select(KnowledgeDocument.id)
-            .where(KnowledgeDocument.stored_file_id == stored_file_id)
-            .limit(1)
-        )
-        snapshot_file = db.scalar(
-            select(SnapshotDocument.id)
-            .where(SnapshotDocument.stored_file_id == stored_file_id)
-            .limit(1)
-        )
-        if remaining is None and snapshot_file is None:
-            stored = db.get(StoredFile, stored_file_id)
-            if stored is not None:
-                db.execute(
-                    delete(FileReference).where(FileReference.stored_file_id == stored_file_id)
-                )
-                db.delete(stored)
+    # The card leaves the library. Debate copies and frozen snapshot bytes are
+    # separate files, so the library row and its own storage can go.
+    result = _document_dto(
+        scoped.document,
+        can_manage_visibility=scoped.document.owner_user_id == context.user.id,
+    ).model_copy(update={"workspace_state": "hidden"})
+    document_key = scoped.document.id
+    from app.modules.agents.cascade import bump_agent
+    from app.modules.real_delete import hard_delete_document, prune_agent_versions
+
+    for agent_id in affected_ids:
+        try:
+            bump_agent(db, settings, agent_id, drop_document_ids=[document_key])
+        except Exception:
+            logger.exception("rag_delete_cascade_failed agent_id=%s", agent_id)
+            db.rollback()
+    current = db.get(KnowledgeDocument, document_key)
+    if current is not None:
+        hard_delete_document(db, current, settings.resolved_data_root)
+    for agent_id in affected_ids:
+        try:
+            prune_agent_versions(db, agent_id, settings.resolved_data_root)
+        except Exception:
+            logger.exception("rag_delete_prune_failed agent_id=%s", agent_id)
+            db.rollback()
     finish_idempotency(db, record, 200, result.model_dump(mode="json"))
     saga_checkpoint("hide_knowledge_document.before_final_commit")
     db.commit()
     saga_checkpoint("hide_knowledge_document.after_final_commit")
-    if affected_ids:
-        background.add_task(
-            cascade_removed_sources,
-            get_database(request),
-            settings,
-            agent_ids=affected_ids,
-            document_ids=[str(document_id)],
-        )
     return result
 
 

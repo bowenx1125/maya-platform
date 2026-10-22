@@ -3403,9 +3403,9 @@ export interface components {
             /** @enum {string} */
             slot: "A" | "B" | "C" | "D" | "E";
             order_index: number;
-            agent_id: components["schemas"]["Uuid"];
+            agent_id: components["schemas"]["Uuid"] | null;
             agent_name: string;
-            agent_version_id: components["schemas"]["Uuid"];
+            agent_version_id: components["schemas"]["Uuid"] | null;
             version_label: string;
             knowledge_snapshot_id: components["schemas"]["Uuid"];
             avatar_config: components["schemas"]["AvatarConfig"];

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, idempotency_conflict, not_found, stale_revision
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -221,6 +222,8 @@ def _read_activity_executor(
     else:
         member_id = activity.boundary_team_member_id
         agent_version_id = activity.boundary_agent_version_id
+    if member_id is None or agent_version_id is None:
+        raise conflict("assessment_executor_revoked", "This assessment executor is unavailable.")
     member = db.get(TeamVersionMember, member_id)
     version = db.get(AgentVersion, agent_version_id)
     leader_version = db.get(AgentVersion, activity.recipe_version_id)
@@ -868,8 +871,8 @@ def get_assessment_executor_context(
         turn_id=turn.id,
         result_id=running_results[0].id,
         participant_id=participant.id,
-        team_member_id=participant.team_member_id,
-        agent_version_id=participant.agent_version_id,
+        team_member_id=live_link(participant.team_member_id, "Team member"),
+        agent_version_id=live_link(participant.agent_version_id, "Agent version"),
         activity_id=activity.id,
         attempt_id=attempt.id,
         task_payload_json=_canonical(task_payload),
@@ -933,8 +936,8 @@ def mint_runtime_execution_scope(
         activity_id=activity.id,
         attempt_id=attempt.id,
         executor_participant_id=participant.id,
-        executor_team_member_id=participant.team_member_id,
-        executor_agent_version_id=participant.agent_version_id,
+        executor_team_member_id=live_link(participant.team_member_id, "Team member"),
+        executor_agent_version_id=live_link(participant.agent_version_id, "Agent version"),
         model_call_id=identity.model_call_id,
         tool_call_id=identity.tool_call_id,
         question_payloads=question_payloads,

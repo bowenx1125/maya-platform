@@ -237,11 +237,9 @@ def test_set_create_agent_binding_and_asset_save_are_cas_and_idempotent(
             db.query(KnowledgeAssetVersion)
             .filter(KnowledgeAssetVersion.asset_id == asset_v1["id"])
             .count()
-            == 2
+            == 0
         )
-        current_set = db.get(KnowledgeSet, set_id)
-        assert current_set is not None
-        assert current_set.content_revision == 3
+        assert db.get(KnowledgeSet, set_id) is None
 
 
 def test_group_public_student_projection_omits_rubric_and_its_fingerprint(
@@ -1061,8 +1059,8 @@ def test_set_revocation_is_soft_cas_idempotent_and_blocks_late_writes(
     )
 
     with database.session() as db:
-        assert db.get(KnowledgeSet, set_row["id"]) is not None
-        assert db.query(KnowledgeAssetVersion).filter_by(asset_id=asset.json()["id"]).count() == 1
+        assert db.get(KnowledgeSet, set_row["id"]) is None
+        assert db.query(KnowledgeAssetVersion).filter_by(asset_id=asset.json()["id"]).count() == 0
 
     _peer, peer_csrf = login(client, "bowen")
     peer_delete = client.request(

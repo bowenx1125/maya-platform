@@ -14,7 +14,6 @@ from app.core.errors import PlatformError
 from app.core.models import (
     Agent,
     AgentVersion,
-    AgentVersionDocument,
     FileOperation,
     IdempotencyRecord,
     KnowledgeDocument,
@@ -33,7 +32,6 @@ from app.modules.debates.schemas import DebateDraftRequest, DebateParticipantInp
 from app.modules.debates.setup.service import create_debate_draft
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login, make_foreign_group
 from tests.persona_fixtures import confirmed_persona_fields
@@ -381,6 +379,7 @@ def test_delete_hides_agent_and_preserves_versions_group_files_and_audit(
         document = session.get(KnowledgeDocument, document_id)
         assert document is not None
         source_file_id = document.stored_file_id
+        assert source_file_id
 
     # Audit storage is host-owned and intentionally not an ORM Agent relation.
     # Insert a generic row in the real shared schema and prove Agent deletion
@@ -406,13 +405,10 @@ def test_delete_hides_agent_and_preserves_versions_group_files_and_audit(
     )
     assert deleted.status_code == 204, deleted.text
     with database.session() as session:
-        retained = session.get(Agent, agent["id"])
-        assert retained is not None and retained.deleted_at is not None
-        assert retained.status == "archived"
-        assert session.get(AgentVersion, version_id) is not None
-        assert session.get(AgentVersionDocument, (version_id, document_id)) is not None
-        assert session.get(KnowledgeDocument, document_id) is not None
-        assert session.get(StoredFile, source_file_id) is not None
+        assert session.get(Agent, agent["id"]) is None
+        assert session.get(AgentVersion, version_id) is None
+        assert session.get(KnowledgeDocument, document_id) is None
+        assert session.get(StoredFile, source_file_id) is None
         assert session.get(StoredFile, stored_file_id) is not None
         assert session.get(VoiceProfile, voice_id) is not None
         assert session.get(FileOperation, operation_id) is not None
@@ -477,8 +473,7 @@ def test_same_group_member_soft_deletes_public_agent(
     )
     assert deleted.status_code == 204, deleted.text
     with database.session() as session:
-        kept = session.get(Agent, agent["id"])
-        assert kept is not None and kept.deleted_at is not None
+        assert session.get(Agent, agent["id"]) is None
 
 
 def test_delete_removes_unreferenced_published_agent_from_both_workspaces(
@@ -592,10 +587,10 @@ def test_double_delete_with_a_new_key_is_a_stable_not_found(client: TestClient) 
     assert second.status_code == 404, second.text
 
 
-def test_delete_preserves_snapshots_and_formerly_published_drafts(
+def test_delete_removes_the_agent_and_its_unpublished_snapshot(
     client: TestClient,
 ) -> None:
-    """Tombstones preserve immutable records instead of bypassing their FKs."""
+    """A deleted Agent takes its versions and non-Debate snapshots with it."""
 
     app = cast(Any, client.app)
     database = app.state.database
@@ -631,19 +626,6 @@ def test_delete_preserves_snapshots_and_formerly_published_drafts(
             )
         )
 
-    # A raw FK attempt must lose as well; this proves the database guard is not
-    # being bypassed by the endpoint's application-level history query.
-    session = database.session_factory()
-    try:
-        row = session.get(Agent, snapshot_agent_id)
-        assert row is not None
-        session.delete(row)
-        with pytest.raises(IntegrityError):
-            session.flush()
-    finally:
-        session.rollback()
-        session.close()
-
     _student, csrf = login(client, "bowen")
     for index, agent_id in enumerate((snapshot_agent_id, formerly_published_id)):
         response = client.delete(
@@ -653,9 +635,10 @@ def test_delete_preserves_snapshots_and_formerly_published_drafts(
         assert response.status_code == 204, response.text
         assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
     with database.session() as session:
-        assert session.get(Agent, snapshot_agent_id) is not None
-        assert session.get(AgentVersion, formerly_draft_id) is not None
-        assert session.get(KnowledgeSnapshot, snapshot_id) is not None
+        assert session.get(Agent, snapshot_agent_id) is None
+        assert session.get(AgentVersion, snapshot_version_id) is None
+        assert session.get(AgentVersion, formerly_draft_id) is None
+        assert session.get(KnowledgeSnapshot, snapshot_id) is None
 
 
 def test_description_metadata_does_not_mutate_release_or_debate_inputs(
@@ -750,16 +733,6 @@ def test_delete_and_publish_race_has_one_serialized_winner(
     student_context = _context(database, STUDENT_BOWEN_ID)
     charged_operation_id = str(uuid4())
     with database.session() as session:
-        draft = session.get(AgentVersion, version_id)
-        assert draft is not None
-        saved_draft = (draft.agent_md, draft.revision)
-        saved_documents = set(
-            session.scalars(
-                select(AgentVersionDocument.document_id).where(
-                    AgentVersionDocument.agent_version_id == version_id
-                )
-            )
-        )
         now = datetime.now(UTC)
         session.add(
             ProviderOperation(
@@ -788,6 +761,7 @@ def test_delete_and_publish_race_has_one_serialized_winner(
             _csrf_header="x" * 32,
             context=student_context,
             db=db,
+            settings=settings,
         )
 
     def publish_operation(db: Any) -> Any:
@@ -811,37 +785,12 @@ def test_delete_and_publish_race_has_one_serialized_winner(
     publish_result = second_result if operation_order == "delete-first" else first_result
 
     if _result_status(delete_result) == 204:
-        # Removal now retains a tombstone and draft for existing chat history.
-        # Publication must still lose and must not create a snapshot.
+        # Real deletion removes the Agent. Publication must still lose.
         assert isinstance(publish_result, PlatformError), repr(publish_result)
         assert _result_code(publish_result) in {"not_found", "invalid_state"}
         with database.session() as session:
-            removed = session.get(Agent, agent_id)
-            retained = session.get(AgentVersion, version_id)
-            assert removed is not None and retained is not None
-            assert removed.status == "archived" and removed.deleted_at is not None
-            assert removed.current_published_version_id is None
-            assert retained.agent_id == removed.id and retained.state == "draft"
-            assert (retained.agent_md, retained.revision) == saved_draft
-            assert retained.knowledge_snapshot_id is None
-            assert (
-                session.scalar(
-                    select(KnowledgeSnapshot.id).where(
-                        KnowledgeSnapshot.agent_version_id == version_id
-                    )
-                )
-                is None
-            )
-            assert (
-                set(
-                    session.scalars(
-                        select(AgentVersionDocument.document_id).where(
-                            AgentVersionDocument.agent_version_id == version_id
-                        )
-                    )
-                )
-                == saved_documents
-            )
+            assert session.get(Agent, agent_id) is None
+            assert session.get(AgentVersion, version_id) is None
         assert client.get(f"/api/v1/agents/{agent_id}").status_code == 404
         assert client.get(f"/api/v1/agent-versions/{version_id}").status_code == 404
         visible = client.get(f"/api/v1/groups/{GROUP_DEMO_ID}/agents")
@@ -875,7 +824,7 @@ def test_delete_and_create_debate_race_is_fk_safe(
     client: TestClient,
     operation_order: str,
 ) -> None:
-    """A Debate participant and an Agent delete cannot both commit."""
+    """Deleting an Agent leaves a Debate's copied participant and drops the row."""
 
     database = cast(Any, client.app).state.database
     first_agent_id, _first_version_id, _first_snapshot_id = _insert_published_agent(
@@ -897,6 +846,7 @@ def test_delete_and_create_debate_race_is_fk_safe(
         ],
     )
     student_context = _context(database, STUDENT_BOWEN_ID)
+    settings = cast(Any, client.app).state.settings
 
     def delete_operation(db: Any) -> Any:
         return delete_agent(
@@ -905,6 +855,7 @@ def test_delete_and_create_debate_race_is_fk_safe(
             _csrf_header="x" * 32,
             context=student_context,
             db=db,
+            settings=settings,
         )
 
     def debate_operation(db: Any) -> Any:
@@ -931,21 +882,22 @@ def test_delete_and_create_debate_race_is_fk_safe(
 
     with database.session() as session:
         retained = session.get(Agent, first_agent_id)
-        assert retained is not None
-        participants = session.scalars(
-            select(DebateParticipant).where(
-                DebateParticipant.agent_id == first_agent_id,
-            )
-        ).all()
-        if _result_status(delete_result) == 204:
-            assert isinstance(debate_result, PlatformError), repr(debate_result)
-            assert retained.deleted_at is not None
-            assert len(participants) == 0
+        if _result_status(delete_result) != 204:
+            raise AssertionError(repr(delete_result))
+        assert retained is None
+        if isinstance(debate_result, PlatformError):
+            participants = session.scalars(
+                select(DebateParticipant).where(DebateParticipant.agent_id == first_agent_id)
+            ).all()
+            assert participants == []
         else:
-            assert _result_code(delete_result) == "agent_history_retained", repr(delete_result)
-            assert not isinstance(debate_result, Exception), repr(debate_result)
-            assert retained.deleted_at is None
-            assert len(participants) == 1
+            debate_id = str(debate_result.id)
+            copied = session.scalars(
+                select(DebateParticipant).where(DebateParticipant.debate_id == debate_id)
+            ).all()
+            assert copied
+            assert all(row.agent_md_snapshot for row in copied)
+            assert any(row.agent_id is None for row in copied)
 
 
 @pytest.mark.parametrize("publish_first", [False, True])
@@ -1063,7 +1015,7 @@ def test_http_publish_delete_order_has_stable_envelopes_and_terminal_claims(
         assert claims[publish_key] == "abandoned"
         assert claims[delete_key] == "completed"
         assert snapshots == []
-        assert len(versions) == 1 and versions[0].state == "draft"
+        assert versions == []
         assert guards == []
         assert snapshot_operations == []
         assert snapshot_files == []

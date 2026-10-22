@@ -16,9 +16,11 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Float,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Table,
     Text,
@@ -168,9 +170,16 @@ class DebateParticipant(Base):
     course_id: Mapped[str] = mapped_column(String(36), nullable=False)
     # NULL for a teacher's personal Agent, which belongs to no group.
     group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    agent_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    agent_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    # Live links; NULL once the Agent/version is deleted (2026-10-20). The
+    # Debate keeps its own copy of everything it needs: AGENT.md text,
+    # the knowledge snapshot (frozen file + chunks) and the voice decision.
+    agent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     knowledge_snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    agent_md_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    persona_spec_hash_snapshot: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    voice_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    voice_external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     slot: Mapped[str] = mapped_column(String(1), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     agent_name: Mapped[str] = mapped_column(String(240), nullable=False)
@@ -203,38 +212,34 @@ class DebateParticipant(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["agent_id", "group_id"],
-            ["agents.id", "agents.group_id"],
-            name="fk_debate_participants_agent_group",
-            ondelete="RESTRICT",
+            ["agent_id"],
+            ["agents.id"],
+            name="fk_debate_participants_agent",
+            ondelete="SET NULL",
         ),
         ForeignKeyConstraint(
-            ["agent_version_id", "agent_id", "knowledge_snapshot_id"],
-            [
-                "agent_versions.id",
-                "agent_versions.agent_id",
-                "agent_versions.knowledge_snapshot_id",
-            ],
-            name="fk_debate_participants_version_snapshot",
-            ondelete="RESTRICT",
+            ["agent_version_id"],
+            ["agent_versions.id"],
+            name="fk_debate_participants_agent_version",
+            ondelete="SET NULL",
         ),
         ForeignKeyConstraint(
-            ["knowledge_snapshot_id", "agent_version_id"],
-            ["knowledge_snapshots.id", "knowledge_snapshots.agent_version_id"],
-            name="fk_debate_participants_snapshot_version",
+            ["knowledge_snapshot_id"],
+            ["knowledge_snapshots.id"],
+            name="fk_debate_participants_snapshot",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["requested_voice_profile_id"],
             ["voice_profiles.id"],
             name="fk_debate_participants_requested_voice",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         ForeignKeyConstraint(
             ["effective_voice_profile_id"],
             ["voice_profiles.id"],
             name="fk_debate_participants_effective_voice",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         UniqueConstraint("debate_id", "slot", name="uq_debate_participants_debate_slot"),
         UniqueConstraint("debate_id", "order_index", name="uq_debate_participants_debate_order"),
@@ -271,7 +276,7 @@ class DebateParticipant(Base):
         CheckConstraint(
             "(effective_voice_kind = 'mock_sentinel' AND effective_voice_profile_id IS NULL) OR "
             "(effective_voice_kind = 'platform_profile' "
-            "AND effective_voice_profile_id IS NOT NULL)",
+            "AND (effective_voice_profile_id IS NOT NULL OR voice_snapshot_json IS NOT NULL))",
             name="ck_debate_participants_voice_shape",
         ),
         Index("ix_debate_participants_debate_order", "debate_id", "order_index"),
@@ -326,6 +331,10 @@ class DebateTurn(Base):
             ["debate_participants.id", "debate_participants.knowledge_snapshot_id"],
             name="fk_debate_turns_participant_snapshot",
             ondelete="RESTRICT",
+            # Repointing a Debate onto its own snapshot updates the participant
+            # and its turns in one transaction.
+            deferrable=True,
+            initially="DEFERRED",
         ),
         ForeignKeyConstraint(
             ["audio_file_id"],
@@ -337,7 +346,7 @@ class DebateTurn(Base):
             ["actual_tts_voice_profile_id"],
             ["voice_profiles.id"],
             name="fk_debate_turns_actual_voice_profile",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         UniqueConstraint("debate_id", "turn_index", name="uq_debate_turns_debate_index"),
         UniqueConstraint("id", "participant_id", name="uq_debate_turns_id_participant"),
@@ -396,8 +405,7 @@ class DebateTurn(Base):
         CheckConstraint(
             "actual_tts_voice_kind IS NULL OR "
             "(actual_tts_voice_kind = 'mock_sentinel' AND actual_tts_voice_profile_id IS NULL) OR "
-            "(actual_tts_voice_kind = 'platform_profile' "
-            "AND actual_tts_voice_profile_id IS NOT NULL)",
+            "actual_tts_voice_kind = 'platform_profile'",
             name="ck_debate_turns_actual_voice_shape",
         ),
         Index("ix_debate_turns_debate_index", "debate_id", "turn_index"),
@@ -649,3 +657,78 @@ __all__ = [
     "PositionHistory",
     "TurnSource",
 ]
+
+
+class DebateVoiceClone(Base):
+    """A provider voice clone owned by one Debate (2026-10-20).
+
+    Created from the platform Voice's retained sample when the Debate is
+    created, so deleting the platform Voice never changes a Debate's audio.
+    ``debate_id`` deliberately has no FK: the clone outlives the Debate row
+    just long enough for the sweeper to delete the provider voice.
+    """
+
+    __tablename__ = "debate_voice_clones"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_voice_profile_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False, default="create")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    provider_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_model_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    sample_file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("stored_files.id", ondelete="RESTRICT", name="fk_debate_voice_clones_sample"),
+        nullable=True,
+    )
+    sample_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    recovery_name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "debate_id", "source_voice_profile_id", name="uq_debate_voice_clones_debate_voice"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'ready', 'failed', 'no_sample')",
+            name="ck_debate_voice_clones_status",
+        ),
+        CheckConstraint("origin IN ('create', 'backfill')", name="ck_debate_voice_clones_origin"),
+        CheckConstraint("attempts >= 0", name="ck_debate_voice_clones_attempts"),
+        Index("ix_debate_voice_clones_status", "status"),
+    )
+
+
+class DebateKnowledgeCopy(Base):
+    """Canonical Knowledge markdown frozen onto one Debate participant.
+
+    RAG bytes live in a ``knowledge_snapshots`` row with ``owner_debate_id``
+    set. This row is the Knowledge set text, with no FK back to the live set,
+    so Brainform can delete the set without changing the Debate.
+    """
+
+    __tablename__ = "debate_knowledge_copies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    participant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_knowledge_set_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "participant_id",
+            "source_knowledge_set_id",
+            name="uq_debate_knowledge_copies_participant_set",
+        ),
+        CheckConstraint("length(content_hash) = 64", name="ck_debate_knowledge_copies_hash"),
+        Index("ix_debate_knowledge_copies_debate", "debate_id"),
+    )

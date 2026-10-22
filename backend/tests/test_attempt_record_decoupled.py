@@ -114,7 +114,7 @@ def test_rule1_deleted_chat_keeps_attempt_and_record(reentry_env: Any) -> None: 
             )
         ).first()
         actor = get_auth_context(db, ctx["settings"], ctx["token"])
-        course_id = db.get(Conversation, ctx["source_id"]).course_id
+        course_id = db.get(Conversation, ctx["new_id"]).course_id
         listed = list_my_assessment_attempts(db, actor, course_id=course_id)
         assert ctx["attempt_id"] in str(listed)
 
@@ -142,13 +142,11 @@ def test_rule3_continue_reopens_attempt_with_answers(reentry_env: Any) -> None: 
                 )
             )
         }
-        with pytest.raises(PlatformError) as raised:
-            _start(db, ctx, "继续")
-        assert raised.value.code == "assessment_resume_original_conversation"
-        assert raised.value.details["conversation_id"] == ctx["source_id"]
+        _start(db, ctx, "继续")
     with ctx["database"].session() as db:
-        source = db.get(Conversation, ctx["source_id"])
-        assert source is not None and source.withdrawn_at is None
+        assert db.get(Conversation, ctx["source_id"]) is None
+        attempt = db.get(AssessmentAttempt, ctx["attempt_id"])
+        assert attempt is not None and attempt.source_conversation_id == ctx["new_id"]
         unfinished = _unfinished(db, ctx["user_id"], ctx["team_id"])
         assert [a.id for a in unfinished] == [ctx["attempt_id"]]
         after = {
@@ -160,10 +158,9 @@ def test_rule3_continue_reopens_attempt_with_answers(reentry_env: Any) -> None: 
             )
         }
         assert after == before
-        # Rule 4: the resumed attempt keeps its answers and edit path; the
-        # prompt is only told it was resumed.
+        resumed_chat = db.get(Conversation, ctx["new_id"])
         assert is_resumed_attempt(db, ctx["attempt_id"])
-        assert _attempt_was_resumed(db, source)
+        assert _attempt_was_resumed(db, resumed_chat)
         assert "Do not re-ask answered questions" in RESUMED_ATTEMPT_NOTE
 
 
@@ -298,13 +295,11 @@ def test_rule4_resumed_attempt_keeps_answer_editing(reentry_env: Any) -> None:  
     assert created.status_code == 200, created.text
     ctx = {"settings": settings, "token": token, "new_id": created.json()["id"]}
     with database.session() as db:
-        with pytest.raises(PlatformError) as raised:
-            _start(db, ctx, "继续")
-        assert raised.value.code == "assessment_resume_original_conversation"
+        _start(db, ctx, "继续")
     with database.session() as db:
         actor = get_auth_context(db, settings, token)
-        resumed = get_assessment_runtime_context(db, actor, source_id)
+        resumed = get_assessment_runtime_context(db, actor, ctx["new_id"])
         assert resumed is not None and str(resumed.attempt.id) == attempt_id
-        target = _edit_target(db, actor, source_id, "修改第1题：我认为是光合作用")
+        target = _edit_target(db, actor, ctx["new_id"], "修改第1题：我认为是光合作用")
         assert isinstance(target, tuple), target
         assert str(target[0]) == str(version) and target[1] == "我认为是光合作用"

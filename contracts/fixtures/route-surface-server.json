@@ -13370,13 +13370,27 @@
             "maximum": 4
           },
           "agent_id": {
-            "$ref": "#/components/schemas/Uuid"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "agent_name": {
             "type": "string"
           },
           "agent_version_id": {
-            "$ref": "#/components/schemas/Uuid"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "version_label": {
             "type": "string",

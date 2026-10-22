@@ -8,7 +8,7 @@ import re
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -68,16 +68,19 @@ def _active_attempt(
     db: Session,
     *,
     actor_user_id: str,
-    team_id: str,
+    team_id: str | None,
     recipe_id: str,
 ) -> AssessmentAttempt | None:
     """The learner's one unfinished attempt for this recipe, whatever its Chat.
 
     Owner rule (2026-10-20): Chat and Record are decoupled. Deleting the Chat
     does not end or remove the attempt; it stays in progress until the student
-    chooses to continue it or restart.
+    chooses to continue it or restart. A Team that was really deleted has no id
+    left to match.
     """
 
+    if team_id is None:
+        return None
     return db.scalar(
         select(AssessmentAttempt)
         .where(
@@ -119,10 +122,21 @@ def unfinished_attempt_elsewhere(
             AssessmentAttempt.actor_user_id == actor_user_id,
             AssessmentAttempt.team_id == team_id,
             AssessmentAttempt.status.in_(("in_progress", "paused")),
-            AssessmentAttempt.source_conversation_id != conversation_id,
+            or_(
+                AssessmentAttempt.source_conversation_id.is_(None),
+                AssessmentAttempt.source_conversation_id != conversation_id,
+            ),
         )
         .order_by(AssessmentAttempt.started_at.desc(), AssessmentAttempt.id.desc())
     )
+
+
+def source_chat_missing(db: Session, attempt: AssessmentAttempt) -> bool:
+    """The Chat that owned this attempt was deleted, so it cannot be reopened."""
+
+    if not attempt.source_conversation_id:
+        return True
+    return db.get(Conversation, attempt.source_conversation_id) is None
 
 
 def attempt_can_continue(db: Session, attempt: AssessmentAttempt) -> bool:
@@ -167,6 +181,40 @@ def continue_unfinished_attempt(db: Session, attempt: AssessmentAttempt) -> str 
     )
     db.flush()
     return conversation.id
+
+
+def adopt_unfinished_attempt(db: Session, attempt: AssessmentAttempt, conversation_id: str) -> None:
+    """Continue an attempt whose Chat was deleted, on the Chat the student is in.
+
+    The answers stay on the attempt. The deleted transcript is not restored.
+    """
+
+    if attempt.status not in ("in_progress", "paused"):
+        raise conflict("assessment_state_invalid", "Only an unfinished attempt can be continued.")
+    if attempt.status == "paused":
+        attempt.status = "in_progress"
+    attempt.source_conversation_id = conversation_id
+    attempt.updated_at = _now()
+    attempt.revision += 1
+    db.add(
+        _event(
+            attempt=attempt,
+            actor_user_id=attempt.actor_user_id,
+            client_event_id=str(uuid4()),
+            event_kind="resume",
+            classification=None,
+            request_hash=_hash(
+                _canonical(
+                    {
+                        "attempt_id": attempt.id,
+                        "conversation_id": conversation_id,
+                        "reason": "continue_deleted_chat",
+                    }
+                )
+            ),
+        )
+    )
+    db.flush()
 
 
 def restart_unfinished_attempt(db: Session, attempt: AssessmentAttempt) -> None:
@@ -395,7 +443,7 @@ def _context(
             if activity_question is None or activity_question.question_version_id is None:
                 raise conflict("assessment_state_invalid", "The current Question is unavailable.")
             set_row = db.get(KnowledgeSet, activity_question.knowledge_set_id)
-            if set_row is None:
+            if set_row is None or activity_question.asset_id is None:
                 raise conflict(
                     "assessment_resource_revoked", "The current Question is unavailable."
                 )
@@ -841,12 +889,15 @@ def append_follow_up_questions(
     attempt.revision += 1
     attempt.updated_at = _now()
     db.flush()
-    context = _context(db, attempt, attempt.source_conversation_id)
+    conversation_id = attempt.source_conversation_id
+    if conversation_id is None:
+        return True
+    context = _context(db, attempt, conversation_id)
     if context.current_question is not None:
         mark_attempt_question_presented(
             db,
             actor,
-            attempt.source_conversation_id,
+            conversation_id,
             question_version_id=context.current_question.question_version_id,
         )
     return True
@@ -1069,10 +1120,12 @@ def _attempt_for_start_replay(
     db: Session,
     *,
     actor_user_id: str,
-    team_id: str,
+    team_id: str | None,
     recipe_id: str,
     client_event_id: str,
 ) -> AssessmentAttempt | None:
+    if team_id is None:
+        return None
     return db.scalar(
         select(AssessmentAttempt)
         .join(AssessmentAttemptEvent, AssessmentAttemptEvent.attempt_id == AssessmentAttempt.id)
@@ -1122,9 +1175,9 @@ def start_or_resume_attempt(
         return _context(db, active, conversation.id)
     if active is not None:
         # Owner rule (2026-10-20): never silently give up an unfinished attempt.
-        # The student chooses 继续/重新做 (see team_runtime explicit start). Only
-        # an attempt whose Chat can no longer be used (republished) is given up.
-        if attempt_can_continue(db, active):
+        # The student chooses 继续/重新做. A deleted Chat still holds that
+        # attempt, so it asks too. Only a republished Chat is given up.
+        if attempt_can_continue(db, active) or source_chat_missing(db, active):
             raise conflict(
                 "assessment_resume_choice_required",
                 RESUME_CHOICE_PROMPT,
@@ -1402,6 +1455,8 @@ def _record_answer_or_skip(
     classification: str,
     request_hash: str,
 ) -> LearningRecord:
+    if attempt.source_conversation_id is None:
+        raise not_found()
     conversation, provenance = _authorized_provenance(db, actor, attempt.source_conversation_id)
     if conversation.chat_visibility != attempt.chat_visibility:
         raise not_found()
@@ -1801,6 +1856,8 @@ def apply_attempt_lifecycle_action(
 
     attempt = db.get(AssessmentAttempt, str(attempt_id))
     if attempt is None or attempt.actor_user_id != str(actor.user.id):
+        raise not_found()
+    if attempt.source_conversation_id is None:
         raise not_found()
     conversation, _provenance = _authorized_provenance(db, actor, attempt.source_conversation_id)
     activity = ensure_assessment_activity(db, actor, conversation.id)

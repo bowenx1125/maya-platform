@@ -172,9 +172,8 @@ def test_groupmate_soft_deletes_public_agent_and_is_recorded(client):
     deleted = client.delete(f"/api/v1/agents/{agent['id']}", headers=_headers(kaikai_csrf))
     assert deleted.status_code == 204, deleted.text
     with client.app.state.database.session() as db:
-        row = db.get(Agent, agent["id"])
-        assert row.deleted_at is not None and row.status == "archived"
-        assert db.get(AgentEditAudit, agent["id"]).deleted_by_user_id == KAIKAI_ID
+        assert db.get(Agent, agent["id"]) is None
+        assert db.get(AgentEditAudit, agent["id"]) is None
 
 
 def test_groupmate_cannot_touch_private_agent_over_http(client):

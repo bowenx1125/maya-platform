@@ -568,7 +568,7 @@ class AgentVersionDocument(Base):
         String(36), ForeignKey("agent_versions.id", ondelete="CASCADE"), primary_key=True
     )
     document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), primary_key=True
+        String(36), ForeignKey("knowledge_documents.id", ondelete="CASCADE"), primary_key=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -594,11 +594,15 @@ class KnowledgeSnapshot(Base):
     __tablename__ = "knowledge_snapshots"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    agent_version_id: Mapped[str] = mapped_column(
+    agent_version_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("agent_versions.id", ondelete="RESTRICT"),
-        nullable=False,
+        ForeignKey("agent_versions.id", ondelete="SET NULL"),
+        nullable=True,
     )
+    # Set on the deep copy a Debate keeps. Null on an Agent's own snapshot.
+    # No FK: the copy outlives nothing except the Debate, and deletion removes
+    # it in the same transaction as the Debate row.
+    owner_debate_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     stored_file_id: Mapped[str] = mapped_column(
         "combined_file_id",
         String(36),
@@ -659,6 +663,7 @@ class KnowledgeSnapshot(Base):
             name="ck_knowledge_snapshots_embedding_identity",
         ),
         UniqueConstraint("agent_version_id", name="uq_knowledge_snapshots_agent_version"),
+        Index("ix_knowledge_snapshots_owner_debate", "owner_debate_id"),
     )
 
     @property
@@ -759,8 +764,8 @@ class SnapshotDocument(Base):
     snapshot_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("knowledge_snapshots.id", ondelete="CASCADE"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     stored_file_id: Mapped[str] = mapped_column(
         "frozen_file_id",
@@ -818,8 +823,8 @@ class KnowledgeChunk(Base):
     snapshot_document_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("snapshot_documents.id", ondelete="CASCADE"), nullable=False
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("knowledge_documents.id", ondelete="RESTRICT"), nullable=False
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("knowledge_documents.id", ondelete="SET NULL"), nullable=True
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_text: Mapped[str] = mapped_column("text", Text, nullable=False)
@@ -1094,6 +1099,14 @@ class VoiceProfile(Base):
     provider_key: Mapped[str] = mapped_column(String(32), nullable=False)
     target_model_key: Mapped[str] = mapped_column(String(120), nullable=False)
     external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # The normalized enrollment sample, kept so a Debate can create its own
+    # independent clone (2026-10-20). NULL for voices enrolled before 0077.
+    sample_file_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("stored_files.id", ondelete="RESTRICT", name="fk_voice_profiles_sample"),
+        nullable=True,
+    )
+    sample_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     recovery_name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -1167,7 +1180,7 @@ class VoiceProviderOperation(Base):
         String(36),
         ForeignKey(
             "voice_profiles.id",
-            ondelete="RESTRICT",
+            ondelete="CASCADE",
             name="fk_voice_provider_operations_profile",
         ),
         nullable=False,
@@ -1432,7 +1445,7 @@ class ProviderExportManifest(Base):
         String(36),
         ForeignKey(
             "agent_versions.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
             name="fk_provider_export_manifests_agent_version",
         ),
         nullable=True,

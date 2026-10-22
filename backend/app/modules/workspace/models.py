@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.models import Base
+from app.modules.real_delete_checks import CONVERSATION_ENTRY_CHECK
 
 
 class Conversation(Base):
@@ -24,10 +25,10 @@ class Conversation(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"))
     agent_version_id: Mapped[str | None] = mapped_column(
-        ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("agent_versions.id", ondelete="SET NULL"), nullable=True
     )
     snapshot_id: Mapped[str | None] = mapped_column(
-        ForeignKey("knowledge_snapshots.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("knowledge_snapshots.id", ondelete="SET NULL"), nullable=True
     )
     agent_name_snapshot: Mapped[str] = mapped_column(
         Text, nullable=False, default="", server_default=""
@@ -45,7 +46,7 @@ class Conversation(Base):
         String(32), nullable=False, default="single_agent", server_default="single_agent"
     )
     team_id: Mapped[str | None] = mapped_column(
-        ForeignKey("teams.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
     )
     team_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     team_owner_user_id: Mapped[str | None] = mapped_column(
@@ -54,12 +55,24 @@ class Conversation(Base):
     team_name_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
     team_authorization_epoch: Mapped[int | None] = mapped_column(Integer, nullable=True)
     publication_id: Mapped[str | None] = mapped_column(
-        ForeignKey("course_team_publications.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("course_team_publications.id", ondelete="SET NULL"), nullable=True
     )
     publication_epoch: Mapped[int | None] = mapped_column(Integer, nullable=True)
     revision: Mapped[int] = mapped_column(Integer, default=0)
     active_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the Agent or Team row is removed. The chat stays readable and cannot continue.
+    source_removed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    history_agent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    history_agent_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    history_version_label: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    agent_avatar_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    history_team_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    history_team_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     # The owner's own name for the Chat; empty keeps the automatic one.
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -70,28 +83,12 @@ class Conversation(Base):
         CheckConstraint(
             "chat_visibility IN ('private', 'public')", name="ck_conversations_privacy"
         ),
-        CheckConstraint(
-            "(entry_kind = 'agent' AND origin = 'single_agent' AND agent_version_id IS NOT NULL "
-            "AND team_id IS NULL AND team_version_id IS NULL AND team_owner_user_id IS NULL "
-            "AND team_name_snapshot IS NULL AND team_authorization_epoch IS NULL "
-            "AND publication_id IS NULL AND publication_epoch IS NULL) OR "
-            "(entry_kind IN ('team', 'maya_team') AND agent_version_id IS NULL AND "
-            "snapshot_id IS NULL "
-            "AND team_id IS NOT NULL AND team_version_id IS NOT NULL AND "
-            "team_owner_user_id IS NOT NULL "
-            "AND team_name_snapshot IS NOT NULL AND team_authorization_epoch IS NOT NULL "
-            "AND team_authorization_epoch >= 0 AND "
-            "((entry_kind = 'team' AND origin = 'custom_team' AND publication_id IS"
-            " NULL AND publication_epoch IS NULL) OR "
-            "(entry_kind = 'maya_team' AND origin = 'published_course_team' AND "
-            "publication_id IS NOT NULL "
-            "AND publication_epoch IS NOT NULL AND publication_epoch >= 0)))",
-            name="ck_conversations_entry",
-        ),
+        CheckConstraint(CONVERSATION_ENTRY_CHECK, name="ck_conversations_entry"),
         ForeignKeyConstraint(
             ["team_id", "team_version_id"],
             ["team_versions.team_id", "team_versions.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
+            name="fk_conversations_team_version",
         ),
         UniqueConstraint("id", "team_version_id", name="uq_conversations_team_version"),
         Index("ix_conversations_course_privacy", "course_id", "chat_visibility", "user_id"),
@@ -103,14 +100,14 @@ class ConversationParticipant(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     conversation_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    team_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    team_member_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"))
-    agent_version_id: Mapped[str] = mapped_column(
-        ForeignKey("agent_versions.id", ondelete="RESTRICT")
+    team_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    team_member_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
+    agent_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_versions.id", ondelete="SET NULL")
     )
     snapshot_id: Mapped[str | None] = mapped_column(
-        ForeignKey("knowledge_snapshots.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("knowledge_snapshots.id", ondelete="SET NULL"), nullable=True
     )
     agent_authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     position: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -118,7 +115,7 @@ class ConversationParticipant(Base):
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     avatar_config_json: Mapped[str] = mapped_column(Text, nullable=False)
     invoke_grant_id: Mapped[str | None] = mapped_column(
-        ForeignKey("team_member_invoke_grants.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("team_member_invoke_grants.id", ondelete="SET NULL"), nullable=True
     )
 
     __table_args__ = (
@@ -126,11 +123,18 @@ class ConversationParticipant(Base):
             ["conversation_id", "team_version_id"],
             ["agent_conversations.id", "agent_conversations.team_version_id"],
             ondelete="CASCADE",
+            # A Team chat follows a new Team version in place (2026-10-20).
+            onupdate="CASCADE",
+            name="conversation_participants_conversation_id_team_version_id_fkey",
         ),
         ForeignKeyConstraint(
             ["team_version_id", "team_member_id"],
             ["team_version_members.team_version_id", "team_version_members.id"],
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
+            # Checked at commit, after the member ids are moved too.
+            deferrable=True,
+            initially="DEFERRED",
+            name="conversation_participants_team_version_id_team_member_id_fkey",
         ),
         CheckConstraint(
             "position >= 0 AND agent_authorization_epoch >= 0",
@@ -160,7 +164,7 @@ class ConversationParticipantSet(Base):
         ForeignKey("conversation_participants.id", ondelete="CASCADE"), primary_key=True
     )
     knowledge_set_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_sets.id", ondelete="RESTRICT"), primary_key=True
+        ForeignKey("knowledge_sets.id", ondelete="CASCADE"), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     __table_args__ = (
@@ -176,7 +180,7 @@ class ConversationSharedSet(Base):
         ForeignKey("agent_conversations.id", ondelete="CASCADE"), primary_key=True
     )
     knowledge_set_id: Mapped[str] = mapped_column(
-        ForeignKey("knowledge_sets.id", ondelete="RESTRICT"), primary_key=True
+        ForeignKey("knowledge_sets.id", ondelete="CASCADE"), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     __table_args__ = (
@@ -545,7 +549,7 @@ class AgentAccountMemory(Base):
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     agent_id: Mapped[str] = mapped_column(
-        ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
     )
     course_id: Mapped[str] = mapped_column(
         ForeignKey("courses.id", ondelete="RESTRICT"), nullable=False

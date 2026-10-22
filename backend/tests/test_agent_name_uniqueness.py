@@ -149,8 +149,7 @@ def test_retry_reclaims_own_abandoned_empty_draft_name(client):
     retried = _create(client, csrf, "retry me")
     assert retried.status_code == 201, retried.text
     with client.app.state.database.session() as db:
-        old = db.get(Agent, first.json()["id"])
-        assert old.deleted_at is not None
+        assert db.get(Agent, first.json()["id"]) is None
         assert db.get(Agent, retried.json()["id"]).deleted_at is None
 
 
