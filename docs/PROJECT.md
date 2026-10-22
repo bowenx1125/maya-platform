@@ -234,12 +234,10 @@ updated; Unicode validation equivalent.
 Backend Windows+Linux:2892/45skip;95 Windows failures reproduced on base,covered on
 Linux. PG16:15;frontend1017/1skip;assertions kept.
 
-Release9c68d42b0b1b618fabeb8fc22237c8586152a52e:GitHub main→server bare main→clean FF
-from5dd9690b,prod Compose built0075/0076. Backup
-maya-20261021T093817Z-pre-9c68d42b.sqlite3 (SQLite backup API,integrity=ok),matching
-.pgdump readable; prior images kept. Both backends ready200;frontend/backend/
-Postgres healthy,gateway/autoheal running.0076_agent_editor_audit=ALEMBIC_HEAD;
-public HTTPS200;frontend build9c68d42b;TTL30/hash cap2 confirmed.
+Release9c68d42b0b1b618fabeb8fc22237c8586152a52e:GitHub→bare→FF from5dd9690b;
+Compose built0075/0076. Backup maya-20261021T093817Z-pre-9c68d42b.sqlite3 API/
+integrity=ok,matching .pgdump readable,old images kept. Both ready200,containers
+healthy,0076_agent_editor_audit=ALEMBIC_HEAD;public200/frontend9c68d42b/TTL30/hash2.
 
 Live:10 logins200(max1078ms),30-day cookie,NUL422. Synthetic Agent GET404,2 test
 accounts inactive/sessions revoked,teacher sessions logged out,audit kept. Charged
@@ -279,15 +277,12 @@ final new23 passed. PG105 passed after temp disk recovery;POSIX boundary/reset
 passed. Actions39809567546 billing-blocked before steps.0 real Provider calls;
 classroom capacity open.
 
-Oct23 release:PR #237,build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7;
-GitHub main then server bare main then clean FF from6b1c2a88.
-Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 (backup API,integrity=ok),
-matching .pgdump readable; pre-release images kept. Both backends ready200,
-frontend/backend/PG healthy,gateway/autoheal running;0076_agent_editor_audit matches
-ALEMBIC_HEAD;public HTTPS200,frontend build matches. Live synthetic password change/
-reset preserved current session and revoked old sessions as specified; old password
-rejected,new password accepted. Exact test account inactive,all test sessions closed.
-Charged requests14331 before/after;0 real Provider calls in this run.
+Oct23 #237:build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7; GitHub→bare→FF from6b1c2a88.
+Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 API/integrity=ok,matching .pgdump
+readable,old images kept. Both ready200,containers healthy,0076_agent_editor_audit
+matches,public200/frontend build match. Live password change/reset:current session
+retained,old sessions/password rejected,new password accepted;test account inactive/
+sessions closed. Charged14331 unchanged;0 real Provider calls.
 
 ## Oct23 isolated 50-user concurrency
 
@@ -303,3 +298,13 @@ resets on return. Fixed rerun:50/50 ready; forced two-connection regression fail
 base and passes after fix,plus pool-reset/preexisting-transaction checks. SQLite
 poll regressions pass. This measures HTTP/DB/Mock work,not real-model capacity.
 Scripts load_auth_http/load_chat_http/load_upload_http retain reproducible checks.
+
+Release #239:aa6d6ffd33239110bc57fc8db0cfb963a8f7cfac,GitHub→bare→FF from68c972f2.
+Backup maya-20261022T165903Z-pre-aa6d6ffd.sqlite3 API/integrity=ok;matching .pgdump
+readable,old images kept. Both ready200,containers healthy,schema0076 matches,
+frontend build matches,public200. Load-test probes all200;Compose replacement had
+6 consecutive502 probes (~12s),then recovered. Isolated accounts/data/stack removed.
+
+Self-run:2847 Windows passes;95 failures cleared on Linux (4 shell cases needed LF).
+60 skipped;frontend1045;Ruff/format/mypy/contracts/POSIX passed.
+Actions39818125728 billing-blocked before steps.
