@@ -285,12 +285,19 @@ cannot unlock newer ones. Seven list-read methods abort fetch/body after60s and
 release cache slots. Mock30s responses:five list endpoints105 to10 total calls;
 initial pending reads4 to1. These are synthetic measurements,not classroom capacity.
 
-Self-run checks (Actions billing-blocked): frontend1045 passed/1 skipped,build,
-typecheck,lint; Ruff/format/mypy,contracts158 routes,Latin tables,Prettier,boundary
-probe passed. Backend Windows full:2840 passed/52 skipped;95 old failures reproduced
-on clean base,2 zero-TTL clock flakes passed on rerun. Those97 passed in isolated
-Linux after correcting temporary shell-file line endings. One draft history fixture
-was corrected to the existing owner-only contract; final new regressions23 passed
-(SQLite+PG). PG-related105 passed across initial/recovery runs after replacing a
-full temporary DB volume. POSIX boundary/reset checks passed in Linux. No real
-Provider calls; long classroom capacity and live provider behavior remain untested.
+Self-run CI:frontend1045 passed/1 skipped,build/typecheck/lint; Ruff/format/mypy,
+158-route contracts,Latin/Prettier/boundary probe passed. Windows backend2840/52skip;
+95 base failures plus2 zero-TTL clock flakes all covered in Linux. Draft history
+fixture corrected to owner-only contract;final new23 passed. PG105 passed after
+temporary DB disk recovery;POSIX boundary/reset passed. Actions39809567546 billing-
+blocked before any step. No real Provider calls; classroom capacity remains open.
+
+Oct23 release:PR #237,build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7;
+GitHub main then server bare main then clean FF from6b1c2a88.
+Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 (backup API,integrity=ok),
+matching .pgdump readable; pre-release images retained. Both backends ready200,
+frontend/backend/PG healthy,gateway/autoheal running;0076_agent_editor_audit matches
+ALEMBIC_HEAD;public HTTPS200,frontend build matches. Live synthetic password change/
+reset preserved current session and revoked old sessions as specified; old password
+rejected,new password accepted. Exact test account inactive,all test sessions closed.
+Charged requests14331 before/after;0 real Provider calls in this run.
