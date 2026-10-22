@@ -71,7 +71,6 @@ export type KnowledgeDocumentMutation = {
   agent_version: AgentVersion | null;
 };
 export type RagPreview = components["schemas"]["RagPreview"];
-export type TestChatResponse = components["schemas"]["TestChatResponse"];
 export type PersonaPreviewSpec = {
   schema_version?: string;
   identity: {
@@ -790,7 +789,7 @@ export function isConflict(error: unknown): error is PlatformApiError {
   return (
     error instanceof PlatformApiError &&
     error.status === 409 &&
-    error.code === "stale_revision"
+    (error.code === "stale_revision" || error.code === "stale_base_version")
   );
 }
 
@@ -1319,7 +1318,7 @@ export class PlatformApi {
   controlConversationTurn(
     conversationId: string,
     turnId: string,
-    action: "pause" | "stop" | "resume",
+    action: "pause" | "resume",
   ): Promise<ConversationSession> {
     return this.postJson(
       `conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}:${action}`,
@@ -1953,12 +1952,22 @@ export class PlatformApi {
 
   async nextVersion(
     agentId: string,
-    options: IdempotentMutationOptions = {},
+    options: IdempotentMutationOptions & {
+      /** Published version the editor started from (409 stale_base_version). */
+      expectedBaseVersionId?: string;
+    } = {},
   ): Promise<AgentVersion> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST("/agents/{agent_id}/versions", {
         params: {
           path: { agent_id: agentId },
+          ...(options.expectedBaseVersionId
+            ? {
+                query: {
+                  expected_base_version_id: options.expectedBaseVersionId,
+                },
+              }
+            : {}),
           header: {
             "Idempotency-Key": key,
             "X-CSRF-Token": this.csrfToken ?? "",
@@ -2139,20 +2148,6 @@ export class PlatformApi {
         body: form as unknown as never,
       },
     );
-    return unwrap(result);
-  }
-
-  async testChat(
-    versionId: string,
-    message: string,
-  ): Promise<TestChatResponse> {
-    const result = await this.client.POST("/agent-versions/{version_id}/chat", {
-      params: {
-        path: { version_id: versionId },
-        header: { "X-CSRF-Token": this.csrfToken ?? "" },
-      },
-      body: { message },
-    });
     return unwrap(result);
   }
 

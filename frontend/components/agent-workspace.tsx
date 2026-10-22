@@ -26,6 +26,12 @@ import {
   type KnowledgeSnapshot,
   type RagPreview,
 } from "../lib/api";
+import {
+  clearAgentDraftStash,
+  loadAgentDraftStash,
+  saveAgentDraftStash,
+} from "../lib/agent-draft-stash";
+import { groupLibraryOrClosed } from "../lib/group-library";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
 import { useLocale, useT } from "./locale";
@@ -315,6 +321,12 @@ export function AgentWorkbench({
   const router = useRouter();
   const { locale } = useLocale();
   const { api, user } = useSession();
+  const stashUserId = user?.id;
+  // Read through a ref so the session arriving does not reload the editor.
+  const stashUserIdRef = useRef(stashUserId);
+  useLayoutEffect(() => {
+    stashUserIdRef.current = stashUserId;
+  }, [stashUserId]);
   const workbenchScope =
     actorScopeKey ??
     (versionId
@@ -603,7 +615,7 @@ export function AgentWorkbench({
           nextLibrarySetIds,
         ] = await Promise.all([
           nextAgent.group_id
-            ? api.knowledge(nextAgent.group_id)
+            ? groupLibraryOrClosed(api.knowledge(nextAgent.group_id))
             : api.workspaceDocuments(nextAgent.course_id),
           // Preview is draft-only. A published version is the editor baseline
           // until Done, and its preview request is a not-found.
@@ -659,6 +671,26 @@ export function AgentWorkbench({
           );
           setPendingKnowledgeSetIds(null);
           setConflict(false);
+          // A Done that lost to another editor kept its edits in this
+          // browser; put them straight back on top of the latest version.
+          const stash = loadAgentDraftStash(
+            stashUserIdRef.current,
+            nextAgent.id,
+          );
+          if (stash) {
+            const offeredIds = new Set(
+              offered
+                .filter((document) => document.workspace_state === "active")
+                .map((document) => document.id),
+            );
+            setAgentMd(stash.agent_md);
+            if (stash.avatar_config) setAvatarConfig(stash.avatar_config);
+            setVoiceProfileId(stash.voice_profile_id);
+            setSelectedDocumentIds(
+              stash.document_ids.filter((id) => offeredIds.has(id)),
+            );
+            setNotice("localDraftRestoredNotice");
+          }
         }
       } catch (cause) {
         if (isCurrentScope(requestScope)) setError(cause);
@@ -732,6 +764,17 @@ export function AgentWorkbench({
       <ReadOnlyVersion version={version} agent={agent} backHref={backHref} />
     );
 
+  function stashLocalDraft() {
+    if (!agent?.id) return;
+    saveAgentDraftStash(stashUserId, agent.id, {
+      agent_md: agentMd,
+      avatar_config: avatarConfig ?? null,
+      voice_profile_id: voiceProfileId,
+      document_ids: selectedDocumentIds,
+      base_version_id: version?.id ?? null,
+    });
+  }
+
   async function saveDraft() {
     const requestScope = workbenchScope;
     abandonUploadIntent();
@@ -761,7 +804,10 @@ export function AgentWorkbench({
       return next;
     } catch (cause) {
       if (isCurrentScope(requestScope)) {
-        if (isConflict(cause)) setConflict(true);
+        if (isConflict(cause)) {
+          stashLocalDraft();
+          setConflict(true);
+        }
         setError(cause);
       }
     } finally {
@@ -1177,7 +1223,10 @@ export function AgentWorkbench({
       await publishCurrent(retry);
     } catch (cause) {
       if (!isCurrentScope(requestScope)) return;
-      if (isConflict(cause)) setConflict(true);
+      if (isConflict(cause)) {
+        stashLocalDraft();
+        setConflict(true);
+      }
       if (isAmbiguousMutationFailure(cause)) setRetryAction("publish");
       setError(cause);
     } finally {
@@ -1226,6 +1275,7 @@ export function AgentWorkbench({
         };
         setRetryAction(null);
         setVersion(next);
+        clearAgentDraftStash(stashUserId, activeAgent.id);
         setNotice("publishedNotice");
         router.replace(
           activeAgent.group_id
@@ -1256,11 +1306,20 @@ export function AgentWorkbench({
       const intent = `agent-next-version:${currentAgent.id}`;
       const handle = mutationStore.handleFor(intent);
       try {
-        saved = await api.nextVersion(currentAgent.id, { idempotency: handle });
+        saved = await api.nextVersion(currentAgent.id, {
+          idempotency: handle,
+          // The published version this editor started from: if someone else
+          // has published since, the server answers 409 stale_base_version.
+          expectedBaseVersionId: saved.id,
+        });
         mutationStore.finish(intent, handle);
         if (!isCurrentScope(requestScope)) return;
       } catch (cause) {
         if (!isCurrentScope(requestScope)) return;
+        if (isConflict(cause)) {
+          mutationStore.abandon(intent, handle);
+          throw cause;
+        }
         if (isAmbiguousMutationFailure(cause)) {
           setError(cause);
           setRetryAction("publish");
@@ -1374,6 +1433,7 @@ export function AgentWorkbench({
       setRetryAction(null);
       setStagedRag([]);
       setVersion(next);
+      clearAgentDraftStash(stashUserId, currentAgent.id);
       if (generationFlow) {
         const receipt = next.knowledge_generation;
         if (!receipt) {

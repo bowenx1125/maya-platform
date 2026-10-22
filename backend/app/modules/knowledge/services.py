@@ -184,10 +184,11 @@ def observes_group(db: Session, user_id: str, group_id: str | None) -> bool:
     """Whether a course teacher has entered this group to look round it.
 
     Entering is the membership row the roster's Enter creates for the visit.
-    An observer may read all of the group's work, private included, but only
-    read it: the read routes below are the only places that grant the
+    That row is a temporary membership: the group library answers the teacher
+    the way it answers a groupmate. Private Agents stay readable and not
+    editable. The read routes below are the only places that grant the
     ``observer`` role, so it never edits, publishes, chats with or reuses a
-    student's private work.
+    student's private Agent.
     """
 
     if group_id is None:
@@ -761,13 +762,8 @@ def visible_student_agent(db: Session, context: AuthContext, agent_id: str) -> S
 
 def visible_student_document(db: Session, context: AuthContext, document_id: str) -> ScopedDocument:
     document = db.get(KnowledgeDocument, document_id)
-    if (
-        document is not None
-        and document.workspace_state == "active"
-        and document.owner_user_id != context.user.id
-        and observes_group(db, context.user.id, document.group_id)
-    ):
-        return ScopedDocument(document, "observer")
+    # The library does not grow an observer view. An entered teacher reads a
+    # document only when a groupmate could: they own it, or it is public.
     if document is None or not can_read_source(db, context, document):
         raise not_found()
     if document.owner_user_id == context.user.id:
@@ -1605,9 +1601,16 @@ def agent_summary(
         if shared is not None and draft_shared_with_editors(db, shared, agent):
             draft = shared
     audit = db.get(AgentEditAudit, agent.id)
-    last_editor = (
-        db.scalar(select(User.display_name).where(User.id == audit.last_edited_by_user_id))
+    # The hover tooltip names the latest editor; before anyone else edits,
+    # that is the creator.
+    last_editor_id = (
+        audit.last_edited_by_user_id
         if audit is not None and audit.last_edited_by_user_id
+        else agent.owner_user_id
+    )
+    last_editor = (
+        db.scalar(select(User.display_name).where(User.id == last_editor_id))
+        if last_editor_id
         else None
     )
     return AgentSummary(

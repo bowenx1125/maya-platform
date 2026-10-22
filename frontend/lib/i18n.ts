@@ -274,7 +274,9 @@ const enMessages = {
   immutable: "Immutable",
   discardDraftConfirm: "Discard unsaved changes?",
   conflictDetail:
-    "Someone else changed this content. Please refresh. Your local AGENT.md is still here; copy your edits before refreshing.",
+    "Someone else saved or published this Agent first. Refresh to load the latest version; your edits are kept in this browser and restored after refreshing.",
+  localDraftRestoredNotice:
+    "Your unpublished edits were restored on top of the latest version. Review them and click Done to publish.",
   agentMd: "AGENT.md",
   insertOutline: "Template",
   uploadMd: "Upload",
@@ -541,7 +543,7 @@ const enMessages = {
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
   errorStaleRevision: "Someone else changed this content. Please refresh.",
-  agentLastEditedTooltip: "Last edited: {name}, Version: {version}",
+  agentLastEditedTooltip: "Latest version: {version} · Last edited by: {name}",
   errorStaleControlVersion:
     "The classroom state changed. Refresh and try again.",
   errorIdempotencyConflict:
@@ -1174,7 +1176,9 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   immutable: "不可变",
   discardDraftConfirm: "放弃未保存的修改？",
   conflictDetail:
-    "内容已被别人修改，请刷新。本地 AGENT.md 仍保留，刷新前请复制你的修改。",
+    "别人已先保存或发布了这个 Agent。请刷新以载入最新版本；你的修改已保存在本浏览器，刷新后会自动恢复。",
+  localDraftRestoredNotice:
+    "已在最新版本上恢复你未发布的修改。请检查后点击完成以发布。",
   agentMd: "AGENT.md",
   insertOutline: "模板",
   uploadMd: "上传",
@@ -1417,7 +1421,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorInvalidState: "当前状态不支持该操作。",
   errorVersionImmutable: "已发布版本不可变更。",
   errorStaleRevision: "内容已被别人修改，请刷新",
-  agentLastEditedTooltip: "最新编辑：{name}，Version：{version}",
+  agentLastEditedTooltip: "最新版本：{version} · 最新编辑：{name}",
   errorStaleControlVersion: "课堂状态已变化，请刷新后重试。",
   errorIdempotencyConflict: "此请求已使用过不同的数据。",
   errorDemoRoundCountFixed: "演示固定使用两轮。",

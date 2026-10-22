@@ -1984,23 +1984,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/conversations/{conversation_id}/turns/{turn_id}:stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stop Team Conversation Turn Output */
-        post: operations["stopTeamConversationTurnOutput"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/courses/{course_id}/brainform/knowledge": {
         parameters: {
             query?: never;
@@ -8018,7 +8001,10 @@ export interface operations {
     };
     createNextAgentVersion: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Published version the editor started from. When another editor has published since, the request is rejected with 409 stale_base_version. */
+                expected_base_version_id?: string | null;
+            };
             header: {
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
@@ -10920,65 +10906,6 @@ export interface operations {
         };
     };
     resumeTeamConversationTurn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: string;
-                turn_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatSession"] | components["schemas"]["TeamChatSession"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    stopTeamConversationTurnOutput: {
         parameters: {
             query?: never;
             header?: never;

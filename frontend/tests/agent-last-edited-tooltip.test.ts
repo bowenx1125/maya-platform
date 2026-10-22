@@ -1,26 +1,60 @@
 import { describe, expect, it } from "vitest";
-import { agentLastEditedTitle } from "../lib/agent-tooltip";
+import { agentLastEditedTitle, formatVersionLabel } from "../lib/agent-tooltip";
 import { tm } from "../lib/i18n";
 
+const zh = (k: "agentLastEditedTooltip", v?: Record<string, string>) =>
+  tm(k, v ?? {}, "zh");
+const en = (k: "agentLastEditedTooltip", v?: Record<string, string>) =>
+  tm(k, v ?? {}, "en");
+
 describe("agentLastEditedTitle", () => {
-  it("formats zh and en tooltips with the version number", () => {
+  it("shows the latest version as V1.x and the latest editor", () => {
     const agent = {
       last_edited_by_name: "Kaikai",
       current_version_label: "V1.2",
     };
-    expect(agentLastEditedTitle((k, v) => tm(k, v ?? {}, "zh"), agent)).toBe(
-      "最新编辑：Kaikai，Version：1.2",
+    expect(agentLastEditedTitle(zh, agent)).toBe(
+      "最新版本：V1.2 · 最新编辑：Kaikai",
     );
-    expect(agentLastEditedTitle((k, v) => tm(k, v ?? {}, "en"), agent)).toBe(
-      "Last edited: Kaikai, Version: 1.2",
+    expect(agentLastEditedTitle(en, agent)).toBe(
+      "Latest version: V1.2 · Last edited by: Kaikai",
     );
   });
-  it("is absent until someone edited", () => {
+
+  it("names a teacher who edited a student's public Agent", () => {
+    expect(
+      agentLastEditedTitle(en, {
+        last_edited_by_name: "Maya",
+        current_version_label: "V1.3",
+      }),
+    ).toBe("Latest version: V1.3 · Last edited by: Maya");
+  });
+
+  it("names the student creator before anyone else edited", () => {
+    // The server reports the creator as the latest editor until then.
+    expect(
+      agentLastEditedTitle(
+        en,
+        { last_edited_by_name: "Bowen", current_version_label: null },
+        "1.0",
+      ),
+    ).toBe("Latest version: V1.0 · Last edited by: Bowen");
+  });
+
+  it("is absent only when no editor name is known", () => {
     expect(
       agentLastEditedTitle((k) => k, {
         last_edited_by_name: null,
-        current_version_label: "1.0",
+        current_version_label: "V1.0",
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("formatVersionLabel", () => {
+  it("keeps one decimal with a V prefix", () => {
+    expect(formatVersionLabel("1.3")).toBe("V1.3");
+    expect(formatVersionLabel("v2.0")).toBe("V2.0");
+    expect(formatVersionLabel("V1.9")).toBe("V1.9");
   });
 });

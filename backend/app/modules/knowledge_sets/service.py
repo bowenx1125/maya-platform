@@ -36,6 +36,7 @@ from app.modules.knowledge.services import (
     document_file_content,
     observes_group,
     observes_private_agent,
+    public_agent_editor_role,
     scoped_group_role_for_user,
     visible_agent,
 )
@@ -3219,7 +3220,13 @@ def _agent_for_binding(db: Session, context: AuthContext, agent_id: str, *, edit
     if agent is None or agent.deleted_at is not None or agent.status != "active":
         raise not_found()
     role = _agent_workspace_role(db, context, agent)
-    if role is None or (edit and role != "owner"):
+    if edit and role != "owner":
+        # PR #229: a public Agent is also edited by groupmates and course
+        # teachers; a private Agent stays creator-only.
+        if public_agent_editor_role(db, context, agent) not in {"groupmate", "course_teacher"}:
+            raise not_found()
+        return agent
+    if role is None:
         raise not_found()
     return agent
 
@@ -3335,6 +3342,19 @@ def replace_agent_knowledge_sets(
         .where(AgentKnowledgeSet.agent_id == agent_id)
         .order_by(AgentKnowledgeSet.order_index, AgentKnowledgeSet.knowledge_set_id)
     ).all()
+    if agent.owner_user_id != context.user.id:
+        # A shared editor only sees the Sets readable to them.  Bindings they
+        # cannot read are kept as they are rather than dropped by omission.
+        for binding in existing:
+            if binding.knowledge_set_id in string_ids:
+                continue
+            kept = db.get(KnowledgeSet, binding.knowledge_set_id)
+            if kept is None:
+                continue
+            kept_role = _set_role(db, context, kept)
+            if kept_role is None or not _set_sources_readable(db, context, kept, kept_role):
+                string_ids.append(kept.id)
+                candidate_rows.append(kept)
     if [row.knowledge_set_id for row in existing] == string_ids:
         return agent.metadata_revision, [
             _summary(db, context, row, can_edit=_set_role(db, context, row) == "owner")

@@ -172,7 +172,6 @@ const implemented = new Set([
   "renameKnowledgeDocument",
   "resumeTeamConversationTurn",
   "saveKnowledgeMarkdown",
-  "stopTeamConversationTurnOutput",
   "updateCurrentUser",
 ]);
 const methods = new Set([

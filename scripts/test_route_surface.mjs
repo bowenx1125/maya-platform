@@ -82,8 +82,9 @@ try {
   // course provider settings (three), the Knowledge graph, Real Report
   // continue and pending report manifests had no caller and are gone;
   // Persona compile/confirm and voice confirm had no caller and are gone;
-  // the Record attempt lifecycle-action route had no caller and is gone.
-  if (platformOperationCount !== 159 || placeholderCount !== 0) {
+  // the Record attempt lifecycle-action route had no caller and is gone;
+  // stopping a Chat turn had no caller and is gone (pause and resume stay).
+  if (platformOperationCount !== 158 || placeholderCount !== 0) {
     throw new Error(
       `Wave 4 route target drifted: ${platformOperationCount} implemented / ${placeholderCount} placeholders`,
     );

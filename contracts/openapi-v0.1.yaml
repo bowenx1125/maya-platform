@@ -2058,6 +2058,16 @@ paths:
       - Agents
       operationId: createNextAgentVersion
       parameters:
+      - name: expected_base_version_id
+        in: query
+        required: false
+        description: Published version the editor started from. When another editor has published since, the request is rejected with 409 stale_base_version.
+        schema:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Expected Base Version Id
       - $ref: '#/components/parameters/IdempotencyKey'
       - $ref: '#/components/parameters/CsrfToken'
       responses:
@@ -5018,69 +5028,6 @@ paths:
       security:
       - sessionCookie: []
       summary: Resume Team Conversation Turn
-      tags:
-      - Chat
-  /conversations/{conversation_id}/turns/{turn_id}:stop:
-    post:
-      operationId: stopTeamConversationTurnOutput
-      parameters:
-      - in: path
-        name: conversation_id
-        required: true
-        schema:
-          format: uuid
-          title: Conversation Id
-          type: string
-      - in: path
-        name: turn_id
-        required: true
-        schema:
-          format: uuid
-          title: Turn Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                discriminator:
-                  mapping:
-                    agent: '#/components/schemas/ChatSession'
-                    maya_team: '#/components/schemas/TeamChatSession'
-                    team: '#/components/schemas/TeamChatSession'
-                  propertyName: entry_kind
-                oneOf:
-                - $ref: '#/components/schemas/ChatSession'
-                - $ref: '#/components/schemas/TeamChatSession'
-                title: Response Stopteamconversationturnoutput
-          description: Successful Response
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Not Found
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Conflict
-      security:
-      - sessionCookie: []
-      summary: Stop Team Conversation Turn Output
       tags:
       - Chat
   /courses/{course_id}/brainform/knowledge:

@@ -1,4 +1,9 @@
-"""A teacher who enters a group sees all of its work, and only reads it."""
+"""A teacher who enters a group reads its private Agents, and only reads them.
+
+The group library is the members' library: an entered teacher browses and
+uploads it the way a groupmate does, and does not see another student's
+private file.
+"""
 
 from __future__ import annotations
 
@@ -136,8 +141,19 @@ def test_an_entered_teacher_reads_a_groups_private_work(client: TestClient, data
     assert team.json()["can_edit"] is False
 
     listed_documents = {item["id"]: item for item in client.get(documents).json()}
-    assert listed_documents[work["document"]]["can_manage_visibility"] is False
-    assert client.get(f"/api/v1/knowledge-documents/{work['document']}").status_code == 200
+    assert work["document"] not in listed_documents
+    assert client.get(f"/api/v1/knowledge-documents/{work['document']}").status_code == 404
+    uploaded = client.post(
+        documents,
+        headers=_headers(csrf, f"observer-library-upload-{uuid4()}"),
+        data={"visibility": "public"},
+        files={"file": ("visit.md", b"# Visit\n\nteacher library note", "text/markdown")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    uploaded_id = uploaded.json()["document"]["id"]
+    listed_documents = {item["id"]: item for item in client.get(documents).json()}
+    assert listed_documents[uploaded_id]["can_manage_visibility"] is True
+    assert work["document"] not in listed_documents
 
     # Leaving closes it again.
     assert client.delete(membership, headers=headers).status_code == 204
