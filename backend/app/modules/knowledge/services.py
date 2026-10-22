@@ -1605,9 +1605,16 @@ def agent_summary(
         if shared is not None and draft_shared_with_editors(db, shared, agent):
             draft = shared
     audit = db.get(AgentEditAudit, agent.id)
-    last_editor = (
-        db.scalar(select(User.display_name).where(User.id == audit.last_edited_by_user_id))
+    # The hover tooltip names the latest editor; before anyone else edits,
+    # that is the creator.
+    last_editor_id = (
+        audit.last_edited_by_user_id
         if audit is not None and audit.last_edited_by_user_id
+        else agent.owner_user_id
+    )
+    last_editor = (
+        db.scalar(select(User.display_name).where(User.id == last_editor_id))
+        if last_editor_id
         else None
     )
     return AgentSummary(

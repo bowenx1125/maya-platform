@@ -258,8 +258,7 @@ Base0829e2ddf4c1a5c86e9a252264024afe31b699e1; integrated inputs
 #234 7f4c8fff9d758cce4cc81fe765e2bc876db0cc2b and
 #235 a04c2ea4cd8a69e8a0d424f12e05ec350c781e31.
 Compose passes TTL30 and hash cap2/process (two replicas=4 hashes).
-Existing password-reset/catalog-change login races reproduced and fenced by User
-locks, post-hash credential recheck and credential flush before session revocation.
+Password-reset/catalog-change login races fenced(User locks,post-hash recheck).
 RAG four-entry bad→same-name-good recovery passed. Agent/Knowledge editor NUL and
 surrogate bypasses reject before persistence; blank drafts remain valid.
 Markdown UI errors no longer become PDF/Word guidance. Knowledge PUT adds declared
@@ -285,18 +284,19 @@ for recovery. Both backend replicas ready200, frontend/backend/Postgres healthy;
 gateway/autoheal running, schema0076_agent_editor_audit matches ALEMBIC_HEAD,
 public HTTPS200, frontend build9c68d42b; effective TTL30/hash cap2 confirmed.
 
-Live smoke: one synthetic account's10 simultaneous logins all200,max1078ms;
-30-day session cookie/expiry, invalid editor NUL/surrogate422 then valid save passed.
+Live smoke: 10 simultaneous logins200(max1078ms); 30-day cookie, NUL422 passed.
 Exact owner/id/content verification preceded API cleanup; the synthetic Agent
 was deleted (GET404). Both synthetic accounts inactive,
 all their sessions revoked; teacher test sessions logged out. Audit rows retained.
 Provider charged-request total14242 before/after; no real Provider calls.
 Two-core50-distinct-user capacity and month-long real-session retention untested.
 
-## October22 teacher Agent hotfix
+## October22 shared Agent editing
 
-Course teachers opening a student's public Agent (#229) saw "deleted or no longer
-shared": the editor also loads the group library, which stays 404 to a teacher
-who has not joined. The editor now treats that 404 as an empty library and keeps
-the version's bound sources; backend permissions unchanged. Regression tests:
-backend teacher open/next-version/save, frontend editor load.
+Public Agent editors(creator,groupmates,course teachers) now open and edit end to
+end: editor treats the closed group library(404 to unjoined teachers) as empty;
+shared editors may rebind Knowledge Sets(unreadable bindings kept). Private stays
+creator-only(teacher group-visit observer read unchanged). Done sends
+expected_base_version_id; a stale base gets409 stale_base_version, edits kept in
+localStorage per Agent+user, restored after refresh, cleared on Done. Tooltip:
+latest V1.x+last editor(creator before any edit).

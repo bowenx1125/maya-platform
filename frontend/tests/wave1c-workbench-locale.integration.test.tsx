@@ -617,7 +617,7 @@ describe("Wave 1C real workbench locale boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
-        "Your local AGENT.md",
+        "your edits are kept in this browser",
       ),
     );
     const beforeSwitch = identities.at(-1);
@@ -634,7 +634,7 @@ describe("Wave 1C real workbench locale boundary", () => {
       (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
     ).toBe("# Conflict stays local");
     expect(screen.getByRole("alert").textContent).toContain(
-      "本地 AGENT.md 仍保留",
+      "你的修改已保存在本浏览器",
     );
     expect(screen.getAllByText("版本冲突")).toHaveLength(1);
     const afterSwitch = identities.at(-1);

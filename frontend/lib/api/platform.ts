@@ -790,7 +790,7 @@ export function isConflict(error: unknown): error is PlatformApiError {
   return (
     error instanceof PlatformApiError &&
     error.status === 409 &&
-    error.code === "stale_revision"
+    (error.code === "stale_revision" || error.code === "stale_base_version")
   );
 }
 
@@ -1953,12 +1953,22 @@ export class PlatformApi {
 
   async nextVersion(
     agentId: string,
-    options: IdempotentMutationOptions = {},
+    options: IdempotentMutationOptions & {
+      /** Published version the editor started from (409 stale_base_version). */
+      expectedBaseVersionId?: string;
+    } = {},
   ): Promise<AgentVersion> {
     return commitMutation(options.idempotency, async (key) => {
       const result = await this.client.POST("/agents/{agent_id}/versions", {
         params: {
           path: { agent_id: agentId },
+          ...(options.expectedBaseVersionId
+            ? {
+                query: {
+                  expected_base_version_id: options.expectedBaseVersionId,
+                },
+              }
+            : {}),
           header: {
             "Idempotency-Key": key,
             "X-CSRF-Token": this.csrfToken ?? "",

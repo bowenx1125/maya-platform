@@ -1394,11 +1394,24 @@ def list_agent_versions(
     responses={
         201: {"model": AgentVersionDTO, "description": "Current published version cloned."},
         404: {"model": Error, "description": "Agent not found."},
-        409: {"model": Error, "description": "Version creation conflict."},
+        409: {
+            "model": Error,
+            "description": (
+                "Version creation conflict, including stale_base_version when "
+                "another editor already published a newer version."
+            ),
+        },
     },
 )
 def create_next_agent_version(
     agent_id: UUID,
+    expected_base_version_id: UUID | None = Query(
+        None,
+        description=(
+            "Published version the editor started from. When another editor has "
+            "published since, the request is rejected with 409 stale_base_version."
+        ),
+    ),
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=16),
     _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
     context: AuthContext = Depends(require_authenticated_mutation),
@@ -1406,7 +1419,16 @@ def create_next_agent_version(
 ) -> AgentVersionDTO:
     reject_baseline_agent_mutation(str(agent_id))
     scoped = visible_student_agent(db, context, str(agent_id))
-    body_hash = parse_json_payload_hash("createNextAgentVersion", context, [str(agent_id)], {})
+    body_hash = parse_json_payload_hash(
+        "createNextAgentVersion",
+        context,
+        [str(agent_id)],
+        (
+            {"expected_base_version_id": str(expected_base_version_id)}
+            if expected_base_version_id is not None
+            else {}
+        ),
+    )
     record, replay = claim_idempotency(
         db, context, "createNextAgentVersion", idempotency_key, body_hash
     )
@@ -1429,6 +1451,19 @@ def create_next_agent_version(
     if current is None or current.state != "published":
         abandon_claim(db, record)
         raise invalid_state("The current published version is unavailable.")
+    if expected_base_version_id is not None and str(expected_base_version_id) != current.id:
+        # Two editors opened the same published version; the first Done
+        # published a newer one.  The second must not silently overwrite it.
+        abandon_claim(db, record)
+        raise conflict(
+            "stale_base_version",
+            "Someone else published a newer version of this Agent.",
+            {
+                "expected_base_version_id": str(expected_base_version_id),
+                "current_published_version_id": current.id,
+                "current_version_label": agent_version_label(current.version_seq),
+            },
+        )
     if scoped.agent.owner_user_id != context.user.id and not version_is_currently_public(
         current, scoped.agent
     ):

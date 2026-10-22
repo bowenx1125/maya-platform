@@ -8018,7 +8018,10 @@ export interface operations {
     };
     createNextAgentVersion: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Published version the editor started from. When another editor has published since, the request is rejected with 409 stale_base_version. */
+                expected_base_version_id?: string | null;
+            };
             header: {
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */

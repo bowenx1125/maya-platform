@@ -3435,6 +3435,24 @@
         "operationId": "createNextAgentVersion",
         "parameters": [
           {
+            "name": "expected_base_version_id",
+            "in": "query",
+            "required": false,
+            "description": "Published version the editor started from. When another editor has published since, the request is rejected with 409 stale_base_version.",
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Base Version Id"
+            }
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           },
           {
