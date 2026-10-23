@@ -298,7 +298,8 @@ Actions39818125728 billing-blocked before steps.
 Base6c09c024. Enrollment runs off the event loop; invalid filenames return
 audio_invalid422 with safe stage/request-id logs. MP3 encoder padding and M4A
 final-frame padding no longer reject20s clips; decoded10–20s limits stay.
-Linux voice92 passed:four concurrent uploads/readiness,personal/group invalid→
-same-name valid,consent/ownership/charging/cleanup. FE1050/1skip;full Windows
-2852 passed/60skip,101 failure/error records undergoing Linux coverage. No real
-Provider calls or live test accounts. The reported group's exact failure is unconfirmed.
+Linux171 passed,including voice96 and all101 Windows failure/error records;
+Windows2852 passed/60skip,FE1050/1skip. Four uploads/readiness,same-name recovery,
+10/20s acceptance and9.99/20.01s rejection passed. Ruff/format/mypy/types/lint/
+contracts/migrations/POSIX passed. No real calls/live test accounts. The original
+group incident is unconfirmed without its files/errors.
