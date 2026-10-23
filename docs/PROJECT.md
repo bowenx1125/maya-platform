@@ -303,3 +303,8 @@ Windows2852 passed/60skip,FE1050/1skip. Four uploads/readiness,same-name recover
 10/20s acceptance and9.99/20.01s rejection passed. Ruff/format/mypy/types/lint/
 contracts/migrations/POSIX passed. No real calls/live test accounts. The original
 group incident is unconfirmed without its files/errors.
+
+Built3e785c01169b15454258d03c19eb75100a426bb1;backup
+maya-20261023T031952Z-pre-3e785c01.sqlite3 API/ok+PG dump verified. Both ready200,
+schema0076 matches,healthy/public200. Build126 probe pairs:3 API failures;post-
+switch20 pairs passed. Temporary stacks/data removed.
