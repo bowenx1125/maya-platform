@@ -236,13 +236,10 @@ Backend Windows+Linux:2892/45skip;95 Windows failures reproduced on base,covered
 Linux. PG16:15;frontend1017/1skip;assertions kept.
 
 Release9c68d42b0b1b618fabeb8fc22237c8586152a52e:GitHub→bare→FF from5dd9690b;
-Compose built0075/0076. Backup maya-20261021T093817Z-pre-9c68d42b.sqlite3 API/
-integrity=ok,matching .pgdump readable,old images kept. Both ready200,containers
-healthy,0076_agent_editor_audit=ALEMBIC_HEAD;public200/frontend9c68d42b/TTL30/hash2.
-
-Live:10 logins200(max1078ms),30-day cookie,NUL422. Synthetic Agent GET404,2 test
-accounts inactive/sessions revoked,teacher sessions logged out,audit kept. Charged
-14242 before/after;0 real Provider calls. Month-long retention not yet observed.
+SQLite API/integrity+PG backups,ready/containers/schema0076/public200/build/TTL30/
+hash2 verified. Live10 logins200(max1078ms),NUL422,synthetic Agent GET404,
+2 test accounts inactive/sessions revoked,teacher logout;charged14242 unchanged.
+0 real calls;month-long retention unobserved. Backup receipts:PROJECT@6c09c024.
 
 ## Oct22 shared Agent editing
 
@@ -256,28 +253,20 @@ uncalled POST /conversations/{id}/turns/{turn_id}:stop and client testChat; kept
 
 ## Oct22 performance
 
-Base 6b1c2a882fa8e08360fbf0d850b386134dd70246. Password change/reset:rollback before
-hash wait/CPU,then User lock/credential reread before write/revocation. Single-slot
-pool:checkedout=0 during queued/running hashes,unrelated reads pass; parallel
-credential replacement fenced. SQLite+isolated PG:10 passed.
-
-Chat history batches assessment receipts/Boundary call IDs,refreshes latest lifecycle
-only,skips discarded Team Agent projection. Synthetic 1/20/100-turn SELECTs:5/81/401→
-5/5/5,full DTO parity.13 tests:owner-only history,receipt order,completed Boundary
-precedence,paused/completed/abandoned state. No schema change.
-
-Brainform polling waits for current reads incl. nested groups; mutations refresh
-at once,stale loads cannot unlock successors. Seven list reads abort fetch/body
-after60s,releasing cache slots. Mock30s:five endpoints105→10 calls,initial pending
-reads4→1. Synthetic results,not classroom capacity.
-
-Self-run:FE1045/1skip;BE2840/52skip+new23;PG105. Windows95 base fails+2 clock flakes covered Linux;POSIX boundary/reset passed. Build/type/lint,Ruff/format/mypy,158 routes,Latin/Prettier/boundary passed;owner-only draft fix. Actions39809567546 billing-blocked;0 Provider calls;capacity open.
-
-Oct23 #237:build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7; GitHub→bare→FF from6b1c2a88.
-Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 API/integrity=ok,matching .pgdump
-readable,old images kept. Both ready200,containers healthy,0076_agent_editor_audit
-matches,public200/frontend build match. Live password change/reset:current session
-retained,old sessions/password rejected,new accepted;test account deleted:credential,4 sessions,course/group memberships. Backup maya-20261022T225246Z-pre-test-account-delete.sqlite3 used SQLite API;integrity=ok,matching PostgreSQL dump readable. Base origin/main@60c6ed1a. Charged14331 unchanged;0 real calls.
+Base6b1c2a882fa8e08360fbf0d850b386134dd70246. Hash waits release DB connections;
+credential reread/lock fences replacement. SQLite+PG10 passed. Chat history batches
+assessment/Boundary projections:1/20/100-turn SELECTs5/81/401→5/5/5,DTO parity,
+13 ownership/lifecycle regressions. Brainform coalesces nested reads,refreshes on
+mutation,fences stale responses,aborts seven list reads after60s. Mock30s:105→10
+calls,pending4→1. No schema change;real classroom capacity unverified.
+FE1045/1skip,BE2840/52skip+23,PG105;95 Windows baseline failures+2 clock flakes
+covered Linux. Build/type/lint/Ruff/format/mypy/158 routes/Latin/Prettier/POSIX
+passed;owner-only drafts fixed. Actions39809567546 billing-blocked;0 real calls.
+#237 built82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7,GitHub→bare→FF from6b1c2a88;
+SQLite API/integrity+PG backups,ready200/schema0076/containers/public200 verified.
+Password change/reset kept current session,revoked old sessions/credentials.
+Synthetic account/credential/4 sessions/memberships deleted,charged14331 unchanged.
+Exact backup/cleanup receipts remain in PROJECT history at6c09c024.
 
 ## Oct23 isolated 50-user concurrency
 
@@ -303,3 +292,13 @@ frontend build matches,public200. Load-test probes all200;Compose replacement ha
 Self-run:2847 Windows passes;95 failures cleared on Linux (4 shell cases needed LF).
 60 skipped;frontend1045;Ruff/format/mypy/contracts/POSIX passed.
 Actions39818125728 billing-blocked before steps.
+
+## Oct23 voice uploads
+
+Base6c09c024. Enrollment runs off the event loop; invalid filenames return
+audio_invalid422 with safe stage/request-id logs. MP3 encoder padding and M4A
+final-frame padding no longer reject20s clips; decoded10–20s limits stay.
+Linux voice92 passed:four concurrent uploads/readiness,personal/group invalid→
+same-name valid,consent/ownership/charging/cleanup. FE1050/1skip;full Windows
+2852 passed/60skip,101 failure/error records undergoing Linux coverage. No real
+Provider calls or live test accounts. The reported group's exact failure is unconfirmed.
