@@ -963,7 +963,7 @@ def enroll_voice(
     # Content probing happens before the database claim.  The source remains in
     # the UUID temp directory and is deleted by the route's finally block.
     try:
-        validate_source_audio(upload.source_path, upload.source_filename)
+        source_info = validate_source_audio(upload.source_path, upload.source_filename)
     except AudioValidationError as exc:
         upload.cleanup()
         raise validation_failure("The voice file is not valid.", code="audio_invalid") from exc
@@ -1018,7 +1018,13 @@ def enroll_voice(
     normalized_path = upload.request_directory / "normalized.wav"
     try:
         try:
-            run_ffmpeg_normalize(upload.source_path, normalized_path)
+            run_ffmpeg_normalize(
+                upload.source_path,
+                normalized_path,
+                duration_seconds=(
+                    source_info.duration_seconds if "m4a" in source_info.format_names else None
+                ),
+            )
             normalized = read_pcm16_wav(normalized_path)
             normalized_info = audio_quality_metrics(normalized)
             if not 10.0 <= normalized_info["duration_seconds"] <= 20.0:

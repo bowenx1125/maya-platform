@@ -161,8 +161,14 @@ def _normalised_source(settings: Settings, source: Path) -> Iterator[tuple[bytes
                 output_stream.write(chunk)
             output_stream.flush()
         source_copy.chmod(0o600)
-        validate_source_audio(source_copy, source.name)
-        run_ffmpeg_normalize(source_copy, normalized)
+        source_info = validate_source_audio(source_copy, source.name)
+        run_ffmpeg_normalize(
+            source_copy,
+            normalized,
+            duration_seconds=(
+                source_info.duration_seconds if "m4a" in source_info.format_names else None
+            ),
+        )
         normalized_bytes = read_pcm16_wav(normalized)
         metrics = audio_quality_metrics(normalized_bytes)
         if not 10.0 <= metrics["duration_seconds"] <= 20.0:

@@ -159,7 +159,10 @@ def validate_source_audio(path: Path, filename: str) -> ProbeInfo:
     }
     if not accepted.get(suffix, False):
         raise AudioValidationError("audio_invalid")
-    if not MIN_ENROLLMENT_SECONDS <= info.duration_seconds <= MAX_ENROLLMENT_SECONDS:
+    # MP3 container duration includes encoder delay/padding. The decoded PCM
+    # still has to satisfy the exact enrollment limits before provider dispatch.
+    padding = 2 * 1152 / info.sample_rate if suffix == ".mp3" and info.sample_rate > 0 else 0.0
+    if not MIN_ENROLLMENT_SECONDS <= info.duration_seconds <= MAX_ENROLLMENT_SECONDS + padding:
         raise AudioValidationError("audio_invalid")
     return info
 
@@ -205,6 +208,7 @@ def run_ffmpeg_normalize(
     target: Path,
     *,
     timeout_seconds: float = 30.0,
+    duration_seconds: float | None = None,
 ) -> None:
     """Create deterministic signed PCM16/24 kHz/mono WAV output."""
 
@@ -232,6 +236,9 @@ def run_ffmpeg_normalize(
         str(NORMALIZED_SAMPLE_RATE),
         "-ac",
         str(NORMALIZED_CHANNELS),
+        # M4A declares playable duration separately from its padded final AAC
+        # frame. Honor that duration instead of counting encoder padding.
+        *(["-t", str(duration_seconds)] if duration_seconds is not None else []),
         str(target),
     ]
     process: subprocess.Popen[bytes] | None = None
