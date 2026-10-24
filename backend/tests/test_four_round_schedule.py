@@ -28,6 +28,7 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
+from tests.postgres_db import new_database_url
 from tests.test_wave2_setup import COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, _insert_published_agent
 
 RULE_SET = "ordered_multi_expert_mutual_learning_v1"
@@ -35,7 +36,7 @@ TEACHING = "four_round_v1"
 
 
 def test_unattempted_recovery_never_retries_an_existing_llm_operation():
-    engine = create_engine("sqlite://")
+    engine = create_engine(new_database_url(schema=False))
     with Session(engine) as db:
         db.execute(
             text(

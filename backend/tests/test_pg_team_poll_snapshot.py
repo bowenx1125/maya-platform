@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture
 def postgres_poll_database() -> Iterator[tuple[Engine, sessionmaker[Session]]]:
@@ -23,6 +25,7 @@ def postgres_poll_database() -> Iterator[tuple[Engine, sessionmaker[Session]]]:
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
     if make_url(url).get_backend_name() != "postgresql":
         pytest.fail("MAYA_TEST_POSTGRES_URL must name a PostgreSQL test database")
+    url = named_url("pg", schema=False)
     admin = create_engine(url, poolclass=NullPool)
     schema = f"maya_poll_snapshot_{uuid4().hex}"
     engine = None

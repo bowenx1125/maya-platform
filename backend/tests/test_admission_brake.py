@@ -135,10 +135,10 @@ def test_brake_window_drains_in_ten_seconds(probe: _Probe) -> None:
 
 def test_a_failed_write_statement_is_not_left_counted(database) -> None:  # type: ignore[no-untyped-def]
     from sqlalchemy import text
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import DBAPIError
 
     before = aa.db_writes_in_flight()
     with database.engine.connect() as connection:
-        with pytest.raises(OperationalError):
+        with pytest.raises(DBAPIError):
             connection.execute(text("UPDATE no_such_table SET x = 1"))
     assert aa.db_writes_in_flight() == before

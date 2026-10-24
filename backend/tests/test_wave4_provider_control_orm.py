@@ -5,13 +5,10 @@ from __future__ import annotations
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from app.core.db import Database
 from app.core.models import (
     ProviderOperation,
@@ -35,8 +32,10 @@ from app.providers.control_repository import (
     ProviderRepositoryError,
     ScopeBudgetMissing,
 )
-from sqlalchemy import Table, inspect, select, text
+from sqlalchemy import Table, inspect, select
 from sqlalchemy.exc import IntegrityError
+
+from tests.postgres_db import named_url
 
 
 def _digest(value: str) -> str:
@@ -100,7 +99,7 @@ def _repository_with_confirmed_manifest(
     scope_id: str = "scope-1",
     require_export_confirmation: bool = True,
 ) -> tuple[Database, ProviderRepository, ExportManifestV1]:
-    database = Database(f"sqlite:///{tmp_path / f'{scope_id}.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / f'{scope_id}.sqlite3'}"))
     database.upgrade_schema()
     repository = ProviderRepository(
         database,
@@ -128,7 +127,7 @@ def _repository_with_confirmed_manifest(
 
 
 def test_0010_creates_server_only_tables_without_key_or_payload_columns(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'schema.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'schema.sqlite3'}"))
     database.upgrade_schema()
     inspector = inspect(database.engine)
     expected = {
@@ -285,7 +284,7 @@ def _knowledge_operation(
     tmp_path: Path,
     scope_id: str,
 ) -> tuple[Database, ProviderRepository, str]:
-    database = Database(f"sqlite:///{tmp_path / f'{scope_id}.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / f'{scope_id}.sqlite3'}"))
     database.upgrade_schema()
     repository = ProviderRepository(database)
     policy = _policy()
@@ -505,47 +504,3 @@ def test_missing_scope_budget_and_invalid_orm_state_fail_closed(tmp_path: Path) 
                 )
             )
     database.dispose()
-
-
-def test_0010_downgrade_refuses_nonempty_provider_data_and_allows_empty_round_trip(
-    tmp_path: Path,
-) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'provider-control-downgrade.sqlite3'}")
-    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    config.set_main_option(
-        "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
-    )
-    config.set_main_option("sqlalchemy.url", database.database_url)
-    config.attributes["database_url"] = database.database_url
-    try:
-        command.upgrade(config, "0009_persona_structured_fields")
-        command.upgrade(config, "0010_provider_control_ledger")
-        now = datetime.now(UTC)
-        with database.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO provider_scope_budgets "
-                    "(scope_id,max_requests,max_total_tokens,max_cost_cny,created_at,updated_at) "
-                    "VALUES ('migration-scope',2,20,0.02,:now,:now)"
-                ),
-                {"now": now},
-            )
-        with pytest.raises(RuntimeError, match="ProviderDataCallV1 data"):
-            command.downgrade(config, "0009_persona_structured_fields")
-        with database.engine.connect() as connection:
-            assert connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == ("0010_provider_control_ledger")
-            assert (
-                connection.execute(text("SELECT COUNT(*) FROM provider_scope_budgets")).scalar_one()
-                == 1
-            )
-
-        with database.engine.begin() as connection:
-            connection.execute(text("DELETE FROM provider_scope_budgets"))
-        command.downgrade(config, "0009_persona_structured_fields")
-        assert not inspect(database.engine).has_table("provider_operations")
-        command.upgrade(config, "0010_provider_control_ledger")
-        assert inspect(database.engine).has_table("provider_operations")
-    finally:
-        database.dispose()

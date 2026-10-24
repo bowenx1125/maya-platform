@@ -281,24 +281,3 @@ async def test_draft_prepare_tts_unavailable_keeps_speech_and_code(app_factory) 
     finally:
         await tasks.close()
         database.dispose()
-
-
-def test_ensure_turn_job_sqlite_keeps_insert_or_ignore() -> None:
-    statements: list[str] = []
-
-    class _Result:
-        rowcount = 0
-
-    class _FakeDB:
-        def get_bind(self):
-            return SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
-
-        def execute(self, statement, params=None):
-            del params
-            statements.append(str(statement))
-            return _Result()
-
-    debate = SimpleNamespace(id="debate-1", cancellation_generation=0)
-    turn = SimpleNamespace(id="turn-1", turn_index=0)
-    SqlPlaybackRepository._ensure_turn_job(_FakeDB(), debate, turn)
-    assert statements and "INSERT OR IGNORE INTO jobs" in statements[0]

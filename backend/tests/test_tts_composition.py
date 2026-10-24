@@ -13,12 +13,14 @@ from app.providers.dashscope import DashScopeTTSProvider
 from app.providers.factory import embedding_provider
 from app.providers.tts import MockTTSProvider
 
+from tests.postgres_db import named_url
+
 
 def _settings(tmp_path: Path, **updates: object) -> Settings:
     values: dict[str, object] = {
         "maya_env": "test",
         "session_secret": "s" * 32,
-        "database_url": f"sqlite:///{tmp_path / 'maya.sqlite3'}",
+        "database_url": named_url(f"{tmp_path / 'maya.sqlite3'}"),
         "data_root": tmp_path,
         "tts_provider": "mock",
         "voice_provider": "mock",

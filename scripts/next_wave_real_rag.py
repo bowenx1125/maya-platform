@@ -343,7 +343,8 @@ def _real_settings(
         "_env_file": None,
         "maya_env": "test",
         "session_secret": secrets.token_urlsafe(32),
-        "database_url": f"sqlite:///{runtime_root / 'maya.sqlite3'}",
+        # A dedicated, empty PostgreSQL database for this acceptance run.
+        "database_url": _env("NEXT_WAVE_DATABASE_URL"),
         "data_root": runtime_root,
         "demo_mode": False,
         "demo_quick_login": False,

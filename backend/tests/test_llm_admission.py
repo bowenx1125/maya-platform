@@ -13,6 +13,8 @@ from app.core.errors import PlatformError
 from app.core.llm_admission import llm_admission_slot, reset_llm_admission_state
 from app.providers.llm_transport import HttpxLLMTransport
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture(autouse=True)
 def _reset_gate() -> None:
@@ -34,7 +36,7 @@ def _settings(**overrides: object) -> Settings:
         "maya_env": "test",
         "session_secret": "x" * 32,
         "demo_mode": True,
-        "database_url": "sqlite://",
+        "database_url": named_url("settings"),
         "data_root": "/tmp",
         "llm_provider": "mock",
         "embedding_provider": "mock",

@@ -11,6 +11,8 @@ from app.core import adaptive_admission as aa
 from app.core.config import Settings
 from app.core.errors import PlatformError
 
+from tests.postgres_db import named_url
+
 
 class _Probe:
     def __init__(self) -> None:
@@ -635,7 +637,7 @@ def test_pool_checkout_wait_is_recorded(probe: _Probe, tmp_path) -> None:  # typ
     from app.core import db as db_module
     from sqlalchemy import create_engine, text
 
-    engine = create_engine(f"sqlite:///{tmp_path / 'pool.sqlite3'}")
+    engine = create_engine(named_url(f"{tmp_path / 'pool.sqlite3'}"))
     db_module._time_pool_checkout(engine)
     try:
         for _ in range(20):

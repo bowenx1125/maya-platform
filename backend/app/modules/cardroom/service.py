@@ -3,9 +3,8 @@
 Nothing runs in the background. Everyone at a table polls once a second, and
 every request first settles whatever the clock has made due: a player whose 60
 seconds ran out checks or folds, and a finished hand is followed by the next
-six seconds later. Writers take SQLite's writer lock before reading the room,
-and a write only lands on the revision it read, so two players' polls can
-never settle the same moment twice.
+six seconds later. A write only lands on the revision it read, so two
+players' polls can never settle the same moment twice.
 """
 
 from __future__ import annotations
@@ -18,12 +17,11 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, forbidden, not_found, stale_revision
 from app.core.models import CourseMember
-from app.core.sqlutil import begin_immediate
 from app.modules.auth.service import AuthContext
 from app.modules.workspace.access import course_member
 
@@ -96,20 +94,8 @@ class RoomState:
 
 
 def _aware(value: datetime) -> datetime:
-    # SQLite hands back naive datetimes for timezone-aware columns.
+    # Older rows may carry a naive datetime.
     return value if value.tzinfo else value.replace(tzinfo=UTC)
-
-
-def _lock(db: Session) -> None:
-    """Take SQLite's writer lock before the room is read for a write."""
-
-    if db.get_bind().dialect.name != "sqlite":
-        return
-    db.rollback()
-    try:
-        begin_immediate(db)
-    except OperationalError:
-        raise conflict("card_room_busy", "The table is busy; try again.") from None
 
 
 def _load(
@@ -284,15 +270,13 @@ def view(room: CardRoom, state: RoomState, viewer: str, now: datetime) -> CardRo
 def _open(
     db: Session, context: AuthContext, code: str, now: datetime
 ) -> tuple[CardRoom, RoomState, bool]:
-    """Lock, read, and settle a room that is about to be changed."""
+    """Read and settle a room that is about to be changed."""
 
-    _lock(db)
     room, state = _load(db, context, code, now)
     return room, state, _settle(state, now)
 
 
 def create_room(db: Session, context: AuthContext, now: datetime) -> CardRoomView:
-    _lock(db)
     user = context.user
     # Abandoned rooms give their codes back before a new one is drawn.
     db.execute(

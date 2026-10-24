@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
 from tests.conftest import login
+from tests.postgres_db import named_url
 from tests.test_agent_source_cascade import GROUP_ID, _agent_with_docs, _current, _h, _upload
 
 
@@ -38,6 +39,7 @@ def app_bundle(
     if not postgres_url:
         bundle[1].dispose()
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
+    postgres_url = named_url("pg", schema=False)
     bundle[1].dispose()
     settings = bundle[2].model_copy(update={"database_url": postgres_url})
     database = Database(postgres_url, settings.data_root)

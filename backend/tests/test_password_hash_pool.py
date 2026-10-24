@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture(params=["sqlite", "postgres"])
 def password_database(
@@ -38,6 +40,7 @@ def password_database(
                 pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
             if make_url(url).get_backend_name() != "postgresql":
                 pytest.fail("MAYA_TEST_POSTGRES_URL must name a PostgreSQL test database")
+            url = named_url("pg", schema=False)
             schema_engine = create_engine(url, poolclass=NullPool)
             candidate_schema = f"maya_hash_pool_{uuid4().hex}"
             with schema_engine.begin() as connection:
@@ -47,7 +50,7 @@ def password_database(
             # schema. No public tables or another test's schema are changed.
             connect_args = {"options": f"-csearch_path={schema_name}"}
         else:
-            url = f"sqlite:///{tmp_path / 'hash-pool.sqlite3'}"
+            url = named_url(f"{tmp_path / 'hash-pool.sqlite3'}")
         engine = create_engine(
             url,
             connect_args=connect_args,

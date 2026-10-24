@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict
 from app.core.models import DemoAcceptanceRun, FileReference, Job, StoredFile
-from app.core.sqlutil import foreign_keys_ok
 from app.modules.debates import cleanup as cleanup
 from app.modules.debates.models import AuditLog, DebateParticipant, DebateTurn
 from app.modules.debates.playback._core import PlaybackCore
@@ -27,31 +26,15 @@ def _write_reset_final_input(
     """Change the frozen envelope only inside the explicit reset writer transaction."""
     from app.modules.debates.models import Debate
 
-    # BEGIN IMMEDIATE is held by both callers. Other writers cannot observe
-    # the scoped exception; rollback also restores the original SQLite DDL.
-    trigger = None
-    if db.get_bind().dialect.name == "sqlite":
-        trigger = db.scalar(
-            text(
-                "SELECT sql FROM sqlite_master WHERE type='trigger' "
-                "AND name='debate_final_input_immutable'"
-            )
-        )
-    if trigger:
-        db.execute(text("DROP TRIGGER debate_final_input_immutable"))
-    try:
-        values: dict[str, Any] = {
-            "final_input_json": value,
-            "final_input_hash": hashlib.sha256(value.encode()).hexdigest()
-            if value is not None
-            else None,
-        }
-        if clear_timestamp:
-            values["final_frozen_at"] = None
-        db.execute(update(Debate).where(Debate.id == debate.id).values(**values))
-    finally:
-        if trigger:
-            db.execute(text(str(trigger)))
+    values: dict[str, Any] = {
+        "final_input_json": value,
+        "final_input_hash": hashlib.sha256(value.encode()).hexdigest()
+        if value is not None
+        else None,
+    }
+    if clear_timestamp:
+        values["final_frozen_at"] = None
+    db.execute(update(Debate).where(Debate.id == debate.id).values(**values))
 
 
 async def rebirth_debate(
@@ -304,8 +287,6 @@ async def rebirth_debate(
             )
         )
         db.flush()
-        if not foreign_keys_ok(db):
-            raise cleanup.DebateCleanupError("foreign_key_violations_after")
         result = cleanup.DeleteAllResult(
             debate_id=debate_id,
             revision=revision,

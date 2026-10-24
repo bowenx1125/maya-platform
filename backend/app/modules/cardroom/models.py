@@ -38,7 +38,6 @@ class CardRoom(Base):
             "ux_card_rooms_open_code",
             "code",
             unique=True,
-            sqlite_where=text("closed_at IS NULL"),
             postgresql_where=text("closed_at IS NULL"),
         ),
         Index("ix_card_rooms_course_id", "course_id"),

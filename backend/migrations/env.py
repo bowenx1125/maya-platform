@@ -6,7 +6,6 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from app.core.db import _sqlite_pragmas
 from app.core.models import Base
 from app.modules.auth import admission as _admission_models
 from app.modules.cardroom import models as _cardroom_models
@@ -18,7 +17,7 @@ from app.modules.reports import models as _report_models
 from app.modules.runtime_tools import models as _runtime_tool_models
 from app.modules.teams import models as _team_models
 from app.modules.workspace import models as _workspace_models
-from sqlalchemy import engine_from_config, event, pool
+from sqlalchemy import engine_from_config, pool
 
 del (
     _admission_models,
@@ -76,12 +75,6 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
         future=True,
     )
-    # Register before the first connection is checked out.  In particular,
-    # journal_mode=WAL must be applied at connection-open time; issuing it
-    # after Alembic starts its migration transaction can make SQLite discard
-    # the version-row write while retaining DDL.
-    if connectable.dialect.name == "sqlite":
-        event.listen(connectable, "connect", _sqlite_pragmas)
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
@@ -90,16 +83,8 @@ def run_migrations_online() -> None:
             transactional_ddl=True,
             transaction_per_migration=True,
         )
-        try:
-            with context.begin_transaction():
-                context.run_migrations()
-        finally:
-            if connectable.dialect.name == "sqlite":
-                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
-                if connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() != 1:
-                    raise RuntimeError(
-                        "Migrations failed to restore SQLite foreign-key enforcement."
-                    )
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 if context.is_offline_mode():

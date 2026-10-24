@@ -193,8 +193,9 @@ policy/manifest hashes, and nothing else.
 
 ## 6. Running the Demo locally
 
-After an authorized update, back up the active SQLite database using SQLite's
-backup API inside the backend container, then rebuild with
+After an authorized update, back up the PostgreSQL database with `pg_dump -Fc`
+inside the postgres container and check the dump with `pg_restore --list`, then
+rebuild with
 `docker compose up -d --build --wait`. Preserve `.env`, private configuration and
 runtime assets. Verify Compose health, container `/health/ready`, the schema head
 and `http://localhost:8080/`; distinguish these from manual product acceptance.
@@ -269,10 +270,12 @@ git push maya-prod:/opt/maya-platform.git HEAD:main
 ssh maya-prod 'cd /opt/maya-platform && git pull --ff-only'
 ```
 
-Before a rebuild, back up `/app/data/maya.sqlite3` with SQLite's backup API
-inside `maya-production-backend-1`. Write the backup under
-`/srv/maya-production/backups/` and require `PRAGMA integrity_check` to be
-`ok`. Then, from `/opt/maya-platform`:
+Before a rebuild, back up PostgreSQL with `pg_dump -U maya -Fc maya` inside
+`maya-production-postgres-1`. Write the dump under
+`/srv/maya-production/backups/` and require `pg_restore --list` on it to
+succeed. The application is PostgreSQL only; never delete the old
+`/app/data/maya.sqlite3` from code or scripts (a person removes it after a
+stable week). Then, from `/opt/maya-platform`:
 
 ```bash
 docker compose --project-name maya-production \

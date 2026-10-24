@@ -319,11 +319,6 @@ def test_twenty_independent_students_submit_during_knowledge_update_and_recover(
     assert len(session_ids) == len(concurrent_actions)
     assert all(result in {"recorded", "transitioned"} for result in first_results)
 
-    with database.engine.connect() as connection:
-        assert connection.exec_driver_sql("PRAGMA journal_mode").scalar_one().casefold() == "wal"
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
-        assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one() >= 5_000
-
     with database.session() as db:
         answers = db.scalars(
             select(LearningRecord)

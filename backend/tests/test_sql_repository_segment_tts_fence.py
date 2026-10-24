@@ -11,13 +11,14 @@ from app.modules.debates.playback.protocols import PreparedGenerationFence
 from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
 from sqlalchemy import text
 
+from tests.postgres_db import named_url
 from tests.test_cleanup_debate_runtime import _seed_runtime_graph, _uid
 from tests.test_debate_cleanup import _make_final_ready
 
 
 @pytest.fixture
 def segment_retry_db(tmp_path: Path):
-    database = Database(f"sqlite:///{tmp_path / 'maya.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'maya.sqlite3'}"), tmp_path)
     database.upgrade_schema()
     ids = _seed_runtime_graph(database, tmp_path)
     ids["job"] = _uid(77)

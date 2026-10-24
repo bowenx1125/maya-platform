@@ -10,6 +10,8 @@ from app.core.config import Settings
 from app.core.errors import PlatformError
 from app.core.write_guard import reset_write_guard_state, write_guard_slot
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture(autouse=True)
 def _reset_gate() -> None:
@@ -23,7 +25,7 @@ def _settings(**overrides: object) -> Settings:
         "maya_env": "test",
         "session_secret": "x" * 32,
         "demo_mode": True,
-        "database_url": "sqlite://",
+        "database_url": named_url("settings"),
         "data_root": "/tmp",
         "llm_provider": "mock",
         "embedding_provider": "mock",

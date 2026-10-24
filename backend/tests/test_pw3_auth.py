@@ -34,6 +34,8 @@ from app.seed import seed_demo_data
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from tests.postgres_db import named_url
+
 ACCOUNT_TABLE = """# private Demo catalog
 | account_key | username | display_name | password | role | group |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +54,7 @@ def _app(tmp_path: Path, *, quick_login: bool = True) -> tuple[Any, Database, Se
         session_secret="x" * 32,
         demo_mode=True,
         demo_quick_login=quick_login,
-        database_url=f"sqlite:///{tmp_path / 'maya.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'maya.sqlite3'}"),
         data_root=tmp_path,
         demo_accounts_file=accounts,
         llm_provider="mock",
@@ -510,7 +512,7 @@ def test_fresh_invalid_bootstrap_rolls_back_seed_and_catalog_graph(tmp_path: Pat
         session_secret="x" * 32,
         demo_mode=True,
         demo_accounts_file=accounts,
-        database_url=f"sqlite:///{tmp_path / 'fresh.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'fresh.sqlite3'}"),
         data_root=tmp_path / "data",
     )
     database = Database(settings.database_url, settings.resolved_data_root)
@@ -535,7 +537,7 @@ def test_sync_commit_failure_does_not_publish_catalog_snapshot(tmp_path: Path) -
         session_secret="x" * 32,
         demo_mode=True,
         demo_accounts_file=accounts,
-        database_url=f"sqlite:///{tmp_path / 'commit-failure.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'commit-failure.sqlite3'}"),
         data_root=tmp_path / "data",
     )
     database = Database(settings.database_url, settings.resolved_data_root)
@@ -616,7 +618,7 @@ def test_lifespan_seeds_once_then_allows_catalog_rename_on_restart(tmp_path: Pat
         session_secret="x" * 32,
         demo_mode=True,
         demo_quick_login=True,
-        database_url=f"sqlite:///{tmp_path / 'startup.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'startup.sqlite3'}"),
         data_root=tmp_path / "data",
         demo_accounts_file=accounts,
     )

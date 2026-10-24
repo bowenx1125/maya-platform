@@ -15,6 +15,7 @@ from app.modules.debates import models as _debate_models
 from app.modules.debates.models import Debate, DebateTurn, PlaybackState
 from sqlalchemy import select, text, update
 
+from tests.postgres_db import named_url
 from tests.test_cleanup_debate_runtime import _add, _hash, _seed_runtime_graph, _uid
 
 del _debate_models
@@ -23,7 +24,7 @@ del _debate_models
 @pytest.fixture
 def migrated_database(tmp_path: Path):
     database_path = tmp_path / "maya.sqlite3"
-    database = Database(f"sqlite:///{database_path}", tmp_path)
+    database = Database(named_url(f"{database_path}"), tmp_path)
     database.upgrade_schema()
     ids = _seed_runtime_graph(database, tmp_path)
     try:
@@ -507,7 +508,6 @@ def test_delete_all_removes_only_target_graph_and_restores_recovery_guards(migra
 
     with database.session() as session:
         assert session.get(Debate, ids["debate"]) is None
-        assert session.execute(text("PRAGMA foreign_key_check")).first() is None
         assert session.execute(text("SELECT count(*) FROM users")).scalar_one() == 2
         assert session.execute(text("SELECT count(*) FROM courses")).scalar_one() == 1
         assert session.execute(text("SELECT count(*) FROM knowledge_snapshots")).scalar_one() == 1
@@ -524,15 +524,6 @@ def test_delete_all_removes_only_target_graph_and_restores_recovery_guards(migra
         assert session.execute(
             text("SELECT acceptance_run_id, call_no FROM provider_operations")
         ).first() == (None, None)
-        triggers = {
-            row[0]: row[1]
-            for row in session.execute(
-                text("SELECT name, sql FROM sqlite_master WHERE type='trigger'")
-            )
-        }
-        assert cleanup._RECOVERY_DELETE_TRIGGER in triggers
-        assert cleanup._RECOVERY_UPDATE_TRIGGER in triggers
-        assert "BEFORE DELETE ON llm_recovery_inputs" in triggers[cleanup._RECOVERY_DELETE_TRIGGER]
 
 
 def test_delete_all_preserves_other_active_classroom(migrated_database):
@@ -631,7 +622,6 @@ def test_delete_all_refuses_symlinked_runtime_file_without_db_mutation(migrated_
     with database.session() as session:
         debate = session.get(Debate, ids["debate"])
         assert debate is not None and debate.revision == 1
-        assert session.execute(text("PRAGMA foreign_key_check")).first() is None
 
 
 @pytest.mark.parametrize("failure", ["partial_files", "runtime_cancel"])

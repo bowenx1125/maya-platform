@@ -25,12 +25,14 @@ from app.providers.llm_price_card import (
     real_core_demo_budget_cap,
 )
 
+from tests.postgres_db import named_url
+
 
 def _settings(tmp_path: Path, **updates: object) -> Settings:
     values: dict[str, object] = {
         "maya_env": "test",
         "session_secret": "s" * 32,
-        "database_url": f"sqlite:///{tmp_path / 'maya.sqlite3'}",
+        "database_url": named_url(f"{tmp_path / 'maya.sqlite3'}"),
         "data_root": tmp_path,
         "tts_provider": "mock",
         "voice_provider": "mock",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 from collections.abc import Callable
 from typing import Any, NoReturn
 
@@ -55,7 +54,7 @@ def _psycopg_like_operational() -> sa_exc.OperationalError:
 
 def _postgres_undefined_table() -> sa_exc.ProgrammingError:
     return sa_exc.ProgrammingError(
-        "SELECT sql FROM sqlite_master", {}, Exception('relation "sqlite_master" does not exist')
+        "SELECT 1 FROM missing", {}, Exception('relation "missing" does not exist')
     )
 
 
@@ -68,21 +67,7 @@ def _postgres_undefined_table() -> sa_exc.ProgrammingError:
         (lambda: httpx.ReadTimeout("slow"), 503, "provider_unavailable"),
         (lambda: sa_exc.TimeoutError("pool exhausted"), 503, "provider_unavailable"),
         (_psycopg_like_operational, 503, "provider_unavailable"),
-        (
-            lambda: sa_exc.OperationalError(
-                "UPDATE x", {}, sqlite3.OperationalError("database is locked")
-            ),
-            503,
-            "provider_unavailable",
-        ),
         (_postgres_undefined_table, 500, "internal_error"),
-        (
-            lambda: sa_exc.OperationalError(
-                "SELECT 1 FROM t", {}, sqlite3.OperationalError("no such table: t")
-            ),
-            500,
-            "internal_error",
-        ),
         (
             lambda: sa_exc.IntegrityError("DELETE", {}, Exception("fk violation")),
             500,
