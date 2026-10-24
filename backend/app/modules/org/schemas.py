@@ -115,7 +115,8 @@ class OverviewResult(BaseModel):
     """One formal test attempt by a group member, with its answer sheet.
 
     ``phase`` is what a teacher should be told: a missing summary or score is
-    not still answering. ``conversation_id`` is the chat the attempt ran in.
+    not still answering. ``conversation_id`` is the chat the attempt ran in,
+    null once that chat was deleted: Record does not depend on it.
     """
 
     attempt_id: UUID
@@ -131,7 +132,7 @@ class OverviewResult(BaseModel):
         "paused",
         "completed",
     ]
-    conversation_id: UUID
+    conversation_id: UUID | None
     group_id: UUID | None = None
     group_name: str | None = None
     started_at: datetime

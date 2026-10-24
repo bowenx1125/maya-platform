@@ -14,8 +14,8 @@ from app.modules.auth.service import AuthContext
 from app.modules.org.schemas import OverviewResult
 
 from .reports import (
+    delete_course_assessment_attempt,
     download_assessment_course_report,
-    hide_course_assessment_attempt,
     list_course_assessment_attempts,
     list_my_assessment_attempts,
 )
@@ -76,7 +76,7 @@ def list_my_assessment_attempts_route(
     status_code=204,
     operation_id="deleteCourseAssessmentAttempt",
     response_class=Response,
-    responses={404: {"model": Error}},
+    responses={404: {"model": Error}, 409: {"model": Error}},
 )
 def delete_course_assessment_attempt_route(
     course_id: UUID,
@@ -85,9 +85,11 @@ def delete_course_assessment_attempt_route(
     actor: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> Response:
-    """A course teacher deletes an attempt from Record. It is only hidden."""
+    """A course teacher deletes an attempt from Record, for the student too."""
 
-    hide_course_assessment_attempt(db, actor, course_id=str(course_id), attempt_id=str(attempt_id))
+    delete_course_assessment_attempt(
+        db, actor, course_id=str(course_id), attempt_id=str(attempt_id)
+    )
     return Response(status_code=204)
 
 

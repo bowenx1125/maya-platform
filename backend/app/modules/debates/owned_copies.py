@@ -379,7 +379,6 @@ def delete_debate_knowledge(db: Session, debate_id: str, data_root: Path | None)
         if snapshot.id in referenced:
             continue
         _delete_snapshot_files(db, snapshot, data_root)
-        db.delete(snapshot)
     if not referenced:
         for copy in db.scalars(
             select(DebateKnowledgeCopy).where(DebateKnowledgeCopy.debate_id == debate_id)
@@ -401,7 +400,9 @@ def _delete_snapshot_files(
             )
         ).all()
     )
-    db.delete(snapshot)
-    db.flush()
+    from app.modules.purge import purge_ids
+
+    if not purge_ids(db, "knowledge_snapshots", [snapshot.id]):
+        return
     for file_id in file_ids:
         release_stored_file(db, data_root, file_id)

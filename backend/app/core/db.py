@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -137,6 +137,37 @@ def _time_pool_checkout(engine: Engine) -> None:
     pool.connect = timed_connect  # type: ignore[method-assign]
 
 
+def registered_metadata() -> MetaData:
+    """The model metadata with every vertical-domain table registered.
+
+    Isolated tests call create_all through this; deployment still uses
+    Alembic as the source of truth.
+    """
+
+    from app.modules.auth import admission as _admission_models
+    from app.modules.debates import models as _debate_models
+    from app.modules.interactions import models as _interaction_models
+    from app.modules.knowledge_sets import models as _knowledge_set_models
+    from app.modules.learning import models as _learning_models
+    from app.modules.reports import models as _report_models
+    from app.modules.runtime_tools import models as _runtime_tool_models
+    from app.modules.teams import models as _team_models
+    from app.modules.workspace import models as _workspace_models
+
+    del (
+        _admission_models,
+        _debate_models,
+        _interaction_models,
+        _knowledge_set_models,
+        _learning_models,
+        _report_models,
+        _runtime_tool_models,
+        _team_models,
+        _workspace_models,
+    )
+    return Base.metadata
+
+
 class Database:
     """Application database and session factory."""
 
@@ -161,29 +192,7 @@ class Database:
         does not create any later-wave tables.
         """
 
-        # Register Wave 2/3 vertical-domain tables before isolated tests call
-        # create_all. Deployment still uses Alembic as the source of truth.
-        from app.modules.auth import admission as _admission_models
-        from app.modules.debates import models as _debate_models
-        from app.modules.interactions import models as _interaction_models
-        from app.modules.knowledge_sets import models as _knowledge_set_models
-        from app.modules.learning import models as _learning_models
-        from app.modules.reports import models as _report_models
-        from app.modules.runtime_tools import models as _runtime_tool_models
-        from app.modules.teams import models as _team_models
-        from app.modules.workspace import models as _workspace_models
-
-        del (
-            _admission_models,
-            _debate_models,
-            _interaction_models,
-            _knowledge_set_models,
-            _learning_models,
-            _report_models,
-            _runtime_tool_models,
-            _team_models,
-            _workspace_models,
-        )
+        registered_metadata()
         if self.engine.url.get_backend_name() == "postgresql":
             ensure_postgres_compat(self.engine)
         if self.engine.url.get_backend_name() == "sqlite":

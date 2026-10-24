@@ -8904,7 +8904,7 @@
     },
     "/api/v1/learning/courses/{course_id}/assessment-attempts/{attempt_id}": {
       "delete": {
-        "description": "A course teacher deletes an attempt from Record. It is only hidden.",
+        "description": "A course teacher deletes an attempt from Record, for the student too.",
         "operationId": "deleteCourseAssessmentAttempt",
         "parameters": [
           {
@@ -8951,6 +8951,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
           }
         },
         "security": [
@@ -11511,7 +11521,14 @@
             ]
           },
           "conversation_id": {
-            "$ref": "#/components/schemas/Uuid"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "group_id": {
             "anyOf": [

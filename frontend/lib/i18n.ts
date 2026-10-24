@@ -825,7 +825,7 @@ const enMessages = {
   recordUnfinished: "Unfinished",
   recordDeleteNamed: "Delete {name}'s attempt",
   recordDeleteConfirm:
-    "Delete this attempt from Record? Its answers and chat are kept and can be restored.",
+    "Permanently delete this attempt? Its answers and scores are removed for the student too, and it cannot be restored. The chat is not affected.",
   overviewActivity: "Recent activity",
   overviewNoMembers: "No students in this group yet.",
   overviewNoResults: "No Record yet.",
@@ -1748,7 +1748,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   recordUnfinished: "未完成",
   recordDeleteNamed: "删除 {name} 的这次测评",
   recordDeleteConfirm:
-    "从 Record 删除这次测评？作答和聊天记录会保留，可以恢复。",
+    "永久删除这次测评？作答和成绩会一起删除，学生那边也看不到，无法恢复。聊天记录不受影响。",
   overviewActivity: "最近动态",
   overviewNoMembers: "这个组还没有学生。",
   overviewNoResults: "还没有 Record。",

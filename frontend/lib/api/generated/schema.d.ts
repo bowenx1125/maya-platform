@@ -2102,7 +2102,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Course Assessment Attempt Route
-         * @description A course teacher deletes an attempt from Record. It is only hidden.
+         * @description A course teacher deletes an attempt from Record, for the student too.
          */
         delete: operations["deleteCourseAssessmentAttempt"];
         options?: never;
@@ -2827,7 +2827,7 @@ export interface components {
             status: "in_progress" | "paused" | "completed";
             /** @enum {string} */
             phase: "answering" | "summary_not_saved" | "scoring_not_saved" | "paused" | "completed";
-            conversation_id: components["schemas"]["Uuid"];
+            conversation_id: components["schemas"]["Uuid"] | null;
             group_id?: components["schemas"]["Uuid"] | null;
             group_name?: string | null;
             started_at: components["schemas"]["IsoTime"];
@@ -11293,6 +11293,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
