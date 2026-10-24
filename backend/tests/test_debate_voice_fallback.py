@@ -90,10 +90,9 @@ def test_real_voice_resolution_decrypts_custom_and_falls_back_without_fake_audio
     participant = SqlRow(
         {"effective_voice_kind": "platform_profile", "effective_voice_profile_id": custom_id}
     )
-    with database.session() as db:
-        custom = SqlPlaybackRepository.resolve_effective_voice(db, participant, settings)
-        assert (custom.profile_id, custom.voice_token) == (custom_id, "fixture-custom-external")
-        db.get(VoiceProfile, custom_id).external_id_encrypted = b"invalid-envelope"
+    # Owner decision (2026-10-24): a Debate speaks only from its own voice
+    # snapshot. Without one, the live Voice row is not read; the configured
+    # system fallback speaks, and without that the turn is text only.
     with database.session() as db:
         fallback = SqlPlaybackRepository.resolve_effective_voice(db, participant, settings)
         assert (fallback.profile_id, fallback.voice_token) == (

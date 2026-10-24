@@ -1,23 +1,29 @@
-"""Debate-owned provider voice clones (2026-10-20).
+"""The voice a Debate keeps: a copied sample and the supplier voice ID.
 
-A Debate speaks with its own independent clone, created from the platform
-Voice's retained enrollment sample, so deleting or changing the platform
-Voice never changes a Debate's audio.
+Owner decision (2026-10-24, replaces the independent clone): creating a
+Debate copies each participant Voice's recording into the Debate's own
+storage and records that Voice's supplier voice ID (encrypted, bound to the
+snapshot row) in ``debate_voice_clones``. Nothing is enrolled, so nothing is
+charged. Playback and new speech use only this snapshot.
 
-* ``request_debate_clones`` (in the create transaction) adds one ``pending``
-  row per distinct voiced participant voice. Debate creation never waits for
-  or fails on the provider.
-* ``sweep_debate_voice_clones`` (startup + periodic, advisory lock) enrolls
-  pending ``create`` rows with bounded retries and deletes the provider voice
-  of clones whose Debate row is gone. ``backfill`` rows are only enrolled by
-  the explicit backfill script.
-* Until a clone is ready, audio uses the platform Voice it was copied from
-  while it still exists (the same voice); see ``resolve_debate_clone``.
+The supplier voice is shared by the Voice and every Debate that copied it,
+so it is deleted at the supplier only when none of them is left:
+
+* Deleting the Voice removes its row and files, and skips the supplier call
+  while any live Debate snapshot names the same voice.
+* Deleting a Debate leaves its snapshot rows without a Debate; the sweeper
+  removes them and their files, and calls the supplier once per voice only
+  when no Voice row and no live Debate still holds it.
+
+Both decisions take the same PostgreSQL advisory lock per voice, keyed by an
+HMAC of the supplier voice ID, so a concurrent Debate create, Debate delete
+and Voice delete see each other's committed rows.
 """
 
 from __future__ import annotations
 
-import base64
+import hashlib
+import hmac
 import json
 import logging
 from datetime import UTC, datetime
@@ -39,8 +45,6 @@ from app.modules.voices.crypto import (
 
 logger = logging.getLogger(__name__)
 
-MAX_ATTEMPTS = 5
-_SWEEP_LOCK_KEY = 0x6D617961_766F6963  # "mayavoic"
 CLONE_SCOPE = "debate"
 
 
@@ -49,8 +53,63 @@ def _now() -> datetime:
 
 
 def clone_recovery_name(clone_id: str) -> str:
-    # Provider prefixes accept lowercase letters/digits, fewer than ten.
     return f"d{clone_id.replace('-', '')[:8]}"
+
+
+def voice_ref_hash(settings: Any, provider_key: str, model: str, voice_id: str) -> str:
+    """A keyed fingerprint of one supplier voice, safe to store and compare."""
+
+    message = f"{provider_key}\0{model}\0{voice_id}".encode()
+    return hmac.new(settings.secret_bytes, message, hashlib.sha256).hexdigest()
+
+
+def lock_voice(db: Session, ref_hash: str) -> None:
+    """Serialize every reference decision about one supplier voice."""
+
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"maya-supplier-voice:{ref_hash}"},
+        )
+
+
+def profile_voice_id(profile: VoiceProfile, settings: Any) -> str | None:
+    if not profile.external_id_encrypted:
+        return None
+    try:
+        return decrypt_external_voice_id(
+            profile.external_id_encrypted,
+            settings.secret_bytes,
+            profile_id=profile.id,
+            scope=profile.scope,
+            group_id=profile.group_id,
+            provider_key=profile.provider_key,
+            target_model_key=profile.target_model_key,
+        )
+    except VoiceEncryptionError:
+        return None
+
+
+def _participant_voice_id(row: Any, settings: Any) -> str | None:
+    """The supplier ID frozen into a participant before snapshot rows existed."""
+
+    raw = getattr(row, "voice_snapshot_json", None)
+    cipher = getattr(row, "voice_external_id_encrypted", None)
+    if not raw or not cipher:
+        return None
+    try:
+        snapshot = json.loads(raw)
+        return decrypt_external_voice_id(
+            bytes(cipher),
+            settings.secret_bytes,
+            profile_id=str(snapshot.get("voice_profile_id") or ""),
+            scope=str(snapshot.get("scope") or ""),
+            group_id=snapshot.get("group_id"),
+            provider_key=str(snapshot.get("provider_key") or ""),
+            target_model_key=str(snapshot.get("target_model_key") or ""),
+        )
+    except (ValueError, VoiceEncryptionError):
+        return None
 
 
 def source_voice_id(row: Any) -> str | None:
@@ -124,15 +183,16 @@ def _owned_sample(db: Session, profile: VoiceProfile, data_root: Path | None) ->
     return file_id
 
 
-def request_debate_clones(
+def snapshot_debate_voices(
     db: Session,
     debate_id: str,
     participants: list[Any],
     *,
+    settings: Any,
     origin: str = "create",
     data_root: Path | None = None,
 ) -> list[DebateVoiceClone]:
-    """Add pending clone rows for a Debate's voiced participants (idempotent)."""
+    """Copy each voiced participant's sample and supplier ID (idempotent, free)."""
 
     created: list[DebateVoiceClone] = []
     existing = set(
@@ -153,7 +213,21 @@ def request_debate_clones(
         model = profile.target_model_key if profile else snapshot.get("target_model_key")
         if not provider_key or not model:
             continue
-        sample = _owned_sample(db, profile, data_root) if profile is not None else None
+        supplier_id = profile_voice_id(profile, settings) if profile is not None else None
+        supplier_id = supplier_id or _participant_voice_id(row, settings)
+        ref_hash = (
+            voice_ref_hash(settings, str(provider_key), str(model), supplier_id)
+            if supplier_id
+            else None
+        )
+        if ref_hash is not None:
+            lock_voice(db, ref_hash)
+            if profile is not None:
+                db.refresh(profile)
+                # A Voice whose delete already committed may be leaving the
+                # supplier right now; a new Debate does not copy it.
+                if origin == "create" and profile.status != "ready":
+                    continue
         clone_id = str(uuid4())
         now = _now()
         clone = DebateVoiceClone(
@@ -161,12 +235,26 @@ def request_debate_clones(
             debate_id=debate_id,
             source_voice_profile_id=voice_id,
             origin=origin,
-            status="pending" if sample else "no_sample",
+            status="ready",
             provider_key=str(provider_key),
             target_model_key=str(model),
-            sample_file_id=sample,
+            sample_file_id=(_owned_sample(db, profile, data_root) if profile is not None else None),
             sample_language=profile.sample_language if profile is not None else None,
             recovery_name=clone_recovery_name(clone_id),
+            provider_voice_hash=ref_hash,
+            external_id_encrypted=(
+                encrypt_external_voice_id(
+                    supplier_id,
+                    settings.secret_bytes,
+                    profile_id=clone_id,
+                    scope=CLONE_SCOPE,
+                    group_id=None,
+                    provider_key=str(provider_key),
+                    target_model_key=str(model),
+                )
+                if supplier_id
+                else None
+            ),
             attempts=0,
             created_at=now,
             updated_at=now,
@@ -180,7 +268,7 @@ def request_debate_clones(
 def resolve_debate_clone(
     db: Any, debate_id: str, voice_id: str, settings: Any
 ) -> tuple[str, str] | None:
-    """(provider token, model) of a ready Debate clone, else None."""
+    """(supplier voice ID, model) from the Debate's own snapshot, else None."""
 
     row = (
         db.execute(
@@ -212,18 +300,12 @@ def resolve_debate_clone(
 
 
 def resolve_snapshot_voice(participant: Any, settings: Any) -> tuple[str, str] | None:
-    """(provider token, model) from the supplier id frozen into the participant.
-
-    A Voice uploaded before samples were kept cannot be cloned for a Debate.
-    Its Debates speak with the supplier voice the snapshot names; deleting the
-    platform Voice keeps that supplier voice while they need it.
-    """
+    """(supplier ID, model) frozen into a participant that has no snapshot row yet."""
 
     from app.providers.dashscope import LEGACY_CLONE_MODEL_KEY
 
     raw = getattr(participant, "voice_snapshot_json", None)
-    cipher = getattr(participant, "voice_external_id_encrypted", None)
-    if not raw or not cipher:
+    if not raw or not getattr(participant, "voice_external_id_encrypted", None):
         return None
     try:
         snapshot = json.loads(raw)
@@ -231,42 +313,52 @@ def resolve_snapshot_voice(participant: Any, settings: Any) -> tuple[str, str] |
         return None
     profile_id = snapshot.get("voice_profile_id")
     model = snapshot.get("target_model_key")
-    provider_key = snapshot.get("provider_key")
     if not profile_id or not isinstance(model, str) or not model:
         return None
     if model == LEGACY_CLONE_MODEL_KEY:
         return None
     if getattr(settings, "tts_provider", "mock") == "mock":
         return str(profile_id), model
-    if provider_key != "dashscope":
+    if snapshot.get("provider_key") != "dashscope":
         return None
-    try:
-        token = decrypt_external_voice_id(
-            bytes(cipher),
-            settings.secret_bytes,
-            profile_id=str(profile_id),
-            scope=str(snapshot.get("scope") or ""),
-            group_id=snapshot.get("group_id"),
-            provider_key=provider_key,
-            target_model_key=model,
+    token = _participant_voice_id(participant, settings)
+    return (token, model) if token else None
+
+
+def _live_debate_refs(db: Session, ref_hash: str, *, exclude: set[str] | None = None) -> bool:
+    query = select(DebateVoiceClone.id).where(
+        DebateVoiceClone.provider_voice_hash == ref_hash,
+        DebateVoiceClone.debate_id.in_(select(Debate.id)),
+    )
+    if exclude:
+        query = query.where(DebateVoiceClone.id.not_in(exclude))
+    return db.scalar(query.limit(1)) is not None
+
+
+def debates_hold_supplier_voice(db: Session, profile: VoiceProfile, settings: Any) -> bool:
+    """True while a live Debate still speaks with this Voice's supplier voice.
+
+    Takes the voice lock; the caller's next commit (the Voice delete) releases
+    it, so a Debate create waiting on the lock then sees the Voice deleted.
+    """
+
+    supplier_id = profile_voice_id(profile, settings)
+    if supplier_id is not None:
+        ref_hash = voice_ref_hash(
+            settings, profile.provider_key, profile.target_model_key, supplier_id
         )
-    except VoiceEncryptionError:
-        return None
-    return token, model
-
-
-def debates_need_supplier_voice(db: Session, profile_id: str) -> bool:
-    """True while a Debate without its own clone still speaks with this Voice."""
-
+        lock_voice(db, ref_hash)
+        if _live_debate_refs(db, ref_hash):
+            return True
+    # A Debate made before snapshot rows existed and not yet backfilled.
     covered = select(DebateVoiceClone.debate_id).where(
-        DebateVoiceClone.source_voice_profile_id == profile_id,
-        DebateVoiceClone.status.in_(("ready", "pending")),
+        DebateVoiceClone.source_voice_profile_id == profile.id
     )
     return (
         db.scalar(
             select(DebateParticipant.id)
             .where(
-                DebateParticipant.effective_voice_profile_id == profile_id,
+                DebateParticipant.effective_voice_profile_id == profile.id,
                 DebateParticipant.voice_external_id_encrypted.is_not(None),
                 DebateParticipant.debate_id.not_in(covered),
             )
@@ -276,114 +368,97 @@ def debates_need_supplier_voice(db: Session, profile_id: str) -> bool:
     )
 
 
-def enroll_clone(
-    db: Session, clone: DebateVoiceClone, *, data_root: Path, settings: Any, provider: Any
-) -> bool:
-    """One enrollment attempt; True when the clone became ready."""
+def _drop_snapshot(db: Session, clone: DebateVoiceClone, data_root: Path | None) -> None:
+    from app.modules.real_delete import release_stored_file
 
-    from app.providers.voice import VoiceCloneRefusedError
-
-    sample = db.get(StoredFile, clone.sample_file_id) if clone.sample_file_id else None
-    if sample is None:
-        clone.status = "no_sample"
-        clone.updated_at = _now()
-        return False
-    clone.attempts += 1
-    clone.updated_at = _now()
-    try:
-        wav = contained_path(data_root, sample.relative_path).read_bytes()
-        data_uri = "data:audio/wav;base64," + base64.b64encode(wav).decode("ascii")
-        result = provider.enroll(
-            data_uri,
-            recovery_name=clone.recovery_name,
-            target_model_key=clone.target_model_key,
-            language=clone.sample_language or "en",
-        )
-    except VoiceCloneRefusedError:
-        clone.status = "failed"
-        clone.safe_error_code = "voice_clone_refused"
-        return False
-    except Exception:  # noqa: BLE001 - provider/file errors retry, bounded
-        logger.warning("debate_voice_clone_enroll_failed clone=%s", clone.id)
-        clone.safe_error_code = "provider_unavailable"
-        if clone.attempts >= MAX_ATTEMPTS:
-            clone.status = "failed"
-        return False
-    if not result.external_voice_id or result.degraded:
-        clone.safe_error_code = "voice_clone_degraded"
-        if clone.attempts >= MAX_ATTEMPTS:
-            clone.status = "failed"
-        return False
-    clone.external_id_encrypted = encrypt_external_voice_id(
-        result.external_voice_id,
-        settings.secret_bytes,
-        profile_id=clone.id,
-        scope=CLONE_SCOPE,
-        group_id=None,
-        provider_key=clone.provider_key,
-        target_model_key=clone.target_model_key,
-    )
-    clone.status = "ready"
-    clone.safe_error_code = None
-    return True
-
-
-def _delete_orphan(db: Session, clone: DebateVoiceClone, *, settings: Any, provider: Any) -> None:
-    if clone.status == "ready" and clone.external_id_encrypted:
-        external = decrypt_external_voice_id(
-            clone.external_id_encrypted,
-            settings.secret_bytes,
-            profile_id=clone.id,
-            scope=CLONE_SCOPE,
-            group_id=None,
-            provider_key=clone.provider_key,
-            target_model_key=clone.target_model_key,
-        )
-        provider.delete(external, target_model_key=clone.target_model_key)
+    sample = clone.sample_file_id
     db.delete(clone)
+    db.flush()
+    release_stored_file(db, data_root, sample)
 
 
-def sweep_debate_voice_clones(
-    db: Session, *, data_root: Path, settings: Any, provider: Any, origin: str = "create"
+def release_orphan_voices(
+    db: Session, *, data_root: Path | None, settings: Any, provider: Any
 ) -> dict[str, int]:
-    """Enroll pending clones and delete clones of deleted Debates."""
+    """Remove snapshot rows of deleted Debates; free each supplier voice once."""
 
-    counts = {"ready": 0, "pending": 0, "deleted": 0}
-    if db.get_bind().dialect.name == "postgresql":
-        if not db.execute(
-            text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _SWEEP_LOCK_KEY}
-        ).scalar():
-            return counts
-    orphans = db.scalars(
-        select(DebateVoiceClone).where(DebateVoiceClone.debate_id.not_in(select(Debate.id)))
-    ).all()
+    counts = {"released": 0, "supplier_deleted": 0, "kept": 0}
+    orphans = list(
+        db.scalars(
+            select(DebateVoiceClone).where(DebateVoiceClone.debate_id.not_in(select(Debate.id)))
+        ).all()
+    )
+    groups: dict[str | None, list[DebateVoiceClone]] = {}
     for clone in orphans:
+        groups.setdefault(clone.provider_voice_hash, []).append(clone)
+    for ref_hash, rows in groups.items():
         try:
-            _delete_orphan(db, clone, settings=settings, provider=provider)
-            counts["deleted"] += 1
-        except Exception:  # noqa: BLE001 - keep the row, retry next sweep
-            logger.warning("debate_voice_clone_delete_failed clone=%s", clone.id)
-    db.commit()
-    pending = db.scalars(
-        select(DebateVoiceClone).where(
-            DebateVoiceClone.status == "pending", DebateVoiceClone.origin == origin
-        )
-    ).all()
-    for clone in pending:
-        if enroll_clone(db, clone, data_root=data_root, settings=settings, provider=provider):
-            counts["ready"] += 1
-        else:
-            counts["pending"] += 1
-        db.commit()
+            if ref_hash is None:
+                for clone in rows:
+                    _drop_snapshot(db, clone, data_root)
+                db.commit()
+                counts["released"] += len(rows)
+                continue
+            lock_voice(db, ref_hash)
+            ids = {clone.id for clone in rows}
+            fresh = list(
+                db.scalars(select(DebateVoiceClone).where(DebateVoiceClone.id.in_(ids))).all()
+            )
+            if not fresh:
+                db.commit()
+                continue
+            source_ids = {clone.source_voice_profile_id for clone in fresh}
+            voice_row_left = (
+                db.scalar(select(VoiceProfile.id).where(VoiceProfile.id.in_(source_ids)).limit(1))
+                is not None
+            )
+            if not voice_row_left and not _live_debate_refs(db, ref_hash, exclude=ids):
+                first = fresh[0]
+                if first.external_id_encrypted:
+                    supplier_id = decrypt_external_voice_id(
+                        first.external_id_encrypted,
+                        settings.secret_bytes,
+                        profile_id=first.id,
+                        scope=CLONE_SCOPE,
+                        group_id=None,
+                        provider_key=first.provider_key,
+                        target_model_key=first.target_model_key,
+                    )
+                    # Still under the lock: no new reference can appear before
+                    # the rows go, and a failed call keeps them for a retry.
+                    provider.delete(supplier_id, target_model_key=first.target_model_key)
+                    counts["supplier_deleted"] += 1
+            else:
+                counts["kept"] += 1
+            for clone in fresh:
+                _drop_snapshot(db, clone, data_root)
+            db.commit()
+            counts["released"] += len(fresh)
+        except Exception:  # noqa: BLE001 - keep the rows, retry next sweep
+            db.rollback()
+            logger.warning("debate_voice_release_failed rows=%d", len(rows))
     return counts
 
 
-def sync_debate_clones(db: Session, debate_id: str, *, data_root: Path | None = None) -> None:
-    """Match clone rows to the Debate's current voiced participants.
+def sweep_debate_voice_clones(
+    db: Session, *, data_root: Path, settings: Any, provider: Any
+) -> dict[str, int]:
+    """Startup and periodic: release the voices of deleted Debates. Never enrolls.
 
-    A clone no longer needed (a draft changed its participants) is detached
-    to a random id, so the sweeper deletes its provider voice like a deleted
-    Debate's.
+    Two sweepers (two replicas) may run at once: each voice is decided under
+    its own lock and its rows are re-read there, so the second finds nothing.
+    """
+
+    return release_orphan_voices(db, data_root=data_root, settings=settings, provider=provider)
+
+
+def sync_debate_clones(
+    db: Session, debate_id: str, *, settings: Any, data_root: Path | None = None
+) -> None:
+    """Match snapshot rows to the Debate's current voiced participants.
+
+    A row no longer needed (a draft changed its participants) is detached to a
+    random Debate id, so the sweeper releases it like a deleted Debate's.
     """
 
     participants = participants_of(db, debate_id)
@@ -392,13 +467,10 @@ def sync_debate_clones(db: Session, debate_id: str, *, data_root: Path | None = 
         select(DebateVoiceClone).where(DebateVoiceClone.debate_id == debate_id)
     ).all():
         if clone.source_voice_profile_id not in needed:
-            if clone.status == "ready":
-                clone.debate_id = str(uuid4())
-                clone.updated_at = _now()
-            else:
-                db.delete(clone)
+            clone.debate_id = str(uuid4())
+            clone.updated_at = _now()
     db.flush()
-    request_debate_clones(db, debate_id, participants, data_root=data_root)
+    snapshot_debate_voices(db, debate_id, participants, settings=settings, data_root=data_root)
 
 
 def participants_of(db: Session, debate_id: str) -> list[DebateParticipant]:

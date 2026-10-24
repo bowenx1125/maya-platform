@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remove legacy hidden, soft-deleted and withdrawn rows. Dry-run by default.
 
-Counts the rows before and after. Debate snapshots, voice clones, grades and
+Counts the rows before and after. Debate snapshots, Debate voice copies, grades and
 Record answer payloads are never deleted; the write rolls back if their counts
 move. Old Agent versions are pruned to the current version plus the previous
 AGENT.md. Files under the owned storage roots that no row references, and that

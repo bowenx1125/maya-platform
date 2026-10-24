@@ -332,9 +332,16 @@ def test_plato_resolves_the_preset_and_a_clone_keeps_its_model(
             )
             session.add(clone)
         # Chats are text-only, so Debate playback is where a profile's own
-        # model reaches the supplier.
+        # model reaches the supplier. A Debate speaks from the voice frozen
+        # into it (2026-10-24), never from the live Voice row.
+        from app.modules.debates.owned_copies import voice_snapshot
+
         real = settings.model_copy(update={"tts_provider": "dashscope"})
         with database.session() as session:
+            frozen = {
+                profile_id: voice_snapshot(session.get(VoiceProfile, profile_id))
+                for profile_id in (clone_id, ELDRIC_SAGE_PROFILE_ID)
+            }
             resolved = [
                 SqlPlaybackRepository.resolve_effective_voice(
                     session,
@@ -342,6 +349,8 @@ def test_plato_resolves_the_preset_and_a_clone_keeps_its_model(
                         {
                             "effective_voice_kind": "platform_profile",
                             "effective_voice_profile_id": profile_id,
+                            "voice_snapshot_json": frozen[profile_id][0],
+                            "voice_external_id_encrypted": frozen[profile_id][1],
                         }
                     ),
                     real,

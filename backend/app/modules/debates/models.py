@@ -660,12 +660,15 @@ __all__ = [
 
 
 class DebateVoiceClone(Base):
-    """A provider voice clone owned by one Debate (2026-10-20).
+    """The voice one Debate keeps (2026-10-24): a copied sample and supplier ID.
 
-    Created from the platform Voice's retained sample when the Debate is
-    created, so deleting the platform Voice never changes a Debate's audio.
-    ``debate_id`` deliberately has no FK: the clone outlives the Debate row
-    just long enough for the sweeper to delete the provider voice.
+    Nothing is enrolled: the row holds the source Voice's supplier voice ID
+    (encrypted, bound to this row) and a copy of its recording, so deleting
+    the platform Voice never changes a Debate's audio. ``provider_voice_hash``
+    is a keyed fingerprint of the supplier voice, used to count references.
+    ``debate_id`` deliberately has no FK: the row outlives the Debate just long
+    enough for the sweeper to release it and, if nothing else holds the
+    supplier voice, delete it there.
     """
 
     __tablename__ = "debate_voice_clones"
@@ -685,6 +688,7 @@ class DebateVoiceClone(Base):
     sample_language: Mapped[str | None] = mapped_column(String(16), nullable=True)
     recovery_name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     external_id_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    provider_voice_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -701,6 +705,7 @@ class DebateVoiceClone(Base):
         CheckConstraint("origin IN ('create', 'backfill')", name="ck_debate_voice_clones_origin"),
         CheckConstraint("attempts >= 0", name="ck_debate_voice_clones_attempts"),
         Index("ix_debate_voice_clones_status", "status"),
+        Index("ix_debate_voice_clones_voice_hash", "provider_voice_hash"),
     )
 
 

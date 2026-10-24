@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Copy AGENT.md, RAG/Knowledge and a voice clone into existing Debates.
+"""Copy AGENT.md, RAG/Knowledge and the voice into existing Debates.
 
 Dry-run by default. ``--apply`` writes. The copy is idempotent: a Debate that
-already owns its snapshot, markdown and clone row is left alone. Writing to the
+already owns its snapshot, markdown and voice row is left alone. The voice is
+the source Voice's recording and supplier ID, copied for free: nothing is
+enrolled and no supplier is called. Writing to the
 production database also needs --confirm-production; back it up first.
 """
 
@@ -26,16 +28,20 @@ from app.modules.debates.models import Debate, DebateVoiceClone  # noqa: E402
 from app.modules.debates.owned_copies import adopt_debate_knowledge  # noqa: E402
 from app.modules.debates.voice_clones import (  # noqa: E402
     participants_of,
-    request_debate_clones,
+    snapshot_debate_voices,
     source_voice_id,
 )
 
 
 def _guard_production(url: str, data_root: Path, *, apply: bool, confirmed: bool) -> None:
     lowered = f"{url} {data_root}".lower()
-    production = any(
-        marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
-    ) or os.environ.get("MAYA_ENV") == "production"
+    production = (
+        any(
+            marker in lowered
+            for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
+        )
+        or os.environ.get("MAYA_ENV") == "production"
+    )
     if apply and production and not confirmed:
         raise SystemExit("Production target: pass --confirm-production with --apply.")
 
@@ -45,7 +51,7 @@ def plan(session: Any) -> dict[str, int]:
         "debates": 0,
         "missing_agent_md": 0,
         "unpinned_knowledge": 0,
-        "missing_voice_clone": 0,
+        "missing_voice": 0,
     }
     for debate_id in session.scalars(select_ids(session)).all():
         counts["debates"] += 1
@@ -61,7 +67,7 @@ def plan(session: Any) -> dict[str, int]:
                 counts["unpinned_knowledge"] += 1
             voice = source_voice_id(row)
             if voice and session.scalar(select_clone(session, debate_id, voice)) is None:
-                counts["missing_voice_clone"] += 1
+                counts["missing_voice"] += 1
     return counts
 
 
@@ -80,7 +86,7 @@ def select_clone(session: Any, debate_id: str, voice_id: str) -> Any:
     )
 
 
-def apply(session: Any, data_root: Path) -> dict[str, int]:
+def apply(session: Any, data_root: Path, settings: Any) -> dict[str, int]:
     filled = {"agent_md": 0, "knowledge": 0, "voice_rows": 0}
     from sqlalchemy import select
 
@@ -100,8 +106,8 @@ def apply(session: Any, data_root: Path) -> dict[str, int]:
         session.flush()
         after = {row.knowledge_snapshot_id for row in rows}
         filled["knowledge"] += len(after - before)
-        created = request_debate_clones(
-            session, debate_id, rows, origin="backfill", data_root=data_root
+        created = snapshot_debate_voices(
+            session, debate_id, rows, settings=settings, origin="backfill", data_root=data_root
         )
         filled["voice_rows"] += len(created)
     session.commit()
@@ -134,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.apply:
             print("dry-run; pass --apply to write")
             return 0
-        written = apply(session, settings.resolved_data_root)
+        written = apply(session, settings.resolved_data_root, settings)
         after = plan(session)
         print("wrote", written)
         print("after", after)
