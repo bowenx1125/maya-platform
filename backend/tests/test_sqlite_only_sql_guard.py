@@ -32,6 +32,7 @@ REVIEWED: dict[str, int] = {
     "modules/knowledge/providers/sql_stage.py": 1,  # dialect == "sqlite"
     "modules/debates/cleanup.py": 4,  # trigger dance only when dialect == "sqlite"
     "modules/debates/rebirth.py": 2,  # final-input trigger only when dialect == "sqlite"
+    "modules/teams/retarget.py": 1,  # defer_foreign_keys only when dialect == "sqlite"
     "modules/debates/playback/sql_repository.py": 6,  # postgres branches beside each
 }
 
