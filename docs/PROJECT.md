@@ -197,109 +197,25 @@ Per-sign-in Studyform/Brainform/Chat/Voices cache:6 parallel,10s reuse,429/503 b
 Students use teachers' public Agents only in Teams; old chats read-only. Oct19:
 uploaded Voices ready at once (0073);▷ listens only;Team model call12 rows (was16).
 
-## Oct20 review and release
+## Oct20–23 releases (compacted)
 
-Base `5dd9690bfa04c7a9d2a101bdb2abce7d01e3b85a`; integrated inputs:
+Oct20 base5dd9690b +#225 f2646b28,#229 566a798f,#227 bfe8187e,#230 a0f2954c,#232
+69d3218d: answer guard/edits,public Agent editors/audit,Chat-independent Record;0076.
+Reviewed #228 4560e3cf,#231 c41062b2: cascade durable recovery,no auto-retry,Persona
+confirm. #215 superseded;#226,#38–41,#97 excluded. Oct21 +#234 7f4c8fff,#235 a04c2ea4:
+Compose TTL30,hash cap2/process,login race fences,NUL/surrogate refusal before save.
+Release9c68d42b ready/schema0076/public200 (receipts PROJECT@6c09c024).
 
-- #225 `f2646b280663b8efc0a194b1c759cac70fd98c4e`
-- #229 `566a798f0dd368a144d7a27317f407350936eb5a`
-- #227 `bfe8187e8ed7cb77c3cebd2715f9a2a68b434500`
-- #230 `a0f2954ceff73e46afeab249f8b6487bd29f1fa6`
-- #232 `69d3218d98f920f3d99203492f660c22e2dc92c5`
+Oct22 shared editing: Public Agent editors=creator/groupmates/course teachers;Done
+sends expected_base_version_id,409 stale_base_version keeps edits;per-user drafts.
+Performance: hash waits free DB connections;Chat history SELECTs constant (5);
+Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
 
-Answer guard/edits,public Agent editors/audit,title fit,Chat-independent Record,dead
-routes;fixed0076→0075. Private-source/ownerless fences/editor tooltip stay. Old-answer
-formats frozen,guard state saved;guard/PG write-count tests passed,ceilings same.
-
-Reviewed inputs:
-#228 `4560e3cf0e64e5e86d42581fe7bbabc5faa2caec`,
-#231 `c41062b2ffc4f259be86088671475503c5f573f2`;
-main `8e59881ecf110e1ae1e0ef70078a7f0a00002780`.
-Cascade:durable recovery/replica lock,failure refs,no auto-retry,Persona confirm,
-private-name filtering;159 routes.
-#215 superseded; alternative#226, legacy#38–41 and drafts#233/#97 excluded.
-5df2066b:mock backend/PG/frontend and build/contract gates passed.
-Actions39546479628 billing-blocked.
-
-## Oct21 PR review and release
-
-Base0829e2ddf4c1a5c86e9a252264024afe31b699e1; integrated
-#234 7f4c8fff9d758cce4cc81fe765e2bc876db0cc2b,
-#235 a04c2ea4cd8a69e8a0d424f12e05ec350c781e31.
-Compose TTL30,hash cap2/process (2 replicas=4). User lock/post-hash recheck fences
-reset/catalog-change login races. Four RAG entries:bad→same-name-good passed.
-Agent/Knowledge editors reject NUL/surrogates before persistence,allow blank drafts.
-Markdown errors keep Markdown guidance; Knowledge PUT422/schema/hash/types/fixture
-updated; Unicode validation equivalent.
-
-Backend Windows+Linux:2892/45skip;95 Windows failures reproduced on base,covered on
-Linux. PG16:15;frontend1017/1skip;assertions kept.
-
-Release9c68d42b:backups/ready/schema0076/public200 verified;0 real calls
-(receipts:PROJECT@6c09c024).
-
-## Oct22 shared Agent editing
-
-Public Agent editors:creator/groupmates/course teachers; Enter=temp membership.
-Teachers use own+public Knowledge; private files hidden,unreadable bindings retained,
-unjoined library404=empty. Private Agents:creator edits,visitors read. Done uses
-expected_base_version_id;409 stale_base_version retains edits. Per-Agent/user drafts
-survive refresh,clear on Done. Guide shows latest V1.x/editor or creator. Removed
-uncalled POST /conversations/{id}/turns/{turn_id}:stop and client testChat; kept
-/debates/{id}/release,playback_reset CLI,dual-account smoke.
-
-## Oct22 performance
-
-Base6b1c2a882fa8e08360fbf0d850b386134dd70246. Hash waits release DB connections;
-credential reread/lock fences replacement. SQLite+PG10 passed. Chat history batches
-assessment/Boundary projections:1/20/100-turn SELECTs5/81/401→5/5/5,DTO parity,
-13 ownership/lifecycle regressions. Brainform coalesces nested reads,refreshes on
-mutation,fences stale responses,aborts seven list reads after60s. Mock30s:105→10
-calls,pending4→1. No schema change;real classroom capacity unverified.
-FE1045/1skip,BE2840/52skip+23,PG105;95 Windows baseline failures+2 clock flakes
-covered Linux. Build/type/lint/Ruff/format/mypy/158 routes/Latin/Prettier/POSIX
-passed;owner-only drafts fixed. Actions39809567546 billing-blocked;0 real calls.
-#237 built82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7,GitHub→bare→FF from6b1c2a88;
-SQLite API/integrity+PG backups,ready200/schema0076/containers/public200 verified.
-Password change/reset kept current session,revoked old sessions/credentials.
-Synthetic account/credential/4 sessions/memberships deleted,charged14331 unchanged.
-Exact backup/cleanup receipts remain in PROJECT history at6c09c024.
-
-## Oct23 isolated 50-user concurrency
-
-Same two-core host; separate PG/internal network,2 backends capped0.6 CPU each,
-hash2/process,Mock providers. Two50-login waves:100/100 HTTP200,p95<=7.85s;
-identities/cookie rotation/revocation passed. Agent50 and two-member Team50 passed
-SSE+persistence,replay/same-session races/foreign-account denial. Four upload entries:
-200 NUL422 followed by200 same-name201; hash/owner/revision checked,0 retries.
-
-Found PG READ COMMITTED race:3/50 Team streams emitted done with stale state despite
-50 persisted ready. Poll now uses one REPEATABLE READ snapshot; connection isolation
-resets on return. Fixed rerun:50/50 ready; forced two-connection regression fails on
-base and passes after fix,plus pool-reset/preexisting-transaction checks. SQLite
-poll regressions pass. This measures HTTP/DB/Mock work,not real-model capacity.
-Scripts load_auth_http/load_chat_http/load_upload_http retain reproducible checks.
-
-Release #239 aa6d6ffd:backup/PG dump ok,ready200,schema0076,public200;~12s 502
-during Compose swap. Isolated stacks removed.
-
-Self-run:2847 Windows passes;95 failures cleared on Linux (4 shell cases needed LF).
-60 skipped;frontend1045;Ruff/format/mypy/contracts/POSIX passed.
-Actions39818125728 billing-blocked before steps.
-
-## Oct23 voice uploads
-
-Base6c09c024. Enrollment runs off the event loop; invalid filenames return
-audio_invalid422 with safe stage/request-id logs. MP3 encoder padding and M4A
-final-frame padding no longer reject20s clips; decoded10–20s limits stay.
-Linux171 passed,including voice96 and all101 Windows failure/error records;
-Windows2852 passed/60skip,FE1050/1skip. Four uploads/readiness,same-name recovery,
-10/20s acceptance and9.99/20.01s rejection passed. Ruff/format/mypy/types/lint/
-contracts/migrations/POSIX passed. No real calls/live test accounts. The original
-group incident is unconfirmed without its files/errors.
-
-Built3e785c01:backup ok,ready200,schema0076,public200;3 API probe failures during
-build,20 post-switch pairs passed.
+Oct23 isolated 50-user run (Mock,2 capped backends): logins 100/100,p95≤7.85s;Agent/
+Team50 SSE+persistence passed. PG READ COMMITTED race (3/50 stale done) fixed with one
+REPEATABLE READ poll snapshot. Release #239 aa6d6ffd (~12s 502 during swap). Voice
+uploads: enrollment off the event loop,MP3/M4A padding fixed,10–20s limits kept;
+built3e785c01. All Oct releases:0 real Provider calls;Actions billing-blocked.
 
 ## Oct24 Team chats and junk (#241)
 
@@ -311,3 +227,31 @@ the library: never-indexed RAG returns 503 `rag_upload_index_failed`, not stored
 Voices (refused/enrollment/mapping) are deleted unless charged (hidden) or holding a
 supplier id. The sweep hard-deletes empty Agents (no written/published version,
 files, Team/Debate/chat reference) after 1h, including same-name retired drafts.
+
+## Oct24 true deletion (#242, supersedes #233)
+
+Head0078_chat_answer_decouple. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
+with storage; history FKs SET NULL with snapshot names,so Records/grades/history
+open. Deleting a chat keeps per-question answers;deleting an Agent/Team ends its chats
+(agent_deleted/team_deleted),fails pending turns,abandons unfinished attempts. Debates
+own AGENT.md,RAG/Knowledge copies and a voice clone;no RESTRICT on originals;only
+deleting the Debate drops its clone. A legacy Voice without a sample keeps its supplier
+voice while a cloneless Debate needs it;Debates speak from their snapshot id. Prune
+keeps current+previous AGENT.md,skips versions a live chat/Team/unfinished attempt
+uses;5-min sweep prunes later. Failed uploads hard-deleted. Scripts (dry-run default,
+production needs --confirm-production): backfill_debate_snapshots (idempotent),
+backfill_debate_voice_clones,cleanup_soft_deleted (counts,prunes,disk orphans>1h;rolls
+back if Debate/answer counts move). Prod-shaped PG (create_all@0072+0073–0076,seeded):
+upgrade→downgrade→upgrade passed,counts kept;real prod schema dump still to run.
+
+## Oct24 Debate Next and errors
+
+Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
+per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
+plays the blob (159 routes). debate_timing logs:generation/tts/lock_wait/audio_serve/
+next_request;browser logs audio_prefetch/audio_start. Errors: Debate create 422
+debate_agents_not_ready lists agent_id/issue/message (unpublished,no RAG,AGENT.md
+without # heading+text,archived,Avatar) with a pencil to the Agent;Voice None shown,
+never blocking (AGENTS voice rule). Agent editor hint bar;uploaded voice auto-selected.
+Team errors name the Agent;agent_in_team names own Teams;~40 codes get messages,unknown
+codes show their code.
