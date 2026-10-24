@@ -618,7 +618,7 @@ const enMessages = {
   debateFieldLlmParam:
     "Generation parameters: {field} is out of range. Correct it, then create again.",
   debateFieldEdit: "Edit this setting",
-  debateParamsTitle: "Generation parameters",
+  debateParamsTitle: "Generation Parameters",
   debateParamsReset: "Restore defaults",
   debateParamsNeverSent: "Saved, never sent to the model",
   debateParamsOn: "On",

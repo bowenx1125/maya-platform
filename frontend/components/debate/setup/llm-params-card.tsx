@@ -1,5 +1,6 @@
 "use client";
 
+import { IconRefresh } from "../../quiet-icons";
 import { SectionCard } from "../../ui";
 import { useT } from "../../locale";
 import type { DebateDraftRequest, DebateLLMDefaults } from "../../../lib/api";
@@ -120,15 +121,20 @@ export function LlmParamsCard({
     <SectionCard
       title={t("debateParamsTitle")}
       className={`${rulesetStyles.card} ${sectionStyles.section}`}
+      guide="debate.llmParams"
       action={
-        <button
-          type="button"
-          className={rulesetStyles.action}
-          disabled={disabled}
-          onClick={onReset}
-        >
-          {t("debateParamsReset")}
-        </button>
+        <div className={rulesetStyles.actions}>
+          <button
+            type="button"
+            className={`${rulesetStyles.action} ${rulesetStyles.iconAction}`}
+            disabled={disabled}
+            aria-label={t("debateParamsReset")}
+            data-ui-guide="debate.llmParamsReset"
+            onClick={onReset}
+          >
+            <IconRefresh />
+          </button>
+        </div>
       }
     >
       <div id={LLM_PARAMS_ANCHOR} className={styles.rows}>
@@ -140,7 +146,7 @@ export function LlmParamsCard({
           return (
             <div key={spec.name} className={styles.row} data-param={spec.name}>
               <div className={styles.label}>
-                <code>{spec.name}</code>
+                <span className={styles.name}>{spec.name}</span>
                 <button
                   type="button"
                   className={styles.help}
