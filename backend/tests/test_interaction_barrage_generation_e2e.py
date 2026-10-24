@@ -172,7 +172,10 @@ def test_http_barrage_freezes_anonymously_then_survives_mock_generation_and_publ
             assert late.status_code == 410 and late.json()["code"] == "barrage_collection_closed"
             assert client.post(url, json=first).status_code == 201
             final_snapshots = [snapshot for snapshot in llm.snapshots if snapshot.round.number == 4]
-            assert len(final_snapshots) == 1
+            # Both Final speakers are inside the live lookahead window (owner
+            # decision 2026-10-24), and both read the one frozen barrage set.
+            assert len(final_snapshots) == 2
+            assert final_snapshots[0].barrages == final_snapshots[1].barrages
             snapshot = final_snapshots[0]
             with database.session() as db:
                 frozen_input = read_final_input(db.get(Debate, debate_id))
@@ -221,6 +224,6 @@ def test_http_barrage_freezes_anonymously_then_survives_mock_generation_and_publ
                 == frozen_input["barrages"][0]["text"]
             )
             assert final["segment_turn"]["segments"][0]["reply_text"] not in final["speech"]
-            assert len(llm.snapshots) == 7
+            assert len(llm.snapshots) == 8
     finally:
         database.dispose()
