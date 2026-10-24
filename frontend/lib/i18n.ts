@@ -577,6 +577,8 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorRagIndexFailed:
+    "This file could not be indexed, so it was not saved. Upload it again in a minute.",
   errorInternal: "Something went wrong on the server. Please try again.",
   errorHostMemoryPressure:
     "The server is busy right now. Your message was kept; please try again shortly.",
@@ -1448,6 +1450,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
+  errorRagIndexFailed: "这个文件没能建立索引，所以没有保存。请稍后重新上传。",
   errorInternal: "服务器出错，请稍后重试。",
   errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
@@ -1943,6 +1946,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  rag_index_failed: "errorRagIndexFailed",
   internal_error: "errorInternal",
   host_memory_pressure: "errorHostMemoryPressure",
   host_load_pressure: "errorServerBusy",

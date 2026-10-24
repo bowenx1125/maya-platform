@@ -309,7 +309,7 @@ describe("Brainform workspace actions", () => {
     state.api.uploadRagLibraryDocument = vi
       .fn()
       .mockRejectedValue(
-        new PlatformApiError(503, "not kept", { code: "provider_unavailable" }),
+        new PlatformApiError(503, "not kept", { code: "rag_index_failed" }),
       );
     renderWithActions();
     fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));
@@ -322,7 +322,7 @@ describe("Brainform workspace actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(
       await screen.findByText(
-        "A platform capability is temporarily unavailable.",
+        "This file could not be indexed, so it was not saved. Upload it again in a minute.",
       ),
     ).toBeTruthy();
     expect(state.api.uploadRagLibraryDocument).toHaveBeenCalled();

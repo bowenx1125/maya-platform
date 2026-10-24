@@ -667,9 +667,9 @@ def _sweep_team_chats_and_junk(database: Database, settings: Settings) -> None:
         session.commit()
 
     def drop_refused_voices(session: Session) -> None:
-        from app.modules.voices.cleanup import sweep_rejected_voices
+        from app.modules.voices.cleanup import sweep_failed_voices
 
-        sweep_rejected_voices(session, settings.resolved_data_root)
+        sweep_failed_voices(session, settings.resolved_data_root)
 
     run("Team chat retarget sweep", retarget_teams)
     run("Abandoned agent sweep", drop_abandoned)

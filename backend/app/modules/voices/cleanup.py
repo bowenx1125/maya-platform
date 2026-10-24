@@ -1,9 +1,12 @@
-"""Drop a voice the supplier refused before it became a library card.
+"""Drop a voice upload that failed before it became a usable library card.
 
-An uncharged refusal never created a billed voice, so the profile and its
-operation rows go away. The idempotency record stays and still replays the
-refusal. A charged refusal keeps its operation ledger and only leaves the
-library (status ``deleted``).
+Owner decision (2026-10-24): a failed Voice upload does not stay in the
+library. The upload response already carries the error the owner reads, so
+the card is not needed to explain it. An uncharged failure never created a
+billed voice, so the profile and its operation rows go away. A charged
+failure keeps its operation ledger and only leaves the library (status
+``deleted``). A failed card that holds a supplier voice id is left alone: the
+supplier voice must be removed through the normal delete first.
 """
 
 from __future__ import annotations
@@ -22,14 +25,17 @@ from app.modules.knowledge.recovery import _remove_owned_path
 LOGGER = logging.getLogger(__name__)
 
 
-def discard_rejected_voice(
+def discard_failed_voice(
     db: Session,
     profile: VoiceProfile,
     *,
     data_root: Path | None = None,
+    safe_error_code: str | None = None,
 ) -> str:
-    """Hide or delete one refused profile. Returns ``deleted`` or ``hidden``."""
+    """Hide or delete one failed profile. Returns ``deleted``, ``hidden`` or ``kept``."""
 
+    if profile.external_id_encrypted:
+        return "kept"
     operations = list(
         db.scalars(
             select(VoiceProviderOperation).where(VoiceProviderOperation.profile_id == profile.id)
@@ -40,7 +46,7 @@ def discard_rejected_voice(
         select(AgentVersion.id).where(AgentVersion.voice_profile_id == profile.id).limit(1)
     )
     if charged or referenced is not None:
-        _hide(profile)
+        _hide(profile, safe_error_code)
         return "hidden"
     nested = db.begin_nested()
     try:
@@ -53,34 +59,37 @@ def discard_rejected_voice(
         nested.commit()
     except IntegrityError:
         nested.rollback()
-        LOGGER.info("rejected_voice_delete_blocked profile_id=%s", profile.id)
-        _hide(profile)
+        LOGGER.info("failed_voice_delete_blocked profile_id=%s", profile.id)
+        _hide(profile, safe_error_code)
         return "hidden"
     return "deleted"
 
 
-def sweep_rejected_voices(db: Session, data_root: Path | None = None) -> int:
-    """Remove refused voice cards left behind by an earlier process."""
+def sweep_failed_voices(db: Session, data_root: Path | None = None) -> int:
+    """Remove failed voice cards left behind by an earlier request or process."""
 
     profiles = list(
         db.scalars(
             select(VoiceProfile).where(
                 VoiceProfile.status == "failed",
-                VoiceProfile.safe_error_code == "voice_clone_refused",
+                VoiceProfile.external_id_encrypted.is_(None),
             )
         ).all()
     )
     removed = 0
     for profile in profiles:
-        if discard_rejected_voice(db, profile, data_root=data_root) in {"deleted", "hidden"}:
+        if discard_failed_voice(db, profile, data_root=data_root) in {"deleted", "hidden"}:
             removed += 1
     db.commit()
+    if removed:
+        LOGGER.info("failed_voice_sweep removed=%d", removed)
     return removed
 
 
-def _hide(profile: VoiceProfile) -> None:
+def _hide(profile: VoiceProfile, safe_error_code: str | None) -> None:
     profile.status = "deleted"
-    profile.safe_error_code = profile.safe_error_code or "voice_clone_refused"
+    code = safe_error_code or profile.safe_error_code
+    profile.safe_error_code = code or "voice_enrollment_failed"
     profile.updated_at = datetime.now(UTC)
 
 

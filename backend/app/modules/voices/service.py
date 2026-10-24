@@ -35,7 +35,7 @@ from app.modules.knowledge.services import (
     request_hash,
 )
 from app.modules.org.access import WorkspaceMember
-from app.modules.voices.cleanup import discard_rejected_voice
+from app.modules.voices.cleanup import discard_failed_voice
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
     decrypt_external_voice_id,
@@ -844,6 +844,14 @@ def _store_enrollment_success(
         output_bytes=result.output_bytes,
     )
     if not succeeded:
+        # The error reaches the owner in this response; the card is not kept.
+        discard_failed_voice(
+            db,
+            profile,
+            data_root=settings.resolved_data_root,
+            safe_error_code="voice_enrollment_failed",
+        )
+        db.commit()
         raise PlatformError(
             "voice_enrollment_failed",
             "The voice enrollment could not be completed.",
@@ -1069,7 +1077,12 @@ def enroll_voice(
                 # A refused clone never becomes retryable, not even with the
                 # same key: the answer was decided before any charged call.
                 _remember_clone_refusal(db, record)
-                discard_rejected_voice(db, profile, data_root=settings.resolved_data_root)
+                discard_failed_voice(
+                    db,
+                    profile,
+                    data_root=settings.resolved_data_root,
+                    safe_error_code="voice_clone_refused",
+                )
                 db.commit()
                 raise CLONE_REFUSED_ERROR
             elif operation.state == "prepared":
@@ -1117,7 +1130,12 @@ def enroll_voice(
         # re-issue it, but the uncharged profile is not kept.
         if getattr(provider_instance, "target_model_key", None) == FLASH_TTS_MODEL_KEY:
             _remember_clone_refusal(db, record)
-            discard_rejected_voice(db, profile, data_root=settings.resolved_data_root)
+            discard_failed_voice(
+                db,
+                profile,
+                data_root=settings.resolved_data_root,
+                safe_error_code="voice_clone_refused",
+            )
             db.commit()
             raise CLONE_REFUSED_ERROR
         _dispatch_operation(db, operation)
@@ -1142,8 +1160,13 @@ def enroll_voice(
             # A typed refusal is deterministic, never ambiguous: no provider
             # fallback or automatic retry may re-issue this enrollment. The
             # charged operation stays; the card leaves the library.
-            discard_rejected_voice(db, profile, data_root=settings.resolved_data_root)
             _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
+            discard_failed_voice(
+                db,
+                profile,
+                data_root=settings.resolved_data_root,
+                safe_error_code="voice_clone_refused",
+            )
             _remember_clone_refusal(db, record)
             db.commit()
             raise _safe_provider_error(exc) from exc

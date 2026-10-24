@@ -569,8 +569,8 @@ async def upload_knowledge_document(
         assert_claim_owned(db, record)
         if chunks is None:
             raise PlatformError(
-                "provider_unavailable",
-                "This file could not be indexed, so it was not kept.",
+                "rag_index_failed",
+                "This file could not be indexed, so it was not saved.",
                 503,
             )
         promote_atomic(settings.resolved_data_root, staging_path, relative_path)

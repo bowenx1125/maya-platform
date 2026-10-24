@@ -1056,7 +1056,7 @@ def test_delete_same_idempotency_key_replays_without_second_provider_command(
     assert provider.delete_calls == 1
 
 
-def test_delete_removes_a_refused_voice_without_a_provider_call(
+def test_a_refused_voice_leaves_the_library_without_a_provider_call(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1073,14 +1073,11 @@ def test_delete_removes_a_refused_voice_without_a_provider_call(
         files={"file": ("sample.wav", _wav(), "audio/wav")},
     )
     assert refused.status_code == 422
+    assert refused.json()["code"] == "voice_clone_refused"
+    # Owner decision (2026-10-24): a failed upload leaves the library at once;
+    # the 422 above is where the owner reads why. Nothing is left to delete.
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
-    failed = next(item for item in listed if item["status"] == "failed")
-    deleted = client.delete(
-        f"/api/v1/voice-profiles/{failed['id']}",
-        headers=_headers(csrf, "voice-delete-refused-0001"),
-    )
-    assert deleted.status_code == 200, deleted.text
-    assert deleted.json()["status"] == "deleted"
+    assert all(item["status"] != "failed" for item in listed)
     assert provider.delete_calls == 0
 
 

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from app.modules.learning.models import AssessmentActivity, AssessmentAttempt
 from app.modules.teams.models import Team, TeamVersionMember
 from app.modules.teams.service import follow_published_agent
@@ -276,3 +278,115 @@ def test_in_progress_assessment_chat_stays_on_its_attempt(
             )
         )
         assert answer == "kept answer"
+
+
+_POSTGRES_URL = os.environ.get("MAYA_TEST_POSTGRES_URL")
+
+
+@pytest.fixture()
+def postgres_client(app_factory: Any) -> Any:
+    if not _POSTGRES_URL:
+        pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
+    from app.core import adaptive_admission as aa
+    from app.core import write_guard as wg
+    from app.core.db import Database
+    from app.main import create_app
+    from app.modules.demo_baseline.service import ensure_demo_baseline
+    from sqlalchemy import text
+
+    _app, sqlite_database, base = app_factory()
+    sqlite_database.dispose()
+    settings = base.model_copy(update={"database_url": _POSTGRES_URL})
+    database = Database(_POSTGRES_URL, settings.data_root)
+    with database.engine.begin() as connection:
+        connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
+    app = create_app(settings, database)
+    aa.reset_adaptive_admission_state()
+    wg.reset_write_guard_state()
+    with TestClient(app) as client:
+        client.headers["Origin"] = "http://testserver"
+        with database.session() as db:
+            ensure_demo_baseline(db, settings.resolved_data_root)
+            db.commit()
+        yield client, database
+    database.dispose()
+
+
+def test_postgres_retarget_swaps_members_and_keeps_history(postgres_client: Any) -> None:
+    # PostgreSQL checks the conversation/participant foreign keys per
+    # statement, so the swap goes through the single-statement path.
+    from tests.test_mayaform_team_conversations import _make_agent_version
+
+    client, database = postgres_client
+    team, versions, csrf = _team(client, database)
+    session = _create(client, csrf, {"kind": "team", "team_id": team["id"]})
+    speaker_id = _remember(database, session["id"], "before the swap")
+    _agent, added_version = _make_agent_version(
+        database, owner_id=MAYA_ID, name="Teacher member added", visibility="public"
+    )
+    by_version = {member["agent_version_id"]: member for member in team["members"]}
+    first, second = by_version[versions[0]], by_version[versions[1]]
+    saved = client.put(
+        f"/api/v1/teams/{team['id']}",
+        headers=_headers(csrf, f"team-retarget-{uuid4()}"),
+        json={
+            "display_name": "Swapped circle",
+            "visibility": team["visibility"],
+            "members": [
+                {
+                    "agent_version_id": versions[0],
+                    "is_leader": not first["is_leader"],
+                    "position": second["position"],
+                },
+                {
+                    "agent_version_id": versions[1],
+                    "is_leader": not second["is_leader"],
+                    "position": first["position"],
+                },
+                {"agent_version_id": added_version, "is_leader": False, "position": 2},
+            ],
+            "shared_knowledge_set_ids": team["shared_knowledge_set_ids"],
+            "expected_metadata_revision": team["metadata_revision"],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    body = client.get(f"/api/v1/conversations/{session['id']}", headers=_headers(csrf)).json()
+    assert body["team"]["version_id"] == saved.json()["current_version_id"]
+    assert body["team"]["name"] == "Swapped circle"
+    assert len(body["team"]["members"]) == 3
+    assert [turn["user_text"] for turn in body["turns"]] == ["before the swap"]
+    with database.session() as db:
+        participants = list(
+            db.scalars(
+                select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == session["id"]
+                )
+            )
+        )
+        assert len(participants) == 3
+        assert {row.team_version_id for row in participants} == {saved.json()["current_version_id"]}
+        assert sum(1 for row in participants if row.is_leader) == 1
+        result = db.scalar(
+            select(TeamTurnResult).where(TeamTurnResult.conversation_id == session["id"])
+        )
+        assert result is not None and result.participant_id == speaker_id
+
+
+def test_a_maya_team_chat_follows_the_republished_version(
+    client: TestClient, database: Any
+) -> None:
+    team, _versions, csrf = _team(client, database)
+    session = _create(client, csrf, {"kind": "maya_team", "team_id": team["id"]})
+    _remember(database, session["id"], "maya question")
+    saved = _resave(client, csrf, team, "Maya circle 2")
+    body = client.get(f"/api/v1/conversations/{session['id']}", headers=_headers(csrf)).json()
+    assert body["team"]["version_id"] == saved["current_version_id"]
+    assert [turn["user_text"] for turn in body["turns"]] == ["maya question"]
+    with database.session() as db:
+        row = db.get(Conversation, session["id"])
+        assert row is not None and row.publication_id is not None
+        from app.modules.teams.models import CourseTeamPublication
+
+        publication = db.get(CourseTeamPublication, row.publication_id)
+        assert publication is not None
+        assert publication.team_version_id == saved["current_version_id"]

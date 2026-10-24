@@ -235,11 +235,8 @@ updated; Unicode validation equivalent.
 Backend Windows+Linux:2892/45skip;95 Windows failures reproduced on base,covered on
 Linux. PG16:15;frontend1017/1skip;assertions kept.
 
-Release9c68d42b0b1b618fabeb8fc22237c8586152a52e:GitHub→bare→FF from5dd9690b;
-SQLite API/integrity+PG backups,ready/containers/schema0076/public200/build/TTL30/
-hash2 verified. Live10 logins200(max1078ms),NUL422,synthetic Agent GET404,
-2 test accounts inactive/sessions revoked,teacher logout;charged14242 unchanged.
-0 real calls;month-long retention unobserved. Backup receipts:PROJECT@6c09c024.
+Release9c68d42b:backups/ready/schema0076/public200 verified;0 real calls
+(receipts:PROJECT@6c09c024).
 
 ## Oct22 shared Agent editing
 
@@ -283,11 +280,8 @@ base and passes after fix,plus pool-reset/preexisting-transaction checks. SQLite
 poll regressions pass. This measures HTTP/DB/Mock work,not real-model capacity.
 Scripts load_auth_http/load_chat_http/load_upload_http retain reproducible checks.
 
-Release #239:aa6d6ffd33239110bc57fc8db0cfb963a8f7cfac,GitHub→bare→FF from68c972f2.
-Backup maya-20261022T165903Z-pre-aa6d6ffd.sqlite3 API/integrity=ok;matching .pgdump
-readable,old images kept. Both ready200,containers healthy,schema0076 matches,
-frontend build matches,public200. Load-test probes all200;Compose replacement had
-6 consecutive502 probes (~12s),then recovered. Isolated accounts/data/stack removed.
+Release #239 aa6d6ffd:backup/PG dump ok,ready200,schema0076,public200;~12s 502
+during Compose swap. Isolated stacks removed.
 
 Self-run:2847 Windows passes;95 failures cleared on Linux (4 shell cases needed LF).
 60 skipped;frontend1045;Ruff/format/mypy/contracts/POSIX passed.
@@ -304,7 +298,16 @@ Windows2852 passed/60skip,FE1050/1skip. Four uploads/readiness,same-name recover
 contracts/migrations/POSIX passed. No real calls/live test accounts. The original
 group incident is unconfirmed without its files/errors.
 
-Built3e785c01169b15454258d03c19eb75100a426bb1;backup
-maya-20261023T031952Z-pre-3e785c01.sqlite3 API/ok+PG dump verified. Both ready200,
-schema0076 matches,healthy/public200. Build126 probe pairs:3 API failures;post-
-switch20 pairs passed. Temporary stacks/data removed.
+Built3e785c01:backup ok,ready200,schema0076,public200;3 API probe failures during
+build,20 post-switch pairs passed.
+
+## Oct24 Team chats and junk (#241)
+
+Open Team/Maya Team chats follow each new Team version (save, member publish,
+5-min sweep); turns/participants keep history. Mid-reply chats wait for the sweep;
+in-progress/paused formal attempts stay on their version, answers intact; a removed
+member who already replied keeps the chat on its old version. Failed uploads leave
+the library: never-indexed RAG returns 503 `rag_index_failed`, not stored; failed
+Voices (refused/enrollment/mapping) are deleted unless charged (hidden) or holding a
+supplier id. The sweep hard-deletes empty Agents (no written/published version,
+files, Team/Debate/chat reference) after 1h, including same-name retired drafts.

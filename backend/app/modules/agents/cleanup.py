@@ -1,8 +1,11 @@
-"""Remove empty Agent drafts that a failed save left behind.
+"""Remove empty Agents that a failed create left behind.
 
-Same-name retry still retires only the matching draft. This sweep is the
-global pass: an owner's empty draft, older than an hour, with no version
-content and no Team, Debate, or chat reference, is deleted.
+Owner decision (2026-10-24): an empty failed Agent is cleaned up globally,
+not only when the owner retries the same name. The existing five-minute sweep
+deletes an owner's Agent that has no published or written version, no files,
+and no Team, Debate or chat reference. The hour of grace keeps a create that is
+still between its two requests (row, then AGENT.md). A draft the same-name
+retry already retired is removed by the same pass.
 """
 
 from __future__ import annotations
@@ -33,7 +36,6 @@ def sweep_abandoned_agents(db: Session, *, now: datetime | None = None) -> int:
         db.scalars(
             select(Agent).where(
                 Agent.owner_user_id.is_not(None),
-                Agent.deleted_at.is_(None),
                 Agent.current_published_version_id.is_(None),
                 Agent.updated_at < cutoff,
             )
@@ -53,6 +55,8 @@ def sweep_abandoned_agents(db: Session, *, now: datetime | None = None) -> int:
             nested.rollback()
             LOGGER.info("abandoned_agent_delete_blocked agent_id=%s", agent.id)
     db.commit()
+    if removed:
+        LOGGER.info("abandoned_agent_sweep removed=%d", removed)
     return removed
 
 

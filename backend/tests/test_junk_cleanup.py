@@ -17,7 +17,7 @@ from app.core.models import (
 from app.modules.agents.cleanup import sweep_abandoned_agents
 from app.modules.knowledge.recovery import purge_failed_knowledge_uploads
 from app.modules.teams.models import TeamVersionMember
-from app.modules.voices.cleanup import sweep_rejected_voices
+from app.modules.voices.cleanup import sweep_failed_voices
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -45,7 +45,7 @@ def test_a_new_upload_that_never_indexes_is_not_kept(
         files={"file": ("missed.md", b"# Missed\n\nnot kept", "text/markdown")},
     )
     assert failed.status_code == 503, failed.text
-    assert failed.json()["code"] == "provider_unavailable"
+    assert failed.json()["code"] == "rag_index_failed"
     with database.session() as db:
         assert (
             db.scalar(
@@ -152,7 +152,7 @@ def _draft(client: TestClient, csrf: str, name: str, key: str) -> tuple[str, str
     return body["id"], body["versions"][0]["id"]
 
 
-def test_sweep_removes_old_empty_agents_and_refused_voices(
+def test_sweep_removes_old_empty_agents_and_failed_voices(
     client: TestClient, database: Any
 ) -> None:
     _user, csrf = login(client, "bowen")
@@ -164,17 +164,25 @@ def test_sweep_removes_old_empty_agents_and_refused_voices(
     referenced, referenced_version = _draft(
         client, csrf, "Referenced empty", "junk-referenced-empty01"
     )
+    retired, _retired_version = _draft(client, csrf, "Retired empty", "junk-retired-empty-ag01")
     old = datetime.now(UTC) - timedelta(hours=2)
     refused = str(uuid4())
     charged = str(uuid4())
+    enroll_failed = str(uuid4())
+    supplier_held = str(uuid4())
     with database.session() as db:
         draft = db.get(AgentVersion, written_version)
         assert draft is not None
         draft.agent_md = "# Kept"
-        for agent_id in (old_empty, written, referenced):
+        for agent_id in (old_empty, written, referenced, retired):
             agent = db.get(Agent, agent_id)
             assert agent is not None
             agent.updated_at = old
+        retired_row = db.get(Agent, retired)
+        assert retired_row is not None
+        # What a same-name retry leaves: a soft-deleted empty draft.
+        retired_row.deleted_at = old
+        retired_row.status = "archived"
         db.add(
             TeamVersionMember(
                 id=str(uuid4()),
@@ -220,6 +228,35 @@ def test_sweep_removes_old_empty_agents_and_refused_voices(
                     created_at=old,
                     updated_at=old,
                 ),
+                VoiceProfile(
+                    id=enroll_failed,
+                    scope="personal",
+                    group_id=None,
+                    display_name="Enrollment failed",
+                    status="failed",
+                    provider_key="mock",
+                    target_model_key="qwen3-tts-flash",
+                    recovery_name=f"enroll-failed-{uuid4()}",
+                    provenance_json="{}",
+                    safe_error_code="voice_enrollment_failed",
+                    created_at=old,
+                    updated_at=old,
+                ),
+                VoiceProfile(
+                    id=supplier_held,
+                    scope="personal",
+                    group_id=None,
+                    display_name="Degraded with a supplier voice",
+                    status="failed",
+                    provider_key="mock",
+                    target_model_key="qwen3-tts-flash",
+                    recovery_name=f"supplier-held-{uuid4()}",
+                    provenance_json="{}",
+                    external_id_encrypted=b"sealed",
+                    safe_error_code="voice_enrollment_failed",
+                    created_at=old,
+                    updated_at=old,
+                ),
             ]
         )
         db.flush()
@@ -242,14 +279,18 @@ def test_sweep_removes_old_empty_agents_and_refused_voices(
         )
         db.commit()
         assert sweep_abandoned_agents(db) >= 1
-        assert sweep_rejected_voices(db) == 2
+        assert sweep_failed_voices(db) == 3
     with database.session() as db:
         assert db.get(Agent, old_empty) is None
         assert db.get(AgentVersion, old_version) is None
         assert db.get(Agent, recent) is not None
         assert db.get(Agent, written) is not None
         assert db.get(Agent, referenced) is not None
+        assert db.get(Agent, retired) is None
         assert db.get(VoiceProfile, refused) is None
+        assert db.get(VoiceProfile, enroll_failed) is None
+        kept = db.get(VoiceProfile, supplier_held)
+        assert kept is not None and kept.status == "failed"
         hidden = db.get(VoiceProfile, charged)
         assert hidden is not None and hidden.status == "deleted"
         operation = db.scalar(
