@@ -152,9 +152,28 @@ class AdvancePlaybackRequest(_ClosedModel):
 
 
 class PrefetchNextAudioRequest(_ClosedModel):
-    expected_control_version: int = Field(ge=0)
-    expected_current_turn_id: UUID
+    """A controller ticket for one speech's audio, downloaded ahead of playback.
+
+    PR A2 (2026-10-24): the Immerse stage downloads every ready speech in
+    order, whatever the playback state, by naming ``turn_id``. The older form
+    (no ``turn_id``) still names the adjacent successor of the current turn.
+    """
+
     controller_epoch: UUID
+    turn_id: UUID | None = None
+    expected_control_version: int | None = Field(default=None, ge=0)
+    expected_current_turn_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _names_a_turn(self) -> PrefetchNextAudioRequest:
+        if self.turn_id is None and (
+            self.expected_control_version is None or self.expected_current_turn_id is None
+        ):
+            raise PydanticCustomError(
+                "prefetch_turn_missing",
+                "Name turn_id, or the expected control version and current turn.",
+            )
+        return self
 
 
 class PrefetchedNextAudio(_ClosedModel):
@@ -257,6 +276,19 @@ class PlaybackState(_ClosedModel):
     playback_rate: float = Field(ge=0.95, le=1.25)
     control_version: int = Field(ge=0)
     next_turn_ready: bool
+
+
+class AdvancedPlayback(PlaybackState):
+    """Next's answer: the new state and, when its audio is ready, the URL.
+
+    ``media_url`` carries a controller ticket for the new current speech, so
+    the stage can start it without waiting for the media handshake.
+    """
+
+    media_url: str | None = Field(
+        default=None,
+        pattern=r"^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$",
+    )
 
 
 class DebateSegment(_ClosedModel):

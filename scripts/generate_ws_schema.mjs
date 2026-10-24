@@ -328,6 +328,7 @@ const payloads = {
       report_status: statuses.report,
       final_input_frozen: { type: "boolean" },
       public_turns: arrayOf(publicTurn),
+      audio_ready_turn_ids: arrayOf(uuid),
       playback: playbackState,
       interaction: interactionSummary,
       report: reportSummary,
@@ -388,6 +389,7 @@ const payloads = {
     },
     ["turn_id", "slot", "round_no"],
   ),
+  "turn.audio_ready": closed({ turn_id: uuid }, ["turn_id"]),
   "turn.ready": closed(
     {
       turn_id: uuid,
@@ -684,6 +686,7 @@ const eventTypes = [
   "round.started",
   "turn.preparing",
   "turn.ready",
+  "turn.audio_ready",
   "playback.started",
   "playback.paused",
   "playback.resumed",

@@ -28,6 +28,7 @@ from app.core.origin import origin_allowed
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext, get_auth_context, session_hash
 from app.modules.debates.schemas import (
+    AdvancedPlayback,
     AdvancePlaybackRequest,
     DebateDetail,
     DebateStartRequest,
@@ -349,7 +350,7 @@ def _control_dependencies() -> dict[str, Any]:
 @router.post(
     "/debates/{debate_id}/next",
     operation_id="advanceDebatePlayback",
-    response_model=PlaybackState,
+    response_model=AdvancedPlayback,
     responses={
         200: {"description": "Authoritative playback state after advancing one live turn."},
         401: {"model": Error},
@@ -369,12 +370,20 @@ async def advance_debate_playback_route(
     started = time.monotonic()
     outcome = "ok"
     try:
-        return await service.next(
+        state = await service.next(
             db,
             str(debate_id),
             expected_control_version=payload.expected_control_version,
             expected_current_turn_id=str(payload.expected_current_turn_id),
             context=context,
+        )
+        # PR A2: the new speech's audio URL rides on the answer, saving the
+        # media handshake's round trip before it can start.
+        media_url = service.current_audio_url(
+            db, str(debate_id), session_hash=_session_hash(context), context=context
+        )
+        return AdvancedPlayback.model_validate(
+            {**state.model_dump(mode="json"), "media_url": media_url}
         )
     except PlatformError as error:
         outcome = error.code
@@ -415,9 +424,14 @@ async def prefetch_next_debate_audio_route(
             db,
             str(debate_id),
             expected_control_version=payload.expected_control_version,
-            expected_current_turn_id=str(payload.expected_current_turn_id),
+            expected_current_turn_id=(
+                str(payload.expected_current_turn_id)
+                if payload.expected_current_turn_id is not None
+                else None
+            ),
             epoch=str(payload.controller_epoch),
             session_hash=_session_hash(context),
+            turn_id=str(payload.turn_id) if payload.turn_id is not None else None,
             context=context,
         )
     except PlatformError as error:
@@ -425,8 +439,9 @@ async def prefetch_next_debate_audio_route(
         raise
     finally:
         LOGGER.info(
-            "debate_timing stage=prefetch_request debate_id=%s outcome=%s ms=%d",
+            "debate_timing stage=prefetch_request debate_id=%s turn_id=%s outcome=%s ms=%d",
             debate_id,
+            payload.turn_id or "successor",
             outcome,
             int((time.monotonic() - started) * 1000),
         )
