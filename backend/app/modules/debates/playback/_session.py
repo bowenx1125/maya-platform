@@ -46,7 +46,7 @@ class PlaybackSessionMixin(PlaybackCore):
         context: AuthContext | None = None,
     ) -> ControllerAcquiredResult:
         takeover_event: EventRecord | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "controller_acquire"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             debate_status = str(getattr(debate, "status", ""))
@@ -153,7 +153,7 @@ class PlaybackSessionMixin(PlaybackCore):
         session_hash: str,
     ) -> None:
         disconnect_event: EventRecord | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "controller_disconnect"):
             debate = self._get_debate(db, debate_id)
             state = self._state(db, debate)
             if state.controller_epoch != epoch or state.controller_session_hash != session_hash:
@@ -237,7 +237,7 @@ class PlaybackSessionMixin(PlaybackCore):
         action: Literal["start", "resume", "next", "replay"],
         context: AuthContext | None = None,
     ) -> tuple[PreparedMedia | None, MediaPreparedResult]:
-        async with self._lock:
+        async with self._debate_lock(debate_id, "media_prepare_locked"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -618,7 +618,7 @@ class PlaybackSessionMixin(PlaybackCore):
         context: AuthContext | None = None,
     ) -> PlaybackStateDTO:
         started_event: EventRecord | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "started_ack"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -715,10 +715,7 @@ class PlaybackSessionMixin(PlaybackCore):
         if started_event is not None:
             await self._publish_event(started_event)
         if action in {"start", "next"}:
-            turns = self._turns(db, debate)
-            index = next((index for index, item in enumerate(turns) if str(item.id) == turn_id), 0)
-            if index + 1 < len(turns):
-                await self._enqueue(debate, turns[index + 1])
+            await self._enqueue_lookahead(db, debate)
         return self._state_dto(state, db, debate)
 
     def _avatar_states(self, participants: list[Any], turn: Any) -> list[dict[str, Any]]:
@@ -767,7 +764,7 @@ class PlaybackSessionMixin(PlaybackCore):
         next_turn_to_enqueue: Any | None = None
         mode = "live"
         completed_epoch: str | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "ended_ack"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -963,7 +960,7 @@ class PlaybackSessionMixin(PlaybackCore):
         context: AuthContext | None = None,
     ) -> PlaybackStateDTO:
         failed_playback_event: EventRecord | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "play_failed"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -1088,6 +1085,73 @@ class PlaybackSessionMixin(PlaybackCore):
         }
         return payload, last_sequence
 
+    async def prefetch_next_audio(
+        self,
+        db: Any,
+        debate_id: str,
+        *,
+        expected_control_version: int,
+        expected_current_turn_id: str,
+        epoch: str,
+        session_hash: str,
+        context: AuthContext | None = None,
+    ) -> tuple[str, str]:
+        """Let the active controller download the ready next turn ahead of Next.
+
+        Owner decision (2026-10-24): the browser preloads a speech as soon as
+        its audio is ready. The ticket is the controller's own, names exactly
+        the adjacent successor of the playing turn, and is only honoured while
+        that is still true; it never makes the turn public or current.
+        """
+
+        async with self._debate_lock(debate_id, "prefetch_next_audio"):
+            debate = self._get_debate(db, debate_id)
+            self._assert_teacher(db, debate, context)
+            state = self._state(db, debate)
+            self._check_control(state, expected_control_version)
+            self._check_epoch(state, epoch=epoch, session_hash=session_hash)
+            if state.current_turn_id != expected_current_turn_id:
+                raise conflict(
+                    "stale_control_version",
+                    "The playback current turn is stale.",
+                    {"current_current_turn_id": state.current_turn_id},
+                )
+            successor = self._prefetchable_successor(db, debate, state)
+            if successor is None:
+                raise conflict(
+                    "next_not_ready", "The adjacent next turn is not ready for playback."
+                )
+            successor_id = str(successor.id)
+            # One outstanding prefetch per item; a repeat replaces it.
+            self.ticket_store.revoke_item(debate_id, successor_id)
+            token, _binding = self.ticket_store.issue(
+                session_hash=session_hash,
+                controller_epoch=epoch,
+                debate_id=debate_id,
+                turn_id=successor_id,
+                action="prefetch",
+                control_version=state.control_version,
+            )
+            return (
+                successor_id,
+                f"/api/v1/debates/{debate_id}/audio/{successor_id}?media_ticket={token}",
+            )
+
+    def _prefetchable_successor(self, db: Any, debate: Any, state: Any) -> Any | None:
+        if not self._next_turn_ready(db, debate, state):
+            return None
+        current = self._current_turn(db, debate, state)
+        successor, unique = self._adjacent_successor(self._turns(db, debate), current)
+        if (
+            successor is None
+            or not unique
+            or self._turn_text_only(successor)
+            or self._turn_text_fallback_ready(successor)
+            or self._validated_turn_audio(db, debate, successor) is None
+        ):
+            return None
+        return successor
+
     async def authorize_audio(
         self,
         db: Any,
@@ -1130,6 +1194,15 @@ class PlaybackSessionMixin(PlaybackCore):
         ):
             raise forbidden()
         state = self._state(db, debate)
+        if ticket_binding.action == "prefetch":
+            successor = self._prefetchable_successor(db, debate, state)
+            if (
+                state.controller_epoch != ticket_binding.controller_epoch
+                or successor is None
+                or str(successor.id) != turn_id
+            ):
+                raise forbidden()
+            return AudioAuthorization(metadata, ticket_binding)
         if (
             state.controller_epoch != ticket_binding.controller_epoch
             or state.current_turn_id != turn_id

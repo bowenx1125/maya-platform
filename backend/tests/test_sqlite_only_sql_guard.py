@@ -25,12 +25,14 @@ PATTERN = re.compile(
 # only runs when the bound dialect is SQLite (or is a SQLite-only tool).
 REVIEWED: dict[str, int] = {
     "core/db.py": 7,  # sqlite pragmas listener, sqlite_master alembic probe, check_ready
+    "core/sqlite_fk.py": 1,  # sqlite_master trigger copy only when dialect == "sqlite"
     "core/sqlutil.py": 2,  # foreign_keys_ok / begin_immediate: dialect == "sqlite"
     "tools/sqlite_import.py": 2,  # offline SQLite import tool, never served
     "providers/control_repository.py": 1,  # dialect == "sqlite"
     "modules/knowledge/providers/sql_stage.py": 1,  # dialect == "sqlite"
     "modules/debates/cleanup.py": 4,  # trigger dance only when dialect == "sqlite"
     "modules/debates/rebirth.py": 2,  # final-input trigger only when dialect == "sqlite"
+    "modules/teams/retarget.py": 1,  # defer_foreign_keys only when dialect == "sqlite"
     "modules/debates/playback/sql_repository.py": 6,  # postgres branches beside each
 }
 

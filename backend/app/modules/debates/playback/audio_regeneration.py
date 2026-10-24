@@ -1310,10 +1310,8 @@ class AudioRegenerationService:
             raise AudioRegenerationError(
                 "the effective voice is unavailable", code="voice_unavailable"
             )
-        if voice.kind == "platform_profile" and not voice.profile_id:
-            raise AudioRegenerationError(
-                "the effective voice is unavailable", code="voice_unavailable"
-            )
+        # platform_profile may carry no profile id: a Debate's own clone keeps
+        # speaking after the platform Voice is deleted (2026-10-20).
 
     def _discard_stage(self, staged: StagedAudio | None) -> None:
         if staged is not None:

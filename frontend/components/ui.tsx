@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -7,7 +8,7 @@ import { isConflict } from "../lib/api";
 import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useLocale, useT } from "./locale";
-import { IconClose } from "./quiet-icons";
+import { IconClose, IconEdit } from "./quiet-icons";
 
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
@@ -156,7 +157,68 @@ export function ErrorNotice({
         : notFound && missing
           ? t(notFound)
           : localizeError(error, locale)}
+      <ErrorFixLinks error={error} />
     </Notice>
+  );
+}
+
+type FixLink = { href: string; label: string };
+
+/**
+ * Where to fix what the error names (owner decision 2026-10-24): the Agent a
+ * Team or Debate refused, or the reader's own Teams that still hold an Agent.
+ */
+function ErrorFixLinks({ error }: { error: unknown }) {
+  const t = useT();
+  if (!error || typeof error !== "object") return null;
+  const { code, details } = error as { code?: unknown; details?: unknown };
+  if (!details || typeof details !== "object") return null;
+  const values = details as Record<string, unknown>;
+  const student =
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/student");
+  const links: FixLink[] = [];
+  if (typeof values.agent_id === "string") {
+    const name = typeof values.agent_name === "string" ? values.agent_name : "";
+    links.push({
+      href: `/${student ? "student" : "teacher"}/agents/${encodeURIComponent(values.agent_id)}`,
+      label: t("agentIssueEdit", { name }),
+    });
+  }
+  if (code === "agent_in_team" && Array.isArray(values.teams)) {
+    for (const team of values.teams) {
+      if (!team || typeof team !== "object") continue;
+      const {
+        team_id: teamId,
+        team_name: teamName,
+        group_id: groupId,
+      } = team as Record<string, unknown>;
+      if (typeof teamId !== "string" || typeof teamName !== "string") continue;
+      const query = `mode=team-edit&team_id=${encodeURIComponent(teamId)}`;
+      links.push({
+        href:
+          student && typeof groupId === "string"
+            ? `/student/groups/${encodeURIComponent(groupId)}?${query}`
+            : `/teacher/studyform?${query}`,
+        label: t("errorEditTeam", { name: teamName }),
+      });
+    }
+  }
+  if (!links.length) return null;
+  return (
+    <span className="error-fix-links">
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          className="inline-button"
+          href={link.href}
+          aria-label={link.label}
+          title={link.label}
+        >
+          <IconEdit />
+        </Link>
+      ))}
+    </span>
   );
 }
 

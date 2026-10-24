@@ -74,7 +74,6 @@ from app.seed import BOWEN_ID, JADE_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, select, text
-from sqlalchemy.exc import IntegrityError
 from starlette.requests import Request
 
 from tests.conftest import login, make_foreign_group
@@ -810,18 +809,8 @@ def test_flash_target_model_refuses_clone_before_dispatch(
     assert body["code"] == "voice_clone_refused"
     assert provider.enroll_calls == 0
     with database.session() as session:
-        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
-        assert profile is not None
-        assert profile.status == "failed"
-        assert profile.safe_error_code == "voice_clone_refused"
-        operation = session.scalar(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile.id,
-            )
-        )
-        assert operation is not None
-        assert operation.state == "failed"
-        assert operation.safe_error_code == "voice_clone_refused"
+        assert session.scalar(select(VoiceProfile.id)) is None
+        assert session.scalar(select(VoiceProviderOperation.id)) is None
 
 
 def test_typed_clone_refusal_after_dispatch_stays_terminal(
@@ -846,17 +835,9 @@ def test_typed_clone_refusal_after_dispatch_stays_terminal(
     assert response.json()["code"] == "voice_clone_refused"
     assert provider.enroll_calls == 1
     with database.session() as session:
-        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
-        assert profile is not None
-        assert profile.status == "failed"
-        assert profile.safe_error_code == "voice_clone_refused"
-        operation = session.scalar(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile.id,
-            )
-        )
-        assert operation is not None
-        assert operation.state == "failed"
+        # Real deletion: the refused card and its operation rows are gone.
+        assert session.scalar(select(VoiceProfile.id)) is None
+        assert session.scalar(select(VoiceProviderOperation.id)) is None
         # Same-key retry must stay refused, not re-dispatch.
         record = session.scalar(
             select(IdempotencyRecord).where(
@@ -1065,7 +1046,7 @@ def test_delete_same_idempotency_key_replays_without_second_provider_command(
     assert provider.delete_calls == 1
 
 
-def test_delete_removes_a_refused_voice_without_a_provider_call(
+def test_a_refused_voice_leaves_the_library_without_a_provider_call(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1082,14 +1063,11 @@ def test_delete_removes_a_refused_voice_without_a_provider_call(
         files={"file": ("sample.wav", _wav(), "audio/wav")},
     )
     assert refused.status_code == 422
+    assert refused.json()["code"] == "voice_clone_refused"
+    # Owner decision (2026-10-24): a failed upload leaves the library at once;
+    # the 422 above is where the owner reads why. Nothing is left to delete.
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
-    failed = next(item for item in listed if item["status"] == "failed")
-    deleted = client.delete(
-        f"/api/v1/voice-profiles/{failed['id']}",
-        headers=_headers(csrf, "voice-delete-refused-0001"),
-    )
-    assert deleted.status_code == 200, deleted.text
-    assert deleted.json()["status"] == "deleted"
+    assert all(item["status"] != "failed" for item in listed)
     assert provider.delete_calls == 0
 
 
@@ -1139,34 +1117,11 @@ def test_delete_different_idempotency_key_takes_over_an_abandoned_delete(
     assert taken_over.status_code == 200, taken_over.text
     assert taken_over.json()["status"] == "deleted"
     assert provider.delete_calls == 1
+    # The takeover finished the supplier delete, so the profile and its
+    # operation ledger are gone. One delete operation per profile is still
+    # enforced by uq_voice_provider_operations_profile_delete.
     with database.session() as session:
-        operations = session.scalars(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile["id"],
-                VoiceProviderOperation.operation_type == "delete",
-            )
-        ).all()
-        assert len(operations) == 1
-        assert operations[0].state == "succeeded"
-        assert operations[0].attempt == 2
-        session.add(
-            VoiceProviderOperation(
-                id="13131313-1313-4313-8313-131313131313",
-                profile_id=profile["id"],
-                operation_type="delete",
-                profile_scope="group",
-                state="prepared",
-                attempt=1,
-                claim_token="competing-delete-worker",
-                request_hash="e" * 64,
-                provider_deadline=timestamp + timedelta(seconds=30),
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
-        )
-        with pytest.raises(IntegrityError):
-            session.flush()
-        session.rollback()
+        assert session.get(VoiceProfile, profile["id"]) is None
 
 
 def test_delete_two_live_requests_issue_exactly_one_provider_command(
@@ -1240,14 +1195,7 @@ def test_delete_two_live_requests_issue_exactly_one_provider_command(
     assert responses["second"].json()["status"] == "deleted"
     assert provider.delete_calls == 1
     with database.session() as session:
-        operations = session.scalars(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile["id"],
-                VoiceProviderOperation.operation_type == "delete",
-            )
-        ).all()
-        assert len(operations) == 1
-        assert operations[0].state == "succeeded"
+        assert session.get(VoiceProfile, profile["id"]) is None
 
 
 def test_voice_routes_emit_only_frozen_negative_statuses(
@@ -2384,6 +2332,7 @@ def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
         assert {item["name"] for item in schema.get_foreign_keys("voice_profiles")} == {
             "fk_voice_profiles_consent_actor",
             "fk_voice_profiles_group",
+            "fk_voice_profiles_sample",
         }
         assert {item["name"] for item in schema.get_foreign_keys("voice_provider_operations")} == {
             "fk_voice_provider_operations_idempotency",

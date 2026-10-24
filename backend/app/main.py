@@ -222,16 +222,35 @@ def _bootstrap_accounts(database: Database, settings: Settings) -> None:
 
 
 async def _agent_cascade_sweeper(database: Any, settings: Any) -> None:
-    """Startup + every 5 min: finish Agent auto-publishes a restart lost."""
+    """Startup, then every minute: release the voices of deleted Debates;
+    every 5 min: Agent auto-publishes a restart lost."""
 
     from app.modules.agents.cascade import sweep_stale_agents
+    from app.modules.debates.voice_clones import sweep_debate_voice_clones
+    from app.providers.factory import voice_provider
 
+    def clones() -> None:
+        with database.session() as session:
+            sweep_debate_voice_clones(
+                session,
+                data_root=settings.resolved_data_root,
+                settings=settings,
+                provider=voice_provider(settings),
+            )
+
+    tick = 0
     while True:
+        if tick % 5 == 0:
+            try:
+                await asyncio.to_thread(sweep_stale_agents, database, settings)
+            except Exception:  # noqa: BLE001 - a sweep failure must not kill the loop
+                logging.getLogger(__name__).exception("Agent auto-bump sweep crashed")
         try:
-            await asyncio.to_thread(sweep_stale_agents, database, settings)
-        except Exception:  # noqa: BLE001 - a sweep failure must not kill the loop
-            logging.getLogger(__name__).exception("Agent auto-bump sweep crashed")
-        await asyncio.sleep(300)
+            await asyncio.to_thread(clones)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("Debate voice release sweep crashed")
+        tick += 1
+        await asyncio.sleep(60)
 
 
 async def _reclaim_orphans_later(database: Any, snapshot: dict[str, Any]) -> None:

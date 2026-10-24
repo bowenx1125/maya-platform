@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import conflict, not_found
+from app.core.links import live_link
 from app.core.models import Agent, AgentVersion
 from app.modules.auth.service import AuthContext
 from app.modules.workspace.models import (
@@ -47,7 +48,11 @@ def _speaking(db: Session, row: Conversation, identity: ToolCallIdentity) -> tup
     participant = db.get(ConversationParticipant, identity.participant_id)
     if participant is None or participant.conversation_id != row.id:
         raise not_found()
-    return participant.agent_id, participant.display_name, bool(participant.is_leader)
+    return (
+        live_link(participant.agent_id, "Agent"),
+        participant.display_name,
+        bool(participant.is_leader),
+    )
 
 
 def _current_turn(db: Session, row: Conversation, identity: ToolCallIdentity) -> ConversationTurn:
@@ -230,7 +235,7 @@ def write_agent_memory(
                 )
             if len(matches) > 1:
                 raise conflict("agent_memory_name_ambiguous", "That member name is not unique.")
-            targets.append(matches[0].agent_id)
+            targets.append(live_link(matches[0].agent_id, "Agent"))
     else:
         targets = [agent_id]
     saved = [

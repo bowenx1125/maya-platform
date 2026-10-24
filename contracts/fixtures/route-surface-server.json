@@ -4903,6 +4903,57 @@
         }
       }
     },
+    "/api/v1/debates/{debate_id}/next-audio": {
+      "post": {
+        "tags": [
+          "Debates"
+        ],
+        "operationId": "prefetchNextDebateAudio",
+        "description": "Controller-only ticket for the ready next turn's audio, so the browser can download it before Next. Honoured only while that turn is still the playing turn's adjacent successor.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DebateId"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrefetchNextAudioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Controller-only ticket for the ready next turn's audio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrefetchedNextAudio"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/debates/{debate_id}/preparation/retry": {
       "post": {
         "tags": [
@@ -13281,6 +13332,44 @@
           }
         }
       },
+      "PrefetchNextAudioRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_control_version",
+          "expected_current_turn_id",
+          "controller_epoch"
+        ],
+        "properties": {
+          "expected_control_version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expected_current_turn_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "controller_epoch": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "PrefetchedNextAudio": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "turn_id",
+          "media_url"
+        ],
+        "properties": {
+          "turn_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "media_url": {
+            "type": "string",
+            "pattern": "^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\\?media_ticket=[A-Za-z0-9_-]{43}$"
+          }
+        }
+      },
       "ReleaseDebateRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -13370,13 +13459,27 @@
             "maximum": 4
           },
           "agent_id": {
-            "$ref": "#/components/schemas/Uuid"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "agent_name": {
             "type": "string"
           },
           "agent_version_id": {
-            "$ref": "#/components/schemas/Uuid"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "version_label": {
             "type": "string",

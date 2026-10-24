@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
@@ -43,6 +44,11 @@ from app.core.models import (
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
+from app.modules.debates.owned_copies import (
+    adopt_debate_knowledge,
+    delete_debate_knowledge,
+    voice_snapshot,
+)
 from app.modules.debates.round_count import (
     debate_teaching_protocol,
     expected_turn_count,
@@ -74,8 +80,11 @@ from app.modules.debates.setup.rules import (
 )
 from app.modules.debates.teaching_rules import freeze_teaching_rules
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
+from app.modules.debates.voice_clones import snapshot_debate_voices, sync_debate_clones
 from app.modules.interactions.service import create_closed_window
 from app.providers.tts import TTS_UNAVAILABLE_CODES
+
+LOGGER = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
@@ -566,6 +575,36 @@ def _fence_resolved_agent_chain(
         )
 
 
+def _assert_participants_ready(
+    db: Session, *, course_id: str, payload: Any, settings: Settings
+) -> None:
+    """Refuse once with every Agent's problems, each naming its Agent.
+
+    An Agent this course cannot see is left to the resolver, which answers
+    404 without saying whether it exists.
+    """
+
+    from app.modules.agents.readiness import debate_issues
+
+    issues: list[dict[str, Any]] = []
+    for item in payload.participants:
+        agent = db.get(Agent, str(item.agent_id))
+        if agent is None or agent.course_id != course_id:
+            continue
+        issues.extend(debate_issues(db, agent, settings))
+    if issues:
+        LOGGER.info(
+            "debate_agents_not_ready course_id=%s issues=%s",
+            course_id,
+            ",".join(f"{item['agent_id']}:{item['issue']}" for item in issues),
+        )
+        raise validation_failure(
+            "Some selected Agents are not ready for a Debate.",
+            {"issues": issues},
+            code="debate_agents_not_ready",
+        )
+
+
 def _participant_row(
     db: Session,
     *,
@@ -601,6 +640,9 @@ def _participant_row(
     )
     stance = item.assigned_stance if item.stance_mode == "assigned" else None
     timestamp = utc_now()
+    voice_json, voice_cipher = voice_snapshot(
+        db.get(VoiceProfile, effective_voice_id) if effective_voice_id else None
+    )
     return DebateParticipant(
         id=str(uuid4()),
         debate_id=debate.id,
@@ -609,6 +651,10 @@ def _participant_row(
         agent_id=agent.id,
         agent_version_id=version.id,
         knowledge_snapshot_id=snapshot.id,
+        agent_md_snapshot=version.agent_md,
+        persona_spec_hash_snapshot=version.persona_spec_hash,
+        voice_snapshot_json=voice_json,
+        voice_external_id_encrypted=voice_cipher,
         slot=chr(65 + order_index),
         order_index=order_index,
         agent_name=agent.name,
@@ -920,9 +966,11 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                 "id": _as_uuid(row.id),
                 "slot": row.slot,
                 "order_index": row.order_index,
-                "agent_id": _as_uuid(row.agent_id),
+                "agent_id": _as_uuid(row.agent_id) if row.agent_id else None,
                 "agent_name": row.agent_name,
-                "agent_version_id": _as_uuid(row.agent_version_id),
+                "agent_version_id": (
+                    _as_uuid(row.agent_version_id) if row.agent_version_id else None
+                ),
                 "version_label": row.version_label,
                 "knowledge_snapshot_id": _as_uuid(row.knowledge_snapshot_id),
                 "avatar_config": json.loads(row.avatar_config_json),
@@ -1241,6 +1289,9 @@ def create_debate_draft(
     # every committed new Debate has exactly one closed classroom window.
     create_closed_window(db, debate)
     runtime_settings = _settings(db, settings)
+    _assert_participants_ready(
+        db, course_id=debate.course_id, payload=payload, settings=runtime_settings
+    )
     participant_rows = [
         _participant_row(
             db,
@@ -1253,6 +1304,18 @@ def create_debate_draft(
     ]
     require_teacher_course(db, actor_user_id, course_id)
     db.add_all(participant_rows)
+    db.flush()
+    adopt_debate_knowledge(
+        db, debate.id, list(participant_rows), runtime_settings.resolved_data_root
+    )
+    # The Debate keeps each voice's recording and supplier ID; no enrollment.
+    snapshot_debate_voices(
+        db,
+        debate.id,
+        list(participant_rows),
+        settings=runtime_settings,
+        data_root=runtime_settings.resolved_data_root,
+    )
     db.add(
         PlaybackState(
             id=str(uuid4()),
@@ -1539,19 +1602,26 @@ def update_debate_draft(
     db.execute(delete(DebateParticipant).where(DebateParticipant.debate_id == debate.id))
     db.flush()
     runtime_settings = _settings(db, settings)
-    db.add_all(
-        [
-            _participant_row(
-                db,
-                debate=debate,
-                item=item,
-                order_index=index,
-                settings=runtime_settings,
-            )
-            for index, item in enumerate(payload.participants)
-        ]
+    _assert_participants_ready(
+        db, course_id=debate.course_id, payload=payload, settings=runtime_settings
     )
+    participant_rows = [
+        _participant_row(
+            db,
+            debate=debate,
+            item=item,
+            order_index=index,
+            settings=runtime_settings,
+        )
+        for index, item in enumerate(payload.participants)
+    ]
+    db.add_all(participant_rows)
     db.flush()
+    adopt_debate_knowledge(db, debate.id, participant_rows, runtime_settings.resolved_data_root)
+    delete_debate_knowledge(db, debate.id, runtime_settings.resolved_data_root)
+    sync_debate_clones(
+        db, debate.id, settings=runtime_settings, data_root=runtime_settings.resolved_data_root
+    )
     return _detail(db, debate)
 
 

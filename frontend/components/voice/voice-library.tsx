@@ -111,9 +111,18 @@ function enrollmentCreated(profile: VoiceProfile | null | undefined): boolean {
   );
 }
 
-// A deleted voice stays on the server for its audit trail only.
+// A deleted voice stays on the server for its audit trail only. A refused
+// clone is removed server-side; hide it here too so a list read before that
+// sweep does not leave a card.
 function listedVoices(profiles: VoiceProfile[]): ListedVoice[] {
-  return profiles.filter((profile) => profile.status !== "deleted");
+  return profiles.filter(
+    (profile) =>
+      profile.status !== "deleted" &&
+      !(
+        profile.status === "failed" &&
+        profile.safe_error_code === "voice_clone_refused"
+      ),
+  );
 }
 
 function previewIsCurrent(expiresAt: string): boolean {
@@ -411,6 +420,10 @@ export function VoiceLibrary({
       setFile(null);
       setCreating(false);
       setNotice("voiceProfileCreatedNotice");
+      // Owner decision (2026-10-24): a voice just uploaded from an Agent is
+      // that Agent's choice. Without an upload the choice stays as it was,
+      // None by default.
+      if (onSelect && profile) onSelect(profile.id);
       await load();
     } catch (cause) {
       const rejected = isCloneRefusal(cause) || isFileRejection(cause);

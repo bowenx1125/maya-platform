@@ -1,5 +1,7 @@
 "use client";
 
+import { AgentIssueList } from "./agent-issue-list";
+import { versionIssues } from "../lib/agent-readiness";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -44,7 +46,7 @@ import {
 import { buildAgentTemplate } from "./agent-template";
 import { PageAction } from "./page-action";
 import { ModuleUpload } from "./studyform-layout";
-import { IconDownload, IconUpload } from "./quiet-icons";
+import { IconClose, IconDownload, IconUpload } from "./quiet-icons";
 import { VoiceLibrary } from "./voice/voice-library";
 import {
   downloadText,
@@ -374,6 +376,7 @@ export function AgentWorkbench({
   const avatarLoadSequence = useRef(0);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
+  const [agentIssuesDismissed, setAgentIssuesDismissed] = useState(false);
   const [agentMd, setAgentMd] = useState("");
   const [draftName, setDraftName] = useState("");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "public">(
@@ -1485,6 +1488,14 @@ export function AgentWorkbench({
   const queuedCreateRag =
     creating && !agent?.id ? pendingKnowledgeUpload : null;
 
+  // What still keeps this Agent out of a Debate, read from the editor as it
+  // stands, so a fixed item leaves the bar without a reload.
+  const agentIssues = versionIssues(
+    { id: agent.id, name: agent.name },
+    { agent_md: agentMd, voice_profile_id: voiceProfileId },
+    { ragCount: selectedDocumentIds.length },
+  );
+
   return (
     <>
       <PageIntro
@@ -1496,6 +1507,21 @@ export function AgentWorkbench({
             : `${agent.name} · ${version.version_label}`
         }
       />
+      {!unsavedCreate && agentIssues.length && !agentIssuesDismissed ? (
+        // A hint, not an error: it never takes the alert role.
+        <div className="notice notice-warning agent-issue-bar" role="note">
+          <strong>{t("agentIssuesTitle")}</strong>
+          <AgentIssueList issues={agentIssues} />
+          <button
+            type="button"
+            className="notice-close"
+            aria-label={t("noticeDismiss")}
+            onClick={() => setAgentIssuesDismissed(true)}
+          >
+            <IconClose />
+          </button>
+        </div>
+      ) : null}
       {generationFlow ? (
         <Notice tone="info">{t("aiKnowledgeFlowIntro")}</Notice>
       ) : null}

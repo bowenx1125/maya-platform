@@ -98,6 +98,7 @@ const implemented = new Set([
   "startDebate",
   "retryDebatePreparation",
   "advanceDebatePlayback",
+  "prefetchNextDebateAudio",
   "freezeFinalInput",
   "deleteDebateVoice",
   "regenerateDebateTurnAudio",

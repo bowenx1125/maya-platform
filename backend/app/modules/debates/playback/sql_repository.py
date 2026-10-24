@@ -30,6 +30,7 @@ from .audio import AudioMetadata
 from .events import EventRecord
 from .llm_publication import SqlLLMPublication
 from .protocols import (
+    LIVE_LOOKAHEAD_TURNS,
     PlaybackRepository,
     PreparedGenerationFence,
     PreparedTurn,
@@ -37,6 +38,29 @@ from .protocols import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+# A live turn may be prepared while it is the playing turn or the one after
+# it, as before, or further inside the lookahead window once every earlier turn
+# is final-ready: each turn still sees exactly the speeches before it.
+_LIVE_WINDOW_SQL = (
+    "AND EXISTS (SELECT 1 FROM playback_states "
+    "JOIN debate_turns AS current_turn "
+    "ON current_turn.id=playback_states.current_turn_id "
+    "WHERE playback_states.debate_id=debate_turns.debate_id "
+    "AND debate_turns.turn_index BETWEEN current_turn.turn_index "
+    f"AND current_turn.turn_index+{LIVE_LOOKAHEAD_TURNS} "
+    "AND (debate_turns.turn_index <= current_turn.turn_index+1 "
+    "OR NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
+    "WHERE earlier.debate_id=debate_turns.debate_id "
+    "AND earlier.turn_index < debate_turns.turn_index "
+    "AND earlier.generation_status NOT IN ('final_ready','ready','completed')))) "
+)
+_EARLIER_READY_SQL = (
+    "AND NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
+    "WHERE earlier.debate_id=debate_turns.debate_id "
+    "AND earlier.turn_index < debate_turns.turn_index "
+    "AND earlier.generation_status NOT IN ('final_ready','ready','completed')) "
+)
 
 
 def _now() -> datetime:
@@ -323,11 +347,36 @@ class SqlPlaybackRepository(PlaybackRepository):
                 return None
             return token, model
 
-        frozen_id = getattr(participant, "effective_voice_profile_id", None)
-        if getattr(participant, "effective_voice_kind", None) == "platform_profile" and (
-            ready := ready_profile(frozen_id)
-        ):
-            return ResolvedTurnVoice("platform_profile", str(frozen_id), *ready)
+        from app.modules.debates.voice_clones import (
+            resolve_debate_clone,
+            resolve_snapshot_voice,
+            source_voice_id,
+        )
+
+        # Only the Debate's own snapshot speaks (2026-10-24): its copied
+        # supplier ID, then one frozen into a not-yet-backfilled participant,
+        # then the configured system fallback. The live Voice row is never read.
+        source_id = source_voice_id(participant)
+        debate_id = getattr(participant, "debate_id", None)
+        # NULL once the platform Voice is deleted (the turn's FK is SET NULL).
+        live_profile = getattr(participant, "effective_voice_profile_id", None)
+        if source_id and debate_id:
+            if getattr(settings, "tts_provider", "mock") == "mock":
+                clone = db.execute(
+                    text(
+                        "SELECT target_model_key FROM debate_voice_clones WHERE "
+                        "debate_id=:d AND source_voice_profile_id=:v AND status='ready'"
+                    ),
+                    {"d": debate_id, "v": source_id},
+                ).first()
+                if clone is not None:
+                    return ResolvedTurnVoice(
+                        "platform_profile", live_profile, f"clone:{source_id}", str(clone[0])
+                    )
+            elif owned := resolve_debate_clone(db, str(debate_id), source_id, settings):
+                return ResolvedTurnVoice("platform_profile", live_profile, *owned)
+        if source_id and (frozen := resolve_snapshot_voice(participant, settings)):
+            return ResolvedTurnVoice("platform_profile", live_profile, *frozen)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
         if ready := ready_profile(fallback_id, system_only=True):
             return ResolvedTurnVoice("platform_profile", str(fallback_id), *ready)
@@ -2653,24 +2702,10 @@ class SqlPlaybackRepository(PlaybackRepository):
             "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
             "AND debates.status=:debate_status "
             "AND debates.cancellation_generation=:generation) "
-            # A live lesson may only ready the playing turn or the one after
-            # it. A draft has no playing turn, so its ordering is the fact that
-            # every earlier turn is already made -- the same rule, stated for a
-            # Debate that nothing is advancing through.
-            + (
-                "AND EXISTS (SELECT 1 FROM playback_states "
-                "JOIN debate_turns AS current_turn "
-                "ON current_turn.id=playback_states.current_turn_id "
-                "WHERE playback_states.debate_id=debate_turns.debate_id "
-                "AND debate_turns.turn_index IN "
-                "(current_turn.turn_index,current_turn.turn_index+1)) "
-                if debate_status == "running"
-                else "AND NOT EXISTS (SELECT 1 FROM debate_turns AS earlier "
-                "WHERE earlier.debate_id=debate_turns.debate_id "
-                "AND earlier.turn_index < debate_turns.turn_index "
-                "AND earlier.generation_status NOT IN "
-                "('final_ready','ready','completed')) "
-            )
+            # A live lesson may only ready a turn inside its preparation
+            # window. A draft has no playing turn, so its ordering is the fact
+            # that every earlier turn is already made.
+            + (_LIVE_WINDOW_SQL if debate_status == "running" else _EARLIER_READY_SQL)
             + "AND EXISTS (SELECT 1 FROM jobs WHERE jobs.debate_id=debate_turns.debate_id "
             "AND jobs.turn_id=debate_turns.id AND jobs.state='running' "
             "AND jobs.claim_token=:claim_token "
@@ -3046,13 +3081,8 @@ class SqlPlaybackRepository(PlaybackRepository):
                 "AND EXISTS (SELECT 1 FROM debates WHERE debates.id=debate_turns.debate_id "
                 "AND debates.status='running' "
                 "AND debates.cancellation_generation=:generation) "
-                "AND EXISTS (SELECT 1 FROM playback_states "
-                "JOIN debate_turns AS current_turn "
-                "ON current_turn.id=playback_states.current_turn_id "
-                "WHERE playback_states.debate_id=debate_turns.debate_id "
-                "AND debate_turns.turn_index IN "
-                "(current_turn.turn_index,current_turn.turn_index+1)) "
-                "AND EXISTS (SELECT 1 FROM jobs WHERE turn_id=:turn_id AND state='running' "
+                + _LIVE_WINDOW_SQL
+                + "AND EXISTS (SELECT 1 FROM jobs WHERE turn_id=:turn_id AND state='running' "
                 "AND claim_token=:claim_token AND cancellation_generation=:generation)"
             ),
             {

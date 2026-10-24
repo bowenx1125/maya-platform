@@ -121,7 +121,10 @@ const enMessages = {
   debateBack: "Back",
   debateNoDebates: "No debates yet.",
   debateNoCandidates: "No Agents yet.",
-  debateCreateUnavailable: "The debate service is not available in this build.",
+  debateNoCourse:
+    "No course you teach is selected, so Debates cannot be listed or created. Open one of your courses first.",
+  debateCreateUnconfirmed:
+    "The server did not confirm the new Debate. Refresh the Debate list to see whether it was created.",
   debateTopicRequired: "Enter a non-empty English topic.",
   debateSelectAtLeast: "Select at least two Agents.",
   debateSelectAtMost: "A Demo debate supports at most five Agents.",
@@ -577,6 +580,83 @@ const enMessages = {
   errorTranslationNotConfigured:
     "The test translation service is not configured.",
   errorProviderUnavailable: "A platform capability is temporarily unavailable.",
+  errorRagIndexFailed:
+    "This file could not be indexed, so it was not saved. Upload it again in a minute.",
+  debateAgentsNotReady: "Fix these Agents before the Debate can be created:",
+  agentIssuesTitle: "This Agent is not ready for a Debate:",
+  agentIssueArchived: "Agent “{name}” was deleted or archived.",
+  agentIssueNotPublished:
+    "Agent “{name}” has no published version. Open it and press Done to publish it.",
+  agentIssueRagMissing: "Agent “{name}” needs at least one RAG file.",
+  agentIssueAgentMdInvalid:
+    "Agent “{name}” has a non-standard AGENT.md: it needs a heading line starting with # and some text under it.",
+  agentIssueAvatarMissing: "Agent “{name}” has no usable Avatar.",
+  agentIssueVoiceMissing:
+    "Agent “{name}” has no Voice (Voice is None). The Debate will use the platform voice or show text only.",
+  agentIssueEdit: "Edit Agent “{name}”",
+  errorEditTeam: "Edit Team “{name}”",
+  errorChatFailed:
+    "This reply could not be generated. Send your message again.",
+  errorAgentHistoryRetained:
+    "This Agent is being published right now and cannot be deleted. Try again in a moment.",
+  errorAgentInTeam:
+    "This Agent is still in a Team. Remove it from the Team first.",
+  errorDuplicateTeamAgent: "Agent “{name}” can appear only once in a Team.",
+  errorTeamMemberPrivate:
+    "Agent “{name}” is Private, and a Public Team can only contain Public Agents. Make it Public or remove it.",
+  errorInvalidTeamName: "Give the Team a name.",
+  errorTeamVisibilityLocked:
+    "Private or Public is chosen when the Team is created and cannot be changed.",
+  errorTeamMemberNotPublished:
+    "Team members must use a published Agent version. Publish the Agent first.",
+  errorPrivateSourceForPublicAgent:
+    "This Agent uses a Private RAG file. Make that file Public before making the Agent Public.",
+  errorPrivateSourceForPublicSet:
+    "A Public Knowledge set can only use Public sources in its group.",
+  errorStaleBaseVersion:
+    "Someone else published a newer version of this Agent. Your edits are kept; reload to see their version.",
+  errorChatBusy:
+    "The last message is still being answered. Wait for it, or refresh the chat.",
+  errorChatMessageEmpty: "Type a message first.",
+  errorChatInterrupted: "This Team reply was stopped. Send the message again.",
+  errorChatAttachmentsUnavailable: "This chat does not accept attachments.",
+  errorNextNotReady:
+    "The next speech is still being prepared. Next becomes available as soon as it is ready.",
+  errorNoNextTurn: "This was the last speech.",
+  errorActiveDebateExists:
+    "Another Debate in this course is playing. Stop it first.",
+  errorOutputLanguageLocked:
+    "The Debate language was set in Preview and cannot be changed now.",
+  errorFinalInputRequired: "Press Final to prepare the last round.",
+  errorFinalInputNotReady: "Finish the prepared rounds before pressing Final.",
+  errorKnowledgeSourcesMissing:
+    "This Agent has no RAG file to generate Knowledge from. Add a RAG file first.",
+  errorInvalidKnowledgeName: "Give the Knowledge a name.",
+  errorDuplicateKnowledgeBinding: "This Knowledge is already linked.",
+  errorDuplicateKnowledgeSource: "This source is already selected.",
+  errorPersonalSetOwnerOnly:
+    "Only the owner can use this personal Knowledge until it is shared.",
+  errorRegistrationUnavailable:
+    "No course is open for registration yet. Ask your teacher.",
+  errorGroupNotFound: "Choose one of this course's groups.",
+  errorGroupChangeForbidden: "Only students choose their own group.",
+  errorAccountReadOnly:
+    "This account is managed by the platform and cannot be edited here.",
+  errorIdempotencyInProgress:
+    "The same request is still running. Wait for it to finish.",
+  errorAssessmentRulesetIncomplete:
+    "Formal assessment needs a complete “# Team Ruleset” section that names the roster. Fix the Team Ruleset first.",
+  errorBarrageTooLong: "Use at most 300 characters.",
+  errorBarrageBlank: "Nickname and message cannot be blank.",
+  errorBarrageCollectionClosed: "Barrage collection has ended.",
+  errorTeachingProtocolInvalid: "A Debate has exactly four rounds.",
+  errorCleanupBusy: "Debate cleanup is busy. Try again in a moment.",
+  errorAgentInTeamNamed:
+    "This Agent is still in Team {teams}. Remove it from that Team first.",
+  errorAgentInTeamOthers:
+    "This Agent is also in {count} Team(s) owned by other people; their owners must remove it.",
+  errorRequestFallbackCode:
+    "The request could not be completed (error code {code}).",
   errorInternal: "Something went wrong on the server. Please try again.",
   errorHostMemoryPressure:
     "The server is busy right now. Your message was kept; please try again shortly.",
@@ -1030,7 +1110,10 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateBack: "返回",
   debateNoDebates: "还没有辩论。",
   debateNoCandidates: "还没有 Agent。",
-  debateCreateUnavailable: "当前构建尚未提供辩论服务。",
+  debateNoCourse:
+    "还没有选中你任教的课程，无法查看或创建 Debate。请先进入一门课程。",
+  debateCreateUnconfirmed:
+    "服务器没有确认新 Debate 已创建。请刷新 Debate 列表，看看是否已经创建。",
   debateTopicRequired: "请输入非空英文议题。",
   debateSelectAtLeast: "请至少选择两个智能体。",
   debateSelectAtMost: "Demo 单场最多支持五个智能体。",
@@ -1448,6 +1531,69 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   errorReportFailed: "无法生成 Maya 报告。",
   errorTranslationNotConfigured: "测试翻译服务尚未配置。",
   errorProviderUnavailable: "平台能力暂时不可用。",
+  errorRagIndexFailed: "这个文件没能建立索引，所以没有保存。请稍后重新上传。",
+  debateAgentsNotReady: "创建 Debate 前，需要先修改这些 Agent：",
+  agentIssuesTitle: "这个 Agent 还不能参加 Debate：",
+  agentIssueArchived: "Agent「{name}」已删除或归档。",
+  agentIssueNotPublished: "Agent「{name}」还没有发布版本，打开后点 Done 发布。",
+  agentIssueRagMissing: "Agent「{name}」至少需要一个 RAG。",
+  agentIssueAgentMdInvalid:
+    "Agent「{name}」的 AGENT.md 不规范：需要一行以 # 开头的标题，以及标题下的正文。",
+  agentIssueAvatarMissing: "Agent「{name}」没有可用的 Avatar。",
+  agentIssueVoiceMissing:
+    "Agent「{name}」的 Voice 是 None，Debate 会用平台声音或只显示文字。",
+  agentIssueEdit: "编辑 Agent「{name}」",
+  errorEditTeam: "编辑 Team「{name}」",
+  errorChatFailed: "这条回复没有生成出来，请重新发送。",
+  errorAgentHistoryRetained: "这个 Agent 正在发布，暂时不能删除，请稍后再试。",
+  errorAgentInTeam: "这个 Agent 已被放进 Team，请先修改 Team。",
+  errorDuplicateTeamAgent: "Agent「{name}」在 Team 里只能出现一次。",
+  errorTeamMemberPrivate:
+    "Agent「{name}」是 Private，Public Team 只能放 Public 的 Agent。请把它改成 Public 或移出 Team。",
+  errorInvalidTeamName: "请给 Team 起个名字。",
+  errorTeamVisibilityLocked:
+    "Team 的 Private / Public 在创建时就定了，不能再改。",
+  errorTeamMemberNotPublished:
+    "Team 成员必须使用已发布的 Agent 版本，请先发布这个 Agent。",
+  errorPrivateSourceForPublicAgent:
+    "这个 Agent 用了 Private 的 RAG 文件，先把文件改成 Public，Agent 才能设为 Public。",
+  errorPrivateSourceForPublicSet:
+    "Public 的 Knowledge 只能使用本组 Public 的来源。",
+  errorStaleBaseVersion:
+    "有人刚发布了这个 Agent 的新版本。你的修改还保留着，刷新后可以看到对方的版本。",
+  errorChatBusy: "上一条消息还在回复中，请稍等或刷新聊天。",
+  errorChatMessageEmpty: "请先输入消息。",
+  errorChatInterrupted: "这次 Team 回复已停止，请重新发送。",
+  errorChatAttachmentsUnavailable: "这个聊天不能添加附件。",
+  errorNextNotReady: "下一段发言还在准备，准备好后就能点 Next。",
+  errorNoNextTurn: "这已经是最后一段发言。",
+  errorActiveDebateExists: "这门课里另一个 Debate 正在播放，请先停止它。",
+  errorOutputLanguageLocked: "Debate 的语言在 Preview 时已确定，现在不能修改。",
+  errorFinalInputRequired: "请先点 Final 准备最后一轮。",
+  errorFinalInputNotReady: "请先播放完已准备好的轮次，再点 Final。",
+  errorKnowledgeSourcesMissing:
+    "这个 Agent 没有可用的 RAG 文件，先添加 RAG 才能生成 Knowledge。",
+  errorInvalidKnowledgeName: "请给 Knowledge 起个名字。",
+  errorDuplicateKnowledgeBinding: "这个 Knowledge 已经关联过了。",
+  errorDuplicateKnowledgeSource: "这个来源已经选过了。",
+  errorPersonalSetOwnerOnly: "这份个人 Knowledge 在分享前只有创建者能用。",
+  errorRegistrationUnavailable: "现在还没有可注册的课程，请联系老师。",
+  errorGroupNotFound: "请选择本课程里的一个小组。",
+  errorGroupChangeForbidden: "只有学生可以自己选择小组。",
+  errorAccountReadOnly: "这个账号由平台管理，不能在这里修改。",
+  errorIdempotencyInProgress: "同样的请求还在进行中，请等它完成。",
+  errorAssessmentRulesetIncomplete:
+    "正式测评需要完整的「# Team Ruleset」章节并写明角色名单，请先修改 Team Ruleset。",
+  errorBarrageTooLong: "最多 300 个字符。",
+  errorBarrageBlank: "昵称和弹幕内容都不能为空。",
+  errorBarrageCollectionClosed: "弹幕收集已结束。",
+  errorTeachingProtocolInvalid: "Debate 必须正好四轮。",
+  errorCleanupBusy: "Debate 清理正忙，请稍后再试。",
+  errorAgentInTeamNamed:
+    "这个 Agent 还在 Team{teams}里，请先在 Team 里移除它。",
+  errorAgentInTeamOthers:
+    "这个 Agent 还在别人的 {count} 个 Team 里，需要 Team 的创建者先移除它。",
+  errorRequestFallbackCode: "请求没有完成（错误代码：{code}）。",
   errorInternal: "服务器出错，请稍后重试。",
   errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
   errorServerBusy: "人多，请稍后重试（消息已保留）。",
@@ -1943,6 +2089,45 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
+  rag_upload_index_failed: "errorRagIndexFailed",
+  debate_agents_not_ready: "debateAgentsNotReady",
+  chat_failed: "errorChatFailed",
+  agent_history_retained: "errorAgentHistoryRetained",
+  agent_in_team: "errorAgentInTeam",
+  duplicate_team_agent: "errorDuplicateTeamAgent",
+  team_member_private: "errorTeamMemberPrivate",
+  invalid_team_name: "errorInvalidTeamName",
+  team_visibility_locked: "errorTeamVisibilityLocked",
+  team_member_version_not_immutable: "errorTeamMemberNotPublished",
+  private_source_for_public_agent: "errorPrivateSourceForPublicAgent",
+  private_source_for_public_set: "errorPrivateSourceForPublicSet",
+  stale_base_version: "errorStaleBaseVersion",
+  chat_busy: "errorChatBusy",
+  chat_message_empty: "errorChatMessageEmpty",
+  chat_interrupted: "errorChatInterrupted",
+  chat_attachments_unavailable: "errorChatAttachmentsUnavailable",
+  next_not_ready: "errorNextNotReady",
+  no_next_turn: "errorNoNextTurn",
+  active_debate_exists: "errorActiveDebateExists",
+  output_language_locked: "errorOutputLanguageLocked",
+  final_input_required: "errorFinalInputRequired",
+  final_input_not_ready: "errorFinalInputNotReady",
+  knowledge_generation_sources_missing: "errorKnowledgeSourcesMissing",
+  invalid_knowledge_set_name: "errorInvalidKnowledgeName",
+  duplicate_knowledge_set_binding: "errorDuplicateKnowledgeBinding",
+  duplicate_knowledge_set_source: "errorDuplicateKnowledgeSource",
+  personal_set_owner_only: "errorPersonalSetOwnerOnly",
+  registration_unavailable: "errorRegistrationUnavailable",
+  group_not_found: "errorGroupNotFound",
+  group_change_forbidden: "errorGroupChangeForbidden",
+  account_read_only: "errorAccountReadOnly",
+  idempotency_in_progress: "errorIdempotencyInProgress",
+  assessment_ruleset_incomplete: "errorAssessmentRulesetIncomplete",
+  barrage_too_long: "errorBarrageTooLong",
+  barrage_blank: "errorBarrageBlank",
+  barrage_collection_closed: "errorBarrageCollectionClosed",
+  teaching_protocol_invalid: "errorTeachingProtocolInvalid",
+  cleanup_busy: "errorCleanupBusy",
   internal_error: "errorInternal",
   host_memory_pressure: "errorHostMemoryPressure",
   host_load_pressure: "errorServerBusy",
@@ -2029,8 +2214,38 @@ export function localizeError(
         return tm("errorAuthRateLimited", { seconds }, locale);
       }
     }
+    const details =
+      candidate.details && typeof candidate.details === "object"
+        ? (candidate.details as Record<string, unknown>)
+        : {};
+    if (candidate.code === "agent_in_team" && Array.isArray(details.teams)) {
+      const names = details.teams
+        .map((team) =>
+          team && typeof team === "object"
+            ? (team as { team_name?: unknown }).team_name
+            : null,
+        )
+        .filter((name): name is string => typeof name === "string")
+        .map((name) => (locale === "zh" ? `「${name}」` : `“${name}”`));
+      const others =
+        typeof details.other_team_count === "number"
+          ? details.other_team_count
+          : 0;
+      const parts = [
+        ...(names.length
+          ? [tm("errorAgentInTeamNamed", { teams: names.join(" ") }, locale)]
+          : []),
+        ...(others > 0
+          ? [tm("errorAgentInTeamOthers", { count: others }, locale)]
+          : []),
+      ];
+      if (parts.length) return parts.join(" ");
+    }
     if (typeof candidate.code === "string") {
       const key = errorCodeKeys[candidate.code];
+      // A message that names its Agent gets the name the server sent.
+      if (key && typeof details.agent_name === "string")
+        return tm(key, { name: details.agent_name }, locale);
       if (key) return t(key, locale);
     }
     if (typeof candidate.status === "number") {
@@ -2046,6 +2261,12 @@ export function localizeError(
   // browser wording ("Failed to fetch") names no next step.
   if (error instanceof TypeError) return t("errorNetwork", locale);
   if (error instanceof Error && error.message) return error.message;
+  // Never only "the request failed": keep the stable code for the reader.
+  if (error && typeof error === "object") {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && /^[a-z_]+$/.test(code))
+      return tm("errorRequestFallbackCode", { code }, locale);
+  }
   return t(fallback, locale);
 }
 

@@ -135,6 +135,19 @@ class AdvancePlaybackRequest(_ClosedModel):
     expected_current_turn_id: UUID
 
 
+class PrefetchNextAudioRequest(_ClosedModel):
+    expected_control_version: int = Field(ge=0)
+    expected_current_turn_id: UUID
+    controller_epoch: UUID
+
+
+class PrefetchedNextAudio(_ClosedModel):
+    turn_id: UUID
+    media_url: str = Field(
+        pattern=r"^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$"
+    )
+
+
 class RetryPreparationRequest(_ClosedModel):
     expected_control_version: int = Field(ge=0)
     turn_id: UUID
@@ -163,9 +176,9 @@ class DebateParticipant(_ClosedModel):
     id: UUID
     slot: Slot
     order_index: int = Field(ge=0, le=4)
-    agent_id: UUID
+    agent_id: UUID | None
     agent_name: str
-    agent_version_id: UUID
+    agent_version_id: UUID | None
     version_label: str = Field(pattern=r"^V[0-9]+\.[0-9]+$")
     knowledge_snapshot_id: UUID
     avatar_config: AvatarConfig

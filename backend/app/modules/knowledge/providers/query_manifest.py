@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
 from app.core.db import Database
@@ -97,15 +97,23 @@ def _assert_snapshot_owner(
     *,
     course_id: str,
     group_id: str | None,
-    agent_version_id: str,
+    agent_version_id: str | None,
     snapshot_id: str,
     persona_spec_hash: str,
     identity: EmbeddingIdentityV1,
+    scope_id: str | None = None,
 ) -> None:
-    version = db.get(AgentVersion, agent_version_id)
+    version = db.get(AgentVersion, agent_version_id) if agent_version_id else None
     snapshot = db.get(KnowledgeSnapshot, snapshot_id)
-    if version is None or snapshot is None:
+    if snapshot is None:
         raise QueryManifestError("the frozen query Snapshot owner is unavailable")
+    if version is None or _debate_pins_snapshot(db, scope_id, snapshot_id, course_id, group_id):
+        # A Debate owns its participant snapshot (2026-10-20): once the Agent
+        # or version is deleted, the Debate's own frozen row is the owner.
+        if not _debate_pins_snapshot(db, scope_id, snapshot_id, course_id, group_id):
+            raise QueryManifestError("the frozen query Snapshot owner is unavailable")
+        _assert_identity(snapshot, identity)
+        return
     agent = db.get(Agent, version.agent_id)
     group = db.get(Group, group_id) if group_id is not None else None
     expected_group_scope = (
@@ -133,6 +141,29 @@ def _assert_snapshot_owner(
         or persona_spec_hash not in {markdown_hash(version.agent_md), version.persona_spec_hash}
     ):
         raise QueryManifestError("the frozen query Snapshot owner changed")
+    _assert_identity(snapshot, identity)
+
+
+def _debate_pins_snapshot(
+    db: Session,
+    debate_id: str | None,
+    snapshot_id: str,
+    course_id: str,
+    group_id: str | None,
+) -> bool:
+    if not debate_id:
+        return False
+    row = db.execute(
+        text(
+            "SELECT course_id, group_id FROM debate_participants "
+            "WHERE debate_id = :d AND knowledge_snapshot_id = :s"
+        ),
+        {"d": debate_id, "s": snapshot_id},
+    ).first()
+    return row is not None and row[0] == course_id and (row[1] or None) == group_id
+
+
+def _assert_identity(snapshot: KnowledgeSnapshot, identity: EmbeddingIdentityV1) -> None:
     persisted = EmbeddingIdentityV1(
         provider=snapshot.embedding_provider,
         model_key=snapshot.embedding_model_key,
@@ -155,7 +186,7 @@ def ensure_real_query_export_manifest(
     turn_id: str,
     course_id: str,
     group_id: str | None,
-    agent_version_id: str,
+    agent_version_id: str | None,
     snapshot_id: str,
     identity: EmbeddingIdentityV1,
     transcript_hash: str,
@@ -211,6 +242,7 @@ def ensure_real_query_export_manifest(
         snapshot_id=snapshot_id,
         persona_spec_hash=persona_spec_hash,
         identity=identity,
+        scope_id=scope_id,
     )
     policy.validate()
     repository = ProviderRepository(database)

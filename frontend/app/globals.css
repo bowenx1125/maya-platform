@@ -3158,3 +3158,37 @@ dd {
   line-clamp: 2;
   overflow-wrap: anywhere;
 }
+
+/* Per-Agent problems, each with a pencil that opens that Agent. */
+.agent-issue-list {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-issue-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-issue-list .inline-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.agent-issue-hint {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.error-fix-links {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}

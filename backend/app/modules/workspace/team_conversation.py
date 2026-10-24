@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, not_found
+from app.core.links import live_link
 from app.core.models import Agent, AgentVersion, CourseMember
 from app.core.read_memo import memoized
 from app.modules.agents.schemas import AvatarConfig
@@ -273,9 +274,9 @@ def _read_frozen_team_selection(db: Session, row: Conversation) -> FrozenTeamSel
         )
         members.append(
             FrozenTeamMember(
-                binding_id=participant.team_member_id,
-                agent_id=participant.agent_id,
-                agent_version_id=participant.agent_version_id,
+                binding_id=live_link(participant.team_member_id, "Team member"),
+                agent_id=live_link(participant.agent_id, "Agent"),
+                agent_version_id=live_link(participant.agent_version_id, "Agent version"),
                 position=participant.position,
                 is_leader=participant.is_leader,
                 display_name=participant.display_name,
@@ -371,6 +372,67 @@ def _assessment_stage(
     return None if later_message is not None else "completed"
 
 
+def _historical_team_session(
+    db: Session,
+    row: Conversation,
+    context: AuthContext,
+    *,
+    runtime_available: bool,
+) -> TeamChatSession:
+    """A deleted Team's chat stays readable and cannot continue."""
+
+    del runtime_available
+    from .team_runtime import _student_hides_turn, project_team_turn
+
+    if not row.history_team_id or not row.history_team_version_id:
+        raise not_found()
+    participants = _participants(db, row.id)
+    turns = [
+        project_team_turn(db, turn, read_only=row.user_id != context.user.id)
+        for turn in db.scalars(
+            select(ConversationTurn)
+            .where(ConversationTurn.conversation_id == row.id)
+            .order_by(ConversationTurn.position, ConversationTurn.id)
+        )
+        if not _student_hides_turn(db, turn)
+    ]
+
+    return TeamChatSession(
+        id=UUID(row.id),
+        entry_kind=cast("Literal['team', 'maya_team']", row.entry_kind),
+        chat_visibility=cast("Literal['private', 'public']", row.chat_visibility),
+        origin=cast("Literal['custom_team', 'published_course_team']", row.origin),
+        team=ChatTeam(
+            id=UUID(row.history_team_id),
+            version_id=UUID(row.history_team_version_id),
+            course_id=UUID(row.course_id),
+            name=row.team_name_snapshot or "Team",
+            members=[
+                TeamChatParticipant(
+                    id=UUID(participant.id),
+                    name=participant.display_name,
+                    avatar_config=AvatarConfig.model_validate_json(participant.avatar_config_json),
+                    position=participant.position,
+                    is_leader=participant.is_leader,
+                    available=False,
+                    deleted=True,
+                )
+                for participant in participants
+            ],
+            available=False,
+            deleted=True,
+        ),
+        revision=row.revision,
+        turns=turns,
+        created_at=row.created_at,
+        title=row.title,
+        pinned_at=row.pinned_at,
+        assessment_stage=None,
+        read_only=row.user_id != context.user.id,
+        can_send=False,
+    )
+
+
 def team_session_view(
     db: Session,
     row: Conversation,
@@ -381,6 +443,8 @@ def team_session_view(
 ) -> TeamChatSession:
     from .team_runtime import _student_hides_turn, _validate_members, project_team_turn
 
+    if row.source_removed_at is not None or row.team_id is None:
+        return _historical_team_session(db, row, context, runtime_available=runtime_available)
     selection = frozen_team_selection(db, row)
     participants = _participants(db, row.id)
     availability: dict[str, bool] = {}

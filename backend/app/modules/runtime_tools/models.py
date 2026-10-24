@@ -20,8 +20,8 @@ class RuntimeModelCallStage(Base):
     turn_id: Mapped[str] = mapped_column(
         ForeignKey("agent_conversation_turns.id", ondelete="RESTRICT")
     )
-    executor_agent_version_id: Mapped[str] = mapped_column(
-        ForeignKey("agent_versions.id", ondelete="RESTRICT")
+    executor_agent_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("agent_versions.id", ondelete="SET NULL")
     )
     ordinal: Mapped[int] = mapped_column()
     dispatch_ordinal: Mapped[int] = mapped_column()

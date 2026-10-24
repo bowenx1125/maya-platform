@@ -75,8 +75,7 @@ def test_only_the_owner_may_rename_and_a_request_must_change_something(
     assert deleted.status_code == 204
     assert _patch(client, csrf, chat["id"], {"pinned": True}).status_code == 404
     with database.session() as db:
-        row = db.get(Conversation, chat["id"])
-        assert row is not None and row.title is None and row.pinned_at is None
+        assert db.get(Conversation, chat["id"]) is None
 
 
 def test_a_chat_whose_agent_was_deleted_can_still_be_renamed_and_pinned(

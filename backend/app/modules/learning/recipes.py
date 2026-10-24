@@ -386,6 +386,8 @@ def refresh_assessment_activity_questions(
     ):
         raise not_found()
     if selected_knowledge_set_ids is None:
+        if conversation.team_id is None:
+            raise not_found()
         selection = resolve_chat_entry(
             db,
             actor,
@@ -678,6 +680,7 @@ def _ensure_assessment_activity(
             course_id=conversation.course_id,
             team_id=conversation.team_id,
             team_version_id=conversation.team_version_id,
+            team_name_snapshot=conversation.team_name_snapshot or "",
             publication_id=conversation.publication_id,
             recipe_id=recipe_id,
             recipe_version_id=leader_version.id,

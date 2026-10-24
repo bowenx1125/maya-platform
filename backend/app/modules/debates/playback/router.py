@@ -35,6 +35,8 @@ from app.modules.debates.schemas import (
     PlaybackCommandRequest,
     PlaybackControlRequest,
     PlaybackState,
+    PrefetchedNextAudio,
+    PrefetchNextAudioRequest,
     ReleaseDebateRequest,
     RetryPreparationRequest,
     Transcript,
@@ -364,13 +366,58 @@ async def advance_debate_playback_route(
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
 ) -> Any:
-    return await service.next(
+    started = time.monotonic()
+    outcome = "ok"
+    try:
+        return await service.next(
+            db,
+            str(debate_id),
+            expected_control_version=payload.expected_control_version,
+            expected_current_turn_id=str(payload.expected_current_turn_id),
+            context=context,
+        )
+    except PlatformError as error:
+        outcome = error.code
+        raise
+    finally:
+        LOGGER.info(
+            "debate_timing stage=next_request debate_id=%s outcome=%s ms=%d",
+            debate_id,
+            outcome,
+            int((time.monotonic() - started) * 1000),
+        )
+
+
+@router.post(
+    "/debates/{debate_id}/next-audio",
+    operation_id="prefetchNextDebateAudio",
+    response_model=PrefetchedNextAudio,
+    responses={
+        200: {"description": "Controller-only ticket for the ready next turn's audio."},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": Error},
+    },
+)
+async def prefetch_next_debate_audio_route(
+    debate_id: UUID,
+    payload: PrefetchNextAudioRequest,
+    _csrf_header: str = Header(..., alias="X-CSRF-Token", min_length=32),
+    context: AuthContext = Depends(require_authenticated_mutation),
+    db: Session = Depends(get_db),
+    service: PlaybackService = Depends(get_playback_service),
+) -> Any:
+    turn_id, media_url = await service.prefetch_next_audio(
         db,
         str(debate_id),
         expected_control_version=payload.expected_control_version,
         expected_current_turn_id=str(payload.expected_current_turn_id),
+        epoch=str(payload.controller_epoch),
+        session_hash=_session_hash(context),
         context=context,
     )
+    return PrefetchedNextAudio(turn_id=UUID(turn_id), media_url=media_url)
 
 
 @router.post(
@@ -868,6 +915,7 @@ async def stream_audio_route(
 ) -> Response:
     if service.audio_store is None:
         raise not_found()
+    served_started = time.monotonic()
     await service.authorize_audio(
         db,
         str(debate_id),
@@ -900,6 +948,14 @@ async def stream_audio_route(
             ).model_dump(mode="json"),
             headers=result.headers,
         )
+    LOGGER.info(
+        "debate_timing stage=audio_serve debate_id=%s turn_id=%s status=%d bytes=%d ms=%d",
+        debate_id,
+        turn_id,
+        result.status_code,
+        len(result.body),
+        int((time.monotonic() - served_started) * 1000),
+    )
     return Response(
         content=result.body,
         status_code=result.status_code,

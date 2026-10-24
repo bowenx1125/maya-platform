@@ -7,11 +7,9 @@ from app.core.models import (
     Agent,
     AgentVersion,
     FileReference,
-    KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeSnapshot,
     SnapshotDocument,
-    StoredFile,
 )
 from app.modules.agents.markdown import AgentMarkdown, markdown_hash
 from app.modules.debates.generation.segments import SegmentInputSnapshot
@@ -112,9 +110,8 @@ def test_free_markdown_publishes_without_persona_compile_or_confirmation(
     assert denied.status_code == 409 and denied.json()["code"] == "agent_deleted"
     assert client.get(f"/api/v1/agents/{agent['id']}").status_code == 404
     with database.session() as db:
-        retained = db.get(Agent, agent["id"])
-        assert retained is not None and retained.deleted_at is not None
-        assert db.get(KnowledgeSnapshot, published.json()["knowledge_snapshot_id"]) is not None
+        assert db.get(Agent, agent["id"]) is None
+        assert db.get(KnowledgeSnapshot, published.json()["knowledge_snapshot_id"]) is None
     login(client)
     assert client.get(f"/api/v1/conversations/{conversation_id}").status_code == 404
     assert not any(
@@ -262,34 +259,6 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
         expected_index_revision = original_document.index_revision
         original_source_file_id = original_document.stored_file_id
         original_source_file_sha = original_document.stored_file.sha256
-        frozen_snapshot_file = db.get(StoredFile, snapshot_documents[0].stored_file_id)
-        assert frozen_snapshot_file is not None
-        frozen_snapshot_sha = frozen_snapshot_file.sha256
-        snapshot_fingerprint = (
-            snapshot.content_hash,
-            snapshot.total_char_count,
-            tuple(
-                (row.id, row.document_id, row.stored_file_id, row.char_count, row.order_index)
-                for row in snapshot_documents
-            ),
-            tuple(
-                (
-                    row.id,
-                    row.snapshot_document_id,
-                    row.document_id,
-                    row.chunk_index,
-                    row.chunk_text,
-                    row.start_offset,
-                    row.end_offset,
-                    row.embedding_blob,
-                )
-                for row in db.scalars(
-                    select(KnowledgeChunk)
-                    .where(KnowledgeChunk.snapshot_id == snapshot_id)
-                    .order_by(KnowledgeChunk.snapshot_document_id, KnowledgeChunk.chunk_index)
-                ).all()
-            ),
-        )
 
     replacement_source = "replacement evidence \n" * 7_000
     assert len(replacement_source) > 100_000
@@ -306,42 +275,28 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
     assert replaced.json()["id"] == original_document_id
 
     with database.session() as db:
-        snapshot = db.get(KnowledgeSnapshot, snapshot_id)
-        assert snapshot is not None
-        snapshot_documents = db.scalars(
+        # The replaced RAG publishes a new Agent version. The previous version
+        # keeps AGENT.md only, so its frozen snapshot is gone.
+        assert db.get(KnowledgeSnapshot, snapshot_id) is None
+        previous = db.get(AgentVersion, version_id)
+        assert previous is not None and previous.state == "superseded"
+        assert previous.knowledge_snapshot_id is None
+        assert previous.agent_md == agent_markdown
+        agent_row = db.get(Agent, agent["id"])
+        assert agent_row is not None and agent_row.current_published_version_id
+        current = db.get(AgentVersion, agent_row.current_published_version_id)
+        assert current is not None and current.knowledge_snapshot_id
+        assert current.knowledge_snapshot_id != snapshot_id
+        new_snapshot_id = current.knowledge_snapshot_id
+        new_documents = db.scalars(
             select(SnapshotDocument)
-            .where(SnapshotDocument.snapshot_id == snapshot_id)
+            .where(SnapshotDocument.snapshot_id == new_snapshot_id)
             .order_by(SnapshotDocument.order_index)
         ).all()
+        assert new_documents
         old_document = db.get(KnowledgeDocument, original_document_id)
         assert old_document is not None and old_document.workspace_state == "active"
         assert old_document.stored_file is not None
-        actual_fingerprint = (
-            snapshot.content_hash,
-            snapshot.total_char_count,
-            tuple(
-                (row.id, row.document_id, row.stored_file_id, row.char_count, row.order_index)
-                for row in snapshot_documents
-            ),
-            tuple(
-                (
-                    row.id,
-                    row.snapshot_document_id,
-                    row.document_id,
-                    row.chunk_index,
-                    row.chunk_text,
-                    row.start_offset,
-                    row.end_offset,
-                    row.embedding_blob,
-                )
-                for row in db.scalars(
-                    select(KnowledgeChunk)
-                    .where(KnowledgeChunk.snapshot_id == snapshot_id)
-                    .order_by(KnowledgeChunk.snapshot_document_id, KnowledgeChunk.chunk_index)
-                ).all()
-            ),
-        )
-        assert actual_fingerprint == snapshot_fingerprint
         assert old_document.content_hash != expected_content_hash
         assert old_document.index_revision == expected_index_revision + 1
         assert old_document.content_version_seq == 2
@@ -365,12 +320,18 @@ def test_long_rag_document_and_aggregate_publish_without_length_gates(
         )
         assert history_reference is not None
         assert history_reference.stored_file_id == original_source_file_id
-        frozen_snapshot_file_after = db.get(StoredFile, snapshot_documents[0].stored_file_id)
-        assert frozen_snapshot_file_after is not None
-        assert frozen_snapshot_file_after.sha256 == frozen_snapshot_sha
+        replaced_document = next(
+            row for row in new_documents if row.document_id == original_document_id
+        )
 
+    assert (
+        client.get(
+            f"/api/v1/knowledge-snapshots/{snapshot_id}/documents/{snapshot_documents[0].id}/download"
+        ).status_code
+        == 404
+    )
     frozen_download = client.get(
-        f"/api/v1/knowledge-snapshots/{snapshot_id}/documents/{snapshot_documents[0].id}/download"
+        f"/api/v1/knowledge-snapshots/{new_snapshot_id}/documents/{replaced_document.id}/download"
     )
     assert frozen_download.status_code == 200, frozen_download.text
-    assert first_source in frozen_download.text
+    assert "replacement evidence" in frozen_download.text

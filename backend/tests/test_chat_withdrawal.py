@@ -50,16 +50,12 @@ def test_chat_withdrawal_retains_history_fences_pending_and_replays_delete(
         )
     url = f"/api/v1/conversations/{conversation_id}"
     assert client.delete(url, headers=headers).status_code == 204
-    assert client.delete(url, headers=headers).status_code == 204
+    assert client.delete(url, headers=headers).status_code == 404
     assert client.get(url).status_code == 404
     assert client.get("/api/v1/conversations").json() == []
     with database.session() as db:
-        row = db.get(Conversation, conversation_id)
-        turn = db.get(ConversationTurn, turn_id)
-        assert row is not None and row.withdrawn_at is not None
-        assert row.active_request_id is None and row.revision == 2
-        assert turn is not None and turn.user_text == "An unfinished answer"
-        assert turn.state == "failed" and turn.safe_error_code == "chat_withdrawn"
+        assert db.get(Conversation, conversation_id) is None
+        assert db.get(ConversationTurn, turn_id) is None
         assert not db.scalar(select(_current_chat_claim(conversation_id, turn_id, 1)))
     _teacher_session, teacher_csrf = login(client, "maya")
     assert client.get(url).status_code == 404

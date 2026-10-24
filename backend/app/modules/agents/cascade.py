@@ -623,6 +623,7 @@ def sweep_stale_agents(database: Database, settings: Settings) -> int:
                     retarget_agent_chats(retarget_session, agent_id)
             finally:
                 retarget_session.close()
+            _sweep_team_chats_and_junk(database, settings)
             if work:
                 LOGGER.info("Agent auto-bump sweep stale=%d published=%d", len(work), published)
             return published
@@ -631,6 +632,65 @@ def sweep_stale_agents(database: Database, settings: Settings) -> int:
                 lock_session.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _SWEEP_LOCK_KEY})
     finally:
         lock_session.close()
+
+
+def _sweep_team_chats_and_junk(database: Database, settings: Settings) -> None:
+    """Retarget idle Team chats and drop junk, under the sweep lock already held."""
+
+    from collections.abc import Callable
+
+    def run(label: str, work: Callable[[Session], None]) -> None:
+        session = database.session_factory()
+        try:
+            work(session)
+        except Exception:  # noqa: BLE001
+            session.rollback()
+            LOGGER.exception("%s failed", label)
+        finally:
+            session.close()
+
+    def retarget_teams(session: Session) -> None:
+        from app.modules.teams.retarget import retarget_team_chats, teams_with_stale_chats
+
+        for team_id in teams_with_stale_chats(session):
+            retarget_team_chats(session, team_id)
+
+    def drop_abandoned(session: Session) -> None:
+        from app.modules.agents.cleanup import sweep_abandoned_agents
+
+        sweep_abandoned_agents(session)
+
+    def drop_failed_uploads(session: Session) -> None:
+        from app.modules.knowledge.recovery import purge_failed_knowledge_uploads
+
+        purge_failed_knowledge_uploads(session, settings.resolved_data_root)
+        session.commit()
+
+    def drop_failed_voices(session: Session) -> None:
+        from app.modules.voices.cleanup import sweep_failed_voices
+
+        sweep_failed_voices(session, settings.resolved_data_root)
+
+    def prune_versions(session: Session) -> None:
+        from app.modules.real_delete import prune_agent_versions
+
+        # Versions a chat or attempt still used at publish time are pruned
+        # once it has moved on. Only Agents with something to prune are read.
+        crowded = session.scalars(
+            select(AgentVersion.agent_id)
+            .where(AgentVersion.state != "draft")
+            .group_by(AgentVersion.agent_id)
+            .having(func.count() > 2)
+        ).all()
+        for agent_id in crowded:
+            prune_agent_versions(session, agent_id, settings.resolved_data_root)
+            session.commit()
+
+    run("Team chat retarget sweep", retarget_teams)
+    run("Abandoned agent sweep", drop_abandoned)
+    run("Failed upload sweep", drop_failed_uploads)
+    run("Failed voice sweep", drop_failed_voices)
+    run("Agent version prune sweep", prune_versions)
 
 
 def retarget_agent_chats(db: Session, agent_id: str) -> int:

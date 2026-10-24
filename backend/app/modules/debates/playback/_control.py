@@ -198,7 +198,7 @@ class PlaybackControlMixin(PlaybackCore):
             assert_claim_owned(db, idempotency_record)
         staged_events: list[EventRecord] = []
         previous_playback: dict[str, Any] | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "start"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             if str(getattr(debate, "status", "draft")) != "draft":
@@ -503,7 +503,7 @@ class PlaybackControlMixin(PlaybackCore):
         record: Any | None = None
         replay = False
         target: Any | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "retry_preparation"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             record, replay = self._claim_control_idempotency(
@@ -670,7 +670,7 @@ class PlaybackControlMixin(PlaybackCore):
         record: Any | None = None
         replay = False
         paused_event: EventRecord | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "pause"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             record, replay = self._claim_control_idempotency(
@@ -748,7 +748,7 @@ class PlaybackControlMixin(PlaybackCore):
     ) -> PlaybackStateDTO:
         record: Any | None = None
         replay = False
-        async with self._lock:
+        async with self._debate_lock(debate_id, "resume"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             record, replay = self._claim_control_idempotency(
@@ -812,7 +812,7 @@ class PlaybackControlMixin(PlaybackCore):
     ) -> PlaybackStateDTO:
         skip_events: list[EventRecord] = []
         next_turn_to_enqueue: Any | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "skip"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -917,7 +917,7 @@ class PlaybackControlMixin(PlaybackCore):
         terminal_event: EventRecord | None = None
         terminal_epoch: str | None = None
         partial = False
-        async with self._lock:
+        async with self._debate_lock(debate_id, "finish"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             record, replay = self._claim_control_idempotency(
@@ -1106,7 +1106,7 @@ class PlaybackControlMixin(PlaybackCore):
         speech without waiting for its audio to finish.
         """
 
-        async with self._lock:
+        async with self._debate_lock(debate_id, "next"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -1311,18 +1311,8 @@ class PlaybackControlMixin(PlaybackCore):
                     )
                 if text_events:
                     await self._publish_events(text_events)
-                    turns = self._turns(db, debate)
-                    current = next(
-                        (item for item in turns if str(item.id) == state.current_turn_id), None
-                    )
-                    if current is not None:
-                        following, unique = self._adjacent_successor(turns, current)
-                        if (
-                            unique
-                            and following is not None
-                            and not self._next_turn_ready(db, debate, state)
-                        ):
-                            await self._enqueue(debate, following)
+                if not is_replay:
+                    await self._enqueue_lookahead(db, debate)
                 return self._state_dto(state, db, debate)
             if (
                 not is_replay
@@ -1383,7 +1373,7 @@ class PlaybackControlMixin(PlaybackCore):
     ) -> PlaybackStateDTO:
         stopped_event: EventRecord | None = None
         stopped_epoch: str | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "stop"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -1604,7 +1594,7 @@ class PlaybackControlMixin(PlaybackCore):
             return self._state_dto(state, db, debate)
         previous_mode = "live"
         resulting_status = "stopped"
-        async with self._lock:
+        async with self._debate_lock(debate_id, "operator_reset"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             state = self._state(db, debate)
@@ -1729,7 +1719,7 @@ class PlaybackControlMixin(PlaybackCore):
         turn_id: str | None,
         context: AuthContext | None,
     ) -> PlaybackStateDTO:
-        async with self._lock:
+        async with self._debate_lock(debate_id, "begin_replay"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
             if str(getattr(debate, "status", "")) not in {"debate_finished", "completed"}:

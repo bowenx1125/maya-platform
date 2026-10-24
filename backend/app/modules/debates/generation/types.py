@@ -419,7 +419,7 @@ class ParticipantContext:
     """Frozen participant/persona input consumed by one generation call."""
 
     participant_id: str
-    agent_id: str
+    agent_id: str | None
     agent_name: str
     slot: str
     order_index: int

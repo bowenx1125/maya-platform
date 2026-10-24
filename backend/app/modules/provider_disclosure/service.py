@@ -21,6 +21,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.links import live_link
 from app.core.models import (
     Agent,
     AgentVersion,
@@ -1824,7 +1825,7 @@ class SqlAlchemyProviderDisclosureStore:
                     self.db,
                     user_id,
                     frozen_team_selection(self.db, conversation),
-                    {member.team_member_id for member in selected},
+                    {live_link(member.team_member_id, "Team member") for member in selected},
                 )
             except (PlatformError, ValueError, TypeError):
                 return False

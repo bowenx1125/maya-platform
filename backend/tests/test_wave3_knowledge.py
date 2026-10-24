@@ -1204,12 +1204,18 @@ def test_published_and_superseded_release_fingerprint_survives_metadata_change(
             assert old_document is not None and old_document.workspace_state == "active"
             assert old_document.content_version_seq == 2
         after = _release_fingerprint(database, settings.resolved_data_root, first_agent)
-        # Editing a used RAG file now auto-publishes a new Agent version
-        # (owner decision 2026-10-20). Every frozen release row the Debate
-        # relies on is still there unchanged; only new rows are added.
+        # Editing a used RAG file auto-publishes a new Agent version. Prune
+        # then keeps that version and the previous release, and drops older
+        # ones. The Debate does not read those rows: its participant copy is
+        # unchanged.
         for key, rows in before.items():
             if key == "versions":
-                # The previous published version becomes superseded.
-                assert {row[0] for row in rows} <= {row[0] for row in after[key]}
+                published_before = {row[0] for row in rows if row[3] == "published"}
+                assert published_before <= {row[0] for row in after[key]}
+            elif key == "participants":
+                assert set(rows) == set(after[key])
             else:
-                assert set(rows) <= set(after[key]), key
+                after_ids = {row[0] for row in after[key]}
+                for row in rows:
+                    if row[0] in after_ids:
+                        assert row in after[key]

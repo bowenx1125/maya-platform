@@ -297,6 +297,13 @@ def test_answers_hints_skips_and_evidence_append_once_and_survive_chat_delete(
 
     # A legacy Public Chat stays a single_agent fact; it is not rewritten into
     # published-course evidence merely because its chat_visibility is public.
+    with database.session() as db:
+        record_ids = list(
+            db.scalars(
+                select(LearningRecord.id).where(LearningRecord.conversation_id == conversation_id)
+            ).all()
+        )
+    assert len(record_ids) == 5
     withdrawn = client.delete(
         f"/api/v1/conversations/{conversation_id}",
         headers={"X-CSRF-Token": csrf},
@@ -304,16 +311,9 @@ def test_answers_hints_skips_and_evidence_append_once_and_survive_chat_delete(
     assert withdrawn.status_code == 204, withdrawn.text
     assert client.get(f"/api/v1/conversations/{conversation_id}").status_code == 404
     with database.session() as db:
-        conversation = db.get(Conversation, conversation_id)
-        assert conversation is not None and conversation.withdrawn_at is not None
-        assert (
-            db.scalar(
-                select(func.count(LearningRecord.id)).where(
-                    LearningRecord.conversation_id == conversation_id
-                )
-            )
-            == 5
-        )
+        assert db.get(Conversation, conversation_id) is None
+        kept = [db.get(LearningRecord, record_id) for record_id in record_ids]
+        assert all(row is not None and row.conversation_id is None for row in kept)
         with pytest.raises(PlatformError) as withdrawn_records:
             read_learning_records(db, _context(db, settings, raw_token), conversation_id)
         assert withdrawn_records.value.code == "not_found"

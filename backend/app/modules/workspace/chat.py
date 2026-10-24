@@ -120,6 +120,34 @@ router = APIRouter(
 logger = logging.getLogger("maya.workspace")
 
 
+_FALLBACK_AVATAR = AvatarConfig(
+    template_id="historical",
+    material_theme="historical",
+    default_expression="neutral",
+    expression_strength="medium",
+    motion_style="calm",
+)
+
+
+def _historical_agent(conversation: Conversation) -> ChatAgent:
+    raw = conversation.agent_avatar_json
+    try:
+        avatar = AvatarConfig.model_validate_json(raw) if raw else _FALLBACK_AVATAR
+    except ValueError:
+        avatar = _FALLBACK_AVATAR
+    return ChatAgent(
+        agent_id=UUID(conversation.history_agent_id or conversation.id),
+        version_id=UUID(conversation.history_agent_version_id or conversation.id),
+        course_id=UUID(conversation.course_id),
+        name=conversation.agent_name_snapshot or "Agent",
+        version_label=conversation.history_version_label or "V1.0",
+        avatar_config=avatar,
+        visibility="private",
+        available=False,
+        deleted=True,
+    )
+
+
 def agent_view(
     version: AgentVersion,
     agent: Agent,
@@ -1359,10 +1387,28 @@ def session_view(
         )
         for turn in turns
     ]
-    version = db.get(AgentVersion, conversation.agent_version_id)
+    version = (
+        db.get(AgentVersion, conversation.agent_version_id)
+        if conversation.agent_version_id
+        else None
+    )
     agent = db.get(Agent, version.agent_id) if version else None
     if version is None or agent is None:
-        raise not_found()
+        if conversation.source_removed_at is None or not conversation.history_agent_id:
+            raise not_found()
+        return ChatSession(
+            id=UUID(conversation.id),
+            chat_visibility=cast(Literal["private", "public"], conversation.chat_visibility),
+            read_only=read_only,
+            can_send=False,
+            agent=_historical_agent(conversation),
+            revision=conversation.revision,
+            created_at=conversation.created_at,
+            title=conversation.title,
+            pinned_at=conversation.pinned_at,
+            turns=visible_turns,
+            knowledge_generation=None,
+        )
     available = _conversation_is_callable(db, conversation, version, agent, conversation.user_id)
     return ChatSession(
         id=UUID(conversation.id),
@@ -1731,30 +1777,11 @@ def delete_conversation(
     if row is None or row.user_id != context.user.id:
         raise not_found()
     course_member(db, context, row.course_id)
-    if row.withdrawn_at is None:
-        from app.modules.learning.attempts import withdraw_conversation_attempts
+    from app.modules.real_delete import hard_delete_conversation
 
-        timestamp = datetime.now(UTC)
-        db.execute(
-            update(Conversation)
-            .where(Conversation.id == row.id, Conversation.withdrawn_at.is_(None))
-            .values(
-                withdrawn_at=timestamp, active_request_id=None, revision=Conversation.revision + 1
-            )
-        )
-        db.execute(
-            update(ConversationTurn)
-            .where(ConversationTurn.conversation_id == row.id, ConversationTurn.state == "pending")
-            .values(state="failed", safe_error_code="chat_withdrawn")
-        )
-        withdraw_conversation_attempts(db, row.id)
-        db.commit()
-    from .attachments import purge_conversation_attachments
-    from .chat_reports import purge_conversation_reports
-
-    # Attached files and saved reports are private to this Chat and leave with it.
-    purge_conversation_attachments(db, settings, row.id)
-    purge_conversation_reports(db, row.id)
+    # Answers stay on the attempt. The transcript and its files leave.
+    hard_delete_conversation(db, row, settings.resolved_data_root)
+    db.commit()
     return Response(status_code=204)
 
 
@@ -1813,6 +1840,9 @@ def stream_message(
     settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
     row = owned_conversation(db, context, str(conversation_id))
+    if row.source_removed_at is not None:
+        code = "team_deleted" if row.entry_kind != "agent" else "agent_deleted"
+        raise conflict(code, "This chat cannot continue.")
     if row.entry_kind != "agent":
         _require_canonical_assessment_conversation(db, context, row)
         if not accepts_event_stream(accept):

@@ -304,6 +304,31 @@ describe("Brainform workspace actions", () => {
     expect(screen.queryByRole("button", { name: "New Knowledge" })).toBeNull();
   });
 
+  it("shows the index error and does not list a RAG upload that failed", async () => {
+    state.role = "teacher";
+    state.api.uploadRagLibraryDocument = vi.fn().mockRejectedValue(
+      new PlatformApiError(503, "not kept", {
+        code: "rag_upload_index_failed",
+      }),
+    );
+    renderWithActions();
+    fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));
+    fireEvent.change(screen.getByLabelText("Filename"), {
+      target: { value: "Broken" },
+    });
+    fireEvent.change(screen.getByLabelText("Content"), {
+      target: { value: "# Broken" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(
+      await screen.findByText(
+        "This file could not be indexed, so it was not saved. Upload it again in a minute.",
+      ),
+    ).toBeTruthy();
+    expect(state.api.uploadRagLibraryDocument).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Broken.md" })).toBeNull();
+  });
+
   it("adds a teacher's RAG to the shared course pool, in no Agent", async () => {
     state.role = "teacher";
     state.api.uploadRagLibraryDocument = vi

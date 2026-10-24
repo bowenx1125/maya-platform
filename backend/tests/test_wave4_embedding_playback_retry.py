@@ -15,6 +15,7 @@ from app.modules.debates.generation.mutual_learning_policy import (
 from app.modules.debates.models import Debate, DebateTurn, PlaybackState
 from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.protocols import (
+    LIVE_LOOKAHEAD_TURNS,
     MemoryDebate,
     MemoryParticipant,
     MemoryPlaybackRepository,
@@ -115,9 +116,10 @@ async def test_confirmation_required_is_nonterminal_and_explicit_retry_resumes(
     )
     assert retried.control_version == 1
     await tasks.wait_debate(debate.id)
-    # The successful current turn keeps the existing bounded one-turn
-    # prefetch behavior, so the adjacent turn is prepared exactly once too.
-    assert calls == [0, 0, 1]
+    # The successful current turn starts the bounded lookahead (owner decision
+    # 2026-10-24: up to LIVE_LOOKAHEAD_TURNS past the playing turn), each turn
+    # prepared exactly once and strictly in order.
+    assert calls == [0, 0, *range(1, 1 + LIVE_LOOKAHEAD_TURNS)]
     assert debate.status == "running"
     assert first.generation_status == "final_ready"
     assert first.failed_code is None

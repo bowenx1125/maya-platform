@@ -143,14 +143,13 @@ def test_every_voice_status_can_be_deleted(
 
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["status"] == "deleted"
-    assert _status(database, profile_id) == "deleted"
+    # A confirmed supplier delete removes the row. The response is the last
+    # picture of the card; the list no longer contains it.
+    with database.session() as session:
+        assert session.get(VoiceProfile, profile_id) is None
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
-    # The list keeps deleted rows for audit; the UI hides them.
-    assert all(item["status"] == "deleted" for item in listed if item["id"] == profile_id)
-    # The stored supplier id is deleted remotely, once.
+    assert all(item["id"] != profile_id for item in listed)
     assert provider.delete_calls == 1
-    operation = _delete_operation(database, profile_id)
-    assert operation is not None and operation.state == "succeeded"
 
 
 def test_outcome_unknown_voice_is_found_by_recovery_name_and_deleted(
@@ -179,8 +178,8 @@ def test_outcome_unknown_voice_is_found_by_recovery_name_and_deleted(
     assert deleted.json()["status"] == "deleted"
     assert provider.exists_calls == 1
     assert deleted_ids == ["supplier-voice-1"]
-    operation = _delete_operation(database, profile_id)
-    assert operation is not None and operation.state == "succeeded"
+    with database.session() as session:
+        assert session.get(VoiceProfile, profile_id) is None
 
 
 def test_outcome_unknown_voice_with_nothing_at_the_supplier_just_goes(
@@ -200,7 +199,8 @@ def test_outcome_unknown_voice_with_nothing_at_the_supplier_just_goes(
     assert deleted.status_code == 200, deleted.text
     assert provider.exists_calls == 1
     assert provider.delete_calls == 0
-    assert _status(database, profile_id) == "deleted"
+    with database.session() as session:
+        assert session.get(VoiceProfile, profile_id) is None
 
 
 def test_ambiguous_recovery_name_matches_delete_no_supplier_voice(
@@ -252,11 +252,12 @@ def test_supplier_failure_still_deletes_the_card_and_a_later_delete_finishes_cle
     operation = _delete_operation(database, profile_id)
     assert operation is not None and operation.state == "outcome_unknown"
 
-    # The supplier is back: a second delete (new key) finishes the cleanup.
+    # The supplier is back: a second delete (new key) finishes the cleanup
+    # and the card is then really gone.
     second = _delete(client, csrf, profile_id, f"delete-supplier-down-{failure}-2")
     assert second.status_code == 200, second.text
-    operation = _delete_operation(database, profile_id)
-    assert operation is not None and operation.state == "succeeded"
+    with database.session() as session:
+        assert session.get(VoiceProfile, profile_id) is None
 
 
 def test_refused_voice_is_deleted_without_any_supplier_call(
@@ -288,7 +289,7 @@ def test_refused_voice_is_deleted_without_any_supplier_call(
     assert provider.delete_calls == 0
 
 
-def test_repeat_delete_of_a_deleted_voice_is_idempotent(
+def test_a_new_key_after_a_settled_delete_is_not_found(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -298,9 +299,10 @@ def test_repeat_delete_of_a_deleted_voice_is_idempotent(
     _use(monkeypatch, provider)
     profile_id = _enroll(client, csrf, "enroll-repeat-delete-01").json()["id"]
     assert _delete(client, csrf, profile_id, "delete-repeat-0001").status_code == 200
+    # The same key still replays. A different key finds nothing and does not
+    # call the supplier again.
     again = _delete(client, csrf, profile_id, "delete-repeat-0002")
-    assert again.status_code == 200
-    assert again.json()["status"] == "deleted"
+    assert again.status_code == 404
     assert provider.delete_calls == 1
 
 
@@ -397,7 +399,7 @@ def test_voice_deleted_during_enrollment_stays_deleted_and_is_removed_remotely(
     assert created.json()["status"] == "deleted"
     assert provider.delete_calls == 1
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
-    assert all(item["status"] == "deleted" for item in listed if item["id"] == created.json()["id"])
+    assert all(item["id"] != created.json()["id"] for item in listed)
 
 
 def _deleting_provider(
@@ -463,7 +465,9 @@ def test_delete_during_enrollment_stays_deleted_and_leaves_no_supplier_voice(
     _enroll(client, csrf, f"overtaken-enroll-{outcome}")
     profile_id = seen["profile_id"]
 
-    assert _status(database, profile_id) == "deleted"
+    # Enrollment has finished and the supplier voice is gone, so the card is too.
+    with database.session() as session:
+        assert session.get(VoiceProfile, profile_id) is None
     assert provider._voices == {}
 
 
@@ -498,5 +502,6 @@ def test_a_later_delete_rechecks_an_enrollment_whose_outcome_is_unknown(
     again = _delete(client, csrf, profile_id, "overtaken-delete-again")
 
     assert again.status_code == 200, again.text
-    assert _status(database, profile_id) == "deleted"
+    with database.session() as session:
+        assert session.get(VoiceProfile, profile_id) is None
     assert provider._voices == {}

@@ -345,10 +345,15 @@ def test_create_list_get_update_freezes_current_versions_and_click_order(
         bowen_version,
         kaikai_version,
     ]
-    assert [item["knowledge_snapshot_id"] for item in created["participants"]] == [
-        bowen_snapshot,
-        kaikai_snapshot,
-    ]
+    # Each participant points at a Debate-owned copy, not the Brainform snapshot.
+    copied_ids = [item["knowledge_snapshot_id"] for item in created["participants"]]
+    assert copied_ids != [bowen_snapshot, kaikai_snapshot]
+    with database.session() as db:
+        for snapshot_id in copied_ids:
+            owned = db.get(KnowledgeSnapshot, snapshot_id)
+            assert owned is not None and owned.owner_debate_id == debate_id
+        assert db.get(KnowledgeSnapshot, bowen_snapshot) is not None
+        assert db.get(KnowledgeSnapshot, kaikai_snapshot) is not None
     assert all(item["voice_fallback_active"] for item in created["participants"])
     assert all(item["effective_voice_profile_id"] is None for item in created["participants"])
 
