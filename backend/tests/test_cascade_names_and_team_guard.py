@@ -59,3 +59,41 @@ def test_agent_in_live_team_is_detected_and_released_when_team_is_deleted(
     assert deleted.status_code == 204
     with database.session() as db:
         assert not _agent_in_live_team(db, first[0])
+
+
+def test_agent_in_team_names_the_actors_own_teams_only(client: TestClient, database: Any) -> None:
+    from app.modules.agents.router import _live_team_blockers
+
+    from tests.test_mayaform_teams import BOWEN_ID
+
+    _, csrf = login(client, "maya")
+    first = _make_agent_version(database, owner_id=MAYA_ID, name="Named A", visibility="public")
+    second = _make_agent_version(database, owner_id=MAYA_ID, name="Named B", visibility="public")
+    created = client.post(
+        f"/api/v1/courses/{COURSE_ID}/teams",
+        headers=_headers(csrf, "cascade-team-named-create-1"),
+        json={
+            **_team_payload([first[1], second[1]], visibility="public"),
+            "display_name": "Ethics circle",
+        },
+    )
+    assert created.status_code == 201, created.text
+    team_id = created.json()["id"]
+    with database.session() as db:
+        own = _live_team_blockers(db, first[0], MAYA_ID)
+        assert own == {
+            "teams": [{"team_id": team_id, "team_name": "Ethics circle", "group_id": None}],
+            "other_team_count": 0,
+        }
+        assert _live_team_blockers(db, first[0], BOWEN_ID) == {
+            "teams": [],
+            "other_team_count": 1,
+        }
+    deleted = client.delete(
+        f"/api/v1/agents/{first[0]}",
+        headers=_headers(csrf, "cascade-team-named-delete1"),
+    )
+    assert deleted.status_code == 409, deleted.text
+    body = deleted.json()
+    assert body["code"] == "agent_in_team"
+    assert body["details"]["teams"][0]["team_name"] == "Ethics circle"

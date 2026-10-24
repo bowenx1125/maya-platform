@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime
-from typing import NoReturn, cast
+from typing import Any, NoReturn, cast
 from unicodedata import normalize
 from uuid import UUID, uuid4
 
@@ -516,6 +516,35 @@ def _agent_in_live_team(db: Session, agent_id: str) -> bool:
         )
         is not None
     )
+
+
+def _live_team_blockers(db: Session, agent_id: str, actor_user_id: str) -> dict[str, Any]:
+    """Which live Teams hold this Agent, as the actor may see them.
+
+    The actor's own Teams are named so the error can open them; anyone else's
+    Team is only counted, so a private Team's name never leaks.
+    """
+
+    from app.modules.teams.models import Team, TeamVersion, TeamVersionMember
+
+    rows = db.execute(
+        select(Team.id, Team.display_name, Team.group_id, Team.owner_user_id)
+        .join(
+            TeamVersion,
+            (TeamVersion.team_id == Team.id)
+            & (TeamVersion.version_seq == Team.current_version_seq),
+        )
+        .join(TeamVersionMember, TeamVersionMember.team_version_id == TeamVersion.id)
+        .where(Team.deleted_at.is_(None), TeamVersionMember.agent_id == agent_id)
+        .distinct()
+        .order_by(Team.display_name)
+    ).all()
+    own = [
+        {"team_id": row.id, "team_name": row.display_name, "group_id": row.group_id}
+        for row in rows
+        if row.owner_user_id == actor_user_id
+    ]
+    return {"teams": own, "other_team_count": len(rows) - len(own)}
 
 
 def _begin_immediate(db: Session) -> None:
@@ -1288,6 +1317,7 @@ def delete_agent(
             raise conflict(
                 "agent_in_team",
                 "已被放进 Team，请先修改 Team。",
+                _live_team_blockers(db, agent.id, context.user.id),
             )
 
         from app.modules.real_delete import hard_delete_agent

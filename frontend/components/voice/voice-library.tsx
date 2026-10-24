@@ -420,6 +420,10 @@ export function VoiceLibrary({
       setFile(null);
       setCreating(false);
       setNotice("voiceProfileCreatedNotice");
+      // Owner decision (2026-10-24): a voice just uploaded from an Agent is
+      // that Agent's choice. Without an upload the choice stays as it was,
+      // None by default.
+      if (onSelect && profile) onSelect(profile.id);
       await load();
     } catch (cause) {
       const rejected = isCloneRefusal(cause) || isFileRejection(cause);

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
@@ -82,6 +83,8 @@ from app.modules.debates.topic_language import TopicLanguageError, validate_topi
 from app.modules.debates.voice_clones import request_debate_clones, sync_debate_clones
 from app.modules.interactions.service import create_closed_window
 from app.providers.tts import TTS_UNAVAILABLE_CODES
+
+LOGGER = logging.getLogger(__name__)
 
 
 def utc_now() -> datetime:
@@ -569,6 +572,36 @@ def _fence_resolved_agent_chain(
         raise validation_failure(
             "The selected knowledge snapshot changed before the Debate draft was saved.",
             code="rag_missing",
+        )
+
+
+def _assert_participants_ready(
+    db: Session, *, course_id: str, payload: Any, settings: Settings
+) -> None:
+    """Refuse once with every Agent's problems, each naming its Agent.
+
+    An Agent this course cannot see is left to the resolver, which answers
+    404 without saying whether it exists.
+    """
+
+    from app.modules.agents.readiness import debate_issues
+
+    issues: list[dict[str, Any]] = []
+    for item in payload.participants:
+        agent = db.get(Agent, str(item.agent_id))
+        if agent is None or agent.course_id != course_id:
+            continue
+        issues.extend(debate_issues(db, agent, settings))
+    if issues:
+        LOGGER.info(
+            "debate_agents_not_ready course_id=%s issues=%s",
+            course_id,
+            ",".join(f"{item['agent_id']}:{item['issue']}" for item in issues),
+        )
+        raise validation_failure(
+            "Some selected Agents are not ready for a Debate.",
+            {"issues": issues},
+            code="debate_agents_not_ready",
         )
 
 
@@ -1256,6 +1289,9 @@ def create_debate_draft(
     # every committed new Debate has exactly one closed classroom window.
     create_closed_window(db, debate)
     runtime_settings = _settings(db, settings)
+    _assert_participants_ready(
+        db, course_id=debate.course_id, payload=payload, settings=runtime_settings
+    )
     participant_rows = [
         _participant_row(
             db,
@@ -1562,6 +1598,9 @@ def update_debate_draft(
     db.execute(delete(DebateParticipant).where(DebateParticipant.debate_id == debate.id))
     db.flush()
     runtime_settings = _settings(db, settings)
+    _assert_participants_ready(
+        db, course_id=debate.course_id, payload=payload, settings=runtime_settings
+    )
     participant_rows = [
         _participant_row(
             db,

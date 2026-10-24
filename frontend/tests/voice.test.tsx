@@ -515,7 +515,9 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" />
       </AppShell>,
     );
-    expect(await screen.findByRole("button", { name: "ready.wav" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "ready.wav" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "refused.wav" })).toBeNull();
     expect(screen.queryByRole("button", { name: "deleted.wav" })).toBeNull();
   });
@@ -888,6 +890,57 @@ describe("Agent voice picker", () => {
     expect(checked()).toEqual(["peer.wav"]);
     fireEvent.click(screen.getByRole("radio", { name: "None" }));
     expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+
+  it("selects a voice just uploaded from an Agent, and only that one", async () => {
+    const created = {
+      id: "voice-new",
+      scope: "group",
+      group_id: "group-a",
+      status: "ready",
+      source_filename: "fresh.wav",
+      safe_error_code: null,
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    let enrolled = false;
+    api.voiceProfiles.mockImplementation(async () =>
+      enrolled ? [mine, peer, created] : [mine, peer],
+    );
+    api.enrollVoice.mockImplementation(async () => {
+      enrolled = true;
+      return created;
+    });
+    const onSelect = vi.fn();
+    render(
+      <AppShell role="student">
+        <VoiceLibrary
+          groupId="group-a"
+          embedded
+          selectedId={null}
+          onSelect={onSelect}
+        />
+      </AppShell>,
+    );
+    await screen.findByRole("radio", { name: "peer.wav" });
+    // Voices exist but none was uploaded here: the choice stays None.
+    expect(checked()).toEqual(["None"]);
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const input = screen.getByLabelText(
+      "Upload a 10–20 second clip of yourself reading aloud (16-bit WAV, MP3, or M4A; max 10 MB).",
+    ) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File([new Uint8Array([1, 2, 3])], "fresh.wav", {
+            type: "audio/wav",
+          }),
+        ],
+      },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: CONSENT }));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("voice-new"));
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to None when the chosen voice is deleted", async () => {

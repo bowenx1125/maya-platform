@@ -210,7 +210,11 @@ def _validate_members(
                 "Team members must use a published immutable Agent version.",
             )
         if agent.id in seen_agent_ids:
-            raise unprocessable("duplicate_team_agent", "An Agent can only appear once in a Team.")
+            raise unprocessable(
+                "duplicate_team_agent",
+                "An Agent can only appear once in a Team.",
+                {"agent_id": agent.id, "agent_name": agent.name},
+            )
         seen_agent_ids.add(agent.id)
         role = _agent_workspace_role(db, actor, agent)
         if (
@@ -229,6 +233,7 @@ def _validate_members(
             raise unprocessable(
                 "team_member_private",
                 "A public Team can only contain public Agents.",
+                {"agent_id": agent.id, "agent_name": agent.name},
             )
         raw_source_fences = _capture_raw_source_fences(db, version, course_id)
         if not _raw_source_fences_current(

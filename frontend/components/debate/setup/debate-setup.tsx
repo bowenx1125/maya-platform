@@ -36,9 +36,15 @@ import {
   EmptyCard,
   ErrorNotice,
   LoadingCard,
+  Notice,
   PageIntro,
   SectionCard,
 } from "../../ui";
+import { AgentIssueList } from "../../agent-issue-list";
+import {
+  agentIssuesFromError,
+  versionIssues,
+} from "../../../lib/agent-readiness";
 import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
 import { PageAction } from "../../page-action";
@@ -89,7 +95,7 @@ export function TeacherDebateList({
     async (silent = false, propagateError = false) => {
       const sequence = ++loadSequence.current;
       if (!courseId) {
-        setError(new Error(t("debateCreateUnavailable")));
+        setError(new Error(t("debateNoCourse")));
         setLoading(false);
         return;
       }
@@ -424,7 +430,7 @@ export function TeacherDebateCreate({
 
   const load = useCallback(async () => {
     if (!courseId) {
-      setError(new Error(copy(t, "debateCreateUnavailable")));
+      setError(new Error(copy(t, "debateNoCourse")));
       setLoading(false);
       return;
     }
@@ -496,7 +502,7 @@ export function TeacherDebateCreate({
       return;
     }
     if (!courseId) {
-      setFormError(copy(t, "debateCreateUnavailable"));
+      setFormError(copy(t, "debateNoCourse"));
       return;
     }
     const payload: SetupDraftPayload = {
@@ -542,7 +548,7 @@ export function TeacherDebateCreate({
         payload as DebateDraftRequest,
         createMutation.current.handle,
       );
-      if (!created?.id) throw new Error(copy(t, "debateCreateUnavailable"));
+      if (!created?.id) throw new Error(copy(t, "debateCreateUnconfirmed"));
       createMutation.current = null;
       router.replace("/teacher/debates");
     } catch (cause) {
@@ -558,13 +564,26 @@ export function TeacherDebateCreate({
     return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   }
 
+  const agentIssues = agentIssuesFromError(error);
+  // Voice None never refuses a Debate, but the teacher sees it per Agent.
+  const voiceWarnings = selectedIds.flatMap((agentId) => {
+    const candidate = candidates.find((item) => item.agent.id === agentId);
+    if (!candidate) return [];
+    return versionIssues(candidate.agent, candidate.current_version).filter(
+      (item) => item.issue === "voice_missing",
+    );
+  });
+  const editAgentHref = (agentId: string) =>
+    `/teacher/agents/${encodeURIComponent(agentId)}`;
   return (
     <div className={styles.pageStack}>
       <PageIntro title={copy(t, "newDebateTitle")} />
       {!rulesEditing ? (
         <PageAction name="back" href="/teacher/debates" disabled={busy} />
       ) : null}
-      {error ? <ErrorNotice error={error} onRetry={() => void load()} /> : null}
+      {error && !agentIssues ? (
+        <ErrorNotice error={error} onRetry={() => void load()} />
+      ) : null}
       <form
         id="create-debate-form"
         className={styles.pageStack}
@@ -772,6 +791,16 @@ export function TeacherDebateCreate({
           >
             {formError}
           </DismissibleAlert>
+        ) : null}
+        {agentIssues ? (
+          <Notice inline tone="error" title={copy(t, "debateAgentsNotReady")}>
+            <AgentIssueList issues={agentIssues} editHref={editAgentHref} />
+          </Notice>
+        ) : null}
+        {voiceWarnings.length ? (
+          <div className="agent-issue-hint">
+            <AgentIssueList issues={voiceWarnings} editHref={editAgentHref} />
+          </div>
         ) : null}
         {/* Creating mid-edit would freeze rules other than the ones on
           screen, so Done waits until the ruleset edit is saved or discarded. */}

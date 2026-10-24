@@ -399,9 +399,12 @@ describe("private Agent chat", () => {
     });
     await waitFor(() => expect(getChatRequest()).toBeNull());
     expect(reopenedInput).toHaveProperty("value", "");
+    // The turn line and the chat notice both name the reason now.
     expect(
-      screen.getByText("The platform request could not be completed."),
-    ).toBeTruthy();
+      screen.getAllByText(
+        "This reply could not be generated. Send your message again.",
+      ).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("chat_failed")).toBeNull();
 
     fireEvent.change(reopenedInput, {
