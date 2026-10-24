@@ -9401,6 +9401,42 @@
         ]
       }
     },
+    "/api/v1/client-metrics": {
+      "post": {
+        "tags": [
+          "Telemetry"
+        ],
+        "operationId": "reportClientMetrics",
+        "summary": "Report Client Metrics",
+        "description": "Sampled browser timings (Next to first audio, first page render, assessment submit). Each metric is written to the server log with its page's route template; nothing is stored and no user or record id is kept.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientMetricsReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Metrics accepted and logged; nothing is stored."
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "operationId": "health_live_health_live_get",
@@ -13403,6 +13439,54 @@
           },
           "expected_current_turn_id": {
             "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "ClientMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "ms"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "debate_next_to_play",
+              "page_first_render",
+              "assessment_submit"
+            ]
+          },
+          "ms": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 600000
+          },
+          "page": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "pattern": "^/[A-Za-z0-9/_{}\\[\\]-]*$"
+          }
+        }
+      },
+      "ClientMetricsReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metrics"
+        ],
+        "properties": {
+          "metrics": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ClientMetric"
+            }
           }
         }
       },

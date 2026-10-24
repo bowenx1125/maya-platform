@@ -21,6 +21,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from app.core.request_timing import provider_call
 from app.providers.audio import MAX_PREVIEW_BYTES, AudioValidationError, validate_speech_audio
 from app.providers.tts import (
     TTSAudioInvalidError,
@@ -330,7 +331,7 @@ class DashScopeVoiceCloneProvider:
         del language, transcript
         sample = _sample_bytes(audio_data_uri)
         try:
-            with _client() as client:
+            with _client() as client, provider_call("voice"):
                 audio_url = self._upload_sample(client, sample, recovery_name)
                 response = client.post(
                     f"{_base_url(self.config)}{VOICE_CUSTOMIZATION_PATH}",
@@ -388,7 +389,7 @@ class DashScopeVoiceCloneProvider:
         deadline = time.monotonic() + VOICE_REVIEW_WAIT_SECONDS
         status: str | None = None
         try:
-            with _client() as client:
+            with _client() as client, provider_call("voice"):
                 while True:
                     response = client.post(
                         f"{_base_url(self.config)}{VOICE_CUSTOMIZATION_PATH}",
@@ -422,7 +423,7 @@ class DashScopeVoiceCloneProvider:
         visibility_known = False
         page_size = 100
         try:
-            with _client() as client:
+            with _client() as client, provider_call("voice"):
                 # Pagination is intentionally private to this adapter.  Only
                 # recovery-name matches leave this method.
                 for page in range(10):
@@ -498,7 +499,7 @@ class DashScopeVoiceCloneProvider:
             }
         )
         try:
-            with _client() as client:
+            with _client() as client, provider_call("voice"):
                 response = client.post(
                     f"{_base_url(self.config)}{VOICE_CUSTOMIZATION_PATH}",
                     headers={"Authorization": f"Bearer {self.config.api_key}"},
@@ -683,6 +684,17 @@ def _download_from_pinned_address(
     request_target = parsed.path or "/"
     if parsed.query:
         request_target += "?" + parsed.query
+    with provider_call("tts"):
+        return _download_pinned(request_target, hostname, address, max_bytes, deadline)
+
+
+def _download_pinned(
+    request_target: str,
+    hostname: str,
+    address: str,
+    max_bytes: int,
+    deadline: float,
+) -> bytes:
     connection = _PinnedHTTPSConnection(hostname, address, deadline)
     try:
         if connection.sock is not None:
@@ -869,7 +881,10 @@ class DashScopeTTSProvider:
             }
         try:
             # Cloned synthesis can take longer than the generic provider read window.
-            with _client(read_timeout=TTS_GENERATION_READ_TIMEOUT_SECONDS) as client:
+            with (
+                _client(read_timeout=TTS_GENERATION_READ_TIMEOUT_SECONDS) as client,
+                provider_call("tts"),
+            ):
                 response = client.post(
                     url,
                     headers={

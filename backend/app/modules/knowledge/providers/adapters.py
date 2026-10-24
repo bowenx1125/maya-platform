@@ -20,6 +20,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from app.core.request_timing import provider_call
+
 from .embedding import (
     EmbeddingResponseDialect,
     ValidatedEmbeddingBatchV1,
@@ -184,21 +186,8 @@ class HttpxEmbeddingTransport:
     ) -> object:
         started = time.monotonic()
         try:
-            if self.client is not None:
-                return self.client.post(
-                    url,
-                    headers=dict(headers),
-                    json=dict(json),
-                    timeout=timeout,
-                    follow_redirects=False,
-                )
-            with httpx.Client(follow_redirects=False, trust_env=self._trust_env) as client:
-                return client.post(
-                    url,
-                    headers=dict(headers),
-                    json=dict(json),
-                    timeout=timeout,
-                )
+            with provider_call("embedding"):
+                return self._post(url, headers=headers, json=json, timeout=timeout)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             diagnostics = _transport_diagnostics(
                 exc,
@@ -219,6 +208,30 @@ class HttpxEmbeddingTransport:
             )
             _log_transport_diagnostics(diagnostics)
             raise EmbeddingAcceptanceUnknown(diagnostics=diagnostics) from exc
+
+    def _post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        json: Mapping[str, object],
+        timeout: float,
+    ) -> object:
+        if self.client is not None:
+            return self.client.post(
+                url,
+                headers=dict(headers),
+                json=dict(json),
+                timeout=timeout,
+                follow_redirects=False,
+            )
+        with httpx.Client(follow_redirects=False, trust_env=self._trust_env) as client:
+            return client.post(
+                url,
+                headers=dict(headers),
+                json=dict(json),
+                timeout=timeout,
+            )
 
 
 @dataclass(frozen=True, slots=True)

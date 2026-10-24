@@ -7,6 +7,7 @@ import {
 import { t, tm } from "../i18n";
 import { notePollResponse } from "../poll-pacing";
 import { invalidateRequestCache } from "../request-cache";
+import type { ClientMetric } from "../client-metrics";
 
 export type AuthSession = components["schemas"]["AuthSession"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
@@ -901,6 +902,24 @@ export class PlatformApi {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * Sampled browser timings. Sent outside the typed client so the shared
+   * page-load cache is not emptied, as it is after every other POST.
+   */
+  async reportClientMetrics(metrics: ClientMetric[]): Promise<void> {
+    const separator = this.baseUrl.endsWith("/") ? "" : "/";
+    await fetch(`${this.baseUrl}${separator}client-metrics`, {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": this.csrfToken ?? "",
+      },
+      body: JSON.stringify({ metrics }),
+    });
   }
 
   setCsrfToken(token: string | undefined): void {
