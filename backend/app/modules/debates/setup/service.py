@@ -79,7 +79,7 @@ from app.modules.debates.setup.rules import (
 )
 from app.modules.debates.teaching_rules import freeze_teaching_rules
 from app.modules.debates.topic_language import TopicLanguageError, validate_topic
-from app.modules.debates.voice_clones import request_debate_clones, sync_debate_clones
+from app.modules.debates.voice_clones import snapshot_debate_voices, sync_debate_clones
 from app.modules.interactions.service import create_closed_window
 from app.providers.tts import TTS_UNAVAILABLE_CODES
 
@@ -1272,9 +1272,13 @@ def create_debate_draft(
     adopt_debate_knowledge(
         db, debate.id, list(participant_rows), runtime_settings.resolved_data_root
     )
-    # The Debate's own voice clones; enrollment runs in the background.
-    request_debate_clones(
-        db, debate.id, list(participant_rows), data_root=runtime_settings.resolved_data_root
+    # The Debate keeps each voice's recording and supplier ID; no enrollment.
+    snapshot_debate_voices(
+        db,
+        debate.id,
+        list(participant_rows),
+        settings=runtime_settings,
+        data_root=runtime_settings.resolved_data_root,
     )
     db.add(
         PlaybackState(
@@ -1576,7 +1580,9 @@ def update_debate_draft(
     db.flush()
     adopt_debate_knowledge(db, debate.id, participant_rows, runtime_settings.resolved_data_root)
     delete_debate_knowledge(db, debate.id, runtime_settings.resolved_data_root)
-    sync_debate_clones(db, debate.id, data_root=runtime_settings.resolved_data_root)
+    sync_debate_clones(
+        db, debate.id, settings=runtime_settings, data_root=runtime_settings.resolved_data_root
+    )
     return _detail(db, debate)
 
 

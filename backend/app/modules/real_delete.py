@@ -1,6 +1,6 @@
 """Hard-delete Brainform rows without erasing records, grades, or Debates.
 
-Debates keep their own AGENT.md, knowledge copy and voice clone. Chats of a
+Debates keep their own AGENT.md, knowledge copy and voice copy. Chats of a
 deleted Agent or Team stay open as history and refuse new messages. Deleting
 a chat drops the transcript and leaves assessment answers in place.
 """

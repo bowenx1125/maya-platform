@@ -1217,7 +1217,7 @@ def enroll_voice(
             db.commit()
             return result
         if profile.status == "ready":
-            # Kept so each Debate can create its own independent clone.
+            # Kept so each Debate can copy the recording into its own storage.
             try:
                 with db.begin_nested():
                     retain_voice_sample(

@@ -42,6 +42,7 @@ from sqlalchemy import select
 from tests import test_wave2_setup as debate_fixtures
 from tests.conftest import login
 from tests.test_debate_voice_clones import (
+    SUPPLIER_ID,
     FakeCloneProvider,
     _create_voiced_debate,
     _voice_with_sample,
@@ -95,7 +96,7 @@ def test_debate_keeps_its_copy_after_voice_and_agent_are_deleted(debate_app: Any
         voice = SqlPlaybackRepository.resolve_effective_voice(
             db, row, settings.model_copy(update={"tts_provider": "dashscope"})
         )
-        assert voice.voice_token == provider.enrolled[0]
+        assert voice.voice_token == SUPPLIER_ID
         agent = db.get(Agent, original_agent)
         assert agent is not None
         hard_delete_agent(db, agent, settings.resolved_data_root)
@@ -208,7 +209,7 @@ def test_prune_keeps_current_and_previous_agent_md_only(debate_app: Any) -> None
 def test_rag_knowledge_voice_and_agent_deletion_keeps_debate_material(
     debate_app: Any,
 ) -> None:
-    """A Debate replays from its own RAG, Knowledge text and voice clone."""
+    """A Debate replays from its own RAG, Knowledge text and voice copy."""
 
     app, database, client = debate_app
     settings = app.state.settings
@@ -390,4 +391,4 @@ def test_rag_knowledge_voice_and_agent_deletion_keeps_debate_material(
         voice = SqlPlaybackRepository.resolve_effective_voice(
             db, row, settings.model_copy(update={"tts_provider": "dashscope"})
         )
-        assert voice.voice_token == provider.enrolled[0]
+        assert voice.voice_token == SUPPLIER_ID

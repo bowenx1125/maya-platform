@@ -391,12 +391,15 @@ def delete_voice_profile(
         operation.updated_at = timestamp
         db.commit()
 
+    from app.modules.debates.voice_clones import debates_hold_supplier_voice
+
+    # Decided under the voice lock, which the soft delete's commit releases:
+    # a Debate create waiting on it then sees this Voice gone and copies none.
+    held = debates_hold_supplier_voice(db, profile, settings)
     _soft_delete(db, profile, settings)
-
-    from app.modules.debates.voice_clones import debates_need_supplier_voice
-
-    if debates_need_supplier_voice(db, profile.id):
-        # Deleting a Voice must never silence a Debate that has no clone.
+    if held:
+        # The supplier voice now belongs to the Debates that copied it; the
+        # last of them to be deleted removes it at the supplier.
         LOGGER.info("Voice delete kept the supplier voice for Debates profile_id=%s", profile.id)
         _finish_operation(db, operation, state="succeeded")
         return finish(profile)

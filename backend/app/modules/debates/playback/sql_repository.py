@@ -329,8 +329,9 @@ class SqlPlaybackRepository(PlaybackRepository):
             source_voice_id,
         )
 
-        # The Debate's own clone first (2026-10-20); until it is ready, the
-        # platform Voice it was copied from, while that still exists.
+        # Only the Debate's own snapshot speaks (2026-10-24): its copied
+        # supplier ID, then one frozen into a not-yet-backfilled participant,
+        # then the configured system fallback. The live Voice row is never read.
         source_id = source_voice_id(participant)
         debate_id = getattr(participant, "debate_id", None)
         # NULL once the platform Voice is deleted (the turn's FK is SET NULL).
@@ -350,11 +351,6 @@ class SqlPlaybackRepository(PlaybackRepository):
                     )
             elif owned := resolve_debate_clone(db, str(debate_id), source_id, settings):
                 return ResolvedTurnVoice("platform_profile", live_profile, *owned)
-        frozen_id = getattr(participant, "effective_voice_profile_id", None)
-        if getattr(participant, "effective_voice_kind", None) == "platform_profile" and (
-            ready := ready_profile(frozen_id)
-        ):
-            return ResolvedTurnVoice("platform_profile", str(frozen_id), *ready)
         if source_id and (frozen := resolve_snapshot_voice(participant, settings)):
             return ResolvedTurnVoice("platform_profile", live_profile, *frozen)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)

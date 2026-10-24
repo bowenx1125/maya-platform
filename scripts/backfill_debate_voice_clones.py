@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Give existing Debates their own provider voice clones (2026-10-20).
+"""Give existing Debates their own copy of each voice, for free (2026-10-24).
 
-Default is a read-only dry run that prints counts only. ``--create-rows``
-adds ``backfill`` clone rows (``pending`` when the platform Voice kept a
-sample, otherwise ``no_sample``). ``--enroll`` creates the clones and calls
-the configured provider; a real provider additionally needs ``--allow-real``.
-Voices enrolled before 0077 kept no sample, so their Debates are counted as
-``no_sample`` and speak with the supplier voice frozen in their snapshot.
-Writing to the production database also needs ``--confirm-production``.
+Dry-run by default (counts only). ``--apply`` copies, per voiced participant,
+the source Voice's recording (when the Voice still has one) and its supplier
+voice ID (from the Voice, or from the ID frozen into the participant). It is
+idempotent and never enrolls or calls a supplier. Writing to the production
+database also needs ``--confirm-production``.
 """
 
 from __future__ import annotations
@@ -30,16 +28,14 @@ from app.core.models import VoiceProfile  # noqa: E402
 from app.modules.debates.models import Debate, DebateVoiceClone  # noqa: E402
 from app.modules.debates.voice_clones import (  # noqa: E402
     participants_of,
-    request_debate_clones,
+    snapshot_debate_voices,
     source_voice_id,
-    sweep_debate_voice_clones,
 )
-from app.providers.factory import voice_provider  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 
 def plan(session: Any) -> dict[str, int]:
-    counts = {"debates": 0, "voiced": 0, "with_sample": 0, "no_sample": 0, "has_clone": 0}
+    counts = {"debates": 0, "voiced": 0, "has_copy": 0, "with_sample": 0, "id_only": 0}
     for debate_id in session.scalars(select(Debate.id)).all():
         counts["debates"] += 1
         for row in participants_of(session, debate_id):
@@ -53,10 +49,10 @@ def plan(session: Any) -> dict[str, int]:
                     DebateVoiceClone.source_voice_profile_id == voice,
                 )
             ):
-                counts["has_clone"] += 1
+                counts["has_copy"] += 1
                 continue
             profile = session.get(VoiceProfile, voice)
-            key = "with_sample" if profile is not None and profile.sample_file_id else "no_sample"
+            key = "with_sample" if profile is not None and profile.sample_file_id else "id_only"
             counts[key] += 1
     return counts
 
@@ -65,9 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--database-url", default=None)
     parser.add_argument("--data-root", default=None, type=Path)
-    parser.add_argument("--create-rows", action="store_true")
-    parser.add_argument("--enroll", action="store_true")
-    parser.add_argument("--allow-real", action="store_true")
+    parser.add_argument("--apply", action="store_true", help="Write. Default is dry-run.")
     parser.add_argument("--confirm-production", action="store_true")
     args = parser.parse_args(argv)
     overrides: dict[str, Any] = {"maya_env": "operator"}
@@ -77,33 +71,34 @@ def main(argv: list[str] | None = None) -> int:
         overrides["data_root"] = args.data_root
     settings = Settings(_env_file=SCRIPT_ROOT / ".env", **overrides)
     lowered = f"{settings.database_url} {settings.resolved_data_root}".lower()
-    production = any(
-        marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
-    ) or os.environ.get("MAYA_ENV") == "production"
-    if (args.create_rows or args.enroll) and production and not args.confirm_production:
+    production = (
+        any(
+            marker in lowered
+            for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
+        )
+        or os.environ.get("MAYA_ENV") == "production"
+    )
+    if args.apply and production and not args.confirm_production:
         print("Production target: pass --confirm-production to write.", file=sys.stderr)
-        return 2
-    if args.enroll and settings.voice_provider != "mock" and not args.allow_real:
-        print("Refusing to call a real voice provider without --allow-real.", file=sys.stderr)
         return 2
     database = Database(settings.database_url)
     with database.session() as session:
         print(json.dumps({"before": plan(session)}, sort_keys=True))
-        if args.create_rows:
+        if args.apply:
+            copied = 0
             for debate_id in session.scalars(select(Debate.id)).all():
-                request_debate_clones(
-                    session, debate_id, participants_of(session, debate_id), origin="backfill"
+                copied += len(
+                    snapshot_debate_voices(
+                        session,
+                        debate_id,
+                        participants_of(session, debate_id),
+                        settings=settings,
+                        origin="backfill",
+                        data_root=settings.resolved_data_root,
+                    )
                 )
             session.commit()
-        if args.enroll:
-            result = sweep_debate_voice_clones(
-                session,
-                data_root=settings.resolved_data_root,
-                settings=settings,
-                provider=voice_provider(settings),
-                origin="backfill",
-            )
-            print(json.dumps({"enrolled": result}, sort_keys=True))
+            print(json.dumps({"copied": copied}, sort_keys=True))
         print(json.dumps({"after": plan(session)}, sort_keys=True))
     return 0
 

@@ -468,6 +468,7 @@ def upgrade() -> None:
         sa.Column("sample_language", sa.String(length=16), nullable=True),
         sa.Column("recovery_name", sa.String(length=120), nullable=False, unique=True),
         sa.Column("external_id_encrypted", sa.LargeBinary(), nullable=True),
+        sa.Column("provider_voice_hash", sa.String(length=64), nullable=True),
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("safe_error_code", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -485,6 +486,9 @@ def upgrade() -> None:
         sa.CheckConstraint("attempts >= 0", name="ck_debate_voice_clones_attempts"),
     )
     op.create_index("ix_debate_voice_clones_status", "debate_voice_clones", ["status"])
+    op.create_index(
+        "ix_debate_voice_clones_voice_hash", "debate_voice_clones", ["provider_voice_hash"]
+    )
     op.add_column(
         "knowledge_snapshots",
         sa.Column("owner_debate_id", sa.String(length=36), nullable=True),
@@ -591,6 +595,7 @@ def downgrade() -> None:
     op.drop_table("debate_knowledge_copies")
     op.drop_index("ix_knowledge_snapshots_owner_debate", table_name="knowledge_snapshots")
     op.drop_column("knowledge_snapshots", "owner_debate_id")
+    op.drop_index("ix_debate_voice_clones_voice_hash", table_name="debate_voice_clones")
     op.drop_index("ix_debate_voice_clones_status", table_name="debate_voice_clones")
     op.drop_table("debate_voice_clones")
     with op.batch_alter_table("voice_profiles") as batch:
