@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
+from app.modules.debates.models import DEFAULT_PLAYBACK_RATE
 from app.modules.debates.playback.eligibility import has_complete_finished_playback
 from app.modules.debates.round_count import (
     debate_round_count,
@@ -111,7 +112,9 @@ class PlaybackControlMixin(PlaybackCore):
         try:
             control_version = int(info.get("control_version", 0) or 0)
             cursor_ms = int(info.get("cursor_ms", 0) or 0)
-            playback_rate = float(info.get("playback_rate", 1.0) or 1.0)
+            playback_rate = float(
+                info.get("playback_rate", DEFAULT_PLAYBACK_RATE) or DEFAULT_PLAYBACK_RATE
+            )
             event = self._stage_event(
                 db,
                 old_debate_id,

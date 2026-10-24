@@ -41,6 +41,10 @@ from app.core.models import (
 )
 from app.core.sqlutil import portable_sql
 
+# Inserted on a new playback row. A stored rate is left alone; there is no
+# migration that rewrites existing Debates.
+DEFAULT_PLAYBACK_RATE = 1.25
+
 # These parent keys are required by SQLite before it will accept the exact
 # cross-scope foreign keys below.  They are declared here as metadata indexes
 # for ``create_all``-based isolated tests; migration 0004 creates the same
@@ -504,7 +508,9 @@ class PlaybackState(Base):
     mode: Mapped[str] = mapped_column(String(8), nullable=False, default="live")
     current_turn_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     cursor_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    playback_rate: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    playback_rate: Mapped[float] = mapped_column(
+        Float, nullable=False, default=DEFAULT_PLAYBACK_RATE
+    )
     control_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     controller_epoch: Mapped[str | None] = mapped_column(String(128), nullable=True)
     controller_owner_connection: Mapped[str | None] = mapped_column(String(128), nullable=True)

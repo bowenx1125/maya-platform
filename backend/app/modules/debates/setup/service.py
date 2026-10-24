@@ -43,7 +43,13 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
-from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
+from app.modules.debates.models import (
+    DEFAULT_PLAYBACK_RATE,
+    Debate,
+    DebateParticipant,
+    DebateTurn,
+    PlaybackState,
+)
 from app.modules.debates.owned_copies import (
     adopt_debate_knowledge,
     delete_debate_knowledge,
@@ -942,7 +948,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=1.0,
+            playback_rate=DEFAULT_PLAYBACK_RATE,
             control_version=0,
             next_turn_ready=False,
         )
@@ -1324,7 +1330,7 @@ def create_debate_draft(
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=1.0,
+            playback_rate=DEFAULT_PLAYBACK_RATE,
             control_version=0,
             created_at=timestamp,
             updated_at=timestamp,
