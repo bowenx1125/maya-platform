@@ -515,7 +515,9 @@ describe("M08 voice library", () => {
         <VoiceLibrary groupId="group-a" />
       </AppShell>,
     );
-    expect(await screen.findByRole("button", { name: "ready.wav" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "ready.wav" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "refused.wav" })).toBeNull();
     expect(screen.queryByRole("button", { name: "deleted.wav" })).toBeNull();
   });
