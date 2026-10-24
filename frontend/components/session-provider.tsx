@@ -31,6 +31,10 @@ import {
   type RegisterRequest,
 } from "../lib/api";
 import { resetChatRequestIdentity } from "../lib/chat-request-store";
+import {
+  observeFirstRender,
+  setClientMetricsTransport,
+} from "../lib/client-metrics";
 import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
 import { endTeacherEnter } from "../lib/teacher-visit";
@@ -240,6 +244,18 @@ export function SessionProvider({
       sessionOperationEpoch.current += 1;
     };
   }, [refresh]);
+
+  useEffect(() => {
+    observeFirstRender();
+  }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      if (status === "anonymous") setClientMetricsTransport(null);
+      return;
+    }
+    setClientMetricsTransport((metrics) => api.reportClientMetrics(metrics));
+  }, [api, status]);
 
   const login = useCallback(
     (

@@ -2237,6 +2237,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/client-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report Client Metrics
+         * @description Sampled browser timings (Next to first audio, first page render, assessment submit). Each metric is written to the server log with its page's route template; nothing is stored and no user or record id is kept.
+         */
+        post: operations["reportClientMetrics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3502,6 +3522,15 @@ export interface components {
         AdvancePlaybackRequest: {
             expected_control_version: number;
             expected_current_turn_id: components["schemas"]["Uuid"];
+        };
+        ClientMetric: {
+            /** @enum {string} */
+            name: "debate_next_to_play" | "page_first_render" | "assessment_submit";
+            ms: number;
+            page?: string | null;
+        };
+        ClientMetricsReport: {
+            metrics: components["schemas"]["ClientMetric"][];
         };
         PrefetchNextAudioRequest: {
             expected_control_version: number;
@@ -11728,6 +11757,33 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    reportClientMetrics: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientMetricsReport"];
+            };
+        };
+        responses: {
+            /** @description Metrics accepted and logged; nothing is stored. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
 }

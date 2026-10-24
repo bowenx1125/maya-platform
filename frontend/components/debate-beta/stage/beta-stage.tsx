@@ -19,6 +19,7 @@ import type {
   ProviderDataCallManifestListResponse,
 } from "../../../lib/api";
 import { createIdempotencyHandle } from "../../../lib/api";
+import { markDebateNextClicked } from "../../../lib/client-metrics";
 import {
   SpeechStream,
   type StreamTurn,
@@ -3265,6 +3266,7 @@ export function BetaDebateStage({
             }
             return;
           }
+          markDebateNextClicked();
           let next: DebatePlaybackState;
           try {
             next = await api.advanceDebatePlayback(debateId, {

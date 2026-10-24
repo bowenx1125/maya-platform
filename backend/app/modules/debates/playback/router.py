@@ -408,15 +408,28 @@ async def prefetch_next_debate_audio_route(
     db: Session = Depends(get_db),
     service: PlaybackService = Depends(get_playback_service),
 ) -> Any:
-    turn_id, media_url = await service.prefetch_next_audio(
-        db,
-        str(debate_id),
-        expected_control_version=payload.expected_control_version,
-        expected_current_turn_id=str(payload.expected_current_turn_id),
-        epoch=str(payload.controller_epoch),
-        session_hash=_session_hash(context),
-        context=context,
-    )
+    started = time.monotonic()
+    outcome = "ok"
+    try:
+        turn_id, media_url = await service.prefetch_next_audio(
+            db,
+            str(debate_id),
+            expected_control_version=payload.expected_control_version,
+            expected_current_turn_id=str(payload.expected_current_turn_id),
+            epoch=str(payload.controller_epoch),
+            session_hash=_session_hash(context),
+            context=context,
+        )
+    except PlatformError as error:
+        outcome = error.code
+        raise
+    finally:
+        LOGGER.info(
+            "debate_timing stage=prefetch_request debate_id=%s outcome=%s ms=%d",
+            debate_id,
+            outcome,
+            int((time.monotonic() - started) * 1000),
+        )
     return PrefetchedNextAudio(turn_id=UUID(turn_id), media_url=media_url)
 
 
@@ -924,6 +937,7 @@ async def stream_audio_route(
         media_ticket=media_ticket,
         context=context,
     )
+    read_started = time.monotonic()
     try:
         result = service.audio_store.response(
             str(debate_id),
@@ -949,11 +963,14 @@ async def stream_audio_route(
             headers=result.headers,
         )
     LOGGER.info(
-        "debate_timing stage=audio_serve debate_id=%s turn_id=%s status=%d bytes=%d ms=%d",
+        "debate_timing stage=audio_serve debate_id=%s turn_id=%s status=%d bytes=%d "
+        "authorize_ms=%d read_ms=%d ms=%d",
         debate_id,
         turn_id,
         result.status_code,
         len(result.body),
+        int((read_started - served_started) * 1000),
+        int((time.monotonic() - read_started) * 1000),
         int((time.monotonic() - served_started) * 1000),
     )
     return Response(

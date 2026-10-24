@@ -1,6 +1,7 @@
 "use client";
 
 import { ASSESSMENT_COMPLETED_EVENT } from "../lib/assessment-events";
+import { recordClientMetric } from "../lib/client-metrics";
 import {
   useCallback,
   useEffect,
@@ -1970,6 +1971,7 @@ function AgentChatScope({
       const busyRetryUntil = Date.now() + TEAM_BUSY_RETRY_LIMIT_MS;
       let busyAttempt = 0;
       let result: TeamChatSession;
+      const sendStarted = performance.now();
       for (;;) {
         try {
           result = await api.streamTeamConversation(
@@ -2002,6 +2004,12 @@ function AgentChatScope({
         (!preset && selectedTeamIdRef.current !== sentSessionId)
       ) {
         return;
+      }
+      if (result.assessment_stage) {
+        recordClientMetric(
+          "assessment_submit",
+          performance.now() - sendStarted,
+        );
       }
       rememberTeam(result);
       setSelectedTeam(result);

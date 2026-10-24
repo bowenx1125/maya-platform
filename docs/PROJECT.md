@@ -224,26 +224,19 @@ kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 ## Oct24 true deletion (#242, supersedes #233)
 
 Head0078_chat_answer_decouple. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
-with storage; history FKs SET NULL with snapshot names,so Records/grades/history
-open. Deleting a chat keeps per-question answers;deleting an Agent/Team ends its chats
-(agent_deleted/team_deleted),fails pending turns,abandons unfinished attempts. Debates
-own AGENT.md,RAG/Knowledge copies and a voice copy:the Voice's recording plus its
-supplier voice ID (debate_voice_clones,encrypted+keyed hash);nothing enrolled or
-charged;playback/TTS read only it. Voice delete skips the supplier while a live Debate
-names the voice;the sweeper frees a deleted Debate's rows/files and deletes the
-supplier voice once when no Voice row or live Debate holds it (per-voice advisory lock). Prune
-keeps current+previous AGENT.md,skips versions a live chat/Team/unfinished attempt
-uses;5-min sweep prunes later. Failed uploads hard-deleted. Scripts (dry-run default,
-production needs --confirm-production): backfill_debate_snapshots (idempotent),
-backfill_debate_voice_clones (free copy),cleanup_soft_deleted (counts,prunes,disk orphans>1h;rolls
-back if Debate/answer counts move). Prod-shaped PG (create_all@0072+0073–0076,seeded):
-upgrade→downgrade→upgrade passed,counts kept;real prod schema dump still to run.
+with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
+Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
+unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
+(recording + supplier voice ID in debate_voice_clones); the sweeper deletes a supplier
+voice once nothing holds it (per-voice advisory lock). Prune keeps current+previous
+AGENT.md and versions still in use. Scripts (dry-run default, --confirm-production):
+backfill_debate_snapshots, backfill_debate_voice_clones, cleanup_soft_deleted.
 
 ## Oct24 Debate Next and errors
 
 Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
 per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
-plays the blob (159 routes). debate_timing logs:generation/tts/lock_wait/audio_serve/
+plays the blob. debate_timing logs:generation/tts/lock_wait/audio_serve/
 next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
@@ -279,6 +272,16 @@ resolver/fence drift (agent_not_current etc.), shown in the same bar. malformed_
 details.errors gives field+type; the form writes one sentence per field; Retry resends.
 Agent page bar lines each have a Done that publishes edits in place and re-checks only
 that line. Topic copy: any language.
+
+## Oct24 timing logs (PR A)
+
+Each request logs a `request_timing` JSON line (method,route template,status,ms,
+db_ms/queries,provider ms per kind,host,slow≥1s; streams to headers; fast /health
+probes omitted); debate_timing adds prefetch_request and audio_serve authorize/read. Browser samples 25%
+of page loads: Next→speech,first contentful paint,assessment send→reply; POST
+/client-metrics logs `client_metric`,stores nothing. Read-only
+`scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
+provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.
 
 ## Oct24 Debate generation parameters (PR E)
 

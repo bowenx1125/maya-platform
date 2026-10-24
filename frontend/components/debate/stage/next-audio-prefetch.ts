@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { PlatformApi } from "../../../lib/api/platform";
+import { noteDebateSpeechPlaying } from "../../../lib/client-metrics";
 
 type PrefetchApi = Partial<Pick<PlatformApi, "prefetchNextDebateAudio">>;
 
@@ -119,6 +120,7 @@ export function useNextAudioPrefetch({
 
   /** Log how long the browser waited between media.prepared and playback. */
   const notePlaying = useCallback((turnId: string | null) => {
+    noteDebateSpeechPlaying();
     const started = loadStartedAt.current;
     if (!started || started.turnId !== turnId) return;
     loadStartedAt.current = null;
