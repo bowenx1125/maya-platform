@@ -234,13 +234,15 @@ Head0078_chat_answer_decouple. Voices/RAG/Knowledge/Agents/Teams/chats hard-dele
 with storage; history FKs SET NULL with snapshot names,so Records/grades/history
 open. Deleting a chat keeps per-question answers;deleting an Agent/Team ends its chats
 (agent_deleted/team_deleted),fails pending turns,abandons unfinished attempts. Debates
-own AGENT.md,RAG/Knowledge copies and a voice clone;no RESTRICT on originals;only
-deleting the Debate drops its clone. A legacy Voice without a sample keeps its supplier
-voice while a cloneless Debate needs it;Debates speak from their snapshot id. Prune
+own AGENT.md,RAG/Knowledge copies and a voice copy:the Voice's recording plus its
+supplier voice ID (debate_voice_clones,encrypted+keyed hash);nothing enrolled or
+charged;playback/TTS read only it. Voice delete skips the supplier while a live Debate
+names the voice;the sweeper frees a deleted Debate's rows/files and deletes the
+supplier voice once when no Voice row or live Debate holds it (per-voice advisory lock). Prune
 keeps current+previous AGENT.md,skips versions a live chat/Team/unfinished attempt
 uses;5-min sweep prunes later. Failed uploads hard-deleted. Scripts (dry-run default,
 production needs --confirm-production): backfill_debate_snapshots (idempotent),
-backfill_debate_voice_clones,cleanup_soft_deleted (counts,prunes,disk orphans>1h;rolls
+backfill_debate_voice_clones (free copy),cleanup_soft_deleted (counts,prunes,disk orphans>1h;rolls
 back if Debate/answer counts move). Prod-shaped PG (create_all@0072+0073–0076,seeded):
 upgrade→downgrade→upgrade passed,counts kept;real prod schema dump still to run.
 
