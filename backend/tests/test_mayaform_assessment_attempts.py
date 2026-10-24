@@ -3832,12 +3832,12 @@ def test_a_student_record_lists_only_the_students_own_attempts(attempt_env: Any)
 # Owner request (2026-10-18): Record shows attempts on revoked Team versions
 # and unfinished attempts with their saved answers; a course teacher can
 # delete an attempt, which only hides it. Abandoned attempts stay hidden.
-def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
+def test_teacher_record_shows_revoked_and_unfinished_attempts_and_deletes(
     attempt_env: Any,
 ) -> None:
     from app.core.models import Course, CourseMember
     from app.modules.learning.reports import (
-        hide_course_assessment_attempt,
+        delete_course_assessment_attempt,
         list_course_assessment_attempts,
     )
     from app.modules.teams.models import CourseTeamPublication
@@ -3924,7 +3924,7 @@ def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
         stranger = _service_actor(db, settings, stranger_id)
         for course in (COURSE_ID, other_course):
             with pytest.raises(PlatformError) as refused:
-                hide_course_assessment_attempt(db, stranger, course_id=course, attempt_id=kept)
+                delete_course_assessment_attempt(db, stranger, course_id=course, attempt_id=kept)
             assert refused.value.code == "not_found"
         db.rollback()
 
@@ -3933,7 +3933,8 @@ def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
     assert missing.status_code == 404
     deleted = client.delete(delete_url, headers={"X-CSRF-Token": teacher_csrf})
     assert deleted.status_code == 204, deleted.text
-    assert client.delete(delete_url, headers={"X-CSRF-Token": teacher_csrf}).status_code == 204
+    # The delete is real (owner, 2026-10-24): a second one finds nothing.
+    assert client.delete(delete_url, headers={"X-CSRF-Token": teacher_csrf}).status_code == 404
     assert kept not in client.get(url).text
     # The student's own Record no longer shows it either.
     _login(client, "bowen")
@@ -3941,14 +3942,11 @@ def test_teacher_record_shows_revoked_and_unfinished_attempts_and_soft_deletes(
     assert mine.status_code == 200, mine.text
     assert kept not in mine.text
 
-    # Only hidden: the attempt, its answers and its chat are all still there.
+    # The attempt and its answers are gone; the chat is untouched.
     with database.session() as db:
-        attempt = db.get(AssessmentAttempt, kept)
-        assert attempt is not None and attempt.status == "in_progress"
-        assert attempt.teacher_hidden_at is not None
-        assert attempt.teacher_hidden_by_user_id == TEACHER_ID
+        assert db.get(AssessmentAttempt, kept) is None
         assert db.get(Conversation, conversation_id) is not None
-        assert db.scalar(
+        assert not db.scalar(
             select(func.count())
             .select_from(LearningRecord)
             .where(LearningRecord.attempt_id == kept)

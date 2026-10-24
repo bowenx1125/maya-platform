@@ -32,6 +32,8 @@ from .models import (
     AssessmentCourseReportEvidence,
     AssessmentCourseReportMutation,
     AssessmentCourseReportRevision,
+    LearningAssessment,
+    LearningAssessmentRevision,
     LearningRecord,
 )
 from .recipes import declared_recipe
@@ -870,6 +872,244 @@ def read_student_answers(
     return sheets
 
 
+def _record_visible() -> Any:
+    """Attempts Record lists: unfinished, finished, or cut off by a deleted Team."""
+
+    return or_(
+        AssessmentAttempt.status.in_(("in_progress", "paused", "completed")),
+        and_(
+            AssessmentAttempt.status == "abandoned",
+            AssessmentAttempt.abandonment_reason == "source_deleted",
+        ),
+    )
+
+
+def _teacher_record_query(course_id: str) -> Any:
+    """Every Record a course teacher may see, straight from the attempt rows.
+
+    Bug (2026-10-24): the teacher list re-validated each activity against its
+    live Team (not deleted, still published, same leader), so a Team that was
+    deleted, edited or republished emptied Record while the student's own list
+    still showed the attempts. Record now depends only on the course, the
+    attempt and the student: not on the Team, its version, the chat or the
+    Agents. Names come from the stored snapshots.
+    """
+
+    return (
+        select(AssessmentAttempt, AssessmentActivity)
+        .join(AssessmentActivity, AssessmentActivity.id == AssessmentAttempt.activity_id)
+        .join(
+            CourseMember,
+            (CourseMember.course_id == AssessmentActivity.course_id)
+            & (CourseMember.user_id == AssessmentAttempt.actor_user_id),
+        )
+        .join(User, User.id == AssessmentAttempt.actor_user_id)
+        .where(
+            AssessmentActivity.course_id == course_id,
+            AssessmentAttempt.recipe_id == AssessmentActivity.recipe_id,
+            AssessmentAttempt.teacher_hidden_at.is_(None),
+            _record_visible(),
+            CourseMember.role == "student",
+            User.status == "active",
+        )
+    )
+
+
+def _presented_status(attempt: AssessmentAttempt, phase: str) -> tuple[str, str]:
+    # A Team deleted mid-attempt leaves it unfinished; Record shows it as paused.
+    if attempt.status == "abandoned":
+        return "paused", "paused"
+    return attempt.status, phase
+
+
+def _activity_names(
+    db: Session, activities: list[AssessmentActivity]
+) -> dict[str, tuple[str, str, str | None]]:
+    """Per activity: (test name, Team name, version label), read in three queries."""
+
+    version_ids = {row.team_version_id for row in activities if row.team_version_id}
+    versions = {
+        row.id: row
+        for row in (
+            db.scalars(select(TeamVersion).where(TeamVersion.id.in_(version_ids))).all()
+            if version_ids
+            else []
+        )
+    }
+    set_names: dict[str, list[str]] = defaultdict(list)
+    if activities:
+        selection = {row.id: row.question_selection_revision for row in activities}
+        for activity_id, revision, name in db.execute(
+            select(
+                AssessmentActivityQuestion.activity_id,
+                AssessmentActivityQuestion.selection_revision,
+                KnowledgeSet.display_name,
+            )
+            .join(KnowledgeSet, KnowledgeSet.id == AssessmentActivityQuestion.knowledge_set_id)
+            .where(AssessmentActivityQuestion.activity_id.in_(list(selection)))
+            .order_by(
+                AssessmentActivityQuestion.activity_id,
+                AssessmentActivityQuestion.ordinal,
+                KnowledgeSet.id,
+            )
+        ).all():
+            cleaned = str(name).strip()
+            if (
+                revision == selection[activity_id]
+                and cleaned
+                and cleaned not in set_names[activity_id]
+            ):
+                set_names[activity_id].append(cleaned)
+    names: dict[str, tuple[str, str, str | None]] = {}
+    for activity in activities:
+        version = versions.get(activity.team_version_id or "")
+        # Same order as the student's list: the version's name while it exists,
+        # then the name stored when the Team was removed.
+        snapshot = (activity.team_name_snapshot or "").strip()
+        team = (version.display_name.strip() if version is not None else "") or snapshot or "Team"
+        label = team_version_label(version.version_seq) if version is not None else None
+        parts = [team]
+        # Without its version the Team was deleted; its stored name stands alone.
+        if version is not None and set_names.get(activity.id):
+            parts.append(", ".join(set_names[activity.id]))
+        if label:
+            parts.append(label)
+        names[activity.id] = (" · ".join(parts), team, label)
+    return names
+
+
+def answer_sheets(db: Session, attempts: list[AssessmentAttempt]) -> dict[str, dict[str, Any]]:
+    """``attempt_answer_sheet`` for many attempts in a fixed number of queries.
+
+    Only unfinished attempts look up their phase one by one; a course has few.
+    """
+
+    from app.modules.knowledge_sets.schemas import QuestionContent
+
+    if not attempts:
+        return {}
+    by_id = {attempt.id: attempt for attempt in attempts}
+    activity_course: dict[str, str] = {
+        row_id: course
+        for row_id, course in db.execute(
+            select(AssessmentActivity.id, AssessmentActivity.course_id).where(
+                AssessmentActivity.id.in_({attempt.activity_id for attempt in attempts})
+            )
+        ).all()
+    }
+    users: dict[str, str] = {
+        user_id: name
+        for user_id, name in db.execute(
+            select(User.id, User.display_name).where(
+                User.id.in_({attempt.actor_user_id for attempt in attempts})
+            )
+        ).all()
+    }
+    questions: dict[str, list[AssessmentAttemptQuestion]] = defaultdict(list)
+    for question in db.scalars(
+        select(AssessmentAttemptQuestion)
+        .join(
+            AssessmentActivityQuestion,
+            AssessmentActivityQuestion.id == AssessmentAttemptQuestion.activity_question_id,
+        )
+        .join(AssessmentAttempt, AssessmentAttempt.id == AssessmentAttemptQuestion.attempt_id)
+        .where(
+            AssessmentAttemptQuestion.attempt_id.in_(list(by_id)),
+            AssessmentActivityQuestion.selection_revision
+            == AssessmentAttempt.question_selection_revision,
+        )
+        .order_by(
+            AssessmentAttemptQuestion.attempt_id,
+            AssessmentAttemptQuestion.ordinal,
+            AssessmentAttemptQuestion.id,
+        )
+    ).all():
+        questions[question.attempt_id].append(question)
+    answers: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for record, question_id in db.execute(
+        select(LearningRecord, AssessmentAttemptEvent.question_id)
+        .join(
+            AssessmentAttemptEvent, AssessmentAttemptEvent.learning_record_id == LearningRecord.id
+        )
+        .where(
+            AssessmentAttemptEvent.attempt_id.in_(list(by_id)),
+            LearningRecord.attempt_id == AssessmentAttemptEvent.attempt_id,
+            LearningRecord.record_kind == "answer",
+        )
+        .order_by(LearningRecord.created_at, LearningRecord.id)
+    ).all():
+        answers[str(record.attempt_id)][str(question_id)].append(
+            str(json.loads(record.payload_json)["answer_text"])
+        )
+    scores: dict[str, dict[int, tuple[float | None, str]]] = defaultdict(dict)
+    for assessment, revision in db.execute(
+        select(LearningAssessment, LearningAssessmentRevision)
+        .join(
+            LearningAssessmentRevision,
+            (LearningAssessmentRevision.assessment_id == LearningAssessment.id)
+            & (LearningAssessmentRevision.revision_seq == LearningAssessment.current_revision_seq),
+        )
+        .where(
+            LearningAssessment.attempt_id.in_(list(by_id)),
+            LearningAssessmentRevision.revision_source == "model_evaluation",
+            LearningAssessmentRevision.attempt_id == LearningAssessment.attempt_id,
+        )
+    ).all():
+        attempt = by_id.get(str(assessment.attempt_id))
+        if (
+            attempt is None
+            or assessment.owner_user_id != attempt.actor_user_id
+            or assessment.course_id != activity_course.get(attempt.activity_id)
+        ):
+            continue
+        for item in json.loads(revision.content_json).get("questions", []):
+            scores[attempt.id][int(item["question_ordinal"])] = (
+                item.get("points_awarded"),
+                str(item.get("feedback") or ""),
+            )
+    sheets: dict[str, dict[str, Any]] = {}
+    for attempt in attempts:
+        rows = questions.get(attempt.id, [])
+        offset = rows[0].ordinal if rows else 0
+        given = answers.get(attempt.id, {})
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            ordinal = row.ordinal - offset
+            content = (
+                QuestionContent.model_validate_json(row.content_json) if row.content_json else None
+            )
+            awarded, feedback = scores.get(attempt.id, {}).get(ordinal, (None, ""))
+            total = None
+            if content is not None:
+                total = content.rubric.total_points
+                if total is None and content.rubric.criteria:
+                    total = sum(criterion.points for criterion in content.rubric.criteria)
+            items.append(
+                {
+                    "number": ordinal + 1,
+                    "prompt": content.prompt.splitlines()[0] if content else "",
+                    "answers": list(given.get(row.id, [])),
+                    "skipped": row.resolution == "skipped",
+                    "points_awarded": awarded,
+                    "points_total": total,
+                    "feedback": feedback,
+                }
+            )
+        ended_at = attempt.completed_at or attempt.abandoned_at
+        display_name = users.get(attempt.actor_user_id)
+        sheets[attempt.id] = {
+            "attempt_id": attempt.id,
+            "student_name": display_name if display_name is not None else "Student",
+            "learner_ref": f"Learner-{_hash(attempt.actor_user_id)[:6].upper()}",
+            "status": attempt.status,
+            "phase": attempt_teacher_phase(db, attempt),
+            "started_at": attempt.started_at.isoformat(),
+            "ended_at": ended_at.isoformat() if ended_at is not None else None,
+            "questions": items,
+        }
+    return sheets
+
+
 def _attempt_rows(
     db: Session,
     actor: AuthContext,
@@ -880,74 +1120,81 @@ def _attempt_rows(
 ) -> list[dict[str, Any]]:
     """Formal attempts, newest first, each with its sheet and its group.
 
-    Bug (2026-10-17, #123): the course list re-ran every activity check and
-    attempt query once per group, so Record took seconds to open. Each
-    activity is now validated once and its attempts read once; ``group_of``
-    places a student, and an attempt with no group is left out.
+    One query reads the attempts (``_teacher_record_query``); names, sheets,
+    publications and report links are read in bulk, not per attempt.
     """
 
-    results: list[dict[str, Any]] = []
-    for item, activity in _authorized_activities(
-        db, actor, course_id=course_id, include_revoked=True
-    ):
-        report_path: str | None = None
-        report_read = False
-        publication = (
-            db.get(CourseTeamPublication, activity.publication_id)
-            if activity.publication_id
-            else None
-        )
-        team_version = (
-            db.get(TeamVersion, activity.team_version_id) if activity.team_version_id else None
-        )
-        for attempt in _eligible_attempts(db, activity):
-            # A teacher's delete hides the attempt. Deleting the chat does not.
-            if attempt.status == "abandoned" or attempt.teacher_hidden_at is not None:
-                continue
-            group = group_of(attempt.actor_user_id)
-            if group is None or (wanted is not None and not wanted(attempt)):
-                continue
-            if not report_read:
-                report_path = _latest_report_path(db, actor, activity_id=activity.id)
-                report_read = True
-            sheet = attempt_answer_sheet(db, attempt)
-            if sheet["phase"] not in _TEACHER_PHASES:
-                raise not_found()
-            awarded = [
-                question["points_awarded"]
-                for question in sheet["questions"]
-                if question["points_awarded"] is not None
-            ]
-            totals = [
-                question["points_total"]
-                for question in sheet["questions"]
-                if question["points_total"] is not None
-            ]
-            results.append(
-                {
-                    "attempt_id": attempt.id,
-                    "user_id": attempt.actor_user_id,
-                    "student_name": sheet["student_name"],
-                    "test_name": item.name,
-                    "team_name": item.team_name,
-                    "status": attempt.status,
-                    "phase": sheet["phase"],
-                    "conversation_id": attempt.source_conversation_id,
-                    "group_id": group[0],
-                    "group_name": group[1],
-                    "started_at": attempt.started_at,
-                    "ended_at": attempt.completed_at,
-                    "points_awarded": sum(awarded) if awarded else None,
-                    "points_total": sum(totals) if totals else None,
-                    "questions": sheet["questions"],
-                    "report_download_path": report_path,
-                    "publication_state": publication.state if publication else None,
-                    "version_label": (
-                        team_version_label(team_version.version_seq) if team_version else None
-                    ),
-                }
+    _require_course_teacher(db, actor, course_id)
+    pairs = [
+        (attempt, activity)
+        for attempt, activity in db.execute(
+            _teacher_record_query(course_id).order_by(
+                AssessmentAttempt.started_at.desc(), AssessmentAttempt.id
             )
-    results.sort(key=lambda row: row["started_at"], reverse=True)
+        ).all()
+        if group_of(attempt.actor_user_id) is not None and (wanted is None or wanted(attempt))
+    ]
+    activities = list({activity.id: activity for _attempt, activity in pairs}.values())
+    names = _activity_names(db, activities)
+    publication_ids = {row.publication_id for row in activities if row.publication_id}
+    publication_state: dict[str, str] = {
+        publication_id: state
+        for publication_id, state in (
+            db.execute(
+                select(CourseTeamPublication.id, CourseTeamPublication.state).where(
+                    CourseTeamPublication.id.in_(publication_ids)
+                )
+            ).all()
+            if publication_ids
+            else []
+        )
+    }
+    report_paths = {
+        activity.id: _latest_report_path(db, actor, activity_id=activity.id)
+        for activity in activities
+    }
+    sheets = answer_sheets(db, [attempt for attempt, _activity in pairs])
+    results: list[dict[str, Any]] = []
+    for attempt, activity in pairs:
+        group = group_of(attempt.actor_user_id)
+        assert group is not None
+        sheet = sheets[attempt.id]
+        status, phase = _presented_status(attempt, sheet["phase"])
+        if phase not in _TEACHER_PHASES:
+            continue
+        test_name, team_name, version_label = names[activity.id]
+        awarded = [
+            question["points_awarded"]
+            for question in sheet["questions"]
+            if question["points_awarded"] is not None
+        ]
+        totals = [
+            question["points_total"]
+            for question in sheet["questions"]
+            if question["points_total"] is not None
+        ]
+        results.append(
+            {
+                "attempt_id": attempt.id,
+                "user_id": attempt.actor_user_id,
+                "student_name": sheet["student_name"],
+                "test_name": test_name,
+                "team_name": team_name,
+                "status": status,
+                "phase": phase,
+                "conversation_id": attempt.source_conversation_id,
+                "group_id": group[0],
+                "group_name": group[1],
+                "started_at": attempt.started_at,
+                "ended_at": attempt.completed_at,
+                "points_awarded": sum(awarded) if awarded else None,
+                "points_total": sum(totals) if totals else None,
+                "questions": sheet["questions"],
+                "report_download_path": report_paths.get(activity.id),
+                "publication_state": publication_state.get(activity.publication_id or ""),
+                "version_label": version_label,
+            }
+        )
     return results
 
 
@@ -988,7 +1235,7 @@ def list_course_assessment_attempts(
 
     A conversation or attempt id that is not one of these attempts is not
     found. The same rule hides a group outside the course. A student in
-    several groups is listed under the first by name.
+    several groups is listed under the first by name, one in none without a group.
     """
 
     _require_course_teacher(db, actor, course_id)
@@ -1021,7 +1268,13 @@ def list_course_assessment_attempts(
             conversation_id is None or attempt.source_conversation_id == conversation_id
         )
 
-    rows = _attempt_rows(db, actor, course_id=course_id, group_of=placed.get, wanted=wanted)
+    def group_of(user_id: str) -> tuple[str | None, str | None] | None:
+        # A student who left every group keeps their Record; it has no group.
+        if group_id is None:
+            return placed.get(user_id, (None, None))
+        return placed.get(user_id)
+
+    rows = _attempt_rows(db, actor, course_id=course_id, group_of=group_of, wanted=wanted)
     if (attempt_id is not None or conversation_id is not None) and not rows:
         raise not_found()
     return rows
@@ -1038,8 +1291,9 @@ def list_my_assessment_attempts(
     Owner request (2026-10-18): the student's Brainform shows Record, like
     the teacher's, listing the assessment Teams the student took. Every row
     is read by ``actor_user_id`` from the session, so no request can name
-    another student. Abandoned attempts stay out; a deleted chat does not hide its attempt. A
-    revoked or superseded publication does not hide a student's own answers.
+    another student. Abandoned attempts stay out, except one a deleted Team
+    cut off; a deleted chat does not hide its attempt. A revoked or
+    superseded publication does not hide a student's own answers.
     Scores and feedback stay with the teacher.
     """
 
@@ -1057,7 +1311,7 @@ def list_my_assessment_attempts(
             AssessmentAttempt.actor_user_id == own_id,
             # A teacher's Record delete hides the attempt here too.
             AssessmentAttempt.teacher_hidden_at.is_(None),
-            AssessmentAttempt.status.in_(("in_progress", "paused", "completed")),
+            _record_visible(),
             AssessmentActivity.course_id == course_id,
             # A deleted Chat keeps its attempt in Record (owner, 2026-10-20).
             or_(
@@ -1087,7 +1341,8 @@ def list_my_assessment_attempts(
         ):
             continue
         sheet = attempt_answer_sheet(db, attempt)
-        if sheet["phase"] not in _TEACHER_PHASES:
+        status, phase = _presented_status(attempt, sheet["phase"])
+        if phase not in _TEACHER_PHASES:
             continue
         team_name = (
             team_version.display_name
@@ -1104,8 +1359,8 @@ def list_my_assessment_attempts(
                 "student_name": sheet["student_name"],
                 "test_name": test_name,
                 "team_name": team_name,
-                "status": attempt.status,
-                "phase": sheet["phase"],
+                "status": status,
+                "phase": phase,
                 "conversation_id": attempt.source_conversation_id,
                 "group_id": group[0] if group else None,
                 "group_name": group[1] if group else None,
@@ -1123,41 +1378,35 @@ def list_my_assessment_attempts(
     return results
 
 
-def hide_course_assessment_attempt(
+def delete_course_assessment_attempt(
     db: Session,
     actor: AuthContext,
     *,
     course_id: str,
     attempt_id: str,
 ) -> None:
-    """A course teacher deletes an attempt from Record: a soft delete.
+    """A course teacher deletes one Record: the attempt, its answers and scores.
 
-    Owner request (2026-10-18). Only the attempt is marked; its answers,
-    chat, ledger and learning records stay, so it can be restored. Only a
-    teacher of the attempt's course, on a student of that course, may do it.
-    Repeating the delete changes nothing.
+    Owner decision (2026-10-24): a teacher's delete is real and the student no
+    longer sees the attempt either. Only a teacher who can see the attempt in
+    Record may delete it; anything else is not found.
     """
 
     _require_course_teacher(db, actor, course_id)
-    attempt = db.get(AssessmentAttempt, attempt_id)
-    activity = db.get(AssessmentActivity, attempt.activity_id) if attempt else None
     if (
-        attempt is None
-        or activity is None
-        or activity.course_id != course_id
-        or course_member_role(db, attempt.actor_user_id, course_id) != "student"
+        db.execute(
+            _teacher_record_query(course_id).where(AssessmentAttempt.id == attempt_id)
+        ).first()
+        is None
     ):
         raise not_found()
-    if attempt.teacher_hidden_at is None:
-        db.execute(
-            update(AssessmentAttempt)
-            .where(
-                AssessmentAttempt.id == attempt.id,
-                AssessmentAttempt.teacher_hidden_at.is_(None),
-            )
-            .values(teacher_hidden_at=_now(), teacher_hidden_by_user_id=str(actor.user.id))
-        )
-        db.commit()
+    from app.modules.purge import purge, purge_ids
+
+    purge(db, "learning_assessments", LearningAssessment.attempt_id == attempt_id)
+    if not purge_ids(db, "assessment_attempts", [attempt_id]):
+        db.rollback()
+        raise conflict("record_delete_blocked", "This record is still in use and was not deleted.")
+    db.commit()
 
 
 def _latest_report_path(db: Session, actor: AuthContext, *, activity_id: str) -> str | None:
@@ -1266,7 +1515,7 @@ __all__ = [
     "create_assessment_course_report",
     "download_assessment_course_report",
     "list_authorized_assessment_activities",
-    "hide_course_assessment_attempt",
+    "delete_course_assessment_attempt",
     "list_course_assessment_attempts",
     "list_my_assessment_attempts",
     "read_assessment_activity_aggregate",

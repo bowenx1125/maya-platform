@@ -19,7 +19,6 @@ from app.core.models import (
     AgentVersion,
     AgentVersionDocument,
     FileOperation,
-    FileReference,
     KnowledgeChunk,
     KnowledgeDocument,
     KnowledgeSnapshot,
@@ -30,7 +29,7 @@ from app.core.models import (
 from app.core.version_label import agent_version_label
 from app.modules.debates.models import DebateParticipant
 from app.modules.debates.owned_copies import _delete_snapshot_files
-from app.modules.knowledge.files import contained_path
+from app.modules.deferred_files import unlink_after_commit
 from app.modules.knowledge_sets.models import (
     AgentKnowledgeSet,
     KnowledgeAsset,
@@ -51,6 +50,7 @@ from app.modules.learning.models import (
     LearningBoundary,
     LearningRecord,
 )
+from app.modules.purge import purge_ids
 from app.modules.runtime_tools.models import RuntimeModelCallStage, RuntimeToolReceipt
 from app.modules.teams.models import (
     CourseTeamPublication,
@@ -80,7 +80,7 @@ def _now() -> datetime:
 
 
 def release_stored_file(db: Session, data_root: Path | None, file_id: str | None) -> None:
-    """Unlink a file once nothing in the database still points at it."""
+    """Drop a file's row once nothing points at it; unlink it after commit."""
 
     if not file_id:
         return
@@ -90,17 +90,8 @@ def release_stored_file(db: Session, data_root: Path | None, file_id: str | None
     if stored is None:
         return
     relative = stored.relative_path
-    db.execute(delete(FileReference).where(FileReference.stored_file_id == file_id))
-    db.delete(stored)
-    db.flush()
-    if data_root is None:
-        return
-    try:
-        path = contained_path(data_root, relative)
-        if path.is_file():
-            path.unlink()
-    except OSError:
-        LOGGER.warning("stored_file_unlink_failed")
+    if purge_ids(db, "stored_files", [file_id]):
+        unlink_after_commit(db, data_root, relative)
 
 
 def _file_referenced(db: Session, file_id: str) -> bool:
@@ -404,8 +395,7 @@ def hard_delete_agent(db: Session, agent: Agent, data_root: Path | None) -> None
     for knowledge_set in _exclusive_knowledge_sets(db, agent.id):
         hard_delete_knowledge_set(db, knowledge_set, data_root)
     snapshot_ids = _non_debate_snapshot_ids(db, version_ids)
-    db.delete(agent)
-    db.flush()
+    purge_ids(db, "agents", [agent.id])
     delete_snapshots(db, snapshot_ids, data_root)
 
 
@@ -442,8 +432,7 @@ def hard_delete_team(db: Session, team: Team) -> None:
             delete(TeamVersionMember).where(TeamVersionMember.team_version_id.in_(version_ids))
         )
         db.execute(delete(TeamVersion).where(TeamVersion.team_id == team.id))
-    db.delete(team)
-    db.flush()
+    purge_ids(db, "teams", [team.id])
 
 
 def detach_conversation_answers(db: Session, conversation_id: str) -> None:
@@ -501,17 +490,9 @@ def hard_delete_conversation(
         )
     )
     db.execute(delete(TeamProviderCall).where(TeamProviderCall.result_id.in_(result_ids)))
-    db.delete(conversation)
-    db.flush()
-    if data_root is None:
-        return
-    for relative in file_paths:
-        try:
-            path = contained_path(data_root, relative)
-            if path.is_file():
-                path.unlink()
-        except OSError:
-            LOGGER.warning("conversation_attachment_unlink_failed")
+    if purge_ids(db, "agent_conversations", [conversation_id]):
+        for relative in file_paths:
+            unlink_after_commit(db, data_root, relative)
 
 
 def hard_delete_document(db: Session, document: KnowledgeDocument, data_root: Path | None) -> None:
@@ -537,8 +518,7 @@ def hard_delete_document(db: Session, document: KnowledgeDocument, data_root: Pa
         delete(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.document_id == document.id)
     )
     db.execute(delete(AgentVersionDocument).where(AgentVersionDocument.document_id == document.id))
-    db.delete(document)
-    db.flush()
+    purge_ids(db, "knowledge_documents", [document.id])
     release_stored_file(db, data_root, file_id)
 
 
@@ -591,12 +571,10 @@ def hard_delete_knowledge_set(db: Session, row: KnowledgeSet, data_root: Path | 
             KnowledgeSetMarkdownVersion.knowledge_set_id == row.id
         )
     )
-    if run_ids:
-        db.execute(delete(KnowledgeGenerationRun).where(KnowledgeGenerationRun.id.in_(run_ids)))
     db.execute(delete(AgentKnowledgeSet).where(AgentKnowledgeSet.knowledge_set_id == row.id))
     # Team version rows keep a null set id so chat selection still fails closed.
-    db.delete(row)
-    db.flush()
+    # Generation runs go with their accepted stages, items, receipts and targets.
+    purge_ids(db, "knowledge_sets", [row.id])
 
 
 def hard_delete_voice(db: Session, profile: VoiceProfile, data_root: Path | None) -> None:
@@ -606,8 +584,7 @@ def hard_delete_voice(db: Session, profile: VoiceProfile, data_root: Path | None
         .where(AgentVersion.voice_profile_id == profile.id)
         .values(voice_profile_id=None)
     )
-    db.delete(profile)
-    db.flush()
+    purge_ids(db, "voice_profiles", [profile.id])
     release_stored_file(db, data_root, file_id)
 
 
@@ -727,7 +704,6 @@ def prune_agent_versions(db: Session, agent_id: str, data_root: Path | None) -> 
         ):
             # A finished assessment names this version as provenance.
             continue
-        db.delete(version)
-        removed += 1
+        removed += len(purge_ids(db, "agent_versions", [version.id]))
     db.flush()
     return removed

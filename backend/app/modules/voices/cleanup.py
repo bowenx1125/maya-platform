@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.models import VoicePreview, VoiceProfile
-from app.modules.knowledge.recovery import _remove_owned_path
+from app.modules.deferred_files import unlink_after_commit
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,7 +69,5 @@ def sweep_failed_voices(db: Session, data_root: Path | None = None) -> int:
 
 
 def _unlink_previews(db: Session, profile_id: str, data_root: Path | None) -> None:
-    if data_root is None:
-        return
     for preview in db.scalars(select(VoicePreview).where(VoicePreview.profile_id == profile_id)):
-        _remove_owned_path(data_root, preview.relative_path)
+        unlink_after_commit(db, data_root, preview.relative_path)

@@ -262,3 +262,19 @@ Local CI a9a34db3 (Linux,PG16): backend 3040 passed/22 skip; #242 alone 37968f87
 3032/22; frontend 1067/1; Ruff/format/mypy/tsc/lint/Prettier/contracts(159)/
 migration probes passed. Known flake test_course_live_socket_pushes_start_and_end
 reran green. Node 24.14 for Prettier/Latin tables. Actions billing-blocked;0 real calls.
+
+## Oct24 cleanup and Record hotfix
+
+Production cleanup --apply rolled back on knowledge_generation_accepted_stages; the
+5-min prune failed on fk_provider_export_manifests_agent_version (RESTRICT in prod,
+SET NULL in models); rolled-back deletes had already unlinked 841 files. Hard deletes
+now run through app/modules/purge.py: one rule (delete/null/protect) per foreign key
+into every deleted table, read from the live catalog, never relying on ON DELETE;
+records,answers,Debate copies and ledgers only get null; a test fails on an unruled FK.
+Files unlink only after the outermost commit (dropped on rollback). Teacher Record
+reads attempts by course+student only (no Team/publication/chat/Agent checks); a
+Team-deleted unfinished attempt shows as paused for both sides; ungrouped students
+listed; a deleted chat no longer 500s Record (conversation_id nullable). Teacher delete
+is real (attempt,answers,scores; chat kept). Prod-shaped 0076→0078 seeded run:
+main reproduced the FK error and file loss; fix dry-run→apply→apply second run 0,
+Debate snapshots/answers/participants unchanged. 0078 lost no link fields: no backfill.
