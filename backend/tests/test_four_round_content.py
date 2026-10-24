@@ -88,7 +88,7 @@ def output(snapshot, count):
 def test_exact_body_boundaries_count_only_displayed_paragraphs(language, round_no):
     ctx = context(round_no, language)
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
-    high = {"zh": [50, 50, 50, 100], "en": [80, 80, 100, 150]}[language][round_no - 1]
+    high = {"zh": [120, 120, 120, 120], "en": [80, 80, 100, 150]}[language][round_no - 1]
     for count in (1, high, high + 1):
         value = output(snapshot, count)
         result = validate_segment_output(value, snapshot)
@@ -108,10 +108,8 @@ def test_source_alias_guidance_is_prompt_only_and_does_not_rewrite_speech():
     ctx = context(1, "zh")
     snapshot = build_segment_input(ctx, persona=ctx.participant.persona)
     prompt = build_segment_system_prompt(snapshot)
-    assert "RAG证实" in prompt
-    assert "RAG提示" in prompt
-    assert "我感觉" in prompt
-    assert "不写进课堂正文" in prompt
+    assert "绝不把“RAG”“RAG证实”“RAG提示”“我感觉”这类标签" in prompt
+    assert "S 编号只是内部元数据，绝不能写进或读进段落正文" in prompt
     value = output(snapshot, 1)
     value["segments"][0]["text"] = "S2和S5的正文保持原样。"
     assert validate_segment_output(value, snapshot).speech == "S2和S5的正文保持原样。"
