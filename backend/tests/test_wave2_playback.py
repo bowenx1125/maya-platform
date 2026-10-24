@@ -1142,7 +1142,7 @@ def test_sql_state_and_event_share_one_commit_or_rollback(app_factory: Any) -> N
             assert (status, sequence, event_count) == ("running", 1, 1)
 
 
-def test_tts_voice_is_revalidated_custom_then_system_then_mock(app_factory: Any) -> None:
+def test_tts_voice_without_a_snapshot_uses_system_then_mock(app_factory: Any) -> None:
     app, database, settings = app_factory()
     custom_id, fallback_id = str(uuid4()), str(uuid4())
     timestamp = datetime.now(UTC)
@@ -1187,12 +1187,9 @@ def test_tts_voice_is_revalidated_custom_then_system_then_mock(app_factory: Any)
                 "effective_voice_profile_id": custom_id,
             }
         )
-        with database.session() as db:
-            custom = SqlPlaybackRepository.resolve_effective_voice(db, frozen_participant, settings)
-            assert (custom.kind, custom.profile_id) == ("platform_profile", custom_id)
-            custom_row = db.get(VoiceProfile, custom_id)
-            assert custom_row is not None
-            custom_row.status = "deleted"
+        # Owner decision (2026-10-24): only the Debate's own voice snapshot
+        # speaks. This participant has none, so the live custom Voice row is
+        # never read: the system fallback speaks, then the mock sentinel.
         with database.session() as db:
             fallback = SqlPlaybackRepository.resolve_effective_voice(
                 db, frozen_participant, settings
