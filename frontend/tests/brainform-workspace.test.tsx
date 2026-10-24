@@ -306,13 +306,11 @@ describe("Brainform workspace actions", () => {
 
   it("shows the index error and does not list a RAG upload that failed", async () => {
     state.role = "teacher";
-    state.api.uploadRagLibraryDocument = vi
-      .fn()
-      .mockRejectedValue(
-        new PlatformApiError(503, "not kept", {
-          code: "rag_upload_index_failed",
-        }),
-      );
+    state.api.uploadRagLibraryDocument = vi.fn().mockRejectedValue(
+      new PlatformApiError(503, "not kept", {
+        code: "rag_upload_index_failed",
+      }),
+    );
     renderWithActions();
     fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));
     fireEvent.change(screen.getByLabelText("Filename"), {
