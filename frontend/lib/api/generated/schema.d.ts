@@ -1115,6 +1115,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}/debate-llm-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        /** @description The DEBATE_LLM_* defaults and ranges the parameter card starts from. */
+        get: operations["getDebateLLMDefaults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/courses/{course_id}/debates": {
         parameters: {
             query?: never;
@@ -3387,7 +3406,65 @@ export interface components {
             zh: string;
             en: string;
         };
+        /**
+         * DebateLLMParams
+         * @description One Debate's overrides; null means "do not send this parameter".
+         */
+        DebateLLMParams: {
+            /** Enable Thinking */
+            enable_thinking?: boolean | null;
+            /** Frequency Penalty */
+            frequency_penalty?: number | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
+            /** Presence Penalty */
+            presence_penalty?: number | null;
+            /** Repetition Penalty */
+            repetition_penalty?: number | null;
+            /** Seed */
+            seed?: number | null;
+            /** Temperature */
+            temperature?: number | null;
+            /** Top P */
+            top_p?: number | null;
+        };
+        /** DebateLLMParamSpec */
+        DebateLLMParamSpec: {
+            /** Default */
+            default?: number | boolean | null;
+            /** Exclusive Maximum */
+            exclusive_maximum: boolean;
+            /** Exclusive Minimum */
+            exclusive_minimum: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "float" | "int" | "bool";
+            /** Maximum */
+            maximum?: number | null;
+            /** Minimum */
+            minimum?: number | null;
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "temperature" | "top_p" | "presence_penalty" | "frequency_penalty" | "repetition_penalty" | "max_tokens" | "enable_thinking" | "seed";
+            /** Sent */
+            sent: boolean;
+            /** Step */
+            step?: number | null;
+        };
+        /** DebateLLMDefaults */
+        DebateLLMDefaults: {
+            /** Params */
+            params: components["schemas"]["DebateLLMParamSpec"][];
+            /** Playback Rate */
+            playback_rate: number;
+        };
         DebateDraftRequest: {
+            /** @description The parameter card's values; omitted means the DEBATE_LLM_* defaults. */
+            llm_params?: components["schemas"]["DebateLLMParams"] | null;
             /** @description Non-empty topic; any script or symbols are accepted. */
             topic: string;
             /** @default  */
@@ -8693,6 +8770,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeachingPrompts"];
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    getDebateLLMDefaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: components["parameters"]["CourseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Default generation parameters and their ranges for a new debate. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebateLLMDefaults"];
                 };
             };
             403: components["responses"]["Error"];

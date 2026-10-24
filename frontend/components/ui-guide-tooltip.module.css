@@ -14,6 +14,8 @@
   line-height: 1.5;
   pointer-events: none;
   overflow-wrap: anywhere;
+  /* A multi-line hint (the parameter card's "?") keeps its lines. */
+  white-space: pre-line;
 }
 
 @media (prefers-reduced-motion: no-preference) {

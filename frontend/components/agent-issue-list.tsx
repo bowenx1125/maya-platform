@@ -72,6 +72,8 @@ export function AgentIssueList({
   );
 }
 
+export type BarLine = { text: string; href: string | null };
+
 /**
  * The one bar every Agent hint and Debate form problem uses: the same look
  * whatever it says, pinned to the top of the page and brought into view when
@@ -92,8 +94,9 @@ export function AgentHintBar({
   /** Something must change before the page can go on: announced at once. */
   alert?: boolean;
   issues?: AgentIssue[];
-  /** Problems that belong to no Agent (a form field), in the same style. */
-  lines?: string[];
+  /** Problems that belong to no Agent (a form field), in the same style;
+   * one with an href gets a pencil to the part of the page to edit. */
+  lines?: Array<string | BarLine>;
   editHref?: (agentId: string) => string;
   onCheck?: (issue: AgentIssue) => void;
   checking?: string | null;
@@ -124,11 +127,25 @@ export function AgentHintBar({
       <strong>{title}</strong>
       {lines.length ? (
         <ul className="agent-issue-list">
-          {lines.map((line) => (
-            <li key={line}>
-              <span>{line}</span>
-            </li>
-          ))}
+          {lines.map((line) => {
+            const { text, href } =
+              typeof line === "string" ? { text: line, href: null } : line;
+            return (
+              <li key={text}>
+                <span>{text}</span>
+                {href ? (
+                  <a
+                    className="inline-button"
+                    href={href}
+                    aria-label={t("debateFieldEdit")}
+                    title={t("debateFieldEdit")}
+                  >
+                    <IconEdit />
+                  </a>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       {issues.length ? (

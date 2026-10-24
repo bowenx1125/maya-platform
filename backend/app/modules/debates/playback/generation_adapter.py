@@ -20,7 +20,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings, configured_llm_model
+from app.core.config import Settings, configured_debate_llm_model
 from app.core.errors import PlatformError, conflict
 from app.core.models import (
     AgentVersion,
@@ -78,7 +78,7 @@ from app.modules.debates.round_count import (
     uses_segment_protocol,
     visible_turn_predecessors,
 )
-from app.modules.debates.teaching_rules import frozen_system_prompt
+from app.modules.debates.teaching_rules import frozen_llm_settings, frozen_system_prompt
 from app.modules.debates.topic_language import model_topic
 from app.modules.knowledge.providers.adapters import (
     DashScopeEmbeddingConfig,
@@ -339,7 +339,9 @@ class SqlTurnPreparer:
         if llm is not None:
             self.llm = llm
         elif settings is not None and getattr(settings, "llm_provider", "mock") == "dashscope":
-            self.llm = select_fixed_llm_provider(cast(Settings, settings))
+            self.llm = select_fixed_llm_provider(
+                cast(Settings, settings), model_key=configured_debate_llm_model()
+            )
         else:
             self.llm = llm_provider(cast(Settings, settings))
         self.llm_runtime = llm_runtime
@@ -592,7 +594,9 @@ class SqlTurnPreparer:
                     "persona_spec_hash": owner.persona_spec_hash,
                 }
                 build_manifest_hash = digest(logical_build)
-                model_key = str(getattr(segment_adapter.config, "model", configured_llm_model()))
+                model_key = str(
+                    getattr(segment_adapter.config, "model", configured_debate_llm_model())
+                )
                 persona_spec_hash = owner.persona_spec_hash
                 if len(persona_spec_hash) != 64:
                     persona_spec_hash = digest(persona_payload)
@@ -956,7 +960,7 @@ class SqlTurnPreparer:
                 or str(operation_row["policy_hash"]) != frozen_request.policy_hash
                 or str(operation_row["export_manifest_hash"]) != frozen_request.export_manifest_hash
                 or str(operation_row["build_manifest_hash"]) != frozen_request.build_manifest_hash
-                or str(operation_row["model_key"]) != configured_llm_model()
+                or str(operation_row["model_key"]) != configured_debate_llm_model()
                 or str(operation_row["state"]) not in {"accepted", "succeeded"}
                 or str(operation_row["staged_response_hash"] or "")
                 != str(getattr(stage, "output_hash", ""))
@@ -1347,6 +1351,7 @@ class SqlTurnPreparer:
             )
             if debate_teaching_protocol(debate)
             else None,
+            frozen_llm=frozen_llm_settings(debate.rule_snapshot_json),
             barrages=barrages,
         )
         llm_runtime, llm_runtime_options, llm_manifest_preparer = self._llm_runtime_for_turn(

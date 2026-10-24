@@ -92,6 +92,8 @@ export function mergeIssues(
 export type FieldProblem = {
   key: MessageKey;
   params?: Record<string, string>;
+  /** The form section to edit, when the problem lives in one. */
+  anchor?: string;
 };
 
 const TOPIC_TYPES = new Set([
@@ -149,6 +151,12 @@ export function debateFieldProblems(
       problem = { key: "debateFieldTeachingPrompts" };
     } else if (root === "output_language") {
       problem = { key: "debateFieldOutputLanguage" };
+    } else if (root === "llm_params") {
+      problem = {
+        key: "debateFieldLlmParam",
+        params: { field: index ?? "llm_params" },
+        anchor: "debate-llm-params",
+      };
     } else {
       problem = { key: "debateFieldOther", params: { field: field || "?" } };
     }

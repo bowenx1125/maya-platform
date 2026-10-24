@@ -848,8 +848,14 @@ _LLM_MODEL_OPERATIONS = frozenset(
 
 
 def authorized_provider_model(provider_operation: str) -> str | None:
-    """Embedding and speech stay pinned. LLM calls follow LLM_MODEL."""
+    """Embedding and speech stay pinned. LLM calls follow LLM_MODEL, Debates
+    DEBATE_LLM_MODEL when it is set."""
 
+    if provider_operation in {"llm_debate", "llm_debate_turn"}:
+        # The same setting the Debate adapter sends (DEBATE_LLM_MODEL, else LLM_MODEL).
+        from app.core.config import configured_debate_llm_model
+
+        return configured_debate_llm_model()
     if provider_operation in _LLM_MODEL_OPERATIONS:
         from app.core.config import configured_llm_model
 

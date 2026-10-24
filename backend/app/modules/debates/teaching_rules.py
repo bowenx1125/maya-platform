@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 DEFAULT_DIRECTORY = Path(__file__).with_name("default_rules")
+LEGACY_DIRECTORY = DEFAULT_DIRECTORY / "legacy"
 
 
 def default_teaching_prompts() -> dict[str, str]:
@@ -16,12 +17,34 @@ def default_teaching_prompts() -> dict[str, str]:
     }
 
 
-def compile_system_prompt(markdown: str, round_number: int, language: str = "en") -> str:
-    """Send authored Markdown intact; no heading parser or hidden teaching defaults.
+def legacy_teaching_prompts() -> dict[str, str]:
+    """The Ruleset text before the execution contract moved into it."""
 
-    The execution contract follows the ruleset language: a zh ruleset gets the
-    Chinese contract, everything else keeps the English one. JSON field names
-    and enum values are identical in both, so output parsing is unchanged.
+    return {
+        lang: (LEGACY_DIRECTORY / f"{lang}.md").read_text(encoding="utf-8") for lang in ("zh", "en")
+    }
+
+
+ROUND_PLACEHOLDER = "{round}"
+
+
+def compile_system_prompt(markdown: str, round_number: int, language: str = "en") -> str:
+    """The Ruleset as the teacher saw it, with ``{round}`` filled in.
+
+    Owner decision (2026-10-24): the execution contract is part of the
+    editable Ruleset template (default_rules/*.md), so nothing is appended
+    here. The JSON schema is still enforced by the request's response_format.
+    """
+
+    del language
+    return markdown.replace(ROUND_PLACEHOLDER, str(round_number))
+
+
+def legacy_compile_system_prompt(markdown: str, round_number: int, language: str = "en") -> str:
+    """The pre-template prompt: Ruleset plus a code-written execution contract.
+
+    Only Debates frozen without their own prompts reach this, and they keep
+    the exact text they always had.
     """
     if language == "zh":
         return _compile_zh_system_prompt(markdown, round_number)
@@ -116,15 +139,24 @@ def _compile_zh_system_prompt(markdown: str, round_number: int) -> str:
     )
 
 
-def freeze_teaching_rules(prompts: Mapping[str, str] | None = None) -> dict[str, object]:
+def freeze_teaching_rules(
+    prompts: Mapping[str, str] | None = None,
+    llm_params: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    from app.modules.debates.llm_params import CONTRACT_VERSION
+
     authored = dict(default_teaching_prompts() if prompts is None else prompts)
-    return {
+    frozen: dict[str, object] = {
         "teaching_prompts": authored,
         "system_prompts": {
             lang: [compile_system_prompt(authored[lang], turn, lang) for turn in range(1, 5)]
             for lang in ("zh", "en")
         },
+        "contract_version": CONTRACT_VERSION,
     }
+    if llm_params is not None:
+        frozen["llm_params"] = dict(llm_params)
+    return frozen
 
 
 def frozen_system_prompt(snapshot_json: str, round_number: int, language: str) -> str:
@@ -132,5 +164,16 @@ def frozen_system_prompt(snapshot_json: str, round_number: int, language: str) -
     stored = snapshot.get("system_prompts")
     if stored is not None:
         return str(stored[language][round_number - 1])
-    # Only pre-editor records lack a frozen prompt. New creation always stores one.
-    return compile_system_prompt(default_teaching_prompts()[language], round_number, language)
+    # Only pre-editor records lack a frozen prompt. They keep the contract the
+    # code wrote then, over the Ruleset text of that time (now legacy_rules).
+    return legacy_compile_system_prompt(legacy_teaching_prompts()[language], round_number, language)
+
+
+def frozen_llm_settings(snapshot_json: str) -> dict[str, object] | None:
+    """The contract version and parameters this Debate froze, if it froze any."""
+
+    snapshot = json.loads(snapshot_json)
+    params = snapshot.get("llm_params")
+    if not isinstance(params, dict):
+        return None
+    return {"contract_version": snapshot.get("contract_version"), "params": params}

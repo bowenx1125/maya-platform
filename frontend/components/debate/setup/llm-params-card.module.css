@@ -1,0 +1,101 @@
+.rows {
+  display: grid;
+  gap: 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(170px, 220px) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line, #e4ddd2);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.label code {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--indigo-dark);
+}
+
+.help {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line, #dedee3);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--muted, #62626a);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: help;
+}
+
+.note {
+  color: var(--muted, #62626a);
+  font-size: 0.75rem;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Outranks the global full-width input rule in globals.css. */
+.control > input.slider:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex: 1 1 180px;
+  min-width: 140px;
+  accent-color: var(--indigo-dark);
+}
+
+.control > input.number:not([type="checkbox"]):not([type="radio"]) {
+  flex: 0 0 110px;
+  min-height: 36px;
+  width: 110px;
+  padding: 6px 8px;
+  border: 1px solid var(--line, #dedee3);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.control > input.integer:not([type="checkbox"]):not([type="radio"]) {
+  flex-basis: 180px;
+  width: 180px;
+}
+
+.switch,
+.omit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--muted, #62626a);
+}
+
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -23,6 +23,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.core.replica import hold_claim
 from app.core.sqlutil import begin_immediate
+from app.modules.debates.llm_params import configured_playback_rate
 from app.providers.dashscope import LEGACY_CLONE_MODEL_KEY
 from app.providers.tts import TTS_UNAVAILABLE_CODES
 
@@ -994,7 +995,7 @@ class SqlPlaybackRepository(PlaybackRepository):
             "mode": "live",
             "current_turn_id": None,
             "cursor_ms": 0,
-            "playback_rate": 1.0,
+            "playback_rate": configured_playback_rate(db),
             "control_version": 0,
             "controller_epoch": None,
             "controller_session_hash": None,

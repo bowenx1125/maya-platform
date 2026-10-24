@@ -20,6 +20,7 @@ from app.modules.debates.generation.types import (
     MutualLearningSynthesisV1,
     MutualLearningTurnResultV1,
 )
+from app.modules.debates.llm_params import DebateLLMParams
 
 Stance = Literal["support", "oppose", "neutral"]
 StanceMode = Literal["assigned", "open"]
@@ -68,6 +69,34 @@ class TeachingPrompts(_ClosedModel):
     en: str
 
 
+class DebateLLMParamSpec(_ClosedModel):
+    name: Literal[
+        "temperature",
+        "top_p",
+        "presence_penalty",
+        "frequency_penalty",
+        "repetition_penalty",
+        "max_tokens",
+        "enable_thinking",
+        "seed",
+    ]
+    kind: Literal["float", "int", "bool"]
+    # The env default; null means not sent unless the teacher sets a value.
+    default: float | int | bool | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    exclusive_minimum: bool
+    exclusive_maximum: bool
+    step: float | None = None
+    # False: stored with the Debate but never sent to the model.
+    sent: bool
+
+
+class DebateLLMDefaults(_ClosedModel):
+    params: list[DebateLLMParamSpec]
+    playback_rate: float
+
+
 class DebateDraftRequest(_ClosedModel):
     topic: str = Field(
         min_length=1, description="Non-empty topic; any script or symbols are accepted."
@@ -81,6 +110,8 @@ class DebateDraftRequest(_ClosedModel):
     rule_set_id: RuleSetId = NEW_DEBATE_RULE_SET_ID
     total_duration_seconds: None = None
     turn_duration_seconds: None = None
+    # The parameter card's values; omitted means the DEBATE_LLM_* defaults.
+    llm_params: DebateLLMParams | None = None
 
     @field_validator("topic")
     @classmethod

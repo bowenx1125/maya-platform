@@ -211,22 +211,15 @@ sends expected_base_version_id,409 stale_base_version keeps edits;per-user draft
 Performance: hash waits free DB connections;Chat history SELECTs constant (5);
 Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
 
-Oct23 isolated 50-user run (Mock,2 capped backends): logins 100/100,p95≤7.85s;Agent/
-Team50 SSE+persistence passed. PG READ COMMITTED race (3/50 stale done) fixed with one
-REPEATABLE READ poll snapshot. Release #239 aa6d6ffd (~12s 502 during swap). Voice
-uploads: enrollment off the event loop,MP3/M4A padding fixed,10–20s limits kept;
-built3e785c01. All Oct releases:0 real Provider calls;Actions billing-blocked.
+Oct23 50-user Mock run passed (logins 100/100, p95≤7.85s); PG poll race fixed with one
+REPEATABLE READ snapshot. Release #239 aa6d6ffd; voice enrollment off the event loop.
+0 real Provider calls in all Oct releases.
 
 ## Oct24 Team chats and junk (#241)
 
-Open Team/Maya Team chats follow each new Team version (save, member publish,
-5-min sweep); turns/participants keep history. Mid-reply chats wait for the sweep;
-in-progress/paused formal attempts stay on their version, answers intact; a removed
-member who already replied keeps the chat on its old version. Failed uploads leave
-the library: never-indexed RAG returns 503 `rag_upload_index_failed`, not stored; failed
-Voices (refused/enrollment/mapping) are deleted unless charged (hidden) or holding a
-supplier id. The sweep hard-deletes empty Agents (no written/published version,
-files, Team/Debate/chat reference) after 1h, including same-name retired drafts.
+Open Team chats follow each new Team version (save, publish, 5-min sweep); history,
+mid-reply chats and unfinished attempts keep theirs. Failed RAG uploads/Voices are not
+kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
@@ -254,10 +247,7 @@ plays the blob (159 routes). debate_timing logs:generation/tts/lock_wait/audio_s
 next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
-Local CI a9a34db3 (Linux,PG16): backend 3040 passed/22 skip; #242 alone 37968f87
-3032/22; frontend 1067/1; Ruff/format/mypy/tsc/lint/Prettier/contracts(159)/
-migration probes passed. Known flake test_course_live_socket_pushes_start_and_end
-reran green. Node 24.14 for Prettier/Latin tables. Actions billing-blocked;0 real calls.
+Local CI a9a34db3 (PG16): backend 3040/22 skip, frontend 1067/1, all gates (159 routes).
 
 ## Oct24 cleanup and Record hotfix
 
@@ -289,3 +279,16 @@ resolver/fence drift (agent_not_current etc.), shown in the same bar. malformed_
 details.errors gives field+type; the form writes one sentence per field; Retry resends.
 Agent page bar lines each have a Done that publishes edits in place and re-checks only
 that line. Topic copy: any language.
+
+## Oct24 Debate generation parameters (PR E)
+
+Env (no MAYA_ prefix, compose `${VAR:-default}`, .env.example): DEBATE_LLM_MODEL
+(fallback LLM_MODEL; also llm_debate_turn), DEBATE_LLM_TEMPERATURE 0.65, _TOP_P 0.8,
+_PRESENCE/_FREQUENCY/_REPETITION_PENALTY, _MAX_TOKENS, _SEED empty, _ENABLE_THINKING
+false, _TIMEOUT_SECONDS 120, DEBATE_TTS_MODEL, DEBATE_PLAYBACK_RATE 1.25 (0.95–1.25,
+new playback rows). Unset env = previous production values. The create form's
+parameter card starts from GET /courses/{id}/debate-llm-defaults; values (null = not
+sent; frequency_penalty never sent) freeze into rule_snapshot_json.llm_params with
+contract_version ruleset_contract_v3. The execution contract now lives in
+default_rules/{zh,en}.md ({round} placeholder), editable; compile only substitutes.
+Debates frozen before v3 keep the legacy compile (default_rules/legacy) and env params.
