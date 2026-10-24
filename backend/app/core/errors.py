@@ -95,7 +95,20 @@ async def request_validation_handler(
     # Pydantic's detailed errors may contain field internals but no secrets;
     # flatten them into a stable platform code while retaining useful fields.
     errors = exc.errors()
-    details = {"fields": [str(item.get("loc", ())) for item in errors]}
+    details = {
+        "fields": [str(item.get("loc", ())) for item in errors],
+        # Path and error type only (never the input), so a form can say which
+        # field is wrong and why.
+        "errors": [
+            {
+                "field": ".".join(
+                    str(part) for part in tuple(item.get("loc", ()))[1:] if part != "__root__"
+                ),
+                "type": str(item.get("type", "")),
+            }
+            for item in errors
+        ],
+    }
     csrf_error = any(
         tuple(item.get("loc", ()))[:1] == ("header",) and "csrf" in str(item.get("loc", ())).lower()
         for item in errors

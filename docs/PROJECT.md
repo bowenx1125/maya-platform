@@ -251,12 +251,8 @@ upgrade→downgrade→upgrade passed,counts kept;real prod schema dump still to 
 Next: live prepares up to3 turns ahead,each after its predecessor is final-ready;
 per-Debate lock;controller-only POST /debates/{id}/next-audio prefetch ticket,stage
 plays the blob (159 routes). debate_timing logs:generation/tts/lock_wait/audio_serve/
-next_request;browser logs audio_prefetch/audio_start. Errors: Debate create 422
-debate_agents_not_ready lists agent_id/issue/message (unpublished,no RAG,AGENT.md
-without # heading+text,archived,Avatar) with a pencil to the Agent;Voice None shown,
-never blocking (AGENTS voice rule). Agent editor hint bar;uploaded voice auto-selected.
-Team errors name the Agent;agent_in_team names own Teams;~40 codes get messages,unknown
-codes show their code.
+next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
+Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
 Local CI a9a34db3 (Linux,PG16): backend 3040 passed/22 skip; #242 alone 37968f87
 3032/22; frontend 1067/1; Ruff/format/mypy/tsc/lint/Prettier/contracts(159)/
@@ -278,3 +274,18 @@ listed; a deleted chat no longer 500s Record (conversation_id nullable). Teacher
 is real (attempt,answers,scores; chat kept). Prod-shaped 0076→0078 seeded run:
 main reproduced the FK error and file loss; fix dry-run→apply→apply second run 0,
 Debate snapshots/answers/participants unchanged. 0078 lost no link fields: no backfill.
+
+## Oct24 Agent hints and Debate create
+
+Agent checks are hints, never save/publish blockers (Avatar dropped from publish
+blockers; empty AGENT.md and unindexed RAG still block). agents/readiness.py judges the
+current published version (archived,unpublished,no RAG,AGENT.md without # heading+text,
+Avatar,Voice None non-blocking) and AgentDetail/PublishedAgentSummary carry it as
+readiness_issues. Debate form checks each Agent when picked; one top, sticky bar (same
+look for every line) names each Agent with a pencil to /teacher/agents/{id}; blocking
+lines stop the send. The server still refuses (fail closed: races,API clients) with
+debate_agents_not_ready, now also for not found (no name: existence not told) and
+resolver/fence drift (agent_not_current etc.), shown in the same bar. malformed_request
+details.errors gives field+type; the form writes one sentence per field; Retry resends.
+Agent page bar lines each have a Done that publishes edits in place and re-checks only
+that line. Topic copy: any language.

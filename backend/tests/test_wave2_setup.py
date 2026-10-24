@@ -670,7 +670,10 @@ def test_create_pointer_state_snapshot_drift_rolls_back_everything(
                 course_id=COURSE_ID,
                 payload=_create_payload(bowen_id, kaikai_id, topic="Rollback create"),
             )
-    assert error.value.code == expected_code
+    # Every Agent refusal names its Agent (owner, 2026-10-24); the drift
+    # reason is the issue, not the error code.
+    assert error.value.code == "debate_agents_not_ready"
+    assert [item["issue"] for item in error.value.details["issues"]] == [expected_code]
 
     with database.session() as session:
         assert session.scalars(select(Debate)).all() == []
@@ -731,7 +734,8 @@ def test_update_pointer_drift_rolls_back_revision_and_participants(
                 payload=_create_payload(bowen_id, kaikai_id, topic="After update"),
                 expected_revision=0,
             )
-    assert error.value.code == "agent_not_current"
+    assert error.value.code == "debate_agents_not_ready"
+    assert [item["issue"] for item in error.value.details["issues"]] == ["agent_not_current"]
 
     with database.session() as session:
         debate = session.get(Debate, str(created.id))

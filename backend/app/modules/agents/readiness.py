@@ -11,6 +11,11 @@ and some body text under it.
 Voice None is shown to the teacher but never refuses a Debate: speech falls
 back to the configured voice or to text, and text publication never waits on
 a voice (AGENTS.md).
+
+Owner decision (2026-10-24): none of these stop an Agent being saved or
+published. They are hints on the Agent page and on the Debate form, read from
+the Agent's current published version, and only creating a Debate refuses the
+blocking ones.
 """
 
 from __future__ import annotations
@@ -32,7 +37,15 @@ ISSUE_MESSAGES = {
         "starting with # and some text under it."
     ),
     "avatar_missing": "Agent “{name}” has no usable Avatar.",
+    "agent_not_current": (
+        "Agent “{name}” changed while the Debate was being created. Check it and create again."
+    ),
+    "agent_not_found": "Agent “{name}” is no longer available in this course.",
+    "voice_missing": (
+        "Agent “{name}” has Voice set to None: it will speak with the default voice, or as text."
+    ),
 }
+NON_BLOCKING = frozenset({"voice_missing"})
 
 _HEADING = re.compile(r"^#{1,6}\s+\S", re.MULTILINE)
 
@@ -47,16 +60,28 @@ def agent_md_is_standard(markdown: str) -> bool:
 
 
 def issue(agent: Agent, kind: str) -> dict[str, Any]:
+    return named_issue(agent.id, agent.name, kind)
+
+
+def named_issue(agent_id: str, agent_name: str, kind: str) -> dict[str, Any]:
     return {
-        "agent_id": agent.id,
-        "agent_name": agent.name,
+        "agent_id": agent_id,
+        "agent_name": agent_name,
         "issue": kind,
-        "message": ISSUE_MESSAGES[kind].format(name=agent.name),
+        "blocking": kind not in NON_BLOCKING,
+        "message": ISSUE_MESSAGES[kind].format(name=agent_name),
     }
 
 
 def debate_issues(db: Session, agent: Agent, settings: Settings) -> list[dict[str, Any]]:
     """Every reason this Agent cannot join a new Debate; empty when it can."""
+
+    del settings
+    return [item for item in readiness_issues(db, agent) if item["blocking"]]
+
+
+def readiness_issues(db: Session, agent: Agent) -> list[dict[str, Any]]:
+    """Every hint for this Agent's current published version, Voice None included."""
 
     if agent.deleted_at is not None or agent.status == "archived":
         return [issue(agent, "agent_archived")]
@@ -85,4 +110,6 @@ def debate_issues(db: Session, agent: Agent, settings: Settings) -> list[dict[st
         validate_avatar_config(json.loads(version.avatar_config_json))
     except Exception:  # noqa: BLE001
         found.append(issue(agent, "avatar_missing"))
+    if not version.voice_profile_id:
+        found.append(issue(agent, "voice_missing"))
     return found

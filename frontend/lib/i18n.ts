@@ -125,7 +125,7 @@ const enMessages = {
     "No course you teach is selected, so Debates cannot be listed or created. Open one of your courses first.",
   debateCreateUnconfirmed:
     "The server did not confirm the new Debate. Refresh the Debate list to see whether it was created.",
-  debateTopicRequired: "Enter a non-empty English topic.",
+  debateTopicRequired: "Enter a topic.",
   debateSelectAtLeast: "Select at least two Agents.",
   debateSelectAtMost: "A Demo debate supports at most five Agents.",
   debateCurrent: "current",
@@ -594,6 +594,28 @@ const enMessages = {
   agentIssueVoiceMissing:
     "Agent “{name}” has no Voice (Voice is None). The Debate will use the platform voice or show text only.",
   agentIssueEdit: "Edit Agent “{name}”",
+  agentIssueNotCurrent:
+    "Agent “{name}” changed while the Debate was being created. Check it, then create again.",
+  agentIssueNotFound: "Agent “{name}” is no longer available in this course.",
+  agentIssueCheck: "Done: save, publish and check this again",
+  debateFixBeforeCreate: "Fix these before creating the Debate:",
+  debateAgentsHints: "About the selected Agents:",
+  debateFieldTopicBlank: "Enter a topic.",
+  debateFieldTooFewAgents: "Choose at least 2 Agents.",
+  debateFieldTooManyAgents: "Choose at most 5 Agents.",
+  debateFieldDuplicateAgent: "The same Agent is selected twice.",
+  debateFieldStanceMissing:
+    "Agent “{name}” is set to an assigned stance, but no stance is chosen. Choose support, oppose or neutral.",
+  debateFieldStanceUnexpected:
+    "Agent “{name}” has an open stance, so it cannot also have an assigned one.",
+  debateFieldAgent:
+    "Agent “{name}” could not be read from the form. Select it again.",
+  debateFieldBackground:
+    "The Background text could not be read. Edit it and try again.",
+  debateFieldTeachingPrompts:
+    "The teaching rules could not be read. Open them, save, and try again.",
+  debateFieldOutputLanguage: "The output language must be Chinese or English.",
+  debateFieldOther: "The field “{field}” is not valid.",
   errorEditTeam: "Edit Team “{name}”",
   errorChatFailed:
     "This reply could not be generated. Send your message again.",
@@ -1114,7 +1136,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
     "还没有选中你任教的课程，无法查看或创建 Debate。请先进入一门课程。",
   debateCreateUnconfirmed:
     "服务器没有确认新 Debate 已创建。请刷新 Debate 列表，看看是否已经创建。",
-  debateTopicRequired: "请输入非空英文议题。",
+  debateTopicRequired: "请输入议题。",
   debateSelectAtLeast: "请至少选择两个智能体。",
   debateSelectAtMost: "Demo 单场最多支持五个智能体。",
   debateCurrent: "当前版本",
@@ -1543,6 +1565,24 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   agentIssueVoiceMissing:
     "Agent「{name}」的 Voice 是 None，Debate 会用平台声音或只显示文字。",
   agentIssueEdit: "编辑 Agent「{name}」",
+  agentIssueNotCurrent:
+    "Agent「{name}」在创建 Debate 时被修改了，请检查后再创建。",
+  agentIssueNotFound: "Agent「{name}」在这门课里已经不可用。",
+  agentIssueCheck: "Done：保存并发布，再检查这一项",
+  debateFixBeforeCreate: "创建 Debate 前请先处理：",
+  debateAgentsHints: "所选 Agent 的提示：",
+  debateFieldTopicBlank: "议题不能为空。",
+  debateFieldTooFewAgents: "请至少选择 2 个 Agent。",
+  debateFieldTooManyAgents: "最多只能选择 5 个 Agent。",
+  debateFieldDuplicateAgent: "同一个 Agent 选了两次。",
+  debateFieldStanceMissing:
+    "Agent「{name}」选了指定立场，但还没有选具体立场，请选择支持、反对或中立。",
+  debateFieldStanceUnexpected: "Agent「{name}」是开放立场，不能同时指定立场。",
+  debateFieldAgent: "Agent「{name}」的选择无法读取，请重新选择。",
+  debateFieldBackground: "背景内容无法读取，请修改后重试。",
+  debateFieldTeachingPrompts: "教学规则无法读取，请打开保存后重试。",
+  debateFieldOutputLanguage: "输出语言只能是中文或英文。",
+  debateFieldOther: "字段「{field}」不正确。",
   errorEditTeam: "编辑 Team「{name}」",
   errorChatFailed: "这条回复没有生成出来，请重新发送。",
   errorAgentHistoryRetained: "这个 Agent 正在发布，暂时不能删除，请稍后再试。",

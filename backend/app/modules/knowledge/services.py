@@ -1352,12 +1352,9 @@ def blockers(db: Session, version: AgentVersion, agent: Agent) -> list[str]:
         result.append("rag_index_pending")
     if "failed" in statuses:
         result.append("rag_index_failed")
-    try:
-        from app.modules.avatars import validate_avatar_config
-
-        validate_avatar_config(json.loads(version.avatar_config_json))
-    except Exception:
-        result.append("avatar_missing")
+    # Owner decision (2026-10-24): a missing Avatar, like missing RAG, Voice None
+    # or a non-standard AGENT.md, is a hint on the Agent page and never stops a
+    # publish. Only a new Debate refuses it (agents/readiness.py).
     return result
 
 
@@ -1655,6 +1652,9 @@ def agent_detail(
         ]
     if role == "teacher" and not versions:
         raise not_found()
+    from app.modules.agents.readiness import readiness_issues
+    from app.modules.agents.schemas import AgentReadinessIssue
+
     return AgentDetail(
         **agent_summary(
             db,
@@ -1671,6 +1671,9 @@ def agent_detail(
                 include_private_sources=role in {"owner", "observer"},
             )
             for version in versions
+        ],
+        readiness_issues=[
+            AgentReadinessIssue.model_validate(item) for item in readiness_issues(db, agent)
         ],
     )
 
