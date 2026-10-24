@@ -313,8 +313,10 @@ def insert_wave1_rows_and_voice_ledger(database: Database) -> None:
                 embedding_key="mock",
             )
         )
-        session.add(
-            VoiceProfile(
+        # Core insert with explicit columns: the model has gained columns
+        # (0077 voice samples) that this older schema does not have.
+        session.execute(
+            VoiceProfile.__table__.insert().values(
                 id=system_voice_id,
                 scope="system",
                 group_id=None,
