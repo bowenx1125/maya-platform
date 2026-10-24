@@ -147,7 +147,7 @@ def _retarget_one(
             .order_by(ConversationParticipant.position)
         ).all()
     )
-    by_agent = {plan.member.agent_id: plan for plan in plans}
+    by_agent = {plan.member.agent_id: plan for plan in plans if plan.member.agent_id}
     try:
         stayers, newcomers, leavers = _match_participants(participants, by_agent)
     except _Skip as skipped:
@@ -214,6 +214,8 @@ def _plans_for(
     )
     plans: list[_MemberPlan] = []
     for member in members:
+        if member.agent_id is None or member.agent_version_id is None:
+            raise _Skip("member_unavailable")
         agent = db.get(Agent, member.agent_id)
         agent_version = db.get(AgentVersion, member.agent_version_id)
         if (
@@ -273,13 +275,14 @@ def _match_participants(
     stayers: list[tuple[ConversationParticipant, _MemberPlan]] = []
     leavers: list[ConversationParticipant] = []
     for participant in participants:
-        plan = by_agent.get(participant.agent_id)
-        if plan is None:
+        agent_id = participant.agent_id
+        plan = by_agent.get(agent_id) if agent_id else None
+        if agent_id is None or plan is None:
             leavers.append(participant)
             continue
-        if participant.agent_id in seen:
+        if agent_id in seen:
             raise _Skip("duplicate_member")
-        seen.add(participant.agent_id)
+        seen.add(agent_id)
         stayers.append((participant, plan))
     newcomers = [plan for agent_id, plan in by_agent.items() if agent_id not in seen]
     return stayers, newcomers, leavers

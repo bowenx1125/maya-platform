@@ -2,8 +2,8 @@
 """Copy AGENT.md, RAG/Knowledge and a voice clone into existing Debates.
 
 Dry-run by default. ``--apply`` writes. The copy is idempotent: a Debate that
-already owns its snapshot, markdown and clone row is left alone. Refuses a
-production database URL. Do not point this at production.
+already owns its snapshot, markdown and clone row is left alone. Writing to the
+production database also needs --confirm-production; back it up first.
 """
 
 from __future__ import annotations
@@ -30,10 +30,13 @@ from app.modules.debates.voice_clones import (  # noqa: E402
 )
 
 
-def _refuse_production(url: str) -> None:
-    lowered = url.lower()
-    if "maya-production" in lowered or "8.210.57.144" in lowered:
-        raise SystemExit("Refusing to touch a production database.")
+def _guard_production(url: str, data_root: Path, *, apply: bool, confirmed: bool) -> None:
+    lowered = f"{url} {data_root}".lower()
+    production = any(
+        marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
+    )
+    if apply and production and not confirmed:
+        raise SystemExit("Production target: pass --confirm-production with --apply.")
 
 
 def plan(session: Any) -> dict[str, int]:
@@ -109,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database-url", default=None)
     parser.add_argument("--data-root", default=None, type=Path)
     parser.add_argument("--apply", action="store_true", help="Write. Default is dry-run.")
+    parser.add_argument("--confirm-production", action="store_true")
     args = parser.parse_args(argv)
     overrides: dict[str, Any] = {"maya_env": "operator"}
     if args.database_url is not None:
@@ -116,7 +120,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.data_root is not None:
         overrides["data_root"] = args.data_root
     settings = Settings(_env_file=SCRIPT_ROOT / ".env", **overrides)
-    _refuse_production(settings.database_url)
+    _guard_production(
+        settings.database_url,
+        settings.resolved_data_root,
+        apply=args.apply,
+        confirmed=args.confirm_production,
+    )
     database = Database(settings.database_url)
     with database.session() as session:
         before = plan(session)

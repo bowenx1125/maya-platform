@@ -611,19 +611,49 @@ def hard_delete_voice(db: Session, profile: VoiceProfile, data_root: Path | None
     release_stored_file(db, data_root, file_id)
 
 
-def _version_live_chat(db: Session, version_id: str) -> bool:
-    return (
-        db.scalar(
-            select(Conversation.id)
-            .where(
-                Conversation.agent_version_id == version_id,
-                Conversation.source_removed_at.is_(None),
-                Conversation.withdrawn_at.is_(None),
-            )
-            .limit(1)
-        )
-        is not None
+def _versions_in_use(db: Session, version_ids: list[str]) -> set[str]:
+    """Versions something live still runs on; prune leaves them whole.
+
+    A mid-reply chat, a Team chat kept on its old Team version (an unfinished
+    formal attempt, a departed member's replies), a Team that could not follow
+    its member, and an unfinished assessment all keep reading the version's
+    AGENT.md, files and voice. The sweep prunes them once they move on.
+    """
+
+    if not version_ids:
+        return set()
+    live_chat = (Conversation.source_removed_at.is_(None), Conversation.withdrawn_at.is_(None))
+    queries = (
+        select(Conversation.agent_version_id).where(
+            Conversation.agent_version_id.in_(version_ids), *live_chat
+        ),
+        select(ConversationParticipant.agent_version_id)
+        .join(Conversation, Conversation.id == ConversationParticipant.conversation_id)
+        .where(ConversationParticipant.agent_version_id.in_(version_ids), *live_chat),
+        select(TeamVersionMember.agent_version_id)
+        .join(TeamVersion, TeamVersion.id == TeamVersionMember.team_version_id)
+        .join(Team, Team.id == TeamVersion.team_id)
+        .where(
+            TeamVersionMember.agent_version_id.in_(version_ids),
+            TeamVersion.version_seq == Team.current_version_seq,
+            Team.deleted_at.is_(None),
+        ),
     )
+    used: set[str] = set()
+    for query in queries:
+        used.update(value for value in db.scalars(query).all() if value)
+    unfinished = select(AssessmentAttempt.activity_id).where(
+        AssessmentAttempt.status.in_(("in_progress", "paused"))
+    )
+    for row in db.execute(
+        select(
+            AssessmentActivity.recipe_version_id,
+            AssessmentActivity.evaluator_agent_version_id,
+            AssessmentActivity.boundary_agent_version_id,
+        ).where(AssessmentActivity.id.in_(unfinished))
+    ).all():
+        used.update(value for value in row if value in version_ids)
+    return used
 
 
 def _strip_version_sources(db: Session, version: AgentVersion, data_root: Path | None) -> None:
@@ -667,6 +697,7 @@ def prune_agent_versions(db: Session, agent_id: str, data_root: Path | None) -> 
     )
     superseded = [row for row in versions if row.state == "superseded" and row.id not in parked_ids]
     keep_previous = superseded[0].id if superseded else None
+    in_use = _versions_in_use(db, [row.id for row in versions])
     removed = 0
     for version in versions:
         if (
@@ -674,32 +705,29 @@ def prune_agent_versions(db: Session, agent_id: str, data_root: Path | None) -> 
             or version.id == current_id
             or version.id in draft_ids
             or version.id in parked_ids
+            or version.id in in_use
         ):
             continue
-        if version.id != keep_previous:
-            if _version_live_chat(db, version.id):
-                _strip_version_sources(db, version, data_root)
-                continue
-            if (
-                db.scalar(
-                    select(AssessmentActivity.id)
-                    .where(
-                        or_(
-                            AssessmentActivity.recipe_version_id == version.id,
-                            AssessmentActivity.evaluator_agent_version_id == version.id,
-                            AssessmentActivity.boundary_agent_version_id == version.id,
-                        )
-                    )
-                    .limit(1)
-                )
-                is not None
-            ):
-                _strip_version_sources(db, version, data_root)
-                continue
-            _strip_version_sources(db, version, data_root)
-            db.delete(version)
-            removed += 1
-            continue
         _strip_version_sources(db, version, data_root)
+        if version.id == keep_previous:
+            continue
+        if (
+            db.scalar(
+                select(AssessmentActivity.id)
+                .where(
+                    or_(
+                        AssessmentActivity.recipe_version_id == version.id,
+                        AssessmentActivity.evaluator_agent_version_id == version.id,
+                        AssessmentActivity.boundary_agent_version_id == version.id,
+                    )
+                )
+                .limit(1)
+            )
+            is not None
+        ):
+            # A finished assessment names this version as provenance.
+            continue
+        db.delete(version)
+        removed += 1
     db.flush()
     return removed

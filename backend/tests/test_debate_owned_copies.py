@@ -55,6 +55,8 @@ def test_voice_snapshot_copies_config_and_ciphertext() -> None:
     assert payload is not None and cipher == b"cipher"
     assert json.loads(payload) == {
         "display_name": "Kong",
+        # The voice id ciphertext is bound to the group; replay needs it.
+        "group_id": None,
         "provider_key": "dashscope",
         "scope": "personal",
         "target_model_key": "cosyvoice-v2",

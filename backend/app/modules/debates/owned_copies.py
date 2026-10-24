@@ -36,6 +36,7 @@ def voice_snapshot(profile: VoiceProfile | None) -> tuple[str | None, bytes | No
         "voice_profile_id": profile.id,
         "display_name": profile.display_name,
         "scope": profile.scope,
+        "group_id": profile.group_id,
         "provider_key": profile.provider_key,
         "target_model_key": profile.target_model_key,
     }

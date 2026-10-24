@@ -6,7 +6,8 @@ adds ``backfill`` clone rows (``pending`` when the platform Voice kept a
 sample, otherwise ``no_sample``). ``--enroll`` creates the clones and calls
 the configured provider; a real provider additionally needs ``--allow-real``.
 Voices enrolled before 0077 kept no sample, so their Debates are counted as
-``no_sample`` and keep using the platform Voice while it exists.
+``no_sample`` and speak with the supplier voice frozen in their snapshot.
+Writing to the production database also needs ``--confirm-production``.
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--create-rows", action="store_true")
     parser.add_argument("--enroll", action="store_true")
     parser.add_argument("--allow-real", action="store_true")
+    parser.add_argument("--confirm-production", action="store_true")
     args = parser.parse_args(argv)
     overrides: dict[str, Any] = {"maya_env": "operator"}
     if args.database_url is not None:
@@ -73,9 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.data_root is not None:
         overrides["data_root"] = args.data_root
     settings = Settings(_env_file=SCRIPT_ROOT / ".env", **overrides)
-    lowered = settings.database_url.lower()
-    if "maya-production" in lowered or "8.210.57.144" in lowered:
-        print("Refusing to touch a production database.", file=sys.stderr)
+    lowered = f"{settings.database_url} {settings.resolved_data_root}".lower()
+    production = any(
+        marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
+    )
+    if (args.create_rows or args.enroll) and production and not args.confirm_production:
+        print("Production target: pass --confirm-production to write.", file=sys.stderr)
         return 2
     if args.enroll and settings.voice_provider != "mock" and not args.allow_real:
         print("Refusing to call a real voice provider without --allow-real.", file=sys.stderr)

@@ -2,14 +2,20 @@
 """Remove legacy hidden, soft-deleted and withdrawn rows. Dry-run by default.
 
 Counts the rows before and after. Debate snapshots, voice clones, grades and
-Record answer payloads are never deleted. Refuses a production database URL.
-Do not point this at production.
+Record answer payloads are never deleted; the write rolls back if their counts
+move. Old Agent versions are pruned to the current version plus the previous
+AGENT.md. Files under the owned storage roots that no row references, and that
+are older than an hour, are listed and (with --apply) unlinked.
+
+A production URL also needs --confirm-production next to --apply. Back up the
+database and the data root first.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -63,14 +69,54 @@ def _agent_in_live_team(session: Any, agent_id: str) -> bool:
     )
 
 
-def _refuse_production(url: str) -> None:
-    lowered = url.lower()
-    if "maya-production" in lowered or "8.210.57.144" in lowered:
-        raise SystemExit("Refusing to touch a production database.")
+def _looks_like_production(url: str, data_root: Path) -> bool:
+    lowered = f"{url} {data_root}".lower()
+    return any(
+        marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
+    )
+
+
+# Roots that only hold files a database row owns. Anything else under the
+# data root (SQLite files, backups, Debate audio) is never scanned.
+_OWNED_ROOTS = ("snapshots", "voice-samples", "debate-voice-samples")
+_OWNED_GLOBS = ("groups/*/knowledge", "*/voices/previews", "*/*/voices/previews")
+_ORPHAN_MIN_AGE_SECONDS = 3600
+
+
+def _referenced_paths(session: Any) -> set[str]:
+    from app.core.models import VoicePreview
+    from app.modules.workspace.models import ConversationAttachment
+
+    paths: set[str] = set(session.scalars(select(StoredFile.relative_path)).all())
+    paths.update(session.scalars(select(VoicePreview.relative_path)).all())
+    paths.update(session.scalars(select(ConversationAttachment.relative_path)).all())
+    return {path.replace("\\", "/") for path in paths if path}
+
+
+def disk_orphans(session: Any, data_root: Path) -> list[Path]:
+    if not data_root.is_dir():
+        return []
+    referenced = _referenced_paths(session)
+    roots = [data_root / name for name in _OWNED_ROOTS]
+    for pattern in _OWNED_GLOBS:
+        roots.extend(data_root.glob(pattern))
+    cutoff = time.time() - _ORPHAN_MIN_AGE_SECONDS
+    found: list[Path] = []
+    for root in roots:
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.is_symlink():
+                continue
+            relative = path.relative_to(data_root).as_posix()
+            if relative in referenced or path.stat().st_mtime > cutoff:
+                continue
+            found.append(path)
+    return sorted(found)
 
 
 def _orphan_ids(session: Any) -> list[str]:
-    """Stored files nothing still references. Debate copies stay, because their rows point at the file."""
+    """Stored files nothing references. Debate copies stay: their rows point at the file."""
 
     protected: set[str] = set()
     inspector = inspect(session.get_bind())
@@ -88,7 +134,9 @@ def _orphan_ids(session: Any) -> list[str]:
     ]
 
 
-def counts(session: Any) -> dict[str, int]:
+def counts(session: Any, data_root: Path) -> dict[str, int]:
+    from app.core.models import AgentVersion
+
     debate_snapshots = session.scalar(
         select(func.count())
         .select_from(KnowledgeSnapshot)
@@ -144,7 +192,9 @@ def counts(session: Any) -> dict[str, int]:
             )
             or 0
         ),
+        "agent_versions": int(session.scalar(select(func.count()).select_from(AgentVersion)) or 0),
         "orphan_files": len(_orphan_ids(session)),
+        "disk_orphan_files": len(disk_orphans(session, data_root)),
         "debate_snapshots": int(debate_snapshots or 0),
         "answer_payloads": int(answer_rows or 0),
         "debate_participants": int(
@@ -177,9 +227,24 @@ def apply(session: Any, data_root: Path) -> None:
         select(Conversation).where(Conversation.withdrawn_at.is_not(None))
     ).all():
         hard_delete_conversation(session, chat, data_root)
+    from app.modules.real_delete import prune_agent_versions
+
+    for agent_id in session.scalars(select(Agent.id)).all():
+        prune_agent_versions(session, agent_id, data_root)
     for file_id in _orphan_ids(session):
         release_stored_file(session, data_root, file_id)
     session.flush()
+
+
+def unlink_disk_orphans(session: Any, data_root: Path) -> int:
+    removed = 0
+    for path in disk_orphans(session, data_root):
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            print("could not remove", path.relative_to(data_root).as_posix())
+    return removed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -187,6 +252,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database-url", default=None)
     parser.add_argument("--data-root", default=None, type=Path)
     parser.add_argument("--apply", action="store_true", help="Write. Default is dry-run.")
+    parser.add_argument(
+        "--confirm-production",
+        action="store_true",
+        help="Required with --apply when the URL or data root is the production one.",
+    )
     args = parser.parse_args(argv)
     overrides: dict[str, Any] = {"maya_env": "operator"}
     if args.database_url is not None:
@@ -194,16 +264,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.data_root is not None:
         overrides["data_root"] = args.data_root
     settings = Settings(_env_file=SCRIPT_ROOT / ".env", **overrides)
-    _refuse_production(settings.database_url)
+    data_root = settings.resolved_data_root
+    if (
+        args.apply
+        and _looks_like_production(settings.database_url, data_root)
+        and not args.confirm_production
+    ):
+        raise SystemExit("Production target: pass --confirm-production with --apply.")
     database = Database(settings.database_url)
     with database.session() as session:
-        before = counts(session)
+        before = counts(session, data_root)
         print("before", before)
         if not args.apply:
+            for path in disk_orphans(session, data_root)[:50]:
+                print("disk orphan", path.relative_to(data_root).as_posix())
             print("dry-run; pass --apply to write")
             return 0
-        apply(session, settings.resolved_data_root)
-        after = counts(session)
+        apply(session, data_root)
+        after = counts(session, data_root)
         print("after", after)
         if after["debate_snapshots"] != before["debate_snapshots"]:
             session.rollback()
@@ -214,6 +292,9 @@ def main(argv: list[str] | None = None) -> int:
         if after["debate_participants"] != before["debate_participants"]:
             session.rollback()
             raise SystemExit("Debate participants changed; the write was rolled back.")
+        session.commit()
+        print("disk orphan files removed", unlink_disk_orphans(session, data_root))
+        print("final", counts(session, data_root))
     return 0
 
 

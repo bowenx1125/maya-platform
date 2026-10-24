@@ -262,6 +262,7 @@ _BACKFILL_VOICE = """
 UPDATE debate_participants AS p
 SET voice_snapshot_json = json_build_object(
         'display_name', vp.display_name,
+        'group_id', vp.group_id,
         'provider_key', vp.provider_key,
         'scope', vp.scope,
         'target_model_key', vp.target_model_key,
@@ -522,12 +523,22 @@ def upgrade() -> None:
     op.execute("ALTER TABLE debate_participants ALTER COLUMN agent_id DROP NOT NULL")
     op.execute("ALTER TABLE debate_participants ALTER COLUMN agent_version_id DROP NOT NULL")
     op.execute(
+        "ALTER TABLE debate_participants DROP CONSTRAINT IF EXISTS fk_debate_participants_agent"
+    )
+    op.execute(
         "ALTER TABLE debate_participants ADD CONSTRAINT fk_debate_participants_agent "
         "FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL"
     )
     op.execute(
+        "ALTER TABLE debate_participants "
+        "DROP CONSTRAINT IF EXISTS fk_debate_participants_agent_version"
+    )
+    op.execute(
         "ALTER TABLE debate_participants ADD CONSTRAINT fk_debate_participants_agent_version "
         "FOREIGN KEY (agent_version_id) REFERENCES agent_versions(id) ON DELETE SET NULL"
+    )
+    op.execute(
+        "ALTER TABLE debate_participants DROP CONSTRAINT IF EXISTS fk_debate_participants_snapshot"
     )
     op.execute(
         "ALTER TABLE debate_participants ADD CONSTRAINT fk_debate_participants_snapshot "

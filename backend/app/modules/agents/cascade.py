@@ -666,15 +666,31 @@ def _sweep_team_chats_and_junk(database: Database, settings: Settings) -> None:
         purge_failed_knowledge_uploads(session, settings.resolved_data_root)
         session.commit()
 
-    def drop_refused_voices(session: Session) -> None:
+    def drop_failed_voices(session: Session) -> None:
         from app.modules.voices.cleanup import sweep_failed_voices
 
         sweep_failed_voices(session, settings.resolved_data_root)
 
+    def prune_versions(session: Session) -> None:
+        from app.modules.real_delete import prune_agent_versions
+
+        # Versions a chat or attempt still used at publish time are pruned
+        # once it has moved on. Only Agents with something to prune are read.
+        crowded = session.scalars(
+            select(AgentVersion.agent_id)
+            .where(AgentVersion.state != "draft")
+            .group_by(AgentVersion.agent_id)
+            .having(func.count() > 2)
+        ).all()
+        for agent_id in crowded:
+            prune_agent_versions(session, agent_id, settings.resolved_data_root)
+            session.commit()
+
     run("Team chat retarget sweep", retarget_teams)
     run("Abandoned agent sweep", drop_abandoned)
     run("Failed upload sweep", drop_failed_uploads)
-    run("Rejected voice sweep", drop_refused_voices)
+    run("Failed voice sweep", drop_failed_voices)
+    run("Agent version prune sweep", prune_versions)
 
 
 def retarget_agent_chats(db: Session, agent_id: str) -> int:

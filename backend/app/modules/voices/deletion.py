@@ -393,6 +393,14 @@ def delete_voice_profile(
 
     _soft_delete(db, profile, settings)
 
+    from app.modules.debates.voice_clones import debates_need_supplier_voice
+
+    if debates_need_supplier_voice(db, profile.id):
+        # Deleting a Voice must never silence a Debate that has no clone.
+        LOGGER.info("Voice delete kept the supplier voice for Debates profile_id=%s", profile.id)
+        _finish_operation(db, operation, state="succeeded")
+        return finish(profile)
+
     try:
         voice_ids, complete = _remote_voice_ids(db, profile, provider_instance, settings)
     except VoiceProviderError:

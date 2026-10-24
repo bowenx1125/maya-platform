@@ -211,6 +211,71 @@ def resolve_debate_clone(
     return token, str(row["target_model_key"])
 
 
+def resolve_snapshot_voice(participant: Any, settings: Any) -> tuple[str, str] | None:
+    """(provider token, model) from the supplier id frozen into the participant.
+
+    A Voice uploaded before samples were kept cannot be cloned for a Debate.
+    Its Debates speak with the supplier voice the snapshot names; deleting the
+    platform Voice keeps that supplier voice while they need it.
+    """
+
+    from app.providers.dashscope import LEGACY_CLONE_MODEL_KEY
+
+    raw = getattr(participant, "voice_snapshot_json", None)
+    cipher = getattr(participant, "voice_external_id_encrypted", None)
+    if not raw or not cipher:
+        return None
+    try:
+        snapshot = json.loads(raw)
+    except ValueError:
+        return None
+    profile_id = snapshot.get("voice_profile_id")
+    model = snapshot.get("target_model_key")
+    provider_key = snapshot.get("provider_key")
+    if not profile_id or not isinstance(model, str) or not model:
+        return None
+    if model == LEGACY_CLONE_MODEL_KEY:
+        return None
+    if getattr(settings, "tts_provider", "mock") == "mock":
+        return str(profile_id), model
+    if provider_key != "dashscope":
+        return None
+    try:
+        token = decrypt_external_voice_id(
+            bytes(cipher),
+            settings.secret_bytes,
+            profile_id=str(profile_id),
+            scope=str(snapshot.get("scope") or ""),
+            group_id=snapshot.get("group_id"),
+            provider_key=provider_key,
+            target_model_key=model,
+        )
+    except VoiceEncryptionError:
+        return None
+    return token, model
+
+
+def debates_need_supplier_voice(db: Session, profile_id: str) -> bool:
+    """True while a Debate without its own clone still speaks with this Voice."""
+
+    covered = select(DebateVoiceClone.debate_id).where(
+        DebateVoiceClone.source_voice_profile_id == profile_id,
+        DebateVoiceClone.status.in_(("ready", "pending")),
+    )
+    return (
+        db.scalar(
+            select(DebateParticipant.id)
+            .where(
+                DebateParticipant.effective_voice_profile_id == profile_id,
+                DebateParticipant.voice_external_id_encrypted.is_not(None),
+                DebateParticipant.debate_id.not_in(covered),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def enroll_clone(
     db: Session, clone: DebateVoiceClone, *, data_root: Path, settings: Any, provider: Any
 ) -> bool:

@@ -323,7 +323,11 @@ class SqlPlaybackRepository(PlaybackRepository):
                 return None
             return token, model
 
-        from app.modules.debates.voice_clones import resolve_debate_clone, source_voice_id
+        from app.modules.debates.voice_clones import (
+            resolve_debate_clone,
+            resolve_snapshot_voice,
+            source_voice_id,
+        )
 
         # The Debate's own clone first (2026-10-20); until it is ready, the
         # platform Voice it was copied from, while that still exists.
@@ -351,6 +355,8 @@ class SqlPlaybackRepository(PlaybackRepository):
             ready := ready_profile(frozen_id)
         ):
             return ResolvedTurnVoice("platform_profile", str(frozen_id), *ready)
+        if source_id and (frozen := resolve_snapshot_voice(participant, settings)):
+            return ResolvedTurnVoice("platform_profile", live_profile, *frozen)
         fallback_id = getattr(settings, "fallback_voice_profile_id", None)
         if ready := ready_profile(fallback_id, system_only=True):
             return ResolvedTurnVoice("platform_profile", str(fallback_id), *ready)

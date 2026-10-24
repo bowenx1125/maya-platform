@@ -1,10 +1,12 @@
 """0077 against a copy of the production schema (PostgreSQL only).
 
 Set ``MAYA_TEST_POSTGRES_URL`` and ``MAYA_TEST_PROD_SCHEMA_SQL`` (a
-``pg_dump -s --no-owner --no-privileges`` file at 0074). The dump is schema
-only and is never committed. The test restores it into a scratch database,
-upgrades to head and checks every delete rule; a model-parity test runs
-everywhere.
+``pg_dump -s --no-owner --no-privileges`` file). A schema-only dump carries no
+``alembic_version`` row, so ``MAYA_TEST_PROD_SCHEMA_REVISION`` names its
+revision (default ``0076_agent_editor_audit``, production before #242). The
+dump is never committed. The test restores it into a scratch database,
+upgrades to head, checks every delete rule, downgrades back to the dump's
+revision and upgrades again; a model-parity test runs everywhere.
 """
 
 from __future__ import annotations
@@ -62,6 +64,7 @@ def test_models_match_the_migration() -> None:
 
 _URL = os.environ.get("MAYA_TEST_POSTGRES_URL")
 _SCHEMA = os.environ.get("MAYA_TEST_PROD_SCHEMA_SQL")
+_SCHEMA_REVISION = os.environ.get("MAYA_TEST_PROD_SCHEMA_REVISION", "0076_agent_editor_audit")
 
 
 @pytest.mark.skipif(not (_URL and _SCHEMA), reason="needs Postgres and a prod schema dump")
@@ -77,8 +80,10 @@ def test_upgrade_prod_schema_copy() -> None:
         env = {**os.environ, "PGPASSWORD": url.password or ""}
         subprocess.run(
             [
-                "psql", "-q", "-v", "ON_ERROR_STOP=1", "-h", url.host or "127.0.0.1",
-                "-p", str(url.port or 5432), "-U", url.username or "postgres",
+                "psql", "-q", "-v", "ON_ERROR_STOP=1",
+                "-h", url.host or str(url.query.get("host") or "127.0.0.1"),
+                "-p", str(url.port or url.query.get("port") or 5432),
+                "-U", url.username or "postgres",
                 "-d", name, "-f", _SCHEMA,
             ],
             check=True, env=env, capture_output=True,
@@ -86,8 +91,9 @@ def test_upgrade_prod_schema_copy() -> None:
         engine = create_engine(scratch)
         with engine.begin() as conn:
             conn.exec_driver_sql("DELETE FROM alembic_version")
-            conn.exec_driver_sql(
-                "INSERT INTO alembic_version (version_num) VALUES ('0074_interaction_voter_key')"
+            conn.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
+                {"v": _SCHEMA_REVISION},
             )
         config = Config(str(_ROOT / "alembic.ini"))
         config.set_main_option("script_location", str(_ROOT / "migrations"))
@@ -143,6 +149,17 @@ def test_upgrade_prod_schema_copy() -> None:
                     ).scalar_one()
                     == "n"
                 )
+        command.downgrade(config, _SCHEMA_REVISION)
+        with engine.connect() as conn:
+            assert (
+                conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+                == _SCHEMA_REVISION
+            )
+        command.upgrade(config, "head")
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == (
+                ALEMBIC_HEAD
+            )
         engine.dispose()
     finally:
         with admin.connect() as conn:
