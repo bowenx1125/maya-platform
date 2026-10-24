@@ -71,6 +71,7 @@ import type {
   PrivatePlaybackMessage,
   VisiblePlaybackTurn,
 } from "../../debate/stage/types";
+import { useNextAudioPrefetch } from "../../debate/stage/next-audio-prefetch";
 
 type ControlAction = "start" | "next" | "replay" | "pause" | "resume";
 
@@ -1465,6 +1466,18 @@ export function BetaDebateStage({
     [debateId, pauseAudio, readOnly, sendCommand],
   );
 
+  const nextAudio = useNextAudioPrefetch({
+    api,
+    debateId,
+    enabled: !readOnly && controllerReady,
+    mode: playback.mode,
+    status: playback.status,
+    currentTurnId: playback.current_turn_id,
+    controlVersion: playback.control_version,
+    controllerEpochRef,
+    nextTurnReady: playback.next_turn_ready,
+  });
+
   const handlePrivateMessage = useCallback(
     (message: PrivatePlaybackMessage) => {
       const binding = message.command_id
@@ -1553,7 +1566,7 @@ export function BetaDebateStage({
           setAudioPlayingTurnId(null);
           const audio = audioRef.current;
           if (!audio) return;
-          audio.src = message.media_url;
+          audio.src = nextAudio.sourceFor(message.turn_id, message.media_url);
           audio.playbackRate = Math.min(
             1.25,
             Math.max(0.95, current.playback_rate),
@@ -1585,6 +1598,7 @@ export function BetaDebateStage({
                 return;
               }
               startedAckRef.current = true;
+              nextAudio.notePlaying(message.turn_id);
               setMediaRetryNeeded(false);
               setFailure(null);
               sendCommand({
@@ -1723,6 +1737,7 @@ export function BetaDebateStage({
       applyPlayback,
       acquireReplayControllerAfterTerminal,
       debateId,
+      nextAudio,
       markConnection,
       markConnectionIssue,
       markControllerReady,

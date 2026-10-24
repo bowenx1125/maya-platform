@@ -841,7 +841,7 @@ class MediaTicketBinding:
     controller_epoch: str
     debate_id: str
     turn_id: str
-    action: Literal["start", "resume", "next", "replay"]
+    action: Literal["start", "resume", "next", "replay", "prefetch"]
     control_version: int
     issued_at: datetime
     expires_at: datetime
@@ -867,7 +867,7 @@ class MediaTicketStore:
         controller_epoch: str,
         debate_id: str,
         turn_id: str,
-        action: Literal["start", "resume", "next", "replay"],
+        action: Literal["start", "resume", "next", "replay", "prefetch"],
         control_version: int = 0,
         now: datetime | None = None,
     ) -> tuple[str, MediaTicketBinding]:

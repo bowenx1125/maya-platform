@@ -16,7 +16,9 @@ import json
 import logging
 import re
 import time
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
+import weakref
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -33,6 +35,7 @@ from app.providers.tts import TTS_UNAVAILABLE_CODES, MockTTSProvider, TTSProvide
 from .audio import AudioMetadata, AudioStore, MediaTicketBinding, MediaTicketStore
 from .events import DebateEventHub, EventRecord, validate_event_payload
 from .protocols import (
+    LIVE_LOOKAHEAD_TURNS,
     MemoryPlaybackRepository,
     PlaybackRepository,
     TurnPreparer,
@@ -44,6 +47,8 @@ from .schemas import (
 )
 
 LOGGER = logging.getLogger(__name__)
+# Lock waits at or above this are logged; shorter ones are routine.
+LOCK_WAIT_LOG_MS = 50
 _WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*")
 _SAFE_GENERATION_CODES = {
     "turn_generation_failed",
@@ -201,13 +206,19 @@ class PlaybackCore:
         self._media_command_results: dict[
             tuple[str, str], tuple[PreparedMedia | None, MediaPreparedResult]
         ] = {}
-        self._lock = asyncio.Lock()
+        # Startup recovery runs before any request; every other critical
+        # section serializes one Debate only, so a slow database write for one
+        # classroom never holds Next for another.
+        self._startup_lock = asyncio.Lock()
+        self._debate_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     async def recover_startup(self, db: Any) -> tuple[str, ...]:
         """Fence interrupted work, revoke controllers and recover audio swaps."""
 
         recoverable_llm_turns: tuple[tuple[str, str], ...] = ()
-        async with self._lock:
+        async with self._startup_lock:
             recover = getattr(self.repository, "recover_startup", None)
             affected = tuple(recover(db)) if callable(recover) else ()
             recoverable = getattr(self.repository, "recoverable_llm_turns", None)
@@ -1746,6 +1757,64 @@ class PlaybackCore:
                     asyncio.create_task(cast(Coroutine[Any, Any, None], maybe))
                 except RuntimeError:
                     pass
+
+    @asynccontextmanager
+    async def _debate_lock(self, debate_id: str, operation: str) -> AsyncIterator[None]:
+        lock = self._debate_locks.get(debate_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._debate_locks[debate_id] = lock
+        started = time.monotonic()
+        async with lock:
+            waited_ms = int((time.monotonic() - started) * 1000)
+            if waited_ms >= LOCK_WAIT_LOG_MS:
+                LOGGER.info(
+                    "debate_timing stage=lock_wait debate_id=%s operation=%s ms=%d",
+                    debate_id,
+                    operation,
+                    waited_ms,
+                )
+            yield
+
+    def _lookahead_turn(self, turns: list[Any], current_index: int) -> Any | None:
+        """The next turn to prepare inside the live window, if any.
+
+        Turns are prepared strictly in order: the first one in the window that
+        is not final-ready is the only candidate, and only while it is still
+        pending. Running or failed work is left to its own worker or retry.
+        """
+
+        ordered = sorted(turns, key=lambda item: int(self._get(item, "turn_index", default=0) or 0))
+        for item in ordered[current_index + 1 : current_index + 1 + LIVE_LOOKAHEAD_TURNS]:
+            status = str(self._get(item, "generation_status", default="pending"))
+            if status in {"final_ready", "ready", "completed"}:
+                continue
+            if status != "pending" or self._get(item, "safe_error_code", default=None):
+                return None
+            return item
+        return None
+
+    async def _enqueue_lookahead(self, db: Any, debate: Any) -> None:
+        state = self._state(db, debate)
+        if (
+            str(self._get(debate, "status", default="")) != "running"
+            or state.mode != "live"
+            or not state.current_turn_id
+        ):
+            return
+        turns = sorted(
+            self._turns(db, debate),
+            key=lambda item: int(self._get(item, "turn_index", default=0) or 0),
+        )
+        current_index = next(
+            (index for index, item in enumerate(turns) if str(item.id) == state.current_turn_id),
+            -1,
+        )
+        if current_index < 0:
+            return
+        turn = self._lookahead_turn(turns, current_index)
+        if turn is not None:
+            await self._enqueue(debate, turn)
 
     async def _enqueue(self, debate: Any, turn: Any) -> bool:
         try:

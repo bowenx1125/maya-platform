@@ -34,6 +34,7 @@ import {
   resolveDebateRoundPhase,
   resolvePlaybackStageLabels,
 } from "./labels";
+import { useNextAudioPrefetch } from "./next-audio-prefetch";
 import {
   connectionIssueFromCloseCode,
   consumeEventSequence,
@@ -1227,6 +1228,18 @@ export function DebateStage({
     [debateId, pauseAudio, readOnly, sendCommand],
   );
 
+  const nextAudio = useNextAudioPrefetch({
+    api,
+    debateId,
+    enabled: !readOnly && controllerReady,
+    mode: playback.mode,
+    status: playback.status,
+    currentTurnId: playback.current_turn_id,
+    controlVersion: playback.control_version,
+    controllerEpochRef,
+    nextTurnReady: playback.next_turn_ready,
+  });
+
   const handlePrivateMessage = useCallback(
     (message: PrivatePlaybackMessage) => {
       const binding = message.command_id
@@ -1304,7 +1317,7 @@ export function DebateStage({
           startedAckRef.current = false;
           const audio = audioRef.current;
           if (!audio) return;
-          audio.src = message.media_url;
+          audio.src = nextAudio.sourceFor(message.turn_id, message.media_url);
           audio.playbackRate = Math.min(
             1.25,
             Math.max(0.95, current.playback_rate),
@@ -1336,6 +1349,7 @@ export function DebateStage({
                 return;
               }
               startedAckRef.current = true;
+              nextAudio.notePlaying(message.turn_id);
               setMediaRetryNeeded(false);
               setFailure(null);
               sendCommand({
@@ -1456,6 +1470,7 @@ export function DebateStage({
       applyPlayback,
       acquireReplayControllerAfterTerminal,
       debateId,
+      nextAudio,
       markConnection,
       markConnectionIssue,
       markControllerReady,

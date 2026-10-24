@@ -1243,6 +1243,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debates/{debate_id}/next-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Controller-only ticket for the ready next turn's audio, so the browser can download it before Next. Honoured only while that turn is still the playing turn's adjacent successor. */
+        post: operations["prefetchNextDebateAudio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debates/{debate_id}/preparation/retry": {
         parameters: {
             query?: never;
@@ -3382,6 +3399,15 @@ export interface components {
         AdvancePlaybackRequest: {
             expected_control_version: number;
             expected_current_turn_id: components["schemas"]["Uuid"];
+        };
+        PrefetchNextAudioRequest: {
+            expected_control_version: number;
+            expected_current_turn_id: components["schemas"]["Uuid"];
+            controller_epoch: components["schemas"]["Uuid"];
+        };
+        PrefetchedNextAudio: {
+            turn_id: components["schemas"]["Uuid"];
+            media_url: string;
         };
         ReleaseDebateRequest: {
             /**
@@ -8965,6 +8991,39 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["PlaybackState"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    prefetchNextDebateAudio: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Raw per-session CSRF token returned by AuthSession; required on authenticated mutations. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                debate_id: components["parameters"]["DebateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrefetchNextAudioRequest"];
+            };
+        };
+        responses: {
+            /** @description Controller-only ticket for the ready next turn's audio. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrefetchedNextAudio"];
+                };
+            };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];

@@ -52,7 +52,15 @@ export type DebatePlaybackApi = Pick<
   | "listProviderDataCallManifests"
   | "replayDebate"
 > &
-  Partial<Pick<PlatformApi, "updateClassroomLive" | "debate" | "finishDebate">>;
+  Partial<
+    Pick<
+      PlatformApi,
+      | "updateClassroomLive"
+      | "debate"
+      | "finishDebate"
+      | "prefetchNextDebateAudio"
+    >
+  >;
 
 export type DebateStartRequest = Parameters<PlatformApi["startDebate"]>[1];
 export type AdvancePlaybackRequest = Parameters<

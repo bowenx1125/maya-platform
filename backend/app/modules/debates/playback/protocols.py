@@ -11,6 +11,12 @@ from uuid import uuid4
 from .audio import AudioMetadata
 from .schemas import RetrievalSourceDTO
 
+# Owner decision (2026-10-24): a live lesson prepares up to this many turns
+# past the playing one, each strictly after the turn before it is final-ready,
+# so Next rarely waits on generation and TTS. A draft already prepares every
+# turn in order; this applies the same ordering rule to a running Debate.
+LIVE_LOOKAHEAD_TURNS = 3
+
 
 @dataclass(frozen=True)
 class PreparedSource:

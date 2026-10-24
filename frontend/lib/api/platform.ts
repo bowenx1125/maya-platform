@@ -446,6 +446,10 @@ export type DebateDraftUpdateRequest =
   operations["updateDebateDraft"]["requestBody"]["content"]["application/json"];
 export type AdvancePlaybackRequest =
   operations["advanceDebatePlayback"]["requestBody"]["content"]["application/json"];
+export type PrefetchNextAudioRequest =
+  operations["prefetchNextDebateAudio"]["requestBody"]["content"]["application/json"];
+export type PrefetchedNextAudio =
+  operations["prefetchNextDebateAudio"]["responses"]["200"]["content"]["application/json"];
 export type PlaybackControlRequest =
   operations["pauseDebate"]["requestBody"]["content"]["application/json"];
 export type FinishDebateRequest =
@@ -2834,6 +2838,21 @@ export class PlatformApi {
   ): Promise<DebatePlaybackState> {
     return unwrap(
       await this.client.POST("/debates/{debate_id}/next", {
+        params: {
+          path: { debate_id: debateId },
+          header: { "X-CSRF-Token": this.csrfToken ?? "" },
+        },
+        body,
+      }),
+    );
+  }
+
+  async prefetchNextDebateAudio(
+    debateId: string,
+    body: PrefetchNextAudioRequest,
+  ): Promise<PrefetchedNextAudio> {
+    return unwrap(
+      await this.client.POST("/debates/{debate_id}/next-audio", {
         params: {
           path: { debate_id: debateId },
           header: { "X-CSRF-Token": this.csrfToken ?? "" },

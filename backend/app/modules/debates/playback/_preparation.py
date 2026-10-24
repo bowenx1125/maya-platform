@@ -6,6 +6,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import PureWindowsPath
@@ -23,6 +24,7 @@ from ._core import (
 from .audio import AudioMetadata, StagedAudio
 from .events import EventRecord
 from .protocols import (
+    LIVE_LOOKAHEAD_TURNS,
     PreparedGenerationFence,
     PreparedSource,
     PreparedTurn,
@@ -530,7 +532,7 @@ class PlaybackPreparationMixin(PlaybackCore):
         teacher starts the debate the work is simply already done.
         """
 
-        async with self._lock:
+        async with self._debate_lock(debate_id, "prepare_turn_pass_with_claim"):
             debate = self._get_debate(db, debate_id)
             state = self._state(db, debate)
             turns = self._turns(db, debate)
@@ -589,15 +591,16 @@ class PlaybackPreparationMixin(PlaybackCore):
                 turn_index = int(
                     self._get(turn, "turn_index", default=current_index) or current_index
                 )
-                if turn_index not in {current_index, current_index + 1}:
+                if not current_index <= turn_index <= current_index + LIVE_LOOKAHEAD_TURNS:
                     return
-                if turn_index == current_index + 1:
-                    previous = turns[current_index]
-                    previous_generation = str(
-                        self._get(previous, "generation_status", default="pending")
-                    )
-                    if previous_generation not in {"final_ready", "ready", "completed"}:
-                        return
+                # Every turn between the playing one and this one is already
+                # made, so this turn sees exactly the speeches before it.
+                if any(
+                    str(self._get(item, "generation_status", default="pending"))
+                    not in {"final_ready", "ready", "completed"}
+                    for item in turns[current_index:turn_index]
+                ):
+                    return
             cancellation_generation = int(
                 self._get(debate, "cancellation_generation", default=0) or 0
             )
@@ -792,9 +795,19 @@ class PlaybackPreparationMixin(PlaybackCore):
             # M11 owns the single shared attempt 1|2 repair budget.  Playback
             # invokes that orchestrator once and therefore cannot multiply two
             # generation attempts into four provider calls.
+            generation_started = time.monotonic()
             prepared = self._validate_prepared(
                 await self._call_preparer(db, debate, turn, 1),
                 debate_output_language(debate),
+            )
+            LOGGER.info(
+                "debate_timing stage=generation debate_id=%s turn_id=%s turn_index=%s "
+                "lookahead=%s ms=%d",
+                debate_id,
+                turn_id,
+                turn_index,
+                turn_index - current_index if current_index >= 0 else 0,
+                int((time.monotonic() - generation_started) * 1000),
             )
             # Accepted LLM stage + its recovery input must survive a process
             # crash before TTS.  Generation deliberately leaves the provider
@@ -837,6 +850,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                 # more blocking HTTP call, and the audio store writes a file. Mock
                 # TTS returns fast enough to hide this, so leaving it on the loop
                 # would put the freeze back the moment the voice slice goes real.
+                tts_started = time.monotonic()
                 if uses_segment_protocol(debate):
                     stage_work = asyncio.create_task(
                         asyncio.to_thread(
@@ -880,6 +894,12 @@ class PlaybackPreparationMixin(PlaybackCore):
                         except Exception:
                             pass
                         raise
+                LOGGER.info(
+                    "debate_timing stage=tts debate_id=%s turn_id=%s ms=%d",
+                    debate_id,
+                    turn_id,
+                    int((time.monotonic() - tts_started) * 1000),
+                )
             except TTSProviderError as exc:
                 if exc.safe_code not in TTS_UNAVAILABLE_CODES:
                     raise
@@ -890,7 +910,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                     turn_id,
                     audio_error_code,
                 )
-            async with self._lock:
+            async with self._debate_lock(debate_id, "prepare_turn_pass_with_claim"):
                 fresh_debate = self._get_debate(db, debate_id)
                 fresh_turn = next(
                     (
@@ -961,13 +981,24 @@ class PlaybackPreparationMixin(PlaybackCore):
                     fresh_turn = next(
                         item for item in self._turns(db, fresh_debate) if str(item.id) == turn_id
                     )
+                    await self._enqueue_lookahead(db, fresh_debate)
                     if await self._publish_text_current(db, fresh_debate, fresh_turn):
                         return
                     current_state = self._state(db, fresh_debate)
+                    successor_of_current = next(
+                        (
+                            int(self._get(item, "turn_index", default=0) or 0) + 1
+                            for item in self._turns(db, fresh_debate)
+                            if str(item.id) == current_state.current_turn_id
+                        ),
+                        None,
+                    )
                     if (
                         current_state.mode == "live"
                         and current_state.status == "waiting_next"
                         and current_state.current_turn_id is not None
+                        and int(self._get(fresh_turn, "turn_index", default=0) or 0)
+                        == successor_of_current
                         and self._next_turn_ready(db, fresh_debate, current_state)
                     ):
                         event = self._stage_event(
@@ -1032,6 +1063,9 @@ class PlaybackPreparationMixin(PlaybackCore):
                     current_state.mode == "live"
                     and current_state.status == "waiting_next"
                     and current_state.current_turn_id is not None
+                    # A lookahead turn further on changes nothing about Next.
+                    and int(self._get(fresh_turn, "turn_index", default=0) or 0)
+                    == current_index + 1
                     and self._next_turn_ready(db, fresh_debate, current_state)
                 ):
                     # A successor may finish its slow generation/TTS after
@@ -1053,14 +1087,7 @@ class PlaybackPreparationMixin(PlaybackCore):
                     )
                 self._commit(db)
                 audio_committed = True
-                if is_current:
-                    next_turn = (
-                        current_turns[current_index + 1]
-                        if current_index + 1 < len(current_turns)
-                        else None
-                    )
-                    if next_turn is not None:
-                        next_turn_to_enqueue = next_turn
+                next_turn_to_enqueue = self._lookahead_turn(current_turns, current_index)
             await self._publish_events(ready_events)
             if next_turn_to_enqueue is not None:
                 await self._enqueue(fresh_debate, next_turn_to_enqueue)
@@ -1145,7 +1172,7 @@ class PlaybackPreparationMixin(PlaybackCore):
         ):
             return
         if prewarming:
-            async with self._lock:
+            async with self._debate_lock(debate_id, "prepare_turn_pass_with_claim"):
                 debate = self._get_debate(db, debate_id)
                 turns = self._turns(db, debate)
                 current = next(
@@ -1171,7 +1198,7 @@ class PlaybackPreparationMixin(PlaybackCore):
             return
         failed_event: EventRecord | None = None
         failed_epoch: str | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "prepare_turn_pass_with_claim"):
             debate = self._get_debate(db, debate_id)
             turns = self._turns(db, debate)
             turn = next((item for item in turns if str(getattr(item, "id", "")) == turn_id), turn)
@@ -1229,7 +1256,7 @@ class PlaybackPreparationMixin(PlaybackCore):
 
         self._rollback(db)
         deferred_event: EventRecord | None = None
-        async with self._lock:
+        async with self._debate_lock(debate_id, "defer_provider_preparation"):
             try:
                 debate = self._get_debate(db, debate_id)
                 turns = self._turns(db, debate)
