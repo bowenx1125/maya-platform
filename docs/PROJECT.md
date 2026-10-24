@@ -307,7 +307,7 @@ Open Team/Maya Team chats follow each new Team version (save, member publish,
 5-min sweep); turns/participants keep history. Mid-reply chats wait for the sweep;
 in-progress/paused formal attempts stay on their version, answers intact; a removed
 member who already replied keeps the chat on its old version. Failed uploads leave
-the library: never-indexed RAG returns 503 `rag_index_failed`, not stored; failed
+the library: never-indexed RAG returns 503 `rag_upload_index_failed`, not stored; failed
 Voices (refused/enrollment/mapping) are deleted unless charged (hidden) or holding a
 supplier id. The sweep hard-deletes empty Agents (no written/published version,
 files, Team/Debate/chat reference) after 1h, including same-name retired drafts.

@@ -309,7 +309,7 @@ describe("Brainform workspace actions", () => {
     state.api.uploadRagLibraryDocument = vi
       .fn()
       .mockRejectedValue(
-        new PlatformApiError(503, "not kept", { code: "rag_index_failed" }),
+        new PlatformApiError(503, "not kept", { code: "rag_upload_index_failed" }),
       );
     renderWithActions();
     fireEvent.click(await screen.findByRole("button", { name: "New RAG" }));

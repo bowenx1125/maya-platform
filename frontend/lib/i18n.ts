@@ -1946,7 +1946,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
   report_failed: "errorReportFailed",
   translation_not_configured: "errorTranslationNotConfigured",
   provider_unavailable: "errorProviderUnavailable",
-  rag_index_failed: "errorRagIndexFailed",
+  rag_upload_index_failed: "errorRagIndexFailed",
   internal_error: "errorInternal",
   host_memory_pressure: "errorHostMemoryPressure",
   host_load_pressure: "errorServerBusy",
