@@ -3054,6 +3054,28 @@ export interface components {
              */
             visibility: "private" | "public";
         };
+        /**
+         * AgentReadinessIssue
+         * @description One hint about an Agent's current published version, named by Agent.
+         */
+        AgentReadinessIssue: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Agent Name */
+            agent_name: string;
+            /** Blocking */
+            blocking: boolean;
+            /**
+             * Issue
+             * @enum {string}
+             */
+            issue: "agent_archived" | "agent_not_published" | "rag_missing" | "agent_md_invalid" | "avatar_missing" | "voice_missing";
+            /** Message */
+            message: string;
+        };
         /** AgentDetail */
         AgentDetail: {
             /** Can Delete */
@@ -3098,6 +3120,8 @@ export interface components {
              * @enum {string}
              */
             ownership_scope: "group" | "personal";
+            /** Readiness Issues */
+            readiness_issues?: components["schemas"]["AgentReadinessIssue"][];
             /**
              * Status
              * @enum {string}
@@ -3347,6 +3371,8 @@ export interface components {
             current_version: components["schemas"]["AgentVersion"];
             /** Group Name */
             group_name: string;
+            /** Readiness Issues */
+            readiness_issues?: components["schemas"]["AgentReadinessIssue"][];
         };
         DebateParticipantInput: {
             agent_id: components["schemas"]["Uuid"];

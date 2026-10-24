@@ -12204,6 +12204,49 @@
         "title": "AgentSummary",
         "type": "object"
       },
+      "AgentReadinessIssue": {
+        "description": "One hint about an Agent's current published version, named by Agent.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "blocking": {
+            "title": "Blocking",
+            "type": "boolean"
+          },
+          "issue": {
+            "enum": [
+              "agent_archived",
+              "agent_not_published",
+              "rag_missing",
+              "agent_md_invalid",
+              "avatar_missing",
+              "voice_missing"
+            ],
+            "title": "Issue",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "agent_name",
+          "issue",
+          "blocking",
+          "message"
+        ],
+        "title": "AgentReadinessIssue",
+        "type": "object"
+      },
       "AgentDetail": {
         "properties": {
           "can_delete": {
@@ -12325,6 +12368,13 @@
             ],
             "title": "Ownership Scope",
             "type": "string"
+          },
+          "readiness_issues": {
+            "items": {
+              "$ref": "#/components/schemas/AgentReadinessIssue"
+            },
+            "title": "Readiness Issues",
+            "type": "array"
           },
           "status": {
             "enum": [
@@ -13179,6 +13229,13 @@
           "group_name": {
             "title": "Group Name",
             "type": "string"
+          },
+          "readiness_issues": {
+            "items": {
+              "$ref": "#/components/schemas/AgentReadinessIssue"
+            },
+            "title": "Readiness Issues",
+            "type": "array"
           }
         },
         "required": [

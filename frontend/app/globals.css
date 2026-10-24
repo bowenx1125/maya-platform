@@ -3181,9 +3181,33 @@ dd {
   min-height: 28px;
 }
 
-.agent-issue-hint {
-  color: var(--muted);
-  font-size: 0.92rem;
+/* Every Agent hint and Debate form problem: one look, pinned to the top. */
+.agent-hint-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 14px 18px;
+  border: 1px solid #e9d6a8;
+  border-radius: 18px;
+  background: #fffaf0;
+  box-shadow: 0 6px 18px rgba(60, 40, 0, 0.08);
+  line-height: 1.45;
+}
+
+.agent-hint-bar > strong,
+.agent-hint-bar > .agent-issue-list {
+  grid-column: 1;
+}
+
+.agent-hint-bar > .notice-close {
+  grid-column: 2;
+  grid-row: 1;
+  margin: -6px -8px 0 0;
 }
 
 .error-fix-links {

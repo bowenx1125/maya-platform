@@ -1,7 +1,11 @@
 "use client";
 
-import { AgentIssueList } from "./agent-issue-list";
-import { versionIssues } from "../lib/agent-readiness";
+import { AgentHintBar } from "./agent-issue-list";
+import {
+  issueKey,
+  readinessIssues,
+  type AgentIssue,
+} from "../lib/agent-readiness";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -377,6 +381,14 @@ export function AgentWorkbench({
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [voiceProfileId, setVoiceProfileId] = useState<string | null>(null);
   const [agentIssuesDismissed, setAgentIssuesDismissed] = useState(false);
+  // After a line's Done the bar is pinned to what was on screen, minus the
+  // line that now passes, so one check never moves the other lines.
+  const [checkedIssues, setCheckedIssues] = useState<{
+    agentId: string;
+    issues: AgentIssue[];
+  } | null>(null);
+  const [checkingIssue, setCheckingIssue] = useState<string | null>(null);
+  const stayAfterPublish = useRef(false);
   const [agentMd, setAgentMd] = useState("");
   const [draftName, setDraftName] = useState("");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "public">(
@@ -1458,6 +1470,12 @@ export function AgentWorkbench({
         return;
       }
       setNotice("publishedNotice");
+      if (stayAfterPublish.current) {
+        // A hint line's Done publishes in place and reads the Agent again.
+        const fresh = await api.agent(currentAgent.id);
+        if (isCurrentScope(requestScope)) setAgent(fresh);
+        return;
+      }
       router.replace(
         publishOnDone
           ? (backHref ??
@@ -1488,13 +1506,44 @@ export function AgentWorkbench({
   const queuedCreateRag =
     creating && !agent?.id ? pendingKnowledgeUpload : null;
 
-  // What still keeps this Agent out of a Debate, read from the editor as it
-  // stands, so a fixed item leaves the bar without a reload.
-  const agentIssues = versionIssues(
-    { id: agent.id, name: agent.name },
-    { agent_md: agentMd, voice_profile_id: voiceProfileId },
-    { ragCount: selectedDocumentIds.length },
-  );
+  // Read by the server from the current published version (agents/readiness.py),
+  // the same rules a new Debate applies.
+  const agentIssues =
+    checkedIssues && checkedIssues.agentId === agent.id
+      ? checkedIssues.issues
+      : readinessIssues(agent);
+
+  async function checkIssue(item: AgentIssue) {
+    const key = issueKey(item);
+    const shown = agentIssues;
+    setCheckingIssue(key);
+    // Like the sidebar Done, only edits are published; with none, the line
+    // is simply checked again against what is already published.
+    if (localDirty || retryAction === "publish") {
+      stayAfterPublish.current = true;
+      try {
+        await publish(retryAction === "publish");
+      } finally {
+        stayAfterPublish.current = false;
+      }
+    }
+    try {
+      const fresh = await api.agent(item.agent_id);
+      const stillThere = readinessIssues(fresh).some(
+        (candidate) => issueKey(candidate) === key,
+      );
+      setCheckedIssues({
+        agentId: item.agent_id,
+        issues: stillThere
+          ? shown
+          : shown.filter((candidate) => issueKey(candidate) !== key),
+      });
+    } catch {
+      // The line stays; the publish error, if any, is already shown.
+    } finally {
+      setCheckingIssue(null);
+    }
+  }
 
   return (
     <>
@@ -1507,20 +1556,14 @@ export function AgentWorkbench({
             : `${agent.name} · ${version.version_label}`
         }
       />
-      {!unsavedCreate && agentIssues.length && !agentIssuesDismissed ? (
-        // A hint, not an error: it never takes the alert role.
-        <div className="notice notice-warning agent-issue-bar" role="note">
-          <strong>{t("agentIssuesTitle")}</strong>
-          <AgentIssueList issues={agentIssues} />
-          <button
-            type="button"
-            className="notice-close"
-            aria-label={t("noticeDismiss")}
-            onClick={() => setAgentIssuesDismissed(true)}
-          >
-            <IconClose />
-          </button>
-        </div>
+      {!unsavedCreate && !agentIssuesDismissed ? (
+        <AgentHintBar
+          title={t("agentIssuesTitle")}
+          issues={agentIssues}
+          onCheck={generationFlow ? undefined : (item) => void checkIssue(item)}
+          checking={checkingIssue}
+          onDismiss={() => setAgentIssuesDismissed(true)}
+        />
       ) : null}
       {generationFlow ? (
         <Notice tone="info">{t("aiKnowledgeFlowIntro")}</Notice>

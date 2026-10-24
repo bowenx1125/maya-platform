@@ -2029,6 +2029,9 @@ def list_published_agents_for_teacher(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[PublishedAgentSummary]:
+    from app.modules.agents.readiness import readiness_issues
+    from app.modules.agents.schemas import AgentReadinessIssue
+
     member_role = course_member_role(db, context.user.id, str(course_id))
     if member_role not in {"teacher", "student"}:
         raise not_found()
@@ -2065,6 +2068,9 @@ def list_published_agents_for_teacher(
                 context=context,
             ),
             current_version=version_dto(db, version, agent),
+            readiness_issues=[
+                AgentReadinessIssue.model_validate(item) for item in readiness_issues(db, agent)
+            ],
         )
         for agent, version, group_name in public_rows
     ]

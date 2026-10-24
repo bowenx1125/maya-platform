@@ -11,7 +11,8 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from app.modules.agents.schemas import AvatarConfig
 from app.modules.debates.generation.evidence_trace import EvidenceTraceV1
@@ -48,10 +49,17 @@ class DebateParticipantInput(_ClosedModel):
 
     @model_validator(mode="after")
     def validate_stance_shape(self) -> DebateParticipantInput:
+        # Typed errors, so the Debate form can name the Agent and the reason.
         if self.stance_mode == "assigned" and self.assigned_stance is None:
-            raise ValueError("assigned stance is required when stance_mode is assigned")
+            raise PydanticCustomError(
+                "assigned_stance_missing",
+                "assigned stance is required when stance_mode is assigned",
+            )
         if self.stance_mode == "open" and self.assigned_stance is not None:
-            raise ValueError("assigned stance must be empty when stance_mode is open")
+            raise PydanticCustomError(
+                "assigned_stance_unexpected",
+                "assigned stance must be empty when stance_mode is open",
+            )
         return self
 
 
@@ -74,14 +82,22 @@ class DebateDraftRequest(_ClosedModel):
     total_duration_seconds: None = None
     turn_duration_seconds: None = None
 
-    @model_validator(mode="after")
-    def validate_selection(self) -> DebateDraftRequest:
-        if not self.topic.strip():
-            raise ValueError("topic must not be blank")
-        ids = [item.agent_id for item in self.participants]
+    @field_validator("topic")
+    @classmethod
+    def validate_topic(cls, value: str) -> str:
+        if not value.strip():
+            raise PydanticCustomError("topic_blank", "topic must not be blank")
+        return value
+
+    @field_validator("participants")
+    @classmethod
+    def validate_participants(
+        cls, value: list[DebateParticipantInput]
+    ) -> list[DebateParticipantInput]:
+        ids = [item.agent_id for item in value]
         if len(set(ids)) != len(ids):
-            raise ValueError("participants must be unique")
-        return self
+            raise PydanticCustomError("participants_duplicate", "participants must be unique")
+        return value
 
 
 class DebateDraftUpdateRequest(DebateDraftRequest):

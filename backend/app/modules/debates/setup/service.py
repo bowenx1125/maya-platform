@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import (
+    PlatformError,
     conflict,
     forbidden,
     idempotency_conflict,
@@ -590,19 +591,44 @@ def _assert_participants_ready(
     for item in payload.participants:
         agent = db.get(Agent, str(item.agent_id))
         if agent is None or agent.course_id != course_id:
+            # Missing and out-of-course read the same, so existence is not told.
+            issues.append(_participant_issue(db, course_id, str(item.agent_id), "agent_not_found"))
             continue
         issues.extend(debate_issues(db, agent, settings))
     if issues:
-        LOGGER.info(
-            "debate_agents_not_ready course_id=%s issues=%s",
-            course_id,
-            ",".join(f"{item['agent_id']}:{item['issue']}" for item in issues),
-        )
-        raise validation_failure(
-            "Some selected Agents are not ready for a Debate.",
-            {"issues": issues},
-            code="debate_agents_not_ready",
-        )
+        raise _agents_not_ready(course_id, issues)
+
+
+def _participant_issue(db: Session, course_id: str, agent_id: str, kind: str) -> dict[str, Any]:
+    from app.modules.agents.readiness import named_issue
+
+    agent = db.get(Agent, agent_id)
+    name = agent.name if agent is not None and agent.course_id == course_id else ""
+    return named_issue(agent_id, name, kind)
+
+
+def _agents_not_ready(course_id: str, issues: list[dict[str, Any]]) -> PlatformError:
+    LOGGER.info(
+        "debate_agents_not_ready course_id=%s issues=%s",
+        course_id,
+        ",".join(f"{item['agent_id']}:{item['issue']}" for item in issues),
+    )
+    return validation_failure(
+        "Some selected Agents are not ready for a Debate.",
+        {"issues": issues},
+        code="debate_agents_not_ready",
+    )
+
+
+# A single refusal while resolving or fencing one participant, as the issue
+# the Debate form shows next to that Agent.
+_PARTICIPANT_CODES = {
+    "not_found": "agent_not_found",
+    "agent_archived": "agent_archived",
+    "agent_not_current": "agent_not_current",
+    "rag_missing": "rag_missing",
+    "avatar_missing": "avatar_missing",
+}
 
 
 def _participant_row(
@@ -613,31 +639,38 @@ def _participant_row(
     order_index: int,
     settings: Settings,
 ) -> DebateParticipant:
-    (
-        agent,
-        group,
-        version,
-        snapshot,
-        avatar,
-        requested_voice_id,
-        effective_voice_id,
-        effective_voice_kind,
-        fallback_active,
-    ) = _resolve_agent_version(
-        db,
-        course_id=debate.course_id,
-        agent_id=str(item.agent_id),
-        settings=settings,
-    )
-    # Revalidate the complete captured relationship immediately before the
-    # frozen row is returned to the caller's final write transaction.
-    _fence_resolved_agent_chain(
-        db,
-        agent=agent,
-        group=group,
-        version=version,
-        snapshot=snapshot,
-    )
+    try:
+        (
+            agent,
+            group,
+            version,
+            snapshot,
+            avatar,
+            requested_voice_id,
+            effective_voice_id,
+            effective_voice_kind,
+            fallback_active,
+        ) = _resolve_agent_version(
+            db,
+            course_id=debate.course_id,
+            agent_id=str(item.agent_id),
+            settings=settings,
+        )
+        # Revalidate the complete captured relationship immediately before the
+        # frozen row is returned to the caller's final write transaction.
+        _fence_resolved_agent_chain(
+            db,
+            agent=agent,
+            group=group,
+            version=version,
+            snapshot=snapshot,
+        )
+    except PlatformError as error:
+        kind = _PARTICIPANT_CODES.get(error.code)
+        if kind is None:
+            raise
+        issue = _participant_issue(db, debate.course_id, str(item.agent_id), kind)
+        raise _agents_not_ready(debate.course_id, [issue]) from error
     stance = item.assigned_stance if item.stance_mode == "assigned" else None
     timestamp = utc_now()
     voice_json, voice_cipher = voice_snapshot(

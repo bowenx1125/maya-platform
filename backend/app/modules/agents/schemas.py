@@ -125,8 +125,27 @@ class KnowledgeDocumentMutation(BaseModel):
     agent_version: AgentVersion | None = None
 
 
+class AgentReadinessIssue(BaseModel):
+    """One hint about an Agent's current published version, named by Agent."""
+
+    agent_id: UUID
+    agent_name: str
+    issue: Literal[
+        "agent_archived",
+        "agent_not_published",
+        "rag_missing",
+        "agent_md_invalid",
+        "avatar_missing",
+        "voice_missing",
+    ]
+    # Only blocking issues keep the Agent out of a new Debate.
+    blocking: bool
+    message: str
+
+
 class AgentDetail(AgentSummary):
     versions: list[AgentVersion] = Field(default_factory=list)
+    readiness_issues: list[AgentReadinessIssue] = Field(default_factory=list)
 
 
 class UpdateAgentDraftRequest(BaseModel):
@@ -213,6 +232,7 @@ class PublishedAgentSummary(BaseModel):
     group_name: str
     agent: AgentSummary
     current_version: AgentVersion
+    readiness_issues: list[AgentReadinessIssue] = Field(default_factory=list)
 
 
 class SnapshotDocument(BaseModel):

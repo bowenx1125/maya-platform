@@ -77,7 +77,26 @@ function makeVersion(overrides: Partial<AgentVersion> = {}): AgentVersion {
   } as AgentVersion;
 }
 
-function makeApi(version: AgentVersion) {
+type Issue = { issue: string; blocking?: boolean };
+
+function readiness(issues: Issue[]) {
+  const messages: Record<string, string> = {
+    rag_missing: "needs RAG",
+    voice_missing: "voice none",
+    agent_md_invalid: "agent md",
+    avatar_missing: "avatar",
+  };
+  return issues.map((item) => ({
+    agent_id: "agent-id",
+    agent_name: "Agent",
+    issue: item.issue,
+    blocking: item.blocking ?? item.issue !== "voice_missing",
+    message: messages[item.issue] ?? item.issue,
+  }));
+}
+
+function makeApi(version: AgentVersion, issues: Issue[][] = [[]]) {
+  let read = 0;
   const api = {
     me: vi.fn(async () => makeSession()),
     getCsrfToken: vi.fn(() => "csrf-1"),
@@ -85,6 +104,9 @@ function makeApi(version: AgentVersion) {
     agent: vi.fn(
       async () =>
         ({
+          readiness_issues: readiness(
+            issues[Math.min(read++, issues.length - 1)],
+          ),
           id: "agent-id",
           group_id: "group-id",
           course_id: "course-id",
@@ -144,7 +166,9 @@ function makeApi(version: AgentVersion) {
     updateDraft: vi.fn(
       async (_id: string, _body: { avatar_config?: AvatarConfig }) => version,
     ),
-    publish: vi.fn(),
+    publish: vi.fn(async () => ({ ...version, state: "published" })),
+    nextVersion: vi.fn(async () => ({ ...version, state: "draft" })),
+    versions: vi.fn(async () => [version]),
   };
   return api;
 }
@@ -183,55 +207,109 @@ function renderWorkbench(
   );
 }
 
+function editAgentMd(value: string) {
+  fireEvent.change(screen.getByLabelText(/AGENT\.md.*editor/i), {
+    target: { value },
+  });
+}
+
 describe("Agent hint bar", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
-  it("names no RAG, Voice None and a non-standard AGENT.md, and closes", async () => {
-    const version = makeVersion({ agent_md: "only text, no heading" });
-    renderWorkbench(makeApi(version) as unknown as PlatformApi, true);
+  const all = [
+    { issue: "rag_missing" },
+    { issue: "voice_missing" },
+    { issue: "agent_md_invalid" },
+    { issue: "avatar_missing" },
+  ];
+
+  it("lists the server's checks of the published version at the top, and closes", async () => {
+    const { container } = renderWorkbench(
+      makeApi(makeVersion(), [all]) as unknown as PlatformApi,
+      true,
+    );
     const bar = await screen.findByRole("note");
+    expect(bar.className).toBe("agent-hint-bar");
     expect(bar.textContent).toContain("This Agent is not ready for a Debate:");
     expect(bar.textContent).toContain(
       "Agent “Agent” needs at least one RAG file.",
     );
+    expect(bar.textContent).toContain("Agent “Agent” has no Voice");
     expect(bar.textContent).toContain(
-      "Agent “Agent” has no Voice (Voice is None).",
+      "Agent “Agent” has a non-standard AGENT.md",
     );
-    expect(bar.textContent).toContain(
-      "Agent “Agent” has a non-standard AGENT.md: it needs a heading line starting with # and some text under it.",
-    );
+    expect(bar.textContent).toContain("Agent “Agent” has no usable Avatar.");
+    // Above the editor: the first block after the page title.
+    const heading = container.querySelector("h1");
+    expect(
+      heading &&
+        heading.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const form = container.querySelector("textarea");
+    expect(
+      form &&
+        bar.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     fireEvent.click(within(bar).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("note")).toBeNull();
   });
 
-  it("stays away when the Agent has RAG, a Voice and a standard AGENT.md", async () => {
-    const version = makeVersion({
-      agent_md: "# Agent\n\nA clear perspective.",
-      voice_profile_id: "voice-1",
-      enabled_documents: [
-        {
-          id: "doc-1",
-          source_filename: "notes.md",
-          workspace_state: "active",
-          index_status: "ready",
-          index_revision: 1,
-          char_count: 10,
-          content_hash: "a".repeat(64),
-          authorization_epoch: 0,
-          can_manage_visibility: true,
-          course_id: "course-id",
-          group_id: "group-id",
-          ownership_scope: "group",
-          visibility: "public",
-          created_at: "2026-01-01T00:00:00Z",
-        },
-      ] as unknown as AgentVersion["enabled_documents"],
-    });
-    renderWorkbench(makeApi(version) as unknown as PlatformApi, true);
+  it("stays away when the published version passes every check", async () => {
+    renderWorkbench(
+      makeApi(makeVersion(), [[]]) as unknown as PlatformApi,
+      true,
+    );
     await screen.findByLabelText("Material theme");
     expect(screen.queryByRole("note")).toBeNull();
+  });
+
+  it("each line's Done publishes and removes only that line once it passes", async () => {
+    // Load, then after the RAG line's Done: RAG and Voice pass on the server.
+    const api = makeApi(makeVersion(), [
+      all,
+      [{ issue: "agent_md_invalid" }, { issue: "avatar_missing" }],
+      [{ issue: "avatar_missing" }],
+    ]);
+    renderWorkbench(api as unknown as PlatformApi, true);
+    const bar = await screen.findByRole("note");
+    const checks = within(bar).getAllByRole("button", {
+      name: "Done: save, publish and check this again",
+    });
+    expect(checks).toHaveLength(4);
+    editAgentMd("# Agent\n\nA clear perspective.");
+    fireEvent.click(checks[0]);
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(bar.textContent).not.toContain("needs at least one RAG file"),
+    );
+    // Voice also passes now, but only the checked line moves.
+    expect(bar.textContent).toContain("has no Voice");
+    expect(bar.textContent).toContain("non-standard AGENT.md");
+
+    // A line that still fails stays after its Done.
+    editAgentMd("# Agent\n\nA clearer perspective.");
+    const avatarCheck = within(bar)
+      .getAllByRole("listitem")
+      .find((item) => item.getAttribute("data-issue") === "avatar_missing")!;
+    fireEvent.click(
+      within(avatarCheck).getByRole("button", {
+        name: "Done: save, publish and check this again",
+      }),
+    );
+    await waitFor(() => expect(api.publish).toHaveBeenCalledTimes(2));
+    await act(async () => undefined);
+    expect(bar.textContent).toContain("has no usable Avatar.");
+  });
+
+  it("publishes an Agent that still has open hints: they never block saving", async () => {
+    const api = makeApi(makeVersion(), [all]);
+    renderWorkbench(api as unknown as PlatformApi, true);
+    await screen.findByRole("note");
+    editAgentMd("still no heading");
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    await waitFor(() => expect(api.publish).toHaveBeenCalled());
   });
 });

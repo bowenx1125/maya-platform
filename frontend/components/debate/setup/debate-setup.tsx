@@ -11,7 +11,6 @@ import {
   type FormEvent,
 } from "react";
 
-import { DismissibleAlert } from "../../dismissible-alert";
 import {
   createIdempotencyHandle,
   isAmbiguousMutationFailure,
@@ -40,10 +39,12 @@ import {
   PageIntro,
   SectionCard,
 } from "../../ui";
-import { AgentIssueList } from "../../agent-issue-list";
+import { AgentHintBar } from "../../agent-issue-list";
 import {
   agentIssuesFromError,
-  versionIssues,
+  debateFieldProblems,
+  mergeIssues,
+  readinessIssues,
 } from "../../../lib/agent-readiness";
 import rulesetStyles from "./ruleset-editor.module.css";
 import styles from "./debate-setup.module.css";
@@ -397,9 +398,10 @@ export function TeacherDebateCreate({
   const [error, setError] = useState<unknown>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
-  // Bumped on every validation pass, so a message closed with × shows again
-  // when the same mistake is repeated (the text alone would not change).
+  // Bumped on every validation pass and refusal, so the bar at the top is
+  // scrolled back into view even when the same problem repeats.
   const [validationAttempt, setValidationAttempt] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (loading || typeof ResizeObserver === "undefined") return;
     const inputs = [topicInputRef.current, backgroundInputRef.current].filter(
@@ -460,8 +462,23 @@ export function TeacherDebateCreate({
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  const agentNames = useMemo(
+    () =>
+      Object.fromEntries(
+        candidates.map((item) => [item.agent.id, item.agent.name]),
+      ) as Record<string, string>,
+    [candidates],
+  );
+  // Read from each Agent's current published version by the server
+  // (agents/readiness.py), so the form and the create agree.
+  const selectedReadiness = selectedIds.flatMap((agentId) => {
+    const candidate = candidates.find((item) => item.agent.id === agentId);
+    return candidate ? readinessIssues(candidate) : [];
+  });
+
   function toggleCandidate(candidate: PublishedAgentSummary) {
     setFormError(null);
+    setError(null);
     setValidationAttempt((attempt) => attempt + 1);
     const id = candidate.agent.id;
     if (selectedIds.includes(id)) {
@@ -497,6 +514,11 @@ export function TeacherDebateCreate({
       return;
     }
     setTopicError(null);
+    // The same checks the server makes, already on screen: nothing to send.
+    if (selectedReadiness.some((item) => item.blocking)) {
+      setError(null);
+      return;
+    }
     if (selectedIds.length < 2) {
       setFormError(copy(t, "debateSelectAtLeast"));
       return;
@@ -525,12 +547,15 @@ export function TeacherDebateCreate({
       total_duration_seconds: null,
       turn_duration_seconds: null,
     };
-    if (
-      payload.participants.some(
-        (item) => item.stance_mode === "assigned" && !item.assigned_stance,
-      )
-    ) {
-      setFormError(copy(t, "debateAssigned"));
+    const unstanced = payload.participants.find(
+      (item) => item.stance_mode === "assigned" && !item.assigned_stance,
+    );
+    if (unstanced) {
+      setFormError(
+        t("debateFieldStanceMissing", {
+          name: agentNames[unstanced.agent_id] ?? "",
+        }),
+      );
       return;
     }
     setBusy(true);
@@ -554,8 +579,22 @@ export function TeacherDebateCreate({
     } catch (cause) {
       if (!isAmbiguousMutationFailure(cause)) createMutation.current = null;
       setError(cause);
+      setValidationAttempt((attempt) => attempt + 1);
+      // A refused Agent may have changed since the list was read: read it
+      // again, so the bar's checks match what the server just said.
+      if (agentIssuesFromError(cause)) void refreshCandidates();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function refreshCandidates() {
+    if (!courseId) return;
+    try {
+      const next = await effectiveController.loadCandidates(courseId);
+      setCandidates(next.filter((item) => item.agent.status === "active"));
+    } catch {
+      // The bar already shows the server's answer.
     }
   }
 
@@ -564,15 +603,24 @@ export function TeacherDebateCreate({
     return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   }
 
-  const agentIssues = agentIssuesFromError(error);
-  // Voice None never refuses a Debate, but the teacher sees it per Agent.
-  const voiceWarnings = selectedIds.flatMap((agentId) => {
-    const candidate = candidates.find((item) => item.agent.id === agentId);
-    if (!candidate) return [];
-    return versionIssues(candidate.agent, candidate.current_version).filter(
-      (item) => item.issue === "voice_missing",
-    );
-  });
+  const issues = mergeIssues(
+    [agentIssuesFromError(error) ?? [], selectedReadiness],
+    agentNames,
+  );
+  const fieldLines = (
+    debateFieldProblems(
+      error,
+      (index) => agentNames[selectedIds[index]] ?? "",
+    ) ?? []
+  ).map((problem) => t(problem.key, problem.params ?? {}));
+  const lines = [topicError, formError, ...fieldLines].filter(
+    (line): line is string => Boolean(line),
+  );
+  const mustFix = lines.length > 0 || issues.some((item) => item.blocking);
+  const otherError =
+    error && !agentIssuesFromError(error) && fieldLines.length === 0
+      ? error
+      : null;
   const editAgentHref = (agentId: string) =>
     `/teacher/agents/${encodeURIComponent(agentId)}`;
   return (
@@ -581,10 +629,22 @@ export function TeacherDebateCreate({
       {!rulesEditing ? (
         <PageAction name="back" href="/teacher/debates" disabled={busy} />
       ) : null}
-      {error && !agentIssues ? (
-        <ErrorNotice error={error} onRetry={() => void load()} />
+      <AgentHintBar
+        title={t(mustFix ? "debateFixBeforeCreate" : "debateAgentsHints")}
+        issues={issues}
+        lines={lines}
+        editHref={editAgentHref}
+        revealKey={validationAttempt}
+        alert={mustFix}
+      />
+      {otherError ? (
+        <ErrorNotice
+          error={otherError}
+          onRetry={() => formRef.current?.requestSubmit()}
+        />
       ) : null}
       <form
+        ref={formRef}
         id="create-debate-form"
         className={styles.pageStack}
         onSubmit={submit}
@@ -599,7 +659,6 @@ export function TeacherDebateCreate({
               <textarea
                 ref={topicInputRef}
                 aria-label={copy(t, "debateTopic")}
-                aria-describedby={topicError ? "debate-topic-error" : undefined}
                 aria-invalid={topicError !== null}
                 disabled={busy}
                 id="debate-topic"
@@ -613,16 +672,6 @@ export function TeacherDebateCreate({
                 rows={3}
                 value={topic}
               />
-              {topicError ? (
-                <DismissibleAlert
-                  as="span"
-                  className={styles.fieldError}
-                  id="debate-topic-error"
-                  resetKey={validationAttempt}
-                >
-                  {topicError}
-                </DismissibleAlert>
-              ) : null}
             </div>
           </SectionCard>
           <SectionCard
@@ -783,25 +832,6 @@ export function TeacherDebateCreate({
           onSave={setTeachingPrompts}
           onEditingChange={setRulesEditing}
         />
-        {formError ? (
-          <DismissibleAlert
-            as="div"
-            className="form-error"
-            resetKey={validationAttempt}
-          >
-            {formError}
-          </DismissibleAlert>
-        ) : null}
-        {agentIssues ? (
-          <Notice inline tone="error" title={copy(t, "debateAgentsNotReady")}>
-            <AgentIssueList issues={agentIssues} editHref={editAgentHref} />
-          </Notice>
-        ) : null}
-        {voiceWarnings.length ? (
-          <div className="agent-issue-hint">
-            <AgentIssueList issues={voiceWarnings} editHref={editAgentHref} />
-          </div>
-        ) : null}
         {/* Creating mid-edit would freeze rules other than the ones on
           screen, so Done waits until the ruleset edit is saved or discarded. */}
         {!rulesEditing ? (
