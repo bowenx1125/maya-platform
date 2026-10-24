@@ -273,17 +273,20 @@ def test_team_freezes_own_shared_sets_and_names_without_private_body_projection(
     assert updated.status_code == 200, updated.text
     _, student_csrf = login(client, "bowen")
     old = client.get(f"/api/v1/conversations/{session['id']}").json()
-    assert old["team"] == session["team"]
+    # Owner decision (2026-10-22): an open chat follows the new Team version,
+    # history and all, instead of staying frozen on the one it started with.
+    assert old["team"]["version_id"] == updated.json()["current_version_id"]
+    assert old["team"]["name"] == "Renamed Team"
     assert old["team"]["available"] is True
     new = _create(client, student_csrf, {"kind": "maya_team", "team_id": team["id"]})
     assert new["team"]["name"] == "Renamed Team"
-    assert new["team"]["version_id"] != old["team"]["version_id"]
+    assert new["team"]["version_id"] == old["team"]["version_id"]
     with database.session() as db:
         agent = db.get(Agent, participants[0].agent_id)
         assert agent is not None
         agent.authorization_epoch += 1
     old = client.get(f"/api/v1/conversations/{session['id']}").json()
-    assert old["team"]["name"] == session["team"]["name"]
+    assert old["team"]["name"] == "Renamed Team"
     assert old["team"]["available"] is False
 
 
