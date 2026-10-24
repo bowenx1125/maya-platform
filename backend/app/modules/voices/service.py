@@ -22,6 +22,7 @@ from app.core.models import (
     AgentVersion,
     CourseMember,
     Group,
+    IdempotencyRecord,
     VoiceProfile,
     VoiceProviderOperation,
 )
@@ -35,6 +36,7 @@ from app.modules.knowledge.services import (
     request_hash,
 )
 from app.modules.org.access import WorkspaceMember
+from app.modules.voices.cleanup import discard_failed_voice
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
     decrypt_external_voice_id,
@@ -90,6 +92,24 @@ CLONE_REFUSED_ERROR = PlatformError(
     "This voice path does not support cloning a custom voice.",
     422,
 )
+
+
+def _remember_clone_refusal(db: Session, record: IdempotencyRecord) -> None:
+    """Keep the refusal as the same-key answer after the profile is gone."""
+
+    db.refresh(record)
+    if record.state != "pending":
+        return
+    finish_idempotency(
+        db,
+        record,
+        CLONE_REFUSED_ERROR.status_code,
+        {
+            "code": CLONE_REFUSED_ERROR.code,
+            "message": CLONE_REFUSED_ERROR.message,
+            "details": CLONE_REFUSED_ERROR.details,
+        },
+    )
 
 
 @dataclass(frozen=True)
@@ -843,6 +863,9 @@ def _store_enrollment_success(
         output_bytes=result.output_bytes,
     )
     if not succeeded:
+        # The error reaches the owner in this response; the card is not kept.
+        discard_failed_voice(db, profile, data_root=settings.resolved_data_root)
+        db.commit()
         raise PlatformError(
             "voice_enrollment_failed",
             "The voice enrollment could not be completed.",
@@ -962,7 +985,7 @@ def enroll_voice(
     # Content probing happens before the database claim.  The source remains in
     # the UUID temp directory and is deleted by the route's finally block.
     try:
-        validate_source_audio(upload.source_path, upload.source_filename)
+        source_info = validate_source_audio(upload.source_path, upload.source_filename)
     except AudioValidationError as exc:
         upload.cleanup()
         raise validation_failure("The voice file is not valid.", code="audio_invalid") from exc
@@ -1017,7 +1040,13 @@ def enroll_voice(
     normalized_path = upload.request_directory / "normalized.wav"
     try:
         try:
-            run_ffmpeg_normalize(upload.source_path, normalized_path)
+            run_ffmpeg_normalize(
+                upload.source_path,
+                normalized_path,
+                duration_seconds=(
+                    source_info.duration_seconds if "m4a" in source_info.format_names else None
+                ),
+            )
             normalized = read_pcm16_wav(normalized_path)
             normalized_info = audio_quality_metrics(normalized)
             if not 10.0 <= normalized_info["duration_seconds"] <= 20.0:
@@ -1063,6 +1092,9 @@ def enroll_voice(
             elif operation.state == "failed" and operation.safe_error_code == "voice_clone_refused":
                 # A refused clone never becomes retryable, not even with the
                 # same key: the answer was decided before any charged call.
+                _remember_clone_refusal(db, record)
+                discard_failed_voice(db, profile, data_root=settings.resolved_data_root)
+                db.commit()
                 raise CLONE_REFUSED_ERROR
             elif operation.state == "prepared":
                 _claim_provider_operation(db, operation, record.claim_token)
@@ -1105,14 +1137,12 @@ def enroll_voice(
         assert profile is not None and operation is not None
         assert_claim_owned(db, record)
         # A known-local refusal is decided before the durable charged
-        # dispatch, and it stays a durable failed card: the teacher must see
-        # that this upload did not become a voice, and the same key cannot
-        # re-issue it.
+        # dispatch. The teacher still sees the error, and the same key cannot
+        # re-issue it, but the uncharged profile is not kept.
         if getattr(provider_instance, "target_model_key", None) == FLASH_TTS_MODEL_KEY:
-            profile.status = "failed"
-            profile.safe_error_code = "voice_clone_refused"
-            profile.updated_at = now_utc()
-            _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
+            _remember_clone_refusal(db, record)
+            discard_failed_voice(db, profile, data_root=settings.resolved_data_root)
+            db.commit()
             raise CLONE_REFUSED_ERROR
         _dispatch_operation(db, operation)
         assert_claim_owned(db, record)
@@ -1140,17 +1170,13 @@ def enroll_voice(
                 db.commit()
             raise _safe_provider_error(exc) from exc
         except VoiceCloneRefusedError as exc:
-            # A typed refusal is deterministic, never ambiguous: the profile
-            # fails closed and no provider fallback or automatic retry may
-            # re-issue this enrollment. A card already deleted during the call
-            # had no supplier voice, so the row goes with the refusal.
-            already_deleted = not _settle_profile_status(
-                db, profile, "failed", "voice_clone_refused"
-            )
+            # A typed refusal is deterministic, never ambiguous: no provider
+            # fallback or automatic retry may re-issue this enrollment. The
+            # charged operation stays; the card leaves the library.
             _finish_operation(db, operation, state="failed", safe_error_code="voice_clone_refused")
-            if already_deleted:
-                _retire_deleted_voice(db, profile, settings)
-                db.commit()
+            discard_failed_voice(db, profile, data_root=settings.resolved_data_root)
+            _remember_clone_refusal(db, record)
+            db.commit()
             raise _safe_provider_error(exc) from exc
         except VoiceProviderError as exc:
             # Once the durable dispatch row is committed, a generic provider

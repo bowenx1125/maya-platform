@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import os
+import subprocess
 import wave
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -27,6 +29,7 @@ from app.core.models import (
 )
 from app.modules.knowledge.files import write_atomic
 from app.modules.voices import preview as voice_preview
+from app.modules.voices import router as voice_router
 from app.modules.voices import service as voice_service
 from app.modules.voices.crypto import (
     VoiceEncryptionError,
@@ -35,6 +38,7 @@ from app.modules.voices.crypto import (
 )
 from app.modules.voices.fallback import FallbackEnrollmentError, enroll_system_fallback
 from app.modules.voices.lease_lock import lock_exclusive, unlock
+from app.modules.voices.schemas import VoiceProfileResponse
 from app.modules.voices.uploads import (
     VoiceUploadDisconnected,
     VoiceUploadTooLarge,
@@ -615,6 +619,174 @@ def test_voice_scope_and_upload_validation(
     assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
 
 
+@pytest.mark.parametrize("personal", [False, True])
+@pytest.mark.parametrize("filename", ["sample.ogg", "../sample.wav", "x" * 256 + ".wav"])
+def test_invalid_voice_filename_returns_422_without_dispatch(
+    voice_client: tuple[TestClient, Database, Settings],
+    filename: str,
+    personal: bool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client, database, settings = voice_client
+    csrf = login(client, "maya" if personal else "bowen")[1]
+    path = (
+        f"/api/v1/courses/{COURSE_ID}/voice-profiles"
+        if personal
+        else f"/api/v1/groups/{GROUP_A}/voice-profiles"
+    )
+    response = client.post(
+        path,
+        headers=_headers(csrf, "invalid-voice-filename-0001"),
+        data={"consent_accepted": "true"},
+        files={"file": (filename, _wav(), "audio/wav")},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "audio_invalid"
+    logs = [record.getMessage() for record in caplog.records if record.name == "maya.voices"]
+    assert any("stage=upload safe_code=audio_invalid request_id=" in line for line in logs)
+    assert all(filename not in line for line in logs)
+    with database.session() as session:
+        assert session.scalar(select(VoiceProviderOperation)) is None
+    assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
+
+
+@pytest.mark.parametrize("personal", [False, True])
+def test_invalid_voice_then_same_name_valid_upload(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+    personal: bool,
+) -> None:
+    client, database, settings = voice_client
+    csrf = login(client, "maya" if personal else "bowen")[1]
+    path = (
+        f"/api/v1/courses/{COURSE_ID}/voice-profiles"
+        if personal
+        else f"/api/v1/groups/{GROUP_A}/voice-profiles"
+    )
+    provider = MockVoiceCloneProvider()
+    monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
+    headers = _headers(csrf, "voice-same-name-recovery-0001")
+    invalid = client.post(
+        path,
+        headers=headers,
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", b"invalid-audio", "audio/wav")},
+    )
+    assert invalid.status_code == 422, invalid.text
+    assert invalid.json()["code"] == "audio_invalid"
+    assert provider.enroll_calls == 0
+    valid = client.post(
+        path,
+        headers=headers,
+        data={"consent_accepted": "true"},
+        files={"file": ("sample.wav", _wav(), "audio/wav")},
+    )
+    assert valid.status_code == 202, valid.text
+    assert valid.json()["status"] == "ready"
+    assert provider.enroll_calls == 1
+    with database.session() as session:
+        operations = session.scalars(select(VoiceProviderOperation)).all()
+        assert len(operations) == 1
+        assert operations[0].charged_request_count == 1
+    assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
+
+
+@pytest.mark.parametrize("extension", ["mp3", "m4a"])
+@pytest.mark.parametrize("seconds", [10.0, 20.0, 9.9, 9.99, 20.01, 20.1])
+def test_compressed_voice_uses_playable_duration(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    extension: str,
+    seconds: float,
+) -> None:
+    client, database, _settings = voice_client
+    source = tmp_path / f"sample.{extension}"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=220:sample_rate=24000",
+            "-t",
+            str(seconds),
+            str(source),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    provider = MockVoiceCloneProvider()
+    monkeypatch.setattr(voice_service, "voice_provider", lambda _settings: provider)
+    csrf = login(client, "bowen")[1]
+    response = client.post(
+        f"/api/v1/groups/{GROUP_A}/voice-profiles",
+        headers=_headers(csrf, f"compressed-duration-{seconds}-{extension}"),
+        data={"consent_accepted": "true"},
+        files={"file": (source.name, source.read_bytes(), "application/octet-stream")},
+    )
+    if 10.0 <= seconds <= 20.0:
+        assert response.status_code == 202, response.text
+        assert response.json()["status"] == "ready"
+        assert provider.enroll_calls == 1
+    else:
+        assert response.status_code == 422, response.text
+        assert response.json()["code"] == "audio_invalid"
+        assert provider.enroll_calls == 0
+        with database.session() as session:
+            assert session.scalar(select(VoiceProviderOperation)) is None
+
+
+@pytest.mark.asyncio
+async def test_four_voice_uploads_leave_event_loop_available(
+    voice_client: tuple[TestClient, Database, Settings],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _database, settings = voice_client
+    csrf = login(client, "bowen")[1]
+    loop = asyncio.get_running_loop()
+    entered: asyncio.Queue[None] = asyncio.Queue()
+    release = Event()
+
+    def waiting_enrollment(*args: object, **kwargs: object) -> VoiceProfileResponse:
+        loop.call_soon_threadsafe(entered.put_nowait, None)
+        if not release.wait(3):
+            raise RuntimeError("test supplier wait expired")
+        return VoiceProfileResponse(
+            id=uuid4(), scope="group", status="ready", created_at=datetime.now(UTC)
+        )
+
+    monkeypatch.setattr(voice_router, "enroll_voice", waiting_enrollment)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=client.app),
+        base_url="http://testserver",
+        cookies=client.cookies,
+    ) as parallel:
+        pending = [
+            asyncio.create_task(
+                parallel.post(
+                    f"/api/v1/groups/{GROUP_A}/voice-profiles",
+                    headers=_headers(csrf, f"concurrent-voice-upload-{index}"),
+                    data={"consent_accepted": "true"},
+                    files={"file": ("sample.wav", _wav(), "audio/wav")},
+                )
+            )
+            for index in range(4)
+        ]
+        try:
+            for _ in pending:
+                await asyncio.wait_for(entered.get(), timeout=2)
+            ready = await asyncio.wait_for(parallel.get("/health/ready"), timeout=2)
+            assert ready.status_code == 200, ready.text
+        finally:
+            release.set()
+            results = await asyncio.gather(*pending)
+        assert [response.status_code for response in results] == [202] * 4
+    assert not list((settings.resolved_data_root / "tmp" / "voice-enrollment").iterdir())
+
+
 def test_flash_target_model_refuses_clone_before_dispatch(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
@@ -637,18 +809,8 @@ def test_flash_target_model_refuses_clone_before_dispatch(
     assert body["code"] == "voice_clone_refused"
     assert provider.enroll_calls == 0
     with database.session() as session:
-        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
-        assert profile is not None
-        assert profile.status == "failed"
-        assert profile.safe_error_code == "voice_clone_refused"
-        operation = session.scalar(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile.id,
-            )
-        )
-        assert operation is not None
-        assert operation.state == "failed"
-        assert operation.safe_error_code == "voice_clone_refused"
+        assert session.scalar(select(VoiceProfile.id)) is None
+        assert session.scalar(select(VoiceProviderOperation.id)) is None
 
 
 def test_typed_clone_refusal_after_dispatch_stays_terminal(
@@ -673,17 +835,9 @@ def test_typed_clone_refusal_after_dispatch_stays_terminal(
     assert response.json()["code"] == "voice_clone_refused"
     assert provider.enroll_calls == 1
     with database.session() as session:
-        profile = session.scalar(select(VoiceProfile).order_by(VoiceProfile.created_at.desc()))
-        assert profile is not None
-        assert profile.status == "failed"
-        assert profile.safe_error_code == "voice_clone_refused"
-        operation = session.scalar(
-            select(VoiceProviderOperation).where(
-                VoiceProviderOperation.profile_id == profile.id,
-            )
-        )
-        assert operation is not None
-        assert operation.state == "failed"
+        # Real deletion: the refused card and its operation rows are gone.
+        assert session.scalar(select(VoiceProfile.id)) is None
+        assert session.scalar(select(VoiceProviderOperation.id)) is None
         # Same-key retry must stay refused, not re-dispatch.
         record = session.scalar(
             select(IdempotencyRecord).where(
@@ -892,7 +1046,7 @@ def test_delete_same_idempotency_key_replays_without_second_provider_command(
     assert provider.delete_calls == 1
 
 
-def test_delete_removes_a_refused_voice_without_a_provider_call(
+def test_a_refused_voice_leaves_the_library_without_a_provider_call(
     voice_client: tuple[TestClient, Database, Settings],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -909,14 +1063,11 @@ def test_delete_removes_a_refused_voice_without_a_provider_call(
         files={"file": ("sample.wav", _wav(), "audio/wav")},
     )
     assert refused.status_code == 422
+    assert refused.json()["code"] == "voice_clone_refused"
+    # Owner decision (2026-10-24): a failed upload leaves the library at once;
+    # the 422 above is where the owner reads why. Nothing is left to delete.
     listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json()
-    failed = next(item for item in listed if item["status"] == "failed")
-    deleted = client.delete(
-        f"/api/v1/voice-profiles/{failed['id']}",
-        headers=_headers(csrf, "voice-delete-refused-0001"),
-    )
-    assert deleted.status_code == 200, deleted.text
-    assert deleted.json()["status"] == "deleted"
+    assert all(item["status"] != "failed" for item in listed)
     assert provider.delete_calls == 0
 
 

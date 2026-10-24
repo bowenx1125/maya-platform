@@ -137,10 +137,18 @@ Notice118434. Voice upload:sample rules,no side copy. Knowledge partial promote 
 published version+source manifest reuses in-flight run. Teacher Chat:generation
 progress; Agent Chat:report links.
 
-Formal micro-rounds follow `# Team Ruleset` → `## Formal assessment`: named roles,
-roster order, ledger-first explicit starts, one rejection then a restated Guide,
-and a summary handoff. Ordinary chat is the leader then members. ACL, then the
-ledger, then the Ruleset. Only the server appends report links.
+Formal micro-rounds:Guide `# Team Ruleset`→`## Formal assessment` names answer_recorder/
+question_guide/scorer/summarizer; student_round_order uses roster names,exactly scorer/
+question_guide; else assessment_ruleset_incomplete,no attempt. Scorer=answer_recorder:
+write Tool,`已记录你的回答。` receipt,abandon recorder line. Explicit starts (正式测评/测试,
+开始测试,再来一轮/一遍,formal test/assessment):ledger first,Guide-only `收到，第一题是…`.
+Later messages:student_round_order,Tool before Guide. Reject non-answers once,Guide
+restates once. All answered:Guide `答题全部结束`,Summarizer `正在总结答案`. Abandon:same order,
+then Guide `已放弃作答，你要重新开始吗，或者和我随便聊聊`,then flag=false.
+MAYA-ASSESSMENT-ROLE never selects speakers; assessment_active=ledger flag.
+Ordinary chat/greetings:leader then members,relevant length; omit empty replies,never
+fail; @-named member must reply. `## Informal` may alter speakers/length. ACL→ledger→
+Ruleset; only server appends report links; later executor turns keep scorer/summarizer.
 
 Built `f007a11` (PR #69),then `2c62871` (PRs #71/#72); backups
 `maya-20261014T111701Z`/`T135154Z.sqlite3` ok,schema0064,ready/public200.
@@ -164,10 +172,14 @@ reference answers/word-joiner replies unspoken. Casual chat resumes; assessment_
 doesn't end turn:Guide answers,omit empty replies,keep Scorer text/scores. Student send
 locks executor before model call; parallel call→chat_busy.
 
-Oct17 admission: adaptive login/create/write/LLM queue. Danger at load≥6 or
-Mem<500; clear at load≤4 and Mem≥550, or after 120s. AIMD, per-process caps and
-the ready limiter stay. Queue-full, a 180s wait and chat_busy store nothing.
-Hung backends autoheal at about 100s.
+Oct17 admission:adaptive login/create/write/LLM queue. Danger:load≥6 or Mem<500;
+clear load≤4/Mem≥550,or120s at load<6. Runs2 slots,scoring first (Mem:1 if idle),
+release+1/5s. AIMD×0.7 on danger/load≥4/Mem<900/30s write-pool p95>500ms; hold
+load3–4/Mem900–1100/threads≥90%,else+4/+2; start/idle72. 1s brake (10s write-pool p95,
+running writes,CPU) halves/clamps. Queue-full/180s-wait/chat_busy stores nothing;
+only `messages:stream`. Per process:LLM/write/create8,max128,in-flight48,sync256+
+asyncio96 threads,pool15+25. Separate ready limiter;nested backstop wait fresh;
+refused Debate segments not_sent; hung backend autoheal≈100s.
 
 Oct17:Teacher Brainform Record replaces Memory:assessment Teams→student attempt/
 score/sheet/report,one cached read/test (0068). Accounts/group visits omit Test results;
@@ -223,14 +235,8 @@ updated; Unicode validation equivalent.
 Backend Windows+Linux:2892/45skip;95 Windows failures reproduced on base,covered on
 Linux. PG16:15;frontend1017/1skip;assertions kept.
 
-Release9c68d42b0b1b618fabeb8fc22237c8586152a52e:GitHub→bare→FF from5dd9690b;
-Compose built0075/0076. Backup maya-20261021T093817Z-pre-9c68d42b.sqlite3 API/
-integrity=ok,matching .pgdump readable,old images kept. Both ready200,containers
-healthy,0076_agent_editor_audit=ALEMBIC_HEAD;public200/frontend9c68d42b/TTL30/hash2.
-
-Live:10 logins200(max1078ms),30-day cookie,NUL422. Synthetic Agent GET404,2 test
-accounts inactive/sessions revoked,teacher sessions logged out,audit kept. Charged
-14242 before/after;0 real Provider calls. Month-long retention not yet observed.
+Release9c68d42b:backups/ready/schema0076/public200 verified;0 real calls
+(receipts:PROJECT@6c09c024).
 
 ## Oct22 shared Agent editing
 
@@ -244,34 +250,20 @@ uncalled POST /conversations/{id}/turns/{turn_id}:stop and client testChat; kept
 
 ## Oct22 performance
 
-Base 6b1c2a882fa8e08360fbf0d850b386134dd70246. Password change/reset:rollback before
-hash wait/CPU,then User lock/credential reread before write/revocation. Single-slot
-pool:checkedout=0 during queued/running hashes,unrelated reads pass; parallel
-credential replacement fenced. SQLite+isolated PG:10 passed.
-
-Chat history batches assessment receipts/Boundary call IDs,refreshes latest lifecycle
-only,skips discarded Team Agent projection. Synthetic 1/20/100-turn SELECTs:5/81/401→
-5/5/5,full DTO parity.13 tests:owner-only history,receipt order,completed Boundary
-precedence,paused/completed/abandoned state. No schema change.
-
-Brainform polling waits for current reads incl. nested groups; mutations refresh
-at once,stale loads cannot unlock successors. Seven list reads abort fetch/body
-after60s,releasing cache slots. Mock30s:five endpoints105→10 calls,initial pending
-reads4→1. Synthetic results,not classroom capacity.
-
-Self-run CI:frontend1045/1skip,build/typecheck/lint,Ruff/format/mypy,158-route contracts,
-Latin/Prettier/boundary probe passed. Windows backend2840/52skip;95 base failures+2
-zero-TTL clock flakes covered in Linux. Draft history fixture corrected to owner-only;
-final new23 passed. PG105 passed after temp disk recovery;POSIX boundary/reset
-passed. Actions39809567546 billing-blocked before steps.0 real Provider calls;
-classroom capacity open.
-
-Oct23 #237:build82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7; GitHub→bare→FF from6b1c2a88.
-Backup maya-20261022T155951Z-pre-82d68ffa.sqlite3 API/integrity=ok,matching .pgdump
-readable,old images kept. Both ready200,containers healthy,0076_agent_editor_audit
-matches,public200/frontend build match. Live password change/reset:current session
-retained,old sessions/password rejected,new password accepted;test account inactive/
-sessions closed. Charged14331 unchanged;0 real Provider calls.
+Base6b1c2a882fa8e08360fbf0d850b386134dd70246. Hash waits release DB connections;
+credential reread/lock fences replacement. SQLite+PG10 passed. Chat history batches
+assessment/Boundary projections:1/20/100-turn SELECTs5/81/401→5/5/5,DTO parity,
+13 ownership/lifecycle regressions. Brainform coalesces nested reads,refreshes on
+mutation,fences stale responses,aborts seven list reads after60s. Mock30s:105→10
+calls,pending4→1. No schema change;real classroom capacity unverified.
+FE1045/1skip,BE2840/52skip+23,PG105;95 Windows baseline failures+2 clock flakes
+covered Linux. Build/type/lint/Ruff/format/mypy/158 routes/Latin/Prettier/POSIX
+passed;owner-only drafts fixed. Actions39809567546 billing-blocked;0 real calls.
+#237 built82d68ffa8cf2c0aa3ca2e3535eeec41ce394aed7,GitHub→bare→FF from6b1c2a88;
+SQLite API/integrity+PG backups,ready200/schema0076/containers/public200 verified.
+Password change/reset kept current session,revoked old sessions/credentials.
+Synthetic account/credential/4 sessions/memberships deleted,charged14331 unchanged.
+Exact backup/cleanup receipts remain in PROJECT history at6c09c024.
 
 ## Oct23 isolated 50-user concurrency
 
@@ -288,35 +280,34 @@ base and passes after fix,plus pool-reset/preexisting-transaction checks. SQLite
 poll regressions pass. This measures HTTP/DB/Mock work,not real-model capacity.
 Scripts load_auth_http/load_chat_http/load_upload_http retain reproducible checks.
 
-Release #239:aa6d6ffd33239110bc57fc8db0cfb963a8f7cfac,GitHub→bare→FF from68c972f2.
-Backup maya-20261022T165903Z-pre-aa6d6ffd.sqlite3 API/integrity=ok;matching .pgdump
-readable,old images kept. Both ready200,containers healthy,schema0076 matches,
-frontend build matches,public200. Load-test probes all200;Compose replacement had
-6 consecutive502 probes (~12s),then recovered. Isolated accounts/data/stack removed.
+Release #239 aa6d6ffd:backup/PG dump ok,ready200,schema0076,public200;~12s 502
+during Compose swap. Isolated stacks removed.
 
 Self-run:2847 Windows passes;95 failures cleared on Linux (4 shell cases needed LF).
 60 skipped;frontend1045;Ruff/format/mypy/contracts/POSIX passed.
 Actions39818125728 billing-blocked before steps.
 
-## True deletion
+## Oct23 voice uploads
 
-Onto main `60c6ed1a`. Supersedes #233; drops its `start_demo.py` edit. Head
-`0078_chat_answer_decouple` after `0077`.
+Base6c09c024. Enrollment runs off the event loop; invalid filenames return
+audio_invalid422 with safe stage/request-id logs. MP3 encoder padding and M4A
+final-frame padding no longer reject20s clips; decoded10–20s limits stay.
+Linux171 passed,including voice96 and all101 Windows failure/error records;
+Windows2852 passed/60skip,FE1050/1skip. Four uploads/readiness,same-name recovery,
+10/20s acceptance and9.99/20.01s rejection passed. Ruff/format/mypy/types/lint/
+contracts/migrations/POSIX passed. No real calls/live test accounts. The original
+group incident is unconfirmed without its files/errors.
 
-Voices, RAG, Knowledge, Agents, Teams and chats are hard-deleted, with storage. A Voice row stays while enrollment is in flight or the
-supplier delete is unconfirmed. Same key replays 200; a new key 404s. Deleting
-an Agent or Team leaves chats readable under the snapshot name and refuses
-sends (`agent_deleted`/`team_deleted`). `agent_in_team` and cascade
-auto-publish stay. History FKs SET NULL. Deleting a chat keeps assessment
-answers. A Debate copies AGENT.md, RAG/Knowledge and a voice clone; deleting
-the original does not change the copy. Prune keeps the current version, drafts,
-a parked cascade draft and the previous AGENT.md. An exclusive Knowledge set
-goes with its Agent. Deleting a set nulls the Team binding.
+Built3e785c01:backup ok,ready200,schema0076,public200;3 API probe failures during
+build,20 post-switch pairs passed.
 
-Backfill and `scripts/cleanup_soft_deleted.py` are dry-run and refuse a
-production URL. 0077 sqlite downgrade drops new tables; re-upgrade tolerates
-that. 0078 restores the 0045 revision triggers; a detached chat refuses
-downgrade.
+## Oct24 Team chats and junk (#241)
 
-Checks: 2992 passed, 23 skipped, Postgres 16. Flake reran ok.
-Frontend 1045/1; tsc 0; Ruff/mypy.
+Open Team/Maya Team chats follow each new Team version (save, member publish,
+5-min sweep); turns/participants keep history. Mid-reply chats wait for the sweep;
+in-progress/paused formal attempts stay on their version, answers intact; a removed
+member who already replied keeps the chat on its old version. Failed uploads leave
+the library: never-indexed RAG returns 503 `rag_index_failed`, not stored; failed
+Voices (refused/enrollment/mapping) are deleted unless charged (hidden) or holding a
+supplier id. The sweep hard-deletes empty Agents (no written/published version,
+files, Team/Debate/chat reference) after 1h, including same-name retired drafts.

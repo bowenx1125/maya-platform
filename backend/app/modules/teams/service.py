@@ -1736,3 +1736,11 @@ def follow_published_agent(db: Session, agent_id: str) -> None:
                 team_id,
                 error.code,
             )
+            continue
+        try:
+            from app.modules.teams.retarget import retarget_team_chats
+
+            retarget_team_chats(db, team.id)
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            LOGGER.exception("Team chat retarget failed team_id=%s", team_id)

@@ -2,14 +2,34 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.models import FileOperation, Job, KnowledgeDocument
+from app.core.models import (
+    AgentVersion,
+    AgentVersionDocument,
+    FileOperation,
+    FileReference,
+    Job,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    SnapshotDocument,
+    StoredFile,
+)
 from app.modules.knowledge.files import contained_path, mark_owned_files_private
+from app.modules.knowledge_sets.models import (
+    KnowledgeAssetVersionSource,
+    KnowledgeDocumentVersion,
+    KnowledgeGenerationSourceReceipt,
+    KnowledgeSetSource,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 _RECOVERABLE_OPERATION_STATES = ("prepared", "staged", "promoted", "cleanup_required")
 
@@ -117,4 +137,95 @@ def recover_startup(session: Session, data_root: Path) -> None:
     ).all():
         job.state = "interrupted"
         job.safe_error_code = "provider_unavailable"
+    # A document that never indexed has nothing to keep. One that failed a
+    # later reindex still has its previous index and stays.
+    purge_failed_knowledge_uploads(session, data_root)
     mark_owned_files_private(data_root)
+
+
+def purge_failed_knowledge_uploads(session: Session, data_root: Path) -> int:
+    """Delete never-indexed failed uploads, including their stored bytes."""
+
+    # Callers such as startup recovery mark rows failed in this session, and
+    # the session does not autoflush.
+    session.flush()
+    documents = list(
+        session.scalars(
+            select(KnowledgeDocument).where(
+                KnowledgeDocument.index_status == "failed",
+                KnowledgeDocument.index_revision == 0,
+            )
+        ).all()
+    )
+    removed = 0
+    for document in documents:
+        if _failed_upload_is_bound(session, document.id):
+            continue
+        nested = session.begin_nested()
+        try:
+            stored = session.get(StoredFile, document.stored_file_id)
+            relative = stored.relative_path if stored is not None else None
+            _remove_owned_path(data_root, relative)
+            _remove_empty_entity_parent(data_root, relative, document.id)
+            session.execute(
+                delete(AgentVersionDocument).where(AgentVersionDocument.document_id == document.id)
+            )
+            session.execute(
+                delete(FileReference).where(
+                    (FileReference.stored_file_id == document.stored_file_id)
+                    | (
+                        (FileReference.owner_type == "knowledge_document")
+                        & (FileReference.owner_id == document.id)
+                    )
+                )
+            )
+            session.delete(document)
+            session.flush()
+            if stored is not None and not _stored_file_still_used(session, stored.id):
+                session.delete(stored)
+            session.flush()
+            nested.commit()
+            removed += 1
+        except (IntegrityError, OSError):
+            nested.rollback()
+            LOGGER.info("failed_upload_delete_blocked document_id=%s", document.id)
+    return removed
+
+
+def _failed_upload_is_bound(session: Session, document_id: str) -> bool:
+    checks = (
+        select(SnapshotDocument.id).where(SnapshotDocument.document_id == document_id),
+        select(KnowledgeChunk.id).where(KnowledgeChunk.document_id == document_id),
+        select(KnowledgeSetSource.id).where(KnowledgeSetSource.document_id == document_id),
+        select(KnowledgeDocumentVersion.id).where(
+            KnowledgeDocumentVersion.document_id == document_id
+        ),
+        select(KnowledgeAssetVersionSource.id).where(
+            KnowledgeAssetVersionSource.document_id == document_id
+        ),
+        select(KnowledgeGenerationSourceReceipt.id).where(
+            KnowledgeGenerationSourceReceipt.document_id == document_id
+        ),
+        select(AgentVersionDocument.document_id)
+        .join(AgentVersion, AgentVersion.id == AgentVersionDocument.agent_version_id)
+        .where(
+            AgentVersionDocument.document_id == document_id,
+            AgentVersion.state != "draft",
+        ),
+    )
+    return any(session.scalar(check.limit(1)) is not None for check in checks)
+
+
+def _stored_file_still_used(session: Session, stored_file_id: str) -> bool:
+    return (
+        session.scalar(
+            select(KnowledgeDocument.id)
+            .where(KnowledgeDocument.stored_file_id == stored_file_id)
+            .limit(1)
+        )
+        is not None
+        or session.scalar(
+            select(FileReference.id).where(FileReference.stored_file_id == stored_file_id).limit(1)
+        )
+        is not None
+    )

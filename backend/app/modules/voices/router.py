@@ -10,9 +10,10 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
-from app.core.errors import Error, PlatformError, validation_failure
+from app.core.errors import Error, PlatformError, request_id_for, validation_failure
 from app.modules.auth.dependencies import (
     get_database,
     get_db,
@@ -43,6 +44,7 @@ from app.modules.voices.uploads import (
     VoiceUploadTooLarge,
     stream_voice_upload,
 )
+from app.providers.audio import AudioValidationError
 
 router = APIRouter(tags=["Voices"])
 LOGGER = logging.getLogger("maya.voices")
@@ -86,15 +88,17 @@ async def _enroll(
     personal_course_id: str | None = None,
 ) -> VoiceProfileResponse:
     upload = None
+    stage = "upload"
     try:
         try:
             upload = await stream_voice_upload(request, settings.resolved_data_root)
         except VoiceUploadTooLarge as exc:
             raise validation_failure("The voice file is too large.", code="audio_invalid") from exc
-        except (VoiceUploadDisconnected, VoiceUploadError) as exc:
+        except (VoiceUploadDisconnected, VoiceUploadError, AudioValidationError) as exc:
             raise validation_failure(
                 "The voice file could not be received.", code="audio_invalid"
             ) from exc
+        stage = "enrollment"
         fields = upload.fields
         consent_raw = fields.get("consent_accepted", "").strip().lower()
         if consent_raw not in {"true", "1", "yes"}:
@@ -102,7 +106,10 @@ async def _enroll(
                 "Voice enrollment requires consent.", code="voice_enrollment_failed"
             )
         try:
-            result = enroll_voice(
+            # Audio tools and supplier review are blocking; keep other uploads and
+            # readiness requests responsive while this enrollment waits.
+            result = await run_in_threadpool(
+                enroll_voice,
                 db,
                 context,
                 settings,
@@ -119,6 +126,14 @@ async def _enroll(
         except (RuntimeError, OSError) as exc:
             raise _safe_provider_failure("enroll") from exc
         return result
+    except PlatformError as exc:
+        LOGGER.warning(
+            "Voice enrollment rejected stage=%s safe_code=%s request_id=%s",
+            stage,
+            exc.code,
+            request_id_for(request),
+        )
+        raise
     finally:
         if upload is not None:
             upload.cleanup()
