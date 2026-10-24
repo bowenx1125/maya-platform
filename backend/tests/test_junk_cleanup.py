@@ -45,7 +45,7 @@ def test_a_new_upload_that_never_indexes_is_not_kept(
         files={"file": ("missed.md", b"# Missed\n\nnot kept", "text/markdown")},
     )
     assert failed.status_code == 503, failed.text
-    assert failed.json()["code"] == "rag_index_failed"
+    assert failed.json()["code"] == "rag_upload_index_failed"
     with database.session() as db:
         assert (
             db.scalar(

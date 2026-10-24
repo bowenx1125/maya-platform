@@ -569,7 +569,7 @@ async def upload_knowledge_document(
         assert_claim_owned(db, record)
         if chunks is None:
             raise PlatformError(
-                "rag_index_failed",
+                "rag_upload_index_failed",
                 "This file could not be indexed, so it was not saved.",
                 503,
             )
