@@ -35,7 +35,6 @@ import {
   EmptyCard,
   ErrorNotice,
   LoadingCard,
-  Notice,
   PageIntro,
   SectionCard,
 } from "../../ui";
