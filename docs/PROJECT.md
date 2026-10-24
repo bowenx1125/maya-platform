@@ -257,3 +257,8 @@ without # heading+text,archived,Avatar) with a pencil to the Agent;Voice None sh
 never blocking (AGENTS voice rule). Agent editor hint bar;uploaded voice auto-selected.
 Team errors name the Agent;agent_in_team names own Teams;~40 codes get messages,unknown
 codes show their code.
+
+Local CI a9a34db3 (Linux,PG16): backend 3040 passed/22 skip; #242 alone 37968f87
+3032/22; frontend 1067/1; Ruff/format/mypy/tsc/lint/Prettier/contracts(159)/
+migration probes passed. Known flake test_course_live_socket_pushes_start_and_end
+reran green. Node 24.14 for Prettier/Latin tables. Actions billing-blocked;0 real calls.
