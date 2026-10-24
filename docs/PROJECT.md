@@ -219,14 +219,11 @@ built3e785c01. All Oct releases:0 real Provider calls;Actions billing-blocked.
 
 ## Oct24 Team chats and junk (#241)
 
-Open Team/Maya Team chats follow each new Team version (save, member publish,
-5-min sweep); turns/participants keep history. Mid-reply chats wait for the sweep;
-in-progress/paused formal attempts stay on their version, answers intact; a removed
-member who already replied keeps the chat on its old version. Failed uploads leave
-the library: never-indexed RAG returns 503 `rag_upload_index_failed`, not stored; failed
-Voices (refused/enrollment/mapping) are deleted unless charged (hidden) or holding a
-supplier id. The sweep hard-deletes empty Agents (no written/published version,
-files, Team/Debate/chat reference) after 1h, including same-name retired drafts.
+Open Team/Maya Team chats follow each new Team version (save,member publish,5-min
+sweep),history kept; mid-reply chats wait;in-progress/paused formal attempts and a
+removed member's replied chat stay on their version. Never-indexed RAG returns 503
+`rag_upload_index_failed`,not stored; failed Voices deleted unless charged or holding a
+supplier id. The sweep hard-deletes empty Agents (no version,files or reference) after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
@@ -242,9 +239,8 @@ supplier voice once when no Voice row or live Debate holds it (per-voice advisor
 keeps current+previous AGENT.md,skips versions a live chat/Team/unfinished attempt
 uses;5-min sweep prunes later. Failed uploads hard-deleted. Scripts (dry-run default,
 production needs --confirm-production): backfill_debate_snapshots (idempotent),
-backfill_debate_voice_clones (free copy),cleanup_soft_deleted (counts,prunes,disk orphans>1h;rolls
-back if Debate/answer counts move). Prod-shaped PG (create_all@0072+0073–0076,seeded):
-upgrade→downgrade→upgrade passed,counts kept;real prod schema dump still to run.
+backfill_debate_voice_clones (free copy),cleanup_soft_deleted (counts,prunes,disk
+orphans>1h;rolls back if Debate/answer counts move). Prod-shaped PG up→down→up passed.
 
 ## Oct24 Debate Next and errors
 
@@ -254,10 +250,8 @@ plays the blob (159 routes). debate_timing logs:generation/tts/lock_wait/audio_s
 next_request;browser logs audio_prefetch/audio_start. Uploaded voice auto-selected;
 Team errors name the Agent;agent_in_team names own Teams;unknown codes show the code.
 
-Local CI a9a34db3 (Linux,PG16): backend 3040 passed/22 skip; #242 alone 37968f87
-3032/22; frontend 1067/1; Ruff/format/mypy/tsc/lint/Prettier/contracts(159)/
-migration probes passed. Known flake test_course_live_socket_pushes_start_and_end
-reran green. Node 24.14 for Prettier/Latin tables. Actions billing-blocked;0 real calls.
+Local CI a9a34db3: backend 3040/22 skip,frontend 1067/1,all gates green.
+Node 24.14 for Prettier/Latin tables. Actions billing-blocked;0 real calls.
 
 ## Oct24 cleanup and Record hotfix
 
@@ -289,3 +283,13 @@ resolver/fence drift (agent_not_current etc.), shown in the same bar. malformed_
 details.errors gives field+type; the form writes one sentence per field; Retry resends.
 Agent page bar lines each have a Done that publishes edits in place and re-checks only
 that line. Topic copy: any language.
+
+## Oct24 timing logs (PR A)
+
+Each request logs a `request_timing` JSON line (method,route template,status,ms,
+db_ms/queries,provider ms per kind,host,slow≥1s; streams to headers; fast /health
+probes omitted); debate_timing adds prefetch_request and audio_serve authorize/read. Browser samples 25%
+of page loads: Next→speech,first contentful paint,assessment send→reply; POST
+/client-metrics (160 routes) logs `client_metric`,stores nothing. Read-only
+`scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
+provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.

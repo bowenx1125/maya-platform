@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core import request_timing
 from app.core.adaptive_admission import (
     adaptive_admission_snapshot,
     begin_request_sample,
@@ -113,6 +114,7 @@ from app.modules.runtime_tools.recovery import (
     recover_single_chat_runs,
 )
 from app.modules.teams.router import router as teams_router
+from app.modules.telemetry.router import router as telemetry_router
 from app.modules.voices.router import router as voices_router
 from app.modules.voices.service import startup_voice_cleanup
 from app.modules.workspace.attachments import router as chat_attachments_router
@@ -145,6 +147,12 @@ HEALTH_THREAD_TOKENS = 4
 # cpu_count + 4, only 6 on the 2-vCPU host, which would cap streamed sends
 # far below the write guard's 20.
 ASYNCIO_EXECUTOR_THREADS = 96
+
+
+def _streamed(content_type: str | None) -> bool:
+    if not content_type:
+        return False
+    return content_type.startswith(("text/event-stream", "audio/", "application/octet-stream"))
 
 
 def build_report_runtime(
@@ -288,6 +296,7 @@ def create_app(
     """
 
     configure_application_logging()
+    request_timing.install_query_timing()
     runtime_settings = settings or get_settings()
     runtime_database = database or Database(
         runtime_settings.database_url,
@@ -692,7 +701,27 @@ def create_app(
         request.state.request_id = str(uuid4())
         started = time.perf_counter()
         sample = begin_request_sample()
-        response = await call_next(request)
+        timing, timing_token = request_timing.begin()
+        status = 500
+        content_type: str | None = None
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            content_type = response.headers.get("content-type")
+        finally:
+            record = request_timing.finish(
+                timing,
+                timing_token,
+                method=request.method,
+                route=request_timing.route_template(request.scope),
+                status=status,
+                stream=_streamed(content_type),
+                log=False,
+            )
+            # Health probes run every few seconds on every replica; only a
+            # slow one is worth a line.
+            if record["slow"] or not request.url.path.startswith("/health/"):
+                request_timing.log_record(record)
         if request.url.path.startswith("/api/"):
             # Time-to-headers feeds the adaptive admission request-p95 signal;
             # LLM work and SSE streams are excluded (slow by nature).
@@ -789,6 +818,7 @@ def create_app(
     app.include_router(live_router, prefix="/api/v1")
     app.include_router(cardroom_router, prefix="/api/v1")
     app.include_router(provider_settings_router, prefix="/api/v1")
+    app.include_router(telemetry_router, prefix="/api/v1")
     # Demo composition/baseline/status and acceptance-run routes exist only
     # for the local Demo. Production must run with DEMO_MODE off, so these
     # unauthenticated or Demo-only surfaces are not registered there at all.

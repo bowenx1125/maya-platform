@@ -11,6 +11,7 @@ import httpx
 
 from app.core.llm_admission import llm_admission_slot
 from app.core.message_timing import add_model_call
+from app.core.request_timing import add_provider_time
 
 # Measured TLS handshakes to the fixed Beijing endpoint take 2.0-2.7s from
 # a developer network, so a 5s connect budget classified a healthy endpoint
@@ -303,6 +304,7 @@ def _record_model_call(
 ) -> None:
     try:
         duration_ms = (time.perf_counter() - started) * 1000.0
+        add_provider_time("llm", duration_ms)
         status = getattr(response, "status_code", None)
         status_code = status if isinstance(status, int) else None
         add_model_call(

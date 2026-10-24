@@ -99,6 +99,7 @@ const implemented = new Set([
   "retryDebatePreparation",
   "advanceDebatePlayback",
   "prefetchNextDebateAudio",
+  "reportClientMetrics",
   "freezeFinalInput",
   "deleteDebateVoice",
   "regenerateDebateTurnAudio",
