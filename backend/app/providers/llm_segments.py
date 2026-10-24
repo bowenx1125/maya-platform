@@ -63,7 +63,7 @@ from app.providers.llm_transport import (
 
 SEGMENT_PROTOCOL: Literal["segments_v2"] = "segments_v2"
 SEGMENT_PROMPT_VERSION = "segment_prompt_v2"
-FOUR_ROUND_SEGMENT_PROMPT_VERSION = "segment_prompt_four_round_v1"
+FOUR_ROUND_SEGMENT_PROMPT_VERSION = "segment_prompt_four_round_v2"
 SEGMENT_OUTPUT_SCHEMA_ID = "maya_llm_turn_output_v2"
 SEGMENT_OPERATION = "llm_debate_turn"
 SEGMENT_ENDPOINT_PATH = "/compatible-mode/v1/chat/completions"
@@ -84,6 +84,19 @@ SEGMENT_NO_HISTORY_COPY_RULE = (
     " speeches and the speech just before yours: refer to an earlier point in at most"
     " one new sentence of your own, then say something new. Verbatim repeats are removed"
     " by the server."
+)
+SEGMENT_NO_HISTORY_COPY_RULE_ZH = (
+    "不要逐字照抄 history 里的任何一句话，包括你自己之前的发言和紧挨在你前面的发言："
+    "提到前面的观点最多用一句自己的新话带过，然后说新的内容。逐字重复会被服务器删除。"
+)
+SEGMENT_REPAIR_PREFIX = (
+    " Repair the prior output using the same frozen input and this server feedback;"
+    " follow the prompt's upper-length guidance without padding the answer;"
+    " return the complete corrected JSON once: "
+)
+SEGMENT_REPAIR_PREFIX_ZH = (
+    "请用同一份冻结输入和下面的服务器反馈修正上一次输出；"
+    "遵守规则里的篇幅上限，不要凑字数；只返回一次完整的修正后 JSON："
 )
 
 
@@ -750,13 +763,12 @@ class SegmentLLMAdapter:
         )
         query_catalog = tuple(_query_record(item) for item in queries)
         system = build_segment_system_prompt(snapshot)
+        zh = getattr(snapshot, "language", "en") == "zh"
         if snapshot.history:
-            system += SEGMENT_NO_HISTORY_COPY_RULE
+            system += SEGMENT_NO_HISTORY_COPY_RULE_ZH if zh else SEGMENT_NO_HISTORY_COPY_RULE
         if repair_feedback is not None:
-            system += (
-                " Repair the prior output using the same frozen input and this server feedback;"
-                " follow the prompt's upper-length guidance without padding the answer;"
-                " return the complete corrected JSON once: " + _canonical(repair_feedback)
+            system += (SEGMENT_REPAIR_PREFIX_ZH if zh else SEGMENT_REPAIR_PREFIX) + _canonical(
+                repair_feedback
             )
         messages = (
             SegmentMessageV2(role="system", content=system),
@@ -798,7 +810,7 @@ class SegmentLLMAdapter:
             "messages": [{"role": item.role, "content": item.content} for item in messages],
             "enable_thinking": False,
             "stream": False,
-            "temperature": 0.2,
+            "temperature": 0.65,
             "top_p": 0.8,
             "n": 1,
             "response_format": {
@@ -1128,6 +1140,7 @@ __all__ = [
     "SEGMENT_OUTPUT_SCHEMA_ID",
     "SEGMENT_PROMPT_VERSION",
     "FOUR_ROUND_SEGMENT_PROMPT_VERSION",
+    "SEGMENT_NO_HISTORY_COPY_RULE_ZH",
     "segment_prompt_version",
     "SEGMENT_PROTOCOL",
     "SEGMENT_RECOVERY_INPUT_BYTES_LIMIT",

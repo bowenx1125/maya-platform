@@ -50,8 +50,13 @@ def test_actual_wire_uses_only_frozen_markdown_and_execution_contract(language, 
     assert request.system_message.content == system
     assert custom in system
     assert default_teaching_prompts()[language] not in system
-    assert f"Execute round {round_number} of 4" in system
-    assert "# Execution contract" in system
+    if language == "zh":
+        assert f"只执行 4 轮中的第 {round_number} 轮" in system
+        assert "# 执行约定" in system
+        assert "Execution contract" not in system
+    else:
+        assert f"Execute round {round_number} of 4" in system
+        assert "# Execution contract" in system
     assert "Output speech in" not in system
     assert "segments" in system
     assert "First-person pronouns in a history entry" not in system
@@ -246,10 +251,15 @@ def test_attribution_guidance_is_editable_ruleset_not_hidden_execution(language,
     rules = freeze_teaching_rules()
     assert rules["teaching_prompts"][language] == authored
     message = frozen_system_prompt(json.dumps(rules), 2, language)
-    assert heading in message.split("# Execution contract", 1)[0]
+    contract_heading = "# 执行约定" if language == "zh" else "# Execution contract"
+    assert heading in message.split(contract_heading, 1)[0]
     edited = authored.split(heading, 1)[0] + "\n## Custom discussion\nUse my teaching rules."
-    edited_message = compile_system_prompt(edited, 2)
+    edited_message = compile_system_prompt(edited, 2, language)
     assert heading not in edited_message
     assert "First-person pronouns" not in edited_message
     assert "preserve who gave it" not in edited_message
-    assert "Only act as discussion.self_id" in edited_message
+    assert (
+        "只以 discussion.self_id 的身份发言"
+        if language == "zh"
+        else "Only act as discussion.self_id"
+    ) in edited_message
