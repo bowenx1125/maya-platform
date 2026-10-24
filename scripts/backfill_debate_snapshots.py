@@ -9,6 +9,7 @@ production database also needs --confirm-production; back it up first.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,7 @@ def _guard_production(url: str, data_root: Path, *, apply: bool, confirmed: bool
     lowered = f"{url} {data_root}".lower()
     production = any(
         marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
-    )
+    ) or os.environ.get("MAYA_ENV") == "production"
     if apply and production and not confirmed:
         raise SystemExit("Production target: pass --confirm-production with --apply.")
 

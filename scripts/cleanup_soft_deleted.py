@@ -14,6 +14,7 @@ database and the data root first.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -73,7 +74,7 @@ def _looks_like_production(url: str, data_root: Path) -> bool:
     lowered = f"{url} {data_root}".lower()
     return any(
         marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
-    )
+    ) or os.environ.get("MAYA_ENV") == "production"
 
 
 # Roots that only hold files a database row owns. Anything else under the

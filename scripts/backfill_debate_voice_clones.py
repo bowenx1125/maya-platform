@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -78,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     lowered = f"{settings.database_url} {settings.resolved_data_root}".lower()
     production = any(
         marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
-    )
+    ) or os.environ.get("MAYA_ENV") == "production"
     if (args.create_rows or args.enroll) and production and not args.confirm_production:
         print("Production target: pass --confirm-production to write.", file=sys.stderr)
         return 2
