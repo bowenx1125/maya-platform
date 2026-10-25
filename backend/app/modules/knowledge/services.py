@@ -52,7 +52,7 @@ from app.core.models import (
     User,
 )
 from app.core.prefetch import prefetched
-from app.core.read_memo import memoized
+from app.core.read_memo import memoized, transaction_memoized
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
 from app.modules.agents.markdown import markdown_hash
@@ -1352,17 +1352,22 @@ def _enabled_documents(db: Session, version_id: str) -> list[KnowledgeDocument]:
             db,
             "enabled_documents",
             version_id,
-            lambda: db.scalars(
-                select(KnowledgeDocument)
-                .join(
-                    AgentVersionDocument, AgentVersionDocument.document_id == KnowledgeDocument.id
-                )
-                .where(
-                    AgentVersionDocument.agent_version_id == version_id,
-                    AgentVersionDocument.enabled.is_(True),
-                )
-                .order_by(AgentVersionDocument.order_index)
-            ).all(),
+            lambda: transaction_memoized(
+                db,
+                ("enabled_documents", version_id),
+                lambda: db.scalars(
+                    select(KnowledgeDocument)
+                    .join(
+                        AgentVersionDocument,
+                        AgentVersionDocument.document_id == KnowledgeDocument.id,
+                    )
+                    .where(
+                        AgentVersionDocument.agent_version_id == version_id,
+                        AgentVersionDocument.enabled.is_(True),
+                    )
+                    .order_by(AgentVersionDocument.order_index)
+                ).all(),
+            ),
         )
     )
 
