@@ -26,7 +26,7 @@ from app.core.postgres_compat import ensure_postgres_compat
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0078_chat_answer_decouple"
+ALEMBIC_HEAD = "0079_playback_media_tickets"
 _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 

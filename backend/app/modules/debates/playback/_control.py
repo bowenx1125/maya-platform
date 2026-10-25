@@ -28,6 +28,7 @@ from ._core import (
 )
 from .audio import AudioMetadata
 from .events import EventRecord
+from .offload import on_main
 from .protocols import (
     MemoryPlaybackRepository,
 )
@@ -1077,7 +1078,7 @@ class PlaybackControlMixin(PlaybackCore):
             self._finish_control_idempotency(db, record, result)
             self._commit(db)
         if partial:
-            await self.task_manager.cancel_debate(debate_id)
+            await on_main(self.task_manager.cancel_debate(debate_id))
             self.ticket_store.revoke_debate(debate_id)
         else:
             self.ticket_store.revoke_debate(debate_id)
@@ -1418,7 +1419,7 @@ class PlaybackControlMixin(PlaybackCore):
             self._commit(db)
             if current_id:
                 self.ticket_store.revoke_item(debate_id, current_id)
-        await self.task_manager.cancel_debate(debate_id)
+        await on_main(self.task_manager.cancel_debate(debate_id))
         self.ticket_store.revoke_debate(debate_id)
         if stopped_epoch is not None:
             self._revoke_epoch(stopped_epoch, debate_id, "debate_terminal")
@@ -1586,7 +1587,7 @@ class PlaybackControlMixin(PlaybackCore):
                     },
                 )
             self._commit(db)
-            await self.task_manager.cancel_debate(debate_id)
+            await on_main(self.task_manager.cancel_debate(debate_id))
             self.ticket_store.revoke_debate(debate_id)
             if reset_epoch is not None:
                 self._revoke_epoch(str(reset_epoch), debate_id, "debate_terminal")
@@ -1682,7 +1683,7 @@ class PlaybackControlMixin(PlaybackCore):
                     },
                 )
             self._commit(db)
-        await self.task_manager.cancel_debate(debate_id)
+        await on_main(self.task_manager.cancel_debate(debate_id))
         self.ticket_store.revoke_debate(debate_id)
         if reset_epoch is not None:
             self._revoke_epoch(reset_epoch, debate_id, "debate_terminal")

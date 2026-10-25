@@ -296,6 +296,9 @@ class Settings(BaseSettings):
     debate_event_relay_poll_seconds: float = Field(
         default=1.0, ge=0.1, le=30, validation_alias="DEBATE_EVENT_RELAY_POLL_SECONDS"
     )
+    # Serve Debate speeches as MP3 (ffmpeg, cached in memory) as well as WAV.
+    # Off by default for local runs and tests; production Compose turns it on.
+    debate_audio_mp3: bool = Field(default=False, validation_alias="DEBATE_AUDIO_MP3")
     # Per-operation backstop: concurrent Agent/Team/Conversation creates per
     # process. 8 per backend (#140 sweep, 2026-10-18): a class opening its
     # chats at once peaked at 8 here and waited briefly instead of reaching

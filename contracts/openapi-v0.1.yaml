@@ -3492,6 +3492,22 @@ paths:
       - $ref: '#/components/parameters/Range'
       - $ref: '#/components/parameters/IfRange'
       - $ref: '#/components/parameters/MediaTicket'
+      - name: If-None-Match
+        in: header
+        required: false
+        schema:
+          type: string
+          maxLength: 1024
+      - name: format
+        in: query
+        required: false
+        description: mp3 asks for the compressed copy; WAV is served when none exists.
+        schema:
+          type: string
+          enum:
+          - wav
+          - mp3
+          default: wav
       responses:
         '200':
           description: Teacher-authorized complete retained audio.
@@ -3504,6 +3520,10 @@ paths:
               $ref: '#/components/headers/ContentLength'
           content:
             audio/wav:
+              schema:
+                type: string
+                format: binary
+            audio/mpeg:
               schema:
                 type: string
                 format: binary
@@ -3523,6 +3543,15 @@ paths:
               schema:
                 type: string
                 format: binary
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The browser's copy (If-None-Match) is still current.
+          headers:
+            ETag:
+              $ref: '#/components/headers/AudioEtag'
         '403':
           $ref: '#/components/responses/Error'
         '404':
@@ -8540,7 +8569,7 @@ components:
           $ref: '#/components/schemas/Uuid'
         media_url:
           type: string
-          pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$
+          pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$
     ReleaseDebateRequest:
       type: object
       additionalProperties: false
@@ -9070,7 +9099,7 @@ components:
             type:
             - string
             - 'null'
-            pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$
+            pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$
     PlaybackState:
       type: object
       required:

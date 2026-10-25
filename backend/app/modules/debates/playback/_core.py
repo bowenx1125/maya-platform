@@ -16,8 +16,8 @@ import json
 import logging
 import re
 import time
-import weakref
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -34,6 +34,8 @@ from app.providers.tts import TTS_UNAVAILABLE_CODES, MockTTSProvider, TTSProvide
 
 from .audio import AudioMetadata, AudioStore, MediaTicketBinding, MediaTicketStore
 from .events import DebateEventHub, EventRecord, validate_event_payload
+from .locks import DebateLocks
+from .offload import on_main, spawn_on_main
 from .protocols import (
     LIVE_LOOKAHEAD_TURNS,
     MemoryPlaybackRepository,
@@ -45,10 +47,13 @@ from .schemas import (
     MediaPreparedResult,
     PlaybackStateDTO,
 )
+from .ticket_store import SqlMediaTicketStore
 
 LOGGER = logging.getLogger(__name__)
 # Lock waits at or above this are logged; shorter ones are routine.
 LOCK_WAIT_LOG_MS = 50
+# Background MP3 encodes of ready speeches (PR C).
+_WARM_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="maya-audio-mp3")
 _WORD_RE = re.compile(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*")
 _SAFE_GENERATION_CODES = {
     "turn_generation_failed",
@@ -175,7 +180,11 @@ class PlaybackCore:
     ) -> None:
         self.repository: PlaybackRepository = repository or MemoryPlaybackRepository()
         self.audio_store = audio_store
-        self.ticket_store = ticket_store or MediaTicketStore()
+        # PR C: tickets live in PostgreSQL whenever the service has a
+        # database, so the other replica honors them too.
+        self.ticket_store = ticket_store or (
+            SqlMediaTicketStore(session_factory) if session_factory else MediaTicketStore()
+        )
         self.event_hub = event_hub or DebateEventHub()
         if task_manager is None:
             from .task_manager import TaskManager
@@ -210,9 +219,7 @@ class PlaybackCore:
         # section serializes one Debate only, so a slow database write for one
         # classroom never holds Next for another.
         self._startup_lock = asyncio.Lock()
-        self._debate_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
-            weakref.WeakValueDictionary()
-        )
+        self._debate_locks = DebateLocks.for_session_factory(session_factory)
 
     async def recover_startup(self, db: Any) -> tuple[str, ...]:
         """Fence interrupted work, revoke controllers and recover audio swaps."""
@@ -1726,7 +1733,8 @@ class PlaybackCore:
         return event
 
     async def _publish_event(self, event: EventRecord) -> None:
-        await self.event_hub.publish(event)
+        # Subscribers live on the server loop, also for offloaded work.
+        await on_main(self.event_hub.publish(event))
 
     async def _publish_events(self, events: list[EventRecord]) -> None:
         for event in events:
@@ -1754,18 +1762,40 @@ class PlaybackCore:
                 # Do not block the takeover transaction for a best-effort
                 # private notification; the socket also observes the epoch.
                 try:
-                    asyncio.create_task(cast(Coroutine[Any, Any, None], maybe))
+                    spawn_on_main(cast(Coroutine[Any, Any, None], maybe))
                 except RuntimeError:
                     pass
 
+    def _warm_compressed(self, debate_id: str, turn_id: str) -> None:
+        """Encode a ready speech's MP3 copy in the background (best effort).
+
+        The browser's first download then finds the copy already in memory.
+        """
+
+        store = self.audio_store
+        if store is None or not store.compressed:
+            return
+
+        def warm() -> None:
+            try:
+                store.compressed_copy(debate_id, turn_id)
+            except Exception:  # noqa: BLE001 - a later request encodes it instead
+                LOGGER.info(
+                    "debate_timing stage=audio_compress_skipped debate_id=%s turn_id=%s",
+                    debate_id,
+                    turn_id,
+                )
+
+        # Not the loop's executor: an offloaded loop would wait for it on exit.
+        _WARM_EXECUTOR.submit(warm)
+
     @asynccontextmanager
     async def _debate_lock(self, debate_id: str, operation: str) -> AsyncIterator[None]:
-        lock = self._debate_locks.get(debate_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._debate_locks[debate_id] = lock
+        """One playback writer per Debate in every thread and replica (PR C)."""
+
         started = time.monotonic()
-        async with lock:
+        release = await self._debate_locks.acquire(debate_id)
+        try:
             waited_ms = int((time.monotonic() - started) * 1000)
             if waited_ms >= LOCK_WAIT_LOG_MS:
                 LOGGER.info(
@@ -1775,6 +1805,8 @@ class PlaybackCore:
                     waited_ms,
                 )
             yield
+        finally:
+            await self._debate_locks.release(release)
 
     def _lookahead_turn(self, turns: list[Any], current_index: int) -> Any | None:
         """The next turn to prepare inside the live window, if any.
@@ -1818,10 +1850,12 @@ class PlaybackCore:
 
     async def _enqueue(self, debate: Any, turn: Any) -> bool:
         try:
-            return await self.task_manager.enqueue(
-                self._debate_id(debate),
-                str(turn.id),
-                self._prepare_task,
+            return await on_main(
+                self.task_manager.enqueue(
+                    self._debate_id(debate),
+                    str(turn.id),
+                    self._prepare_task,
+                )
             )
         except RuntimeError:
             # A synchronous caller can explicitly invoke prepare_turn.  Do not
