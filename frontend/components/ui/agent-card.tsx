@@ -144,6 +144,7 @@ export function AgentCard({
   visibilityLabel,
   mascot,
   footer,
+  caption,
   guideText,
   deleting = false,
   onDelete,
@@ -159,6 +160,8 @@ export function AgentCard({
   visibilityLabel?: string;
   mascot: MascotId;
   footer?: ReactNode;
+  /** A short line above the version strip (e.g. the team on teacher Home). */
+  caption?: ReactNode;
   /** ui-guide hover help (last editor). */
   guideText?: string;
   deleting?: boolean;
@@ -214,7 +217,12 @@ export function AgentCard({
   const titleClass =
     "block min-w-0 font-display text-[22px] font-extrabold leading-tight text-ink no-underline";
   const strip = (
-    <span className="relative z-[1] flex items-center gap-1.5 p-2.5">
+    <span className="relative z-[1] flex flex-col items-start gap-1.5 p-2.5">
+      {caption ? (
+        <span className="max-w-full truncate text-[11px] font-bold text-[#333]">
+          {caption}
+        </span>
+      ) : null}
       <VersionStrip
         label={label}
         pending={pending}
