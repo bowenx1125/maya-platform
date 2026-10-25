@@ -118,7 +118,7 @@ describe("sidebar groups", () => {
       nav().getByRole("link", { name: "Chat with Team" }).getAttribute("href"),
     ).toBe("/student/chat");
     // Brainform has no page of its own for a student: a heading, not a link.
-    expect(nav().queryByRole("link", { name: "Brainform" })).toBeNull();
+    expect(document.querySelector('[data-tour="brain"]')).toBeNull();
   });
 
   it("gives a teacher Knowledge in Brainform and Debates and Accounts in Classroom", () => {
@@ -142,9 +142,9 @@ describe("sidebar groups", () => {
   it("keeps a visiting teacher's Brainform entry for that group", () => {
     state.user = { ...teacher(), groups: [{ group_id: "g", role: "admin" }] };
     renderShell("teacher", "/student/groups/g");
-    expect(
-      nav().getByRole("link", { name: "Brainform" }).getAttribute("href"),
-    ).toBe("/teacher/knowledge?group_id=g");
+    expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
+      "/teacher/knowledge?group_id=g",
+    );
     expect(nav().getByRole("link", { name: "RAG" }).getAttribute("href")).toBe(
       "/teacher/knowledge?group_id=g",
     );
@@ -233,5 +233,81 @@ describe("Live", () => {
     const collapsed = screen.getByRole("link", { name: "Live" });
     expect(collapsed.querySelector("[data-live-sticker]")).toBeNull();
     expect(collapsed.querySelector('[data-live-lamp="on"]')).toBeTruthy();
+  });
+});
+
+describe("group headings", () => {
+  it("are plain labels, and the first row of each group carries its tour place", () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
+    renderShell("student", "/student/groups/group-a");
+    const groups = screen
+      .getAllByRole("group")
+      .filter((group) => group.hasAttribute("aria-labelledby"));
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) {
+      const heading = group.querySelector(
+        `#${group.getAttribute("aria-labelledby")}`,
+      );
+      expect(heading).not.toBeNull();
+      expect(heading!.querySelector("a, button")).toBeNull();
+    }
+    expect(
+      document.querySelector('[data-tour="knowledge"]')?.textContent?.trim(),
+    ).toBe("Agents");
+    expect(
+      document.querySelector('[data-tour="chat"]')?.textContent?.trim(),
+    ).toBe("Chat with Agent");
+    expect(
+      nav().getByRole("link", { name: "Agents" }).getAttribute("aria-current"),
+    ).toBe("page");
+  });
+});
+
+describe("tour on a phone", () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(max-width: 900px)",
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+          addListener() {},
+          removeListener() {},
+        }) as unknown as MediaQueryList,
+    );
+  });
+  afterEach(() => {
+    window.sessionStorage.clear();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("opens the drawer for a sidebar step and closes it afterwards", async () => {
+    window.sessionStorage.setItem(
+      "maya.tour.state",
+      JSON.stringify({
+        ids: ["knowledge", "welcome"],
+        index: 0,
+        groupHref: "/student/groups/group-a",
+      }),
+    );
+    window.history.replaceState(null, "", "/student");
+    renderShell("student", "/student");
+    const menu = () =>
+      document.querySelector<HTMLElement>(
+        'button[aria-controls="workspace-sidebar"]',
+      )!;
+    expect(menu().getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() =>
+      expect(menu().getAttribute("aria-expanded")).toBe("true"),
+    );
+    act(() => {
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+    });
+    await waitFor(() =>
+      expect(menu().getAttribute("aria-expanded")).toBe("false"),
+    );
   });
 });

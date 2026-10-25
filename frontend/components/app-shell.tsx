@@ -31,6 +31,11 @@ import {
 } from "../lib/teacher-visit";
 import { useSession } from "./session-provider";
 import { OnboardingTour } from "./onboarding-tour";
+import {
+  SIDEBAR_ID,
+  SIDEBAR_MOBILE_QUERY,
+  SIDEBAR_REVEAL_EVENT,
+} from "../lib/sidebar-reveal";
 
 type ActionRegistration = {
   owner: string;
@@ -74,7 +79,7 @@ function subscribeCollapsed(listener: () => void) {
   };
 }
 
-const MOBILE_QUERY = "(max-width: 900px)";
+const MOBILE_QUERY = SIDEBAR_MOBILE_QUERY;
 
 function subscribeMobile(listener: () => void) {
   const query = window.matchMedia?.(MOBILE_QUERY);
@@ -97,8 +102,8 @@ type SidebarItem = {
 type SidebarGroup = {
   key: "studyform" | "brainform" | "chatform" | "classroom";
   label: string;
-  /** Today's top-level entry for this group, kept as the heading link. */
-  heading?: { href: string; tour: string };
+  /** The tour target today's top-level entry carried; now on the first row. */
+  tour?: string;
   rail: string;
   tile: string;
   square: string;
@@ -562,6 +567,15 @@ export function AppShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  useEffect(() => {
+    // The tour opens the drawer for a step that points into it.
+    const onReveal = (event: Event) => {
+      const open = (event as CustomEvent<{ open?: boolean }>).detail?.open;
+      setDrawerPath(open ? window.location.pathname : null);
+    };
+    window.addEventListener(SIDEBAR_REVEAL_EVENT, onReveal);
+    return () => window.removeEventListener(SIDEBAR_REVEAL_EVENT, onReveal);
+  }, []);
 
   const studentVoicesHref =
     !teacherSurface && groupId
@@ -574,7 +588,7 @@ export function AppShell({
     {
       key: "studyform",
       label: t("studyform"),
-      heading: { href: studyformHref, tour: "knowledge" },
+      tour: "knowledge",
       rail: "border-studyform",
       tile: "bg-studyform",
       square: "bg-studyform",
@@ -596,7 +610,7 @@ export function AppShell({
     {
       key: "brainform",
       label: "Brainform",
-      heading: brainHref ? { href: brainHref, tour: "brain" } : undefined,
+      tour: brainHref ? "brain" : undefined,
       rail: "border-brainform",
       tile: "bg-brainform",
       square: "bg-brainform",
@@ -629,7 +643,7 @@ export function AppShell({
     {
       key: "chatform",
       label: "Chatform",
-      heading: { href: chatHref, tour: "chat" },
+      tour: "chat",
       rail: "border-chatform",
       tile: "bg-chatform",
       square: "bg-chatform",
@@ -667,7 +681,7 @@ export function AppShell({
     },
   ];
   // The pink pill marks one row: Voices on its own page, otherwise the first
-  // row that opens the active page. aria-current stays on today's entries.
+  // row that opens the active page; that row carries aria-current.
   const onVoices = Boolean(studentVoicesHref && pathname === studentVoicesHref);
   let litKey: string | undefined;
   for (const group of groups) {
@@ -701,11 +715,10 @@ export function AppShell({
 
   function renderItem(group: SidebarGroup, item: SidebarItem, index: number) {
     const lit = litKey === `${group.key}:${item.key}`;
-    // Today's entries keep their aria-current, active class and data-tour.
+    // Live, Debates and Accounts keep today's aria-current and active class.
     const legacy = links.find((link) => link.icon === item.key);
-    const current = legacy ? activeHref === legacy.href : collapsed && lit;
-    const tour =
-      item.tour ?? (collapsed && index === 0 ? group.heading?.tour : undefined);
+    const current = legacy ? activeHref === legacy.href : lit;
+    const tour = item.tour ?? (index === 0 ? group.tour : undefined);
     const isLive = item.key === "live";
     if (item.disabled) {
       return (
@@ -777,7 +790,7 @@ export function AppShell({
             className="grid size-10 place-items-center rounded-arc-s border-[3px] border-border bg-surface text-ink shadow-arc-s active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
             aria-label={t("sidebarExpand")}
             aria-expanded={drawerOpen}
-            aria-controls="workspace-sidebar"
+            aria-controls={SIDEBAR_ID}
             onClick={() => setDrawerPath(pathname)}
           >
             <WorkspaceIcon name="menu" />
@@ -798,7 +811,7 @@ export function AppShell({
           />
         ) : null}
         <header
-          id="workspace-sidebar"
+          id={SIDEBAR_ID}
           data-collapsed={collapsed || undefined}
           className={`sticky top-0 z-20 h-dvh border-r-[3px] border-border bg-sidebar max-[900px]:fixed max-[900px]:inset-y-0 max-[900px]:left-0 max-[900px]:z-50 max-[900px]:w-[min(300px,85vw)] max-[900px]:transition-transform max-[900px]:duration-150 max-[900px]:motion-reduce:transition-none ${drawerOpen ? "" : "max-[900px]:invisible max-[900px]:-translate-x-full"}`}
         >
@@ -807,7 +820,7 @@ export function AppShell({
             className="absolute top-5 -right-[18px] z-10 grid size-8 place-items-center rounded-full border-[3px] border-border bg-surface text-ink shadow-[2px_2px_0_#111] transition-[transform,box-shadow] duration-75 hover:-translate-y-px active:translate-x-[2px] active:translate-y-[2px] active:shadow-none motion-reduce:transition-none"
             aria-label={toggleLabel}
             aria-expanded={mobile ? drawerOpen : !collapsed}
-            aria-controls="workspace-sidebar"
+            aria-controls={SIDEBAR_ID}
             aria-keyshortcuts="Control+B Meta+B"
             title={`${toggleLabel} (Ctrl/⌘ B)`}
             onClick={() =>
@@ -844,8 +857,7 @@ export function AppShell({
               </Link>
               {groups.map((group) => {
                 const headingId = `sidebar-group-${group.key}`;
-                const headingCurrent =
-                  group.heading && activeHref === group.heading.href;
+
                 return (
                   <div
                     key={group.key}
@@ -868,18 +880,7 @@ export function AppShell({
                           aria-hidden="true"
                           className={`size-2 border-2 border-border ${group.square}`}
                         />
-                        {group.heading ? (
-                          <Link
-                            href={group.heading.href}
-                            data-tour={group.heading.tour}
-                            aria-current={headingCurrent ? "page" : undefined}
-                            className={`rounded-[3px] text-ink no-underline hover:underline${headingCurrent ? " active" : ""}`}
-                          >
-                            {group.label}
-                          </Link>
-                        ) : (
-                          <span>{group.label}</span>
-                        )}
+                        <span>{group.label}</span>
                       </div>
                     )}
                     <ul
