@@ -359,8 +359,8 @@ def import_reviewed_policy(
 ) -> PolicyImportResult:
     """Validate then idempotently persist policy data through the domain seam."""
 
-    if not isinstance(database_url, str) or not database_url.startswith("sqlite:"):
-        raise _fail("an explicit SQLite database URL is required")
+    if not isinstance(database_url, str) or not database_url.startswith("postgresql"):
+        raise _fail("an explicit PostgreSQL database URL is required")
     policy = validate_reviewed_policy(
         document,
         acknowledge_reviewed=acknowledge_reviewed,

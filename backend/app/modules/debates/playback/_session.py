@@ -448,7 +448,7 @@ class PlaybackSessionMixin(PlaybackCore):
             except Exception:
                 self.ticket_store.revoke_token(token)
                 raise
-            media_url = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
+            media_url = self._media_url(debate_id, turn_id, token)
             result = MediaPreparedResult(
                 message_id=uuid4(),
                 debate_id=UUID(debate_id),
@@ -1078,6 +1078,8 @@ class PlaybackSessionMixin(PlaybackCore):
             "insight_status": wave3["insight_status"],
             "report_status": wave3["report_status"],
             "public_turns": public_turns,
+            # PR A2: the Immerse stage starts downloading these at once.
+            "audio_ready_turn_ids": self.audio_ready_turn_ids(db, debate),
             "playback": self._state_dto(state, db, debate).model_dump(mode="json"),
             "interaction": wave3["interaction"],
             "report": wave3["report"],
@@ -1090,20 +1092,27 @@ class PlaybackSessionMixin(PlaybackCore):
         db: Any,
         debate_id: str,
         *,
-        expected_control_version: int,
-        expected_current_turn_id: str,
+        expected_control_version: int | None,
+        expected_current_turn_id: str | None,
         epoch: str,
         session_hash: str,
+        turn_id: str | None = None,
         context: AuthContext | None = None,
     ) -> tuple[str, str]:
-        """Let the active controller download the ready next turn ahead of Next.
+        """Let the active controller download a ready speech before it plays.
 
-        Owner decision (2026-10-24): the browser preloads a speech as soon as
-        its audio is ready. The ticket is the controller's own, names exactly
-        the adjacent successor of the playing turn, and is only honoured while
-        that is still true; it never makes the turn public or current.
+        PR A2 (2026-10-24): the Immerse stage downloads every speech whose
+        audio is ready, one after another, independent of Next and of the
+        playback state; ``turn_id`` names it. The ticket is the controller's
+        own and never makes the turn public or current. Without ``turn_id``
+        the older form names the adjacent successor of the playing turn.
         """
 
+        if turn_id is not None:
+            return await self._prefetch_turn(
+                db, debate_id, turn_id, epoch=epoch, session_hash=session_hash, context=context
+            )
+        assert expected_control_version is not None and expected_current_turn_id is not None
         async with self._debate_lock(debate_id, "prefetch_next_audio"):
             debate = self._get_debate(db, debate_id)
             self._assert_teacher(db, debate, context)
@@ -1134,8 +1143,92 @@ class PlaybackSessionMixin(PlaybackCore):
             )
             return (
                 successor_id,
-                f"/api/v1/debates/{debate_id}/audio/{successor_id}?media_ticket={token}",
+                self._media_url(debate_id, successor_id, token),
             )
+
+    async def _prefetch_turn(
+        self,
+        db: Any,
+        debate_id: str,
+        turn_id: str,
+        *,
+        epoch: str,
+        session_hash: str,
+        context: AuthContext | None,
+    ) -> tuple[str, str]:
+        debate = self._get_debate(db, debate_id)
+        self._assert_teacher(db, debate, context)
+        state = self._state(db, debate)
+        self._check_epoch(state, epoch=epoch, session_hash=session_hash)
+        turn = next((item for item in self._turns(db, debate) if str(item.id) == turn_id), None)
+        if turn is None or not self._prefetchable_turn(db, debate, turn):
+            raise conflict("next_not_ready", "This speech's audio is not ready yet.")
+        return turn_id, self._prefetch_url(debate_id, turn_id, state, epoch, session_hash)
+
+    def _prefetch_url(
+        self, debate_id: str, turn_id: str, state: Any, epoch: str, session_hash: str
+    ) -> str:
+        # One outstanding prefetch per item; a repeat replaces it.
+        self.ticket_store.revoke_item(debate_id, turn_id)
+        token, _binding = self.ticket_store.issue(
+            session_hash=session_hash,
+            controller_epoch=epoch,
+            debate_id=debate_id,
+            turn_id=turn_id,
+            action="prefetch",
+            control_version=state.control_version,
+        )
+        return self._media_url(debate_id, turn_id, token)
+
+    def _media_url(self, debate_id: str, turn_id: str, token: str) -> str:
+        """The ticket URL; it asks for the MP3 copy when the server can encode one."""
+
+        url = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
+        store = self.audio_store
+        return f"{url}&format=mp3" if store is not None and store.compressed else url
+
+    def _prefetchable_turn(self, db: Any, debate: Any, turn: Any) -> bool:
+        """A speech whose saved audio can be downloaded now (final and validated)."""
+
+        return (
+            str(self._get(turn, "generation_status", default="")) == "final_ready"
+            and not self._turn_text_only(turn)
+            and not self._turn_text_fallback_ready(turn)
+            and self._validated_turn_audio(db, debate, turn) is not None
+        )
+
+    def audio_ready_turn_ids(self, db: Any, debate: Any) -> list[str]:
+        """Every speech whose audio can be downloaded now, in speaking order."""
+
+        return [
+            str(turn.id)
+            for turn in self._turns(db, debate)
+            if self._prefetchable_turn(db, debate, turn)
+        ]
+
+    def current_audio_url(
+        self, db: Any, debate_id: str, *, session_hash: str, context: AuthContext | None = None
+    ) -> str | None:
+        """After Next: a controller ticket URL for the new current speech, if ready."""
+
+        debate = self._get_debate(db, debate_id)
+        self._assert_teacher(db, debate, context)
+        state = self._state(db, debate)
+        if (
+            not state.controller_epoch
+            or state.controller_session_hash != session_hash
+            or not state.current_turn_id
+        ):
+            return None
+        turn = next(
+            (item for item in self._turns(db, debate) if str(item.id) == state.current_turn_id),
+            None,
+        )
+        if turn is None or not self._prefetchable_turn(db, debate, turn):
+            return None
+        return self._prefetch_url(
+            debate_id, str(turn.id), state, str(state.controller_epoch), session_hash
+        )
 
     def _prefetchable_successor(self, db: Any, debate: Any, state: Any) -> Any | None:
         if not self._next_turn_ready(db, debate, state):
@@ -1195,11 +1288,9 @@ class PlaybackSessionMixin(PlaybackCore):
             raise forbidden()
         state = self._state(db, debate)
         if ticket_binding.action == "prefetch":
-            successor = self._prefetchable_successor(db, debate, state)
-            if (
-                state.controller_epoch != ticket_binding.controller_epoch
-                or successor is None
-                or str(successor.id) != turn_id
+            # PR A2: any ready speech, for the controller that asked for it.
+            if state.controller_epoch != ticket_binding.controller_epoch or not (
+                self._prefetchable_turn(db, debate, turn)
             ):
                 raise forbidden()
             return AudioAuthorization(metadata, ticket_binding)

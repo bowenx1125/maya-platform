@@ -77,11 +77,11 @@ missing, so resetting the runtime no longer removes the review.
 Two separate entry points, one per real slice:
 
 ```bash
-python scripts/import_llm_policy.py --policy-file <your-llm-policy>.json --database-url "sqlite:///$(pwd)/data/maya.sqlite3" --acknowledge-reviewed
+python scripts/import_llm_policy.py --policy-file <your-llm-policy>.json --database-url "$DATABASE_URL" --acknowledge-reviewed
 ```
 
 ```bash
-python scripts/import_provider_policy.py --policy-file <your-embedding-policy>.json --database-url "sqlite:///$(pwd)/data/maya.sqlite3" --acknowledge-reviewed
+python scripts/import_provider_policy.py --policy-file <your-embedding-policy>.json --database-url "$DATABASE_URL" --acknowledge-reviewed
 ```
 
 `--acknowledge-reviewed` is a human attestation. Nobody may pass it on your
@@ -98,7 +98,7 @@ policy fails before it reaches the database.
    `TTS_PROVIDER=dashscope` and `VOICE_PROVIDER=dashscope` as well; they use the
    same `DASHSCOPE_API_KEY` and there is no separate speech key. Leave them
    `mock` when speech is not needed.
-2. Back up SQLite, preserve the effective environment and saved settings, then
+2. Back up PostgreSQL, preserve the effective environment and saved settings, then
    recreate only the affected Maya services. Verify readiness and effective
    provider configuration in the maintenance layer; these checks do not prove
    successful provider calls.
@@ -130,7 +130,7 @@ To rotate:
    `DASHSCOPE_REGION` and `SESSION_SECRET` unchanged. Changing the secret makes
    existing voice envelopes undecryptable. Changing the workspace strands the
    cloned voices.
-2. After backing up SQLite and checking for active requests, recreate the
+2. After backing up PostgreSQL and checking for active requests, recreate the
    backend with the reviewed environment. The process reads the key at startup;
    a plain restart does not apply changed Compose environment values. There is
    no migration.

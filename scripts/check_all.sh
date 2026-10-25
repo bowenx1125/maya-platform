@@ -15,6 +15,8 @@ step "backend format"
 step "backend types"
 (cd backend && uv run mypy app)
 step "backend tests"
+# PostgreSQL only: each test gets its own database on this server.
+: "${MAYA_TEST_POSTGRES_URL:?Set MAYA_TEST_POSTGRES_URL to a PostgreSQL server for the backend tests}"
 (cd backend && uv run pytest -q)
 
 step "repository format"
@@ -27,6 +29,7 @@ step "frontend tests"
 pnpm frontend:test
 
 step "documents"
+pnpm node:check
 pnpm docs:check
 pnpm latin-script:check
 
@@ -43,12 +46,7 @@ node scripts/test_ws_events.mjs
 node scripts/test_ws_commands.mjs
 node scripts/test_repo_boundary.mjs
 
-step "migrations and scripts"
-uv run --directory backend python ../scripts/test_wave1_migration.py
-uv run --directory backend python ../scripts/test_wave2_migration.py
-uv run --directory backend python ../scripts/test_wave3_migration.py
-uv run --directory backend python ../scripts/test_wave4_migration.py
-uv run --directory backend python ../scripts/test_wave4_evidence_migration.py
+step "scripts"
 uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 uv run --directory backend python ../scripts/test_reset_demo_runtime.py
 
@@ -56,5 +54,9 @@ step "route surface"
 uv run --directory backend python ../scripts/export_fastapi_openapi.py /tmp/maya-openapi.json
 node scripts/compare_route_surface.mjs --server-openapi /tmp/maya-openapi.json
 node scripts/test_route_surface.mjs
+
+step "production build"
+pnpm --filter @maya/frontend build
+node scripts/check_production_routes.mjs
 
 printf '\n\033[32mAll deterministic gates passed.\033[0m\n'

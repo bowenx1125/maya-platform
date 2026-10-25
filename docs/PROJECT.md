@@ -150,14 +150,8 @@ Ordinary chat/greetings:leader then members,relevant length; omit empty replies,
 fail; @-named member must reply. `## Informal` may alter speakers/length. ACL→ledger→
 Ruleset; only server appends report links; later executor turns keep scorer/summarizer.
 
-Built `f007a11` (PR #69),then `2c62871` (PRs #71/#72); backups
-`maya-20261014T111701Z`/`T135154Z.sqlite3` ok,schema0064,ready/public200.
-
-Oct16 ADR-010:PostgreSQL prod preserves maya.sqlite3. Postgres16/stamp
-0065_auth_login_admission accepted read-only SQLite-head import (111 tables,receipt).
-Compose:BACKEND_REPLICAS,max_connections=200. Sign-in DB overload:auth_login_queued
-(排队等待入列),not outage copy; formal turns keep chat_busy. Real classroom load/
-cutover unaccepted.
+Oct16 ADR-010:PostgreSQL prod (PR B: only database).
+Compose:BACKEND_REPLICAS,max_connections=200; sign-in overload→auth_login_queued.
 
 Oct15:Team revision0,no canned opening. Teachers list formal attempts/phase/conversation
 id without Enter; private Agents/Teams/RAG/voices need Enter. Activity:Team,Knowledge,
@@ -223,7 +217,7 @@ kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
-Head0078_chat_answer_decouple. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
+Head0079_playback_media_tickets. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
 with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
 Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
 unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
@@ -244,19 +238,12 @@ Local CI a9a34db3 (PG16): backend 3040/22 skip, frontend 1067/1, all gates (159 
 
 ## Oct24 cleanup and Record hotfix
 
-Production cleanup --apply rolled back on knowledge_generation_accepted_stages; the
-5-min prune failed on fk_provider_export_manifests_agent_version (RESTRICT in prod,
-SET NULL in models); rolled-back deletes had already unlinked 841 files. Hard deletes
-now run through app/modules/purge.py: one rule (delete/null/protect) per foreign key
-into every deleted table, read from the live catalog, never relying on ON DELETE;
-records,answers,Debate copies and ledgers only get null; a test fails on an unruled FK.
-Files unlink only after the outermost commit (dropped on rollback). Teacher Record
-reads attempts by course+student only (no Team/publication/chat/Agent checks); a
-Team-deleted unfinished attempt shows as paused for both sides; ungrouped students
-listed; a deleted chat no longer 500s Record (conversation_id nullable). Teacher delete
-is real (attempt,answers,scores; chat kept). Prod-shaped 0076→0078 seeded run:
-main reproduced the FK error and file loss; fix dry-run→apply→apply second run 0,
-Debate snapshots/answers/participants unchanged. 0078 lost no link fields: no backfill.
+Prod cleanup rolled back on an unruled FK and had unlinked 841 files. Hard deletes now
+run through app/modules/purge.py: one rule (delete/null/protect) per FK into every
+deleted table from the live catalog (a test fails on an unruled FK); records, answers,
+Debate copies and ledgers only get null; files unlink after the outermost commit.
+Teacher Record reads attempts by course+student; teacher delete is real (chat kept).
+Prod-shaped 0076→0078 run: dry-run→apply→second apply 0, snapshots unchanged.
 
 ## Oct24 Agent hints and Debate create
 
@@ -283,15 +270,33 @@ of page loads: Next→speech,first contentful paint,assessment send→reply; POS
 `scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
 provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.
 
+## Oct24 PostgreSQL only (PR B)
+
+SQLite DATABASE_URL is refused; the startup import is gone. scripts/migrate_sqlite_to_postgres.py
+copies an old file: dry-run default, --apply --confirm-production, read-only source, one
+transaction + receipt (re-run no-op), never deletes it. Tests need MAYA_TEST_POSTGRES_URL
+(a database per test). Fixed: budget lost update, Agent and
+document races, attempt vs knowledge update, purge order, alembic %, peer lock scope.
+
+## Oct24 Immerse audio predownload (PR A2)
+
+From mount (after the 3D scene, Start, or 10 s) the stage downloads ready speeches as
+blobs, one at a time in speaking order, independent of Next/pause
+(snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
+blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
+no seek at cursor 0. Leaving aborts and frees blobs.
+
+## Oct25 audio, locks and Next cost (PR C)
+
+DEBATE_AUDIO_MP3 (prod on): format=mp3 via ffmpeg, 64 MB memory LRU by WAV digest;
+WAV default; private,max-age=300, 304. Playback routes/WS commands off the event loop
+(offload.py, guard test); per-Debate thread + pg advisory lock; tickets in Postgres
+(0079, hash only). Next 103→35 SQL; tests/bench_debate_next.py.
+
 ## Oct24 Debate generation parameters (PR E)
 
-Env (no MAYA_ prefix, compose `${VAR:-default}`, .env.example): DEBATE_LLM_MODEL
-(fallback LLM_MODEL; also llm_debate_turn), DEBATE_LLM_TEMPERATURE 0.65, _TOP_P 0.8,
-_PRESENCE/_FREQUENCY/_REPETITION_PENALTY, _MAX_TOKENS, _SEED empty, _ENABLE_THINKING
-false, _TIMEOUT_SECONDS 120, DEBATE_TTS_MODEL, DEBATE_PLAYBACK_RATE 1.25 (0.95–1.25,
-new playback rows). Unset env = previous production values. The create form's
-parameter card starts from GET /courses/{id}/debate-llm-defaults; values (null = not
-sent; frequency_penalty never sent) freeze into rule_snapshot_json.llm_params with
-contract_version ruleset_contract_v3. The execution contract now lives in
-default_rules/{zh,en}.md ({round} placeholder), editable; compile only substitutes.
-Debates frozen before v3 keep the legacy compile (default_rules/legacy) and env params.
+DEBATE_LLM_* env (no MAYA_ prefix): model, temperature 0.65, top_p 0.8, penalties,
+max_tokens, seed, thinking, timeout 120; DEBATE_TTS_MODEL. Unset = previous values.
+The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze into
+rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
+contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.

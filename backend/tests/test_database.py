@@ -3,24 +3,23 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.core.config import Settings
-from app.core.db import ALEMBIC_HEAD, SQLITE_BUSY_TIMEOUT_MS, Database
+from app.core.db import ALEMBIC_HEAD, Database
 from sqlalchemy import inspect, text
 
+from tests.postgres_db import named_url
 
-def test_sqlite_pragmas_and_constraints(tmp_path: Path) -> None:
-    db = Database(f"sqlite:///{tmp_path / 'pragma.sqlite3'}")
+
+def test_schema_constraints(tmp_path: Path) -> None:
+    db = Database(named_url(f"{tmp_path / 'pragma.sqlite3'}"))
     db.upgrade_schema()
-    with db.engine.connect() as connection:
-        assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
-        assert str(connection.execute(text("PRAGMA journal_mode")).scalar_one()).lower() == "wal"
-        busy_timeout = connection.execute(text("PRAGMA busy_timeout")).scalar_one()
-        assert 0 < busy_timeout <= SQLITE_BUSY_TIMEOUT_MS
     inspector = inspect(db.engine)
+    # create_all names a column-level UNIQUE the PostgreSQL way (production's
+    # schema was created like this, not by the SQLite migrations).
     assert {item["name"] for item in inspector.get_unique_constraints("users")} == {
-        "uq_users_username"
+        "users_username_key"
     }
     assert {item["name"] for item in inspector.get_unique_constraints("courses")} == {
-        "uq_courses_code"
+        "courses_code_key"
     }
     assert {item["name"] for item in inspector.get_unique_constraints("groups")} == {
         "uq_groups_course_name"
@@ -43,11 +42,11 @@ def test_sqlite_pragmas_and_constraints(tmp_path: Path) -> None:
 
 
 def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path) -> None:
-    db = Database(f"sqlite:///{tmp_path / 'alembic.sqlite3'}")
+    db = Database(named_url(f"{tmp_path / 'alembic.sqlite3'}"))
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0078_chat_answer_decouple"
+    assert ALEMBIC_HEAD == "0079_playback_media_tickets"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (

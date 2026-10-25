@@ -176,10 +176,9 @@ class Settings(BaseSettings):
     )
 
     # These server-only operational values are also part of C02/C08. They are
-    # intentionally not exposed in browser-facing DTOs. ``DATABASE_URL`` is
-    # useful for isolated tests and deployment-level Alembic smoke tests.
+    # intentionally not exposed in browser-facing DTOs. PostgreSQL only.
     database_url: str = Field(
-        default="sqlite:///data/maya.sqlite3",
+        default="postgresql+psycopg://maya@localhost:5432/maya",
         validation_alias="DATABASE_URL",
     )
     data_root: Path = Field(default=Path("data"), validation_alias="DATA_ROOT")
@@ -330,6 +329,9 @@ class Settings(BaseSettings):
     debate_event_relay_poll_seconds: float = Field(
         default=1.0, ge=0.1, le=30, validation_alias="DEBATE_EVENT_RELAY_POLL_SECONDS"
     )
+    # Serve Debate speeches as MP3 (ffmpeg, cached in memory) as well as WAV.
+    # Off by default for local runs and tests; production Compose turns it on.
+    debate_audio_mp3: bool = Field(default=False, validation_alias="DEBATE_AUDIO_MP3")
     # Per-operation backstop: concurrent Agent/Team/Conversation creates per
     # process. 8 per backend (#140 sweep, 2026-10-18): a class opening its
     # chats at once peaked at 8 here and waited briefly instead of reaching
@@ -516,15 +518,21 @@ class Settings(BaseSettings):
     adaptive_admission_weight_login: int = Field(
         default=1, ge=0, le=1_000, validation_alias="ADAPTIVE_ADMISSION_WEIGHT_LOGIN"
     )
-    # Read-only SQLite snapshot imported into an empty PostgreSQL database on
-    # startup. Empty means do not import. The source file is never modified.
-    postgres_import_source: str = Field(default="", validation_alias="MAYA_POSTGRES_IMPORT_SOURCE")
-    postgres_allow_empty: bool = Field(default=False, validation_alias="MAYA_POSTGRES_ALLOW_EMPTY")
     # This is safe only when the application is reachable through the isolated
     # production Caddy network and that gateway overwrites X-Forwarded-For.
     auth_trust_gateway_x_forwarded_for: bool = Field(
         default=False, validation_alias="AUTH_TRUST_GATEWAY_X_FORWARDED_FOR"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def database_is_postgresql(cls, value: str) -> str:
+        if not value.startswith("postgresql"):
+            raise ValueError(
+                "DATABASE_URL must be a PostgreSQL URL; SQLite is no longer supported "
+                "(copy an old file with scripts/migrate_sqlite_to_postgres.py)."
+            )
+        return value
 
     @field_validator("session_secret", mode="before")
     @classmethod
@@ -716,21 +724,6 @@ class Settings(BaseSettings):
         return (
             self.node_env.strip().lower() == "production"
             or self.maya_env.strip().lower() == "production"
-        )
-
-    def single_writer_production_warning(self) -> str | None:
-        """Why this production process should not carry a classroom, if it should not.
-
-        Issue #111: SQLite has one writer and a 5 s busy timeout, so about
-        forty students writing at once time out. Production Compose runs
-        PostgreSQL; SQLite there is only the ADR-010 rollback path.
-        """
-
-        if not self.is_production or not self.database_url.startswith("sqlite"):
-            return None
-        return (
-            "Production is running on SQLite (one writer, 5 s busy timeout). "
-            "Classroom load needs PostgreSQL; see ADR-010."
         )
 
     def validate_runtime(self) -> None:

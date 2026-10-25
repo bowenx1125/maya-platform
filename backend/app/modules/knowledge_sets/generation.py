@@ -24,7 +24,6 @@ from app.core.models import (
     ProviderOperation,
     StoredFile,
 )
-from app.core.sqlutil import begin_immediate
 from app.modules.agents.schemas import KnowledgeGenerationIntent, KnowledgeGenerationReceipt
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
@@ -1427,16 +1426,10 @@ def current_generation_authorized_on_connection(
         )
 
 
-def _start_immediate(db: Session) -> None:
-    if db.get_bind().dialect.name == "sqlite":
-        begin_immediate(db)
-
-
 def claim_generation_run(db: Session, run_id: str) -> str | None:
     """Claim one pending or expired lease and recheck every source fence."""
 
     db.rollback()
-    _start_immediate(db)
     run = db.scalar(
         select(KnowledgeGenerationRun).where(KnowledgeGenerationRun.id == run_id).with_for_update()
     )
@@ -1517,7 +1510,6 @@ def mark_generation_worker_failure(session_factory: Any, run_id: str) -> None:
 
     with session_factory() as db:
         db.rollback()
-        _start_immediate(db)
         run = db.get(KnowledgeGenerationRun, run_id)
         if run is None or run.state != "running":
             db.rollback()
@@ -1542,7 +1534,6 @@ def recover_generation_runs_at_startup(db: Session) -> int:
     """
 
     db.rollback()
-    _start_immediate(db)
     rows = db.scalars(
         select(KnowledgeGenerationRun).where(KnowledgeGenerationRun.state == "running")
     ).all()

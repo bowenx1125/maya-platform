@@ -47,6 +47,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select, text
 
+from tests.postgres_db import named_url
 from tests.test_mayaform_assessment_attempts import _login
 from tests.test_mayaform_team_conversations import _create
 from tests.test_mayaform_teams import COURSE_ID, MAYA_ID, _headers, _make_agent_version
@@ -87,8 +88,8 @@ def app_bundle(
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
     _app, sqlite_database, base = app_factory()
     sqlite_database.dispose()
-    settings = base.model_copy(update={"database_url": _POSTGRES_URL})
-    database = Database(_POSTGRES_URL, settings.data_root)
+    settings = base.model_copy(update={"database_url": named_url("pg", schema=False)})
+    database = Database(named_url("pg", schema=False), settings.data_root)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     yield create_app(settings, database), database, settings

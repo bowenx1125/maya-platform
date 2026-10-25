@@ -4,7 +4,6 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import patch
 from uuid import uuid4
 
 from app.core.models import Agent, AgentVersion, Course, CourseMember, KnowledgeDocument, User
@@ -36,7 +35,6 @@ from app.modules.learning.recipes import current_question_version_for_asset
 from app.modules.workspace.chat_provider import chat_messages
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from tests.conftest import login
 from tests.test_knowledge_generation import _publish, _teacher_agent_with_source
@@ -1684,54 +1682,41 @@ def test_manual_regeneration_action_is_deduplicated_and_new_action_advances_inte
 def test_concurrent_same_regeneration_action_rolls_back_losing_intent_bump(
     client: TestClient, database: Any
 ) -> None:
-    _agent_id, _document_id, initial_run_id, set_id = _create_generation_run(client, database)
+    """Two requests with one action id: one run, one intent bump.
+
+    On PostgreSQL the Set row lock makes the second request wait for the
+    first to commit; it then finds the action and creates nothing.
+    """
+
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    _agent_id, _document_id, _initial_run_id, set_id = _create_generation_run(client, database)
     action_id = str(uuid4())
     with database.session() as db:
-        initial_run = db.get(KnowledgeGenerationRun, initial_run_id)
+        initial_run = db.get(KnowledgeGenerationRun, _initial_run_id)
         assert initial_run is not None
         owner_user_id = initial_run.owner_user_id
+    barrier = Barrier(2)
 
-    original_scalar = Session.scalar
-    interleaved = False
-
-    def scalar_with_interleaving(
-        session: Session, statement: Any, *args: Any, **kwargs: Any
-    ) -> Any:
-        nonlocal interleaved
-        value = original_scalar(session, statement, *args, **kwargs)
-        if (
-            not interleaved
-            and value is None
-            and "knowledge_generation_runs.action_id =" in str(statement)
-        ):
-            interleaved = True
-            with database.session() as winner_db:
-                winner = enqueue_generation_for_existing_set(
-                    winner_db,
-                    set_id=set_id,
-                    owner_user_id=owner_user_id,
-                    action_id=action_id,
-                )
-                assert winner.created is True
-                winner_db.commit()
-        return value
-
-    with database.session() as db:
-        with patch.object(Session, "scalar", scalar_with_interleaving):
-            loser = enqueue_generation_for_existing_set(
+    def enqueue() -> bool:
+        with database.session() as db:
+            barrier.wait(timeout=10)
+            outcome = enqueue_generation_for_existing_set(
                 db,
                 set_id=set_id,
                 owner_user_id=owner_user_id,
                 action_id=action_id,
             )
             db.commit()
+            return bool(outcome.created)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        created = sorted(pool.map(lambda _index: enqueue(), range(2)))
+    assert created == [False, True]
+    with database.session() as db:
         set_row = db.get(KnowledgeSet, set_id)
         assert set_row is not None
-        assert interleaved is True
-        assert loser.created is False
-        assert loser.run.action_id == action_id
-        assert set_row.generation_intent_seq == loser.run.intent_generation
-        assert _current_generation_authorized(db, loser.run) is True
         matching = db.scalars(
             select(KnowledgeGenerationRun).where(
                 KnowledgeGenerationRun.knowledge_set_id == set_id,
@@ -1739,6 +1724,8 @@ def test_concurrent_same_regeneration_action_rolls_back_losing_intent_bump(
             )
         ).all()
         assert len(matching) == 1
+        assert set_row.generation_intent_seq == matching[0].intent_generation
+        assert _current_generation_authorized(db, matching[0]) is True
 
 
 def test_stable_rag_edit_keeps_question_receipt_history_and_auto_enqueues_new_intent(

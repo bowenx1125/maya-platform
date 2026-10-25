@@ -39,7 +39,6 @@ from app.core.models import (
     KnowledgeChunk,
     KnowledgeSnapshot,
 )
-from app.core.sqlutil import portable_sql
 
 # These parent keys are required by SQLite before it will accept the exact
 # cross-scope foreign keys below.  They are declared here as metadata indexes
@@ -154,7 +153,6 @@ class Debate(Base):
             "uq_debates_one_running_per_course",
             "course_id",
             unique=True,
-            sqlite_where=(status == "running") & deleted_at.is_(None),
             postgresql_where=(status == "running") & deleted_at.is_(None),
         ),
     )
@@ -254,10 +252,7 @@ class DebateParticipant(Base):
             "order_index >= 0 AND order_index <= 4", name="ck_debate_participants_order"
         ),
         CheckConstraint(
-            portable_sql(
-                "slot = char(65 + order_index)",
-                "slot = chr(65 + order_index)",
-            ),
+            "slot = chr(65 + order_index)",
             name="ck_debate_participants_slot_order",
         ),
         CheckConstraint(
@@ -491,6 +486,34 @@ class PositionHistory(Base):
         ),
         Index("ix_position_history_participant", "participant_id", "created_at"),
     )
+
+
+class PlaybackMediaTicket(Base):
+    """A playback media ticket, stored by hash so every replica can honor it.
+
+    PR C (2026-10-25). The raw token only ever exists in the URL the
+    controller tab received; this row holds its SHA-256 and binding. Tickets
+    expire within minutes and need no foreign key: authorization re-reads the
+    Debate and turn before any audio is served.
+    """
+
+    __tablename__ = "playback_media_tickets"
+    __table_args__ = (
+        Index("ix_playback_media_tickets_item", "debate_id", "turn_id"),
+        Index("ix_playback_media_tickets_epoch", "controller_epoch"),
+        Index("ix_playback_media_tickets_expires", "expires_at"),
+    )
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    controller_epoch: Mapped[str] = mapped_column(String(36), nullable=False)
+    debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    turn_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    control_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class PlaybackState(Base):

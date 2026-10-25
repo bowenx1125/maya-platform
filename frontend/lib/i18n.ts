@@ -1,3 +1,5 @@
+import errorCopy from "./error-copy.json";
+
 export type Locale = "en" | "zh";
 
 /**
@@ -2212,6 +2214,22 @@ const errorCodeKeys: Record<string, MessageKey> = {
   malformed_request: "errorMalformedRequest",
 };
 
+type ErrorCopyCatalog = {
+  messages: Record<string, Record<Locale, string>>;
+  codes: Record<string, string>;
+};
+
+/**
+ * Copy for every other code the backend can send (PR D3): internal stage
+ * and provider codes share a few family messages, codes a reader can act on
+ * have their own. backend/tests/test_error_copy_contract.py keeps it complete.
+ */
+export function errorCopyFor(code: string, locale: Locale): string | null {
+  const catalog = errorCopy as ErrorCopyCatalog;
+  const key = Object.hasOwn(catalog.codes, code) ? catalog.codes[code] : null;
+  return key ? (catalog.messages[key]?.[locale] ?? null) : null;
+}
+
 /**
  * Translate a stable platform error code at render time.  Unknown Error
  * messages are already-safe application fallbacks and remain visible for
@@ -2306,6 +2324,8 @@ export function localizeError(
       if (key && typeof details.agent_name === "string")
         return tm(key, { name: details.agent_name }, locale);
       if (key) return t(key, locale);
+      const copy = errorCopyFor(candidate.code, locale);
+      if (copy) return copy;
     }
     if (typeof candidate.status === "number") {
       if (candidate.status === 401) return t("errorUnauthenticated", locale);

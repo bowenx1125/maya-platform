@@ -22,6 +22,7 @@ from app.modules.debates import cleanup
 from app.modules.debates import models as _debate_models
 from sqlalchemy import text
 
+from tests.postgres_db import named_url
 from tests.test_cleanup_debate_runtime import _seed_runtime_graph
 
 del _debate_models
@@ -52,7 +53,7 @@ def postgres_database(tmp_path):
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
     from app.core.db import Database
 
-    database = Database(_POSTGRES_URL, tmp_path)
+    database = Database(named_url("pg", schema=False), tmp_path)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     database.initialize_schema()

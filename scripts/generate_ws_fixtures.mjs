@@ -179,6 +179,7 @@ const valid = [
     retrieval_status: "matched",
     grounding_mode: "rag_grounded",
   }),
+  envelope("turn.audio_ready", 5, { turn_id: turnId }),
   envelope("playback.started", 6, {
     turn_id: turnId,
     slot: "A",

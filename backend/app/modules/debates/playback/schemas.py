@@ -183,6 +183,12 @@ class TurnReadyPayload(ClosedModel):
     audio_duration_ms: int | None = Field(default=None, ge=0)
 
 
+class TurnAudioReadyPayload(ClosedModel):
+    """A speech's audio is saved and can be downloaded; playback is unchanged."""
+
+    turn_id: UUID
+
+
 class ErrorPayload(ClosedModel):
     code: str = Field(min_length=1)
     message: str = Field(min_length=1)
@@ -334,6 +340,8 @@ class SnapshotPayload(ClosedModel):
     insight_status: Literal["not_started", "generating", "ready", "failed"]
     report_status: Literal["not_started", "generating", "ready", "failed"]
     public_turns: list[PublicTurnDTO]
+    # Speeches whose audio the Immerse stage can download now, in order.
+    audio_ready_turn_ids: list[UUID] = Field(default_factory=list)
     playback: PlaybackStateDTO
     interaction: SnapshotInteractionDTO
     report: SnapshotReportDTO
@@ -426,7 +434,7 @@ class MediaPreparedResult(PrivateResultBase):
             r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
             r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
             r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
-            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\?media_ticket=[A-Za-z0-9_-]{43}$"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$"
         )
     )
     expires_at: datetime

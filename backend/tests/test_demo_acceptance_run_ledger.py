@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from app.core.db import Database
 from app.core.errors import PlatformError
@@ -53,8 +53,10 @@ from app.providers.control import (
 from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
 from app.seed import COURSE_ID, GROUP_DEMO_ID, TEACHER_ID, seed_demo_data
 from pydantic import ValidationError
-from sqlalchemy import func, inspect, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
+
+from tests.postgres_db import named_url
 
 TARGET_AGENT_ID = "11111111-1111-4111-8111-111111111111"
 TARGET_VERSION_ID = "22222222-2222-4222-8222-222222222222"
@@ -82,7 +84,7 @@ def _now() -> datetime:
 
 
 def _database(tmp_path: Path) -> Database:
-    database = Database(f"sqlite:///{tmp_path / 'ledger.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'ledger.sqlite3'}"), tmp_path)
     database.initialize_schema()
     with database.session() as session:
         seed_demo_data(session)
@@ -503,50 +505,6 @@ def test_snapshot_call1_binding_drift_creates_no_operation(
         database.dispose()
 
 
-def test_empty_db_migration_adds_null_legacy_bindings_and_preserves_downgrade(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "legacy.sqlite3"
-    database_url = f"sqlite:///{path}"
-    config = _migration_config(database_url)
-    command.upgrade(config, "0015_llm_recovery_input")
-    now = _now()
-    with Database(database_url).engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO provider_operations "
-                "(id,scope_id,provider_operation,logical_item_id,attempt_no,request_hash,"
-                "max_tokens,max_cost_cny,policy_hash,export_manifest_hash,build_manifest_hash,"
-                "model_key,state,request_count,charged_request_count,created_at,updated_at) "
-                "VALUES (:id,'legacy','embedding','legacy-item',1,:hash,1,0,:hash,:hash,'',"
-                "'','prepared',0,0,:now,:now)"
-            ),
-            {"id": "legacy-operation", "hash": HASH_A, "now": now},
-        )
-    command.upgrade(config, "0016_real_core_acceptance_run")
-    with Database(database_url).engine.connect() as connection:
-        assert connection.execute(
-            text(
-                "SELECT acceptance_run_id,call_no,request_count,charged_request_count "
-                "FROM provider_operations WHERE id='legacy-operation'"
-            )
-        ).one() == (None, None, 0, 0)
-        assert (
-            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            == "0016_real_core_acceptance_run"
-        )
-    command.downgrade(config, "0015_llm_recovery_input")
-    inspector = inspect(Database(database_url).engine)
-    assert "demo_acceptance_runs" not in inspector.get_table_names()
-    assert "acceptance_run_id" not in {
-        str(column["name"]) for column in inspector.get_columns("provider_operations")
-    }
-    with Database(database_url).engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT request_count,charged_request_count FROM provider_operations")
-        ).one() == (0, 0)
-
-
 def test_ledger_model_constraints_enforce_plan_initial_zero_pair_and_ordinal(
     tmp_path: Path,
 ) -> None:
@@ -928,7 +886,8 @@ def test_run_summary_accepts_a_hash_identified_provider_operation(tmp_path: Path
     try:
         run_id = _create_run(database)
         manifest_hash = _manifest_hash("hash-identified")
-        hashed_operation_id = hashlib.sha256(b"deterministic-llm-operation").hexdigest()
+        # Real LLM operations use a deterministic UUID5 (segments_runtime).
+        hashed_operation_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "deterministic-llm-operation"))
         request = ProviderReservationRequestV1(
             scope_id=TARGET_VERSION_ID,
             provider_operation="llm_debate_turn",

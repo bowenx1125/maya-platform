@@ -29,6 +29,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import NullPool
 
+from tests.postgres_db import named_url
 from tests.test_wave3_interactions import TEACHER_ID, _seed_finished_debate, _service
 
 _WORKERS = 40
@@ -237,11 +238,13 @@ def postgres_interaction(app_factory: Any, monkeypatch: pytest.MonkeyPatch, tmp_
     monkeypatch.setattr("app.core.db.POSTGRES_MAX_OVERFLOW", 50)
     _disable_immediate(monkeypatch)
     _app, _database, settings = app_factory()
-    engine = _create_engine(_POSTGRES_URL)
+    engine = _create_engine(named_url("pg", schema=False))
     with engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     engine.dispose()
-    pg_settings = settings.model_copy(update={"database_url": _POSTGRES_URL, "data_root": tmp_path})
+    pg_settings = settings.model_copy(
+        update={"database_url": named_url("pg", schema=False), "data_root": tmp_path}
+    )
     database = Database(pg_settings.database_url, pg_settings.data_root)
     app = create_app(pg_settings, database)
     with TestClient(app):

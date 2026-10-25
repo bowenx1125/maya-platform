@@ -20,6 +20,7 @@ from app.modules.workspace.models import (
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from tests.postgres_db import named_url
 from tests.test_mayaform_team_conversations import _create, _team
 from tests.test_mayaform_teams import COURSE_ID, MAYA_ID, _headers
 
@@ -296,8 +297,8 @@ def postgres_client(app_factory: Any) -> Any:
 
     _app, sqlite_database, base = app_factory()
     sqlite_database.dispose()
-    settings = base.model_copy(update={"database_url": _POSTGRES_URL})
-    database = Database(_POSTGRES_URL, settings.data_root)
+    settings = base.model_copy(update={"database_url": named_url("pg", schema=False)})
+    database = Database(named_url("pg", schema=False), settings.data_root)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     app = create_app(settings, database)

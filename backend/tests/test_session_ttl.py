@@ -12,6 +12,8 @@ from app.core.models import SessionRecord, User
 from app.modules.auth.service import create_rotated_session, get_auth_context
 from sqlalchemy import select
 
+from tests.postgres_db import named_url
+
 T0 = datetime(2026, 10, 21, 8, 0, 0, tzinfo=UTC)
 
 
@@ -19,14 +21,14 @@ def _settings(database: Database, **overrides: object) -> Settings:
     return Settings(
         maya_env="test",
         session_secret="x" * 32,
-        database_url=f"sqlite:///{Path(database.data_root or Path('.')) / 'ttl.sqlite3'}",
+        database_url=named_url(f"{Path(database.data_root or Path('.')) / 'ttl.sqlite3'}"),
         **overrides,  # type: ignore[arg-type]
     )
 
 
 @pytest.fixture
 def database(tmp_path: Path) -> Database:
-    database = Database(f"sqlite:///{tmp_path / 'ttl.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'ttl.sqlite3'}"), tmp_path)
     database.initialize_schema()
     return database
 

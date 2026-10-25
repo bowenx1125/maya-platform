@@ -40,6 +40,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tests.conftest import login
+from tests.postgres_db import named_url
 
 
 def _digest(value: str) -> str:
@@ -583,7 +584,7 @@ def test_manifest_model_drift_is_a_zero_call_blocker() -> None:
 
 
 def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'provider-preflight.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'provider-preflight.sqlite3'}"))
     database.initialize_schema()
     control = ProviderRepository(database)
     policy = _policy()
@@ -637,7 +638,7 @@ def test_sql_store_reads_and_writes_confirmation_durably(tmp_path: Any) -> None:
 def test_sql_explicit_manifest_resolves_its_policy_after_newer_policy_insert(
     tmp_path: Any,
 ) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'dual-policy.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'dual-policy.sqlite3'}"))
     database.initialize_schema()
     repository = ProviderRepository(database)
     embedding_policy = _policy(policy_id="embedding-policy", snapshot_revision=1)

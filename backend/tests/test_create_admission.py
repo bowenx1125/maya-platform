@@ -11,6 +11,8 @@ from app.core.create_admission import create_admission_slot, reset_create_admiss
 from app.core.errors import PlatformError
 from app.core.host_load_guard import reset_host_load_guard_state, set_load_avg_reader
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture(autouse=True)
 def _reset_gate() -> None:
@@ -28,7 +30,7 @@ def _settings(**overrides: object) -> Settings:
         "maya_env": "test",
         "session_secret": "x" * 32,
         "demo_mode": True,
-        "database_url": "sqlite://",
+        "database_url": named_url("settings"),
         "data_root": "/tmp",
         "llm_provider": "mock",
         "embedding_provider": "mock",

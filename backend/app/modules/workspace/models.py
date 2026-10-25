@@ -151,7 +151,6 @@ class ConversationParticipant(Base):
             "uq_conversation_participant_leader",
             "conversation_id",
             unique=True,
-            sqlite_where=is_leader.is_(True),
             postgresql_where=is_leader.is_(True),
         ),
     )
@@ -383,7 +382,6 @@ class TeamProviderStandingGrant(Base):
             "resource_hash",
             "publisher_user_id",
             unique=True,
-            sqlite_where=revoked_at.is_(None),
             postgresql_where=revoked_at.is_(None),
         ),
         CheckConstraint(
@@ -467,7 +465,6 @@ class ChatProviderStandingGrant(Base):
             "field_classes_hash",
             "confirmed_by_user_id",
             unique=True,
-            sqlite_where=revoked_at.is_(None),
             postgresql_where=revoked_at.is_(None),
         ),
         CheckConstraint(

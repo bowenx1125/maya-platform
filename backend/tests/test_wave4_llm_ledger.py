@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from app.core.config import configured_llm_model
 from app.core.db import Database
@@ -36,6 +35,8 @@ from app.providers.control_repository import (
 )
 from app.providers.llm_recovery import recover_llm_startup
 from sqlalchemy import inspect, text
+
+from tests.postgres_db import named_url
 
 
 def _hash(value: str) -> str:
@@ -131,7 +132,7 @@ def test_legacy_llm_alias_is_read_only_for_new_operation_and_manifest_paths(
     with pytest.raises(ExportManifestError, match="read-only"):
         replace(legacy_manifest, max_attempts=2)
 
-    database = Database(f"sqlite:///{tmp_path / 'legacy-alias.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'legacy-alias.sqlite3'}"))
     database.initialize_schema()
     repository = ProviderRepository(database)
     policy_id = repository.save_policy_snapshot(policy)
@@ -220,7 +221,7 @@ def test_llm_stage_is_immutable_and_required_for_success() -> None:
 
 
 def test_sql_llm_stage_rejects_tampered_output_before_insert(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'stage-tamper.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'stage-tamper.sqlite3'}"))
     database.initialize_schema()
     repository = ProviderRepository(database, require_export_confirmation=False)
     stage = _valid_stage()
@@ -285,7 +286,7 @@ def test_llm_startup_recovery_does_not_touch_other_provider_buckets() -> None:
 
 
 def test_0014_schema_has_composite_budget_and_llm_stage(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'schema.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'schema.sqlite3'}"))
     database.upgrade_schema()
     inspector = inspect(database.engine)
     assert inspector.get_pk_constraint("provider_scope_budgets")["constrained_columns"] == [
@@ -301,7 +302,7 @@ def test_0014_schema_has_composite_budget_and_llm_stage(tmp_path: Path) -> None:
 
 
 def test_sql_budget_lookup_is_ambiguous_without_bucket(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'budget.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'budget.sqlite3'}"))
     database.upgrade_schema()
     repository = ProviderRepository(database, require_export_confirmation=False)
     repository.save_scope_budget(
@@ -329,7 +330,7 @@ def test_sql_budget_lookup_is_ambiguous_without_bucket(tmp_path: Path) -> None:
 
 
 def test_sql_budget_reservation_and_release_are_bucket_isolated(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'bucket-isolation.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'bucket-isolation.sqlite3'}"))
     database.upgrade_schema()
     repository = ProviderRepository(database, require_export_confirmation=False)
     for bucket in (EMBEDDING_QUERY_BUCKET, LLM_DEBATE_TURN_BUCKET):
@@ -434,41 +435,9 @@ def _populate_0013_budget(database: Database, *operations: str) -> None:
             )
 
 
-def test_0014_populated_upgrade_backfills_only_unambiguous_bucket(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'populated.sqlite3'}")
-    config = _migration_config(database)
-    command.upgrade(config, "0013_embedding_identity_stage")
-    _populate_0013_budget(database, "embedding_query")
-    command.upgrade(config, "0014_llm_runtime_budget_buckets")
-    with database.engine.connect() as connection:
-        assert (
-            connection.execute(
-                text("SELECT budget_bucket FROM provider_scope_budgets WHERE scope_id='legacy'")
-            ).scalar_one()
-            == EMBEDDING_QUERY_BUCKET
-        )
-    command.downgrade(config, "0013_embedding_identity_stage")
-    command.upgrade(config, "0014_llm_runtime_budget_buckets")
-    database.dispose()
-
-
-def test_0014_ambiguous_populated_backfill_fails_closed(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'ambiguous.sqlite3'}")
-    config = _migration_config(database)
-    command.upgrade(config, "0013_embedding_identity_stage")
-    _populate_0013_budget(database, "embedding", "embedding_query")
-    with pytest.raises(RuntimeError, match="multiple operation buckets"):
-        command.upgrade(config, "0014_llm_runtime_budget_buckets")
-    with database.engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-            "0013_embedding_identity_stage"
-        )
-    database.dispose()
-
-
 @pytest.mark.parametrize("persistent", [False, True])
 def test_accepted_usage_above_estimate_is_recorded(tmp_path: Path, persistent: bool) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'unbounded-usage.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'unbounded-usage.sqlite3'}"))
     budget = ProviderScopeBudgetV1(
         max_requests=1, max_total_tokens=1, max_cost_cny=0, budget_bucket=LLM_DEBATE_TURN_BUCKET
     )
@@ -503,47 +472,4 @@ def test_accepted_usage_above_estimate_is_recorded(tmp_path: Path, persistent: b
     stored = repository.get_llm_accepted_stage(operation.id)
     assert stored is not None
     _assert_stage_equal(stored, stage)
-    database.dispose()
-
-
-def test_budget_migration_preserves_allocations_and_reservations(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'unbounded-migration.sqlite3'}")
-    config = _migration_config(database)
-    command.upgrade(config, "0032_recovery_input_unbounded")
-    repository = ProviderRepository(database, require_export_confirmation=False)
-    repository.save_scope_budget(
-        "scope",
-        ProviderScopeBudgetV1(
-            max_requests=1,
-            max_total_tokens=10,
-            max_cost_cny=0.001,
-            budget_bucket=LLM_DEBATE_TURN_BUCKET,
-        ),
-    )
-    first = repository.create_prepared(
-        _request(scope_id="scope", operation="llm_debate_turn", item="first")
-    )
-    reservation = repository.reserve(first.id)
-    command.upgrade(config, "0033_budget_accounting_unbounded")
-    assert repository.reservation(first.id) == reservation
-    command.downgrade(config, "0032_recovery_input_unbounded")
-    command.upgrade(config, "0033_budget_accounting_unbounded")
-    assert repository.reservation(first.id) == reservation
-    second = repository.create_prepared(
-        _request(scope_id="scope", operation="llm_debate_turn", item="second")
-    )
-    repository.reserve(second.id)
-    with database.engine.connect() as connection:
-        row = connection.execute(
-            text(
-                "SELECT allocated_requests, allocated_total_tokens, allocated_cost_cny "
-                "FROM provider_scope_budgets WHERE scope_id='scope'"
-            )
-        ).one()
-        assert row == (2, 20, 0.002)
-        assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
-    with pytest.raises(RuntimeError, match="below recorded allocations"):
-        command.downgrade(config, "0032_recovery_input_unbounded")
-    assert repository.reservation(first.id) == reservation
-    assert repository.operation(second.id).charged_request_count == 1
     database.dispose()

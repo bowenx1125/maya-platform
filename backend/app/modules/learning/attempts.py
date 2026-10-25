@@ -952,7 +952,9 @@ def invalidate_assessment_attempts_for_knowledge_update(
             (shared_binding.exists() | participant_binding.exists()),
         )
         .order_by(AssessmentAttempt.id)
-        .with_for_update()
+        # Only the attempts: locking the joined Chat and activity rows as well
+        # would deadlock against a student's action that holds its Chat.
+        .with_for_update(of=AssessmentAttempt)
     ).all()
     invalidated = 0
     refreshed_activities: dict[str, tuple[int, bool, tuple[str, ...]]] = {}
@@ -2750,6 +2752,20 @@ def apply_assessment_decision(
                 response_key="assessment.started",
                 context=context,
             )
+        return None
+    # Hold the attempt until this action commits. A knowledge update locks the
+    # same rows before it ends or replaces unfinished attempts, so the two
+    # cannot interleave (on SQLite the single writer used to give this).
+    attempt = db.scalar(
+        select(AssessmentAttempt)
+        .where(
+            AssessmentAttempt.id == attempt.id,
+            AssessmentAttempt.status.in_(("in_progress", "paused")),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if attempt is None:
         return None
 
     if is_lifecycle_action:

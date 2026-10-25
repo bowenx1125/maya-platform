@@ -23,6 +23,7 @@ from app.providers.control import confirm_export_manifest
 from app.providers.control_repository import ProviderRepository
 from sqlalchemy import event, text
 
+from tests.postgres_db import named_url
 from tests.test_wave4_provider_control_orm import _manifest, _policy
 
 _POSTGRES_URL = os.environ.get("MAYA_TEST_POSTGRES_URL")
@@ -62,7 +63,7 @@ def _ensure_again_and_confirm(repository, policy, policy_id, manifest) -> str:  
 
 
 def test_existing_manifest_is_verified_without_a_failing_insert(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'm.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'm.sqlite3'}"))
     database.upgrade_schema()
     repository, policy, policy_id, manifest = _seed(database)
     failures = _failed_statements(database)
@@ -77,7 +78,7 @@ def test_existing_manifest_is_verified_without_a_failing_insert(tmp_path: Path) 
 def test_ensure_in_one_transaction_on_postgres(tmp_path: Path) -> None:
     if not _POSTGRES_URL:
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
-    database = Database(_POSTGRES_URL, tmp_path)
+    database = Database(named_url("pg", schema=False), tmp_path)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     database.initialize_schema()
@@ -93,7 +94,7 @@ def test_concurrent_duplicate_insert_keeps_postgres_transaction_usable(tmp_path:
     """A race lost at INSERT time (row appears after the read) is still verified."""
     if not _POSTGRES_URL:
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
-    database = Database(_POSTGRES_URL, tmp_path)
+    database = Database(named_url("pg", schema=False), tmp_path)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     database.initialize_schema()

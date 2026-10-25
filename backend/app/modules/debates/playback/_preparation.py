@@ -972,8 +972,16 @@ class PlaybackPreparationMixin(PlaybackCore):
                 if prewarming:
                     # The Preview scheduler alone advances a draft. Enqueuing
                     # its successor here races a second worker for that turn.
+                    audio_event = (
+                        self._stage_event(db, debate_id, "turn.audio_ready", {"turn_id": turn_id})
+                        if audio is not None
+                        else None
+                    )
                     self._commit(db)
                     audio_committed = True
+                    if audio_event is not None:
+                        await self._publish_event(audio_event)
+                        self._warm_compressed(debate_id, turn_id)
                     return
                 if audio is None:
                     self._commit(db)
@@ -1028,7 +1036,12 @@ class PlaybackPreparationMixin(PlaybackCore):
                 is_current = (
                     int(self._get(fresh_turn, "turn_index", default=0) or 0) == current_index
                 )
-                ready_events = []
+                # PR A2: the Immerse stage downloads this speech now. The event
+                # changes no playback state.
+                ready_events = [
+                    self._stage_event(db, debate_id, "turn.audio_ready", {"turn_id": turn_id})
+                ]
+                self._warm_compressed(debate_id, turn_id)
                 if is_current:
                     current_state.status = "ready"
                     current_state.cursor_ms = 0

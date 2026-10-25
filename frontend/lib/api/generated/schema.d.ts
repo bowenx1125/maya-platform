@@ -3532,10 +3532,12 @@ export interface components {
         ClientMetricsReport: {
             metrics: components["schemas"]["ClientMetric"][];
         };
+        /** @description Name turn_id (any ready speech), or the expected control version and current turn (the adjacent successor). */
         PrefetchNextAudioRequest: {
-            expected_control_version: number;
-            expected_current_turn_id: components["schemas"]["Uuid"];
             controller_epoch: components["schemas"]["Uuid"];
+            turn_id?: components["schemas"]["Uuid"] | null;
+            expected_control_version?: number | null;
+            expected_current_turn_id?: components["schemas"]["Uuid"] | null;
         };
         PrefetchedNextAudio: {
             turn_id: components["schemas"]["Uuid"];
@@ -3738,6 +3740,9 @@ export interface components {
             /** @enum {string} */
             report_status: "not_started" | "generating" | "ready" | "failed";
             mutual_learning_synthesis?: components["schemas"]["MutualLearningSynthesisV1"] | null;
+        };
+        AdvancedPlayback: components["schemas"]["PlaybackState"] & {
+            media_url?: string | null;
         };
         PlaybackState: {
             /** @enum {string} */
@@ -5831,6 +5836,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["PlaybackState"];
+            };
+        };
+        /** @description Playback state after Next, with the new speech's audio URL when it is ready. */
+        AdvancedPlayback: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AdvancedPlayback"];
             };
         };
     };
@@ -9146,7 +9160,7 @@ export interface operations {
             };
         };
         responses: {
-            200: components["responses"]["PlaybackState"];
+            200: components["responses"]["AdvancedPlayback"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
@@ -9756,12 +9770,15 @@ export interface operations {
             query?: {
                 /** @description Short-lived platform ticket returned privately to the active playback controller for current-turn bootstrap; never a supplier token. */
                 media_ticket?: components["parameters"]["MediaTicket"];
+                /** @description mp3 asks for the compressed copy; WAV is served when none exists. */
+                format?: "wav" | "mp3";
             };
             header?: {
                 /** @description A single RFC 9110 byte range used by the classroom audio element. */
                 Range?: components["parameters"]["Range"];
                 /** @description Strong platform ETag or RFC 9110 IMF-fixdate returned for this audio. */
                 "If-Range"?: components["parameters"]["IfRange"];
+                "If-None-Match"?: string;
             };
             path: {
                 debate_id: components["parameters"]["DebateId"];
@@ -9781,6 +9798,7 @@ export interface operations {
                 };
                 content: {
                     "audio/wav": string;
+                    "audio/mpeg": string;
                 };
             };
             /** @description Teacher-authorized single byte range of retained audio. */
@@ -9794,7 +9812,16 @@ export interface operations {
                 };
                 content: {
                     "audio/wav": string;
+                    "audio/mpeg": string;
                 };
+            };
+            /** @description The browser's copy (If-None-Match) is still current. */
+            304: {
+                headers: {
+                    ETag: components["headers"]["AudioEtag"];
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];

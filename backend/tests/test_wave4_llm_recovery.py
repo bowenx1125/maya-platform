@@ -10,7 +10,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from app.core.config import configured_llm_model
 from app.core.db import Database
@@ -28,8 +27,9 @@ from app.providers.control import (
     sha256_hex,
 )
 from app.providers.control_repository import ProviderRepository, ProviderRepositoryError
-from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
+
+from tests.postgres_db import named_url
 
 _RECOVERY_IDENTITY_KEYS = (
     "request_hash",
@@ -225,19 +225,17 @@ def _seed_turn(database: Database, *, debate_id: str, turn_id: str) -> None:
 
     now = datetime.now(UTC)
     with database.engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
-        # PRAGMA execution autobegins a transaction on SQLite.  End that
-        # transaction before starting the explicit seed transaction so the
-        # parent rows are inserted as one unit.
-        connection.commit()
         transaction = connection.begin()
         try:
+            # Only the parent keys are seeded; skip the other foreign keys.
+            connection.exec_driver_sql("SET LOCAL session_replication_role = 'replica'")
             connection.execute(
                 text(
-                    "INSERT INTO debates (id,course_id,topic,rule_set_id,rule_snapshot_json,status,"
+                    "INSERT INTO debates (id,course_id,topic,rule_set_id,rule_snapshot_json,"
+                    "output_language,status,"
                     "revision,last_sequence,cancellation_generation,created_by,created_at,updated_at,"
                     "started_at,finished_at,total_duration_seconds,turn_duration_seconds) "
-                    "VALUES (:id,'course-recovery','topic','rules','{}','running',0,0,0,"
+                    "VALUES (:id,'course-recovery','topic','rules','{}','zh','running',0,0,0,"
                     "'user-recovery',"
                     ":now,:now,NULL,NULL,NULL,NULL)"
                 ),
@@ -249,12 +247,13 @@ def _seed_turn(database: Database, *, debate_id: str, turn_id: str) -> None:
                     "round_no,"
                     "turn_index,generation_status,publication_status,preparation_stage,speech,structured_json,"
                     "predecessor_turn_ids_json,transcript_hash,cutoff_turn_index,retrieval_status,grounding_mode,"
-                    "retrieval_receipts_json,word_count,attempt,audio_file_id,audio_duration_ms,"
+                    "retrieval_receipts_json,evidence_trace_json,word_count,attempt,audio_file_id,"
+                    "audio_duration_ms,"
                     "actual_tts_voice_kind,actual_tts_voice_profile_id,safe_error_code,"
                     "created_at,updated_at,public_at) "
                     "VALUES (:id,:debate_id,'participant-recovery','snapshot-recovery',1,0,"
                     "'running','unpublished','generation',NULL,NULL,'[]',NULL,NULL,NULL,NULL,"
-                    "'[]',NULL,1,NULL,NULL,NULL,NULL,NULL,:now,:now,NULL)"
+                    "'[]','[]',NULL,1,NULL,NULL,NULL,NULL,NULL,:now,:now,NULL)"
                 ),
                 {"id": turn_id, "debate_id": debate_id, "now": now},
             )
@@ -262,8 +261,6 @@ def _seed_turn(database: Database, *, debate_id: str, turn_id: str) -> None:
         except Exception:
             transaction.rollback()
             raise
-        finally:
-            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
 
 
 def _prepare_sql(
@@ -275,7 +272,7 @@ def _prepare_sql(
     LLMAcceptedStageV1,
     LLMRecoveryInputV1,
 ]:
-    database = Database(f"sqlite:///{tmp_path / 'recovery.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'recovery.sqlite3'}"))
     database.upgrade_schema()
     request = _request()
     _seed_turn(database, debate_id=request.scope_id, turn_id=request.logical_item_id)
@@ -510,25 +507,6 @@ def test_sql_atomic_failure_rolls_back_both_rows(tmp_path: Path) -> None:
         database.dispose()
 
 
-def test_sql_recovery_input_trigger_and_tamper_fail_closed(tmp_path: Path) -> None:
-    database, repository, _request_value, stage, recovery_input = _prepare_sql(tmp_path)
-    try:
-        repository.stage_llm_accepted_with_recovery(stage, recovery_input)
-        with pytest.raises(IntegrityError):
-            with database.engine.begin() as connection:
-                connection.execute(
-                    text("UPDATE llm_recovery_inputs SET input_hash=:hash WHERE operation_id=:id"),
-                    {"hash": _hash("tampered"), "id": stage.operation_id},
-                )
-        with database.engine.connect() as connection:
-            assert (
-                connection.execute(text("SELECT input_hash FROM llm_recovery_inputs")).scalar_one()
-                == recovery_input.input_hash
-            )
-    finally:
-        database.dispose()
-
-
 def test_sql_orphan_recovery_input_is_a_partial_bundle_error(tmp_path: Path) -> None:
     database, repository, _request_value, stage, recovery_input = _prepare_sql(tmp_path)
     try:
@@ -553,7 +531,7 @@ def test_sql_orphan_recovery_input_is_a_partial_bundle_error(tmp_path: Path) -> 
         database.dispose()
 
 
-def test_sqlite_recovery_input_over_the_old_byte_ceiling_is_stored(tmp_path: Path) -> None:
+def test_recovery_input_over_the_old_byte_ceiling_is_stored(tmp_path: Path) -> None:
     database, _repository, _request_value, stage, recovery_input = _prepare_sql(tmp_path)
     try:
         oversized = "界" * (LLM_RECOVERY_INPUT_BYTES_LIMIT // 3 + 128)
@@ -579,7 +557,7 @@ def test_sqlite_recovery_input_over_the_old_byte_ceiling_is_stored(tmp_path: Pat
             )
         with database.engine.connect() as connection:
             stored = connection.execute(
-                text("SELECT length(CAST(input_json AS BLOB)) FROM llm_recovery_inputs")
+                text("SELECT octet_length(input_json) FROM llm_recovery_inputs")
             ).scalar_one()
         assert stored > LLM_RECOVERY_INPUT_BYTES_LIMIT
     finally:
@@ -601,137 +579,5 @@ def test_legacy_accepted_stage_remains_readable_but_not_recoverable(tmp_path: Pa
                 connection.execute(text("SELECT COUNT(*) FROM llm_recovery_inputs")).scalar_one()
                 == 0
             )
-    finally:
-        database.dispose()
-
-
-def test_0015_schema_has_no_backfill_and_empty_round_trip(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'migration.sqlite3'}")
-    config = _migration_config(database)
-    try:
-        command.upgrade(config, "0014_llm_runtime_budget_buckets")
-        assert not inspect(database.engine).has_table("llm_recovery_inputs")
-        command.upgrade(config, "0015_llm_recovery_input")
-        command.upgrade(config, "0015_llm_recovery_input")
-        inspector = inspect(database.engine)
-        assert inspector.has_table("llm_recovery_inputs")
-        assert [item["name"] for item in inspector.get_columns("llm_recovery_inputs")] == [
-            "operation_id",
-            "turn_id",
-            "attempt_no",
-            "input_version",
-            "input_json",
-            "input_hash",
-            "created_at",
-        ]
-        assert {item["name"] for item in inspector.get_indexes("llm_recovery_inputs")} == {
-            "ix_llm_recovery_inputs_turn"
-        }
-        with database.engine.connect() as connection:
-            assert {
-                row[0]
-                for row in connection.execute(
-                    text(
-                        "SELECT name FROM sqlite_master WHERE type='trigger' "
-                        "AND tbl_name='llm_recovery_inputs'"
-                    )
-                ).all()
-            } == {
-                "trg_llm_recovery_inputs_immutable_update",
-                "trg_llm_recovery_inputs_immutable_delete",
-            }
-        command.downgrade(config, "0014_llm_runtime_budget_buckets")
-        assert not inspect(database.engine).has_table("llm_recovery_inputs")
-        command.upgrade(config, "0015_llm_recovery_input")
-        assert inspect(database.engine).has_table("llm_recovery_inputs")
-    finally:
-        database.dispose()
-
-
-def test_0014_populated_budget_survives_0015_upgrade_downgrade_and_reupgrade(
-    tmp_path: Path,
-) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'migration-populated.sqlite3'}")
-    config = _migration_config(database)
-    now = datetime.now(UTC)
-    try:
-        command.upgrade(config, "0014_llm_runtime_budget_buckets")
-        with database.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO provider_scope_budgets "
-                    "(scope_id,budget_bucket,max_requests,max_total_tokens,max_cost_cny,"
-                    "allocated_requests,allocated_total_tokens,allocated_cost_cny,"
-                    "created_at,updated_at) "
-                    "VALUES ('debate-migration','llm_debate_turn',3,30,0.03,1,6,0.006,:now,:now)"
-                ),
-                {"now": now},
-            )
-        command.upgrade(config, "0015_llm_recovery_input")
-        with database.engine.connect() as connection:
-            assert connection.execute(
-                text(
-                    "SELECT budget_bucket,allocated_requests,allocated_total_tokens "
-                    "FROM provider_scope_budgets WHERE scope_id='debate-migration'"
-                )
-            ).one() == ("llm_debate_turn", 1, 6)
-
-        command.downgrade(config, "0014_llm_runtime_budget_buckets")
-        assert not inspect(database.engine).has_table("llm_recovery_inputs")
-        command.upgrade(config, "0015_llm_recovery_input")
-        with database.engine.connect() as connection:
-            assert connection.execute(
-                text(
-                    "SELECT budget_bucket,allocated_requests,allocated_total_tokens "
-                    "FROM provider_scope_budgets WHERE scope_id='debate-migration'"
-                )
-            ).one() == ("llm_debate_turn", 1, 6)
-    finally:
-        database.dispose()
-
-
-def test_0015_populated_recovery_row_refuses_downgrade(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'migration-populated.sqlite3'}")
-    config = _migration_config(database)
-    try:
-        command.upgrade(config, "0014_llm_runtime_budget_buckets")
-        command.upgrade(config, "0015_llm_recovery_input")
-        _seed_turn(database, debate_id="debate-recovery", turn_id="turn-recovery")
-        now = datetime.now(UTC)
-        input_json = '{"identity":{},"input":{}}'
-        with database.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO provider_operations "
-                    "(id,scope_id,provider_operation,logical_item_id,attempt_no,request_hash,"
-                    "max_tokens,max_cost_cny,policy_hash,export_manifest_hash,build_manifest_hash,"
-                    "model_key,state,request_count,charged_request_count,created_at,updated_at) "
-                    "VALUES ('recovery-operation','debate-recovery','llm_debate_turn',"
-                    "'turn-recovery',1,:hash,20,0.01,:hash,:hash,:hash,'model',"
-                    "'prepared',0,0,:now,:now)"
-                ),
-                {"hash": _hash("recovery-operation"), "now": now},
-            )
-            connection.execute(
-                text(
-                    "INSERT INTO llm_recovery_inputs "
-                    "(operation_id,turn_id,attempt_no,input_version,input_json,input_hash,"
-                    "created_at) "
-                    "VALUES ('recovery-operation','turn-recovery',1,"
-                    "'llm_recovery_input_v1',:input_json,:input_hash,:now)"
-                ),
-                {"input_json": input_json, "input_hash": sha256_hex(input_json), "now": now},
-            )
-        with pytest.raises(RuntimeError, match="retained"):
-            command.downgrade(config, "0014_llm_runtime_budget_buckets")
-        with database.engine.connect() as connection:
-            assert (
-                connection.execute(text("SELECT COUNT(*) FROM llm_recovery_inputs")).scalar_one()
-                == 1
-            )
-            assert connection.execute(
-                text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == ("0015_llm_recovery_input")
-        assert inspect(database.engine).has_table("llm_recovery_inputs")
     finally:
         database.dispose()

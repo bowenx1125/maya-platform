@@ -32,6 +32,7 @@ from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.providers.llm_transport import LLMTransportResponse
 
 from tests.fixtures.next_wave_rag import load_fixture_bundle, validate_report
+from tests.postgres_db import named_url
 
 _EMBEDDING_ENDPOINT = DashScopeEmbeddingConfig(workspace_id="fixture").resolved_endpoint
 _LLM_ENDPOINT = DashScopeLLMConfig(workspace_id="fixture").resolved_endpoint
@@ -296,7 +297,7 @@ def test_disposable_enabled_case_reports_real_seams_and_ledger_counts(
     llm_transport = _FakeLLMTransport()
     llm_adapter = _llm_adapter(llm_policy, llm_transport)
     reviewed = runner.RealRAGSettings(SimpleNamespace(), embedding_policy, llm_policy)
-    database = Database(f"sqlite:///{tmp_path / 'maya.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'maya.sqlite3'}"), tmp_path)
     database.initialize_schema()
     repository = ProviderRepository(database)
     repository.save_policy_snapshot(embedding_policy, snapshot_id="rag-policy-1")
@@ -344,7 +345,7 @@ def test_failed_real_selection_stops_and_preserves_runtime(
     def settings(**kwargs: Any) -> Any:
         root = kwargs["runtime_root"]
         return runner.RealRAGSettings(
-            SimpleNamespace(database_url=f"sqlite:///{root / 'maya.sqlite3'}"),
+            SimpleNamespace(database_url=named_url(f"{root / 'maya.sqlite3'}")),
             embedding_policy,
             llm_policy,
         )
@@ -369,7 +370,7 @@ def test_failed_real_selection_stops_and_preserves_runtime(
     assert len(calls) == 1
     assert result["status"] == "real_failed"
     assert result["stopped_early"] is True
-    assert len(list(tmp_path.glob(".next-wave-rag-*/maya.sqlite3"))) == 1
+    assert len([path for path in tmp_path.glob(".next-wave-rag-*") if path.is_dir()]) == 1
     assert (tmp_path / "rag-real-progress.json").is_file()
 
 

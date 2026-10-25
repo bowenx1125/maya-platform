@@ -23,7 +23,7 @@ from app.modules.debates.generation import (
 from app.modules.debates.generation.recovery_input import build_llm_recovery_input
 from app.modules.debates.generation.runtime import LLMDeferredPublicationV1
 from app.modules.debates.models import Debate, DebatePlaybackState, DebateTurn, TurnSource
-from app.modules.debates.playback.audio import AudioStore, audio_relative_path
+from app.modules.debates.playback.audio import AudioStore
 from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
 from app.modules.debates.playback.llm_publication import SqlLLMPublication
 from app.modules.debates.playback.service import PlaybackService
@@ -50,6 +50,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
 from tests.conftest import login
+from tests.postgres_db import named_url
 from tests.test_wave2_playback import (
     COURSE_ID,
     GROUP_DEMO_ID,
@@ -340,108 +341,6 @@ def _patch_local_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cancellation_generation", [0, 7])
-@pytest.mark.skip(reason="obsolete pre-segments real-LLM product fixture")
-async def test_restart_requeues_complete_bundle_without_llm_call_and_publishes_product(
-    app_factory: object,
-    monkeypatch: pytest.MonkeyPatch,
-    cancellation_generation: int,
-) -> None:
-    _app, database, settings, debate_id, turn_id = _seed_running_product_debate(
-        app_factory,
-        cancellation_generation=cancellation_generation,
-    )
-    adapter = _FakeDashScopeAdapter()
-    _install_fake_dashscope_product_path(database, settings, adapter)
-    _patch_local_confirmation(monkeypatch)
-    first_tts = _FailingTTS()
-    first_tasks = TaskManager()
-    preparer = _product_preparer(settings, adapter)
-    service = _product_service(
-        database,
-        settings,
-        preparer=preparer,
-        tts_provider=first_tts,
-        tasks=first_tasks,
-    )
-    try:
-        with database.session() as db:
-            await service.prepare_turn(db, debate_id, turn_id)
-        with database.engine.connect() as connection:
-            staged = connection.execute(
-                text(
-                    "SELECT p.state,s.generation_status,s.safe_error_code "
-                    "FROM provider_operations AS p "
-                    "JOIN llm_accepted_stages AS a ON a.operation_id=p.id "
-                    "JOIN debate_turns AS s ON s.id=a.turn_id "
-                    "WHERE s.id=:turn_id AND p.state='accepted'"
-                ),
-                {"turn_id": turn_id},
-            ).one()
-            assert staged == ("accepted", "pending", "tts_timeout")
-            assert (
-                connection.execute(text("SELECT COUNT(*) FROM llm_recovery_inputs")).scalar_one()
-                == adapter.call_count
-            )
-        calls_before_restart = adapter.call_count
-        assert calls_before_restart in {1, 2}
-        await first_tasks.close()
-
-        restart_tts = MockTTSProvider()
-        restart_tasks = TaskManager()
-        restarted = _product_service(
-            database,
-            settings,
-            preparer=_product_preparer(settings, adapter),
-            tts_provider=restart_tts,
-            tasks=restart_tasks,
-        )
-        with database.session() as db:
-            await restarted.recover_startup(db)
-        await restart_tasks.wait_debate(debate_id)
-        assert adapter.call_count == calls_before_restart
-        assert restart_tts.synthesize_calls == 1
-        with database.engine.connect() as connection:
-            turn = connection.execute(
-                text(
-                    "SELECT generation_status,publication_status,evidence_trace_json,"
-                    "retrieval_receipts_json FROM debate_turns WHERE id=:turn_id"
-                ),
-                {"turn_id": turn_id},
-            ).one()
-            assert turn[0:2] == ("final_ready", "unpublished")
-            assert json.loads(str(turn[2]))
-            receipts = json.loads(str(turn[3]))
-            assert receipts
-            operation = connection.execute(
-                text(
-                    "SELECT p.state,r.state FROM provider_operations AS p "
-                    "JOIN provider_reservations AS r ON r.operation_id=p.id "
-                    "WHERE p.logical_item_id=:turn_id"
-                ),
-                {"turn_id": turn_id},
-            ).one()
-            assert operation == ("succeeded", "succeeded")
-            assert (
-                connection.execute(
-                    text("SELECT state FROM jobs WHERE turn_id=:turn_id"), {"turn_id": turn_id}
-                ).scalar_one()
-                == "completed"
-            )
-            source = connection.execute(
-                text(
-                    "SELECT snapshot_id,chunk_id FROM turn_sources WHERE turn_id=:turn_id "
-                    "ORDER BY rank LIMIT 1"
-                ),
-                {"turn_id": turn_id},
-            ).one()
-            assert (receipts[0]["snapshot_id"], receipts[0]["chunk_id"]) == tuple(source)
-    finally:
-        await first_tasks.close()
-        database.dispose()
-
-
-@pytest.mark.asyncio
 @pytest.mark.skip(reason="removed legacy accepted-stage path")
 async def test_legacy_accepted_stage_without_recovery_input_stays_blocked_and_zero_call(
     app_factory: object,
@@ -513,81 +412,6 @@ async def test_legacy_accepted_stage_without_recovery_input_stays_blocked_and_ze
             )
     finally:
         await first_tasks.close()
-        database.dispose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skip(reason="obsolete pre-segments real-LLM product fixture")
-async def test_playback_publication_failure_rolls_back_turn_files_and_operation(
-    app_factory: object,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _app, database, settings, debate_id, turn_id = _seed_running_product_debate(app_factory)
-    adapter = _FakeDashScopeAdapter()
-    _install_fake_dashscope_product_path(database, settings, adapter)
-    _patch_local_confirmation(monkeypatch)
-
-    def reject_publication(_self: object, **_kwargs: object) -> object:
-        raise RuntimeError("injected publication failure")
-
-    monkeypatch.setattr(SqlLLMPublication, "commit_llm_turn_success", reject_publication)
-    tasks = TaskManager()
-    tts = MockTTSProvider()
-    service = _product_service(
-        database,
-        settings,
-        preparer=_product_preparer(settings, adapter),
-        tts_provider=tts,
-        tasks=tasks,
-    )
-    relative_audio_path = audio_relative_path(COURSE_ID, debate_id, turn_id)
-    try:
-        with database.session() as db:
-            await service.prepare_turn(db, debate_id, turn_id)
-        assert tts.synthesize_calls == 1
-        with database.engine.connect() as connection:
-            state = connection.execute(
-                text(
-                    "SELECT d.status,t.generation_status,t.speech,t.structured_json,j.state,"
-                    "p.state,r.state FROM debates AS d "
-                    "JOIN debate_turns AS t ON t.debate_id=d.id "
-                    "JOIN jobs AS j ON j.turn_id=t.id "
-                    "JOIN provider_operations AS p ON p.logical_item_id=t.id "
-                    "JOIN provider_reservations AS r ON r.operation_id=p.id "
-                    "WHERE t.id=:turn_id AND p.state='accepted'"
-                ),
-                {"turn_id": turn_id},
-            ).one()
-            assert state == (
-                "failed",
-                "turn_generation_failed",
-                None,
-                None,
-                "failed",
-                "accepted",
-                "accepted",
-            )
-            assert (
-                connection.execute(
-                    text("SELECT COUNT(*) FROM turn_sources WHERE turn_id=:turn_id"),
-                    {"turn_id": turn_id},
-                ).scalar_one()
-                == 0
-            )
-            assert (
-                connection.execute(
-                    text(
-                        "SELECT COUNT(*) FROM stored_files "
-                        "WHERE kind='debate_audio' AND relative_path=:relative_path"
-                    ),
-                    {"relative_path": relative_audio_path},
-                ).scalar_one()
-                == 0
-            )
-        path = Path(settings.resolved_data_root) / relative_audio_path
-        assert not path.exists()
-    finally:
-        await tasks.close()
         database.dispose()
 
 
@@ -838,7 +662,7 @@ def _atomic_fixture(database: Database) -> tuple[SimpleNamespace, SimpleNamespac
 
 
 def test_sql_publication_promotes_operation_and_reservation_atomically(tmp_path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'p1.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'p1.sqlite3'}", schema=False))
     _create_atomic_schema(database)
     stage, recovery = _atomic_fixture(database)
     with database.session() as db:
@@ -874,7 +698,7 @@ def test_sql_publication_promotes_operation_and_reservation_atomically(tmp_path)
 
 
 def test_sql_publication_failure_rolls_turn_and_operation_back(tmp_path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'p1-rollback.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'p1-rollback.sqlite3'}", schema=False))
     _create_atomic_schema(database)
     stage, recovery = _atomic_fixture(database)
     with pytest.raises(RuntimeError, match="reservation CAS"):

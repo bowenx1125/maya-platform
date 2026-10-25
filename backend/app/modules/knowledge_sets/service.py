@@ -117,18 +117,6 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _begin_knowledge_write_transaction(db: Session) -> None:
-    """Acquire SQLite's writer lock unless this Session already owns it."""
-
-    if db.get_bind().dialect.name != "sqlite":
-        return
-    from app.modules.knowledge_sets.generation import _start_immediate
-
-    connection = db.connection().connection.driver_connection
-    if connection is None or not connection.in_transaction:
-        _start_immediate(db)
-
-
 def save_knowledge_markdown_version(
     db: Session,
     *,
@@ -857,7 +845,6 @@ def _promote_manual_asset_markdown(
     if rendered is None:
         return None
     markdown, version_ids = rendered
-    _begin_knowledge_write_transaction(db)
     return save_knowledge_markdown_version(
         db,
         set_id=set_row.id,
@@ -1874,7 +1861,6 @@ def save_brainform_markdown(
     set_id: str,
     request: SaveKnowledgeMarkdownRequest,
 ) -> KnowledgeMarkdownDocument:
-    _begin_knowledge_write_transaction(db)
     access = _editable_access(db, context, set_id)
     set_row = access.knowledge_set
     current_markdown = _current_markdown_version(db, set_row)
@@ -1948,7 +1934,6 @@ def enqueue_brainform_regeneration(
     # Idempotency claims are committed separately. Begin the domain writer
     # transaction before the first access read so concurrent business-action
     # aliases are serialized with their GenerationRun and intent writes.
-    _begin_knowledge_write_transaction(db)
     _editable_access(db, context, set_id)
 
     queued = enqueue_generation_for_existing_set(

@@ -68,7 +68,8 @@ students with Public/Private attempts, actual saved answers/evaluation/Boundary,
 Teacher Agent's scoped statistics/report/download. Real Provider receipts and privacy
 exclusion are separate from Fake tests and infrastructure load measurements.
 
-Backups include a consistent SQLite snapshot plus its referenced files, protected
+Backups include a PostgreSQL dump (`pg_dump -Fc`, checked with `pg_restore --list`)
+plus its referenced files, protected
 configuration and compatible source/image identity. Verify file receipts, DB integrity,
 foreign keys, migration preservation and a separate-instance restore; never force an
 unsafe downgrade. Record measured recovery and HTTP capacity, and keep configured
@@ -219,7 +220,7 @@ is an edge response, while application 403/429 use the platform error envelope.
 This stage has no Chat, Tool, content, generation-count or fee quota.
 
 Arrange protected regular backups and an operator-owned off-host destination before
-public use. A backup must include SQLite via its backup API, referenced runtime
+public use. A backup must include a PostgreSQL `pg_dump -Fc`, referenced runtime
 files, private configuration, effective environment and compatible image/source SHA.
 Check DB/file receipts and rehearse restoration separately. The current repository
 procedure does not provision an external backup account, schedule or monitoring

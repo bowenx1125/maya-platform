@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login, make_foreign_group
 from tests.persona_fixtures import confirmed_persona_fields
+from tests.postgres_db import named_url
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_DEMO_ID = "7813f937-902c-5534-bfb2-ad773a43aeda"
@@ -276,7 +277,7 @@ def test_wave1_deterministic_markdown_and_migration_constraints(tmp_path: Path) 
 
 
 def test_wave1_migration_has_required_indexes(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'migration.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'migration.sqlite3'}"), tmp_path)
     database.upgrade_schema()
     inspector = inspect(database.engine)
     assert {"kind", "relative_path", "sha256", "size", "state"}.issubset(

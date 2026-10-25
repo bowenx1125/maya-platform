@@ -20,6 +20,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 
+from tests.postgres_db import named_url
+
 # Rows of these tables are records, grades, answers, Debate copies or provider
 # ledgers. A cleanup may clear a link on them but never deletes them.
 PROTECTED_PREFIXES = (
@@ -255,6 +257,7 @@ def _postgres(
     url = os.environ.get("MAYA_TEST_POSTGRES_URL")
     if not url:
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
+    url = named_url("pg", schema=False)
     _app, sqlite_database, base = app_factory()
     sqlite_database.dispose()
     settings = base.model_copy(update={"database_url": url})

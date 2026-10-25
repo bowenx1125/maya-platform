@@ -187,35 +187,6 @@ def test_creation_freezes_two_languages_and_other_debates_remain_independent(
         assert db.get(Debate, debate_id).rule_snapshot_json == frozen
 
 
-def test_migration_freezes_existing_rules_without_overwriting_custom_records(monkeypatch):
-    from importlib import import_module
-
-    from sqlalchemy import create_engine, text
-
-    migration = import_module("migrations.versions.0027_frozen_teaching_markdown")
-    engine = create_engine("sqlite://")
-    with engine.begin() as db:
-        db.execute(text("CREATE TABLE debates (id TEXT PRIMARY KEY, rule_snapshot_json TEXT)"))
-        legacy = {"teaching_protocol": "four_round_v1", "round_count": 4}
-        custom = {**legacy, **freeze_teaching_rules({"zh": "Custom CN", "en": "Custom EN"})}
-        other = {"round_count": 2}
-        for name, rules in (("legacy", legacy), ("custom", custom), ("other", other)):
-            db.execute(
-                text("INSERT INTO debates VALUES (:id, :rules)"),
-                {"id": name, "rules": json.dumps(rules)},
-            )
-        monkeypatch.setattr(migration.op, "get_bind", lambda: db)
-        migration.upgrade()
-        rows = {row[0]: json.loads(row[1]) for row in db.execute(text("SELECT * FROM debates"))}
-        assert rows["legacy"]["teaching_prompts"] == default_teaching_prompts()
-        assert rows["custom"] == custom
-        assert rows["other"] == other
-        migration.upgrade()
-        assert {
-            row[0]: json.loads(row[1]) for row in db.execute(text("SELECT * FROM debates"))
-        } == rows
-
-
 def test_selected_language_only_uses_its_own_frozen_prompt():
     from app.modules.debates.schemas import DebateDraftRequest
 

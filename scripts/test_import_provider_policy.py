@@ -28,6 +28,8 @@ from scripts.import_provider_policy import (
 )
 
 
+from tests.postgres_db import public_table_count  # noqa: E402
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -86,9 +88,11 @@ def _document() -> dict[str, Any]:
     return document
 
 
-def test_empty_sqlite_import_is_idempotent_and_only_stores_policy(tmp_path: Path) -> None:
+def test_empty_database_import_is_idempotent_and_only_stores_policy(
+    empty_postgres_url: str,
+) -> None:
     document = _document()
-    database_url = f"sqlite:///{tmp_path / 'policy.sqlite3'}"
+    database_url = empty_postgres_url
 
     first = import_reviewed_policy(
         document,
@@ -122,14 +126,16 @@ def test_empty_sqlite_import_is_idempotent_and_only_stores_policy(tmp_path: Path
         database.dispose()
 
 
-def test_reviewed_acknowledgement_is_required_before_database_access(tmp_path: Path) -> None:
+def test_reviewed_acknowledgement_is_required_before_database_access(
+    empty_postgres_url: str,
+) -> None:
     with pytest.raises(PolicyImportError, match="acknowledgement"):
         import_reviewed_policy(
             _document(),
-            database_url=f"sqlite:///{tmp_path / 'never-created.sqlite3'}",
+            database_url=empty_postgres_url,
             acknowledge_reviewed=False,
         )
-    assert not (tmp_path / "never-created.sqlite3").exists()
+    assert public_table_count(empty_postgres_url) == 0
 
 
 @pytest.mark.parametrize(
@@ -191,10 +197,12 @@ def test_policy_endpoint_path_is_fixed() -> None:
         validate_reviewed_policy(document, acknowledge_reviewed=True)
 
 
-def test_cli_summary_is_hash_only_and_requires_explicit_ack(tmp_path: Path, capsys: Any) -> None:
+def test_cli_summary_is_hash_only_and_requires_explicit_ack(
+    tmp_path: Path, capsys: Any, empty_postgres_url: str
+) -> None:
     document_path = tmp_path / "reviewed-policy.json"
     document_path.write_text(json.dumps(_document()), encoding="utf-8")
-    database_url = f"sqlite:///{tmp_path / 'cli.sqlite3'}"
+    database_url = empty_postgres_url
 
     with pytest.raises(SystemExit) as missing_ack:
         main(

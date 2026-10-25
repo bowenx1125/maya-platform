@@ -14,9 +14,11 @@ from app.core.models import IdempotencyRecord, User
 from app.modules.agents import router as agents_router
 from app.modules.knowledge.services import assert_claim_owned, renew_idempotency_lease
 
+from tests.postgres_db import named_url
+
 
 def _seed(tmp_path: Path, *, lease_delta: timedelta) -> Database:
-    database = Database(f"sqlite:///{tmp_path}/publish-pressure.sqlite3")
+    database = Database(named_url(f"{tmp_path}/publish-pressure.sqlite3"))
     database.initialize_schema()
     now = datetime.now(UTC)
     with database.session() as db:

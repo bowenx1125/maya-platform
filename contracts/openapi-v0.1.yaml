@@ -2922,7 +2922,7 @@ paths:
               $ref: '#/components/schemas/AdvancePlaybackRequest'
       responses:
         '200':
-          $ref: '#/components/responses/PlaybackState'
+          $ref: '#/components/responses/AdvancedPlayback'
         '401':
           $ref: '#/components/responses/Error'
         '403':
@@ -3511,6 +3511,22 @@ paths:
       - $ref: '#/components/parameters/Range'
       - $ref: '#/components/parameters/IfRange'
       - $ref: '#/components/parameters/MediaTicket'
+      - name: If-None-Match
+        in: header
+        required: false
+        schema:
+          type: string
+          maxLength: 1024
+      - name: format
+        in: query
+        required: false
+        description: mp3 asks for the compressed copy; WAV is served when none exists.
+        schema:
+          type: string
+          enum:
+          - wav
+          - mp3
+          default: wav
       responses:
         '200':
           description: Teacher-authorized complete retained audio.
@@ -3523,6 +3539,10 @@ paths:
               $ref: '#/components/headers/ContentLength'
           content:
             audio/wav:
+              schema:
+                type: string
+                format: binary
+            audio/mpeg:
               schema:
                 type: string
                 format: binary
@@ -3542,6 +3562,15 @@ paths:
               schema:
                 type: string
                 format: binary
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: The browser's copy (If-None-Match) is still current.
+          headers:
+            ETag:
+              $ref: '#/components/headers/AudioEtag'
         '403':
           $ref: '#/components/responses/Error'
         '404':
@@ -5888,6 +5917,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PlaybackState'
+    AdvancedPlayback:
+      description: Playback state after Next, with the new speech's audio URL when it is ready.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdvancedPlayback'
   schemas:
     ChatAgent:
       additionalProperties: false
@@ -8664,18 +8699,26 @@ components:
     PrefetchNextAudioRequest:
       type: object
       additionalProperties: false
+      description: Name turn_id (any ready speech), or the expected control version and current turn
+        (the adjacent successor).
       required:
-      - expected_control_version
-      - expected_current_turn_id
       - controller_epoch
       properties:
-        expected_control_version:
-          type: integer
-          minimum: 0
-        expected_current_turn_id:
-          $ref: '#/components/schemas/Uuid'
         controller_epoch:
           $ref: '#/components/schemas/Uuid'
+        turn_id:
+          oneOf:
+          - $ref: '#/components/schemas/Uuid'
+          - type: 'null'
+        expected_control_version:
+          oneOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+        expected_current_turn_id:
+          oneOf:
+          - $ref: '#/components/schemas/Uuid'
+          - type: 'null'
     PrefetchedNextAudio:
       type: object
       additionalProperties: false
@@ -8687,7 +8730,7 @@ components:
           $ref: '#/components/schemas/Uuid'
         media_url:
           type: string
-          pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$
+          pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$
     ReleaseDebateRequest:
       type: object
       additionalProperties: false
@@ -9208,6 +9251,16 @@ components:
             oneOf:
             - $ref: '#/components/schemas/MutualLearningSynthesisV1'
             - type: 'null'
+    AdvancedPlayback:
+      allOf:
+      - $ref: '#/components/schemas/PlaybackState'
+      - type: object
+        properties:
+          media_url:
+            type:
+            - string
+            - 'null'
+            pattern: ^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$
     PlaybackState:
       type: object
       required:

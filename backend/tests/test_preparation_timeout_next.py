@@ -21,12 +21,13 @@ from app.modules.debates.playback.sql_repository import (
 )
 from sqlalchemy import text
 
+from tests.postgres_db import named_url
 from tests.test_cleanup_debate_runtime import _add, _seed_runtime_graph, _uid
 
 
 @pytest.fixture
 def timeout_db(tmp_path: Path):
-    database = Database(f"sqlite:///{tmp_path / 'maya.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'maya.sqlite3'}"), tmp_path)
     database.upgrade_schema()
     ids = _seed_runtime_graph(database, tmp_path)
     ids["job"] = _uid(77)
@@ -320,10 +321,8 @@ def _segments_snapshot(rounds: int) -> str:
 
 
 def _clear_final_input(db, debate_id: str) -> None:
-    # The seeded graph already froze Final; the trigger keeps it immutable, so
-    # the fixture drops it (SQLite test database only) to model a lesson that
+    # The seeded graph already froze Final; clear it to model a lesson that
     # has not reached Final yet.
-    db.execute(text("DROP TRIGGER IF EXISTS debate_final_input_immutable"))
     db.execute(
         text(
             "UPDATE debates SET final_input_json=NULL, final_input_hash=NULL, "

@@ -60,7 +60,7 @@ from app.modules.avatars.router import router as avatars_router
 from app.modules.cardroom.router import router as cardroom_router
 from app.modules.debates.cleanup import resume_cleanup_journals
 from app.modules.debates.cleanup_router import router as debate_cleanup_router
-from app.modules.debates.playback.audio import AudioStore
+from app.modules.debates.playback.audio import AudioStore, playback_transcoder
 from app.modules.debates.playback.audio_regeneration import (
     discard_unjournaled_audio_stages,
     startup_resume_audio_regeneration,
@@ -131,7 +131,6 @@ from app.providers.llm_recovery import recover_llm_startup
 from app.providers.llm_tokenizer import ConservativeLLMTokenizer
 from app.providers.policy_store import ensure_reviewed_policies
 from app.seed import COURSE_ID, seed_demo_data
-from app.tools.sqlite_import import maybe_import_postgres
 
 logger = logging.getLogger("maya.backend")
 # Worker threads for sync handlers (AnyIO default 40). A request queued in
@@ -292,7 +291,7 @@ def create_app(
     """Build an isolated application instance.
 
     Tests pass their own Settings/Database, while production uses the cached
-    environment configuration and the configured SQLite file.
+    environment configuration and the configured PostgreSQL database.
     """
 
     configure_application_logging()
@@ -329,6 +328,7 @@ def create_app(
         audio_store=AudioStore(
             runtime_settings.resolved_data_root,
             tts_provider=selected_tts,
+            transcoder=playback_transcoder(runtime_settings),
         ),
         event_hub=event_hub,
         task_manager=playback_tasks,
@@ -443,9 +443,6 @@ def create_app(
         knowledge_generation_tasks.bind_running_loop()
         prewarm.bind_running_loop()
         runtime_settings.validate_runtime()
-        single_writer = runtime_settings.single_writer_production_warning()
-        if single_writer is not None:
-            logger.warning(single_writer)
         runtime_settings.ensure_data_root()
         if initialize_database:
             with runtime_database.startup_lock():
@@ -453,11 +450,6 @@ def create_app(
                     runtime_database.initialize_schema()
                 else:
                     runtime_database.upgrade_schema()
-                    maybe_import_postgres(
-                        runtime_database,
-                        runtime_settings.postgres_import_source,
-                        allow_empty=runtime_settings.postgres_allow_empty,
-                    )
                 _bootstrap_accounts(runtime_database, runtime_settings)
             background_leader = runtime_database.try_background_leader()
         else:

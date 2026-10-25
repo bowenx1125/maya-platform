@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from app.core.errors import PlatformError, conflict, forbidden, invalid_state, not_found
 from app.modules.auth.service import AuthContext
@@ -28,6 +28,7 @@ from ._core import (
 )
 from .audio import AudioMetadata
 from .events import EventRecord
+from .offload import on_main
 from .protocols import (
     MemoryPlaybackRepository,
 )
@@ -272,7 +273,7 @@ class PlaybackControlMixin(PlaybackCore):
                     course_id=course_id,
                     old_debate_id=current_pointer,
                     new_debate_id=debate_id,
-                    request_id=request_id or idempotency_key or str(uuid4()),
+                    request_id=_bounded_request_id(request_id or idempotency_key),
                     expected_old_debate_id=expected_current_audio_debate_id,
                     idempotency_record_id=(
                         str(idempotency_record.id) if idempotency_record is not None else None
@@ -1077,7 +1078,7 @@ class PlaybackControlMixin(PlaybackCore):
             self._finish_control_idempotency(db, record, result)
             self._commit(db)
         if partial:
-            await self.task_manager.cancel_debate(debate_id)
+            await on_main(self.task_manager.cancel_debate(debate_id))
             self.ticket_store.revoke_debate(debate_id)
         else:
             self.ticket_store.revoke_debate(debate_id)
@@ -1418,7 +1419,7 @@ class PlaybackControlMixin(PlaybackCore):
             self._commit(db)
             if current_id:
                 self.ticket_store.revoke_item(debate_id, current_id)
-        await self.task_manager.cancel_debate(debate_id)
+        await on_main(self.task_manager.cancel_debate(debate_id))
         self.ticket_store.revoke_debate(debate_id)
         if stopped_epoch is not None:
             self._revoke_epoch(stopped_epoch, debate_id, "debate_terminal")
@@ -1586,7 +1587,7 @@ class PlaybackControlMixin(PlaybackCore):
                     },
                 )
             self._commit(db)
-            await self.task_manager.cancel_debate(debate_id)
+            await on_main(self.task_manager.cancel_debate(debate_id))
             self.ticket_store.revoke_debate(debate_id)
             if reset_epoch is not None:
                 self._revoke_epoch(str(reset_epoch), debate_id, "debate_terminal")
@@ -1682,7 +1683,7 @@ class PlaybackControlMixin(PlaybackCore):
                     },
                 )
             self._commit(db)
-        await self.task_manager.cancel_debate(debate_id)
+        await on_main(self.task_manager.cancel_debate(debate_id))
         self.ticket_store.revoke_debate(debate_id)
         if reset_epoch is not None:
             self._revoke_epoch(reset_epoch, debate_id, "debate_terminal")
@@ -1790,3 +1791,17 @@ class PlaybackControlMixin(PlaybackCore):
             self._save(db, debate, state)
             self._commit(db)
             return self._state_dto(state, db, debate)
+
+
+def _bounded_request_id(value: str | None) -> str:
+    """The journal's request id column holds 36 characters (a UUID).
+
+    An Idempotency-Key may be longer; map it to a stable UUID so a retry with
+    the same key still finds the same journal.
+    """
+
+    if not value:
+        return str(uuid4())
+    if len(value) <= 36:
+        return value
+    return str(uuid5(NAMESPACE_URL, f"maya:audio-swap:{value}"))

@@ -36,8 +36,6 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET to a managed value of at least 32 bytes}
       CLASSROOM_PUBLIC_BASE_URL: https://${MAYA_DOMAIN:?Set MAYA_DOMAIN to the public DNS name}
       DATABASE_URL: postgresql+psycopg://maya:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/maya
-      MAYA_POSTGRES_IMPORT_SOURCE: ${MAYA_POSTGRES_IMPORT_SOURCE:-/app/data/maya.sqlite3}
-      MAYA_POSTGRES_ALLOW_EMPTY: ${MAYA_POSTGRES_ALLOW_EMPTY:-false}
       AUTH_LOGIN_QUEUE_RETRY_SECONDS: ${AUTH_LOGIN_QUEUE_RETRY_SECONDS:-2}
       MEMORY_GUARD_MIN_AVAILABLE_MB: ${MEMORY_GUARD_MIN_AVAILABLE_MB:-500}
       MEMORY_GUARD_RESUME_AVAILABLE_MB: ${MEMORY_GUARD_RESUME_AVAILABLE_MB:-550}
@@ -101,6 +99,7 @@ services:
       AUTH_REGISTER_CLIENT_LIMIT: ${AUTH_REGISTER_CLIENT_LIMIT:-120}
       AUTH_REGISTER_WINDOW_SECONDS: ${AUTH_REGISTER_WINDOW_SECONDS:-3600}
       AUTH_ABUSE_MAX_BUCKETS: ${AUTH_ABUSE_MAX_BUCKETS:-8192}
+      DEBATE_AUDIO_MP3: ${DEBATE_AUDIO_MP3:-true}
     networks: !override
       - maya_backend
     depends_on:
@@ -147,7 +146,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    networks:
+    networks: !override
       - maya_backend
 
 networks:

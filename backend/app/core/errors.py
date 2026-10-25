@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID, uuid4
@@ -56,12 +55,7 @@ def is_transient_infrastructure_error(exc: BaseException) -> bool:
     if isinstance(exc, sa_exc.OperationalError):
         # psycopg maps connection loss, deadlocks, serialization failures and
         # admin shutdowns to OperationalError; schema/SQL bugs are
-        # ProgrammingError and therefore stay internal_error.  sqlite3 also
-        # reports "no such table" as OperationalError, so on SQLite only a
-        # busy/locked database counts as transient.
-        if isinstance(exc.orig, sqlite3.Error):
-            text = str(exc.orig).lower()
-            return "locked" in text or "busy" in text
+        # ProgrammingError and therefore stay internal_error.
         return True
     return False
 

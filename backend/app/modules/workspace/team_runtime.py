@@ -24,7 +24,6 @@ from app.core.links import live_link
 from app.core.message_timing import message_timing, set_outcome
 from app.core.models import Agent, AgentVersion, CourseMember, ProviderOperation, User
 from app.core.read_memo import forget_request_reads, memoized, request_read_memo
-from app.core.sqlutil import begin_immediate
 from app.core.write_guard import WriteSlot, write_guard_slot
 from app.modules.auth.service import AuthContext
 from app.modules.learning.models import AssessmentAttempt
@@ -149,8 +148,6 @@ def _canonical(value: object) -> str:
 
 def _begin(db: Session) -> None:
     db.rollback()
-    if db.get_bind().dialect.name == "sqlite":
-        begin_immediate(db)
 
 
 @contextmanager
@@ -172,7 +169,7 @@ def _locked(statement: Any) -> Any:
     pending/running could commit as ready (with its text) before this writer
     changed it, leaving a failed/pending row that still carries text
     (ck_team_result_body). FOR UPDATE waits for that commit and returns the
-    current row; SQLite renders nothing and its writer lock already holds.
+    current row.
     """
 
     return (
@@ -4943,15 +4940,11 @@ def project_team_turn(db: Session, turn: ConversationTurn, *, read_only: bool) -
 
 def _begin_consistent_read(db: Session) -> None:
     """Keep events and their projected state in one committed snapshot."""
-    dialect = db.get_bind().dialect.name
-    if dialect == "sqlite":
-        db.connection().exec_driver_sql("BEGIN")
-    elif dialect == "postgresql":
-        if db.in_transaction():
-            raise RuntimeError("Team polling snapshot must start before database reads.")
-        # READ COMMITTED can see a new turn_done after loading the old pending
-        # turn. Set isolation on this checkout; pool return restores the default.
-        db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+    if db.in_transaction():
+        raise RuntimeError("Team polling snapshot must start before database reads.")
+    # READ COMMITTED can see a new turn_done after loading the old pending
+    # turn. Set isolation on this checkout; pool return restores the default.
+    db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
 
 
 def poll_team_events(

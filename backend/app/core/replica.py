@@ -131,7 +131,11 @@ class ReplicaPresence:
                 text(
                     "SELECT count(*) FROM pg_locks WHERE locktype='advisory' "
                     "AND classid=:a AND objid=:b AND objsubid=2 AND granted "
-                    "AND pid <> :me"
+                    "AND pid <> :me "
+                    # Advisory locks belong to one database; another database
+                    # on the same server is not a peer.
+                    "AND database = (SELECT oid FROM pg_database "
+                    "WHERE datname = current_database())"
                 ),
                 {"a": _ALIVE_CLASS, "b": _ALIVE_OBJ, "me": int(self.pid or 0)},
             ).scalar_one()

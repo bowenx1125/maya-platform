@@ -33,7 +33,6 @@ from app.modules.knowledge.services import normalized_document_content
 from app.modules.knowledge_sets.generation import (
     _current_generation_authorized,
     _finish_blocked,
-    _start_immediate,
     claim_generation_run,
     current_generation_authorized_on_connection,
 )
@@ -582,7 +581,6 @@ def _mark_run_blocked(
 ) -> None:
     with session_factory() as db:
         db.rollback()
-        _start_immediate(db)
         run = db.get(KnowledgeGenerationRun, run_id)
         if run is None or run.state != "running" or run.claim_token != claim_token:
             db.rollback()
