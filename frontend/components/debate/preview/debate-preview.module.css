@@ -1,282 +1,284 @@
-:global(body):has(.page) {
-  background: var(--surface-subtle, #f5f5f7);
-}
+@layer legacy {
+  :global(body):has(.page) {
+    background: var(--surface-subtle, #f5f5f7);
+  }
 
-.page {
-  display: grid;
-  gap: var(--workspace-gap);
-  min-width: 0;
-}
+  .page {
+    display: grid;
+    gap: var(--workspace-gap);
+    min-width: 0;
+  }
 
-.header {
-  align-items: end;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  min-width: 0;
-}
+  .header {
+    align-items: end;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-width: 0;
+  }
 
-.header > div:first-child {
-  flex: 1 1 0;
-  min-width: 0;
-}
+  .header > div:first-child {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 
-.header h1 {
-  overflow-wrap: anywhere;
-  max-width: 760px;
-  margin: 0.55rem 0 0;
-  font-size: clamp(1.75rem, 2.8vw, 2.25rem);
-  line-height: 1.1;
-  letter-spacing: -0.045em;
-}
-
-.headerActions {
-  align-items: center;
-  display: flex;
-  flex: 0 1 360px;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  justify-content: flex-end;
-  max-width: 100%;
-}
-
-.navigationActions {
-  display: flex;
-  align-items: stretch;
-  gap: 0.6rem;
-  white-space: nowrap;
-}
-
-.navigationActions > a {
-  flex: 1 1 auto;
-}
-
-.progressCard {
-  display: grid;
-  gap: 0.8rem;
-  background: var(--surface-subtle, #f5f5f7);
-}
-
-.progressLine {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-  justify-content: space-between;
-}
-
-.progressLine span,
-.turnRound,
-.audioReady,
-.errorRow,
-.missingSpeech,
-.noSource,
-.source span,
-.source small {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.progressTrack {
-  background: var(--line);
-  border-radius: 999px;
-  height: 0.5rem;
-  overflow: hidden;
-}
-
-.progressTrack span {
-  background: var(--indigo);
-  border-radius: inherit;
-  display: block;
-  height: 100%;
-  transition: width 200ms ease;
-}
-
-.turns {
-  display: grid;
-  gap: var(--workspace-gap);
-  min-width: 0;
-  padding: var(--workspace-inset);
-  border: 1px solid var(--line, #dedee3);
-  border-radius: 20px;
-  background: #fff;
-}
-
-.turnCard {
-  background: var(--surface-subtle, #f5f5f7);
-  border: 1px solid var(--line, #dedee3);
-  border-radius: 14px;
-  display: grid;
-  gap: 0.9rem;
-  min-width: 0;
-  padding: 16px;
-}
-
-.turnHeader {
-  align-items: start;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.turnHeader h2 {
-  margin: 0.15rem 0 0;
-  overflow-wrap: anywhere;
-}
-
-.turnStatus {
-  align-items: end;
-  display: grid;
-  gap: 0.35rem;
-  justify-items: end;
-  text-align: right;
-}
-
-.audioReady {
-  color: var(--green);
-}
-
-.audioPending {
-  color: var(--muted);
-}
-
-.speech {
-  color: var(--ink);
-  line-height: 1.65;
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.missingSpeech {
-  border: 1px dashed var(--line);
-  border-radius: 0.7rem;
-  margin: 0;
-  padding: 0.8rem;
-}
-
-.errorRow {
-  align-items: center;
-  background: rgba(183, 79, 90, 0.08);
-  border: 1px solid rgba(183, 79, 90, 0.22);
-  border-radius: 0.75rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  padding: 0.7rem;
-}
-
-.errorRow code {
-  color: var(--red);
-  overflow-wrap: anywhere;
-}
-
-.errorRow .retryButton {
-  flex: 0 0 auto;
-  margin-left: auto;
-  width: 44px;
-  height: 44px;
-}
-
-.ragCheck {
-  border-top: 1px solid var(--line);
-  padding-top: 0.8rem;
-}
-
-.ragCheck summary {
-  min-height: 0;
-  padding: 0;
-  color: var(--indigo-dark);
-  cursor: pointer;
-  font-size: 0.86rem;
-  font-weight: 760;
-}
-
-.segmentList {
-  display: grid;
-  gap: 0.8rem;
-  margin-top: 0.8rem;
-}
-
-.segment {
-  border-left: 3px solid var(--gold);
-  display: grid;
-  gap: 0.55rem;
-  min-width: 0;
-  padding-left: 0.8rem;
-}
-
-.segment > p {
-  color: var(--ink);
-  line-height: 1.5;
-  margin: 0;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.segmentSources {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.source {
-  background: var(--surface-subtle, #f7f6f3);
-  border-radius: 0.6rem;
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-  padding: 0.6rem;
-}
-
-.source strong,
-.source span,
-.source small {
-  overflow-wrap: anywhere;
-}
-
-.source small {
-  line-height: 1.45;
-  white-space: pre-wrap;
-}
-
-.empty {
-  color: var(--muted);
-  margin: 0;
-}
-
-@media (max-width: 620px) {
-  .header,
-  .turnHeader {
-    align-items: stretch;
-    flex-direction: column;
+  .header h1 {
+    overflow-wrap: anywhere;
+    max-width: 760px;
+    margin: 0.55rem 0 0;
+    font-size: clamp(1.75rem, 2.8vw, 2.25rem);
+    line-height: 1.1;
+    letter-spacing: -0.045em;
   }
 
   .headerActions {
-    align-items: stretch;
-    flex: 0 1 auto;
-    justify-content: stretch;
+    align-items: center;
+    display: flex;
+    flex: 0 1 360px;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    max-width: 100%;
   }
 
   .navigationActions {
-    width: 100%;
+    display: flex;
+    align-items: stretch;
+    gap: 0.6rem;
+    white-space: nowrap;
+  }
+
+  .navigationActions > a {
+    flex: 1 1 auto;
+  }
+
+  .progressCard {
+    display: grid;
+    gap: 0.8rem;
+    background: var(--surface-subtle, #f5f5f7);
+  }
+
+  .progressLine {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    justify-content: space-between;
+  }
+
+  .progressLine span,
+  .turnRound,
+  .audioReady,
+  .errorRow,
+  .missingSpeech,
+  .noSource,
+  .source span,
+  .source small {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+
+  .progressTrack {
+    background: var(--line);
+    border-radius: 999px;
+    height: 0.5rem;
+    overflow: hidden;
+  }
+
+  .progressTrack span {
+    background: var(--indigo);
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    transition: width 200ms ease;
+  }
+
+  .turns {
+    display: grid;
+    gap: var(--workspace-gap);
+    min-width: 0;
+    padding: var(--workspace-inset);
+    border: 1px solid var(--line, #dedee3);
+    border-radius: 20px;
+    background: #fff;
+  }
+
+  .turnCard {
+    background: var(--surface-subtle, #f5f5f7);
+    border: 1px solid var(--line, #dedee3);
+    border-radius: 14px;
+    display: grid;
+    gap: 0.9rem;
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .turnHeader {
+    align-items: start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .turnHeader h2 {
+    margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
   }
 
   .turnStatus {
-    align-items: start;
-    justify-items: start;
-    text-align: left;
+    align-items: end;
+    display: grid;
+    gap: 0.35rem;
+    justify-items: end;
+    text-align: right;
   }
-}
 
-.evidenceCount {
-  display: inline-grid;
-  min-width: 1.35rem;
-  height: 1.35rem;
-  place-items: center;
-  margin-left: 6px;
-  border-radius: 999px;
-  color: var(--indigo-dark);
-  background: var(--accent-soft, #f6ecd3);
-  font-size: 0.72rem;
+  .audioReady {
+    color: var(--green);
+  }
+
+  .audioPending {
+    color: var(--muted);
+  }
+
+  .speech {
+    color: var(--ink);
+    line-height: 1.65;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .missingSpeech {
+    border: 1px dashed var(--line);
+    border-radius: 0.7rem;
+    margin: 0;
+    padding: 0.8rem;
+  }
+
+  .errorRow {
+    align-items: center;
+    background: rgba(183, 79, 90, 0.08);
+    border: 1px solid rgba(183, 79, 90, 0.22);
+    border-radius: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.7rem;
+  }
+
+  .errorRow code {
+    color: var(--red);
+    overflow-wrap: anywhere;
+  }
+
+  .errorRow .retryButton {
+    flex: 0 0 auto;
+    margin-left: auto;
+    width: 44px;
+    height: 44px;
+  }
+
+  .ragCheck {
+    border-top: 1px solid var(--line);
+    padding-top: 0.8rem;
+  }
+
+  .ragCheck summary {
+    min-height: 0;
+    padding: 0;
+    color: var(--indigo-dark);
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-weight: 760;
+  }
+
+  .segmentList {
+    display: grid;
+    gap: 0.8rem;
+    margin-top: 0.8rem;
+  }
+
+  .segment {
+    border-left: 3px solid var(--gold);
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+    padding-left: 0.8rem;
+  }
+
+  .segment > p {
+    color: var(--ink);
+    line-height: 1.5;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .segmentSources {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .source {
+    background: var(--surface-subtle, #f7f6f3);
+    border-radius: 0.6rem;
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.6rem;
+  }
+
+  .source strong,
+  .source span,
+  .source small {
+    overflow-wrap: anywhere;
+  }
+
+  .source small {
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+
+  .empty {
+    color: var(--muted);
+    margin: 0;
+  }
+
+  @media (max-width: 620px) {
+    .header,
+    .turnHeader {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .headerActions {
+      align-items: stretch;
+      flex: 0 1 auto;
+      justify-content: stretch;
+    }
+
+    .navigationActions {
+      width: 100%;
+    }
+
+    .turnStatus {
+      align-items: start;
+      justify-items: start;
+      text-align: left;
+    }
+  }
+
+  .evidenceCount {
+    display: inline-grid;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    place-items: center;
+    margin-left: 6px;
+    border-radius: 999px;
+    color: var(--indigo-dark);
+    background: var(--accent-soft, #f6ecd3);
+    font-size: 0.72rem;
+  }
 }

@@ -1,0 +1,19 @@
+/*
+ * Stylesheet entry (PR0). Layer order, lowest first:
+ *   theme     Tailwind theme variables
+ *   legacy    the pre-Arcade globals.css and every *.module.css (wrapped in
+ *             `@layer legacy`), so old pages keep their exact cascade
+ *   (unlayered) Arcade tokens + @theme (styles/arcade.css)
+ *   utilities Tailwind utilities (win over everything above)
+ * No Tailwind preflight: it would restyle legacy pages. Arcade components
+ * reset what they need themselves.
+ */
+@layer theme, legacy, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "./globals.css" layer(legacy);
+@import "../styles/arcade.css";
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "../app";
+@source "../components";

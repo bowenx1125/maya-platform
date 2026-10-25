@@ -1,0 +1,95 @@
+/*
+ * Arcade design tokens and components (DESIGN-RULES §2/§3), PR0.
+ *
+ * Token names: the legacy stylesheet already owns --ink, --muted, --bg-ish
+ * names with different values, so every Arcade token is prefixed --arc-*.
+ * The neobrutalism.dev component variables (--main, --border, --shadow,
+ * --radius-base, --box-shadow-x/y, ...) are kept under their upstream names;
+ * the legacy --shadow was renamed --legacy-shadow so nothing clashes.
+ */
+:root {
+  --arc-main: #ff4d8d;
+  --arc-main-fg: #111111;
+  --arc-bg: #dcebff;
+  --arc-bg-grid: #00000010;
+  --arc-grid-size: 32px;
+  --arc-sidebar: #ffe14d;
+  --arc-surface: #ffffff;
+  --arc-ink: #111111;
+  --arc-muted: #4b5563;
+  --arc-cat-studyform: #a3e635;
+  --arc-cat-brainform: #67e8f9;
+  --arc-cat-chatform: #fdba74;
+  --arc-ok: #22c55e;
+  --arc-ok-bg: #e3fbe9;
+  --arc-warn: #facc15;
+  --arc-warn-bg: #fff7cc;
+  --arc-err: #ef4444;
+  --arc-err-bg: #ffe4e4;
+  --arc-err-text: #b91c1c;
+  --arc-private: #e5e7eb;
+  --arc-border-w: 3px;
+  --arc-border-w-s: 2px;
+  --arc-radius: 10px;
+  --arc-radius-s: 6px;
+  --arc-radius-pill: 999px;
+  --arc-shadow: 6px 6px 0 #111;
+  --arc-shadow-s: 3px 3px 0 #111;
+  --arc-press-depth: 6px;
+  --arc-hover-lift: -2px;
+  --arc-dur-press: 80ms;
+  --arc-dur-ui: 150ms;
+  --arc-dur-feedback: 400ms;
+  --arc-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --arc-font-display:
+    var(--font-bricolage, "Bricolage Grotesque"), "Noto Sans SC", system-ui,
+    sans-serif;
+  --arc-font-body:
+    var(--font-lexend, "Lexend"), "Noto Sans SC", system-ui, sans-serif;
+
+  /* neobrutalism.dev variables (MIT), mapped onto the Arcade palette. */
+  --background: var(--arc-bg);
+  --secondary-background: var(--arc-surface);
+  --foreground: var(--arc-ink);
+  --main-foreground: var(--arc-main-fg);
+  --main: var(--arc-main);
+  --border: #111111;
+  --ring: #111111;
+  --overlay: rgba(17, 17, 17, 0.4);
+  --shadow: 6px 6px 0 0 var(--border);
+  --radius-base: 10px;
+  --box-shadow-x: 6px;
+  --box-shadow-y: 6px;
+  --reverse-box-shadow-x: -6px;
+  --reverse-box-shadow-y: -6px;
+  --base-font-weight: 500;
+  --heading-font-weight: 800;
+}
+
+@theme inline {
+  --color-main: var(--arc-main);
+  --color-main-fg: var(--arc-main-fg);
+  --color-ink: var(--arc-ink);
+  --color-surface: var(--arc-surface);
+  --color-arc-bg: var(--arc-bg);
+  --color-arc-muted: var(--arc-muted);
+  --color-sidebar: var(--arc-sidebar);
+  --color-studyform: var(--arc-cat-studyform);
+  --color-brainform: var(--arc-cat-brainform);
+  --color-chatform: var(--arc-cat-chatform);
+  --color-ok: var(--arc-ok);
+  --color-ok-bg: var(--arc-ok-bg);
+  --color-warn: var(--arc-warn);
+  --color-warn-bg: var(--arc-warn-bg);
+  --color-err: var(--arc-err);
+  --color-err-bg: var(--arc-err-bg);
+  --color-err-text: var(--arc-err-text);
+  --color-private: var(--arc-private);
+  --color-border: var(--border);
+  --shadow-arc: var(--arc-shadow);
+  --shadow-arc-s: var(--arc-shadow-s);
+  --radius-arc: var(--arc-radius);
+  --radius-arc-s: var(--arc-radius-s);
+  --font-display: var(--arc-font-display);
+  --font-body: var(--arc-font-body);
+}

@@ -1,605 +1,607 @@
-.pageStack {
-  display: grid;
-  gap: var(--workspace-gap);
-}
-.pageStack > * {
-  margin-bottom: 0;
-}
+@layer legacy {
+  .pageStack {
+    display: grid;
+    gap: var(--workspace-gap);
+  }
+  .pageStack > * {
+    margin-bottom: 0;
+  }
 
-.candidateGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
+  .candidateGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
 
-.candidate {
-  display: grid;
-  gap: 10px;
-  width: 100%;
-  min-height: 132px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  color: var(--ink);
-  background: var(--surface-subtle, #f5f5f7);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
-}
+  .candidate {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    min-height: 132px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    color: var(--ink);
+    background: var(--surface-subtle, #f5f5f7);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
 
-.candidate:hover {
-  transform: translateY(-1px);
-  border-color: #cfc5ed;
-  box-shadow: 0 10px 24px rgba(20, 25, 40, 0.08);
-}
+  .candidate:hover {
+    transform: translateY(-1px);
+    border-color: #cfc5ed;
+    box-shadow: 0 10px 24px rgba(20, 25, 40, 0.08);
+  }
 
-.candidateSelected {
-  border-color: var(--indigo);
-  box-shadow: 0 0 0 3px var(--accent-soft, #f6ecd3);
-}
+  .candidateSelected {
+    border-color: var(--indigo);
+    box-shadow: 0 0 0 3px var(--accent-soft, #f6ecd3);
+  }
 
-.candidateTop,
-.selectedTop,
-.formHeader,
-.listHeader,
-.metaRow,
-.stanceRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+  .candidateTop,
+  .selectedTop,
+  .formHeader,
+  .listHeader,
+  .metaRow,
+  .stanceRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
 
-.candidateTop,
-.selectedTop,
-.listHeader,
-.formHeader {
-  justify-content: space-between;
-}
+  .candidateTop,
+  .selectedTop,
+  .listHeader,
+  .formHeader {
+    justify-content: space-between;
+  }
 
-.candidateName {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 780;
-}
+  .candidateName {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 780;
+  }
 
-.candidateDescription {
-  min-height: 2.4em;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
+  .candidateDescription {
+    min-height: 2.4em;
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
 
-.orderMark,
-.slotMark {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  color: var(--indigo-dark);
-  background: var(--gold-soft);
-  font-size: 0.8rem;
-  font-weight: 820;
-}
+  .orderMark,
+  .slotMark {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    color: var(--indigo-dark);
+    background: var(--gold-soft);
+    font-size: 0.8rem;
+    font-weight: 820;
+  }
 
-.candidateHint,
-.fieldHint,
-.fixedRule,
-.emptyCopy,
-.listMeta {
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.5;
-}
+  .candidateHint,
+  .fieldHint,
+  .fixedRule,
+  .emptyCopy,
+  .listMeta {
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
 
-.selectedList {
-  display: grid;
-  gap: 12px;
-}
+  .selectedList {
+    display: grid;
+    gap: 12px;
+  }
 
-.selectedRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: center;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-subtle, #f5f5f7);
-}
-
-.selectedIdentity {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.selectedIdentity > div {
-  min-width: 0;
-}
-
-.selectedIdentity strong,
-.selectedIdentity small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selectedIdentity small {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
-.selectedControls {
-  display: grid;
-  grid-template-columns: auto minmax(130px, 160px) minmax(160px, 1fr);
-  gap: 8px;
-  align-items: center;
-}
-
-.noteInput {
-  min-height: 38px !important;
-  padding: 8px 10px !important;
-  font-size: 0.8rem;
-}
-
-.fixedRule {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-left: 3px solid var(--gold);
-  background: rgba(246, 236, 211, 0.62);
-}
-
-.fixedRule strong {
-  color: var(--ink);
-}
-
-.submitRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.list {
-  display: grid;
-  gap: 12px;
-}
-
-.debateCard {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  align-items: center;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fdfaf3;
-  text-decoration: none;
-}
-
-.debateCard h2 {
-  margin: 0;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  font-family: var(--display-serif);
-  font-size: 1.05rem;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-/* Topic column must shrink so long titles wrap instead of squeezing actions. */
-.debateCard > div:first-child {
-  min-width: 0;
-}
-
-.debateCard p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.metaRow {
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.metaRow span {
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
-.metaRow span + span::before {
-  margin-right: 8px;
-  color: #c3bacd;
-  content: "·";
-}
-
-.emptyState {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 18px;
-  border: 1px dashed #d9d0e2;
-  border-radius: 16px;
-  color: var(--muted);
-  background: var(--surface-subtle, #f5f5f7);
-}
-
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-@media (max-width: 760px) {
   .selectedRow {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-subtle, #f5f5f7);
+  }
+
+  .selectedIdentity {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .selectedIdentity > div {
+    min-width: 0;
+  }
+
+  .selectedIdentity strong,
+  .selectedIdentity small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .selectedIdentity small {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 0.76rem;
   }
 
   .selectedControls {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: auto minmax(130px, 160px) minmax(160px, 1fr);
+    gap: 8px;
+    align-items: center;
   }
 
-  .choiceGroup {
-    justify-content: flex-start;
-    width: fit-content;
+  .noteInput {
+    min-height: 38px !important;
+    padding: 8px 10px !important;
+    font-size: 0.8rem;
   }
-}
 
-@media (max-width: 420px) {
-  .candidateGrid {
-    grid-template-columns: 1fr;
+  .fixedRule {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border-left: 3px solid var(--gold);
+    background: rgba(246, 236, 211, 0.62);
+  }
+
+  .fixedRule strong {
+    color: var(--ink);
+  }
+
+  .submitRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .list {
+    display: grid;
+    gap: 12px;
   }
 
   .debateCard {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #fdfaf3;
+    text-decoration: none;
   }
 
-  .debateCard .status-badge {
-    justify-self: start;
+  .debateCard h2 {
+    margin: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-family: var(--display-serif);
+    font-size: 1.05rem;
+    font-weight: 500;
+    line-height: 1.35;
   }
-}
 
-.roundField {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
-}
+  /* Topic column must shrink so long titles wrap instead of squeezing actions. */
+  .debateCard > div:first-child {
+    min-width: 0;
+  }
 
-.roundLabel {
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 640;
-}
+  .debateCard p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
 
-/* The topic and actions share one warm card, separated by a single rule. */
-.debateRow {
-  display: flex;
-  align-items: center;
-  border: 1px solid var(--line, #dedee3);
-  border-radius: 16px;
-  background: var(--surface-subtle, #f5f5f7);
-}
-
-.debateRow > .debateCard {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  border-bottom: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.debateActions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  max-width: 44%;
-  margin: 12px 8px 12px 0;
-  padding-left: 12px;
-  border-left: 1px solid var(--line, #dedee3);
-}
-
-.listCleanup {
-  display: contents;
-}
-
-.debateActions :is(button, a),
-.listAction.listAction {
-  min-height: 36px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--ink, #1d1d1f);
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.debateActions :is(button, a):hover:not(:disabled) {
-  background: var(--surface-hover, #ededf0);
-  color: var(--ink, #1d1d1f);
-  box-shadow: none;
-  text-decoration: none;
-}
-
-.debateActions .iconAction.iconAction {
-  display: inline-grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0;
-  color: var(--muted, #6e6e73);
-}
-
-.debateActions .iconAction.iconAction:hover:not(:disabled),
-.debateActions .iconAction.iconAction:focus-visible {
-  color: var(--ink, #1d1d1f);
-}
-
-.debateActions .iconAction:global(.icon-action-danger):hover:not(:disabled),
-.debateActions .iconAction:global(.icon-action-danger):focus-visible {
-  background: rgba(183, 79, 90, 0.08);
-  color: var(--red, #b74f5a);
-}
-
-.debateActions button:disabled {
-  opacity: 0.5;
-}
-
-.debateActions [role="alert"],
-.debateActions [role="status"] {
-  flex-basis: 100%;
-  max-width: 280px;
-  color: #806044;
-  font-size: 0.75rem;
-}
-
-@media (max-width: 640px) {
-  .debateRow {
+  .metaRow {
     flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .metaRow span {
+    color: var(--muted);
+    font-size: 0.76rem;
+  }
+
+  .metaRow span + span::before {
+    margin-right: 8px;
+    color: #c3bacd;
+    content: "·";
+  }
+
+  .emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 18px;
+    border: 1px dashed #d9d0e2;
+    border-radius: 16px;
+    color: var(--muted);
+    background: var(--surface-subtle, #f5f5f7);
+  }
+
+  .srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 760px) {
+    .selectedRow {
+      grid-template-columns: 1fr;
+    }
+
+    .selectedControls {
+      grid-template-columns: 1fr;
+    }
+
+    .choiceGroup {
+      justify-content: flex-start;
+      width: fit-content;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .candidateGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .debateCard {
+      grid-template-columns: 1fr;
+    }
+
+    .debateCard .status-badge {
+      justify-self: start;
+    }
+  }
+
+  .roundField {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+
+  .roundLabel {
+    color: var(--ink);
+    font-size: 0.8rem;
+    font-weight: 640;
+  }
+
+  /* The topic and actions share one warm card, separated by a single rule. */
+  .debateRow {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--line, #dedee3);
+    border-radius: 16px;
+    background: var(--surface-subtle, #f5f5f7);
   }
 
   .debateRow > .debateCard {
-    flex-basis: 100%;
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    border-bottom: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .debateActions {
-    flex: 1 1 0px;
-    min-width: 0;
-    max-width: calc(100% - 32px);
-    margin: 0 16px 12px;
-    padding-left: 0;
-    padding-top: 4px;
-    border-left: 0;
-    border-top: 0;
-    justify-content: flex-start;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: 44%;
+    margin: 12px 8px 12px 0;
+    padding-left: 12px;
+    border-left: 1px solid var(--line, #dedee3);
   }
-}
 
-.releaseSlot {
-  display: grid;
-  gap: 6px;
-}
+  .listCleanup {
+    display: contents;
+  }
 
-/* The round's shape, at the size the protocol name used to occupy. */
-.rulePhases {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 640;
-  color: var(--ink);
-}
+  .debateActions :is(button, a),
+  .listAction.listAction {
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink, #1d1d1f);
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
 
-.roundLabel {
-  font-size: 1rem;
-}
+  .debateActions :is(button, a):hover:not(:disabled) {
+    background: var(--surface-hover, #ededf0);
+    color: var(--ink, #1d1d1f);
+    box-shadow: none;
+    text-decoration: none;
+  }
 
-/* The protocol block reads as one compact unit rather than a stack of rows. */
-.fixedRule {
-  display: grid;
-  gap: 14px;
-}
+  .debateActions .iconAction.iconAction {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    color: var(--muted, #6e6e73);
+  }
 
-.topicInput.topicInput {
-  background: var(--gold-soft);
-  border-color: #d6bd86;
-}
+  .debateActions .iconAction.iconAction:hover:not(:disabled),
+  .debateActions .iconAction.iconAction:focus-visible {
+    color: var(--ink, #1d1d1f);
+  }
 
-.selectedControlsOpen {
-  grid-template-columns: auto minmax(160px, 1fr);
-}
+  .debateActions .iconAction:global(.icon-action-danger):hover:not(:disabled),
+  .debateActions .iconAction:global(.icon-action-danger):focus-visible {
+    background: rgba(183, 79, 90, 0.08);
+    color: var(--red, #b74f5a);
+  }
 
-@media (max-width: 720px) {
+  .debateActions button:disabled {
+    opacity: 0.5;
+  }
+
+  .debateActions [role="alert"],
+  .debateActions [role="status"] {
+    flex-basis: 100%;
+    max-width: 280px;
+    color: #806044;
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 640px) {
+    .debateRow {
+      flex-wrap: wrap;
+    }
+
+    .debateRow > .debateCard {
+      flex-basis: 100%;
+    }
+
+    .debateActions {
+      flex: 1 1 0px;
+      min-width: 0;
+      max-width: calc(100% - 32px);
+      margin: 0 16px 12px;
+      padding-left: 0;
+      padding-top: 4px;
+      border-left: 0;
+      border-top: 0;
+      justify-content: flex-start;
+    }
+  }
+
+  .releaseSlot {
+    display: grid;
+    gap: 6px;
+  }
+
+  /* The round's shape, at the size the protocol name used to occupy. */
+  .rulePhases {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 640;
+    color: var(--ink);
+  }
+
+  .roundLabel {
+    font-size: 1rem;
+  }
+
+  /* The protocol block reads as one compact unit rather than a stack of rows. */
+  .fixedRule {
+    display: grid;
+    gap: 14px;
+  }
+
+  .topicInput.topicInput {
+    background: var(--gold-soft);
+    border-color: #d6bd86;
+  }
+
   .selectedControlsOpen {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: auto minmax(160px, 1fr);
   }
-}
 
-.topicCard.topicCard {
-  margin: 0;
-  background: #fff;
-  border-color: var(--line);
-}
-.topicColumns {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--workspace-gap);
-}
-.contextInput.contextInput {
-  resize: vertical;
-  display: block;
-  width: 100%;
-  min-height: 120px;
-  background: #fff;
-  border-color: var(--line, #dedee3);
-}
-.agentOrderList {
-  display: grid;
-  gap: 10px;
-}
-.agentOrderRow {
-  display: grid;
-  grid-template-columns: minmax(170px, 0.8fr) minmax(0, 2fr);
-  align-items: center;
-  gap: 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-subtle, #f5f5f7);
-  cursor: pointer;
-}
-.agentOrderRow:hover {
-  border-color: #d6bd86;
-}
-.agentOrderSelected {
-  border-color: #cdb786;
-}
-.agentIdentity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.agentIdentity:focus-visible {
-  outline: 2px solid var(--indigo);
-  outline-offset: 5px;
-}
-.orderNumber {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #f0dfb7;
-  color: #71562e;
-  font-weight: 750;
-}
-.agentText {
-  min-width: 0;
-}
-.agentText strong {
-  display: block;
-  overflow-wrap: anywhere;
-}
-.agentMeta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 5px;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-.agentMeta :global(.status-pill) {
-  font-size: 0.7rem;
-  padding: 3px 8px;
-}
-.orderControls {
-  display: grid;
-  grid-template-columns: auto minmax(85px, 100px) minmax(160px, 1fr);
-  gap: 8px;
-  align-items: center;
-  cursor: default;
-}
-.orderControlsOpen {
-  grid-template-columns: auto minmax(180px, 1fr);
-}
-.orderControls input {
-  width: 100%;
-  min-width: 0;
-}
-.orderControls select {
-  width: 100%;
-  min-width: 0;
-}
-@media (max-width: 1050px) {
-  .agentOrderRow {
-    grid-template-columns: minmax(0, 1fr);
+  @media (max-width: 720px) {
+    .selectedControlsOpen {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
-}
-@media (max-width: 720px) {
+
+  .topicCard.topicCard {
+    margin: 0;
+    background: #fff;
+    border-color: var(--line);
+  }
   .topicColumns {
-    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--workspace-gap);
   }
-  .orderControls,
+  .contextInput.contextInput {
+    resize: vertical;
+    display: block;
+    width: 100%;
+    min-height: 120px;
+    background: #fff;
+    border-color: var(--line, #dedee3);
+  }
+  .agentOrderList {
+    display: grid;
+    gap: 10px;
+  }
+  .agentOrderRow {
+    display: grid;
+    grid-template-columns: minmax(170px, 0.8fr) minmax(0, 2fr);
+    align-items: center;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-subtle, #f5f5f7);
+    cursor: pointer;
+  }
+  .agentOrderRow:hover {
+    border-color: #d6bd86;
+  }
+  .agentOrderSelected {
+    border-color: #cdb786;
+  }
+  .agentIdentity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .agentIdentity:focus-visible {
+    outline: 2px solid var(--indigo);
+    outline-offset: 5px;
+  }
+  .orderNumber {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #f0dfb7;
+    color: #71562e;
+    font-weight: 750;
+  }
+  .agentText {
+    min-width: 0;
+  }
+  .agentText strong {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+  .agentMeta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 5px;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .agentMeta :global(.status-pill) {
+    font-size: 0.7rem;
+    padding: 3px 8px;
+  }
+  .orderControls {
+    display: grid;
+    grid-template-columns: auto minmax(85px, 100px) minmax(160px, 1fr);
+    gap: 8px;
+    align-items: center;
+    cursor: default;
+  }
   .orderControlsOpen {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: auto minmax(180px, 1fr);
   }
-}
+  .orderControls input {
+    width: 100%;
+    min-width: 0;
+  }
+  .orderControls select {
+    width: 100%;
+    min-width: 0;
+  }
+  @media (max-width: 1050px) {
+    .agentOrderRow {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 720px) {
+    .topicColumns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .orderControls,
+    .orderControlsOpen {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
 
-/* Only the Preview link lifts the card; adjacent actions keep their own target. */
-.debateRow {
-  transition:
-    border-color 180ms ease,
-    background-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
-}
-.debateRow > .debateCard {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.debateRow:has(> .debateCard:focus-visible) {
-  border-color: var(--gold, #d3a74a);
-  background: var(--surface, #fdfaf3);
-  box-shadow: 0 8px 24px rgb(52 45 30 / 9%);
-}
-.debateRow > .debateCard:focus-visible {
-  outline: 2px solid var(--accent, #76591f);
-  outline-offset: -3px;
-}
-@media (hover: hover) and (pointer: fine) {
-  .debateRow:has(> .debateCard:hover) {
+  /* Only the Preview link lifts the card; adjacent actions keep their own target. */
+  .debateRow {
+    transition:
+      border-color 180ms ease,
+      background-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+  .debateRow > .debateCard {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .debateRow:has(> .debateCard:focus-visible) {
     border-color: var(--gold, #d3a74a);
     background: var(--surface, #fdfaf3);
     box-shadow: 0 8px 24px rgb(52 45 30 / 9%);
-    transform: translateY(-2px);
   }
-}
-.debateRow:has(> .debateCard:active) {
-  background: var(--gold-soft, #f6ecd3);
-  box-shadow: 0 2px 6px rgb(52 45 30 / 6%);
-  transform: translateY(0);
-}
-@media (prefers-reduced-motion: reduce) {
-  .debateRow {
-    transition: none;
+  .debateRow > .debateCard:focus-visible {
+    outline: 2px solid var(--accent, #76591f);
+    outline-offset: -3px;
   }
-  .debateRow:has(> .debateCard:hover) {
-    transform: none;
+  @media (hover: hover) and (pointer: fine) {
+    .debateRow:has(> .debateCard:hover) {
+      border-color: var(--gold, #d3a74a);
+      background: var(--surface, #fdfaf3);
+      box-shadow: 0 8px 24px rgb(52 45 30 / 9%);
+      transform: translateY(-2px);
+    }
+  }
+  .debateRow:has(> .debateCard:active) {
+    background: var(--gold-soft, #f6ecd3);
+    box-shadow: 0 2px 6px rgb(52 45 30 / 6%);
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .debateRow {
+      transition: none;
+    }
+    .debateRow:has(> .debateCard:hover) {
+      transform: none;
+    }
   }
 }
