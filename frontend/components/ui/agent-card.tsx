@@ -305,7 +305,7 @@ function Sunburst() {
         <path
           key={index}
           d="M100 100 L92 -40 L108 -40 Z"
-          fill="#FFF3A8"
+          fill="#D9F99D"
           transform={`rotate(${index * 22.5} 100 100)`}
         />
       ))}
@@ -321,7 +321,7 @@ export function AgentsEmpty({
   title,
   newHref,
   newLabel,
-  ghosts = 2,
+  ghosts = 3,
 }: {
   title: string;
   newHref?: string;
@@ -330,36 +330,59 @@ export function AgentsEmpty({
 }) {
   return (
     <ul className={AGENT_GRID_CLASS}>
-      <li className="relative flex min-h-[248px] flex-col items-center justify-end gap-3 overflow-hidden rounded-arc border-[3px] border-border bg-studyform p-5 font-body text-ink shadow-arc">
-        <Sunburst />
-        <MascotFigure id="wave" className="relative h-[110px] w-auto" />
-        <p className="relative m-0 font-display text-xl font-extrabold">
+      <li className="relative flex min-h-[248px] flex-col overflow-hidden rounded-arc border-[3px] border-border bg-studyform font-body text-ink shadow-arc">
+        <p className="m-0 border-b-[3px] border-border px-4 py-3.5 font-display text-xl font-extrabold">
           {title}
         </p>
-        {newHref ? (
-          <Link
-            href={newHref}
-            aria-label={newLabel}
-            data-tour="new"
-            data-tour-empty="true"
-            className="relative inline-flex h-10 items-center rounded-full border-[3px] border-border bg-main px-5 font-display text-base font-extrabold text-ink no-underline shadow-arc-s transition-transform hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-ink"
-          >
-            {newLabel}
-          </Link>
-        ) : null}
+        <div className="relative grid flex-1 place-items-center p-5">
+          <Sunburst />
+          {newHref ? (
+            <Link
+              href={newHref}
+              aria-label={newLabel}
+              data-tour="new"
+              data-tour-empty="true"
+              className="relative inline-flex h-10 items-center rounded-arc-s border-[3px] border-border bg-main px-5 font-display text-base font-extrabold text-ink no-underline shadow-arc-s transition-transform hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-ink"
+            >
+              {newLabel}
+            </Link>
+          ) : null}
+        </div>
       </li>
       {Array.from({ length: ghosts }, (_, index) => (
-        <li
-          key={index}
-          aria-hidden="true"
-          className="relative min-h-[248px] rounded-arc border-[3px] border-dashed border-[#9CA3AF] bg-white/40 max-[680px]:hidden"
-        >
-          <span className="absolute -top-3 -right-3 inline-grid size-8 place-items-center rounded-full border-[3px] border-dashed border-[#9CA3AF] bg-white/60 text-[#9CA3AF]">
-            <IconClose size={14} />
-          </span>
-        </li>
+        <GhostSlot key={index} narrowHidden={index > 0} />
       ))}
     </ul>
+  );
+}
+
+/** A dashed placeholder card: grey skeleton of where an Agent will sit. */
+function GhostSlot({ narrowHidden }: { narrowHidden: boolean }) {
+  return (
+    <li
+      aria-hidden="true"
+      className={cn(
+        "relative flex min-h-[248px] flex-col rounded-arc border-[3px] border-dashed border-[#C4C4C4] bg-white/50",
+        narrowHidden && "max-[680px]:hidden",
+      )}
+    >
+      <span className="block border-b-2 border-dashed border-[#D4D4D4] px-4 py-3.5">
+        <span className="block h-3 w-3/5 rounded-full bg-[#E5E5E5]" />
+      </span>
+      <span className="grid flex-1 place-items-end justify-center border-b-2 border-dashed border-[#D4D4D4] pt-5">
+        <span className="block h-[88px] w-[72px] rounded-t-full bg-[#E5E5E5]" />
+      </span>
+      <span className="flex gap-1.5 px-4 pt-3">
+        <span className="block h-4 w-8 rounded-full border-2 border-dashed border-[#D4D4D4]" />
+        <span className="block h-4 w-12 rounded-full bg-[#E5E5E5]" />
+      </span>
+      <span className="block px-4 pt-3 pb-3.5">
+        <span className="block h-2 w-4/5 rounded-full bg-[#E5E5E5]" />
+      </span>
+      <span className="absolute -top-3 -right-3 inline-grid size-8 place-items-center rounded-full border-[3px] border-dashed border-[#C4C4C4] bg-white/70 text-[#C4C4C4]">
+        <IconClose size={14} />
+      </span>
+    </li>
   );
 }
 
