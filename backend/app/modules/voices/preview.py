@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session, aliased
 from app.core.config import Settings
 from app.core.errors import PlatformError, invalid_state, not_found
 from app.core.models import (
+    Agent,
+    AgentVersion,
     CourseMember,
     Group,
     StoredFile,
@@ -29,6 +31,7 @@ from app.core.models import (
     VoicePreviewCounter,
     VoiceProfile,
 )
+from app.core.prefetch import prefetched
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import contained_path, write_atomic
 from app.modules.org.access import WorkspaceMember
@@ -167,6 +170,68 @@ def _configured_fallback(db: Session, settings: Settings) -> VoiceProfile | None
     return profile
 
 
+def prefetch_bound_voices(db: Session, pairs: list[tuple[AgentVersion, Agent]]) -> None:
+    """Batch what ``resolve_effective_voice_profile`` reads for these versions.
+
+    The same rule as its query: a ready group clone whose owner is still a
+    student of the Agent's group, or the owner's ready personal voice.
+    """
+
+    from app.core.prefetch import store
+
+    wanted = {
+        (version.voice_profile_id, agent.group_id, agent.owner_user_id)
+        for version, agent in pairs
+        if version.voice_profile_id
+    }
+    if not wanted:
+        return
+    profiles = {
+        profile.id: profile
+        for profile in db.scalars(
+            select(VoiceProfile).where(
+                VoiceProfile.id.in_({key[0] for key in wanted}),
+                VoiceProfile.status == "ready",
+            )
+        ).all()
+    }
+    group_ids = {key[1] for key in wanted if key[1] is not None}
+    students: dict[str, set[str]] = {group_id: set() for group_id in group_ids}
+    if group_ids:
+        for group_id, user_id in db.execute(
+            select(WorkspaceMember.group_id, WorkspaceMember.user_id)
+            .join(Group, Group.id == WorkspaceMember.group_id)
+            .join(
+                CourseMember,
+                and_(
+                    CourseMember.course_id == Group.course_id,
+                    CourseMember.user_id == WorkspaceMember.user_id,
+                ),
+            )
+            .where(WorkspaceMember.group_id.in_(group_ids), CourseMember.role == "student")
+        ).all():
+            students[group_id].add(user_id)
+    resolved: dict[tuple[str, str | None, str | None], VoiceProfile | None] = {}
+    for profile_id, group_id, owner_user_id in wanted:
+        profile = profiles.get(profile_id)
+        if profile is not None and group_id is not None:
+            usable = (
+                profile.scope == "group"
+                and profile.group_id == group_id
+                and profile.consent_actor_user_id in students[group_id]
+            )
+        elif profile is not None:
+            usable = (
+                profile.scope == "personal"
+                and profile.group_id is None
+                and profile.consent_actor_user_id == owner_user_id
+            )
+        else:
+            usable = False
+        resolved[(profile_id, group_id, owner_user_id)] = profile if usable else None
+    store(db, "bound_voice", resolved)
+
+
 def resolve_effective_voice_profile(
     db: Session,
     bound_profile_id: str | None,
@@ -192,12 +257,17 @@ def resolve_effective_voice_profile(
                 VoiceProfile.consent_actor_user_id == owner_user_id,
             )
         )
-        custom = db.scalar(
-            select(VoiceProfile).where(
-                VoiceProfile.id == bound_profile_id,
-                owned,
-                VoiceProfile.status == "ready",
-            )
+        custom = prefetched(
+            db,
+            "bound_voice",
+            (bound_profile_id, group_id, owner_user_id),
+            lambda: db.scalar(
+                select(VoiceProfile).where(
+                    VoiceProfile.id == bound_profile_id,
+                    owned,
+                    VoiceProfile.status == "ready",
+                )
+            ),
         )
         if custom is not None and custom.external_id_encrypted:
             try:

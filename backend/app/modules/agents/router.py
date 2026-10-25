@@ -41,6 +41,8 @@ from app.core.models import (
     SnapshotDocument,
     User,
 )
+from app.core.prefetch import prefetched
+from app.core.read_memo import request_read_memo
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
 from app.modules.agents.persona import (
@@ -101,6 +103,7 @@ from app.modules.knowledge.services import (
     finish_idempotency,
     observes_group,
     parse_json_payload_hash,
+    prefetch_agent_reads,
     public_agent_editor_role,
     publish_without_snapshot,
     readable_agent,
@@ -1194,8 +1197,15 @@ def get_agent(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
-    scoped = readable_agent(db, context, str(agent_id))
-    return _detail_with_metadata(db, scoped.agent, scoped.role, context)
+    with request_read_memo():
+        scoped = readable_agent(db, context, str(agent_id))
+        versions = db.scalars(
+            select(AgentVersion).where(AgentVersion.agent_id == scoped.agent.id)
+        ).all()
+        prefetch_agent_reads(
+            db, [(scoped.agent, version) for version in versions], viewer_id=context.user.id
+        )
+        return _detail_with_metadata(db, scoped.agent, scoped.role, context)
 
 
 @router.patch(
@@ -1402,22 +1412,26 @@ def list_agent_versions(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[AgentVersionDTO]:
-    scoped = readable_agent(db, context, str(agent_id))
-    query = select(AgentVersion).where(AgentVersion.agent_id == scoped.agent.id)
-    if scoped.role == "teacher":
-        query = query.where(AgentVersion.state.in_(("published", "superseded")))
-    versions = list(db.scalars(query.order_by(AgentVersion.version_seq)).all())
-    versions = [
-        version
-        for version in versions
-        if can_read_version(db, version, scoped.agent, scoped.role, context=context)
-    ]
-    if scoped.role == "teacher" and not versions:
-        raise not_found()
-    return [
-        _version_dto_for_actor(db, version, scoped.agent, context, scoped.role)
-        for version in versions
-    ]
+    with request_read_memo():
+        scoped = readable_agent(db, context, str(agent_id))
+        query = select(AgentVersion).where(AgentVersion.agent_id == scoped.agent.id)
+        if scoped.role == "teacher":
+            query = query.where(AgentVersion.state.in_(("published", "superseded")))
+        versions = list(db.scalars(query.order_by(AgentVersion.version_seq)).all())
+        prefetch_agent_reads(
+            db, [(scoped.agent, version) for version in versions], viewer_id=context.user.id
+        )
+        versions = [
+            version
+            for version in versions
+            if can_read_version(db, version, scoped.agent, scoped.role, context=context)
+        ]
+        if scoped.role == "teacher" and not versions:
+            raise not_found()
+        return [
+            _version_dto_for_actor(db, version, scoped.agent, context, scoped.role)
+            for version in versions
+        ]
 
 
 @router.post(
@@ -2080,10 +2094,17 @@ def list_published_agents_for_teacher(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> list[PublishedAgentSummary]:
+    with request_read_memo():
+        return _published_agents_for_teacher(db, context, str(course_id))
+
+
+def _published_agents_for_teacher(
+    db: Session, context: AuthContext, course_id: str
+) -> list[PublishedAgentSummary]:
     from app.modules.agents.readiness import readiness_issues
     from app.modules.agents.schemas import AgentReadinessIssue
 
-    member_role = course_member_role(db, context.user.id, str(course_id))
+    member_role = course_member_role(db, context.user.id, course_id)
     if member_role not in {"teacher", "student"}:
         raise not_found()
     rows = db.execute(
@@ -2091,7 +2112,7 @@ def list_published_agents_for_teacher(
         .join(AgentVersion, AgentVersion.id == Agent.current_published_version_id)
         .outerjoin(Group, Group.id == Agent.group_id)
         .where(
-            Agent.course_id == str(course_id),
+            Agent.course_id == course_id,
             Agent.status == "active",
             Agent.deleted_at.is_(None),
             Agent.visibility == "public",
@@ -2101,6 +2122,9 @@ def list_published_agents_for_teacher(
         )
         .order_by(Agent.created_at.desc(), Agent.id.desc())
     ).all()
+    prefetch_agent_reads(
+        db, [(agent, version) for agent, version, _group in rows], viewer_id=context.user.id
+    )
     public_rows: list[tuple[Agent, AgentVersion, str]] = [
         (agent, version, group_name or "")
         for agent, version, group_name in rows
@@ -2131,7 +2155,7 @@ def _published_author(
     db: Session, agent: Agent, version: AgentVersion
 ) -> PublishedAgentAuthor | None:
     user_id = agent.owner_user_id or version.persona_confirming_user_id
-    user = db.get(User, user_id) if user_id else None
+    user = prefetched(db, "user", user_id, lambda: db.get(User, user_id)) if user_id else None
     if user is None:
         return None
     return PublishedAgentAuthor(

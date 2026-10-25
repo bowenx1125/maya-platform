@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query
@@ -9,6 +10,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.errors import Error
+from app.core.read_memo import request_read_memo
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.org.schemas import OverviewResult
@@ -36,12 +38,13 @@ def list_course_assessment_attempts_route(
     conversation_id: UUID | None = Query(default=None),
     actor: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
-) -> list[OverviewResult]:
+) -> list[dict[str, Any]]:
     """Formal attempts for a course teacher, with no group visit required."""
 
-    return [
-        OverviewResult.model_validate(row)
-        for row in list_course_assessment_attempts(
+    # The rows go out through response_model, which validates them once;
+    # building OverviewResult here as well validated every sheet twice.
+    with request_read_memo():
+        return list_course_assessment_attempts(
             db,
             actor,
             course_id=str(course_id),
@@ -49,7 +52,6 @@ def list_course_assessment_attempts_route(
             attempt_id=str(attempt_id) if attempt_id is not None else None,
             conversation_id=str(conversation_id) if conversation_id is not None else None,
         )
-    ]
 
 
 @router.get(
