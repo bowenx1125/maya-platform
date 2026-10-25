@@ -1026,7 +1026,6 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
     from app.modules.debates.models import TurnSource
     from app.modules.debates.setup.segment_projection import (
         prefetch_segment_sources,
-        preview_turn_projection,
         segment_projection,
     )
 
@@ -1170,17 +1169,7 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             )
             is not None,
             "preview": preview,
-            "preview_turns": [
-                preview_turn_projection(db, turn, participant_by_id[turn.participant_id])
-                for turn in db.scalars(
-                    select(DebateTurn)
-                    .where(
-                        DebateTurn.debate_id == debate.id,
-                        DebateTurn.round_no < _round_count_from_snapshot(debate),
-                    )
-                    .order_by(DebateTurn.turn_index)
-                ).all()
-            ]
+            "preview_turns": _preview_turns(db, debate, participant_by_id)
             if uses_segment_protocol(debate)
             else [],
             "participants": participant_dtos,
@@ -1538,6 +1527,31 @@ def list_debates(db: Session, *, actor_user_id: str, course_id: str) -> list[Deb
             )
         )
     return summaries
+
+
+def _preview_turns(
+    db: Session, debate: Debate, participant_by_id: dict[str, DebateParticipant]
+) -> list[Any]:
+    from app.modules.debates.setup.segment_projection import (
+        prefetch_segment_sources,
+        preview_turn_projection,
+    )
+
+    turns = list(
+        db.scalars(
+            select(DebateTurn)
+            .where(
+                DebateTurn.debate_id == debate.id,
+                DebateTurn.round_no < _round_count_from_snapshot(debate),
+            )
+            .order_by(DebateTurn.turn_index)
+        ).all()
+    )
+    # The earlier batch may have been dropped by a savepoint in between.
+    prefetch_segment_sources(db, turns)
+    return [
+        preview_turn_projection(db, turn, participant_by_id[turn.participant_id]) for turn in turns
+    ]
 
 
 def get_debate(db: Session, *, actor_user_id: str, debate_id: str) -> DebateDetail:

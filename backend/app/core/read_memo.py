@@ -99,6 +99,23 @@ def memoized[T](
     return value
 
 
+def transaction_memoized[T](db: Session, key: tuple[Hashable, ...], compute: Callable[[], T]) -> T:
+    """``compute()`` once until ``db``'s transaction ends or first writes.
+
+    For reads a request repeats on rows it does not change before reading
+    again (an Agent version's enabled documents, read once per permission
+    check). Any flush or DML in the transaction drops every such value.
+    """
+
+    store = db.info.setdefault(_TX_KEY, {})
+    hit = store.get(key, _MISS)
+    if hit is not _MISS:
+        return cast(T, hit)
+    value = compute()
+    store[key] = value
+    return value
+
+
 def _forget(session: Session, *_args: Any) -> None:
     session.info.pop(_INFO_KEY, None)
     session.info.pop(_TX_KEY, None)
@@ -122,4 +139,4 @@ event.listen(Session, "before_flush", _forget_on_write)
 event.listen(Session, "do_orm_execute", _forget_on_dml)
 
 
-__all__ = ["forget_request_reads", "memoized", "request_read_memo"]
+__all__ = ["forget_request_reads", "memoized", "request_read_memo", "transaction_memoized"]

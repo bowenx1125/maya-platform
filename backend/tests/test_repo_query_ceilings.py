@@ -102,3 +102,29 @@ def test_request_timing_summary_lists_routes_without_ids(client: TestClient) -> 
     assert row["method"] == "GET" and row["count"] == 3 and row["samples"] == 3
     assert row["ms"]["p50"] is not None and row["db_queries"]["max"] >= 1
     assert COURSE_ID not in summary.text
+
+
+def test_transaction_memo_is_dropped_by_any_write(app_bundle: Any, client: TestClient) -> None:
+    from app.core.read_memo import transaction_memoized
+
+    _app, database, _settings = app_bundle
+    calls: list[int] = []
+
+    def compute() -> int:
+        calls.append(1)
+        return len(calls)
+
+    with database.session() as db:
+        assert transaction_memoized(db, ("probe",), compute) == 1
+        assert transaction_memoized(db, ("probe",), compute) == 1
+        member = db.scalar(select(CourseMember).where(CourseMember.course_id == COURSE_ID))
+        assert member is not None
+        member.created_at = member.created_at
+        db.execute(
+            CourseMember.__table__.update()
+            .where(CourseMember.course_id == "no-such-course")
+            .values(role="student")
+        )
+        assert transaction_memoized(db, ("probe",), compute) == 2
+        db.commit()
+        assert transaction_memoized(db, ("probe",), compute) == 3

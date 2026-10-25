@@ -24,7 +24,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
-from app.core.read_memo import memoized
+from app.core.read_memo import memoized, transaction_memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     _agent_workspace_role,
@@ -334,6 +334,18 @@ def _knowledge_set_currently_readable(db: Session, user_id: str, row: KnowledgeS
 
 
 def _has_file_reference(
+    db: Session, stored_file_id: str, owner_type: str, owner_id: str, purpose: str
+) -> bool:
+    # Every source fence of a Team check asks again; production repeated the
+    # same lookup ~24 times per chat open. A write in the transaction drops it.
+    return transaction_memoized(
+        db,
+        ("file_reference", stored_file_id, owner_type, owner_id, purpose),
+        lambda: _read_file_reference(db, stored_file_id, owner_type, owner_id, purpose),
+    )
+
+
+def _read_file_reference(
     db: Session, stored_file_id: str, owner_type: str, owner_id: str, purpose: str
 ) -> bool:
     return (
