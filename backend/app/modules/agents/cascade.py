@@ -683,8 +683,14 @@ def _sweep_team_chats_and_junk(database: Database, settings: Settings) -> None:
             .having(func.count() > 2)
         ).all()
         for agent_id in crowded:
-            prune_agent_versions(session, agent_id, settings.resolved_data_root)
-            session.commit()
+            # One Agent's failure (a constraint only production has) must not
+            # leave every later Agent unpruned for the whole round.
+            try:
+                prune_agent_versions(session, agent_id, settings.resolved_data_root)
+                session.commit()
+            except Exception:  # noqa: BLE001
+                session.rollback()
+                LOGGER.exception("Agent version prune failed agent_id=%s", agent_id)
 
     run("Team chat retarget sweep", retarget_teams)
     run("Abandoned agent sweep", drop_abandoned)
