@@ -580,6 +580,9 @@ def _websocket_session(database: Any, settings: Settings) -> Iterator[Session]:
         db.close()
 
 
+_WS_AUTH_CODES = frozenset({"unauthenticated", "forbidden", "session_revoked"})
+
+
 async def _close_ws(websocket: WebSocket, code: int) -> None:
     """Close with a classification-only code and no configuration details."""
 
@@ -824,7 +827,38 @@ async def debate_events_route(
                                         service.register_connection(epoch, websocket.send_json)
                     return result, close_for_revocation
 
-                result, close_for_revocation = await run_offloaded(handle_command)
+                try:
+                    result, close_for_revocation = await run_offloaded(handle_command)
+                except Exception:
+                    # Every command gets an answer: an unexpected failure is
+                    # logged and rejected, and the client recovers its state.
+                    LOGGER.exception(
+                        "debate_ws command failed debate_id=%s command_type=%s",
+                        debate_id,
+                        command.command_type,
+                    )
+
+                    async def reject_failed(
+                        failed_id: str = str(command.command_id),
+                    ) -> PrivateResult:
+                        with _websocket_session(database, settings) as reject_db:
+                            return await service.command_duplicate_or_rejected(
+                                reject_db,
+                                str(debate_id),
+                                command_id=failed_id,
+                                code="internal_error",
+                                recoverable=True,
+                            )
+
+                    try:
+                        result = await run_offloaded(reject_failed)
+                    except Exception:
+                        LOGGER.exception(
+                            "debate_ws rejection failed; closing debate_id=%s", debate_id
+                        )
+                        await _close_ws(websocket, 1011)
+                        break
+                    close_for_revocation = False
                 if result is not None:
                     await websocket.send_json(private_result_to_wire(result))
                 if close_for_revocation:
@@ -833,8 +867,15 @@ async def debate_events_route(
                 # Handling an ack can finish event_task by publishing its
                 # started/waiting event. Keep that result until the next loop
                 # sends it; replacing a done task here silently loses the event.
-    except (WebSocketDisconnect, RuntimeError, PlatformError):
+    except WebSocketDisconnect:
         pass
+    except (RuntimeError, PlatformError) as exc:
+        # Never end the handler silently: say why and close with a code the
+        # client can act on (sign in again, or reconnect).
+        code = exc.code if isinstance(exc, PlatformError) else type(exc).__name__
+        LOGGER.warning("debate_ws closed debate_id=%s reason=%s", debate_id, code)
+        with contextlib.suppress(Exception):
+            await _close_ws(websocket, 4401 if code in _WS_AUTH_CODES else 1011)
     finally:
         if event_task is not None:
             event_task.cancel()
