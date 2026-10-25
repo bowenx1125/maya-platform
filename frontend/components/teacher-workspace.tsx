@@ -203,24 +203,7 @@ function PublishedAgentCard({
       )}
       guideText={agentLastEditedTitle(t, item.agent)}
       deleteLabel={t("deleteAgent")}
-      footer={
-        groupName || item.author ? (
-          <span className="flex min-w-0 flex-col gap-1 text-xs font-bold">
-            {groupName ? <span className="truncate">{groupName}</span> : null}
-            {item.author ? (
-              <span className="flex min-w-0 items-center gap-1.5">
-                <UserAvatar
-                  avatar={item.author.avatar}
-                  name={item.author.display_name}
-                  userId={item.author.user_id}
-                  size="sm"
-                />
-                <span className="truncate">{item.author.display_name}</span>
-              </span>
-            ) : null}
-          </span>
-        ) : undefined
-      }
+      caption={groupName || undefined}
     />
   );
 }

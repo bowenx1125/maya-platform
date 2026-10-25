@@ -68,7 +68,7 @@ export function HomeAgentRow({
             behavior: prefersReducedMotion() ? "auto" : "smooth",
           });
         }}
-        className="m-0 flex list-none snap-x snap-mandatory scroll-px-1 flex-nowrap gap-[22px] overflow-x-auto overscroll-x-contain p-0 pt-4 pr-4 pb-[18px] pl-1 [scrollbar-color:#111_transparent] [scrollbar-width:thin] [&>li]:w-[150px] [&>li]:flex-none [&>li]:snap-start [&>li]:duration-[320ms] [&>li]:ease-[cubic-bezier(0.34,1.4,0.64,1)] [&>li:focus-within]:-translate-y-[3px] [&>li:focus-within]:shadow-[7px_7px_0_#111] [&>li:hover]:-translate-y-[3px] [&>li:hover]:shadow-[7px_7px_0_#111] motion-reduce:[&>li]:transition-none motion-reduce:[&>li:focus-within]:translate-y-0 motion-reduce:[&>li:hover]:translate-y-0"
+        className="m-0 flex list-none snap-x snap-mandatory scroll-px-1 flex-nowrap gap-[22px] overflow-x-auto overscroll-x-contain p-0 pt-4 pr-4 pb-[18px] pl-1 [scrollbar-color:#111_transparent] [scrollbar-width:thin] [&>li]:w-[150px] [&_[data-card-band]]:h-12 [&_[data-card-band]]:pr-3 [&_[data-card-band]]:text-[15px] [&_[data-card-band]_button]:text-[15px] [&_[data-card-band]>span]:text-[15px] [&>li]:flex-none [&>li]:snap-start [&>li]:duration-[320ms] [&>li]:ease-[cubic-bezier(0.34,1.4,0.64,1)] [&>li:focus-within]:-translate-y-[3px] [&>li:focus-within]:shadow-[7px_7px_0_#111] [&>li:hover]:-translate-y-[3px] [&>li:hover]:shadow-[7px_7px_0_#111] motion-reduce:[&>li]:transition-none motion-reduce:[&>li:focus-within]:translate-y-0 motion-reduce:[&>li:hover]:translate-y-0"
       >
         {children}
       </ul>

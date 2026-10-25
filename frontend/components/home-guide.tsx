@@ -63,7 +63,7 @@ export function HomeGuide({ steps }: { steps: GuideStep[] }) {
                   className="home-guide-marker grid size-[34px] flex-none place-items-center rounded-full border-[3px] border-ink bg-white font-display text-sm font-extrabold shadow-[0_0_0_3px_#fff,0_0_0_5px_#FFE14D] group-data-[state=done]:bg-[#A3E635] group-data-[state=done]:shadow-[0_0_0_3px_#fff,0_0_0_5px_#A3E635]"
                   aria-hidden="true"
                 >
-                  {state === "next" ? "●" : state === "done" ? "✓" : index + 1}
+                  {state === "next" ? "●" : index + 1}
                 </span>
                 <strong className="min-w-0 flex-1 font-bold group-data-[state=done]:font-semibold group-data-[state=done]:text-[#555]">
                   {step.label}
