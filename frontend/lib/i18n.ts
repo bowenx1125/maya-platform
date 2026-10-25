@@ -457,6 +457,11 @@ const enMessages = {
   tourLiveTitle: "Live",
   tourLiveBody:
     "When your teacher starts a class debate, this lights up and takes you there.",
+  tourNewTitle: "The New button",
+  tourNewBody:
+    "Each page keeps its New button up here, next to the page title.",
+  tourNewEmptyTitle: "New",
+  tourNewEmptyBody: "Press New to make your first Agent.",
   tourGuideTitle: "Your next steps",
   tourGuideBody:
     "Work down this list. The step in dark ink is the one to do next.",
@@ -541,7 +546,8 @@ const enMessages = {
   errorInvalidState: "That action is not available in the current state.",
   errorVersionImmutable: "Published versions are immutable.",
   errorStaleRevision: "Someone else changed this content. Please refresh.",
-  agentLastEditedTooltip: "Latest version: {version} · Last edited by: {name}",
+  agentLastEditedTooltip: "Last edited by: {name}",
+  agentLastEditedBy: "Last edited by: {name}",
   errorStaleControlVersion:
     "The classroom state changed. Refresh and try again.",
   errorIdempotencyConflict:

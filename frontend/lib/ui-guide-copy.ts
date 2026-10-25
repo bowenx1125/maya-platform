@@ -57,7 +57,7 @@ export const uiGuideCopy = {
     en: "Choose RAG source files and existing Knowledge that this Agent can use.",
   },
   "agent.lastEdited": {
-    en: "Latest version and last editor.",
+    en: "Last editor.",
   },
   "agent.visibility": {
     en: "A Public personal Agent is shareable, but course students do not get access automatically. They need a separate invocation grant to use it; its prompt and sources remain visible only to its owner.",

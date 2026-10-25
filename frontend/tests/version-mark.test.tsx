@@ -23,7 +23,7 @@ import { VersionTile } from "../components/studyform-layout";
 afterEach(() => cleanup());
 
 describe("version mark", () => {
-  it("opens from the name link and keeps Delete on the version bubble", () => {
+  it("opens from the card link, shows [V1.0 | Private] and deletes from the round ×", () => {
     const onDelete = vi.fn();
     render(
       <>
@@ -42,8 +42,9 @@ describe("version mark", () => {
     );
     const open = screen.getByRole("link", { name: "Laozi" });
     expect(open.getAttribute("href")).toBe("/student/agents/laozi");
-    expect(open.className).toContain("agent-tile-name");
-    expect(open.className).toContain("text-link");
+    // PR0: the whole card is the link; the strip reads [V1.0 | Private].
+    expect(open.textContent).toContain("V1.0");
+    expect(open.textContent).toContain("Private");
     fireEvent.click(screen.getByRole("button", { name: "Delete Laozi" }));
     expect(onDelete).toHaveBeenCalledTimes(1);
   });

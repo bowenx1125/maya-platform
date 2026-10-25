@@ -24,6 +24,7 @@ import {
   trackTeacherLeave,
 } from "../lib/teacher-visit";
 import { useSession } from "./session-provider";
+import { OnboardingTour } from "./onboarding-tour";
 
 type ActionRegistration = {
   owner: string;
@@ -578,6 +579,14 @@ export function AppShell({
           <ViewTransition>{children}</ViewTransition>
         </main>
         <SecretDoor />
+        {isStudent && user ? (
+          <OnboardingTour
+            userId={user.id}
+            pathname={pathname}
+            navigate={router.push}
+            startHere={pathname === "/student"}
+          />
+        ) : null}
       </div>
     </WorkspaceActionsContext.Provider>
   );
