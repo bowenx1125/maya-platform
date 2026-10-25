@@ -150,14 +150,8 @@ Ordinary chat/greetings:leader then members,relevant length; omit empty replies,
 fail; @-named member must reply. `## Informal` may alter speakers/length. ACL→ledger→
 Ruleset; only server appends report links; later executor turns keep scorer/summarizer.
 
-Built `f007a11` (PR #69),then `2c62871` (PRs #71/#72); backups
-`maya-20261014T111701Z`/`T135154Z.sqlite3` ok,schema0064,ready/public200.
-
-Oct16 ADR-010:PostgreSQL prod preserves maya.sqlite3. Postgres16/stamp
-0065_auth_login_admission accepted read-only SQLite-head import (111 tables,receipt).
-Compose:BACKEND_REPLICAS,max_connections=200. Sign-in DB overload:auth_login_queued
-(排队等待入列),not outage copy; formal turns keep chat_busy. Real classroom load/
-cutover unaccepted.
+Oct16 ADR-010:PostgreSQL prod (PR B: only database).
+Compose:BACKEND_REPLICAS,max_connections=200; sign-in overload→auth_login_queued.
 
 Oct15:Team revision0,no canned opening. Teachers list formal attempts/phase/conversation
 id without Enter; private Agents/Teams/RAG/voices need Enter. Activity:Team,Knowledge,
@@ -223,7 +217,7 @@ kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
-Head0078_chat_answer_decouple. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
+Head0079_playback_media_tickets. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
 with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
 Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
 unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
@@ -299,3 +293,10 @@ blobs, one at a time in speaking order, independent of Next/pause
 (snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
 blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
 no seek at cursor 0. Leaving aborts and frees blobs.
+
+## Oct25 audio, locks and Next cost (PR C)
+
+DEBATE_AUDIO_MP3 (prod on): format=mp3 via ffmpeg, 64 MB memory LRU by WAV digest;
+WAV default; private,max-age=300, 304. Playback routes/WS commands off the event loop
+(offload.py, guard test); per-Debate thread + pg advisory lock; tickets in Postgres
+(0079, hash only). Next 103→35 SQL; tests/bench_debate_next.py.

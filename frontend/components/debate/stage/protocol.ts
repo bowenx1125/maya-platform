@@ -75,7 +75,7 @@ const PRIVATE_MESSAGE_TYPES: readonly PrivatePlaybackMessage["message_type"][] =
 const UUID_PATTERN =
   "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}";
 const MEDIA_URL_PATTERN = new RegExp(
-  `^/api/v1/debates/${UUID_PATTERN}/audio/${UUID_PATTERN}\\?media_ticket=[A-Za-z0-9_-]{43}$`,
+  `^/api/v1/debates/${UUID_PATTERN}/audio/${UUID_PATTERN}\\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$`,
 );
 
 function isRecord(value: unknown): value is Record<string, unknown> {

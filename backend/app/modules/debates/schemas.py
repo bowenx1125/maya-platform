@@ -179,7 +179,7 @@ class PrefetchNextAudioRequest(_ClosedModel):
 class PrefetchedNextAudio(_ClosedModel):
     turn_id: UUID
     media_url: str = Field(
-        pattern=r"^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$"
+        pattern=r"^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$"
     )
 
 
@@ -287,7 +287,7 @@ class AdvancedPlayback(PlaybackState):
 
     media_url: str | None = Field(
         default=None,
-        pattern=r"^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}$",
+        pattern=r"^/api/v1/debates/[0-9a-f-]{36}/audio/[0-9a-f-]{36}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$",
     )
 
 

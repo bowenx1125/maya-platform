@@ -3,7 +3,6 @@
 import asyncio
 import hashlib
 import json
-from dataclasses import replace
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -15,7 +14,6 @@ from app.core.models import KnowledgeChunk, SnapshotDocument
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.playback._preparation import _raise_site
 from app.modules.debates.playback.generation_adapter import (
-    SqlSnapshotRetriever,
     SqlTurnPreparer,
     generation_fence,
 )
@@ -36,7 +34,6 @@ from tests.test_wave4_llm_p1_product import (
     _FakeDashScopeAdapter,
     _install_fake_dashscope_product_path,
     _patch_local_confirmation,
-    _product_preparer,
     _product_service,
     _seed_running_product_debate,
 )
@@ -352,54 +349,6 @@ def test_paragraph_source_projection_keeps_saved_reference_and_rejects_wrong_doc
             with pytest.raises(PlatformError):
                 segment_projection(db, turn, participant)
     finally:
-        database.dispose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skip(reason="obsolete pre-segments real-LLM adapter fixture")
-async def test_accepted_turn_publishes_when_only_subset_of_candidate_receipts_is_used(
-    app_factory, monkeypatch
-):
-    _, database, settings, debate_id, turn_id = _seed_running_product_debate(app_factory)
-    adapter = _FakeDashScopeAdapter()
-    _install_fake_dashscope_product_path(database, settings, adapter)
-    _patch_local_confirmation(monkeypatch)
-    original = SqlSnapshotRetriever.retrieve
-
-    def repeated_candidate(self, *args, **kwargs):
-        result = original(self, *args, **kwargs)
-        assert result.receipts
-        first = result.receipts[0]
-        duplicate = replace(first, evidence_id=first.resolved_evidence_id() + "-alternate")
-        return replace(result, receipts=(*result.receipts, duplicate))
-
-    monkeypatch.setattr(SqlSnapshotRetriever, "retrieve", repeated_candidate)
-    tasks = TaskManager()
-    service = _product_service(
-        database,
-        settings,
-        preparer=_product_preparer(settings, adapter),
-        tts_provider=MockTTSProvider(),
-        tasks=tasks,
-    )
-    try:
-        with database.session() as db:
-            await service.prepare_turn(db, debate_id, turn_id)
-        with database.session() as db:
-            turn = db.get(DebateTurn, turn_id)
-            assert turn.generation_status == "final_ready"
-            assert turn.safe_error_code is None
-            assert turn.speech and turn.audio_file_id
-            assert (
-                db.execute(
-                    text("SELECT state FROM provider_operations WHERE logical_item_id=:id"),
-                    {"id": turn_id},
-                ).scalar_one()
-                == "succeeded"
-            )
-        assert adapter.call_count == 1
-    finally:
-        await tasks.close()
         database.dispose()
 
 

@@ -29,6 +29,7 @@ step "frontend tests"
 pnpm frontend:test
 
 step "documents"
+pnpm node:check
 pnpm docs:check
 pnpm latin-script:check
 
