@@ -29,7 +29,22 @@ export const AGENT_GRID_CLASS =
   "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-4 pr-4 pb-2 max-[680px]:grid-cols-1 max-[680px]:gap-4";
 
 const CARD_CLASS =
-  "group/card relative flex min-h-[248px] flex-col overflow-visible rounded-arc border-[3px] border-border bg-surface font-body text-ink shadow-arc transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-within:-translate-y-0.5";
+  "group/card relative flex min-h-[248px] flex-col overflow-visible rounded-[14px] border-[3px] border-border bg-surface p-2 font-body text-ink shadow-[6px_6px_0_#111] transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-within:-translate-y-0.5";
+
+/** Card tones: salmon, periwinkle, sage — title band and sunburst share one. */
+const CARD_TONES = ["#F2B79A", "#C9D3F0", "#C9D9A0"] as const;
+
+/** Deterministic tone per Agent id. */
+export function agentTone(id: string) {
+  let hash = 0;
+  for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return CARD_TONES[hash % CARD_TONES.length];
+}
+
+const FRAME_CLASS =
+  "flex flex-1 flex-col overflow-hidden rounded-[9px] border-[3px] border-border bg-surface";
+const BAND_CLASS =
+  "relative z-[1] flex h-16 items-center border-b-[3px] border-border px-3 pr-10";
 
 /** The round × that deletes; the existing confirm flow runs on click. */
 function DeleteX({
@@ -51,7 +66,7 @@ function DeleteX({
         event.stopPropagation();
         onClick();
       }}
-      className="absolute -top-3 -right-3 z-[2] m-0 inline-grid size-8 min-h-0 cursor-pointer place-items-center rounded-full border-[3px] border-border bg-surface p-0 text-ink shadow-[2px_2px_0_#111] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50"
+      className="absolute -top-3 -right-3 z-[3] m-0 inline-grid size-8 min-h-0 cursor-pointer place-items-center rounded-full border-[3px] border-border bg-surface p-0 text-ink shadow-[2px_2px_0_#111] hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main disabled:cursor-not-allowed disabled:opacity-50"
     >
       <IconClose size={14} />
     </button>
@@ -72,13 +87,13 @@ function VersionStrip({
 }) {
   return (
     <span
-      className="relative z-[1] inline-flex w-fit overflow-hidden rounded-full border-2 border-border text-xs font-bold leading-none"
+      className="relative z-[1] inline-flex w-fit overflow-hidden rounded-md border-2 border-border text-[11px] font-extrabold leading-none shadow-[2px_2px_0_#111]"
       data-pending={pending ? "true" : "false"}
       data-visibility={visibility}
     >
       <span
         className={cn(
-          "bg-surface px-2.5 py-1.5",
+          "bg-surface px-2.5 py-1",
           pending && "bg-warn-bg",
           visibilityLabel && "border-r-2 border-border",
         )}
@@ -88,7 +103,7 @@ function VersionStrip({
       {visibilityLabel ? (
         <span
           className={cn(
-            "px-2.5 py-1.5",
+            "px-2.5 py-1",
             visibility === "public" ? "bg-[#22C55E]" : "bg-[#E5E7EB]",
           )}
         >
@@ -181,110 +196,123 @@ export function AgentCard({
     }
   }
 
+  const tone = agentTone(id);
   const art = (
     <span
-      className="relative grid h-[120px] place-items-center rounded-t-[7px] border-b-[3px] border-border bg-[repeating-conic-gradient(from_0deg,#FFE14D_0deg_12deg,#FFF3A8_12deg_24deg)]"
+      className="relative flex h-[150px] items-end justify-center border-b-[3px] border-border"
+      style={{
+        backgroundColor: tone,
+        backgroundImage:
+          "radial-gradient(circle at 50% 60%,#fff8 0 30%,transparent 31%),repeating-conic-gradient(from 0deg at 50% 60%,#fff6 0 10deg,transparent 10deg 20deg)",
+      }}
       aria-hidden="true"
     >
-      <MascotFigure id={mascot} className="h-[104px] w-auto" />
+      <MascotFigure id={mascot} className="h-[132px] w-auto" />
     </span>
   );
   const title = <FitTitle text={name} />;
   const titleClass =
-    "block min-w-0 font-display text-lg font-extrabold leading-tight text-ink no-underline";
+    "block min-w-0 font-display text-[22px] font-extrabold leading-tight text-ink no-underline";
+  const strip = (
+    <span className="relative z-[1] flex items-center gap-1.5 p-2.5">
+      <VersionStrip
+        label={label}
+        pending={pending}
+        visibility={visibility}
+        visibilityLabel={visibilityLabel}
+      />
+    </span>
+  );
+  const foot = footer ? (
+    <span className="pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]">
+      {footer}
+    </span>
+  ) : null;
 
   return (
-    <li className={CARD_CLASS} data-agent-card={id}>
+    <li className={CARD_CLASS} data-agent-card={id} data-tone={tone}>
       {rename ? (
         <>
           {/* Covers the card so anywhere opens it; the title stays above. */}
           <Link
             href={href}
             aria-label={name}
-            className="absolute inset-0 z-0 rounded-arc focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+            className="absolute inset-0 z-0 rounded-[14px] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
             data-ui-guide={guideText ? "agent.lastEdited" : undefined}
             data-ui-guide-text={guideText}
           />
-          {art}
-          <span className="relative z-[1] flex flex-col gap-2.5 px-4 pt-3.5 pb-1">
-            {editing ? (
-              <input
-                ref={bindInput}
-                autoFocus
-                aria-label={fieldLabel}
-                aria-invalid={renameInvalid || undefined}
-                aria-describedby={renameInvalid ? renameErrorId : undefined}
-                maxLength={120}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onCompositionStart={() => (composing.current = true)}
-                onCompositionEnd={() => (composing.current = false)}
-                onBlur={() => {
-                  // After a failed save, leaving the field (e.g. to Dismiss
-                  // the error) keeps it open; Enter retries, Esc cancels.
-                  if (!renameInvalid) void save();
-                }}
-                onKeyDown={(event) => {
-                  if (composing.current || event.nativeEvent.isComposing)
-                    return;
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void save();
-                  } else if (event.key === "Escape") {
-                    event.preventDefault();
-                    settled.current = true;
-                    setEditing(false);
-                  }
-                }}
-                className="m-0 h-10 w-full rounded-arc-s border-[3px] border-border aria-invalid:border-err aria-invalid:bg-err-bg bg-surface px-2.5 font-display text-lg font-extrabold text-ink outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
-              />
-            ) : (
-              <button
-                type="button"
-                className={cn(
-                  titleClass,
-                  "m-0 min-h-0 w-full cursor-text border-0 bg-transparent p-0 text-left shadow-none hover:underline",
-                  renameInvalid && "rounded-arc-s outline-[3px] outline-err",
-                )}
-                aria-describedby={renameInvalid ? renameErrorId : undefined}
-                onClick={startEditing}
-              >
-                {title}
-              </button>
-            )}
-            <VersionStrip
-              label={label}
-              pending={pending}
-              visibility={visibility}
-              visibilityLabel={visibilityLabel}
-            />
+          <span className={cn(FRAME_CLASS, "pointer-events-none")}>
+            <span className={cn(BAND_CLASS, "pointer-events-auto")} style={{ backgroundColor: tone }}>
+              {editing ? (
+                <input
+                  ref={bindInput}
+                  autoFocus
+                  aria-label={fieldLabel}
+                  aria-invalid={renameInvalid || undefined}
+                  aria-describedby={renameInvalid ? renameErrorId : undefined}
+                  maxLength={120}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onCompositionStart={() => (composing.current = true)}
+                  onCompositionEnd={() => (composing.current = false)}
+                  onBlur={() => {
+                    // After a failed save, leaving the field (e.g. to Dismiss
+                    // the error) keeps it open; Enter retries, Esc cancels.
+                    if (!renameInvalid) void save();
+                  }}
+                  onKeyDown={(event) => {
+                    if (composing.current || event.nativeEvent.isComposing)
+                      return;
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void save();
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      settled.current = true;
+                      setEditing(false);
+                    }
+                  }}
+                  className="m-0 h-10 w-full rounded-arc-s border-[3px] border-border bg-surface px-2.5 font-display text-lg font-extrabold text-ink shadow-[3px_3px_0_#FF4D8D] outline-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main aria-invalid:border-err aria-invalid:bg-err-bg"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={cn(
+                    titleClass,
+                    "-mx-1 m-0 min-h-0 max-w-full cursor-text rounded-md border-0 bg-transparent px-1 py-0.5 text-left shadow-none hover:outline-2 hover:outline-dashed hover:outline-ink",
+                    renameInvalid && "outline-[3px] outline-err",
+                  )}
+                  aria-describedby={renameInvalid ? renameErrorId : undefined}
+                  onClick={startEditing}
+                >
+                  {title}
+                </button>
+              )}
+            </span>
+            {art}
+            {strip}
+            {foot}
           </span>
         </>
       ) : (
         <Link
           href={href}
           aria-label={name}
-          className="flex flex-1 flex-col rounded-arc text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
+          className={cn(
+            FRAME_CLASS,
+            "text-ink no-underline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main",
+          )}
           data-ui-guide={guideText ? "agent.lastEdited" : undefined}
           data-ui-guide-text={guideText}
         >
-          {art}
-          <span className="flex flex-col gap-2.5 px-4 pt-3.5 pb-1">
+          <span className={BAND_CLASS} style={{ backgroundColor: tone }}>
             <span className={titleClass}>{title}</span>
-            <VersionStrip
-              label={label}
-              pending={pending}
-              visibility={visibility}
-              visibilityLabel={visibilityLabel}
-            />
           </span>
+          {art}
+          {strip}
+          {foot}
         </Link>
       )}
-      {footer ? (
-        <span className="relative z-[1] mt-auto px-4 pt-1 pb-3.5 text-xs text-arc-muted pointer-events-none">
-          {footer}
-        </span>
-      ) : null}
       {onDelete ? (
         <DeleteX label={deleteLabel} disabled={deleting} onClick={onDelete} />
       ) : null}
@@ -305,7 +333,7 @@ function Sunburst() {
         <path
           key={index}
           d="M100 100 L92 -40 L108 -40 Z"
-          fill="#D9F99D"
+          fill="#ffffff66"
           transform={`rotate(${index * 22.5} 100 100)`}
         />
       ))}
@@ -330,23 +358,25 @@ export function AgentsEmpty({
 }) {
   return (
     <ul className={AGENT_GRID_CLASS}>
-      <li className="relative flex min-h-[248px] flex-col overflow-hidden rounded-arc border-[3px] border-border bg-studyform font-body text-ink shadow-arc">
-        <p className="m-0 border-b-[3px] border-border px-4 py-3.5 font-display text-xl font-extrabold">
-          {title}
-        </p>
-        <div className="relative grid flex-1 place-items-center p-5">
-          <Sunburst />
-          {newHref ? (
-            <Link
-              href={newHref}
-              aria-label={newLabel}
-              data-tour="new"
-              data-tour-empty="true"
-              className="relative inline-flex h-10 items-center rounded-arc-s border-[3px] border-border bg-main px-5 font-display text-base font-extrabold text-ink no-underline shadow-arc-s transition-transform hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-ink"
-            >
-              {newLabel}
-            </Link>
-          ) : null}
+      <li className="relative flex min-h-[248px] flex-col rounded-[14px] border-[3px] border-border bg-studyform p-2 font-body text-ink shadow-[6px_6px_0_#111]">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-[9px] border-[3px] border-border bg-studyform">
+          <p className="m-0 flex h-16 items-center border-b-[3px] border-border px-3 font-display text-xl font-extrabold">
+            {title}
+          </p>
+          <div className="relative grid min-h-[200px] flex-1 place-items-center p-5">
+            <Sunburst />
+            {newHref ? (
+              <Link
+                href={newHref}
+                aria-label={newLabel}
+                data-tour="new"
+                data-tour-empty="true"
+                className="relative inline-flex h-10 items-center rounded-arc-s border-[3px] border-border bg-main px-5 font-display text-base font-extrabold text-ink no-underline shadow-arc-s transition-transform hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-none focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-ink"
+              >
+                {newLabel}
+              </Link>
+            ) : null}
+          </div>
         </div>
       </li>
       {Array.from({ length: ghosts }, (_, index) => (
@@ -362,26 +392,28 @@ function GhostSlot({ narrowHidden }: { narrowHidden: boolean }) {
     <li
       aria-hidden="true"
       className={cn(
-        "relative flex min-h-[248px] flex-col rounded-arc border-[3px] border-dashed border-[#C4C4C4] bg-white/50",
+        "relative flex min-h-[248px] flex-col rounded-[14px] border-[3px] border-dashed border-[#11111133] p-2",
         narrowHidden && "max-[680px]:hidden",
       )}
     >
-      <span className="block border-b-2 border-dashed border-[#D4D4D4] px-4 py-3.5">
-        <span className="block h-3 w-3/5 rounded-full bg-[#E5E5E5]" />
+      <span className="flex flex-1 flex-col rounded-[9px] border-[3px] border-dashed border-[#11111155]">
+        <span className="flex h-16 items-center border-b-[3px] border-dashed border-[#11111133] px-3">
+          <span className="block h-3 w-3/5 rounded-full bg-[#0000000f]" />
+        </span>
+        <span className="flex h-[150px] items-end justify-center border-b-[3px] border-dashed border-[#11111133]">
+          <span className="block h-[96px] w-[72px] rounded-t-full bg-[#0000000f]" />
+        </span>
+        <span className="flex p-2.5">
+          <span className="inline-flex h-5 overflow-hidden rounded-md border-2 border-dashed border-[#11111133]">
+            <span className="w-11" />
+            <span className="w-14 border-l-2 border-dashed border-[#11111133] bg-[#0000000a]" />
+          </span>
+        </span>
+        <span className="mt-auto block border-t-2 border-dashed border-[#11111122] px-2.5 py-2">
+          <span className="block h-2 w-[70%] rounded-full bg-[#0000000f]" />
+        </span>
       </span>
-      <span className="grid flex-1 place-items-end justify-center border-b-2 border-dashed border-[#D4D4D4] pt-5">
-        <span className="block h-[88px] w-[72px] rounded-t-full bg-[#E5E5E5]" />
-      </span>
-      <span className="flex gap-1.5 px-4 pt-3">
-        <span className="block h-4 w-8 rounded-full border-2 border-dashed border-[#D4D4D4]" />
-        <span className="block h-4 w-12 rounded-full bg-[#E5E5E5]" />
-      </span>
-      <span className="block px-4 pt-3 pb-3.5">
-        <span className="block h-2 w-4/5 rounded-full bg-[#E5E5E5]" />
-      </span>
-      <span className="absolute -top-3 -right-3 inline-grid size-8 place-items-center rounded-full border-[3px] border-dashed border-[#C4C4C4] bg-white text-[#C4C4C4]">
-        <IconClose size={14} />
-      </span>
+      <span className="absolute -top-3 -right-3 size-8 rounded-full border-[3px] border-dashed border-[#11111133] bg-surface" />
     </li>
   );
 }
