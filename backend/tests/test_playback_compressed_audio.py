@@ -183,15 +183,16 @@ def test_mp3_is_off_unless_configured_and_ffmpeg_exists(monkeypatch: pytest.Monk
     assert playback_transcoder(SimpleNamespace(debate_audio_mp3=True)) is None
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/ffmpeg")
     assert isinstance(playback_transcoder(SimpleNamespace(debate_audio_mp3=True)), Mp3Transcoder)
-    assert AudioStore(Path("/nonexistent"), transcoder=Mp3Transcoder(executable="")).compressed is False
+    assert (
+        AudioStore(Path("/nonexistent"), transcoder=Mp3Transcoder(executable="")).compressed
+        is False
+    )
 
 
 def test_media_urls_ask_for_mp3_only_when_the_store_can_encode(tmp_path: Path) -> None:
     debate_id, turn_id, token = str(uuid4()), str(uuid4()), "t" * 43
     plain = SimpleNamespace(audio_store=AudioStore(tmp_path))
-    compressed = SimpleNamespace(
-        audio_store=AudioStore(tmp_path, transcoder=CountingTranscoder())
-    )
+    compressed = SimpleNamespace(audio_store=AudioStore(tmp_path, transcoder=CountingTranscoder()))
     base = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
     assert PlaybackService._media_url(plain, debate_id, turn_id, token) == base  # type: ignore[arg-type]
     assert (
