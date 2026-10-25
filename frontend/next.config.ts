@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
+// Demo-only pages are named page.demo.tsx (/local-roundtable plays a local
+// folder without the platform). They exist under `next dev`, or in a build
+// with DEMO_PAGES=true; the production image never contains them.
+const demoPages =
+  process.env.NODE_ENV !== "production" || process.env.DEMO_PAGES === "true";
+const pageExtensions = ["tsx", "ts", "jsx", "js"];
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  pageExtensions: demoPages ? ["demo.tsx", ...pageExtensions] : pageExtensions,
   poweredByHeader: false,
   allowedDevOrigins: ["127.0.0.1"],
   // Next 16 writes its own AGENTS.md and CLAUDE.md into this package on every

@@ -55,4 +55,8 @@ uv run --directory backend python ../scripts/export_fastapi_openapi.py /tmp/maya
 node scripts/compare_route_surface.mjs --server-openapi /tmp/maya-openapi.json
 node scripts/test_route_surface.mjs
 
+step "production build"
+pnpm --filter @maya/frontend build
+node scripts/check_production_routes.mjs
+
 printf '\n\033[32mAll deterministic gates passed.\033[0m\n'
