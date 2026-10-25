@@ -51,7 +51,6 @@ from app.core.models import (
     Job,
     StoredFile,
 )
-from app.core.sqlutil import foreign_keys_ok
 from app.modules.debates import models as _debate_models
 from app.modules.debates.models import Debate, DebateTurn, PlaybackState
 from app.modules.debates.setup.service import require_teacher_course
@@ -65,15 +64,9 @@ LOGGER = logging.getLogger(__name__)
 _UUID_COMPONENT = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-_RECOVERY_DELETE_TRIGGER = "trg_llm_recovery_inputs_immutable_delete"
-_RECOVERY_UPDATE_TRIGGER = "trg_llm_recovery_inputs_immutable_update"
 _CLEANUP_VOICE_OPERATION = "debate_cleanup_voice_v1"
 _CLEANUP_ALL_OPERATION = "debate_cleanup_all_v1"
 _CLEANUP_OPERATIONS = frozenset({_CLEANUP_VOICE_OPERATION, _CLEANUP_ALL_OPERATION})
-_EXPECTED_RECOVERY_DELETE_TRIGGER_SQL = (
-    "CREATE TRIGGER trg_llm_recovery_inputs_immutable_delete BEFORE DELETE ON "
-    "llm_recovery_inputs BEGIN SELECT RAISE(ABORT, 'llm recovery input is immutable'); END"
-)
 _ACTIVE_PROVIDER_STATES = frozenset(
     {"prepared", "reserved", "sending", "accepted", "acceptance_unknown"}
 )
@@ -827,26 +820,15 @@ def _load_debate(db: Session, debate_id: str, actor_user_id: str) -> Debate:
 
 
 def _begin_immediate(db: Session) -> None:
-    """Take SQLite's writer lock before reading the cleanup graph.
+    """Start the cleanup from a fresh transaction.
 
-    ``get_db`` normally starts a deferred transaction for authentication and
-    route setup.  Cleanup cannot use that snapshot: another writer could
-    replace an audio pointer between graph inspection and the CAS.  Rolling
-    back the request's read snapshot is safe here because this service is the
-    transaction owner, then ``BEGIN IMMEDIATE`` fences the complete read/write
-    sequence.  Non-SQLite test engines simply retain their normal transaction.
+    ``get_db`` normally starts a transaction for authentication and route
+    setup. Rolling back that read snapshot is safe here because this service
+    is the transaction owner; the row locks and CAS checks that follow fence
+    the read/write sequence.
     """
 
     db.rollback()
-    bind = db.get_bind()
-    if getattr(bind.dialect, "name", "") == "sqlite":
-        try:
-            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
-        except Exception as exc:
-            raise conflict(
-                "cleanup_busy",
-                "The Debate cleanup could not acquire its write boundary.",
-            ) from exc
 
 
 def _cleanup_request_hash(
@@ -1163,74 +1145,16 @@ def _interrupt_jobs(
     return max(0, int(getattr(changed, "rowcount", 0) or 0))
 
 
-def _capture_recovery_triggers(db: Session) -> dict[str, str]:
-    names = (_RECOVERY_DELETE_TRIGGER,)
-    rows = (
-        db.execute(
-            text("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name=:delete_name"),
-            {"delete_name": _RECOVERY_DELETE_TRIGGER},
-        )
-        .mappings()
-        .all()
-    )
-    captured = {str(row["name"]): str(row["sql"]) for row in rows if row["sql"]}
-    if set(captured) != set(names):
-        raise DebateCleanupError("recovery_trigger_unavailable")
-    expected = " ".join(_EXPECTED_RECOVERY_DELETE_TRIGGER_SQL.lower().split())
-    for name, sql in captured.items():
-        lowered = " ".join(sql.lower().split())
-        if name != _RECOVERY_DELETE_TRIGGER or lowered != expected:
-            raise DebateCleanupError("recovery_trigger_definition_unexpected")
-    return captured
-
-
-def _drop_recovery_triggers(db: Session, captured: Mapping[str, str]) -> None:
-    if _RECOVERY_DELETE_TRIGGER not in captured:
-        raise DebateCleanupError("recovery_trigger_definition_unexpected")
-    db.execute(text(f'DROP TRIGGER "{_RECOVERY_DELETE_TRIGGER}"'))
-
-
-def _restore_recovery_triggers(db: Session, captured: Mapping[str, str]) -> None:
-    name = _RECOVERY_DELETE_TRIGGER
-    sql = captured.get(name)
-    if not sql:
-        raise DebateCleanupError("recovery_trigger_restore_failed")
-    db.execute(text(sql))
-    row = db.execute(
-        text("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=:name"),
-        {"name": name},
-    ).scalar_one_or_none()
-    if row is None or " ".join(str(row).lower().split()) != " ".join(sql.lower().split()):
-        raise DebateCleanupError("recovery_trigger_restore_failed")
-
-
 def _delete_recovery_inputs(db: Session, column_name: str, values: Iterable[str]) -> int:
-    """Delete scoped LLM recovery inputs on either supported database.
+    """Delete scoped LLM recovery inputs under foreign keys alone.
 
-    SQLite migrations guard the table with an immutability trigger, so the
-    scoped delete briefly drops and restores it inside the caller's writer
-    transaction.  PostgreSQL has no such trigger (``sqlite_master`` does not
-    exist there); the rows are deleted under foreign keys alone.  Skipping the
-    delete on PostgreSQL left ``provider_operations`` rows referenced and made
-    Delete All fail with a foreign key violation.
+    Leaving them made Delete All fail on ``provider_operations`` references.
     """
 
     values_tuple = _values(values)
     if not values_tuple:
         return 0
-    if db.get_bind().dialect.name != "sqlite":
-        return _delete_rows(db, "llm_recovery_inputs", column_name, values_tuple)
-    table = _table("llm_recovery_inputs")
-    present = db.scalar(
-        select(text("count(*)")).select_from(table).where(table.c[column_name].in_(values_tuple))
-    )
-    if not int(present or 0):
-        return 0
-    triggers = _capture_recovery_triggers(db)
-    _drop_recovery_triggers(db, triggers)
-    count = _delete_rows(db, "llm_recovery_inputs", column_name, values_tuple)
-    _restore_recovery_triggers(db, triggers)
-    return count
+    return _delete_rows(db, "llm_recovery_inputs", column_name, values_tuple)
 
 
 def _stored_file_survivor_check(db: Session, graph: _DebateGraph) -> None:
@@ -1732,11 +1656,7 @@ def _delete_rows(db: Session, table_name: str, column_name: str, values: Iterabl
     return max(0, int(getattr(result, "rowcount", 0) or 0))
 
 
-def _delete_graph(
-    db: Session,
-    graph: _DebateGraph,
-    captured_triggers: Mapping[str, str] | None,
-) -> dict[str, int]:
+def _delete_graph(db: Session, graph: _DebateGraph) -> dict[str, int]:
     """Delete one graph in explicit FK-safe order."""
 
     counts: dict[str, int] = {}
@@ -1759,9 +1679,7 @@ def _delete_graph(
         remove("provider_reservations", "operation_id", graph.operation_ids)
     if graph.turn_ids:
         remove("llm_accepted_stages", "turn_id", graph.turn_ids)
-    # Recovery inputs restrict both provider_operations and debate_turns. They
-    # must go on every dialect; only SQLite needs its trigger lifted (done by
-    # the caller, which passes captured_triggers when it did so).
+    # Recovery inputs restrict both provider_operations and debate_turns.
     if graph.turn_ids:
         remove("llm_recovery_inputs", "turn_id", graph.turn_ids)
     if graph.operation_ids:
@@ -1800,11 +1718,6 @@ def _delete_graph(
     )
     remove("debates", "id", {graph.debate_id})
     remove("stored_files", "id", graph.stored_file_ids)
-
-    if captured_triggers is not None:
-        _restore_recovery_triggers(db, captured_triggers)
-    if not foreign_keys_ok(db):
-        raise DebateCleanupError("foreign_key_violations_after")
     return counts
 
 
@@ -1985,7 +1898,6 @@ async def delete_all(
 
     _begin_immediate(db)
     quarantine: _FileQuarantine | None = None
-    captured_triggers: dict[str, str] | None = None
     claim: _IdempotencyClaim | None = None
     try:
         claim = _claim_cleanup_idempotency(
@@ -2046,26 +1958,9 @@ async def delete_all(
             debate_id=debate_id,
             idempotency_record_id=claim.record.id if claim and claim.record else None,
         )
-        recovery_table = _table("llm_recovery_inputs")
-        recovery_predicate: Any = (
-            recovery_table.c.turn_id.in_(tuple(graph.turn_ids)) if graph.turn_ids else false()
-        )
-        if graph.operation_ids:
-            recovery_predicate = recovery_predicate | recovery_table.c.operation_id.in_(
-                tuple(graph.operation_ids)
-            )
-        recovery_count = db.scalar(
-            select(text("count(*)")).select_from(recovery_table).where(recovery_predicate)
-        )
-        if int(recovery_count or 0) and db.get_bind().dialect.name == "sqlite":
-            # The immutability trigger is created by the SQLite migrations.
-            # PostgreSQL schema bootstrap has no equivalent trigger, so the
-            # scoped delete proceeds under foreign keys alone.
-            captured_triggers = _capture_recovery_triggers(db)
-            _drop_recovery_triggers(db, captured_triggers)
         _detach_surviving_run_operations(db, graph)
         _stored_file_survivor_check(db, graph)
-        deleted_rows = _delete_graph(db, graph, captured_triggers)
+        deleted_rows = _delete_graph(db, graph)
         from app.modules.debates.owned_copies import delete_debate_knowledge
 
         delete_debate_knowledge(db, debate_id, root)

@@ -34,7 +34,6 @@ from app.core.models import (
     StoredFile,
     User,
 )
-from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
 from app.core.write_guard import WriteSlot, reserve_write_slot, write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
@@ -1523,9 +1522,6 @@ def create_conversation(
     db.commit()
     with create_admission_slot():
         # Freeze one coherent Team definition while another request may save a new version.
-        if db.get_bind().dialect.name == "sqlite":
-            db.rollback()
-            begin_immediate(db)
         if payload.entry is not None and not isinstance(payload.entry, AgentChatEntry):
             row = create_team_conversation(db, context, payload.entry)
             return session_view(db, row, context, settings)
@@ -1669,9 +1665,6 @@ def create_memory_entry_action(
     """Resolve one durable Brainform navigation intent; sending remains explicit Chat work."""
     course_id = str(payload.course_id)
     source_kind, source_id = _memory_source_identity(payload)
-    if db.get_bind().dialect.name == "sqlite":
-        db.rollback()
-        begin_immediate(db)
     course_member(db, context, course_id)
     actor = db.get(User, context.user.id)
     if actor is None or actor.status != "active":

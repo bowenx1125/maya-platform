@@ -696,7 +696,9 @@ def test_two_teachers_racing_open_have_exactly_one_winner(interaction_app: Any) 
         )
 
     assert outcomes.count(("opened", None)) == 1
-    assert outcomes.count(("invalid_state", 409)) == 1
+    # The loser sees the window open (invalid_state) or loses the revision CAS
+    # (stale_interaction); either way exactly one 409.
+    assert outcomes.count(("invalid_state", 409)) + outcomes.count(("stale_interaction", 409)) == 1
     with database.session() as session:
         window = session.scalar(
             select(ClassroomInteractionWindow).where(

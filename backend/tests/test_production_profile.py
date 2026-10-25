@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 from sqlalchemy import func, select
 
+from tests.postgres_db import named_url
+
 PUBLIC_ORIGIN = "https://maya.example.com"
 PUBLIC_TEACHER_PASSWORD = "Teacher-account-strong-2026!"
 DATABASE_OVERRIDE_PASSWORD = "Teacher-database-override-2026!"
@@ -39,7 +41,7 @@ def _settings(tmp_path: Path, **overrides: Any) -> Settings:
         "demo_auto_confirm_provider": False,
         "session_secret": "production-profile-test-secret-0123456789",
         "classroom_public_base_url": PUBLIC_ORIGIN,
-        "database_url": f"sqlite:///{tmp_path / 'maya.sqlite3'}",
+        "database_url": named_url(f"{tmp_path / 'maya.sqlite3'}"),
         "data_root": tmp_path / "data",
         "demo_accounts_file": tmp_path / "production-accounts.private.md",
         "demo_users_file": tmp_path / "legacy-demo-users.yaml",
@@ -170,7 +172,8 @@ def test_production_compose_requires_dedicated_data_and_config_roots() -> None:
         "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/maya"
     )
     assert database_url in compose
-    assert "MAYA_POSTGRES_IMPORT_SOURCE:" in compose
+    # SQLite is gone: there is no startup import from a SQLite snapshot.
+    assert "MAYA_POSTGRES_IMPORT_SOURCE" not in compose
     assert "replicas: ${BACKEND_REPLICAS:-2}" in compose
     assert 'command: ["postgres", "-c", "max_connections=200"]' in compose
     assert "ADAPTIVE_ADMISSION_MAX_IN_FLIGHT:" in compose

@@ -18,6 +18,8 @@ from app.modules.auth import registration
 from app.modules.auth.models import UserCredential
 from pwdlib import PasswordHash
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture(autouse=True)
 def _reset() -> Iterator[None]:
@@ -251,7 +253,7 @@ def test_verify_runs_with_pool_connection_checked_out_zero(
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import QueuePool
 
-    engine = create_engine(f"sqlite:///{tmp_path / 'pool.sqlite3'}", poolclass=QueuePool)
+    engine = create_engine(named_url(f"{tmp_path / 'pool.sqlite3'}"), poolclass=QueuePool)
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     password_hash = PasswordHash.recommended().hash("demo-password-123")

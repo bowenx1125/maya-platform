@@ -181,7 +181,6 @@ class CourseTeamPublication(Base):
             "uq_course_team_publications_active_team",
             "team_id",
             unique=True,
-            sqlite_where=(state == "published"),
             postgresql_where=(state == "published"),
         ),
     )

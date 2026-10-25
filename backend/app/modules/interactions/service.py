@@ -21,7 +21,7 @@ from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, func, select, update
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -873,13 +873,6 @@ def _allocate_barrage_sequence(session: Session, window: ClassroomInteractionWin
     return sequence
 
 
-def _sqlite_write_conflict(exc: OperationalError) -> bool:
-    """SQLite invalidates a read snapshot when another writer commits first."""
-
-    detail = str(exc.orig).lower()
-    return "database is locked" in detail or "snapshot" in detail or "busy" in detail
-
-
 def _vote_replay(
     session: Session,
     window_id: str,
@@ -1601,12 +1594,6 @@ class InteractionService:
                     raise conflict("stale_sequence", "The barrage sequence is stale.") from exc
                 except PlatformError as exc:
                     if exc.code == "stale_sequence" and attempt + 1 < _BARRAGE_SEQUENCE_ATTEMPTS:
-                        session.rollback()
-                        begin_immediate(session)
-                        continue
-                    raise
-                except OperationalError as exc:
-                    if _sqlite_write_conflict(exc) and attempt + 1 < _BARRAGE_SEQUENCE_ATTEMPTS:
                         session.rollback()
                         begin_immediate(session)
                         continue

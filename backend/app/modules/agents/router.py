@@ -547,17 +547,17 @@ def _live_team_blockers(db: Session, agent_id: str, actor_user_id: str) -> dict[
     return {"teams": own, "other_team_count": len(rows) - len(own)}
 
 
-def _begin_immediate(db: Session) -> None:
+def _begin_immediate(db: Session, agent_id: str | None = None) -> None:
     """Start the final serialized Agent writer transaction.
 
-    Scoped authorization reads may have opened a WAL snapshot.  Roll it back
-    before issuing ``BEGIN IMMEDIATE`` so the final eligibility check cannot
-    fail with ``SQLITE_BUSY_SNAPSHOT`` and so publish/debate writers cannot
-    interleave between the check and the delete.
+    Roll back the scoped authorization reads first. With ``agent_id`` the
+    transaction holds that Agent's writer lock until it ends, so publish,
+    metadata update and delete of one Agent cannot interleave between their
+    final check and their write (SQLite's single writer used to give this).
     """
 
     db.rollback()
-    begin_immediate(db)
+    begin_immediate(db, lock_key=f"agent-writer:{agent_id}" if agent_id else None)
 
 
 def _acquire_publish_guard(
@@ -577,7 +577,9 @@ def _acquire_publish_guard(
     history check.
     """
 
-    _begin_immediate(db)
+    db.rollback()
+    agent_id = db.scalar(select(AgentVersion.agent_id).where(AgentVersion.id == version_id))
+    _begin_immediate(db, str(agent_id) if agent_id is not None else None)
     try:
         scoped = visible_student_version(db, context, version_id)
         if scoped.version.state != "draft":
@@ -1198,9 +1200,8 @@ def update_agent_metadata(
     reject_baseline_agent_mutation(str(agent_id))
     scoped = visible_student_agent(db, context, str(agent_id))
     # Close the authorization read snapshot before taking the final writer
-    # lock.  This also makes concurrent updates resolve to one deterministic
-    # winner instead of a SQLite WAL snapshot error.
-    _begin_immediate(db)
+    # lock, so concurrent updates resolve to one deterministic winner.
+    _begin_immediate(db, str(agent_id))
     try:
         current = db.scalar(
             select(Agent).where(
@@ -1299,7 +1300,7 @@ def delete_agent(
         # A denied first request abandons the claim below without revealing
         # anything about another group.
         _student_delete_scope(db, context, str(agent_id))
-        _begin_immediate(db)
+        _begin_immediate(db, str(agent_id))
         # Re-resolve both the actor scope and the Agent under the writer lock;
         # no publish/Debate writer can slip between this read and the delete.
         agent = _student_delete_scope(db, context, str(agent_id))

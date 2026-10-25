@@ -156,7 +156,6 @@ class Vote(Base):
             "window_id",
             "voter_key",
             unique=True,
-            sqlite_where=text("voter_key IS NOT NULL"),
             postgresql_where=text("voter_key IS NOT NULL"),
         ),
     )

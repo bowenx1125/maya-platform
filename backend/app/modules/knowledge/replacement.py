@@ -1,7 +1,7 @@
 """Copy-on-write Markdown replacement orchestration.
 
 This module owns the long-running filesystem/journal work and the final
-SQLite writer boundary for editing an existing group document.  The ordinary
+writer boundary (a per-document lock) for editing an existing group document.  The ordinary
 knowledge router should only parse/authorize the request and call this
 service; initial upload, preview, retrieval and snapshot code remain in
 ``services.py``.
@@ -168,7 +168,7 @@ def replace_document_copy_on_write(
         # A filename-only edit changes the visible name while keeping the
         # indexed content, receipts and generation inputs identical.
         db.rollback()
-        begin_immediate(db)
+        begin_immediate(db, lock_key=f"knowledge-document:{old_document_id}")
         record = db.get(IdempotencyRecord, idempotency_record_id)
         final_old = db.get(KnowledgeDocument, old_document_id)
         if record is None:
@@ -332,12 +332,11 @@ def replace_document_copy_on_write(
         )
         checkpoint("replace.promoted")
 
-        # End the pre-staging read snapshot before acquiring SQLite's writer
-        # lock.  ``BEGIN IMMEDIATE`` is intentional: all final rereads,
-        # relation rewrites, revision CAS updates and old-document hiding are
-        # one serialized decision.
+        # End the pre-staging read snapshot before taking this document's
+        # writer lock: all final rereads, relation rewrites, revision CAS
+        # updates and old-document hiding are one serialized decision.
         db.rollback()
-        begin_immediate(db)
+        begin_immediate(db, lock_key=f"knowledge-document:{old_document_id}")
         record = db.get(IdempotencyRecord, idempotency_record_id)
         if record is None:
             raise invalid_state("The idempotency claim could not be loaded.")

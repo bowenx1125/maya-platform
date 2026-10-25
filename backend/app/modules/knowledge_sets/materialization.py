@@ -21,7 +21,6 @@ from app.modules.knowledge_sets.generation import (
     GENERATION_OPERATION,
     _current_generation_authorized,
     _finish_blocked,
-    _start_immediate,
 )
 from app.modules.knowledge_sets.models import (
     KnowledgeAsset,
@@ -347,7 +346,6 @@ def _record_failed_item(
 ) -> None:
     with session_factory() as db:
         db.rollback()
-        _start_immediate(db)
         owner_stage = _current_owner_stage(db, run_id, claim_token)
         if owner_stage is None:
             db.rollback()
@@ -428,7 +426,6 @@ def _materialize_one(
     try:
         with session_factory() as db:
             db.rollback()
-            _start_immediate(db)
             owner_stage = _current_owner_stage(db, run_id, claim_token)
             if owner_stage is None:
                 db.rollback()
@@ -612,7 +609,6 @@ def _finish_materialization(
 ) -> None:
     with session_factory() as db:
         db.rollback()
-        _start_immediate(db)
         owner_stage = _current_owner_stage(db, run_id, claim_token)
         if owner_stage is None:
             db.rollback()
@@ -733,7 +729,6 @@ def materialize_accepted_knowledge_generation(
 
     with session_factory() as db:
         db.rollback()
-        _start_immediate(db)
         owner_stage = _current_owner_stage(db, run_id, claim_token)
         if owner_stage is None:
             db.rollback()

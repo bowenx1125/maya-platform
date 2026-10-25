@@ -28,6 +28,8 @@ from app.providers.dashscope import (
 from app.providers.tts import TTSProviderError, TTSVoiceUnavailableError
 from app.providers.voice import VoiceCloneRefusedError, VoiceProviderError
 
+from tests.postgres_db import named_url
+
 SAMPLE = b"RIFF-sample-bytes"
 SAMPLE_URI = "data:audio/wav;base64," + base64.b64encode(SAMPLE).decode("ascii")
 POLICY = {
@@ -371,7 +373,7 @@ def _settings(tmp_path: Path, **values: object) -> object:
     return Settings(
         maya_env="test",
         session_secret="s" * 32,
-        database_url=f"sqlite:///{tmp_path / 't.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 't.sqlite3'}"),
         data_root=tmp_path,
         tts_provider="dashscope",
         voice_provider="dashscope",

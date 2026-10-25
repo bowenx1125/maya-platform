@@ -208,13 +208,7 @@ class ProviderRepository:
         connection = self.engine.connect()
         committed = False
         try:
-            if self.engine.dialect.name == "sqlite":
-                # A scope budget update must not be a read-then-write race.
-                # BEGIN IMMEDIATE acquires SQLite's RESERVED writer lock before
-                # the budget row is read.
-                connection.exec_driver_sql("BEGIN IMMEDIATE")
-            else:
-                connection.begin()
+            connection.begin()
             yield connection
             connection.commit()
             committed = True
@@ -376,7 +370,7 @@ class ProviderRepository:
         }
         try:
             with self._write_connection() as connection:
-                if self._shared.get() is connection and self.engine.dialect.name != "sqlite":
+                if self._shared.get() is connection:
                     # Inside one_transaction() a failed INSERT aborts the whole
                     # PostgreSQL transaction; a savepoint keeps it usable for
                     # the caller's duplicate check.
@@ -940,11 +934,12 @@ class ProviderRepository:
         if budget.budget_bucket != bucket and budget.budget_bucket != EMBEDDING_SNAPSHOT_BUCKET:
             raise ProviderRepositoryError("scope budget bucket does not match its value")
         table = _BUDGET_TABLE
+        # Locked: the counters below are read, then written as old + n.
         existing = (
             connection.execute(
-                select(table).where(
-                    table.c.scope_id == request.scope_id, table.c.budget_bucket == bucket
-                )
+                select(table)
+                .where(table.c.scope_id == request.scope_id, table.c.budget_bucket == bucket)
+                .with_for_update()
             )
             .mappings()
             .first()
@@ -2390,12 +2385,16 @@ class ProviderRepository:
             if operation_row["state"] != "prepared":
                 raise OperationStateError("provider operation is not reservable")
             budget_bucket = budget_bucket_for_operation(str(operation_row["provider_operation"]))
+            # Locked: under READ COMMITTED two reservations would otherwise
+            # both read the old counters and one increment would be lost.
             budget_row = (
                 connection.execute(
-                    select(budget_table).where(
+                    select(budget_table)
+                    .where(
                         budget_table.c.scope_id == operation_row["scope_id"],
                         budget_table.c.budget_bucket == budget_bucket,
                     )
+                    .with_for_update()
                 )
                 .mappings()
                 .first()

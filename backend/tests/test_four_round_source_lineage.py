@@ -6,10 +6,12 @@ from app.modules.debates.source_lineage import receipt_scope_is_valid
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from tests.postgres_db import new_database_url
+
 
 @pytest.fixture
 def evidence_origin():
-    engine = create_engine("sqlite://")
+    engine = create_engine(new_database_url(schema=False))
     with Session(engine) as db:
         db.execute(text("CREATE TABLE debates (id TEXT, rule_snapshot_json TEXT)"))
         db.execute(

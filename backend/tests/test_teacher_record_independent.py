@@ -206,6 +206,33 @@ def test_a_teacher_delete_is_real_and_reaches_the_student(attempt_env: Any) -> N
         assert db.get(Conversation, made["conversation"]) is not None
 
 
+def test_a_teacher_delete_of_an_answered_attempt_does_not_depend_on_fk_order(
+    attempt_env: Any,  # noqa: F811
+    monkeypatch: Any,
+) -> None:
+    """Production 2026-10-24 (PostgreSQL): the purge cleared an answered
+    question's answer link before deleting the question, and the CHECK that an
+    answered question keeps its answer refused it. The order foreign keys come
+    back from the catalog differs by database, so both orders must work.
+    """
+
+    from app.modules import purge as purge_module
+
+    original = purge_module._catalog
+
+    def reversed_catalog(engine: Any) -> dict[str, list[Any]]:
+        return {name: list(reversed(keys)) for name, keys in original(engine).items()}
+
+    _app, database, settings, client = attempt_env
+    made = _attempt(database, settings, client)
+    monkeypatch.setattr(purge_module, "_catalog", reversed_catalog)
+    _token, csrf = _login(client, "maya")
+    deleted = client.delete(f"{TEACHER_URL}/{made['attempt']}", headers={"X-CSRF-Token": csrf})
+    assert deleted.status_code == 204, deleted.text
+    with database.session() as db:
+        assert db.get(AssessmentAttempt, made["attempt"]) is None
+
+
 def test_the_teacher_list_reads_a_fixed_number_of_queries(attempt_env: Any) -> None:  # noqa: F811
     from app.modules.learning.reports import list_course_assessment_attempts
 

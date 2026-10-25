@@ -284,12 +284,18 @@ of page loads: Next→speech,first contentful paint,assessment send→reply; POS
 `scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
 provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.
 
+## Oct24 PostgreSQL only (PR B)
+
+SQLite DATABASE_URL is refused; the startup import is gone. scripts/migrate_sqlite_to_postgres.py
+copies an old file: dry-run default, --apply --confirm-production, read-only source, one
+transaction + receipt (re-run no-op), never deletes it. Tests need MAYA_TEST_POSTGRES_URL
+(a database per test). Fixed: budget lost update, Agent and
+document races, attempt vs knowledge update, purge order, alembic %, peer lock scope.
+
 ## Oct24 Immerse audio predownload (PR A2)
 
-The stage downloads every ready speech as a blob, one at a time in speaking order,
-from mount (after the 3D scene loads, Start, or 10 s), independent of Next/pause; it
-learns ready speeches from the snapshot's audio_ready_turn_ids and the
-turn.audio_ready event (no playback change). POST /debates/{id}/next-audio takes
-turn_id (any ready speech, controller ticket). Playing uses the blob, waits ≤3 s for
-its download, else the URL (never two downloads). Next returns media_url and starts
-the speech before media.prepared; no seek at cursor 0. Leaving aborts and frees blobs.
+From mount (after the 3D scene, Start, or 10 s) the stage downloads ready speeches as
+blobs, one at a time in speaking order, independent of Next/pause
+(snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
+blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
+no seek at cursor 0. Leaving aborts and frees blobs.

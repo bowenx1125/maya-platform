@@ -90,6 +90,7 @@ from sqlalchemy import Table, func, select, update
 
 from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
+from tests.postgres_db import named_url
 from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _headers
 
 
@@ -135,7 +136,7 @@ def _policy(
 def _make_fixture(
     tmp_path: Path, *, source: bytes = b"# Lesson\n\nA bounded lesson."
 ) -> _OwnerFixture:
-    database = Database(f"sqlite:///{tmp_path / 'product-publication.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'product-publication.sqlite3'}"), tmp_path)
     database.initialize_schema()
     course_id = str(uuid4())
     group_id = str(uuid4())

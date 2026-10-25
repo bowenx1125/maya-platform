@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import sqlite3
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from app.core.db import Database
 from app.core.models import Agent, AgentVersion, Course, CourseMember, ProviderOperation
 from app.modules.knowledge_sets.models import AgentKnowledgeSet
@@ -24,11 +19,9 @@ from app.modules.workspace.models import (
     ConversationTurn,
 )
 from fastapi.testclient import TestClient
-from sqlalchemy import event, func, select
-from sqlalchemy.engine import Engine
+from sqlalchemy import func, select
 
 from tests.conftest import login, post_message
-from tests.legacy_organization import seed_legacy_organization
 from tests.test_mayaform_teams import (
     BOWEN_ID,
     COURSE_ID,
@@ -421,178 +414,6 @@ def test_publication_grant_is_not_a_single_or_custom_entry_grant(
         db.add(CourseMember(course_id=course_id, user_id=other_id, role="teacher", created_at=now))
     assert client.get("/api/v1/conversations").json() == []
     assert client.get(f"/api/v1/conversations/{session['id']}").status_code == 404
-
-
-def _config(path: Path) -> Config:
-    root = Path(__file__).parents[1]
-    config = Config(str(root / "alembic.ini"))
-    config.set_main_option("script_location", str(root / "migrations"))
-    config.attributes["database_url"] = f"sqlite:///{path}"
-    return config
-
-
-def _fingerprint(path: Path) -> str:
-    with sqlite3.connect(path) as db:
-        schema = db.execute(
-            "SELECT type,name,tbl_name,sql FROM sqlite_master "
-            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name"
-        ).fetchall()
-        data = {
-            name: db.execute(f'SELECT * FROM "{name}" ORDER BY rowid').fetchall()
-            for kind, name, _table, _sql in schema
-            if kind == "table"
-        }
-    return hashlib.sha256(
-        json.dumps([schema, data], sort_keys=True, default=str).encode()
-    ).hexdigest()
-
-
-def _seed_0040(path: Path) -> None:
-    command.upgrade(_config(path), "0001_wave0_baseline")
-    database = Database(f"sqlite:///{path}")
-    with database.session() as db:
-        seed_legacy_organization(db)
-    command.upgrade(_config(path), PREVIOUS)
-    _, version_id = _make_agent_version(database, owner_id=MAYA_ID, name="Migrated Single")
-    conversation_id = str(uuid4())
-    now = datetime.now(UTC)
-    with database.engine.begin() as db:
-        db.exec_driver_sql(
-            f"INSERT INTO agent_conversations ({OLD_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                conversation_id,
-                MAYA_ID,
-                COURSE_ID,
-                version_id,
-                None,
-                3,
-                None,
-                now,
-                "Frozen old name",
-                0,
-            ),
-        )
-        for position, state in enumerate(("ready", "failed", "acceptance_unknown"), start=1):
-            db.exec_driver_sql(
-                "INSERT INTO agent_conversation_turns (id,conversation_id,position,user_text,"
-                "assistant_text,sources_json,mode,state,safe_error_code,created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    str(uuid4()),
-                    conversation_id,
-                    position,
-                    f"完整用户原文 {position}",
-                    "Old answer" if state == "ready" else None,
-                    "[]",
-                    "real",
-                    state,
-                    None if state == "ready" else "chat_interrupted",
-                    now,
-                ),
-            )
-    with database.session() as db:
-        db.add(
-            ProviderOperation(
-                id=str(uuid4()),
-                scope_id=conversation_id,
-                provider_operation="llm_agent_chat",
-                logical_item_id="preserved-charged-call",
-                attempt_no=1,
-                request_hash="a" * 64,
-                max_tokens=0,
-                max_cost_cny=0,
-                policy_hash="b" * 64,
-                export_manifest_hash="c" * 64,
-                state="acceptance_unknown",
-                request_count=1,
-                charged_request_count=1,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-    database.dispose()
-
-
-def test_0041_populated_upgrade_preserves_single_history_and_provider_ledger(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "populated.sqlite3"
-    _seed_0040(path)
-    with sqlite3.connect(path) as db:
-        before = [
-            db.execute(f"SELECT {columns} FROM {table} ORDER BY id").fetchall()
-            for table, columns in (
-                ("agent_conversations", OLD_COLUMNS),
-                ("agent_conversation_turns", "*"),
-                ("provider_operations", "*"),
-            )
-        ]
-    command.upgrade(_config(path), CURRENT)
-    with sqlite3.connect(path) as db:
-        after = [
-            db.execute(f"SELECT {columns} FROM {table} ORDER BY id").fetchall()
-            for table, columns in (
-                ("agent_conversations", OLD_COLUMNS),
-                ("agent_conversation_turns", "*"),
-                ("provider_operations", "*"),
-            )
-        ]
-        assert after == before
-        assert db.execute(
-            "SELECT entry_kind,chat_visibility,origin FROM agent_conversations"
-        ).fetchall() == [("agent", "private", "single_agent")]
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == (CURRENT,)
-        assert (
-            db.execute("SELECT name FROM sqlite_master WHERE name='chat_messages'").fetchall() == []
-        )
-        indexes = {row[1] for row in db.execute("PRAGMA index_list(agent_conversations)")}
-        assert {"ix_agent_conversations_user_id", "ix_conversations_course_privacy"} <= indexes
-
-
-@pytest.mark.parametrize(
-    "failure_match", ["CREATE TABLE conversation_participants", "UPDATE alembic_version"]
-)
-def test_0041_failure_rolls_back_populated_database_and_head(
-    tmp_path: Path, failure_match: str
-) -> None:
-    path = tmp_path / "rollback.sqlite3"
-    _seed_0040(path)
-    before = _fingerprint(path)
-    fired = False
-
-    def fail(
-        _conn: Any, _cursor: Any, statement: str, _params: Any, _context: Any, _many: bool
-    ) -> None:
-        nonlocal fired
-        if failure_match in statement:
-            fired = True
-            raise RuntimeError("0041 injected failure")
-
-    event.listen(Engine, "before_cursor_execute", fail)
-    try:
-        with pytest.raises(RuntimeError, match="0041 injected failure"):
-            command.upgrade(_config(path), CURRENT)
-    finally:
-        event.remove(Engine, "before_cursor_execute", fail)
-    assert fired and _fingerprint(path) == before
-    command.upgrade(_config(path), CURRENT)
-
-
-def test_0041_fresh_full_chain_and_parent_child_foreign_keys(tmp_path: Path) -> None:
-    path = tmp_path / "fresh.sqlite3"
-    command.upgrade(_config(path), CURRENT)
-    with sqlite3.connect(path) as db:
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == (CURRENT,)
-        for table in (
-            "conversation_participants",
-            "conversation_participant_sets",
-            "conversation_shared_sets",
-        ):
-            assert db.execute(f"PRAGMA foreign_key_list({table})").fetchall()
 
 
 def test_memory_entry_creates_and_replays_an_owner_saved_team_conversation(

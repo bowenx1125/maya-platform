@@ -24,10 +24,10 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from sqlalchemy import MetaData, Table, delete, inspect, select, tuple_, update
-from sqlalchemy.engine import CursorResult, Engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -281,6 +281,8 @@ class _Purge:
         self.catalog = _catalog(engine)
         self.tables: dict[str, Table] = {}
         self.deleted: dict[str, set[tuple[Any, ...]]] = defaultdict(set)
+        # Rows already deleted from the database (a subset of ``deleted``).
+        self.removed: dict[str, set[tuple[Any, ...]]] = defaultdict(set)
         self.updated: set[str] = set()
         self.warned: set[str] = set()
 
@@ -380,29 +382,43 @@ class _Purge:
         return kept
 
     def remove(self, name: str, rows: Sequence[dict[str, Any]]) -> int:
+        """Delete ``rows`` and everything a delete rule reaches from them.
+
+        Two phases: first the whole delete set is planned, then references
+        that a null rule releases are cleared only on rows that stay, and the
+        planned rows are deleted children first. Clearing a reference on a row
+        that is about to go anyway could break its own CHECK (an answered
+        question must keep its answer) before the row is deleted.
+        """
+
+        self.null_jobs: list[tuple[ForeignKey, set[tuple[Any, ...]]]] = []
+        self.self_clears: list[tuple[str, list[str], set[tuple[Any, ...]]]] = []
+        self.order: list[str] = []
+        before = set(self.deleted[name])
+        self.plan(name, rows)
+        self.clear_released_references()
+        self.delete_planned()
+        return len(self.deleted[name] - before)
+
+    def plan(self, name: str, rows: Sequence[dict[str, Any]]) -> None:
         if not rows:
-            return 0
+            return
         pk = self.pk(name)
         keys = {tuple(row[column] for column in pk) for row in rows} - self.deleted[name]
         rows = [row for row in rows if tuple(row[column] for column in pk) in keys]
         if not rows:
-            return 0
+            return
         # Claimed first so a reference cycle back to these rows stops here.
         self.deleted[name].update(keys)
+        if name not in self.order:
+            self.order.append(name)
         for foreign_key in self.catalog.get(name, []):
             rule = self.rule(foreign_key)
             if rule == "protect":
                 continue
-            child = self.table(foreign_key.child)
             if rule == "null":
-                self.updated.add(foreign_key.child)
                 values = {tuple(row[c] for c in foreign_key.referred) for row in rows}
-                for chunk in _chunks(sorted(values, key=repr)):
-                    self.db.execute(
-                        update(child)
-                        .where(_matches(child, foreign_key.columns, chunk))
-                        .values({column: None for column in foreign_key.columns})
-                    )
+                self.null_jobs.append((foreign_key, values))
                 continue
             if foreign_key.child == name:
                 # Rows in this set that point at each other: clear the link first.
@@ -414,22 +430,71 @@ class _Purge:
                     if can_null
                 ]
                 if nullable:
-                    self.updated.add(name)
-                    for chunk in _chunks(sorted(keys, key=repr)):
-                        self.db.execute(
-                            update(child)
-                            .where(_matches(child, pk, chunk))
-                            .values({column: None for column in nullable})
-                        )
-            self.remove(foreign_key.child, self.children(foreign_key, rows))
-        table = self.table(name)
-        removed = 0
-        for chunk in _chunks(sorted(keys, key=repr)):
-            result = cast(
-                CursorResult[Any], self.db.execute(delete(table).where(_matches(table, pk, chunk)))
-            )
-            removed += int(result.rowcount or 0)
-        return removed
+                    self.self_clears.append((name, nullable, keys))
+            self.plan(foreign_key.child, self.children(foreign_key, rows))
+
+    def clear_released_references(self) -> None:
+        for name, nullable, keys in self.self_clears:
+            self.updated.add(name)
+            child = self.table(name)
+            for chunk in _chunks(sorted(keys, key=repr)):
+                self.db.execute(
+                    update(child)
+                    .where(_matches(child, self.pk(name), chunk))
+                    .values({column: None for column in nullable})
+                )
+        for foreign_key, values in self.null_jobs:
+            child = self.table(foreign_key.child)
+            child_pk = self.pk(foreign_key.child)
+            going = self.deleted.get(foreign_key.child, set())
+            staying: list[tuple[Any, ...]] = []
+            for chunk in _chunks(sorted(values, key=repr)):
+                for row in self.db.execute(
+                    select(*[child.c[column] for column in child_pk]).where(
+                        _matches(child, foreign_key.columns, chunk)
+                    )
+                ):
+                    key = tuple(row)
+                    if key not in going:
+                        staying.append(key)
+            if not staying:
+                continue
+            self.updated.add(foreign_key.child)
+            for chunk in _chunks(sorted(set(staying), key=repr)):
+                self.db.execute(
+                    update(child)
+                    .where(_matches(child, child_pk, chunk))
+                    .values({column: None for column in foreign_key.columns})
+                )
+
+    def delete_planned(self) -> None:
+        """Delete every planned row, a referencing table before the table it names."""
+
+        planned = [name for name in self.order if self.deleted.get(name)]
+        waiting = {
+            name: {
+                foreign_key.child
+                for foreign_key in self.catalog.get(name, [])
+                if foreign_key.child != name and foreign_key.child in planned
+            }
+            for name in planned
+        }
+        done: set[str] = set()
+        sequence: list[str] = []
+        while len(sequence) < len(planned):
+            ready = [name for name in planned if name not in done and not (waiting[name] - done)]
+            if not ready:
+                # A cycle (courses <-> debates): newest discoveries first.
+                ready = [next(name for name in reversed(planned) if name not in done)]
+            for name in ready:
+                done.add(name)
+                sequence.append(name)
+        for name in sequence:
+            table = self.table(name)
+            keys = self.deleted[name] - self.removed[name]
+            self.removed[name].update(keys)
+            for chunk in _chunks(sorted(keys, key=repr)):
+                self.db.execute(delete(table).where(_matches(table, self.pk(name), chunk)))
 
     def sync_session(self) -> None:
         """Forget deleted rows and reload what the SQL changed underneath the session."""

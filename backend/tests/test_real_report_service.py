@@ -33,6 +33,8 @@ from app.providers.control import (
 )
 from app.providers.control_repository import ProviderRepository
 
+from tests.postgres_db import named_url
+
 
 def _context(debate_id: str) -> service.ReportContext:
     participants = [
@@ -636,7 +638,7 @@ def test_bound_real_report_continues_once_and_publishes_immutable_ready_revision
 
 
 def test_sqlite_report_success_stays_sending_when_caller_rolls_back(tmp_path: Any) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'report-rollback.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'report-rollback.sqlite3'}"))
     database.upgrade_schema()
     repository = ProviderRepository(database, require_export_confirmation=False)
     policy = _policy()

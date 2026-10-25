@@ -57,6 +57,7 @@ from sqlalchemy import select
 
 from tests.conftest import login
 from tests.persona_fixtures import confirmed_persona_fields
+from tests.postgres_db import named_url
 from tests.test_wave1_agents_knowledge import GROUP_DEMO_ID, _headers
 
 
@@ -149,7 +150,7 @@ def _prepare_control(
 def test_sql_control_adapter_runs_confirmed_fake_embedding_with_durable_budget(
     tmp_path: Path,
 ) -> None:
-    database = Database(f"sqlite:///{tmp_path}/embedding-control.sqlite3")
+    database = Database(named_url(f"{tmp_path}/embedding-control.sqlite3"))
     database.initialize_schema()
     control, repository, build = _prepare_control(database, confirmed=True)
     provider = MockEmbeddingProvider()
@@ -177,7 +178,7 @@ def test_sql_control_adapter_runs_confirmed_fake_embedding_with_durable_budget(
 def test_sql_stage_store_commits_vectors_and_acceptance_before_publication(
     tmp_path: Path,
 ) -> None:
-    database = Database(f"sqlite:///{tmp_path}/embedding-stage.sqlite3")
+    database = Database(named_url(f"{tmp_path}/embedding-stage.sqlite3"))
     database.initialize_schema()
     control, repository, build = _prepare_control(database, confirmed=True)
     provider = MockEmbeddingProvider()
@@ -211,7 +212,7 @@ def test_sql_stage_store_commits_vectors_and_acceptance_before_publication(
 def test_sql_stage_store_rejects_corrupt_vector_without_silent_shape_repair(
     tmp_path: Path,
 ) -> None:
-    database = Database(f"sqlite:///{tmp_path}/embedding-stage-corrupt.sqlite3")
+    database = Database(named_url(f"{tmp_path}/embedding-stage-corrupt.sqlite3"))
     database.initialize_schema()
     control, _repository, build = _prepare_control(database, confirmed=True)
     stages = SqlAlchemyEmbeddingStageStore(database)
@@ -225,8 +226,8 @@ def test_sql_stage_store_rejects_corrupt_vector_without_silent_shape_repair(
     operation_id = result.operations[0].id
     with database.engine.begin() as connection:
         connection.exec_driver_sql(
-            "UPDATE embedding_accepted_vectors SET embedding_blob = X'0000' "
-            "WHERE operation_id = ? AND item_index = 0",
+            "UPDATE embedding_accepted_vectors SET embedding_blob = decode('0000', 'hex') "
+            "WHERE operation_id = %s AND item_index = 0",
             (operation_id,),
         )
 
@@ -240,7 +241,7 @@ def test_sql_stage_store_rejects_corrupt_vector_without_silent_shape_repair(
 def test_provider_publish_lease_renewal_is_bounded_and_exact_token_cas(
     tmp_path: Path,
 ) -> None:
-    database = Database(f"sqlite:///{tmp_path}/embedding-lease.sqlite3")
+    database = Database(named_url(f"{tmp_path}/embedding-lease.sqlite3"))
     database.initialize_schema()
     timestamp = datetime.now(UTC)
     with database.session() as db:
@@ -292,7 +293,7 @@ def test_provider_publish_lease_renewal_is_bounded_and_exact_token_cas(
 def test_embedding_startup_recovery_never_retries_and_preserves_complete_stage(
     tmp_path: Path,
 ) -> None:
-    database = Database(f"sqlite:///{tmp_path}/embedding-recovery.sqlite3")
+    database = Database(named_url(f"{tmp_path}/embedding-recovery.sqlite3"))
     database.initialize_schema()
     control, repository, build = _prepare_control(database, confirmed=True)
     batch = plan_embedding_batches(build).batches[0]
@@ -375,7 +376,7 @@ def test_embedding_startup_recovery_never_retries_and_preserves_complete_stage(
     assert accepted_operation.state == "accepted"
     with database.engine.begin() as connection:
         connection.exec_driver_sql(
-            "DELETE FROM embedding_accepted_vectors WHERE operation_id = ?",
+            "DELETE FROM embedding_accepted_vectors WHERE operation_id = %s",
             (accepted_operation.id,),
         )
     recovered = recover_embedding_provider_startup(database)
@@ -385,7 +386,7 @@ def test_embedding_startup_recovery_never_retries_and_preserves_complete_stage(
 
 
 def test_unconfirmed_sql_manifest_fails_before_fake_provider_call(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path}/embedding-unconfirmed.sqlite3")
+    database = Database(named_url(f"{tmp_path}/embedding-unconfirmed.sqlite3"))
     database.initialize_schema()
     control, _repository, build = _prepare_control(database, confirmed=False)
     provider = MockEmbeddingProvider()

@@ -311,35 +311,9 @@ def _shift_version(
 ) -> bool:
     publication_id = publication.id if publication is not None else None
     publication_epoch = team.authorization_epoch if publication is not None else None
-    dialect = db.get_bind().dialect.name
-    if dialect == "postgresql":
-        return _shift_postgres(
-            db, conversation, team, version, publication_id, publication_epoch, stayers
-        )
-    if dialect == "sqlite":
-        db.execute(text("PRAGMA defer_foreign_keys=ON"))
-    changed = db.execute(
-        text(
-            "UPDATE agent_conversations SET team_version_id = :new_version, "
-            "team_name_snapshot = :name, team_authorization_epoch = :epoch, "
-            "publication_id = :publication_id, publication_epoch = :publication_epoch "
-            "WHERE id = :cid AND team_version_id = :old_version "
-            "AND active_request_id IS NULL AND withdrawn_at IS NULL"
-        ),
-        {
-            "new_version": version.id,
-            "name": version.display_name,
-            "epoch": team.authorization_epoch,
-            "publication_id": publication_id,
-            "publication_epoch": publication_epoch,
-            "cid": conversation.id,
-            "old_version": conversation.team_version_id,
-        },
+    return _shift_postgres(
+        db, conversation, team, version, publication_id, publication_epoch, stayers
     )
-    if int(getattr(changed, "rowcount", 0) or 0) != 1:
-        return False
-    _rewrite_stayers(db, conversation.id, version.id, stayers)
-    return True
 
 
 def _shift_postgres(
@@ -353,7 +327,7 @@ def _shift_postgres(
 ) -> bool:
     # Conversation and its members point at each other. PostgreSQL checks
     # those foreign keys at the end of the statement, so one command has to
-    # move both. SQLite defers the same check until commit instead.
+    # move both.
     if not stayers:
         changed = db.execute(
             text(

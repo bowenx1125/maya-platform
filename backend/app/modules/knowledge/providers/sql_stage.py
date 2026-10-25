@@ -50,10 +50,7 @@ class SqlAlchemyEmbeddingStageStore:
         connection = self.engine.connect()
         committed = False
         try:
-            if self.engine.dialect.name == "sqlite":
-                connection.exec_driver_sql("BEGIN IMMEDIATE")
-            else:
-                connection.begin()
+            connection.begin()
             yield connection
             connection.commit()
             committed = True

@@ -50,6 +50,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
 from tests.conftest import login
+from tests.postgres_db import named_url
 from tests.test_wave2_playback import (
     COURSE_ID,
     GROUP_DEMO_ID,
@@ -838,7 +839,7 @@ def _atomic_fixture(database: Database) -> tuple[SimpleNamespace, SimpleNamespac
 
 
 def test_sql_publication_promotes_operation_and_reservation_atomically(tmp_path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'p1.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'p1.sqlite3'}", schema=False))
     _create_atomic_schema(database)
     stage, recovery = _atomic_fixture(database)
     with database.session() as db:
@@ -874,7 +875,7 @@ def test_sql_publication_promotes_operation_and_reservation_atomically(tmp_path)
 
 
 def test_sql_publication_failure_rolls_turn_and_operation_back(tmp_path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'p1-rollback.sqlite3'}")
+    database = Database(named_url(f"{tmp_path / 'p1-rollback.sqlite3'}", schema=False))
     _create_atomic_schema(database)
     stage, recovery = _atomic_fixture(database)
     with pytest.raises(RuntimeError, match="reservation CAS"):

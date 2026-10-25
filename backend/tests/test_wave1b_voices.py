@@ -13,8 +13,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from alembic import command
-from alembic.config import Config
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
@@ -73,11 +71,11 @@ from app.providers.voice import (
 from app.seed import BOWEN_ID, JADE_ID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select, text
+from sqlalchemy import select, text
 from starlette.requests import Request
 
 from tests.conftest import login, make_foreign_group
-from tests.legacy_organization import seed_legacy_organization
+from tests.postgres_db import named_url
 
 COURSE_ID = "b1ae79ed-e4a6-5b02-9abd-3a3ae944284b"
 GROUP_A = "7813f937-902c-5534-bfb2-ad773a43aeda"
@@ -2204,168 +2202,11 @@ def test_supplier_downloader_enforces_one_total_deadline_across_addresses(
     assert calls == ["1.2.3.4"]
 
 
-def test_0003_migration_preserves_populated_wave1a_rows(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'migration.sqlite3'}"
-    database = Database(database_url, tmp_path)
-    migration_config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    migration_config.set_main_option(
-        "script_location", str(Path(__file__).resolve().parents[1] / "migrations")
-    )
-    migration_config.set_main_option("sqlalchemy.url", database_url)
-    command.upgrade(migration_config, "0002_wave1_agents_rag")
-    now = datetime.now(UTC)
-    with database.session() as session:
-        seed_legacy_organization(session)
-    with database.session() as session:
-        session.execute(
-            text(
-                "INSERT INTO agents "
-                "(id, group_id, name, description, status, created_at, updated_at) "
-                "VALUES (:id, :group_id, :name, :description, :status, :created_at, :updated_at)"
-            ),
-            {
-                "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-                "group_id": GROUP_A,
-                "name": "Preserved Agent",
-                "description": "snapshot row",
-                "status": "active",
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-        session.execute(
-            text(
-                "INSERT INTO agent_versions "
-                "(id, agent_id, version_seq, state, revision, agent_md, avatar_config_json, "
-                "voice_profile_id, knowledge_snapshot_id, published_at, created_at, updated_at) "
-                "VALUES (:id, :agent_id, 0, 'draft', 7, :agent_md, :avatar, :voice, NULL, "
-                "NULL, :created_at, :updated_at)"
-            ),
-            {
-                "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-                "agent_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-                "agent_md": "# preserved",
-                "avatar": '{"template_id":"wave1-default-head"}',
-                "voice": "legacy-voice-reference",
-                "created_at": now,
-                "updated_at": now,
-            },
-        )
-    with database.engine.connect() as connection:
-        before = (
-            connection.execute(
-                text(
-                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
-                    "avatar_config_json, voice_profile_id FROM agents "
-                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
-                )
-            )
-            .mappings()
-            .all()
-        )
-    # Every schema step keeps the row exactly as written. Only the 0060 data
-    # reset, which retires earlier classroom work on purpose, archives it.
-    command.upgrade(migration_config, "0059_chat_titles_pins")
-    with database.engine.connect() as connection:
-        preserved = (
-            connection.execute(
-                text(
-                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
-                    "avatar_config_json, voice_profile_id FROM agents "
-                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
-                )
-            )
-            .mappings()
-            .all()
-        )
-    assert list(before) == list(preserved)
-    command.upgrade(migration_config, "head")
-    command.upgrade(migration_config, "head")
-    with database.engine.connect() as connection:
-        schema = inspect(connection)
-        assert {
-            "voice_profiles",
-            "voice_provider_operations",
-            "voice_previews",
-        }.issubset(set(schema.get_table_names()))
-        assert {item["name"] for item in schema.get_check_constraints("voice_profiles")} == {
-            "ck_voice_profiles_scope",
-            "ck_voice_profiles_scope_group",
-            "ck_voice_profiles_status",
-        }
-        assert {
-            item["name"] for item in schema.get_check_constraints("voice_provider_operations")
-        } == {
-            "ck_voice_provider_operations_attempt",
-            "ck_voice_provider_operations_counters",
-            "ck_voice_provider_operations_scope",
-            "ck_voice_provider_operations_state",
-            "ck_voice_provider_operations_type",
-        }
-        assert {item["name"] for item in schema.get_check_constraints("voice_previews")} == {
-            "ck_voice_previews_state"
-        }
-        assert {item["name"] for item in schema.get_unique_constraints("voice_profiles")} == {
-            "uq_voice_profiles_recovery_name"
-        }
-        profile_indexes = {item["name"]: item for item in schema.get_indexes("voice_profiles")}
-        assert set(profile_indexes) == {
-            "ix_voice_profiles_group_status",
-            "uq_voice_profiles_one_system",
-        }
-        assert profile_indexes["uq_voice_profiles_one_system"]["unique"] == 1
-        operation_indexes = {
-            item["name"]: item for item in schema.get_indexes("voice_provider_operations")
-        }
-        assert set(operation_indexes) == {
-            "ix_voice_provider_operations_profile",
-            "ix_voice_provider_operations_state_deadline",
-            "uq_voice_provider_operations_profile_delete",
-            "uq_voice_provider_operations_system_enroll_active",
-        }
-        assert operation_indexes["uq_voice_provider_operations_profile_delete"]["unique"] == 1
-        assert operation_indexes["uq_voice_provider_operations_system_enroll_active"]["unique"] == 1
-        assert {item["name"] for item in schema.get_indexes("voice_previews")} == {
-            "ix_voice_previews_expiry",
-            "ix_voice_previews_profile_state",
-        }
-        assert {item["name"] for item in schema.get_foreign_keys("voice_profiles")} == {
-            "fk_voice_profiles_consent_actor",
-            "fk_voice_profiles_group",
-            "fk_voice_profiles_sample",
-        }
-        assert {item["name"] for item in schema.get_foreign_keys("voice_provider_operations")} == {
-            "fk_voice_provider_operations_idempotency",
-            "fk_voice_provider_operations_profile",
-        }
-        assert {item["name"] for item in schema.get_foreign_keys("voice_previews")} == {
-            "fk_voice_previews_group",
-            "fk_voice_previews_profile",
-            "fk_voice_previews_stored_file",
-        }
-        after = (
-            connection.execute(
-                text(
-                    "SELECT agents.id, group_id, name, description, status, revision, agent_md, "
-                    "avatar_config_json, voice_profile_id FROM agents "
-                    "JOIN agent_versions ON agent_versions.agent_id = agents.id"
-                )
-            )
-            .mappings()
-            .all()
-        )
-        assert [{**dict(row), "status": "archived"} for row in before] == [
-            dict(row) for row in after
-        ]
-        assert connection.execute(text("SELECT COUNT(*) FROM voice_profiles")).scalar_one() == 0
-    database.dispose()
-
-
 def _fallback_settings(tmp_path: Path) -> Settings:
     return Settings(
         maya_env="test",
         session_secret="f" * 32,
-        database_url=f"sqlite:///{tmp_path / 'fallback.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'fallback.sqlite3'}"),
         data_root=tmp_path / "fallback-data",
         llm_provider="mock",
         embedding_provider="mock",

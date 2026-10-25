@@ -1,7 +1,8 @@
 """Synchronous SQLAlchemy database boundary.
 
-SQLite remains the local and test database. PostgreSQL is the production
-database: concurrent writers, and one schema shared by every backend replica.
+PostgreSQL is the only database: production, local development and tests.
+SQLite support was removed (PR B, 2026-10-24); a SQLite file is only ever read
+by ``scripts/migrate_sqlite_to_postgres.py``.
 """
 
 from __future__ import annotations
@@ -15,13 +16,11 @@ from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.core.logging import configure_application_logging
 from app.core.models import Base
 from app.core.postgres_compat import ensure_postgres_compat
 
-SQLITE_BUSY_TIMEOUT_MS = 5_000
 # Per backend: 15 + 25 = 40, so two replicas hold at most 80 of PostgreSQL's
 # 200 connections; 48 admitted requests rarely hold a connection at once.
 POSTGRES_POOL_SIZE = 15
@@ -32,33 +31,15 @@ _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 
 
-def _sqlite_pragmas(dbapi_connection: object, _connection_record: object) -> None:
-    """Apply required pragmas to every SQLite DB-API connection."""
-
-    # sqlite3.Connection exposes execute; typing it as object keeps this small
-    # adapter independent of a particular DB-API implementation.
-    connection = dbapi_connection
-    execute = connection.execute  # type: ignore[attr-defined]
-    execute("PRAGMA foreign_keys=ON")
-    execute("PRAGMA journal_mode=WAL")
-    execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
-
-
 def build_engine(database_url: str) -> Engine:
-    """Build an engine. SQLite keeps its pragmas; PostgreSQL uses a checked pool."""
+    """Build a PostgreSQL engine with a checked pool."""
 
     backend = make_url(database_url).get_backend_name()
     if backend == "sqlite":
-        connect_args: dict[str, object] = {"check_same_thread": False}
-        kwargs: dict[str, object] = {
-            "future": True,
-            "connect_args": connect_args,
-        }
-        if database_url in {"sqlite://", "sqlite:///:memory:"}:
-            kwargs["poolclass"] = StaticPool
-        engine = create_engine(database_url, **kwargs)
-        event.listen(engine, "connect", _sqlite_pragmas)
-        return engine
+        raise RuntimeError(
+            "SQLite is no longer supported. Set DATABASE_URL to PostgreSQL; copy an "
+            "old SQLite file with scripts/migrate_sqlite_to_postgres.py."
+        )
     if backend == "postgresql":
         engine = create_engine(
             database_url,
@@ -68,7 +49,8 @@ def build_engine(database_url: str) -> Engine:
             max_overflow=POSTGRES_MAX_OVERFLOW,
             pool_timeout=30,
         )
-        ensure_postgres_compat(engine)
+        # No connection here: building an app (or a script's Database) must
+        # not need the server. The JSON helpers are installed with the schema.
         _time_writes(engine)
         _time_pool_checkout(engine)
         return engine
@@ -145,6 +127,7 @@ def registered_metadata() -> MetaData:
     """
 
     from app.modules.auth import admission as _admission_models
+    from app.modules.cardroom import models as _cardroom_models
     from app.modules.debates import models as _debate_models
     from app.modules.interactions import models as _interaction_models
     from app.modules.knowledge_sets import models as _knowledge_set_models
@@ -156,6 +139,7 @@ def registered_metadata() -> MetaData:
 
     del (
         _admission_models,
+        _cardroom_models,
         _debate_models,
         _interaction_models,
         _knowledge_set_models,
@@ -187,18 +171,13 @@ class Database:
     def initialize_schema(self) -> None:
         """Create the current baseline for an application process.
 
-        Deployment upgrades are performed through Alembic (see migrations/),
-        while create_all keeps isolated unit-test SQLite databases useful and
-        does not create any later-wave tables.
+        Deployment upgrades are performed through Alembic (see migrations/);
+        create_all builds isolated test databases and an empty database's
+        first schema.
         """
 
         registered_metadata()
-        if self.engine.url.get_backend_name() == "postgresql":
-            ensure_postgres_compat(self.engine)
-        if self.engine.url.get_backend_name() == "sqlite":
-            database = self.engine.url.database
-            if database and database != ":memory:":
-                Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        ensure_postgres_compat(self.engine)
         # This path is intentionally limited to isolated test databases.  A
         # deployed process always uses ``upgrade_schema`` so Alembic remains
         # the source of truth for the Wave 1A head.
@@ -210,27 +189,19 @@ class Database:
         migration_dir = Path(__file__).resolve().parents[2]
         config = Config(str(migration_dir / "alembic.ini"))
         config.set_main_option("script_location", str(migration_dir / "migrations"))
-        config.set_main_option("sqlalchemy.url", self.database_url)
+        # ConfigParser interpolates "%": a percent-encoded socket path or
+        # password would otherwise fail here.
+        config.set_main_option("sqlalchemy.url", self.database_url.replace("%", "%%"))
         config.attributes["database_url"] = self.database_url
         return config
 
     def _alembic_version(self) -> str | None:
         with self.engine.connect() as connection:
-            if self.engine.dialect.name == "postgresql":
-                exists = connection.execute(
-                    text("SELECT to_regclass('public.alembic_version')")
-                ).scalar_one_or_none()
-                if exists is None:
-                    return None
-            else:
-                row = connection.execute(
-                    text(
-                        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
-                        "AND name = 'alembic_version'"
-                    )
-                ).first()
-                if row is None:
-                    return None
+            exists = connection.execute(
+                text("SELECT to_regclass('public.alembic_version')")
+            ).scalar_one_or_none()
+            if exists is None:
+                return None
             return connection.execute(
                 text("SELECT version_num FROM alembic_version LIMIT 1")
             ).scalar_one_or_none()
@@ -239,14 +210,10 @@ class Database:
     def startup_lock(self) -> Iterator[None]:
         """Serialize schema upgrade and the first import across replicas.
 
-        SQLite has one process, so the lock is a no-op. The PostgreSQL lock is
-        held on its own connection and released before background leadership is
-        claimed, so the two locks cannot deadlock.
+        The lock is held on its own connection and released before background
+        leadership is claimed, so the two locks cannot deadlock.
         """
 
-        if self.engine.dialect.name != "postgresql":
-            yield
-            return
         connection = self.engine.connect()
         connection.execute(
             text("SELECT pg_advisory_lock(hashtext(:key))"),
@@ -271,8 +238,6 @@ class Database:
         resumed twice.
         """
 
-        if self.engine.dialect.name != "postgresql":
-            return True
         connection = self.engine.connect()
         acquired = connection.execute(
             text("SELECT pg_try_advisory_lock(hashtext(:key))"),
@@ -288,24 +253,21 @@ class Database:
     def upgrade_schema(self) -> None:
         """Upgrade an application database through the checked-in Alembic head.
 
-        PostgreSQL does not replay the SQLite-shaped migration history. An
-        empty database is created from the current models and stamped at head.
-        Later revisions run through Alembic and must stay dialect-neutral.
+        The old SQLite-shaped migration history is not replayed. An empty
+        database is created from the current models and stamped at head.
+        Later revisions run through Alembic.
         """
 
         from alembic import command
 
-        if self.engine.dialect.name == "postgresql":
-            ensure_postgres_compat(self.engine)
-            version = self._alembic_version()
-            config = self._alembic_config()
-            if version is None:
-                self.initialize_schema()
-                command.stamp(config, "head")  # type: ignore[arg-type]
-            elif version != ALEMBIC_HEAD:
-                command.upgrade(config, "head")  # type: ignore[arg-type]
-        else:
-            command.upgrade(self._alembic_config(), "head")  # type: ignore[arg-type]
+        ensure_postgres_compat(self.engine)
+        version = self._alembic_version()
+        config = self._alembic_config()
+        if version is None:
+            self.initialize_schema()
+            command.stamp(config, "head")  # type: ignore[arg-type]
+        elif version != ALEMBIC_HEAD:
+            command.upgrade(config, "head")  # type: ignore[arg-type]
         # Alembic's fileConfig rewrites the root logger from alembic.ini,
         # which drops the application's stdout handler and forces the root
         # level back to WARN. Re-assert the application configuration so
@@ -329,23 +291,17 @@ class Database:
         try:
             with self.engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
-                if self.engine.url.get_backend_name() == "sqlite":
-                    foreign_keys = connection.execute(text("PRAGMA foreign_keys")).scalar_one()
-                    journal_mode = str(
-                        connection.execute(text("PRAGMA journal_mode")).scalar_one()
-                    ).lower()
-                    busy_timeout = int(connection.execute(text("PRAGMA busy_timeout")).scalar_one())
-                    pragma_ready = (
-                        foreign_keys == 1 and journal_mode == "wal" and 0 < busy_timeout <= 60_000
-                    )
-                    if not pragma_ready:
-                        return False
-                if self.using_migrations or self.engine.url.get_backend_name() == "postgresql":
-                    version = connection.execute(
-                        text("SELECT version_num FROM alembic_version LIMIT 1")
+                if not self.using_migrations:
+                    # An isolated test schema from create_all has no Alembic row.
+                    exists = connection.execute(
+                        text("SELECT to_regclass('public.alembic_version')")
                     ).scalar_one_or_none()
-                    return version == ALEMBIC_HEAD
-                return True
+                    if exists is None:
+                        return True
+                version = connection.execute(
+                    text("SELECT version_num FROM alembic_version LIMIT 1")
+                ).scalar_one_or_none()
+                return version == ALEMBIC_HEAD
         except Exception:
             return False
 

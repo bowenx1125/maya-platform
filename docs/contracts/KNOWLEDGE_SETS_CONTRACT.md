@@ -42,7 +42,7 @@ short previews; version numbers and Rubric badges are not shown there.
 ## Scope and source authority
 
 Every Set belongs to one course and either a personal owner (`group_id = null`)
-or a current Group membership. SQLite/PostgreSQL schema has a composite
+or a current Group membership. The PostgreSQL schema has a composite
 Group/course foreign key. Personal Sets stay owner-only. Group Sets can be
 shared with their Group; a Public Set can contain only current Public sources
 from that Group. A private source may be linked to its owner’s private Set and

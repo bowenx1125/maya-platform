@@ -37,7 +37,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.engine import Engine
 
-from tests.conftest import post_message
 from tests.test_mayaform_team_conversations import MAYA_ID
 from tests.test_team_provider_disclosure import _prepared
 from tests.test_wave4_provider_control_orm import _repository_with_confirmed_manifest, _request
@@ -233,7 +232,8 @@ def test_team_acceptance_is_atomic_immutable_and_usage_is_optional(
     response = '{"choices":[{"message":{"role":"assistant","content":"valid reply"}}]}'
 
     def fail(_db: Any, _cursor: Any, sql: str, params: Any, _ctx: Any, _many: bool) -> None:
-        if sql.startswith("UPDATE provider_operations") and "accepted" in params:
+        values = params.values() if isinstance(params, dict) else params
+        if sql.startswith("UPDATE provider_operations") and "accepted" in values:
             raise RuntimeError("injected acceptance failure")
 
     event.listen(Engine, "before_cursor_execute", fail)
@@ -410,70 +410,3 @@ def test_real_team_dispatch_stages_exact_wire_and_resumes_without_a_second_trans
         assert stage.accepted_response_json == accepted_body.decode("utf-8")
         operation = db.get(ProviderOperation, stage.operation_id)
         assert operation is not None and operation.state == "succeeded"
-
-
-@pytest.mark.parametrize(
-    "fault", [None, "CREATE TABLE team_provider_calls", "UPDATE alembic_version"]
-)
-def test_0044_preserves_populated_results_and_rolls_back_all_ddl(
-    client: TestClient, database: Any, fault: str | None
-) -> None:
-    import sqlite3
-
-    from alembic import command
-
-    from tests.test_mayaform_team_conversations import _config, _fingerprint, _headers
-    from tests.test_mayaform_team_turns import _body, _chat
-
-    session, csrf, _actor = _chat(client, database)
-    response = post_message(
-        client,
-        f"/api/v1/conversations/{session['id']}/messages",
-        headers=_headers(csrf),
-        json=_body(session, "all"),
-    )
-    assert response.status_code == 200
-    sent = [item for item in response.json()["turns"] if item["user_text"]][-1]
-    assert sent["state"] == "ready"
-    path = Path(database.engine.url.database)
-    # The TestClient fixture creates current metadata directly. Stamp only
-    # this isolated synthetic database before probing the real down/up DDL.
-    command.stamp(_config(path), "0044_team_provider_stage")
-    command.downgrade(_config(path), "0043_learning_evidence")
-    before = _fingerprint(path)
-    with sqlite3.connect(path) as db:
-        names = [
-            row[0]
-            for row in db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' "
-                "AND name NOT LIKE 'sqlite_%' AND name!='alembic_version' ORDER BY name"
-            )
-        ]
-        old_rows = {
-            name: db.execute(f'SELECT * FROM "{name}" ORDER BY rowid').fetchall() for name in names
-        }
-    if fault:
-
-        def fail(_db: Any, _cursor: Any, sql: str, _params: Any, _ctx: Any, _many: bool) -> None:
-            if fault in sql:
-                raise RuntimeError("0044 injected failure")
-
-        event.listen(Engine, "before_cursor_execute", fail)
-        try:
-            with pytest.raises(RuntimeError, match="0044 injected failure"):
-                command.upgrade(_config(path), "0044_team_provider_stage")
-        finally:
-            event.remove(Engine, "before_cursor_execute", fail)
-        assert _fingerprint(path) == before
-    command.upgrade(_config(path), "0044_team_provider_stage")
-    with sqlite3.connect(path) as db:
-        for name, rows in old_rows.items():
-            assert db.execute(f'SELECT * FROM "{name}" ORDER BY rowid').fetchall() == rows
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
-    command.downgrade(_config(path), "0043_learning_evidence")
-    with sqlite3.connect(path) as db:
-        for name, rows in old_rows.items():
-            assert db.execute(f'SELECT * FROM "{name}" ORDER BY rowid').fetchall() == rows
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-    command.upgrade(_config(path), "0044_team_provider_stage")

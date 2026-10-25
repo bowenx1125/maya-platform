@@ -23,7 +23,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.errors import Error, PlatformError, conflict, not_found, unprocessable
-from app.core.sqlutil import begin_immediate
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.files import contained_path, write_atomic
@@ -295,14 +294,10 @@ async def upload_conversation_attachment(
         ) from None
     filename = _display_name(raw_filename)
     media_type, text = extract_attachment_text(filename, content)
-    if db.get_bind().dialect.name == "sqlite":
-        db.rollback()
-        begin_immediate(db)
-    else:
-        # Serializes the count and size limits per conversation.
-        db.execute(
-            select(Conversation.id).where(Conversation.id == str(conversation_id)).with_for_update()
-        )
+    # Serializes the count and size limits per conversation.
+    db.execute(
+        select(Conversation.id).where(Conversation.id == str(conversation_id)).with_for_update()
+    )
     row = _owned_chat_conversation(db, context, str(conversation_id))
     count, used = db.execute(
         select(

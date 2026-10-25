@@ -10,7 +10,6 @@ from uuid import UUID
 
 from app.core.create_admission import create_admission_slot
 from app.core.errors import Error, PlatformError
-from app.core.sqlutil import begin_immediate
 from app.modules.auth.dependencies import get_db, require_auth, require_authenticated_mutation
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
@@ -62,12 +61,6 @@ def _idempotent_mutation[T: BaseModel](
         return cast(T, cached)
     try:
         assert_claim_owned(db, record)
-        if db.get_bind().dialect.name == "sqlite":
-            # Serialize current ACL/CAS reads and publication writes together.
-            # A WAL reader cannot safely upgrade its snapshot after a rival
-            # Team writer commits.
-            db.rollback()
-            begin_immediate(db)
         result = operation()
         finish_idempotency(db, record, status_code, result.model_dump(mode="json"))
         db.commit()
@@ -142,9 +135,6 @@ def delete_team(
         return Response(status_code=204)
     assert_claim_owned(db, record)
     try:
-        if db.get_bind().dialect.name == "sqlite":
-            db.rollback()
-            begin_immediate(db)
         service.delete_team(db, context, str(team_id))
         finish_idempotency(db, record, 204, {})
         db.commit()

@@ -44,6 +44,8 @@ from app.providers.control import (
 )
 from app.providers.control_repository import ProviderRepository
 
+from tests.postgres_db import named_url
+
 
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -165,7 +167,7 @@ def _fixture(
     _AtomicStage,
 ]:
     if database is None:
-        database = Database(f"sqlite:///{tmp_path / f'{attempt_no}-{scope_id}.sqlite3'}")
+        database = Database(named_url(f"{tmp_path / f'{attempt_no}-{scope_id}.sqlite3'}"))
         database.initialize_schema()
     policy = _policy()
     build_hash = _digest("snapshot-build")
@@ -274,7 +276,7 @@ def test_chat_sending_guard_refunds_embedding_reservation_before_dispatch(
     with database.engine.connect() as connection:
         allocated = connection.exec_driver_sql(
             "SELECT allocated_requests, allocated_total_tokens "
-            "FROM provider_scope_budgets WHERE scope_id = ?",
+            "FROM provider_scope_budgets WHERE scope_id = %s",
             (control.request.scope_id,),
         ).one()
     assert tuple(allocated) == (0, 0)
@@ -363,7 +365,7 @@ def test_not_sent_releases_budget_but_unknown_forbids_next_attempt(
     with database.engine.connect() as connection:
         row = connection.exec_driver_sql(
             "SELECT allocated_requests, allocated_total_tokens "
-            "FROM provider_scope_budgets WHERE scope_id = ?",
+            "FROM provider_scope_budgets WHERE scope_id = %s",
             (control.request.scope_id,),
         ).one()
     if isinstance(failure, EmbeddingTransportNotSent):

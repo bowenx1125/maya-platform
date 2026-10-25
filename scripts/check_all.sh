@@ -15,6 +15,8 @@ step "backend format"
 step "backend types"
 (cd backend && uv run mypy app)
 step "backend tests"
+# PostgreSQL only: each test gets its own database on this server.
+: "${MAYA_TEST_POSTGRES_URL:?Set MAYA_TEST_POSTGRES_URL to a PostgreSQL server for the backend tests}"
 (cd backend && uv run pytest -q)
 
 step "repository format"
@@ -43,12 +45,7 @@ node scripts/test_ws_events.mjs
 node scripts/test_ws_commands.mjs
 node scripts/test_repo_boundary.mjs
 
-step "migrations and scripts"
-uv run --directory backend python ../scripts/test_wave1_migration.py
-uv run --directory backend python ../scripts/test_wave2_migration.py
-uv run --directory backend python ../scripts/test_wave3_migration.py
-uv run --directory backend python ../scripts/test_wave4_migration.py
-uv run --directory backend python ../scripts/test_wave4_evidence_migration.py
+step "scripts"
 uv run --directory backend python ../scripts/test_bootstrap_local_demo.py
 uv run --directory backend python ../scripts/test_reset_demo_runtime.py
 

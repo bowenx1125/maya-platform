@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from pathlib import Path
 from threading import Barrier
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from app.core.errors import PlatformError
 from app.core.models import Agent, AgentVersion
 from app.modules.auth.service import AuthContext, get_auth_context
@@ -45,11 +42,9 @@ from app.modules.teams.service import _capture_raw_source_fences
 from app.modules.workspace.models import Conversation
 from app.seed import COURSE_ID, TEACHER_ID
 from fastapi.testclient import TestClient
-from sqlalchemy import event, func, select
-from sqlalchemy.engine import Engine
+from sqlalchemy import func, select
 
 from tests.conftest import login
-from tests.test_mayaform_team_conversations import _config, _fingerprint, _seed_0040
 
 STUDENT_ID = "60541c78-30f1-55c5-b2aa-207b6a766883"
 OTHER_STUDENT_ID = "bc170f51-45fb-5296-a36d-a2edc8f8d315"
@@ -564,182 +559,3 @@ def test_concurrent_assessment_cas_allows_only_one_revision_winner(learning_env:
             '{"summary":"Candidate A"}',
             '{"summary":"Candidate B"}',
         }
-
-
-def _migrated_learning_database(path: Path) -> None:
-    _seed_0040(path)
-    command.upgrade(_config(path), "0043_learning_evidence")
-
-
-def test_0045_upgrade_preserves_populated_learning_rows_and_foreign_keys(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "learning-populated-0045.sqlite3"
-    _migrated_learning_database(path)
-    record_id, assessment_id, revision_id = str(uuid4()), str(uuid4()), str(uuid4())
-    with sqlite3.connect(path) as db:
-        actor, course, conversation = db.execute(
-            "SELECT user_id,course_id,id FROM agent_conversations LIMIT 1"
-        ).fetchone()
-        db.execute("PRAGMA foreign_keys=ON")
-        db.execute(
-            "INSERT INTO learning_records (id,actor_user_id,course_id,conversation_id,"
-            "team_id,team_version_id,origin,chat_visibility,activity_id,record_kind,"
-            "client_event_id,payload_json,payload_hash,created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                record_id,
-                actor,
-                course,
-                conversation,
-                None,
-                None,
-                "single_agent",
-                "private",
-                None,
-                "answer",
-                str(uuid4()),
-                '{"answer_text":"retained before attempts migration"}',
-                "a" * 64,
-                "2026-09-29 00:00:00",
-            ),
-        )
-        db.execute(
-            "INSERT INTO learning_assessments "
-            "(id,owner_user_id,course_id,created_conversation_id,current_revision_seq,"
-            "created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
-            (
-                assessment_id,
-                actor,
-                course,
-                conversation,
-                1,
-                "2026-09-29 00:00:00",
-                "2026-09-29 00:00:00",
-            ),
-        )
-        db.execute(
-            "INSERT INTO learning_assessment_revisions "
-            "(id,assessment_id,revision_seq,previous_revision_id,actor_user_id,course_id,"
-            "conversation_id,team_id,team_version_id,origin,chat_visibility,activity_id,"
-            "content_json,content_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                revision_id,
-                assessment_id,
-                1,
-                None,
-                actor,
-                course,
-                conversation,
-                None,
-                None,
-                "single_agent",
-                "private",
-                None,
-                '{"summary":"retained before attempts migration"}',
-                "b" * 64,
-                "2026-09-29 00:00:00",
-            ),
-        )
-    command.upgrade(_config(path), "0045_assessment_attempts")
-    with sqlite3.connect(path) as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0045_assessment_attempts",
-        )
-        assert db.execute(
-            "SELECT payload_json,attempt_id FROM learning_records WHERE id=?", (record_id,)
-        ).fetchone() == ('{"answer_text":"retained before attempts migration"}', None)
-        assert db.execute(
-            "SELECT content_json,revision_source,attempt_id FROM learning_assessment_revisions "
-            "WHERE id=?",
-            (revision_id,),
-        ).fetchone() == (
-            '{"summary":"retained before attempts migration"}',
-            "user_authored",
-            None,
-        )
-        assert db.execute(
-            "SELECT attempt_id FROM learning_assessments WHERE id=?", (assessment_id,)
-        ).fetchone() == (None,)
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-
-
-def test_0043_downgrade_refuses_saved_raw_evidence_without_changing_database(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "learning-populated.sqlite3"
-    _migrated_learning_database(path)
-    with sqlite3.connect(path) as db:
-        actor, course, conversation = db.execute(
-            "SELECT user_id,course_id,id FROM agent_conversations LIMIT 1"
-        ).fetchone()
-        db.execute("PRAGMA foreign_keys=ON")
-        db.execute(
-            "INSERT INTO learning_records (id,actor_user_id,course_id,conversation_id,"
-            "team_id,team_version_id,origin,chat_visibility,activity_id,record_kind,"
-            "client_event_id,payload_json,payload_hash,created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                str(uuid4()),
-                actor,
-                course,
-                conversation,
-                None,
-                None,
-                "single_agent",
-                "private",
-                None,
-                "answer",
-                str(uuid4()),
-                '{"answer_text":"preserved"}',
-                "a" * 64,
-                "2026-09-28 00:00:00",
-            ),
-        )
-    before = _fingerprint(path)
-    with pytest.raises(RuntimeError, match="Cannot downgrade saved learning evidence"):
-        command.downgrade(_config(path), "0042_team_turn_results")
-    assert _fingerprint(path) == before
-    with sqlite3.connect(path) as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0043_learning_evidence",
-        )
-        assert db.execute("SELECT count(*) FROM learning_records").fetchone() == (1,)
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-
-
-def test_0043_empty_downgrade_head_failure_rolls_back_schema(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "learning-head-fault.sqlite3"
-    _migrated_learning_database(path)
-    before = _fingerprint(path)
-    fired = False
-
-    def fail(
-        _connection: Any,
-        _cursor: Any,
-        statement: str,
-        _parameters: Any,
-        _context: Any,
-        _many: bool,
-    ) -> None:
-        nonlocal fired
-        if "UPDATE alembic_version" in statement:
-            fired = True
-            raise RuntimeError("0043 injected downgrade head failure")
-
-    event.listen(Engine, "before_cursor_execute", fail)
-    try:
-        with pytest.raises(RuntimeError, match="0043 injected downgrade head failure"):
-            command.downgrade(_config(path), "0042_team_turn_results")
-    finally:
-        event.remove(Engine, "before_cursor_execute", fail)
-    assert fired and _fingerprint(path) == before
-    command.downgrade(_config(path), "0042_team_turn_results")
-    with sqlite3.connect(path) as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0042_team_turn_results",
-        )
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)

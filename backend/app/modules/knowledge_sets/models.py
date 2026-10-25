@@ -115,7 +115,6 @@ class KnowledgeSetSource(Base):
             "knowledge_set_id",
             "document_id",
             unique=True,
-            sqlite_where=(is_active.is_(True)),
             postgresql_where=(is_active.is_(True)),
         ),
         Index(
@@ -189,7 +188,6 @@ class KnowledgeAsset(Base):
             "knowledge_set_id",
             "generation_lineage_key",
             unique=True,
-            sqlite_where=(generation_lineage_key.is_not(None)),
             postgresql_where=(generation_lineage_key.is_not(None)),
         ),
     )

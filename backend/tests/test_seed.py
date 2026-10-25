@@ -21,6 +21,8 @@ from app.seed import (
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from tests.postgres_db import named_url
+
 
 def _snapshot(session: Session) -> dict[str, Any]:
     return {
@@ -57,7 +59,7 @@ def _snapshot(session: Session) -> dict[str, Any]:
 
 
 def test_seed_is_exact_and_idempotent(tmp_path: Path) -> None:
-    db = Database(f"sqlite:///{tmp_path / 'seed.sqlite3'}")
+    db = Database(named_url(f"{tmp_path / 'seed.sqlite3'}"))
     db.upgrade_schema()
     with db.session() as session:
         seed_demo_data(session)
@@ -76,7 +78,7 @@ def test_seed_is_exact_and_idempotent(tmp_path: Path) -> None:
 
 
 def test_seed_conflict_rolls_back_everything(tmp_path: Path) -> None:
-    db = Database(f"sqlite:///{tmp_path / 'conflict.sqlite3'}")
+    db = Database(named_url(f"{tmp_path / 'conflict.sqlite3'}"))
     db.upgrade_schema()
     with db.session() as session:
         session.add(
@@ -98,7 +100,7 @@ def test_seed_conflict_rolls_back_everything(tmp_path: Path) -> None:
 
 
 def test_seed_cli_uses_alembic_and_is_repeatable(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'cli.sqlite3'}"
+    database_url = named_url(f"{tmp_path / 'cli.sqlite3'}")
     command = [sys.executable, "-m", "app.seed", "--database-url", database_url]
     first = subprocess.run(command, check=False, capture_output=True, text=True)
     second = subprocess.run(command, check=False, capture_output=True, text=True)
