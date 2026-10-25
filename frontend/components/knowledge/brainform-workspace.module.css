@@ -671,6 +671,7 @@
 
   .studyformGrid > [aria-labelledby="studyform-agents"] > :not(.sectionHeading) {
     overflow: visible;
+    padding-bottom: 8px;
   }
 
   @media (max-width: 960px) {
