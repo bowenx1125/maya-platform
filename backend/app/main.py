@@ -1047,6 +1047,7 @@ def create_app(
                             "resetStudentPassword",
                             "registerStudent",
                             "remakeDebate",
+                            "updateAgentMetadata",
                         }:
                             operation.get("responses", {}).pop("422", None)
                 contract_path = path[len("/api/v1") :]

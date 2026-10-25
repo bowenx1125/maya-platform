@@ -23,6 +23,7 @@ from app.core.errors import (
     invalid_state,
     not_found,
     stale_revision,
+    unprocessable,
     validation_failure,
     version_immutable,
 )
@@ -227,6 +228,24 @@ def _available_agent_name(
     while _agent_name_key(f"{base}-{candidate}") in taken:
         candidate += 1
     return f"{base}-{candidate}"
+
+
+AGENT_NAME_MAX_LENGTH = 120
+
+
+def _clean_agent_name(name: str) -> str:
+    """Trim an Agent name and enforce the shared create/rename limits."""
+
+    cleaned = name.strip()
+    if not cleaned:
+        raise unprocessable("agent_name_required", "Give the Agent a name.")
+    if len(cleaned) > AGENT_NAME_MAX_LENGTH:
+        raise unprocessable(
+            "agent_name_too_long",
+            "Agent names can be at most 120 characters.",
+            {"max_length": AGENT_NAME_MAX_LENGTH},
+        )
+    return cleaned
 
 
 _SUFFIX_RE = re.compile(r"^(.*\S)-(\d{1,6})$")
@@ -938,6 +957,7 @@ def create_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    payload = payload.model_copy(update={"name": _clean_agent_name(payload.name)})
     # The sign-in check above opened a read transaction; end it so a
     # request queued for admission holds no pooled connection while it waits.
     db.commit()
@@ -1075,6 +1095,7 @@ def create_course_workspace_agent(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
+    payload = payload.model_copy(update={"name": _clean_agent_name(payload.name)})
     # The sign-in check above opened a read transaction; end it so a
     # request queued for admission holds no pooled connection while it waits.
     db.commit()
@@ -1185,6 +1206,10 @@ def get_agent(
         200: {"model": AgentDetail, "description": "Mutable Agent metadata updated."},
         404: {"model": Error, "description": "Agent not found."},
         409: {"model": Error, "description": "Metadata revision conflict."},
+        422: {
+            "model": Error,
+            "description": "agent_name_required or agent_name_too_long (max 120 characters).",
+        },
     },
 )
 def update_agent_metadata(
@@ -1194,9 +1219,17 @@ def update_agent_metadata(
     context: AuthContext = Depends(require_authenticated_mutation),
     db: Session = Depends(get_db),
 ) -> AgentDetail:
-    """CAS-update description without touching any versioned Agent data."""
+    """CAS-update name and/or description without touching versioned Agent data.
+
+    ``name`` (optional) is trimmed and resolved in the Agent's name namespace
+    exactly like create (a taken name becomes ``Name-2``; the Agent's own name
+    is a no-op). The response carries the resolved name. No version is
+    published, so versions and Debate snapshots keep their stored names.
+    ``description`` changes only when it is sent.
+    """
 
     reject_baseline_agent_mutation(str(agent_id))
+    new_name = _clean_agent_name(payload.name) if payload.name is not None else None
     scoped = visible_student_agent(db, context, str(agent_id))
     # Close the authorization read snapshot before taking the final writer
     # lock, so concurrent updates resolve to one deterministic winner.
@@ -1232,8 +1265,26 @@ def update_agent_metadata(
                 "agent_visibility_locked",
                 "Private or Public is chosen when the Agent is created.",
             )
-        description = payload.description
-        current.description = description if description and description.strip() else ""
+        if new_name is not None:
+            _lock_agent_name_namespace(
+                db,
+                group_id=current.group_id if current.ownership_scope == "group" else None,
+                owner_user_id=current.owner_user_id,
+                course_id=current.course_id if current.ownership_scope != "group" else None,
+                visibility=current.visibility,
+            )
+            current.name = _available_agent_name(
+                db,
+                new_name,
+                group_id=current.group_id if current.ownership_scope == "group" else None,
+                owner_user_id=current.owner_user_id,
+                course_id=current.course_id if current.ownership_scope != "group" else None,
+                visibility=current.visibility,
+                current=current,
+            )
+        if "description" in payload.model_fields_set:
+            description = payload.description
+            current.description = description if description and description.strip() else ""
         current.metadata_revision += 1
         current.updated_at = _time()
         _touch_last_editor(db, current.id, context.user.id)
