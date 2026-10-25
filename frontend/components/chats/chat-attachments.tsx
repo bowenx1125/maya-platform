@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ChatAttachment } from "../../lib/api/platform";
 import { localizeError } from "../../lib/i18n";
-import { useLocale, useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import { IconClose } from "../quiet-icons";
 import { useSession } from "../session-provider";
 import styles from "../agent-chat.module.css";
@@ -27,7 +27,6 @@ export function ChatAttachments({
 }) {
   const { api } = useSession();
   const t = useT();
-  const { locale } = useLocale();
   const input = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -102,7 +101,7 @@ export function ChatAttachments({
           ) : null}
           {error ? (
             <p className={styles.attachmentError} role="alert">
-              {localizeError(error, locale, "errorFileOperationFailed")}
+              {localizeError(error, "errorFileOperationFailed")}
             </p>
           ) : null}
         </div>

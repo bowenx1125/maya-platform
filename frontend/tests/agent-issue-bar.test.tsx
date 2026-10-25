@@ -13,7 +13,6 @@ import type { ComponentProps } from "react";
 import { AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
 import type { AvatarConfig } from "../components/avatar";
-import { LocaleProvider } from "../components/locale";
 import { SessionProvider } from "../components/session-provider";
 import { PlatformApiError } from "../lib/api";
 import type {
@@ -193,7 +192,7 @@ function renderWorkbench(
   unsavedCreate?: ComponentProps<typeof AgentWorkbench>["unsavedCreate"],
 ) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <SessionProvider api={api}>
         <AppShell role="student">
           <AgentWorkbench
@@ -203,7 +202,7 @@ function renderWorkbench(
           />
         </AppShell>
       </SessionProvider>
-    </LocaleProvider>,
+    </>,
   );
 }
 

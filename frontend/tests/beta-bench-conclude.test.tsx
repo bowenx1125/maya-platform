@@ -53,11 +53,11 @@ vi.mock("../components/debate-beta/stage", () => ({
       ) : null}
     </section>
   ),
-  resolveBetaStageLabels: () => ({
+  defaultBetaStageLabels: {
     openInteraction: "Interact",
     hideInteraction: "Hide",
     interactionOpening: "Opening…",
-  }),
+  },
 }));
 vi.mock("../components/report", () => ({
   ReportPanel: (props: unknown) => {
@@ -74,8 +74,8 @@ vi.mock("../components/ui", () => ({
   ErrorNotice: () => <div role="alert">Error</div>,
   LoadingCard: () => <div>Loading</div>,
 }));
-vi.mock("../components/locale", () => ({
-  useLocale: () => ({ locale: "en" }),
+vi.mock("../lib/i18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/i18n")>()),
   useT: () => (key: string) =>
     ({
       debateBack: "Back",

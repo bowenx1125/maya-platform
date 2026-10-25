@@ -41,7 +41,7 @@ vi.mock("../components/debate-beta/stage", () => ({
       ) : null}
     </section>
   ),
-  resolveBetaStageLabels: () => ({
+  defaultBetaStageLabels: {
     openInteraction: "Interact",
     hideInteraction: "Hide",
     interactionOpening: "Opening…",
@@ -49,7 +49,7 @@ vi.mock("../components/debate-beta/stage", () => ({
     closeCollectionConfirm:
       "Close collection? Students will no longer be able to submit, and the debate will keep running.",
     closingCollection: "Closing…",
-  }),
+  },
 }));
 vi.mock("../components/report", () => ({
   ReportPanel: () => (
@@ -62,8 +62,8 @@ vi.mock("../components/ui", () => ({
   ErrorNotice: () => <div role="alert">Error</div>,
   LoadingCard: () => <div>Loading</div>,
 }));
-vi.mock("../components/locale", () => ({
-  useLocale: () => ({ locale: "en" }),
+vi.mock("../lib/i18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/i18n")>()),
   useT: () => (key: string) =>
     ({
       debateBack: "Back",

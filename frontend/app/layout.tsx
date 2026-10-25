@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { LocaleProvider } from "../components/locale";
 import { SessionProvider } from "../components/session-provider";
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
-import { localeToHtmlLang } from "../lib/i18n";
 
 import "./globals.css";
 
@@ -17,15 +15,12 @@ export const metadata: Metadata = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
-  const initialLocale = "en";
   return (
-    <html lang={localeToHtmlLang(initialLocale)}>
+    <html lang="en-US">
       <body>
         <SessionProvider>
-          <LocaleProvider initialLocale={initialLocale}>
-            {children}
-            <UiGuideTooltip />
-          </LocaleProvider>
+          {children}
+          <UiGuideTooltip />
         </SessionProvider>
       </body>
     </html>

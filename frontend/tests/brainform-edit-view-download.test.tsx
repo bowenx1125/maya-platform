@@ -9,7 +9,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
-import { LocaleProvider } from "../components/locale";
 import { useSession } from "../components/session-provider";
 import type { AgentDetail, AgentVersion, KnowledgeDocument } from "../lib/api";
 
@@ -120,9 +119,9 @@ function renderWorkbench() {
     logout: vi.fn(),
   } as never);
   render(
-    <LocaleProvider initialLocale="en">
+    <>
       <AgentWorkbench versionId="version-1" publishOnDone />
-    </LocaleProvider>,
+    </>,
   );
   return api;
 }

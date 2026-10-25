@@ -44,7 +44,7 @@ import {
 } from "./markdown-editor";
 import { runKnowledgeMutation } from "./knowledge-mutation";
 import { republishAgentsUsingDocument } from "./republish";
-import { useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { WorkspaceAction } from "../workspace-actions";
 import { ModulePlus } from "../studyform-layout";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useT } from "../locale";
+import { useT } from "../../lib/i18n";
 
 export function buildMarkdownFile(filename: string, content: string): File {
   return new File([content], filename, { type: "text/markdown" });

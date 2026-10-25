@@ -18,7 +18,7 @@ import {
 import { AgentScores } from "./agent-scores";
 import { TeacherInteractionPanel } from "../interaction";
 import { ReportPanel } from "../report";
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import { connectionIssueFromCloseCode } from "../debate/stage/protocol";
 
 import styles from "./teacher-wave3.module.css";
@@ -37,7 +37,7 @@ function websocketUrl(debateId: string): string {
 type Wave3ConnectionIssue = ReturnType<typeof connectionIssueFromCloseCode>;
 
 export function TeacherWave3({ api, debateId, detail }: TeacherWave3Props) {
-  const { t } = useLocale();
+  const t = useT();
   const [interaction, setInteraction] = useState<TeacherInteraction | null>(
     null,
   );

@@ -16,7 +16,7 @@ import {
   useSession,
 } from "../../../../../components/session-provider";
 import type { DebateDetail } from "../../../../../lib/api";
-import { useT } from "../../../../../components/locale";
+import { useT } from "../../../../../lib/i18n";
 
 export default function TeacherDebateInteractionPage() {
   const t = useT();

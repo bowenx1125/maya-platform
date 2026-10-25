@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
 import {
   SpeechStream,
   type StreamTurn,
@@ -25,7 +24,7 @@ function renderStream(
   activeReveal?: { turnId: string; progress: number },
 ) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <SpeechStream
         activeReveal={activeReveal}
         describe={() => ({ slot: "A", name: "River Keeper" })}
@@ -34,7 +33,7 @@ function renderStream(
         phaseOf={() => null}
         turns={turns}
       />
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -83,7 +82,7 @@ describe("segments_v2 public debate presentation", () => {
     expect(activeSpeech?.textContent).not.toContain("Second paragraph.");
 
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <SpeechStream
           activeReveal={{ turnId: segmentTurn.id, progress: 1 }}
           describe={() => ({ slot: "A", name: "River Keeper" })}
@@ -92,7 +91,7 @@ describe("segments_v2 public debate presentation", () => {
           phaseOf={() => null}
           turns={[history, segmentTurn]}
         />
-      </LocaleProvider>,
+      </>,
     );
     expect(activeSpeech?.textContent).toContain("Second paragraph.");
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import type { SegmentEvidence } from "../../lib/evidence-grading";
 import { SegmentGrade } from "./segment-grade";
 import styles from "./segment-rag-inspector.module.css";
@@ -20,10 +20,6 @@ export type SegmentRagSource = {
   version_label: string;
 };
 
-function label(locale: string, en: string, zh: string): string {
-  return locale === "zh" ? zh : en;
-}
-
 export function SegmentRagInspector({
   segments,
   sources,
@@ -31,7 +27,6 @@ export function SegmentRagInspector({
   segments: readonly SegmentRagSegment[];
   sources: readonly SegmentRagSource[];
 }) {
-  const { locale } = useLocale();
   const sourceById = new Map(
     sources.map((source) => [source.source_id, source]),
   );
@@ -45,7 +40,7 @@ export function SegmentRagInspector({
   return (
     <details className={styles.inspector}>
       <summary>
-        {label(locale, "Check RAG", "查看 RAG")}
+        Check RAG
         <span className={styles.count}>{sourceById.size}</span>
       </summary>
       <div className={styles.segmentList}>
@@ -55,21 +50,15 @@ export function SegmentRagInspector({
             <p className={styles.segmentText}>{segment.text}</p>
             <div className={styles.sourceList}>
               {segment.source_ids.length === 0 ? (
-                <span className={styles.noSource}>
-                  {label(locale, "General reasoning", "一般推理")}
-                </span>
+                <span className={styles.noSource}>General reasoning</span>
               ) : (
                 segment.source_ids.map((sourceId) => {
                   const source = sourceById.get(sourceId);
                   return source ? (
-                    <SourceReceipt
-                      key={source.source_id}
-                      locale={locale}
-                      source={source}
-                    />
+                    <SourceReceipt key={source.source_id} source={source} />
                   ) : (
                     <span className={styles.noSource} key={sourceId}>
-                      {label(locale, "Source unavailable", "来源不可用")}
+                      Source unavailable
                     </span>
                   );
                 })
@@ -79,11 +68,7 @@ export function SegmentRagInspector({
         ))}
         {segments.length === 0
           ? unlinkedSources.map((source) => (
-              <SourceReceipt
-                key={source.source_id}
-                locale={locale}
-                source={source}
-              />
+              <SourceReceipt key={source.source_id} source={source} />
             ))
           : null}
       </div>
@@ -91,13 +76,7 @@ export function SegmentRagInspector({
   );
 }
 
-function SourceReceipt({
-  locale,
-  source,
-}: {
-  locale: string;
-  source: SegmentRagSource;
-}) {
+function SourceReceipt({ source }: { source: SegmentRagSource }) {
   return (
     <dl className={styles.source}>
       <div className={styles.sourceHeader}>
@@ -105,11 +84,11 @@ function SourceReceipt({
         <dd>{source.version_label}</dd>
       </div>
       <div>
-        <dt>{label(locale, "Query", "检索问题")}</dt>
-        <dd>{source.query_text ?? label(locale, "Not recorded", "未记录")}</dd>
+        <dt>Query</dt>
+        <dd>{source.query_text ?? "Not recorded"}</dd>
       </div>
       <div>
-        <dt>{label(locale, "Excerpt", "摘录")}</dt>
+        <dt>Excerpt</dt>
         <dd className={styles.excerpt}>{source.excerpt}</dd>
       </div>
     </dl>

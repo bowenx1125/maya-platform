@@ -9,7 +9,7 @@ import {
   type PlatformApi,
 } from "../lib/api";
 import type { AvatarState } from "./avatar";
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { ReportMarkdown } from "./report/report-markdown";
 import { useSession } from "./session-provider";
 import { ScholarScene } from "./stage3d/scholar-scene";

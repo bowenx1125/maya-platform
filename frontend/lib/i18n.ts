@@ -1,11 +1,10 @@
 import errorCopy from "./error-copy.json";
 
-export type Locale = "en" | "zh";
-
 /**
- * All platform-owned copy lives in one typed dictionary.  The language
- * provider consumes this table at render time; business data (names, files,
- * prompts and model output) never goes through it.
+ * All platform-owned copy lives in one typed dictionary. The UI is English
+ * only (owner decision 2026-10-25); business data (names, files, prompts and
+ * model output) never goes through it, and a Debate's output language is a
+ * separate setting.
  */
 const enMessages = {
   appName: "Mayaform",
@@ -502,12 +501,6 @@ const enMessages = {
   knowledgeImportLink: "Courseware",
   editor: "editor",
   navigation: "navigation",
-  languageLabel: "Language",
-  languageControl: "Interface language",
-  languageEnglish: "English",
-  languageChinese: "中文",
-  switchToEnglish: "Switch to English",
-  switchToChinese: "Switch to Chinese",
   runtimeEnvironment: "Maya · Environment",
   runtimeHealth: "Runtime health",
   runtimeHealthLede: "A small, honest view of the local platform boundary.",
@@ -1031,976 +1024,6 @@ const enMessages = {
     "This Team turn is still running. Check its status to resume updates.",
 } as const;
 
-const zhMessages: Record<keyof typeof enMessages, string> = {
-  appName: "Mayaform",
-  studyform: "Studyform",
-  workspace: "教学工作区",
-  loading: "正在加载…",
-  retry: "重试",
-  back: "返回",
-  save: "保存",
-  saved: "已保存",
-  publish: "发布",
-  published: "已发布",
-  draft: "草稿",
-  history: "历史版本",
-  archive: "归档",
-  knowledge: "知识库",
-  brainform: "Brainform",
-  rag: "RAG",
-  knowledgeSets: "知识集",
-  openKnowledge: "打开知识库",
-  knowledgeAssets: "项素材",
-  noKnowledgeSets: "还没有 Knowledge。",
-  knowledgeBindingsUpdated: "Knowledge 选择已更新。",
-  generatedSetAgentMismatch:
-    "此知识集没有与该 Agent 对应的生成凭据。请返回知识集并使用它的更新 AI 知识入口。",
-  aiKnowledgeFlowIntro:
-    "为这个 Agent 选择来源文件。点击完成后会发布 Agent，并根据所选来源开始生成知识。",
-  aiKnowledgeSourcesRequired: "请至少选择一个来源后继续。",
-  aiKnowledgeSourcesRequiredHelp:
-    "选择来源前不会发布 Agent，也不会发送生成请求。",
-  generationReceiptMissing:
-    "Agent 已发布，但没有返回知识生成凭据。请打开它的知识集检查当前状态。",
-  setName: "知识集名称",
-  selectCourse: "课程",
-  chooseGroup: "选择已加入的小组",
-  sources: "来源",
-  questions: "问题",
-  notes: "笔记",
-  graph: "图谱",
-  prompt: "问题正文",
-  body: "内容",
-  points: "分值",
-  setSaved: "知识集设置已保存。",
-  agentKnowledgeSets: "此 Agent 的知识集",
-  agents: "智能体",
-  group: "小组",
-  selectGroup: "选择",
-  teacher: "教师视图",
-  student: "学生视图",
-  logout: "退出",
-  signIn: "登录",
-  username: "用户名",
-  password: "密码",
-  createAgent: "新建",
-  name: "名称",
-  description: "简介",
-  agentVisibility: "可见性",
-  privateOption: "Private",
-  publicOption: "Public",
-  makeAgentPublic: "公开 Agent",
-  makeAgentPrivate: "设为私有 Agent",
-  privateVisibilityLede:
-    "私有 Agent 和来源只属于你，进入本组查看的课程教师也能阅读。公开的小组 Agent 发布后可供本组学生和课程教师使用；只有公开来源会共享。",
-  personalVisibilityLede:
-    "个人 Agent 设为公开后可分享，但课程学生不会自动获得访问权限。学生需要单独的调用授权才能使用；提示词和来源仍只有所有者可见。",
-  deleteAgent: "删除",
-  deleteAgentConfirm:
-    "从老师和学生端删除这个智能体？已有聊天保留只读，小组共享知识文件不变。",
-  deleteTeamConfirm: "删除这个 Maya Team？已有聊天保留只读。",
-  deletePrivateTeamConfirm: "删除这个 Team？已有聊天保留只读。",
-  deleteChat: "删除对话",
-  pinChat: "置顶对话",
-  unpinChat: "取消置顶",
-  renameChat: "对话名称",
-  deleteChatConfirm: "删除整段对话？此操作无法撤销。",
-  delete: "删除",
-  readOnly: "已发布快照（只读）",
-  retryConflict: "内容已被别人修改，请刷新。未保存的文字请先复制。",
-  refreshPage: "刷新",
-  signInContinue: "登录后继续。",
-  sessionRequired: "需要登录后才能查看课程或小组内容。",
-  viewUnavailable: "此账号无法访问该页面。",
-  roleBoundary: "Mayaform 将学生草稿与教师快照分开保护。",
-  returnWorkspace: "返回",
-  demoIdentity: "演示身份",
-  or: "或",
-  signingIn: "正在登录…",
-  loginFailed: "登录失败，请检查用户名和密码。",
-  demoSwitchUnavailable: "演示身份切换不可用。",
-  home: "首页",
-  groupWorkspace: "工作区",
-  course: "课程",
-  publishedAgents: "已发布智能体",
-  debates: "课堂",
-  debateList: "辩论",
-  newDebate: "新建",
-  newDebateTitle: "辩论",
-  debateTopic: "议题",
-  debateTopicPlaceholder:
-    "例如：Should the United States ban TikTok's recommendation algorithm?",
-  debateRoundCount: "轮数",
-  debatePhaseOpening: "Opening（开场）",
-  debatePhaseExchange: "Exchange（交流）",
-  debatePhaseFinalIntegration: "Final integration（最终整合）",
-  debateStance: "立场模式",
-  debateAssigned: "教师指定立场",
-  debateOpen: "开放阐述",
-  debateSupport: "支持",
-  debateOppose: "反对",
-  debateNeutral: "中立",
-  debateNote: "教师说明（可选）",
-  debateSelectCount: "已选择 {count} 个",
-  debateBack: "返回",
-  debateNoDebates: "还没有辩论。",
-  debateNoCandidates: "还没有 Agent。",
-  debateNoCourse:
-    "还没有选中你任教的课程，无法查看或创建 Debate。请先进入一门课程。",
-  debateCreateUnconfirmed:
-    "服务器没有确认新 Debate 已创建。请刷新 Debate 列表，看看是否已经创建。",
-  debateTopicRequired: "请输入议题。",
-  debateSelectAtLeast: "请至少选择两个智能体。",
-  debateSelectAtMost: "Demo 单场最多支持五个智能体。",
-  debateCurrent: "当前版本",
-  debateRounds: "{count} 轮",
-  debateStageTitle: "课堂辩论",
-  debateStageDescription: "由教师控制、以后端时间线为准的课堂舞台。",
-  debateStart: "开始",
-  debateConnectionSignIn: "重新登录",
-  debateConnectionReload: "重新载入",
-  debateRegenerate: "重新生成",
-  debatePreviewTitle: "辩论",
-  debatePrewarmReady: "已就绪",
-  debateStalled: "已停滞",
-  debateStalledReason: "预热停在第 {round} 轮：{code}",
-  debateReplayTurn: "重播这段发言",
-  debateReplayAll: "重播整场",
-  debatePartial: "辩论提前结束,已公开的发言仍在下方。",
-  debateTranscript: "公开发言",
-  liveInteractionUnavailable: "仅当老师已开启互动且课堂仍在收集回应时可参与。",
-  debateSources: "来源",
-  debateNoSources: "没有命中的知识来源。",
-  debateRound: "轮次",
-  debatePrepared: "正在准备下一位课堂发言…",
-  debateComplete: "完成",
-  debateStopped: "已中止",
-  debateFailed: "失败",
-  debateWaitingForAudio: "正在等待服务器准备语音…",
-  debateWaitingNext: "等待中",
-  debateConnectionReady: "已连接",
-  debateConnectionReconnecting: "正在重连…",
-  debateConnectionDisconnected: "网络连接已中断",
-  debateConnectionSequenceGap: "课堂状态需要重新同步",
-  debateConnectionSessionExpired: "登录已失效，请重新登录",
-  debateConnectionOriginMismatch: "课堂访问地址与服务器配置不一致",
-  debateConnectionSuperseded: "另一个教师页面已取得控制权",
-  debateConnectionError: "课堂连接需要处理。",
-  wave3ConnectionNetwork: "连接已中断",
-  wave3Reconnect: "重新连接",
-  wave3Reconnecting: "正在重新连接…",
-  wave3DownstreamUnavailable:
-    "未完成的辩论会保留已生成发言供审计，但课堂互动、报告、历史和重播不可用。",
-  debateControllerWaiting: "正在等待教师控制权…",
-  debateControlBusy: "正在更新课堂播放…",
-  debateRetryReason: "播放未能开始，可以重试当前发言。",
-  debateProviderSetupIncomplete:
-    "已选择真实供应商，但其已审阅策略尚未导入。重试无法解决，需要先导入策略。",
-  debatePreviewNotReady:
-    "预览尚未就绪。请打开 Preview 检查已保存的发言后重试。",
-  debatePreviewAudioFailed:
-    "有 {count} 段发言的语音生成失败（{code}），这些发言只会显示文字。可以重试。",
-  debateCleanupDeferred: "课堂仍有操作正在进行，请等待完成后重试。",
-  debateRebirthRefreshFailed:
-    "课堂已重置，但列表更新失败。重试只会重新加载列表。",
-  debateProviderGateTitle: "需要确认本轮外部检索请求。",
-  debateProviderGateLoading: "正在读取精确数据外发说明…",
-  debateProviderGateEmpty: "还没有待处理的查询。",
-  debateProviderGateReview: "查看精确数据外发说明",
-  debateProviderGateReviewAll: "查看全部发言审批",
-  debateProviderGateConfirmed: "数据外发已确认",
-  debateProviderGateRetry: "重试本轮",
-  debateApprovalTitle: "辩论发言审批",
-  debateApprovalLoading: "正在加载辩论发言审批…",
-  debateApprovalError: "无法加载辩论发言审批。",
-  debateApprovalEmpty: "还没有披露。",
-  debateApprovalTurn: "发言",
-  debateApprovalNeedsConfirmation: "需要确认",
-  debateApprovalConfirmed: "已确认",
-  debateApprovalReview: "查看精确说明",
-  debateNoPublishedSpeech: "服务器尚未公开本轮发言。",
-  debateSelectedTurn: "所选发言",
-  debateReplaceAudioConfirm:
-    "开始本场辩论会替换上一场保留的语音；上一场文字仍会保留。",
-  debateAudioLabel: "课堂语音",
-  debateMissingId: "缺少辩论标识。",
-  requestFailed: "请求失败",
-  noticeDismiss: "关闭",
-  requestFallback: "平台请求无法完成。",
-  httpError: "平台 API 返回 HTTP {status}。",
-  revisionConflict: "版本冲突",
-  statusActive: "活跃",
-  statusInactive: "已移除",
-  statusArchived: "已归档",
-  statusDraft: "草稿",
-  statusPublished: "已发布",
-  statusSuperseded: "历史版本",
-  statusReady: "就绪",
-  statusFailed: "失败",
-  statusPending: "等待中",
-  statusIndexing: "索引中",
-  statusMatched: "已命中",
-  statusNoMatch: "未命中",
-  statusNotStarted: "尚未开始",
-  statusGenerating: "生成中",
-  statusOpen: "开放",
-  statusClosed: "已关闭",
-  statusFinalized: "已定稿",
-  statusRunning: "进行中",
-  statusCompleted: "已完成",
-  statusStopped: "已中止",
-  statusDebateFinished: "已结束",
-  statusPreparing: "准备中",
-  statusPlaying: "播放中",
-  statusPaused: "已暂停",
-  statusOutcomeUnknown: "结果未知",
-  statusDeleted: "已删除",
-  statusDeleting: "删除中",
-  statusValidating: "校验中",
-  statusEnrolling: "注册中",
-  statusPreviewReady: "试听就绪",
-  statusPartial: "部分完成",
-  statusInterrupted: "已中断",
-  studentHome: "首页",
-  noGroup: "还没有小组。",
-  noAgents: "还没有 Agent。",
-  members: "成员",
-  newAgent: "新建",
-  agentIdentity: "智能体",
-  agentName: "名称",
-  agentNameRequired: "请输入 Agent 名称。",
-  agentMdRequired: "发布前请填写 AGENT.md 内容。",
-  optional: "可选",
-  shortDescription: "备注",
-  cancel: "取消",
-  creating: "正在创建…",
-  groupNotFound: "该小组已不存在，或你已不在其中。",
-  courseNotFound: "该课程已不存在，或你已不在其中。",
-  agentNotFound: "该 Agent 已被删除，或不再与你共享。",
-  draftNotFound: "该草稿已被删除或已发布。",
-  publishedVersionNotFound: "该发布版本已被删除，或不再与你共享。",
-  publishedAgentNotFound: "该已发布 Agent 已被删除，或不再与你共享。",
-  debateNotFound: "该辩论已被删除，或你已无法访问。",
-  current: "当前",
-  revision: "版本号",
-  order: "顺序",
-  snapshot: "快照",
-  content: "内容",
-  working: "处理中…",
-  done: "完成",
-  publishedNotice: "已发布",
-  createNextVersion: "新建",
-  noVersions: "还没有版本。",
-  immutable: "不可变",
-  discardDraftConfirm: "放弃未保存的修改？",
-  conflictDetail:
-    "别人已先保存或发布了这个 Agent。请刷新以载入最新版本；你的修改已保存在本浏览器，刷新后会自动恢复。",
-  localDraftRestoredNotice:
-    "已在最新版本上恢复你未发布的修改。请检查后点击完成以发布。",
-  agentMd: "AGENT.md",
-  insertOutline: "模板",
-  uploadMd: "上传",
-  uploadRag: "上传 RAG",
-  characters: "字符",
-  saving: "正在保存…",
-  uploadMarkdown: "上传",
-  knowledgeImportFormats:
-    "支持导入 Markdown、PDF 和 Word（.docx）。PDF 和 Word 单个文件不超过 10 MiB；PDF 最多 200 页，其中最多 50 页扫描页可进行本地 OCR。Maya 在本地提取文本并保存为 Markdown。OCR 提取的文字会标记为“由 OCR 生成的文字”；DOCX 内嵌图片不会进行 OCR。Markdown 正文没有人为设置的总长度上限。",
-  knowledgeImportPending:
-    "正在上传、转换为 Markdown（扫描 PDF 页会进行本地 OCR）并建立索引…",
-  knowledgeUploadPending: "正在上传并索引 Markdown 文件…",
-  knowledgeImportInvalid:
-    "请上传可读取的 PDF、Word（.docx）或 UTF-8 Markdown。扫描 PDF 页使用本地 OCR，提取的文字会标记为“由 OCR 生成的文字”；DOCX 内嵌图片不会进行 OCR。",
-  knowledgeMarkdownInvalid:
-    "请使用可读取的 UTF-8 Markdown，并移除无效控制字符。",
-  knowledgeImportTooLarge:
-    "此 PDF/DOCX 超出导入资源限制：单个文件 10 MiB、PDF 200 页、扫描页 OCR 50 页或 PDF/DOCX 解析安全限制。若内容可读，请提取文本并改用 UTF-8 Markdown 导入。",
-  knowledgeImportNoText:
-    "本地 OCR 后仍未找到可读取文本。请检查文件，或提供含文本层的版本。",
-  knowledgeImportUnsupported:
-    "暂不支持此文件类型。请上传 Markdown、PDF 或 Word（.docx）。",
-  knowledgeImportProcessingFailed:
-    "Maya 未能在安全限制内处理此文件。请尝试较小或内容较简单的文档。",
-  knowledgeImportOcrUnavailable:
-    "本地 OCR 暂时不可用。可以重试，或先将 PDF 转换为 Markdown 再上传。",
-  knowledgeImportOcrFailed:
-    "本地 OCR 无法读取此扫描 PDF。请重试，或改上传含文本层的 PDF / Markdown。",
-  knowledgeImportOcrTimeout:
-    "本地 OCR 处理此扫描 PDF 超时。请重试，或改上传较小的扫描件 / Markdown。",
-  noGroupMarkdown: "还没有 RAG。",
-  testChat: "测试聊天",
-  noSources: "没有返回来源文件。一般推理不会被呈现为证据。",
-  publishChecklist: "发布检查清单",
-  readyPublish: "就绪",
-  blockAgentMdMissing: "发布前请填写 AGENT.md。",
-  blockRagMissing: "请至少启用一个已完成索引的 Markdown 文件。",
-  blockRagPending: "请等待已启用文件完成索引。",
-  blockRagFailed: "请重试或移除索引失败的文件。",
-  blockAvatarMissing: "发布前请选择可用的 3D 模板。",
-  ragPreview: "RAG 预览",
-  files: "个文件",
-  preparingPreview: "正在准备预览…",
-  previewAfterIndex: "还没有预览。",
-  noPrompt: "还没有提示词。",
-  enabledEvidence: "已启用证据",
-  noEvidence: "还没有证据。",
-  releaseState: "发布状态",
-  knowledgeSnapshot: "知识快照",
-  loadingSnapshot: "正在加载快照…",
-  downloadRag: "下载",
-  personalAgents: "我的个人 Agent",
-  noPersonalAgents: "还没有 Agent。",
-  noPublishedAgents: "还没有 Agent。",
-  customVoiceReady: "自定义音色就绪",
-  archivedAgent: "已归档智能体",
-  inspect: "查看 →",
-  download: "下载",
-  edit: "编辑",
-  reindex: "重新索引",
-  hide: "隐藏",
-  knowledgeEditLede: "编辑会创建新的不可变来源，并更新引用旧来源的当前草稿。",
-  knowledgeFilename: "文件名",
-  knowledgeContent: "内容",
-  knowledgeHidden: "此来源已从当前 Brainform 资源列表隐藏。",
-  brainformUnavailable: "此课程当前无法使用 Brainform。",
-  brainformRagIntro: "用于检索的 Markdown 来源。",
-  brainformKnowledgeHeading: "Knowledge",
-  brainformKnowledgeIntro: "每个 Agent 当前的 canonical Markdown 文档。",
-  brainformGraphAccessibleLabel: "Knowledge 关系图",
-  brainformMemoryIntro: "进入个人聊天上下文并询问它记得什么。",
-  brainformRagEmpty: "还没有 RAG。",
-  brainformRagHideConfirm: "删除 {filename}？已经创建的 Debate 不受影响。",
-  deleteAffectsAgents:
-    "会影响这些 Agent：{names}。它们会自动发布一个不含它的新版本，照常可用。",
-  brainformRagFileStaged: "已选择 {filename}。保存时才会导入。",
-  brainformAgentsUsingKnowledge: "正在使用此 Knowledge 的 Agents",
-  brainformKnowledgeFirstVersionEmpty:
-    "当前还没有 Knowledge 版本。这是空白 Markdown 草稿。",
-  brainformNoKnowledgeUsers: "还没有 Agent。",
-  brainformNotMarkdownEditor:
-    "这是已导入的文件。请替换为 Markdown 文本或选择其他文件。",
-  brainformKnowledgeEmpty: "还没有 Knowledge。",
-  brainformMemoryEmpty: "还没有 Memory。",
-  brainformMemoryOpen: "在 Chatform 中打开 Memory",
-  brainformMemoryOpenNamed: "在 Chatform 中打开 {name} 的 Memory",
-  brainformMemoryRetry: "继续这次 Memory 查询",
-  brainformMemoryAgent: "Agent",
-  brainformMemoryTeam: "Team",
-  brainformMemoryMayaTeam: "Maya Team",
-  brainformMemoryInvalid: "此 Memory 链接不完整，或与当前课程不匹配。",
-  brainformMemoryLoading: "正在打开你自己的聊天并读取当前 Memory 上下文…",
-  assessmentControlFailed: "无法更新测评状态。请先刷新聊天状态，再尝试操作。",
-  knowledgeCheckClose: "关闭",
-  brainformViewRag: "查看 Markdown 来源",
-  brainformViewRagNamed: "查看 {name}",
-  brainformEditRagNamed: "编辑 {name}",
-  brainformRagName: "RAG 文件名",
-  brainformEditKnowledgeNamed: "编辑 Knowledge {name}",
-  brainformViewKnowledgeNamed: "查看 Knowledge {name}",
-  brainformDownloadRagNamed: "下载 {name}",
-  brainformHideRagNamed: "隐藏 {name}",
-  brainformDeleteKnowledgeNamed: "删除 {name}",
-  brainformDeleteKnowledgeConfirm:
-    "删除 Knowledge「{name}」？使用它的 Agent 和 Team 将不再读取它。",
-  brainformKnowledgeDeleted: "Knowledge 已删除。",
-  brainformNewKnowledge: "新建 Knowledge",
-  brainformNewRag: "新建 RAG",
-  brainformUploadKnowledgeFile: "上传 Markdown 文件作为 Knowledge",
-  brainformReindexRagNamed: "重新索引 {name}",
-  brainformViewKnowledge: "查看 Knowledge",
-  brainformOpenKnowledgeNamed: "进入 {name}",
-  brainformGeneratingNamed: "正在生成 {name}",
-  brainformRenameSetNamed: "重命名 {name}",
-  brainformSetName: "Knowledge 标题",
-  brainformSetNameUnavailable: "无法更新 Knowledge 标题。",
-  brainformRegenerate: "重新生成并替换 Knowledge",
-  brainformRegenerateNamed: "重新生成 {name}",
-  brainformGenerating: "Generating AI Knowledge",
-  brainformGenerationFailed: "生成未完成。",
-  brainformGenerationFailedReason: "生成未完成：{reason}。",
-  brainformNoKnowledgeDocument: "还没有 Knowledge。",
-  brainformProjectionUnavailable: "此账号无法查看该 Knowledge 投影。",
-  brainformRagIndexing: "Markdown 索引仍在处理中。",
-  brainformRagIndexFailed: "Markdown 索引失败。来源文件仍已保留。",
-  brainformRagIndexFailedReason:
-    "Markdown 索引失败（{reason}）。来源文件仍已保留。",
-  brainformDownloadKnowledgeNamed: "下载 {name}",
-  brainformMarkdownRequired:
-    "请选择 .md、.pdf 或 .docx 文件，或输入非空 Markdown。",
-  brainformChooseGroup: "选择小组",
-  brainformRagSaved: "Markdown 来源已保存。",
-  brainformRagUpdatingAgents: "已保存，正在更新使用它的 Agent…",
-  brainformRagAgentsUpdated: "已更新 {names} 及其 Teams。",
-  brainformRagAgentsNotUpdated: "{names} 未能更新，请打开后点 Done。",
-  brainformRetrySameSave: "保存结果尚不确定。重试会检查同一次保存。",
-  brainformRagConflictDraftKept:
-    "来源已在其他位置变化。草稿已保留；重新载入后再保存。",
-  brainformKnowledgeSaved: "Knowledge 已发布为新版本。",
-  brainformKnowledgeConflictDraftKept:
-    "Knowledge 已在其他位置变化。草稿已保留；重新载入后再保存。",
-  brainformRetrySameGeneration: "生成结果尚不确定。重试会检查同一次操作。",
-  brainformRagRenameNote: "只改文件名会更新来源名称，不会重新索引内容。",
-  brainformRagRenamed: "Markdown 文件名已更新。",
-  knowledgeFilenamePlaceholder: "evidence.md",
-  active: "活跃",
-  hidden: "已隐藏",
-  homeWelcomeTitle: "欢迎，{name}",
-  tourWelcomeTitle: "欢迎来到 Mayaform",
-  tourWelcomeBody: "花一分钟认识一下学院里的每个地方。随时可以跳过。",
-  tourStudyformTitle: "Studyform",
-  tourStudyformBody:
-    "在这里创建你的 Agent：它是谁、怎么说话。Team 和语音也在这里。",
-  tourBrainformTitle: "Brainform",
-  tourBrainformBody: "放进 Agent 要读的资料，它回答时会参考这些内容。",
-  tourChatformTitle: "Chatform",
-  tourChatformBody: "和 Agent 或 Team 聊天，可以自己聊，也可以和小组一起。",
-  tourLiveTitle: "Live",
-  tourLiveBody: "老师开始课堂辩论时，这里会亮起来，点进去就能加入。",
-  tourGuideTitle: "接下来做什么",
-  tourGuideBody: "按顺序完成这几步，颜色深的那一步就是下一步。",
-  tourGroupTitle: "你的小组",
-  tourGroupBody: "你的组员和组长都在这里。",
-  tourProfileTitle: "个人资料",
-  tourProfileBody: "在这里选头像、改名字、改密码。",
-  tourNext: "下一步",
-  tourBack: "上一步",
-  tourSkip: "跳过",
-  tourFinish: "开始吧",
-  tourProgress: "{step} / {total}",
-  guide: "引导",
-  guideDone: "完成",
-  guideNext: "下一步",
-  guideOptional: "可选",
-  studentGuideGroup: "认识你的小组",
-  studentGuideAgent: "创建智能体",
-  studentGuideKnowledge: "添加参考资料",
-  studentGuideVoice: "创建音色",
-  teacherGuideCourse: "打开课程",
-  teacherGuideGroups: "创建小组",
-  teacherGuideAgents: "发布智能体",
-  teacherGuideDebate: "开启辩论",
-  profile: "个人资料",
-  userAvatar: "头像",
-  changePassword: "密码",
-  currentPassword: "当前密码",
-  newPassword: "新密码",
-  draftSavedNotice: "草稿已保存，版本号已安全递增。",
-  agentMdUploadedNotice: "AGENT.md 已上传并保存为下一个草稿版本。",
-  evidenceUpdatedNotice: "已更新启用的证据集。",
-  markdownUploadedNotice: "Markdown 已上传并启用到当前草稿。",
-  knowledgeEvidenceImported: "文件已转换为 Markdown 并启用到当前草稿。",
-  knowledgePreviewRefreshFailed: "文件已成功上传，但知识预览暂时未能刷新。",
-  knowledgePreviewRefreshing: "正在刷新 Markdown 预览…",
-  knowledgeImportFile: "导入文件",
-  knowledgeImportAction: "导入",
-  knowledgeImportLink: "课件",
-  editor: "编辑器",
-  navigation: "导航",
-  languageLabel: "语言",
-  languageControl: "界面语言",
-  languageEnglish: "English",
-  languageChinese: "中文",
-  switchToEnglish: "切换到英文",
-  switchToChinese: "切换到中文",
-  runtimeEnvironment: "MAYA · 环境",
-  runtimeHealth: "运行状态",
-  runtimeHealthLede: "以简洁、诚实的方式查看本地平台边界。",
-  checkingApiBoundary: "正在检查同源 API 边界…",
-  backToHome: "返回首页",
-  serviceStatus: "服务状态",
-  gateway: "网关",
-  frontend: "前端",
-  backendApi: "后端 API",
-  gatewayDetail: "单一入口已配置在 8080 端口。",
-  frontendDetail: "Next.js 外壳正在提供此页面。",
-  backendReachable: "平台 API 可访问。",
-  backendUnreachable: "无法访问平台 API。",
-  nonSecretBuildContext: "非敏感构建信息",
-  environment: "环境",
-  checkAgain: "再次检查",
-  runtimeMode: "运行模式",
-  buildMarker: "构建标记",
-  browserApiBoundary: "浏览器 API 边界",
-  sameOriginApi: "/api/v1 · 同源",
-  readinessRule: "就绪规则",
-  readinessRuleDetail: "平台 API 返回 HTTP 200、2xx、401 或 403",
-  ready: "就绪",
-  checking: "检查中",
-  unavailable: "不可用",
-  errorUnauthenticated: "请先登录后继续。",
-  errorForbidden: "此账号不允许执行该操作。",
-  errorNotFound: "该内容已被删除，或你已无法访问。",
-  errorNetwork: "无法连接 Maya。请检查网络后重试。",
-  errorAgentVisibilityLocked: "Agent 的私有或公开在创建时选定，之后不能更改。",
-  errorRagFollowsAgent: "添加到 Agent 的 RAG 与该 Agent 同为私有或公开。",
-  errorTeamMemberSourceUnavailable:
-    "该 Agent 的 RAG 已从资料库移除。请打开 Agent，选择有效的 RAG 并重新发布后再加入 Team。",
-  errorCsrfFailed: "此表单已过期，请重试。",
-  errorInvalidState: "当前状态不支持该操作。",
-  errorVersionImmutable: "已发布版本不可变更。",
-  errorStaleRevision: "内容已被别人修改，请刷新",
-  agentLastEditedTooltip: "最新版本：{version} · 最新编辑：{name}",
-  errorStaleControlVersion: "课堂状态已变化，请刷新后重试。",
-  errorIdempotencyConflict: "此请求已使用过不同的数据。",
-  errorDemoRoundCountFixed: "演示固定使用两轮。",
-  errorParticipantCountInvalid: "请选择 2 到 5 名参辩者。",
-  errorParticipantDuplicate: "同一参辩者只能选择一次。",
-  errorAgentNotCurrent: "只能选择当前已发布智能体。",
-  errorAgentArchived: "已归档智能体不能用于新的课堂活动。",
-  errorAgentNameConflict:
-    "名字已被使用，请换一个名字，比如在后面加上你的名字或数字（如「Zhu Xi 2」）。",
-  errorCrossGroupReference: "该资源属于另一个小组。",
-  errorVoiceFallback: "自定义音色不可用，当前使用平台兜底音色。",
-  errorAudioInvalid:
-    "无法使用这个音频文件。请上传 10–20 秒的 WAV、MP3 或 M4A 录音，然后重新选择文件。",
-  errorVoiceEnrollmentFailed: "无法完成音色创建。",
-  errorDebateAlreadyRunning: "该课程已有另一场辩论正在进行。",
-  errorPreviousAudioCleanup: "开始前请确认清理上一场辩论语音。",
-  errorTurnGenerationFailed: "本场辩论无法完成某次发言生成。",
-  errorInteractionNotReady: "课堂互动尚未就绪。",
-  errorInteractionClosed: "课堂互动已经结束。",
-  errorParticipantNotInDebate: "该参辩者不属于本场辩论。",
-  errorTopicLanguageInvalid: "请填写非空议题。",
-  errorAudioNotRetained: "这段语音已不再保留。",
-  errorBarrageInsightFailed: "无法整理课堂意见。",
-  errorReportFailed: "无法生成 Maya 报告。",
-  errorTranslationNotConfigured: "测试翻译服务尚未配置。",
-  errorProviderUnavailable: "平台能力暂时不可用。",
-  errorRagIndexFailed: "这个文件没能建立索引，所以没有保存。请稍后重新上传。",
-  debateAgentsNotReady: "创建 Debate 前，需要先修改这些 Agent：",
-  agentIssuesTitle: "这个 Agent 还不能参加 Debate：",
-  agentIssueArchived: "Agent「{name}」已删除或归档。",
-  agentIssueNotPublished: "Agent「{name}」还没有发布版本，打开后点 Done 发布。",
-  agentIssueRagMissing: "Agent「{name}」至少需要一个 RAG。",
-  agentIssueAgentMdInvalid:
-    "Agent「{name}」的 AGENT.md 不规范：需要一行以 # 开头的标题，以及标题下的正文。",
-  agentIssueAvatarMissing: "Agent「{name}」没有可用的 Avatar。",
-  agentIssueVoiceMissing:
-    "Agent「{name}」的 Voice 是 None，Debate 会用平台声音或只显示文字。",
-  agentIssueEdit: "编辑 Agent「{name}」",
-  agentIssueNotCurrent:
-    "Agent「{name}」在创建 Debate 时被修改了，请检查后再创建。",
-  agentIssueNotFound: "Agent「{name}」在这门课里已经不可用。",
-  agentIssueCheck: "Done：保存并发布，再检查这一项",
-  debateFixBeforeCreate: "创建 Debate 前请先处理：",
-  debateAgentsHints: "所选 Agent 的提示：",
-  debateFieldTopicBlank: "议题不能为空。",
-  debateFieldTooFewAgents: "请至少选择 2 个 Agent。",
-  debateFieldTooManyAgents: "最多只能选择 5 个 Agent。",
-  debateFieldDuplicateAgent: "同一个 Agent 选了两次。",
-  debateFieldStanceMissing:
-    "Agent「{name}」选了指定立场，但还没有选具体立场，请选择支持、反对或中立。",
-  debateFieldStanceUnexpected: "Agent「{name}」是开放立场，不能同时指定立场。",
-  debateFieldAgent: "Agent「{name}」的选择无法读取，请重新选择。",
-  debateFieldBackground: "背景内容无法读取，请修改后重试。",
-  debateFieldTeachingPrompts: "教学规则无法读取，请打开保存后重试。",
-  debateFieldOutputLanguage: "输出语言只能是中文或英文。",
-  debateFieldLlmParam: "参数调整里的 {field} 超出允许范围，请改正后再创建。",
-  debateFieldEdit: "去修改",
-  debateParamsTitle: "参数调整",
-  debateParamsReset: "恢复默认",
-  debateParamsNeverSent: "只保存，不会发给模型",
-  debateParamsOn: "开",
-  debateParamsOff: "关",
-  debateParamsEmpty: "留空 = 不传",
-  debateParamsOmit: "不传给模型",
-  debateParamsVoice: "语音",
-  debateFieldOther: "字段「{field}」不正确。",
-  errorEditTeam: "编辑 Team「{name}」",
-  errorChatFailed: "这条回复没有生成出来，请重新发送。",
-  errorAgentHistoryRetained: "这个 Agent 正在发布，暂时不能删除，请稍后再试。",
-  errorAgentInTeam: "这个 Agent 已被放进 Team，请先修改 Team。",
-  errorDuplicateTeamAgent: "Agent「{name}」在 Team 里只能出现一次。",
-  errorTeamMemberPrivate:
-    "Agent「{name}」是 Private，Public Team 只能放 Public 的 Agent。请把它改成 Public 或移出 Team。",
-  errorInvalidTeamName: "请给 Team 起个名字。",
-  errorTeamVisibilityLocked:
-    "Team 的 Private / Public 在创建时就定了，不能再改。",
-  errorTeamMemberNotPublished:
-    "Team 成员必须使用已发布的 Agent 版本，请先发布这个 Agent。",
-  errorPrivateSourceForPublicAgent:
-    "这个 Agent 用了 Private 的 RAG 文件，先把文件改成 Public，Agent 才能设为 Public。",
-  errorPrivateSourceForPublicSet:
-    "Public 的 Knowledge 只能使用本组 Public 的来源。",
-  errorStaleBaseVersion:
-    "有人刚发布了这个 Agent 的新版本。你的修改还保留着，刷新后可以看到对方的版本。",
-  errorChatBusy: "上一条消息还在回复中，请稍等或刷新聊天。",
-  errorChatMessageEmpty: "请先输入消息。",
-  errorChatInterrupted: "这次 Team 回复已停止，请重新发送。",
-  errorChatAttachmentsUnavailable: "这个聊天不能添加附件。",
-  errorNextNotReady: "下一段发言还在准备，准备好后就能点 Next。",
-  errorNoNextTurn: "这已经是最后一段发言。",
-  errorActiveDebateExists: "这门课里另一个 Debate 正在播放，请先停止它。",
-  errorOutputLanguageLocked: "Debate 的语言在 Preview 时已确定，现在不能修改。",
-  errorFinalInputRequired: "请先点 Final 准备最后一轮。",
-  errorFinalInputNotReady: "请先播放完已准备好的轮次，再点 Final。",
-  errorKnowledgeSourcesMissing:
-    "这个 Agent 没有可用的 RAG 文件，先添加 RAG 才能生成 Knowledge。",
-  errorInvalidKnowledgeName: "请给 Knowledge 起个名字。",
-  errorDuplicateKnowledgeBinding: "这个 Knowledge 已经关联过了。",
-  errorDuplicateKnowledgeSource: "这个来源已经选过了。",
-  errorPersonalSetOwnerOnly: "这份个人 Knowledge 在分享前只有创建者能用。",
-  errorRegistrationUnavailable: "现在还没有可注册的课程，请联系老师。",
-  errorGroupNotFound: "请选择本课程里的一个小组。",
-  errorGroupChangeForbidden: "只有学生可以自己选择小组。",
-  errorAccountReadOnly: "这个账号由平台管理，不能在这里修改。",
-  errorIdempotencyInProgress: "同样的请求还在进行中，请等它完成。",
-  errorAssessmentRulesetIncomplete:
-    "正式测评需要完整的「# Team Ruleset」章节并写明角色名单，请先修改 Team Ruleset。",
-  errorBarrageTooLong: "最多 300 个字符。",
-  errorBarrageBlank: "昵称和弹幕内容都不能为空。",
-  errorBarrageCollectionClosed: "弹幕收集已结束。",
-  errorTeachingProtocolInvalid: "Debate 必须正好四轮。",
-  errorCleanupBusy: "Debate 清理正忙，请稍后再试。",
-  errorAgentInTeamNamed:
-    "这个 Agent 还在 Team{teams}里，请先在 Team 里移除它。",
-  errorAgentInTeamOthers:
-    "这个 Agent 还在别人的 {count} 个 Team 里，需要 Team 的创建者先移除它。",
-  errorRequestFallbackCode: "请求没有完成（错误代码：{code}）。",
-  errorInternal: "服务器出错，请稍后重试。",
-  errorHostMemoryPressure: "服务器繁忙，消息已保留，请稍后重试。",
-  errorServerBusy: "人多，请稍后重试（消息已保留）。",
-  chatSendBusyRetry: "当前人数较多，请稍后点击重新发送",
-  chatSendPreviousRunning: "上一条消息还在处理中，请稍后重新发送",
-  chatSendScoringBusy: "正在评分，请稍后再试",
-  chatScoringNotice: "评分中…",
-  errorVoiceProviderUnavailable:
-    "语音供应商暂时不可用。请改用平台兜底音色；请勿将失败视为自定义音色已成功。",
-  errorVoiceCloneRefused: "当前音色通道不支持克隆。该样本未保存为自定义音色。",
-  errorChatAcceptanceUnknown:
-    "这次请求的结果尚不确定。Maya 不会自动重发。消息会保留在当前对话中，你可以继续发送新消息。",
-  errorChatTransportUncertain:
-    "Maya 无法确认这次请求是否完成，不会自动重发。你可以检查状态，或重试同一请求以恢复。",
-  errorChatHistoryRefreshFailed:
-    "Maya 无法刷新这段已保存的对话。请先重试刷新，再继续发送。",
-  chatCheckStatus: "检查状态",
-  errorFileOperationFailed: "文件操作无法完成。",
-  errorMalformedRequest: "请检查提交的信息后重试。",
-  errorRequestFallback: "平台请求无法完成。",
-  errorAuthRateLimited: "登录或注册尝试过于频繁，请在 {seconds} 秒后重试。",
-  loginQueueWaiting: "排队等待入列，前面还有 {position} 位。",
-  loginQueueNext: "排队等待入列，马上就到你了。",
-  loginQueueEta: "预计还需约 {seconds} 秒 · 共 {total} 人排队",
-  loginQueueProgressLabel: "登录排队进度",
-  loginQueueReconnecting: "网络中断，正在重连，你的排队位置会保留。",
-  loginQueueResume:
-    "已为你保留排队位置（前面 {position} 位），请重新输入密码继续。",
-  wave3Title: "课堂互动",
-  interactionTitleClosed: "课堂互动",
-  interactionTitleOpen: "课堂互动进行中",
-  interactionTitleFinalized: "互动已结束",
-  interactionOpening: "正在打开…",
-  interactionOpen: "课堂互动",
-  interactionScan: "扫码加入",
-  interactionClosing: "正在结束…",
-  interactionClose: "总结",
-  interactionLiveVote: "实时投票",
-  interactionRawBarrages: "原始弹幕",
-  interactionNoMessages: "暂无弹幕。",
-  audienceLoading: "正在加载课堂…",
-  audienceUnavailable: "互动不可用",
-  audienceUnavailableHint: "此课堂链接无效或已结束。",
-  audienceEyebrow: "Maya 课堂 · 匿名参与",
-  audienceNickname: "昵称",
-  audienceNicknamePlaceholder: "你的昵称",
-  audienceVote: "投票",
-  audienceVoteSubmitted: "已提交",
-  audienceVoteSubmit: "投票",
-  audienceSubmitting: "正在提交…",
-  audienceBarrage: "弹幕",
-  audienceBarrageSubmitted: "已提交",
-  audienceBarragePlaceholder: "分享想法或问题",
-  audienceBarrageSend: "发送",
-  audienceSending: "正在发送…",
-  audienceRound: "轮次",
-  audienceCollectionClosed: "弹幕收集已结束",
-  audienceReconnecting: "连接中断，正在重新连接…",
-  audienceBusyRetrying: "人有点多，正在重试…",
-  audienceTooFast: "发送太快了，请等 {seconds} 秒再发。",
-  voices: "音色",
-  avatarDesign: "Avatar",
-  voiceBinding: "音色绑定",
-  manageVoices: "音色",
-  useFallbackVoice: "使用平台兜底音色",
-  currentVoiceBinding: "当前音色",
-  voiceNoneOption: "无",
-  avatar: "形象",
-  avatarPreview: "形象预览",
-  avatarPreviewUnavailable: "形象预览不可用。",
-  avatarStaticPreview: "静态预览",
-  avatarEditor: "形象编辑器",
-  avatarTemplate: "形象模板",
-  avatarMaterialTheme: "材质主题",
-  avatarEyeColor: "眼睛颜色",
-  avatarAssetDefault: "资产默认",
-  avatarDefaultExpression: "默认表情",
-  avatarExpressionStrength: "表情强度",
-  avatarHeadMotion: "头部动作",
-  avatarPreviewState: "预览状态",
-  avatarPreviewLoading: "正在加载形象预览…",
-  avatarTemplateDefault: "默认",
-  avatarTemplateWarmScholar: "学者",
-  avatarTemplateCivicObserver: "观察者",
-  avatarTemplateUnavailable: "不可用",
-  avatarThemeDemo: "演示",
-  avatarThemeWarmSand: "暖沙",
-  avatarThemeCoolSlate: "冷灰蓝",
-  avatarThemeCivicOlive: "橄榄绿",
-  avatarEyeDefault: "默认",
-  avatarEyeBrown: "棕色",
-  avatarEyeHazel: "榛色",
-  avatarEyeBlue: "蓝色",
-  avatarEyeGreen: "绿色",
-  avatarEyeGray: "灰色",
-  avatarExpressionNeutral: "中性",
-  avatarExpressionAttentive: "专注",
-  avatarExpressionHappy: "愉快",
-  avatarExpressionSeriousAngry: "严肃",
-  avatarExpressionSad: "悲伤",
-  avatarStrengthLow: "低",
-  avatarStrengthMedium: "中",
-  avatarStrengthHigh: "高",
-  avatarMotionCalm: "平静",
-  avatarMotionActive: "活跃",
-  avatarStateIdle: "空闲",
-  avatarStateListening: "聆听",
-  avatarStateSpeaking: "发言",
-  avatarStateThinking: "思考",
-  avatarStateNodYes: "点头",
-  voiceCreateTitle: "新建",
-  voiceNone: "还没有音色。",
-  voiceSampleFile:
-    "请上传 10–20 秒的朗读音频（念一段话；16 位 WAV / MP3 / M4A；不超过 10 MB）。",
-  voiceSelectFileFirst: "请先选择音频文件（.wav / .mp3 / .m4a）。",
-  voiceConsent: "我确认这是我的声音，并授权本课程创建可复用的音色档案。",
-  voiceProfileCreatedNotice: "已创建",
-  voiceCustom: "自定义音色",
-  voiceName: "音色名称",
-  voicePreview: "试听",
-  voicePreviewExpired: "试听已过期，请再点一次播放。",
-  voicePreviewFailed: "试听音频无法播放，请再点一次播放。",
-  voiceDeleteNamed: "删除「{name}」",
-  voiceDelete: "删除",
-  voiceDeleteConfirm: "删除这个自定义音色？已经创建的 Debate 不受影响。",
-  leader: "组长",
-  admin: "管理员",
-  member: "成员",
-  accounts: "账号",
-  groups: "小组",
-  enter: "进入",
-  leave: "退出",
-  rosterNoGroup: "未分组",
-  rosterEmpty: "还没有成员。",
-  rosterNoGroups: "还没有小组。",
-  editMember: "编辑",
-  displayNameLabel: "姓名",
-  groupNameLabel: "小组",
-  overviewMembers: "组员",
-  recordIntro: "正式测评的结果，按发起测评的 Team 分组。",
-  recordOpenNamed: "查看「{name}」的 Record",
-  recordTeamMeta: "学生 {students} · 测评 {attempts}",
-  recordStudents: "学生",
-  recordCompleted: "已完成",
-  recordAverage: "平均得分",
-  recordReportFor: "下载「{name}」的报告",
-  recordOwnIntro: "你自己的正式测评作答记录，按发起测评的 Team 分组。",
-  recordOwnOpenNamed: "查看你在「{name}」的作答记录",
-  recordOwnMeta: "测评 {attempts}",
-  recordAttempts: "测评次数",
-  recordRevokedVersion: "已撤销版本",
-  recordUnfinished: "未完成",
-  recordDeleteNamed: "删除 {name} 的这次测评",
-  recordDeleteConfirm:
-    "永久删除这次测评？作答和成绩会一起删除，学生那边也看不到，无法恢复。聊天记录不受影响。",
-  overviewActivity: "最近动态",
-  overviewNoMembers: "这个组还没有学生。",
-  overviewNoResults: "还没有 Record。",
-  overviewNoActivity: "还没有动态。",
-  overviewNoWork: "还没有 Agent 或 Team。",
-  overviewWorkCounts:
-    "Agent {agents} · Team {teams} · 资料 {rag} · 声音 {voices}",
-  overviewInProgress: "进行中",
-  overviewSummaryNotSaved: "总结未保存",
-  overviewScoringNotSaved: "评分未保存",
-  overviewPaused: "已暂停",
-  overviewConversation: "会话",
-  overviewNoScore: "未评分",
-  overviewReport: "报告",
-  overviewQuestion: "题目",
-  overviewAnswer: "回答",
-  overviewPoints: "得分",
-  overviewFeedback: "评语",
-  overviewSkipped: "（跳过）",
-  overviewNotAnswered: "（未作答）",
-  overviewAgentCreated: "新建了 Agent「{title}」",
-  overviewAgentPublished: "发布了「{title}」",
-  overviewTeamCreated: "新建了 Team「{title}」",
-  overviewRagAdded: "上传了资料「{title}」",
-  overviewVoiceAdded: "添加了声音「{title}」",
-  overviewTestCompleted: "完成了「{title}」的测试",
-  groupMoveConfirm:
-    "确定从「{from}」换到「{to}」？你的 Agent、Team、RAG 和声音会留在「{from}」，换组后你将看不到它们。",
-  removeAccount: "移除",
-  reactivateAccount: "恢复",
-  removeConfirm:
-    "确定移除这个账号？该学生会立即退出登录，并且无法再登录。他做过的内容都会保留，之后可以在「已移除」里恢复。",
-  removedMembers: "已移除",
-  resetPassword: "重置",
-  resetPasswordIssued: "{username} 的新密码",
-  registerTitle: "注册账号",
-  registerGroupLabel: "小组名称",
-  registerSuggestions: "可加入的小组",
-  registerWillJoin: "你将加入「{name}」，该组现有 {count} 人。",
-  registerWillCreate: "还没有同名的小组，你将创建这个小组。",
-  registerStepOf: "第 {current} 步，共 {total} 步",
-  registerStepAccount: "登录信息",
-  registerStepGroup: "你的小组",
-  registerNext: "下一步",
-  registerBack: "上一步",
-  registerSubmit: "注册",
-  registering: "正在注册…",
-  registerFailed: "账号创建失败。",
-  needAccount: "还没有账号？",
-  haveAccount: "已经有账号了？",
-  memberCountShort: "{count} 人",
-  academyWelcome: "欢迎回来",
-  academyEyebrow: "文明互鉴课堂",
-  errorAccountNotFound: "还没有账号使用这个用户名。",
-  errorUsernameTaken: "这个用户名已被使用，请换一个用户名。",
-  errorRegistrationBusy: "当前注册繁忙，请稍后重试。",
-  errorPasswordIncorrect: "密码与该账号不匹配。",
-  errorAccountInactive: "该账号已被教师停用。",
-  loginNeedUsername: "请输入用户名。",
-  loginNeedPassword: "请输入密码。",
-  loginNeedBoth: "请输入用户名和密码。",
-  needAccountLink: "注册账号",
-  passwordRule: "至少 5 位。",
-  passwordTooShort: "密码太短了，至少需要 5 位。",
-  registerConfirmPassword: "再输一次密码",
-  registerPasswordMismatch: "两次输入的密码不一致。",
-  academyMascotsLabel:
-    "学院里的四位学者，眼睛会跟随光标移动，输入密码时会转过头去。",
-  academyStageLabel: "学院庭院",
-  chatHistory: "历史",
-  chatHistoryEmpty: "还没有对话。",
-  chatPickOrNew: "从左侧历史里选一个聊天，或点 New 开始新的聊天。",
-  chatNewTitle: "新对话",
-  chatMessagePlaceholder: "输入消息",
-  chatAttach: "添加附件",
-  chatAttachHelp:
-    "上传聊天记录，只在当前聊天中使用，只有你能看到。支持 .txt、.md、.json、.csv、.html，最大 2 MB。",
-  chatAttachmentRemove: "移除 {name}",
-  chatAttachmentUploading: "正在上传…",
-  errorChatAttachmentType: "请上传 .txt、.md、.json、.csv 或 .html 文件。",
-  errorChatAttachmentTooLarge: "文件不能超过 2 MB。",
-  errorChatAttachmentLimit: "当前聊天已有 5 个附件，请先移除一个。",
-  errorChatAttachmentTextTooLong: "附件内容加起来太长，请上传更短的导出文件。",
-  errorChatAttachmentEncoding: "请把文件另存为 UTF-8 文本后重新上传。",
-  errorChatAttachmentInvalid:
-    "无法读取这个文件，请确认它是有效的文本或 JSON 导出。",
-  chatTargetTeams: "Team",
-  mayaTeam: "Maya Team",
-  mayaTeams: "Maya Teams",
-  mayaTeamPublishHelp:
-    "勾选 Agents、指定组长并选择共享 Knowledge，点击 Done 即发布。学生在 Chatform 点击 New 就能看到。",
-  mayaTeamPublished: "Maya Team 已发布，学生可在 Chatform 的 New 中选择。",
-  mayaTeamNoneYet: "还没有 Maya Team。",
-  teamNoneYet: "还没有 Team。",
-  studyformOpenMayaTeams: "进入 Maya Team",
-  chatCreateTeam: "创建 Team",
-  chatEditTeam: "编辑 Team",
-  teamName: "名称",
-  teamIdentity: "Team",
-  teamNameRequired: "请输入 Team 名称。",
-  teamMembers: "成员",
-  teamMembersHelp: "至少选择两个可用 Agent，并指定唯一组长。",
-  teamSetLeader: "设 {name} 为组长",
-  teamNeedsTwoMembers: "请选择至少两名成员。",
-  teamChooseLeader: "请从已选成员中指定一位组长。",
-  teamSharedKnowledge: "Knowledge",
-  teamSharedKnowledgeHelp: "只有选中的知识集会在此 Team 内共享。",
-  teamNoSharedKnowledge: "还没有 Knowledge。",
-  teamSaveFailed: "无法保存 Team。请检查访问权限后重试。",
-  teamSaveUnknown: "保存结果尚不确定。请用同一请求安全检查；期间表单已锁定。",
-  teamLoadFailed: "无法加载 Team 信息。",
-  teamListRefreshFailed: "Team 已保存，但列表刷新失败。",
-  retryTeamList: "刷新 Team 列表",
-  teamApiNotConnected: "Team 服务尚未接通，未创建聊天。",
-  teamNotEditable: "你已没有权限编辑此 Team。",
-  teamSavedWaitingForChat: "Team 已保存，现在可以开始 Team 聊天。",
-  teamChatUnavailable: "当前运行模式暂不支持发送 Team 聊天。",
-  teamChatMembersUnavailable:
-    "这个 Team 聊天不能继续：你已经无法使用它的成员。请重新和这个 Team 开一个聊天。",
-  teamRequestFailure: "Team 聊天请求无法完成。",
-  teamMemberFailure: "这位 Team 成员未能回复。",
-  teamSummaryNotSaved: "这位成员没能保存总结。再发一条消息即可重试。",
-  teamReplyCutOff: "回复没有写完就被截断了，这次没有保存。请再发一次。",
-  teamProviderConfirmationStudent:
-    "Team 成员的回复需要教师确认当前 Team 数据调用授权。请教师先核对并确认该授权，然后显式发送一条新消息。",
-  teamProviderConfirmationTeacher:
-    "Team 成员的回复需要确认当前 Team 数据调用授权。请核对并确认该授权，然后显式发送一条新消息。",
-  teamChatReadOnly: "此公开 Team 聊天为只读。",
-  chatAgentDeleted:
-    "发布者已删除这个 Agent，这个聊天无法继续，聊天记录已保留。",
-  chatAgentUnavailable:
-    "你已不能使用这个 Agent，这个聊天无法继续，聊天记录已保留。",
-  chatTeamDeleted: "发布者已删除这个 Team，这个聊天无法继续，聊天记录已保留。",
-  chatTeamMemberDeleted:
-    "{name} 已被发布者删除，这个 Team 聊天无法继续，聊天记录已保留。",
-  teamAnswerNotRecorded: "这次回答没有记录下来，请再发送一次以继续测评。",
-  teamRecipients: "接收回复的成员",
-  teamAllMembers: "All",
-  teamPartialResult: "部分成员未能回复；已成功的回复已保留。",
-  teamCheckStatus: "检查 Team 聊天状态",
-  assessmentStageScoring: "作答已保存 · 正在评分",
-  assessmentStageSummarizing: "评分完成 · 正在生成总结",
-  assessmentStageCompleted: "评分完毕 · 正式测评结束",
-  assessmentProgress: "测评进度",
-  knowledgeGenerationProgress: "Knowledge 生成进度",
-  knowledgeGenerationQueued: "Knowledge 已排队",
-  knowledgeGenerationRunning: "正在生成 Knowledge",
-  knowledgeGenerationMaterializing: "正在保存 Knowledge",
-  knowledgeGenerationCompleted: "Knowledge 生成完成",
-  knowledgeGenerationFailed: "Knowledge 生成失败",
-  teamResume: "继续",
-  teamTurnPending: "Team 回复仍在运行。请检查状态以恢复更新。",
-};
-
-export const messages = {
-  en: enMessages,
-  zh: zhMessages,
-} as const satisfies Record<Locale, Record<keyof typeof enMessages, string>>;
-
-/** Terms intentionally shared by both locales because they are product or
- * technical names rather than translatable prose. */
-export const ALLOWED_IDENTICAL_TERMS = [
-  "Homeward",
-  "Mayaform",
-  "Brainform",
-  "Studyform",
-  "Chatform",
-  "Live",
-  "Team",
-  "Maya Team",
-  "Maya Teams",
-  "Agent",
-  "Avatar",
-  "AGENT.md",
-  "evidence.md",
-  "RAG",
-  "Private",
-  "Public",
-  "English",
-  "中文",
-  "Knowledge",
-  "Memory",
-  "Embedding",
-  "TTS",
-  "Mock",
-  "Generating AI Knowledge",
-  "All",
-] as const;
-
 export type MessageKey = keyof typeof enMessages;
 
 export type MessageValues = Record<string, string | number>;
@@ -2047,49 +1070,33 @@ const avatarOptionKeys: Record<string, MessageKey> = {
 export function avatarTemplateLabel(
   templateId: string,
   fallbackName: string,
-  locale: Locale = "en",
 ): string {
   const key = avatarTemplateKeys[templateId];
-  return key ? t(key, locale) : fallbackName;
+  return key ? t(key) : fallbackName;
 }
 
-export function avatarOptionLabel(
-  value: string,
-  locale: Locale = "en",
-): string {
+export function avatarOptionLabel(value: string): string {
   const key = avatarOptionKeys[value];
-  return key ? t(key, locale) : value.replaceAll("_", " ");
+  return key ? t(key) : value.replaceAll("_", " ");
 }
 
-export function t(key: MessageKey, locale: Locale = "en"): string {
-  return messages[locale][key] ?? messages.en[key];
+export function t(key: MessageKey): string {
+  return enMessages[key];
 }
 
-export function tm(
-  key: MessageKey,
-  values: MessageValues,
-  locale: Locale = "en",
-): string {
-  return t(key, locale).replace(/\{(\w+)\}/g, (_, name: string) =>
+export function tm(key: MessageKey, values: MessageValues): string {
+  return t(key).replace(/\{(\w+)\}/g, (_, name: string) =>
     String(values[name] ?? `{${name}}`),
   );
 }
 
-export function createTranslator(locale: Locale): Translator {
-  return ((key: MessageKey, values?: MessageValues) =>
-    values ? tm(key, values, locale) : t(key, locale)) as Translator;
-}
+const translator = ((key: MessageKey, values?: MessageValues) =>
+  values ? tm(key, values) : t(key)) as Translator;
 
-/** Normalize persisted input at the presentation boundary. */
-export function normalizeLocale(value: unknown): Locale {
-  return value === "zh" ? "zh" : "en";
+/** The translator for components (kept as a hook-shaped call site). */
+export function useT(): Translator {
+  return translator;
 }
-
-export function localeToHtmlLang(locale: Locale): "en-US" | "zh-CN" {
-  return locale === "zh" ? "zh-CN" : "en-US";
-}
-
-export const LOCALE_COOKIE = "maya_ui_locale";
 
 const errorCodeKeys: Record<string, MessageKey> = {
   knowledge_import_invalid: "knowledgeImportInvalid",
@@ -2217,7 +1224,7 @@ const errorCodeKeys: Record<string, MessageKey> = {
 };
 
 type ErrorCopyCatalog = {
-  messages: Record<string, Record<Locale, string>>;
+  messages: Record<string, { en: string }>;
   codes: Record<string, string>;
 };
 
@@ -2226,10 +1233,10 @@ type ErrorCopyCatalog = {
  * and provider codes share a few family messages, codes a reader can act on
  * have their own. backend/tests/test_error_copy_contract.py keeps it complete.
  */
-export function errorCopyFor(code: string, locale: Locale): string | null {
+export function errorCopyFor(code: string): string | null {
   const catalog = errorCopy as ErrorCopyCatalog;
   const key = Object.hasOwn(catalog.codes, code) ? catalog.codes[code] : null;
-  return key ? (catalog.messages[key]?.[locale] ?? null) : null;
+  return key ? (catalog.messages[key]?.en ?? null) : null;
 }
 
 /**
@@ -2239,7 +1246,6 @@ export function errorCopyFor(code: string, locale: Locale): string | null {
  */
 export function localizeError(
   error: unknown,
-  locale: Locale = "en",
   fallback: MessageKey = "errorRequestFallback",
 ): string {
   if (error && typeof error === "object") {
@@ -2258,7 +1264,7 @@ export function localizeError(
         candidate.details.reason === "empty_markdown" ||
         candidate.details.reason === "invalid_control_chars")
     ) {
-      return t("knowledgeMarkdownInvalid", locale);
+      return t("knowledgeMarkdownInvalid");
     }
     if (
       candidate.code === "auth_login_queued" &&
@@ -2273,10 +1279,10 @@ export function localizeError(
         position >= 0
       ) {
         return position === 0
-          ? t("loginQueueNext", locale)
-          : tm("loginQueueWaiting", { position }, locale);
+          ? t("loginQueueNext")
+          : tm("loginQueueWaiting", { position });
       }
-      return t("loginQueueNext", locale);
+      return t("loginQueueNext");
     }
     if (
       candidate.code === "auth_rate_limited" &&
@@ -2290,7 +1296,7 @@ export function localizeError(
         Number.isSafeInteger(seconds) &&
         seconds > 0
       ) {
-        return tm("errorAuthRateLimited", { seconds }, locale);
+        return tm("errorAuthRateLimited", { seconds });
       }
     }
     const details =
@@ -2305,17 +1311,17 @@ export function localizeError(
             : null,
         )
         .filter((name): name is string => typeof name === "string")
-        .map((name) => (locale === "zh" ? `「${name}」` : `“${name}”`));
+        .map((name) => `“${name}”`);
       const others =
         typeof details.other_team_count === "number"
           ? details.other_team_count
           : 0;
       const parts = [
         ...(names.length
-          ? [tm("errorAgentInTeamNamed", { teams: names.join(" ") }, locale)]
+          ? [tm("errorAgentInTeamNamed", { teams: names.join(" ") })]
           : []),
         ...(others > 0
-          ? [tm("errorAgentInTeamOthers", { count: others }, locale)]
+          ? [tm("errorAgentInTeamOthers", { count: others })]
           : []),
       ];
       if (parts.length) return parts.join(" ");
@@ -2324,31 +1330,31 @@ export function localizeError(
       const key = errorCodeKeys[candidate.code];
       // A message that names its Agent gets the name the server sent.
       if (key && typeof details.agent_name === "string")
-        return tm(key, { name: details.agent_name }, locale);
-      if (key) return t(key, locale);
-      const copy = errorCopyFor(candidate.code, locale);
+        return tm(key, { name: details.agent_name });
+      if (key) return t(key);
+      const copy = errorCopyFor(candidate.code);
       if (copy) return copy;
     }
     if (typeof candidate.status === "number") {
-      if (candidate.status === 401) return t("errorUnauthenticated", locale);
-      if (candidate.status === 403) return t("errorForbidden", locale);
-      if (candidate.status === 404) return t("errorNotFound", locale);
+      if (candidate.status === 401) return t("errorUnauthenticated");
+      if (candidate.status === 403) return t("errorForbidden");
+      if (candidate.status === 404) return t("errorNotFound");
       // A plain 500 is a server bug (internal_error), not a provider outage.
-      if (candidate.status === 500) return t("errorInternal", locale);
-      if (candidate.status > 500) return t("errorProviderUnavailable", locale);
+      if (candidate.status === 500) return t("errorInternal");
+      if (candidate.status > 500) return t("errorProviderUnavailable");
     }
   }
   // fetch rejects with a TypeError when the connection itself fails; its
   // browser wording ("Failed to fetch") names no next step.
-  if (error instanceof TypeError) return t("errorNetwork", locale);
+  if (error instanceof TypeError) return t("errorNetwork");
   if (error instanceof Error && error.message) return error.message;
   // Never only "the request failed": keep the stable code for the reader.
   if (error && typeof error === "object") {
     const code = (error as { code?: unknown }).code;
     if (typeof code === "string" && /^[a-z_]+$/.test(code))
-      return tm("errorRequestFallbackCode", { code }, locale);
+      return tm("errorRequestFallbackCode", { code });
   }
-  return t(fallback, locale);
+  return t(fallback);
 }
 
 const statusKeys: Record<string, MessageKey> = {
@@ -2386,9 +1392,9 @@ const statusKeys: Record<string, MessageKey> = {
   interrupted: "statusInterrupted",
 };
 
-export function statusLabel(status: string, locale: Locale = "en"): string {
+export function statusLabel(status: string): string {
   const key = statusKeys[status];
-  return key ? t(key, locale) : status.replaceAll("_", " ");
+  return key ? t(key) : status.replaceAll("_", " ");
 }
 
 const blockerKeys: Record<string, MessageKey> = {
@@ -2399,9 +1405,9 @@ const blockerKeys: Record<string, MessageKey> = {
   avatar_missing: "blockAvatarMissing",
 };
 
-export function blockerLabel(blocker: string, locale: Locale = "en"): string {
+export function blockerLabel(blocker: string): string {
   const key = blockerKeys[blocker];
-  return key ? t(key, locale) : blocker.replaceAll("_", " ");
+  return key ? t(key) : blocker.replaceAll("_", " ");
 }
 
 const roleKeys: Record<string, MessageKey> = {
@@ -2412,7 +1418,7 @@ const roleKeys: Record<string, MessageKey> = {
   member: "member",
 };
 
-export function roleLabel(role: string, locale: Locale = "en"): string {
+export function roleLabel(role: string): string {
   const key = roleKeys[role];
-  return key ? t(key, locale) : role;
+  return key ? t(key) : role;
 }

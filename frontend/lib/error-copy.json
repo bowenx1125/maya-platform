@@ -2,304 +2,229 @@
   "comment": "Copy for error codes without a specific i18n message (PR D3). backend/tests/test_error_copy_contract.py fails when a code the backend can send has no copy here or in errorCodeKeys.",
   "messages": {
     "accountFieldManaged": {
-      "en": "This comes from the course's account list. Ask your teacher to change it.",
-      "zh": "此信息来自课程的账号列表。请让老师修改。"
+      "en": "This comes from the course's account list. Ask your teacher to change it."
     },
     "aiStepFailed": {
-      "en": "The AI step didn't finish. Try again; if it keeps happening, tell your teacher.",
-      "zh": "AI 这一步没有完成。请重试；如果一直出现，请告诉老师。"
+      "en": "The AI step didn't finish. Try again; if it keeps happening, tell your teacher."
     },
     "assessmentInactive": {
-      "en": "This assessment is no longer active.",
-      "zh": "这个测评已不再进行。"
+      "en": "This assessment is no longer active."
     },
     "assessmentIncomplete": {
-      "en": "Some questions still need an answer.",
-      "zh": "还有题目没有作答。"
+      "en": "Some questions still need an answer."
     },
     "assessmentNotStarted": {
-      "en": "Start the assessment before answering.",
-      "zh": "请先开始测评再作答。"
+      "en": "Start the assessment before answering."
     },
     "assessmentOriginalChat": {
-      "en": "Continue this assessment in its original conversation.",
-      "zh": "请在原来的对话中继续这个测评。"
+      "en": "Continue this assessment in its original conversation."
     },
     "assessmentPaused": {
-      "en": "Resume the assessment to continue.",
-      "zh": "请继续测评。"
+      "en": "Resume the assessment to continue."
     },
     "assessmentReportStale": {
-      "en": "The answers changed. Generate a new report before downloading.",
-      "zh": "答题内容已变化。请先生成新报告再下载。"
+      "en": "The answers changed. Generate a new report before downloading."
     },
     "assessmentUnavailable": {
-      "en": "This assessment step isn't available right now. Refresh; if it continues, tell your teacher.",
-      "zh": "测评的这一步暂时不可用。请刷新；如果仍然出现，请告诉老师。"
+      "en": "This assessment step isn't available right now. Refresh; if it continues, tell your teacher."
     },
     "assignedStanceMissing": {
-      "en": "Choose a stance for each Agent with an assigned stance.",
-      "zh": "请为每个指定立场的 Agent 选择立场。"
+      "en": "Choose a stance for each Agent with an assigned stance."
     },
     "assignedStanceUnexpected": {
-      "en": "An Agent with an open stance can't have a fixed stance.",
-      "zh": "开放立场的 Agent 不能指定固定立场。"
+      "en": "An Agent with an open stance can't have a fixed stance."
     },
     "avatarInvalid": {
-      "en": "Choose one of the available scholar avatars.",
-      "zh": "请选择一个可用的学者形象。"
+      "en": "Choose one of the available scholar avatars."
     },
     "barrageInvalid": {
-      "en": "This message can't be sent. Check it and try again.",
-      "zh": "这条消息无法发送。请检查后重试。"
+      "en": "This message can't be sent. Check it and try again."
     },
     "barrageTurnChanged": {
-      "en": "The current speech changed. Refresh and send again.",
-      "zh": "当前发言已经变化。请刷新后重新发送。"
+      "en": "The current speech changed. Refresh and send again."
     },
     "cardRoomBusy": {
-      "en": "The table moved on. Try again.",
-      "zh": "牌局已经继续了。请重试。"
+      "en": "The table moved on. Try again."
     },
     "cardRoomCodesExhausted": {
-      "en": "Every room code is in use right now. Try again shortly.",
-      "zh": "目前所有房间号都在使用中。请稍后再试。"
+      "en": "Every room code is in use right now. Try again shortly."
     },
     "cardRoomFull": {
-      "en": "This table is full.",
-      "zh": "这张牌桌已满。"
+      "en": "This table is full."
     },
     "cardRoomIllegalAction": {
-      "en": "That move isn't allowed right now.",
-      "zh": "现在不能这样操作。"
+      "en": "That move isn't allowed right now."
     },
     "cardRoomNeedsPlayers": {
-      "en": "A hand needs two players with chips.",
-      "zh": "一局需要两位有筹码的玩家。"
+      "en": "A hand needs two players with chips."
     },
     "cardRoomNotSeated": {
-      "en": "Sit down before buying chips.",
-      "zh": "请先入座再购买筹码。"
+      "en": "Sit down before buying chips."
     },
     "cardRoomNotYourTurn": {
-      "en": "It isn't your turn.",
-      "zh": "还没轮到你。"
+      "en": "It isn't your turn."
     },
     "cardRoomRebuyNotAllowed": {
-      "en": "You can top up chips only when you have none, between hands.",
-      "zh": "只有在两局之间且没有筹码时才能补充筹码。"
+      "en": "You can top up chips only when you have none, between hands."
     },
     "cardRoomStarted": {
-      "en": "This table is already playing.",
-      "zh": "这张牌桌已经开始了。"
+      "en": "This table is already playing."
     },
     "changedElsewhere": {
-      "en": "This changed in another tab or by someone else. Refresh and try again.",
-      "zh": "内容已在其他页面或被他人更改。请刷新后重试。"
+      "en": "This changed in another tab or by someone else. Refresh and try again."
     },
     "chatReplyFailed": {
-      "en": "This reply didn't finish. Send your message again.",
-      "zh": "这条回复没有完成。请重新发送你的消息。"
+      "en": "This reply didn't finish. Send your message again."
     },
     "classroomUrlUnavailable": {
-      "en": "The classroom link isn't set up on this server.",
-      "zh": "此服务器尚未设置课堂链接。"
+      "en": "The classroom link isn't set up on this server."
     },
     "cleanupFailed": {
-      "en": "Cleanup couldn't finish. Try this action again.",
-      "zh": "清理未能完成。请再试一次。"
+      "en": "Cleanup couldn't finish. Try this action again."
     },
     "conceptReferencedTwice": {
-      "en": "A Concept can be referenced only once.",
-      "zh": "同一个概念只能引用一次。"
+      "en": "A Concept can be referenced only once."
     },
     "conceptSelfPrerequisite": {
-      "en": "A Concept can't depend on itself.",
-      "zh": "概念不能以自身为前提。"
+      "en": "A Concept can't depend on itself."
     },
     "debateEnded": {
-      "en": "This Debate has ended or was removed.",
-      "zh": "这场辩论已结束或已被删除。"
+      "en": "This Debate has ended or was removed."
     },
     "debateInteractionBusy": {
-      "en": "Many people are taking part right now. Wait a moment and try again.",
-      "zh": "现在参与的人很多。请稍等片刻再试。"
+      "en": "Many people are taking part right now. Wait a moment and try again."
     },
     "debateMediaDeleted": {
-      "en": "This Debate's audio was deleted. The text is still available.",
-      "zh": "这场辩论的音频已被删除，文字仍可查看。"
+      "en": "This Debate's audio was deleted. The text is still available."
     },
     "debatePartial": {
-      "en": "This Debate finished early; only the speeches given are kept.",
-      "zh": "这场辩论提前结束，只保留已完成的发言。"
+      "en": "This Debate finished early; only the speeches given are kept."
     },
     "debateRateLimited": {
-      "en": "You're sending too fast. Wait a moment and send again.",
-      "zh": "发送太快了。请稍等片刻再发送。"
+      "en": "You're sending too fast. Wait a moment and send again."
     },
     "debateStepFailed": {
-      "en": "This Debate step couldn't continue. Refresh the stage and try again.",
-      "zh": "辩论的这一步无法继续。请刷新舞台后重试。"
+      "en": "This Debate step couldn't continue. Refresh the stage and try again."
     },
     "demoDataLocked": {
-      "en": "The demo data can't be changed this way.",
-      "zh": "演示数据不能这样修改。"
+      "en": "The demo data can't be changed this way."
     },
     "displayNameInvalid": {
-      "en": "Enter a valid display name.",
-      "zh": "请输入有效的显示名称。"
+      "en": "Enter a valid display name."
     },
     "fileNoText": {
-      "en": "No readable text was found in this file.",
-      "zh": "这个文件中没有可读取的文字。"
+      "en": "No readable text was found in this file."
     },
     "fileProcessingFailed": {
-      "en": "The file couldn't be processed. Try again.",
-      "zh": "文件处理失败。请重试。"
+      "en": "The file couldn't be processed. Try again."
     },
     "fileScanUnreadable": {
-      "en": "The scanned text couldn't be read. Try a clearer file or a text version.",
-      "zh": "扫描的文字无法识别。请换一个更清晰的文件或文字版本。"
+      "en": "The scanned text couldn't be read. Try a clearer file or a text version."
     },
     "fileTooLarge": {
-      "en": "This file is too large to upload.",
-      "zh": "文件太大，无法上传。"
+      "en": "This file is too large to upload."
     },
     "fileUnsupported": {
-      "en": "This file type isn't supported, or the file is damaged.",
-      "zh": "不支持此文件类型，或文件已损坏。"
+      "en": "This file type isn't supported, or the file is damaged."
     },
     "interactionClosed": {
-      "en": "Classroom interaction has ended.",
-      "zh": "课堂互动已经结束。"
+      "en": "Classroom interaction has ended."
     },
     "invalidInput": {
-      "en": "Some details aren't valid. Check them and try again.",
-      "zh": "部分信息无效。请检查后重试。"
+      "en": "Some details aren't valid. Check them and try again."
     },
     "knowledgeChanged": {
-      "en": "This knowledge changed or is no longer available. Refresh and try again.",
-      "zh": "这份知识已更改或不再可用。请刷新后重试。"
+      "en": "This knowledge changed or is no longer available. Refresh and try again."
     },
     "knowledgeGenerationFailed": {
-      "en": "Knowledge generation didn't finish. Try again.",
-      "zh": "知识生成没有完成。请重试。"
+      "en": "Knowledge generation didn't finish. Try again."
     },
     "knowledgeSearchFailed": {
-      "en": "Searching the knowledge didn't work this time. Try again.",
-      "zh": "这次知识检索没有成功。请重试。"
+      "en": "Searching the knowledge didn't work this time. Try again."
     },
     "liveAlreadyActive": {
-      "en": "Another classroom is already broadcasting.",
-      "zh": "另一个课堂正在直播。"
+      "en": "Another classroom is already broadcasting."
     },
     "liveNotActive": {
-      "en": "This classroom isn't broadcasting.",
-      "zh": "这个课堂没有在直播。"
+      "en": "This classroom isn't broadcasting."
     },
     "memberNameAmbiguous": {
-      "en": "That name matches more than one member. Use the full name.",
-      "zh": "这个名字对应多位成员。请使用完整名字。"
+      "en": "That name matches more than one member. Use the full name."
     },
     "memberNameUnknown": {
-      "en": "Name a member who is mentioned in this message.",
-      "zh": "请写出这条消息中提到的成员。"
+      "en": "Name a member who is mentioned in this message."
     },
     "notAllowed": {
-      "en": "You don't have permission to do this.",
-      "zh": "你没有权限执行此操作。"
+      "en": "You don't have permission to do this."
     },
     "notAvailable": {
-      "en": "This isn't available right now. Try again later.",
-      "zh": "暂时无法使用。请稍后再试。"
+      "en": "This isn't available right now. Try again later."
     },
     "operationInterrupted": {
-      "en": "The operation was interrupted. Try again.",
-      "zh": "操作被中断了。请重试。"
+      "en": "The operation was interrupted. Try again."
     },
     "participantsDuplicate": {
-      "en": "Each Agent can take part only once.",
-      "zh": "每个 Agent 只能参加一次。"
+      "en": "Each Agent can take part only once."
     },
     "playbackReset": {
-      "en": "The teacher reset this lesson. Refresh to continue.",
-      "zh": "老师已重置这节课。请刷新后继续。"
+      "en": "The teacher reset this lesson. Refresh to continue."
     },
     "preparationTimeout": {
-      "en": "Preparing this speech took too long. Retry it.",
-      "zh": "准备这段发言耗时过长。请重试。"
+      "en": "Preparing this speech took too long. Retry it."
     },
     "providerAuthFailed": {
-      "en": "The AI service rejected the server's credentials. Tell your administrator.",
-      "zh": "AI 服务拒绝了服务器的凭证。请告诉管理员。"
+      "en": "The AI service rejected the server's credentials. Tell your administrator."
     },
     "providerConfirmationRequired": {
-      "en": "The course teacher must confirm the data disclosure first.",
-      "zh": "需要课程老师先确认数据披露。"
+      "en": "The course teacher must confirm the data disclosure first."
     },
     "recordInUse": {
-      "en": "This record is still in use and wasn't deleted.",
-      "zh": "此记录仍在使用中，未被删除。"
+      "en": "This record is still in use and wasn't deleted."
     },
     "replyInProgress": {
-      "en": "Wait for the current reply to finish.",
-      "zh": "请等待当前回复完成。"
+      "en": "Wait for the current reply to finish."
     },
     "reportFailed": {
-      "en": "The report couldn't be generated. Try again.",
-      "zh": "报告未能生成。请重试。"
+      "en": "The report couldn't be generated. Try again."
     },
     "requestPausedTooLong": {
-      "en": "The server was busy and this request waited too long. Try again.",
-      "zh": "服务器繁忙，请求等待时间过长。请重试。"
+      "en": "The server was busy and this request waited too long. Try again."
     },
     "requestStillRunning": {
-      "en": "The earlier request is still running. Wait for it to finish.",
-      "zh": "之前的请求仍在进行中。请等待完成。"
+      "en": "The earlier request is still running. Wait for it to finish."
     },
     "resetConfirmationRequired": {
-      "en": "Confirm the reset to continue.",
-      "zh": "请确认重置后继续。"
+      "en": "Confirm the reset to continue."
     },
     "resetNotSupported": {
-      "en": "This account has no password that can be reset here.",
-      "zh": "此账号没有可以在这里重置的密码。"
+      "en": "This account has no password that can be reset here."
     },
     "selfStatusForbidden": {
-      "en": "You can't change your own account status.",
-      "zh": "你不能更改自己的账号状态。"
+      "en": "You can't change your own account status."
     },
     "sessionRevoked": {
-      "en": "You've been signed out. Sign in again to continue.",
-      "zh": "你已退出登录。请重新登录后继续。"
+      "en": "You've been signed out. Sign in again to continue."
     },
     "signInRateLimited": {
-      "en": "Too many sign-in attempts. Wait a moment and try again.",
-      "zh": "登录尝试次数过多。请稍等片刻再试。"
+      "en": "Too many sign-in attempts. Wait a moment and try again."
     },
     "sourceDeleted": {
-      "en": "The source file was deleted.",
-      "zh": "源文件已被删除。"
+      "en": "The source file was deleted."
     },
     "teamReplyFailed": {
-      "en": "The Team reply didn't finish. Send your message again.",
-      "zh": "团队回复没有完成。请重新发送你的消息。"
+      "en": "The Team reply didn't finish. Send your message again."
     },
     "topicBlank": {
-      "en": "Enter a topic.",
-      "zh": "请输入辩题。"
+      "en": "Enter a topic."
     },
     "turnNotRunning": {
-      "en": "This reply can't be paused now.",
-      "zh": "这条回复现在无法暂停。"
+      "en": "This reply can't be paused now."
     },
     "turnPaused": {
-      "en": "Resume the paused reply before continuing.",
-      "zh": "请先继续已暂停的回复。"
+      "en": "Resume the paused reply before continuing."
     },
     "voiceFailed": {
-      "en": "The voice couldn't be generated. The text is still shown; try again later.",
-      "zh": "语音未能生成。文字仍会显示；请稍后重试。"
+      "en": "The voice couldn't be generated. The text is still shown; try again later."
     }
   },
   "codes": {

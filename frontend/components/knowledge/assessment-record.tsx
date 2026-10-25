@@ -10,7 +10,7 @@ import {
 
 import type { OverviewResult } from "../../lib/api/platform";
 import { cachedCall, requestCacheIdentity } from "../../lib/request-cache";
-import { useLocale, useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import { useSession } from "../session-provider";
 import { IconClose } from "../quiet-icons";
 import { ASSESSMENT_COMPLETED_EVENT } from "../../lib/assessment-events";
@@ -159,9 +159,8 @@ export function useAssessmentRecord(
 }
 
 function useWhen() {
-  const { locale } = useLocale();
   return (value: string) =>
-    new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en", {
+    new Date(value).toLocaleString("en", {
       month: "short",
       day: "numeric",
       hour: "2-digit",

@@ -245,7 +245,9 @@ describe("ScholarScene asynchronous initialization", () => {
     const stage = stageMock.instances[0];
     stage.options.onReady?.();
 
-    const forward = await view.findByRole("button", { name: "镜头向前移动" });
+    const forward = await view.findByRole("button", {
+      name: "Move camera forward",
+    });
     fireEvent.click(forward);
     fireEvent.keyDown(window, { key: "a" });
     fireEvent.keyUp(window, { key: "a" });
@@ -271,14 +273,19 @@ describe("ScholarScene asynchronous initialization", () => {
       { command: "turn-right", active: false },
     ]);
 
-    fireEvent.click(view.getByRole("button", { name: "切换鸟瞰" }));
+    fireEvent.click(
+      view.getByRole("button", { name: "Toggle bird's-eye view" }),
+    );
     fireEvent.keyDown(window, { key: "Home" });
     expect(stage.overviewToggles).toBe(1);
     expect(stage.cameraResets).toBe(1);
 
-    fireEvent.change(view.getByRole("combobox", { name: "切换院落场景" }), {
-      target: { value: "procedural" },
-    });
+    fireEvent.change(
+      view.getByRole("combobox", { name: "Switch courtyard scene" }),
+      {
+        target: { value: "procedural" },
+      },
+    );
     expect(stage.scenePacks).toEqual(["procedural"]);
     expect(window.location.search).toContain("scene=procedural");
   });

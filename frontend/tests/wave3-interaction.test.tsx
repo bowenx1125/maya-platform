@@ -9,7 +9,6 @@ import {
 import { create } from "qrcode";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
 import { PlatformApiError } from "../lib/api";
 import {
   AudienceInteractionForm,
@@ -377,25 +376,25 @@ describe("M13 anonymous audience form", () => {
     expect(screen.getByLabelText("Nickname")).toBeTruthy();
   });
 
-  it("renders audience controls in the active locale without bilingual labels", async () => {
+  it("renders audience controls without bilingual labels", async () => {
     const api = audienceApi();
     render(
-      <LocaleProvider initialLocale="zh">
+      <>
         <AudienceInteractionForm accessToken="token" api={api} />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByRole("heading", {
       name: "Should classrooms use anonymous questions?",
     });
 
-    fireEvent.change(screen.getByLabelText("昵称"), {
+    fireEvent.change(screen.getByLabelText("Nickname"), {
       target: { value: "同学" },
     });
-    expect(screen.getByLabelText("昵称")).toBeTruthy();
-    expect(screen.getAllByText("投票")).toHaveLength(2);
-    expect(screen.getByText("弹幕")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "投票" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
+    expect(screen.getByLabelText("Nickname")).toBeTruthy();
+    expect(screen.getAllByText("Vote")).toHaveLength(2);
+    expect(screen.getByText("Barrage")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Vote" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
     expect(screen.queryByText("Vote / 投票")).toBeNull();
     expect(screen.queryByText("Barrage / 弹幕")).toBeNull();
   });
@@ -588,35 +587,5 @@ describe("M13 anonymous audience form", () => {
     fireEvent.submit(screen.getByRole("form", { name: "Vote" }));
     expect(api.submitBarrage).not.toHaveBeenCalled();
     expect(api.submitVote).not.toHaveBeenCalled();
-  });
-
-  it("renders one locale at a time for teacher interaction controls", () => {
-    render(
-      <LocaleProvider initialLocale="en">
-        <TeacherInteractionPanel
-          debateId="debate-1"
-          interaction={openInteraction}
-          participants={participants}
-        />
-      </LocaleProvider>,
-    );
-    expect(screen.getByText("Raw barrages")).toBeTruthy();
-    expect(screen.queryByText("原始弹幕")).toBeNull();
-    expect(screen.queryByText(/Raw barrages\s*\/\s*原始弹幕/)).toBeNull();
-
-    cleanup();
-    render(
-      <LocaleProvider initialLocale="zh">
-        <TeacherInteractionPanel
-          debateId="debate-1"
-          interaction={openInteraction}
-          participants={participants}
-        />
-      </LocaleProvider>,
-    );
-    expect(screen.getByText("原始弹幕")).toBeTruthy();
-    expect(screen.queryByText("Raw barrages")).toBeNull();
-    expect(screen.queryByText(/Raw barrages\s*\/\s*原始弹幕/)).toBeNull();
-    expect(screen.getByRole("img", { name: /^扫码加入:/ })).toBeTruthy();
   });
 });

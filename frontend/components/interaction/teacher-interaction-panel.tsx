@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { DismissibleAlert } from "../dismissible-alert";
 import { PieChart } from "../charts";
 import { statusLabel } from "../../lib/i18n";
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import { QrCode } from "./qr-code";
 import type { TeacherInteractionPanelProps } from "./types";
 import styles from "./interaction.module.css";
@@ -19,7 +19,7 @@ export function TeacherInteractionPanel({
   onOpen,
   onClose,
 }: TeacherInteractionPanelProps) {
-  const { locale, t } = useLocale();
+  const t = useT();
   const participantById = new Map(
     participants.map((participant) => [participant.id, participant]),
   );
@@ -45,7 +45,7 @@ export function TeacherInteractionPanel({
           <h2>{title}</h2>
         </div>
         <span className={styles.status} data-status={interaction.status}>
-          {statusLabel(interaction.status, locale)}
+          {statusLabel(interaction.status)}
         </span>
       </div>
 
@@ -118,7 +118,7 @@ function InteractionTotals({
   totalVotes: number;
   participantById: Map<string, { name: string; slot: string }>;
 }) {
-  const { locale, t } = useLocale();
+  const t = useT();
   // Names, not the raw participant ids the aggregate carries: the totals used
   // to render a UUID for every Agent because the vote row has no name to fall
   // back from, and the page that loads the participants never joined them.
@@ -138,10 +138,7 @@ function InteractionTotals({
         <span>{t("interactionLiveVote")}</span>
         <strong>{totalVotes}</strong>
       </div>
-      <PieChart
-        data={data}
-        emptyLabel={locale === "zh" ? "还没有投票。" : "No votes yet."}
-      />
+      <PieChart data={data} emptyLabel="No votes yet." />
     </div>
   );
 }
@@ -151,7 +148,7 @@ function BarrageFeed({
 }: {
   barrages: TeacherInteractionPanelProps["interaction"]["barrages"];
 }) {
-  const { locale, t } = useLocale();
+  const t = useT();
   const feedRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
 

@@ -35,7 +35,6 @@ vi.mock("../components/session-provider", () => ({
 
 import { AccountSettings } from "../components/account-settings";
 import { HomeGuide } from "../components/home-guide";
-import { LocaleProvider } from "../components/locale";
 import { USER_AVATAR_CHOICES } from "../components/user-avatar";
 
 afterEach(() => {
@@ -44,8 +43,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const inEnglish = (ui: ReactNode) =>
-  render(<LocaleProvider initialLocale="en">{ui}</LocaleProvider>);
+const inEnglish = (ui: ReactNode) => render(<>{ui}</>);
 
 describe("home guide", () => {
   it("points only the first unfinished step onward", () => {
@@ -212,9 +210,9 @@ describe("profile identity boundary", () => {
       avatar: USER_AVATAR_CHOICES[0],
     };
     const content = () => (
-      <LocaleProvider initialLocale="en">
+      <>
         <AccountSettings />
-      </LocaleProvider>
+      </>
     );
     const view = render(content());
     fireEvent.change(screen.getByLabelText("Current password"), {
@@ -244,9 +242,9 @@ describe("profile identity boundary", () => {
     );
     const onSaved = vi.fn();
     const content = () => (
-      <LocaleProvider initialLocale="en">
+      <>
         <AccountSettings onSaved={onSaved} />
-      </LocaleProvider>
+      </>
     );
     const view = render(content());
     fireEvent.click(screen.getAllByRole("radio")[2]);

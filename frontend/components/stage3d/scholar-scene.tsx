@@ -415,9 +415,9 @@ export function ScholarScene({
         {status === "ready" && stageCameraControls ? (
           <>
             <label className={styles.scenePackPicker}>
-              <span>院落</span>
+              <span>Courtyard</span>
               <select
-                aria-label="切换院落场景"
+                aria-label="Switch courtyard scene"
                 data-ui-guide="camera.scene"
                 onChange={(event) => changeScenePack(event.target.value)}
                 value={scenePackId}
@@ -430,12 +430,12 @@ export function ScholarScene({
               </select>
             </label>
             <div
-              aria-label="场景相机"
+              aria-label="Scene camera"
               className={styles.cameraControls}
               role="group"
             >
               <button
-                aria-label="镜头向前移动"
+                aria-label="Move camera forward"
                 className={styles.cameraForward}
                 onClick={() => moveStageCamera("forward")}
                 data-ui-guide="camera.forward"
@@ -444,7 +444,7 @@ export function ScholarScene({
                 ↑
               </button>
               <button
-                aria-label="镜头向左转"
+                aria-label="Turn camera left"
                 className={styles.cameraTurnLeft}
                 onClick={() => moveStageCamera("turn-left")}
                 data-ui-guide="camera.turnLeft"
@@ -453,7 +453,7 @@ export function ScholarScene({
                 ↶
               </button>
               <button
-                aria-label="镜头向左移动"
+                aria-label="Move camera left"
                 className={styles.cameraLeft}
                 onClick={() => moveStageCamera("left")}
                 data-ui-guide="camera.left"
@@ -462,7 +462,7 @@ export function ScholarScene({
                 ←
               </button>
               <button
-                aria-label="切换鸟瞰"
+                aria-label="Toggle bird's-eye view"
                 className={styles.cameraOverview}
                 onClick={toggleStageOverview}
                 data-ui-guide="camera.aerial"
@@ -471,7 +471,7 @@ export function ScholarScene({
                 ◎
               </button>
               <button
-                aria-label="镜头向右移动"
+                aria-label="Move camera right"
                 className={styles.cameraRight}
                 onClick={() => moveStageCamera("right")}
                 data-ui-guide="camera.right"
@@ -480,7 +480,7 @@ export function ScholarScene({
                 →
               </button>
               <button
-                aria-label="镜头向右转"
+                aria-label="Turn camera right"
                 className={styles.cameraTurnRight}
                 onClick={() => moveStageCamera("turn-right")}
                 data-ui-guide="camera.turnRight"
@@ -489,7 +489,7 @@ export function ScholarScene({
                 ↷
               </button>
               <button
-                aria-label="镜头向后移动"
+                aria-label="Move camera back"
                 className={styles.cameraBackward}
                 onClick={() => moveStageCamera("backward")}
                 data-ui-guide="camera.backward"

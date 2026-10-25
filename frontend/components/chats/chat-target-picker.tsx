@@ -2,7 +2,7 @@
 
 import { FitTitle } from "../fit-title";
 import type { ChatAgent } from "../../lib/api";
-import { useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import { IconCheck } from "../quiet-icons";
 import { ModuleCard, ModuleGrid, teamVersionLabel } from "../studyform-layout";
 import styles from "../agent-chat.module.css";

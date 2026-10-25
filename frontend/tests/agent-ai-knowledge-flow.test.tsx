@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
-import { LocaleProvider } from "../components/locale";
 import { useSession } from "../components/session-provider";
 import { TeacherAgentDetail } from "../components/teacher-workspace";
 import type {
@@ -198,11 +197,11 @@ function renderWorkbench(
     logout: vi.fn(),
   } as never);
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <AppShell role="teacher">
         <AgentWorkbench versionId="version-1" generationFlow={generationFlow} />
       </AppShell>
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -369,7 +368,7 @@ describe("explicit AI Knowledge Agent flow", () => {
       logout: vi.fn(),
     } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherAgentDetail
             agentId="agent-1"
@@ -377,7 +376,7 @@ describe("explicit AI Knowledge Agent flow", () => {
             generationSetId="set-1"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     const editor = await screen.findByRole("textbox", {
@@ -443,7 +442,7 @@ describe("explicit AI Knowledge Agent flow", () => {
       logout: vi.fn(),
     } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherAgentDetail
             agentId="agent-1"
@@ -451,7 +450,7 @@ describe("explicit AI Knowledge Agent flow", () => {
             generationSetId="set-1"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     expect(
       await screen.findByText(/not linked to a generation receipt/),
@@ -493,7 +492,7 @@ describe("explicit AI Knowledge Agent flow", () => {
       logout: vi.fn(),
     } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherAgentDetail
             agentId="agent-1"
@@ -501,7 +500,7 @@ describe("explicit AI Knowledge Agent flow", () => {
             generationSetId="set-1"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     expect(
       await screen.findByText(/not linked to a generation receipt/),
@@ -546,7 +545,7 @@ describe("explicit AI Knowledge Agent flow", () => {
       logout: vi.fn(),
     } as never);
     const view = render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherAgentDetail
             agentId="agent-1"
@@ -554,13 +553,13 @@ describe("explicit AI Knowledge Agent flow", () => {
             generationSetId="set-old"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await waitFor(() =>
       expect(api.knowledgeSet).toHaveBeenCalledWith("set-old"),
     );
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherAgentDetail
             agentId="agent-1"
@@ -568,7 +567,7 @@ describe("explicit AI Knowledge Agent flow", () => {
             generationSetId="set-new"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await waitFor(() =>
       expect(api.knowledgeSet).toHaveBeenCalledWith("set-new"),

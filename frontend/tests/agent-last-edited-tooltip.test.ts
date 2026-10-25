@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import { agentLastEditedTitle, formatVersionLabel } from "../lib/agent-tooltip";
 import { tm } from "../lib/i18n";
 
-const zh = (k: "agentLastEditedTooltip", v?: Record<string, string>) =>
-  tm(k, v ?? {}, "zh");
 const en = (k: "agentLastEditedTooltip", v?: Record<string, string>) =>
-  tm(k, v ?? {}, "en");
+  tm(k, v ?? {});
 
 describe("agentLastEditedTitle", () => {
   it("shows the latest version as V1.x and the latest editor", () => {
@@ -13,9 +11,6 @@ describe("agentLastEditedTitle", () => {
       last_edited_by_name: "Kaikai",
       current_version_label: "V1.2",
     };
-    expect(agentLastEditedTitle(zh, agent)).toBe(
-      "最新版本：V1.2 · 最新编辑：Kaikai",
-    );
     expect(agentLastEditedTitle(en, agent)).toBe(
       "Latest version: V1.2 · Last edited by: Kaikai",
     );

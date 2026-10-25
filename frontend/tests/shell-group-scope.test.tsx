@@ -22,14 +22,13 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { AppShell } from "../components/app-shell";
-import { LocaleProvider } from "../components/locale";
 
 const content = () => (
-  <LocaleProvider initialLocale="en">
+  <>
     <AppShell role="student">
       <p>Content</p>
     </AppShell>
-  </LocaleProvider>
+  </>
 );
 const links = () =>
   screen.getAllByRole("link").map((link) => link.getAttribute("href"));

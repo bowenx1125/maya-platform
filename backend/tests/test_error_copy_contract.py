@@ -1,4 +1,4 @@
-"""Every error code the backend can send has zh/en copy in the frontend (PR D3).
+"""Every error code the backend can send has English copy in the frontend (PR D3).
 
 Codes are found statically: the first argument of ``PlatformError``,
 ``conflict``, ``unprocessable`` and other ``*Error`` calls, and string values
@@ -93,13 +93,13 @@ def test_specific_copy_is_not_repeated_in_the_catalog() -> None:
     assert sorted(specific_codes() & set(catalog()["codes"])) == []
 
 
-def test_every_message_has_english_and_chinese() -> None:
+def test_every_message_has_english_copy_only() -> None:
     data = catalog()
     messages = data["messages"]
     assert isinstance(messages, dict)
     for code, key in data["codes"].items():  # type: ignore[union-attr]
         assert key in messages, f"{code} names a missing message {key}"
     for key, copy in messages.items():
-        assert set(copy) == {"en", "zh"}, key
+        # The UI is English only (owner decision 2026-10-25).
+        assert set(copy) == {"en"}, key
         assert copy["en"].strip() and not CJK.search(copy["en"]), key
-        assert CJK.search(copy["zh"]), key

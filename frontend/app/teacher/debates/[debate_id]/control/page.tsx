@@ -23,8 +23,8 @@ import {
   type DebateDetail,
   type IdempotencyHandle,
 } from "../../../../../lib/api";
-import { useLocale, useT } from "../../../../../components/locale";
-import { localizeError, type Locale } from "../../../../../lib/i18n";
+import { useT } from "../../../../../lib/i18n";
+import { localizeError } from "../../../../../lib/i18n";
 import { expectedTurnCount } from "../../../../../lib/debate-rounds";
 
 const INITIAL_PLAYBACK_AUTHORITY: PlaybackAuthorityState = {
@@ -55,34 +55,20 @@ function canFinishWithAuthority(
 function finishBlockedCopy(
   detail: DebateDetail,
   authority: PlaybackAuthorityState,
-  locale: Locale,
 ): string {
-  const zh = locale === "zh";
   switch (authority.connectionIssue) {
     case "superseded":
-      return zh
-        ? "暂不可结束：另一个教师页面已取得控制权"
-        : "Finish unavailable: another teacher page has control.";
+      return "Finish unavailable: another teacher page has control.";
     case "session_expired":
-      return zh
-        ? "暂不可结束：登录已失效，请重新登录"
-        : "Finish unavailable: please sign in again.";
+      return "Finish unavailable: please sign in again.";
     case "origin_mismatch":
-      return zh
-        ? "暂不可结束：课堂访问地址与服务器配置不一致"
-        : "Finish unavailable: the classroom address does not match the server configuration.";
+      return "Finish unavailable: the classroom address does not match the server configuration.";
     case "terminal":
-      return zh
-        ? "暂不可结束：辩论正在结束"
-        : "Finish unavailable: the debate is already ending.";
+      return "Finish unavailable: the debate is already ending.";
     case "network":
-      return zh
-        ? "连接恢复后才能结束辩论"
-        : "Finish unavailable until the connection is restored.";
+      return "Finish unavailable until the connection is restored.";
     case "sequence_gap":
-      return zh
-        ? "课堂状态重新同步后才能结束辩论"
-        : "Finish unavailable until classroom state is resynchronized.";
+      return "Finish unavailable until classroom state is resynchronized.";
     default:
       if (
         authority.commandBusy === true ||
@@ -90,13 +76,9 @@ function finishBlockedCopy(
         detail.playback.status === "completed" ||
         detail.playback.status === "stopped"
       ) {
-        return zh
-          ? "本场辩论已结束或已停止"
-          : "This debate has already ended or been stopped.";
+        return "This debate has already ended or been stopped.";
       }
-      return zh
-        ? "当前页面取得教师控制权后才能结束辩论"
-        : "Finish unavailable until this page has active teacher control.";
+      return "Finish unavailable until this page has active teacher control.";
   }
 }
 
@@ -129,7 +111,6 @@ function hasCompletePublicPlan(detail: DebateDetail): boolean {
 
 export default function TeacherDebateControlPage() {
   const t = useT();
-  const { locale } = useLocale();
   const params = useParams<{ debate_id: string | string[] }>();
   const rawDebateId = params?.debate_id;
   const debateId = Array.isArray(rawDebateId) ? rawDebateId[0] : rawDebateId;
@@ -139,14 +120,14 @@ export default function TeacherDebateControlPage() {
       stageTitle: t("debateStageTitle"),
       stageDescription: t("debateStageDescription"),
       start: t("debateStart"),
-      pause: locale === "zh" ? "暂停" : "Pause",
-      resume: locale === "zh" ? "继续" : "Continue",
-      next: locale === "zh" ? "下一步" : "Next",
+      pause: "Pause",
+      resume: "Continue",
+      next: "Next",
       replayTurn: t("debateReplayTurn"),
       replayAll: t("debateReplayAll"),
       debatePartial: t("debatePartial"),
-      reconnect: locale === "zh" ? "重新连接" : "Reconnect",
-      finish: locale === "zh" ? "结束" : "End",
+      reconnect: "Reconnect",
+      finish: "End",
       transcript: t("debateTranscript"),
       sources: t("debateSources"),
       noSources: t("debateNoSources"),
@@ -161,10 +142,10 @@ export default function TeacherDebateControlPage() {
       statusPlaying: t("statusPlaying"),
       statusPaused: t("statusPaused"),
       waitingNext: t("debateWaitingNext"),
-      phaseReady: locale === "zh" ? "就绪" : "Ready",
-      phaseInProgress: locale === "zh" ? "进行中" : "Running",
-      phaseWaiting: locale === "zh" ? "等待继续" : "Waiting",
-      phaseFinished: locale === "zh" ? "已完成" : "Completed",
+      phaseReady: "Ready",
+      phaseInProgress: "Running",
+      phaseWaiting: "Waiting",
+      phaseFinished: "Completed",
       phaseOpening: t("debatePhaseOpening"),
       phaseExchange: t("debatePhaseExchange"),
       phaseFinalIntegration: t("debatePhaseFinalIntegration"),
@@ -183,7 +164,7 @@ export default function TeacherDebateControlPage() {
       connectionSignIn: t("debateConnectionSignIn"),
       connectionReload: t("debateConnectionReload"),
       regenerate: t("debateRegenerate"),
-      localizeCode: (code: string) => localizeError({ code }, locale),
+      localizeCode: (code: string) => localizeError({ code }),
       providerSetupIncomplete: t("debateProviderSetupIncomplete"),
       providerGateTitle: t("debateProviderGateTitle"),
       providerGateLoading: t("debateProviderGateLoading"),
@@ -198,7 +179,7 @@ export default function TeacherDebateControlPage() {
       replaceRetainedAudioConfirm: t("debateReplaceAudioConfirm"),
       audioLabel: t("debateAudioLabel"),
     }),
-    [locale, t],
+    [t],
   );
   const [detail, setDetail] = useState<DebateDetail | null>(null);
   const [currentAudioDebateId, setCurrentAudioDebateId] = useState<
@@ -414,7 +395,7 @@ export default function TeacherDebateControlPage() {
           detail.turn_protocol === "segments_v2" ? (
             <DebatePreview
               detail={detail}
-              error={error ? localizeError(error, locale) : null}
+              error={error ? localizeError(error) : null}
               onRetryTurn={(turnId) => void retryPreviewTurn(turnId)}
               retryingTurnId={retryingPreviewTurnId}
               openClassroomHref={`/teacher/debates-beta/${debateId}/control`}
@@ -445,19 +426,11 @@ export default function TeacherDebateControlPage() {
                           onClick={() => void finish()}
                           type="button"
                         >
-                          {finishBusy
-                            ? locale === "zh"
-                              ? "正在结束…"
-                              : "Finishing…"
-                            : stageLabels.finish}
+                          {finishBusy ? "Finishing…" : stageLabels.finish}
                         </button>
                         {finishAllowed ? null : (
                           <span id="finish-authority-message" role="status">
-                            {finishBlockedCopy(
-                              detail,
-                              playbackAuthority,
-                              locale,
-                            )}
+                            {finishBlockedCopy(detail, playbackAuthority)}
                           </span>
                         )}
                       </>
@@ -482,7 +455,7 @@ export default function TeacherDebateControlPage() {
                 onAuthorityChange={updatePlaybackAuthority}
                 onDetailChange={setDetail}
                 onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
-                outputLanguage={locale === "zh" ? "zh" : "en"}
+                outputLanguage="en"
                 actionInFlight={finishBusy}
                 refreshSnapshot={refreshSnapshot}
               />
