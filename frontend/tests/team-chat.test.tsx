@@ -1158,7 +1158,7 @@ describe("Chatform", () => {
     ).toBeTruthy();
   });
 
-  it("explains under the latest message that a member Agent was deleted", async () => {
+  it("explains in the mascot tray that a member Agent was deleted", async () => {
     const history = {
       ...teamSession,
       can_send: false,
@@ -1187,7 +1187,7 @@ describe("Chatform", () => {
     const log = await screen.findByRole("log");
     const deletedName = teamSession.team.members[1].name;
     expect(
-      await within(log).findByText(
+      await screen.findByText(
         `${deletedName} was deleted by its publisher. This Team chat can't continue; its history is kept.`,
       ),
     ).toBeTruthy();
@@ -1228,7 +1228,7 @@ describe("Chatform", () => {
     );
     const log = await screen.findByRole("log");
     expect(
-      await within(log).findByText(
+      await screen.findByText(
         "This Team Chat can't continue: its members are no longer available to you. Start a new Chat with the Team.",
       ),
     ).toBeTruthy();

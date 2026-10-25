@@ -3261,7 +3261,6 @@ function AgentChatScope({
                   {closedNotice &&
                   closedNoticeDismissed !== activeSession?.id ? (
                     <Notice
-                      inline
                       id="chat-readonly-help"
                       tone="warning"
                       onClose={() =>

@@ -1387,7 +1387,7 @@ describe("private Agent chat", () => {
 });
 
 describe("chat that cannot continue", () => {
-  it("says under the latest message that the publisher deleted the Agent, and closes", async () => {
+  it("says in the mascot tray that the publisher deleted the Agent, and closes", async () => {
     state.api.conversations.mockResolvedValue([
       {
         ...completedConversation,
@@ -1401,7 +1401,7 @@ describe("chat that cannot continue", () => {
       </>,
     );
     const log = await screen.findByRole("log");
-    const notice = await within(log).findByText(
+    const notice = await screen.findByText(
       "The publisher deleted this Agent. This chat can't continue; its history is kept.",
     );
     expect(within(log).getByText("A considered reply")).toBeTruthy();
@@ -1410,9 +1410,9 @@ describe("chat that cannot continue", () => {
       "disabled",
       true,
     );
-    fireEvent.click(within(log).getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(
-      within(log).queryByText(
+      screen.queryByText(
         "The publisher deleted this Agent. This chat can't continue; its history is kept.",
       ),
     ).toBeNull();
