@@ -29,6 +29,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.debates.generation.evidence_trace import public_evidence_trace
 from app.modules.debates.generation.mutual_learning_policy import MUTUAL_LEARNING_RULE_SET_ID
 from app.modules.debates.generation.round_phase import phase_for_round
+from app.modules.debates.models import DEFAULT_PLAYBACK_RATE
 from app.modules.debates.round_count import debate_teaching_protocol, uses_segment_protocol
 from app.providers.tts import TTS_UNAVAILABLE_CODES, MockTTSProvider, TTSProvider
 
@@ -113,7 +114,7 @@ class PlaybackRuntime:
     mode: str = "live"
     current_turn_id: str | None = None
     cursor_ms: int = 0
-    playback_rate: float = 1.0
+    playback_rate: float = DEFAULT_PLAYBACK_RATE
     control_version: int = 0
     controller_epoch: str | None = None
     controller_session_hash: str | None = None
@@ -472,7 +473,7 @@ class PlaybackCore:
             cached.current_turn_id = getattr(state, "current_turn_id", cached.current_turn_id)
             cached.cursor_ms = int(getattr(state, "cursor_ms", cached.cursor_ms) or 0)
             cached.playback_rate = float(
-                getattr(state, "playback_rate", cached.playback_rate) or 1.0
+                getattr(state, "playback_rate", cached.playback_rate) or DEFAULT_PLAYBACK_RATE
             )
             cached.control_version = int(
                 getattr(state, "control_version", cached.control_version) or 0
@@ -515,7 +516,9 @@ class PlaybackCore:
             mode=str(getattr(state, "mode", "live")),
             current_turn_id=getattr(state, "current_turn_id", None),
             cursor_ms=int(getattr(state, "cursor_ms", 0) or 0),
-            playback_rate=float(getattr(state, "playback_rate", 1.0) or 1.0),
+            playback_rate=float(
+                getattr(state, "playback_rate", DEFAULT_PLAYBACK_RATE) or DEFAULT_PLAYBACK_RATE
+            ),
             control_version=int(getattr(state, "control_version", 0) or 0),
             controller_epoch=getattr(state, "controller_epoch", None),
             controller_session_hash=self._controller_sessions.get(debate_id),

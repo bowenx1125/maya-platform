@@ -52,7 +52,12 @@ from app.core.models import (
     StoredFile,
 )
 from app.modules.debates import models as _debate_models
-from app.modules.debates.models import Debate, DebateTurn, PlaybackState
+from app.modules.debates.models import (
+    DEFAULT_PLAYBACK_RATE,
+    Debate,
+    DebateTurn,
+    PlaybackState,
+)
 from app.modules.debates.setup.service import require_teacher_course
 from app.modules.interactions import models as _interaction_models
 from app.modules.reports import models as _report_models
@@ -1020,7 +1025,7 @@ def _load_playback(db: Session, debate_id: str) -> PlaybackState:
             mode="live",
             control_version=0,
             cursor_ms=0,
-            playback_rate=1.0,
+            playback_rate=DEFAULT_PLAYBACK_RATE,
             created_at=now,
             updated_at=now,
         )
