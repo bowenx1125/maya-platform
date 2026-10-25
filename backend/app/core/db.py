@@ -11,6 +11,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import Connection, Engine
@@ -27,6 +28,19 @@ POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
 ALEMBIC_HEAD = "0080_drop_playback_rate"
+# The oldest revision this checkout has (migrations squashed 2026-10-25).
+MIGRATION_BASELINE = "0080_drop_playback_rate"
+
+
+def _known_revision(config: Any, revision: str) -> bool:
+    from alembic.script import ScriptDirectory
+
+    try:
+        return ScriptDirectory.from_config(config).get_revision(revision) is not None
+    except Exception:
+        return False
+
+
 _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 
@@ -283,6 +297,14 @@ class Database:
             self.initialize_schema()
             command.stamp(config, "head")  # type: ignore[arg-type]
         elif version != ALEMBIC_HEAD:
+            if not _known_revision(config, version):
+                # Revisions before the 2026-10-25 squash are gone from this
+                # checkout; refuse clearly instead of Alembic's lookup error.
+                raise RuntimeError(
+                    f"Database is at {version}, older than the squashed migration "
+                    f"baseline {MIGRATION_BASELINE}. Deploy the last release before "
+                    "the squash, let it upgrade, then deploy this one."
+                )
             command.upgrade(config, "head")  # type: ignore[arg-type]
         # Alembic's fileConfig rewrites the root logger from alembic.ini,
         # which drops the application's stdout handler and forces the root

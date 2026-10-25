@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from app.core.config import Settings
-from app.core.db import ALEMBIC_HEAD, Database
+from app.core.db import ALEMBIC_HEAD, MIGRATION_BASELINE, Database
 from sqlalchemy import inspect, text
 
 from tests.postgres_db import named_url
@@ -57,6 +57,25 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
         )
 
 
+def test_database_below_the_squashed_baseline_is_refused(tmp_path: Path) -> None:
+    db = Database(named_url(f"{tmp_path / 'old.sqlite3'}"))
+    db.upgrade_schema()
+    with db.engine.begin() as connection:
+        connection.execute(text("UPDATE alembic_version SET version_num = '0079_old'"))
+    try:
+        db.upgrade_schema()
+    except RuntimeError as error:
+        assert "older than the squashed migration baseline" in str(error)
+        assert MIGRATION_BASELINE in str(error)
+    else:
+        raise AssertionError("an unknown pre-squash revision must be refused")
+    with db.engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == "0079_old"
+        )
+
+
 def test_provider_selectors_are_mock_safe_by_default() -> None:
     settings = Settings(
         maya_env="test",
@@ -89,3 +108,29 @@ def test_session_time_zone_is_utc_whatever_the_client_says(
         assert stored.utcoffset() == timedelta(0)
     finally:
         db.dispose()
+
+
+def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Path) -> None:
+    # Production is at 0080_drop_playback_rate when the squash deploys: the
+    # baseline keeps that id, so startup must only find it, never replay DDL.
+    from sqlalchemy import event
+
+    db = Database(named_url(f"{tmp_path / 'baseline.sqlite3'}"))
+    db.upgrade_schema()
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        statements.append(statement.lstrip().split(None, 1)[0].upper())
+
+    event.listen(db.engine, "before_cursor_execute", record)
+    try:
+        db.upgrade_schema()
+    finally:
+        event.remove(db.engine, "before_cursor_execute", record)
+    assert MIGRATION_BASELINE == ALEMBIC_HEAD == "0080_drop_playback_rate"
+    assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
+    with db.engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == MIGRATION_BASELINE
+        )

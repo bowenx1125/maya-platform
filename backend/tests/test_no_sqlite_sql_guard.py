@@ -22,9 +22,7 @@ PATTERN = re.compile(
 )
 
 # file -> number of allowed occurrences.
-REVIEWED: dict[str, int] = {
-    "core/sqlite_fk.py": 1,  # imported only by historical SQLite migrations
-}
+REVIEWED: dict[str, int] = {}
 
 
 def _occurrences() -> dict[str, int]:
