@@ -448,7 +448,7 @@ class PlaybackSessionMixin(PlaybackCore):
             except Exception:
                 self.ticket_store.revoke_token(token)
                 raise
-            media_url = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
+            media_url = self._media_url(debate_id, turn_id, token)
             result = MediaPreparedResult(
                 message_id=uuid4(),
                 debate_id=UUID(debate_id),
@@ -1143,7 +1143,7 @@ class PlaybackSessionMixin(PlaybackCore):
             )
             return (
                 successor_id,
-                f"/api/v1/debates/{debate_id}/audio/{successor_id}?media_ticket={token}",
+                self._media_url(debate_id, successor_id, token),
             )
 
     async def _prefetch_turn(
@@ -1178,7 +1178,14 @@ class PlaybackSessionMixin(PlaybackCore):
             action="prefetch",
             control_version=state.control_version,
         )
-        return f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
+        return self._media_url(debate_id, turn_id, token)
+
+    def _media_url(self, debate_id: str, turn_id: str, token: str) -> str:
+        """The ticket URL; it asks for the MP3 copy when the server can encode one."""
+
+        url = f"/api/v1/debates/{debate_id}/audio/{turn_id}?media_ticket={token}"
+        store = self.audio_store
+        return f"{url}&format=mp3" if store is not None and store.compressed else url
 
     def _prefetchable_turn(self, db: Any, debate: Any, turn: Any) -> bool:
         """A speech whose saved audio can be downloaded now (final and validated)."""

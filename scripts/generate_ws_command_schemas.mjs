@@ -32,7 +32,7 @@ const nonEmpty = { type: "string", minLength: 1 };
 const privateMediaUrl = {
   type: "string",
   pattern:
-    "^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\?media_ticket=[A-Za-z0-9_-]{43}$",
+    "^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$",
 };
 const closed = (properties, required) => ({
   type: "object",
