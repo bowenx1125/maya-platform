@@ -26,7 +26,7 @@ export function agentMascot(id: string, materialTheme?: string | null) {
 }
 
 export const AGENT_GRID_CLASS =
-  "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-3 pr-3 pb-2 max-[680px]:grid-cols-1 max-[680px]:gap-4";
+  "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5 p-0 pt-4 pr-4 pb-2 max-[680px]:grid-cols-1 max-[680px]:gap-4";
 
 const CARD_CLASS =
   "group/card relative flex min-h-[248px] flex-col overflow-visible rounded-arc border-[3px] border-border bg-surface font-body text-ink shadow-arc transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 focus-within:-translate-y-0.5";
@@ -379,7 +379,7 @@ function GhostSlot({ narrowHidden }: { narrowHidden: boolean }) {
       <span className="block px-4 pt-3 pb-3.5">
         <span className="block h-2 w-4/5 rounded-full bg-[#E5E5E5]" />
       </span>
-      <span className="absolute -top-3 -right-3 inline-grid size-8 place-items-center rounded-full border-[3px] border-dashed border-[#C4C4C4] bg-white/70 text-[#C4C4C4]">
+      <span className="absolute -top-3 -right-3 inline-grid size-8 place-items-center rounded-full border-[3px] border-dashed border-[#C4C4C4] bg-white text-[#C4C4C4]">
         <IconClose size={14} />
       </span>
     </li>
