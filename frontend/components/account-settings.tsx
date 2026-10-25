@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 import { cachedCall, requestCacheIdentity } from "../lib/request-cache";
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ErrorNotice, SectionCard } from "./ui";
 import { USER_AVATAR_CHOICES, UserAvatar } from "./user-avatar";

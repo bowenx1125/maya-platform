@@ -54,7 +54,6 @@ import { AppShell } from "../components/app-shell";
 import { TeamEntryFlow } from "../components/chats/team-entry-flow";
 import { GroupWorkspace } from "../components/student-workspace";
 import { TeacherStudyformWorkspace } from "../components/teacher-workspace";
-import { LocaleProvider } from "../components/locale";
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 import { abandonChatRequest } from "../lib/chat-request-store";
 import { PlatformApiError } from "../lib/api/platform";
@@ -192,12 +191,12 @@ const publicTeam = { ...team, visibility: "public" };
 
 function renderChats() {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <UiGuideTooltip />
       <AppShell role={state.role as "teacher" | "student"}>
         <AgentChat />
       </AppShell>
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -206,7 +205,7 @@ function teamManagementPage(
   initialTeamId?: string,
 ) {
   return (
-    <LocaleProvider initialLocale="en">
+    <>
       <AppShell role="teacher">
         <TeamEntryFlow
           api={state.api as never}
@@ -218,7 +217,7 @@ function teamManagementPage(
           initialTeamId={initialTeamId}
         />
       </AppShell>
-    </LocaleProvider>
+    </>
   );
 }
 
@@ -409,7 +408,7 @@ describe("Studyform Teams", () => {
       can_edit: false,
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <TeamEntryFlow
             api={state.api as never}
@@ -421,7 +420,7 @@ describe("Studyform Teams", () => {
             initialTeamId="team-1"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     expect(
       await screen.findByRole("checkbox", { name: /Socrates/ }),
@@ -579,7 +578,7 @@ describe("Studyform Teams", () => {
     state.api.teams.mockResolvedValue([publicTeam]);
     state.api.team.mockResolvedValue(publicTeam);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeamEntryFlow
             api={state.api as never}
@@ -592,7 +591,7 @@ describe("Studyform Teams", () => {
             initialRouteMode="teams"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     fireEvent.click(
       await screen.findByRole("button", { name: "Reasoning circle" }),
@@ -706,9 +705,9 @@ describe("Studyform Team cards", () => {
       },
     ]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherStudyformWorkspace />
-      </LocaleProvider>,
+      </>,
     );
 
     const headings = await screen.findAllByRole("heading", { level: 2 });
@@ -756,9 +755,9 @@ describe("Studyform Team cards", () => {
       },
     ]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <GroupWorkspace groupId="group-1" />
-      </LocaleProvider>,
+      </>,
     );
 
     const headings = await screen.findAllByRole("heading", { level: 2 });
@@ -796,9 +795,9 @@ describe("Studyform Team cards", () => {
     state.api.versions = vi.fn().mockResolvedValue([]);
     state.api.voiceProfiles = vi.fn().mockResolvedValue([]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <GroupWorkspace groupId="group-1" initialMode="team-new" />
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByRole("heading", { name: "Agents" });
@@ -924,12 +923,12 @@ describe("Chatform", () => {
       act(() => {
         window.history.pushState(null, "", url);
         view.rerender(
-          <LocaleProvider initialLocale="en">
+          <>
             <UiGuideTooltip />
             <AppShell role="student">
               <AgentChat />
             </AppShell>
-          </LocaleProvider>,
+          </>,
         );
       });
     await openNewChat();
@@ -1008,11 +1007,11 @@ describe("Chatform", () => {
     state.role = "teacher";
     state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace initialMode="team-new" />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByLabelText("Name");
     expect(
@@ -1048,11 +1047,11 @@ describe("Chatform", () => {
     state.role = "teacher";
     state.api.workspaceAgents = vi.fn().mockResolvedValue([]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace initialMode="team-new" />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByLabelText("Name");
     fireEvent.click(sidebarButton("Back"));
@@ -2186,11 +2185,11 @@ describe("Chatform", () => {
       mayaTeams: vi.fn().mockResolvedValue([nextDirectoryTeam]),
     };
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByText("No chats yet.");
@@ -2435,12 +2434,12 @@ describe("Chatform", () => {
     state.api.conversationSessions.mockResolvedValue([silentSession]);
     state.api.conversationSession.mockResolvedValue(silentSession);
     render(
-      <LocaleProvider initialLocale="zh">
+      <>
         <UiGuideTooltip />
         <AppShell role="student">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     fireEvent.click(
       await screen.findByRole("button", { name: "我答的怎么样" }),

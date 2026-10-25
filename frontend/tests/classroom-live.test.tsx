@@ -8,7 +8,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ClassroomLive } from "../components/classroom-live";
-import { LocaleProvider } from "../components/locale";
 import {
   PlatformApiError,
   type LiveSnapshot,
@@ -130,11 +129,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function livePage(locale: "en" | "zh" = "en") {
+function livePage() {
   return (
-    <LocaleProvider initialLocale={locale}>
+    <>
       <ClassroomLive />
-    </LocaleProvider>
+    </>
   );
 }
 
@@ -241,11 +240,11 @@ describe("ClassroomLive read-only recovery", () => {
     );
   });
 
-  it("shows the unavailable interaction guidance in Chinese", async () => {
-    render(livePage("zh"));
+  it("shows the unavailable interaction guidance", async () => {
+    render(livePage());
     await settle();
     expect(screen.getByRole("status").textContent).toBe(
-      "仅当老师已开启互动且课堂仍在收集回应时可参与。",
+      "Interaction is available only while the teacher has opened it and responses are being collected.",
     );
   });
 

@@ -27,6 +27,8 @@ Do not add unrequested features, speculative extension points or dependencies
 that existing code can reasonably replace. Keep single-use code in place;
 introduce an abstraction only for a concrete shared need. UI redesigns preserve
 existing wording unless a copy change is explicitly requested.
+The UI is English only: write new copy in English and add no Chinese UI copy.
+A Debate's output language (Chinese or English content) is a separate setting.
 Teaching and attribution guidance belongs in editable Rulesets; do not silently
 reinsert removed guidance through the execution contract.
 

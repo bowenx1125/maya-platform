@@ -39,7 +39,7 @@ import { localizeError, roleLabel, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
 import { endTeacherEnter } from "../lib/teacher-visit";
 import { useSetAcademyMood } from "./academy/mood";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 
 type SessionStatus = "loading" | "authenticated" | "anonymous";
 
@@ -524,7 +524,6 @@ export function RouteGuard({
 
 export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
   const t = useT();
-  const { locale } = useLocale();
   const router = useRouter();
   const { status, login, quickLogin, api, switchIdentity } = useSession();
   const [username, setUsername] = useState("");
@@ -756,7 +755,7 @@ export function LoginForm({ onRegister }: { onRegister?: () => void } = {}) {
         </DismissibleAlert>
       ) : error ? (
         <DismissibleAlert className="form-error" resetKey={error}>
-          {localizeError(error, locale, errorFallback)}
+          {localizeError(error, errorFallback)}
         </DismissibleAlert>
       ) : null}
       {hasDemoIdentities ? (

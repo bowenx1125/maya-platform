@@ -12,31 +12,9 @@ describe("server busy / pressure errors", () => {
     "adaptive_admission_busy",
   ]) {
     it(`${code} tells the student to retry and that input was kept`, () => {
-      const error = { status: 503, code };
-      const zh = localizeError(error, "zh");
-      const en = localizeError(error, "en");
-      expect(zh).toMatch(/稍后重试/);
-      expect(zh).toMatch(/保留/);
-      expect(en).toMatch(/try again/i);
-      expect(en).toMatch(/kept/);
+      const message = localizeError({ status: 503, code });
+      expect(message).toMatch(/try again/i);
+      expect(message).toMatch(/kept/);
     });
   }
-
-  it("busy codes say 人多 in zh", () => {
-    expect(
-      localizeError({ status: 503, code: "llm_admission_busy" }, "zh"),
-    ).toContain("人多");
-    expect(
-      localizeError({ status: 503, code: "write_pressure" }, "zh"),
-    ).toContain("人多");
-    expect(
-      localizeError({ status: 503, code: "create_admission_busy" }, "zh"),
-    ).toContain("人多");
-    expect(
-      localizeError({ status: 503, code: "host_load_pressure" }, "zh"),
-    ).toContain("人多");
-    expect(
-      localizeError({ status: 503, code: "adaptive_admission_busy" }, "zh"),
-    ).toContain("人多");
-  });
 });

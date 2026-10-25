@@ -8,7 +8,6 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RegistrationOptions } from "../lib/api";
-import { LocaleProvider } from "../components/locale";
 
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -37,7 +36,7 @@ function options(): RegistrationOptions {
   } as RegistrationOptions;
 }
 
-function mount(locale: "en" | "zh" = "en") {
+function mount() {
   const api = {
     registrationOptions: vi.fn().mockResolvedValue(options()),
   };
@@ -47,9 +46,9 @@ function mount(locale: "en" | "zh" = "en") {
   });
   mockedUseSession.mockReturnValue({ api, register } as never);
   const view = render(
-    <LocaleProvider initialLocale={locale}>
+    <>
       <RegisterForm />
-    </LocaleProvider>,
+    </>,
   );
   return { api, register, view };
 }
@@ -221,9 +220,9 @@ describe("student self-registration form", () => {
     const register = vi.fn().mockRejectedValue(new Error("username taken"));
     mockedUseSession.mockReturnValue({ api, register } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <RegisterForm />
-      </LocaleProvider>,
+      </>,
     );
 
     const group = await toGroupStep();
@@ -243,9 +242,9 @@ describe("student self-registration form", () => {
     const register = vi.fn().mockResolvedValue({ csrf_token: "csrf" });
     mockedUseSession.mockReturnValue({ api, register } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <RegisterForm />
-      </LocaleProvider>,
+      </>,
     );
 
     const group = await toGroupStep("solo");
@@ -283,12 +282,6 @@ describe("student self-registration form", () => {
       "abcde",
     );
     expect(replace).not.toHaveBeenCalled();
-  });
-
-  it("renders the Chinese copy", async () => {
-    mount("zh");
-    expect(await screen.findByLabelText("用户名")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "下一步" })).toBeTruthy();
   });
 });
 

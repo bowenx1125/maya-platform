@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
 import { apiErrorMessage, PlatformApiError } from "../../lib/api";
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import {
   audienceId,
   isBusyRefusal,
@@ -132,7 +132,7 @@ export function AudienceInteractionForm({
   accessToken,
   api = browserAudienceApi,
 }: AudienceInteractionFormProps) {
-  const { t } = useLocale();
+  const t = useT();
   const messageInput = useRef<HTMLTextAreaElement>(null);
   const [form, setForm] = useState<Awaited<
     ReturnType<AudienceInteractionApi["getForm"]>

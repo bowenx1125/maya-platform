@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 
 export type GuideStep = {
   label: string;

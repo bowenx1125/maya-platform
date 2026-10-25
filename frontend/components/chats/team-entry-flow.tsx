@@ -24,7 +24,7 @@ import {
   type TeamWriteRequest,
 } from "../../lib/api";
 import { localizeError } from "../../lib/i18n";
-import { useLocale, useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import { PageAction } from "../page-action";
 import { teamVersionLabel } from "../studyform-layout";
 import { useSession } from "../session-provider";
@@ -155,7 +155,6 @@ export function TeamEntryFlow({
   onCancel?: () => void;
 }) {
   const t = useT();
-  const { locale } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const { identityGeneration, user } = useSession();
@@ -630,7 +629,7 @@ export function TeamEntryFlow({
       ? mutationUnknown
         ? t("teamSaveUnknown")
         : error instanceof PlatformApiError
-          ? localizeError(error, locale, "teamSaveFailed")
+          ? localizeError(error, "teamSaveFailed")
           : t("teamSaveFailed")
       : "");
 

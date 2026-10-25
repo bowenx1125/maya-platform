@@ -16,7 +16,7 @@ import { localizeError, type MessageKey } from "../lib/i18n";
 import { sanitizeNextPath } from "../lib/navigation";
 import { markTourPending } from "../lib/onboarding";
 import { useSetAcademyMood } from "./academy/mood";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 
 /** Suggestions are display hints; the server owns canonical group identity. */
@@ -36,7 +36,6 @@ const PASSWORD_MIN = 5;
 
 export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
   const t = useT();
-  const { locale } = useLocale();
   const router = useRouter();
   const { api, register } = useSession();
   const [step, setStep] = useState<1 | 2>(1);
@@ -218,7 +217,7 @@ export function RegisterForm({ onCancel }: { onCancel?: () => void }) {
         </DismissibleAlert>
       ) : error ? (
         <DismissibleAlert className="form-error" resetKey={error}>
-          {localizeError(error, locale, "registerFailed")}
+          {localizeError(error, "registerFailed")}
         </DismissibleAlert>
       ) : null}
       <form className="stack-form login-form" onSubmit={submit}>

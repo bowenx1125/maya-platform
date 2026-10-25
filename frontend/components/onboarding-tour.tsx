@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import type { MessageKey } from "../lib/i18n";
 import { finishTour, tourPendingFor } from "../lib/onboarding";
 import { usePrefersReducedMotion } from "./academy/motion";
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import styles from "./onboarding-tour.module.css";
 
 type Step = { target: string | null; title: MessageKey; body: MessageKey };

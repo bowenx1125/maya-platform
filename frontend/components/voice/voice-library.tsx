@@ -20,7 +20,7 @@ import {
 } from "../../lib/voice-list-cache";
 import { statusLabel, type MessageKey } from "../../lib/i18n";
 import { useSession } from "../session-provider";
-import { useLocale, useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import {
   ErrorNotice,
   LoadingCard,
@@ -164,7 +164,6 @@ export function VoiceLibrary({
   id?: string;
 }) {
   const t = useT();
-  const { locale } = useLocale();
   const session = useSession();
   const { api } = session;
   const cacheIdentity = voiceListIdentity(
@@ -719,7 +718,7 @@ export function VoiceLibrary({
           const statusHint =
             profile.status === "ready"
               ? undefined
-              : statusLabel(profile.status, locale);
+              : statusLabel(profile.status);
           return (
             <li
               className={styles.voiceRow}

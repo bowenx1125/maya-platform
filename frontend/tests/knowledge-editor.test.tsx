@@ -7,7 +7,6 @@ import {
   KnowledgeFilenameField,
   KnowledgeMarkdownField,
 } from "../components/knowledge";
-import { LocaleProvider } from "../components/locale";
 
 const originalCreateObjectURL = Object.getOwnPropertyDescriptor(
   URL,
@@ -38,7 +37,7 @@ describe("shared Knowledge Markdown fields and file helpers", () => {
     const onFilenameChange = vi.fn();
     const onMarkdownChange = vi.fn();
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <KnowledgeFilenameField
           value="lesson.md"
           describedBy="filename-help"
@@ -49,7 +48,7 @@ describe("shared Knowledge Markdown fields and file helpers", () => {
           rows={16}
           onChange={onMarkdownChange}
         />
-      </LocaleProvider>,
+      </>,
     );
 
     const filename = screen.getByPlaceholderText("evidence.md");

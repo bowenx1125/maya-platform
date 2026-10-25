@@ -36,7 +36,7 @@ import { AccountSettings } from "./account-settings";
 import { GroupOverview } from "./group-overview";
 import { HomeGuide } from "./home-guide";
 import { OnboardingTour } from "./onboarding-tour";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
 import { UserAvatar } from "./user-avatar";
@@ -128,7 +128,6 @@ function versionBubble(agent: AgentSummary, versions: AgentVersion[]) {
 
 export function StudentDashboard() {
   const t = useT();
-  const { locale } = useLocale();
   const { api, identityGeneration, user } = useSession();
   const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
@@ -266,7 +265,7 @@ export function StudentDashboard() {
                       size="sm"
                     />
                     <strong>{member.display_name}</strong>
-                    <small>{roleLabel(member.role, locale)}</small>
+                    <small>{roleLabel(member.role)}</small>
                   </li>
                 ))}
               </ul>

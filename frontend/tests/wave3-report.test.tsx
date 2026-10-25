@@ -8,7 +8,6 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
 import {
   ReportPanel,
   type Report,
@@ -91,9 +90,9 @@ describe("Wave 3 M14 ReportPanel", () => {
       listReportRevisions: vi.fn(async () => []),
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByText("Report");
@@ -125,9 +124,9 @@ describe("Wave 3 M14 ReportPanel", () => {
       listReportRevisions: vi.fn(async () => []),
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByText("Report");
@@ -170,9 +169,9 @@ describe("Wave 3 M14 ReportPanel", () => {
         .mockResolvedValueOnce(revisions()),
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
 
     await act(async () => {
@@ -193,9 +192,9 @@ describe("Wave 3 M14 ReportPanel", () => {
   it("removes status chrome while preserving insight content and report text", async () => {
     const api = apiMock();
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
 
     expect(await screen.findByText("Report")).toBeTruthy();
@@ -246,9 +245,9 @@ describe("Wave 3 M14 ReportPanel", () => {
           .mockRejectedValue(new Error("History unavailable")),
       });
       render(
-        <LocaleProvider initialLocale="en">
+        <>
           <ReportPanel debateId={debateId} api={api} />
-        </LocaleProvider>,
+        </>,
       );
 
       await act(async () => {
@@ -295,9 +294,9 @@ describe("Wave 3 M14 ReportPanel", () => {
       ),
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -331,9 +330,9 @@ describe("Wave 3 M14 ReportPanel", () => {
       .mockResolvedValue(readyReport());
     const api = apiMock({ getCurrentReport });
     const { rerender } = render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -343,9 +342,9 @@ describe("Wave 3 M14 ReportPanel", () => {
     });
     await act(async () => {
       rerender(
-        <LocaleProvider initialLocale="en">
+        <>
           <ReportPanel debateId={debateId} api={{ ...api }} />
-        </LocaleProvider>,
+        </>,
       );
     });
     await act(async () => {
@@ -376,9 +375,9 @@ describe("Wave 3 M14 ReportPanel", () => {
         .mockResolvedValueOnce(regenerated),
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("Report");
     await waitFor(() =>
@@ -404,9 +403,9 @@ describe("Wave 3 M14 ReportPanel", () => {
       .mockResolvedValueOnce(readyReport());
     const api = apiMock({ regenerateReport });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("Report");
     await waitFor(() =>
@@ -430,9 +429,9 @@ describe("Wave 3 M14 ReportPanel", () => {
     const revokeObjectURL = vi.fn();
     Object.assign(URL, { createObjectURL, revokeObjectURL });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ReportPanel debateId={debateId} api={api} />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("Report");
     await waitFor(() =>

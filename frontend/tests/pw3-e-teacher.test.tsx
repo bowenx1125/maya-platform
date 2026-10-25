@@ -16,7 +16,6 @@ import type {
   GroupDetail,
   KnowledgeSnapshot,
 } from "../lib/api";
-import { LocaleProvider } from "../components/locale";
 import { TeacherDebateList } from "../components/debate/setup/debate-setup";
 
 vi.mock("next/navigation", () => ({
@@ -170,9 +169,9 @@ describe("PW3-E teacher shell and responsive contract", () => {
       user: { courses: [{ course_id: courseId, role: "teacher" }] },
     } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherDebateList />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("A stalled classroom");
     api.debates.mockRejectedValue(new Error("Network unavailable"));
@@ -194,18 +193,18 @@ describe("PW3-E teacher shell and responsive contract", () => {
     expect(screen.queryByText("Network unavailable")).toBeNull();
   });
 
-  it.each([{ locale: "en" as const }, { locale: "zh" as const }])(
+  it.each([{ locale: "en" as const }])(
     "loads the course without explaining itself ($locale)",
-    async (caseData) => {
+    async () => {
       const api = apiForTeacher();
       mockedUseSession.mockReturnValue({
         api,
         user: { courses: [{ course_id: courseId, role: "teacher" }] },
       } as never);
       render(
-        <LocaleProvider initialLocale={caseData.locale}>
+        <>
           <TeacherDashboard />
-        </LocaleProvider>,
+        </>,
       );
 
       // The student-draft boundary used to be stated in a page lede, then in a
@@ -229,9 +228,9 @@ describe("PW3-E teacher shell and responsive contract", () => {
     const api = apiForTeacher();
     mockedUseSession.mockReturnValue({ api } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherAgentDetail agentId={agentId} />
-      </LocaleProvider>,
+      </>,
     );
 
     await waitFor(() =>

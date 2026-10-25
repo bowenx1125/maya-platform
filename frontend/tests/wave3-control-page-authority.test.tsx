@@ -60,9 +60,9 @@ vi.mock("../components/ui", () => ({
     </header>
   ),
 }));
-vi.mock("../components/locale", () => ({
+vi.mock("../lib/i18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/i18n")>()),
   useT: () => (key: string) => key,
-  useLocale: () => ({ locale: "en" }),
 }));
 vi.mock("../components/avatar/avatar-preview", () => ({
   AvatarPreview: ({ fallbackLabel }: { fallbackLabel?: string }) => (

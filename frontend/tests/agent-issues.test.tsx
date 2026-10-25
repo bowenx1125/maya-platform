@@ -15,7 +15,6 @@ import {
   debateFieldProblems,
   mergeIssues,
 } from "../lib/agent-readiness";
-import { LocaleProvider } from "../components/locale";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 
@@ -146,23 +145,6 @@ describe("agent readiness rules", () => {
       ["debateFieldStanceMissing", "王阳明"],
       ["debateFieldTeachingPrompts", ""],
     ]);
-  });
-
-  it("renders each issue in Chinese with a pencil to that Agent", () => {
-    renderComponent(
-      <LocaleProvider initialLocale="zh">
-        <AgentIssueList
-          issues={[
-            { agent_id: "a-1", agent_name: "朱熹", issue: "rag_missing" },
-          ]}
-          editHref={(id) => `/teacher/agents/${id}`}
-        />
-      </LocaleProvider>,
-    );
-    expect(screen.getByText("Agent「朱熹」至少需要一个 RAG。")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "编辑 Agent「朱熹」" }),
-    ).toHaveProperty("pathname", "/teacher/agents/a-1");
   });
 });
 
@@ -347,13 +329,13 @@ describe("specific errors with a way to fix them", () => {
       code: "team_member_private",
       details: { agent_id: "agent-zx", agent_name: "朱熹" },
     });
-    expect(localizeError(error, "zh")).toBe(
-      "Agent「朱熹」是 Private，Public Team 只能放 Public 的 Agent。请把它改成 Public 或移出 Team。",
+    expect(localizeError(error)).toBe(
+      "Agent “朱熹” is Private, and a Public Team can only contain Public Agents. Make it Public or remove it.",
     );
     renderComponent(
-      <LocaleProvider initialLocale="en">
+      <>
         <ErrorNotice inline error={error} />
-      </LocaleProvider>,
+      </>,
     );
     expect(
       screen.getByRole("link", { name: "Edit Agent “朱熹”" }),
@@ -370,15 +352,15 @@ describe("specific errors with a way to fix them", () => {
         other_team_count: 2,
       },
     });
-    expect(localizeError(error, "zh")).toBe(
-      "这个 Agent 还在 Team「伦理圈」里，请先在 Team 里移除它。 这个 Agent 还在别人的 2 个 Team 里，需要 Team 的创建者先移除它。",
+    expect(localizeError(error)).toBe(
+      "This Agent is still in Team “伦理圈”. Remove it from that Team first. This Agent is also in 2 Team(s) owned by other people; their owners must remove it.",
     );
     renderComponent(
-      <LocaleProvider initialLocale="zh">
+      <>
         <ErrorNotice inline error={error} />
-      </LocaleProvider>,
+      </>,
     );
-    const link = screen.getByRole("link", { name: "编辑 Team「伦理圈」" });
+    const link = screen.getByRole("link", { name: "Edit Team “伦理圈”" });
     expect(link.getAttribute("href")).toBe(
       "/teacher/studyform?mode=team-edit&team_id=t-1",
     );
@@ -386,14 +368,13 @@ describe("specific errors with a way to fix them", () => {
 
   it("never falls back to a bare request-failed line when a code exists", async () => {
     const { localizeError } = await import("../lib/i18n");
-    expect(localizeError({ code: "some_new_code" }, "zh")).toBe(
-      "请求没有完成（错误代码：some_new_code）。",
+    expect(localizeError({ code: "some_new_code" })).toBe(
+      "The request could not be completed (error code some_new_code).",
     );
     expect(
-      localizeError(
-        new PlatformApiError(409, "", { code: "next_not_ready" }),
-        "zh",
-      ),
-    ).toBe("下一段发言还在准备，准备好后就能点 Next。");
+      localizeError(new PlatformApiError(409, "", { code: "next_not_ready" })),
+    ).toBe(
+      "The next speech is still being prepared. Next becomes available as soon as it is ready.",
+    );
   });
 });

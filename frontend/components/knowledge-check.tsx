@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { IconClose, IconDownload, IconEye } from "./quiet-icons";
 import { ReportMarkdown } from "./report/report-markdown";
 

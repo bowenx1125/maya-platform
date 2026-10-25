@@ -35,7 +35,7 @@ import {
 } from "./llm-params-card";
 import sectionStyles from "./create-section.module.css";
 import { validateDebateTopic } from "../../../lib/debate-topic";
-import { useLocale, useT } from "../../locale";
+import { useT } from "../../../lib/i18n";
 import { useSession } from "../../session-provider";
 import { DebateCleanupControls } from "../debate-cleanup-controls";
 import { DebateStatus } from "../debate-status";

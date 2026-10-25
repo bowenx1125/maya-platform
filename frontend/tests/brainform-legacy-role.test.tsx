@@ -32,7 +32,6 @@ vi.mock("next/navigation", () => ({
 import StudentGroupKnowledgePage from "../app/student/groups/[group_id]/knowledge/page";
 import StudentKnowledgePage from "../app/student/knowledge/page";
 import { AppShell } from "../components/app-shell";
-import { LocaleProvider } from "../components/locale";
 import { GroupWorkspace } from "../components/student-workspace";
 
 afterEach(() => {
@@ -98,7 +97,7 @@ function setupActor(role: "teacher" | "student", includeJob = false) {
 describe("legacy group Brainform actor context", () => {
   it("uses the joined Teacher course role and reads a Teacher-owned job", async () => {
     const { page } = setupActor("teacher", true);
-    render(<LocaleProvider initialLocale="en">{await page}</LocaleProvider>);
+    render(<>{await page}</>);
 
     await waitFor(() =>
       expect(state.api.brainformKnowledge).toHaveBeenCalledWith("course"),
@@ -115,7 +114,7 @@ describe("legacy group Brainform actor context", () => {
 
   it("does not give an actual Student access to a Teacher-owned job query", async () => {
     const { page } = setupActor("student", true);
-    render(<LocaleProvider initialLocale="en">{await page}</LocaleProvider>);
+    render(<>{await page}</>);
 
     await waitFor(() =>
       expect(state.api.brainformKnowledge).toHaveBeenCalledWith("course"),
@@ -143,11 +142,11 @@ describe("legacy group Brainform actor context", () => {
       voiceProfiles: vi.fn().mockResolvedValue([]),
     };
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <GroupWorkspace groupId="joined-group" />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByRole("heading", { name: "Agents" });

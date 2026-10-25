@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { uiGuideText, type UiGuideKey } from "../lib/ui-guide-copy";
-import { useLocale } from "./locale";
+import { useT } from "../lib/i18n";
 import styles from "./ui-guide-tooltip.module.css";
 
 const tooltipId = "maya-ui-guide-tooltip";
@@ -25,20 +25,13 @@ function guideTarget(value: EventTarget | null): HTMLElement | null {
 }
 
 export function UiGuideTooltip() {
-  const { locale } = useLocale();
   const pathname = usePathname();
   const [active, setActive] = useState<ActiveGuide | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const localeRef = useRef(locale);
   const text = active
-    ? active.target.dataset.uiGuideText?.trim() ||
-      uiGuideText(active.key, locale)
+    ? active.target.dataset.uiGuideText?.trim() || uiGuideText(active.key)
     : null;
-
-  useLayoutEffect(() => {
-    localeRef.current = locale;
-  }, [locale]);
 
   useEffect(() => {
     let described: HTMLElement | null = null;
@@ -85,8 +78,7 @@ export function UiGuideTooltip() {
     ) => {
       const key = target.dataset.uiGuide;
       const message =
-        target.dataset.uiGuideText?.trim() ||
-        (key ? uiGuideText(key, localeRef.current) : null);
+        target.dataset.uiGuideText?.trim() || (key ? uiGuideText(key) : null);
       if (!key || !message) {
         hide();
         return;
@@ -219,8 +211,7 @@ export function UiGuideTooltip() {
         return;
       }
       const nextText =
-        described.dataset.uiGuideText?.trim() ||
-        uiGuideText(currentKey, localeRef.current);
+        described.dataset.uiGuideText?.trim() || uiGuideText(currentKey);
       if (!nextText) {
         hide();
       } else if (nextText !== currentText) {

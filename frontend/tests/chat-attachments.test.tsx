@@ -16,7 +16,6 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { ChatAttachments } from "../components/chats/chat-attachments";
-import { LocaleProvider } from "../components/locale";
 import { PlatformApiError } from "../lib/api/platform";
 
 const saved = {
@@ -31,9 +30,9 @@ const saved = {
 
 function view(disabled = false) {
   return render(
-    <LocaleProvider initialLocale="zh">
+    <>
       <ChatAttachments conversationId="conversation-1" disabled={disabled} />
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -58,8 +57,8 @@ describe("Chat attachments", () => {
     expect(state.api.conversationAttachments).toHaveBeenCalledWith(
       "conversation-1",
     );
-    const add = screen.getByRole("button", { name: "添加附件" });
-    expect(add.getAttribute("title")).toContain("只有你能看到");
+    const add = screen.getByRole("button", { name: "Attach a file" });
+    expect(add.getAttribute("title")).toContain("Only you can see it");
     const file = new File(["{}"], "export.json", { type: "application/json" });
     const input = screen.getByTestId("chat-attachment-input");
     expect(input.getAttribute("accept")).toBe(".txt,.md,.json,.csv,.html,.htm");
@@ -70,7 +69,7 @@ describe("Chat attachments", () => {
       file,
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "移除 她的聊天记录.txt" }),
+      screen.getByRole("button", { name: "Remove 她的聊天记录.txt" }),
     );
     await waitFor(() =>
       expect(screen.queryByText("她的聊天记录.txt")).toBeNull(),
@@ -97,7 +96,7 @@ describe("Chat attachments", () => {
       target: { files: [new File(["x"], "photo.png")] },
     });
     expect((await screen.findByRole("alert")).textContent).toBe(
-      "请上传 .txt、.md、.json、.csv 或 .html 文件。",
+      "Attach a .txt, .md, .json, .csv or .html file.",
     );
     expect(screen.queryByText("photo.png")).toBeNull();
   });
@@ -105,7 +104,7 @@ describe("Chat attachments", () => {
   it("is disabled while the Team is answering", async () => {
     state.api = { conversationAttachments: vi.fn().mockResolvedValue([]) };
     view(true);
-    const add = screen.getByRole("button", { name: "添加附件" });
+    const add = screen.getByRole("button", { name: "Attach a file" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
   });
 });

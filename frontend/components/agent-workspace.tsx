@@ -39,7 +39,7 @@ import {
 import { groupLibraryOrClosed } from "../lib/group-library";
 import { useIdempotencyStore } from "../lib/idempotency";
 import { blockerLabel, statusLabel, type MessageKey } from "../lib/i18n";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 import {
   AVATAR_TEMPLATE_DEFAULT_CONFIGS,
   AvatarEditor,
@@ -330,7 +330,6 @@ export function AgentWorkbench({
 }) {
   const t = useT();
   const router = useRouter();
-  const { locale } = useLocale();
   const { api, user } = useSession();
   const stashUserId = user?.id;
   // Read through a ref so the session arriving does not reload the editor.
@@ -1281,9 +1280,7 @@ export function AgentWorkbench({
         const saved = materialized.version;
         const activeAgent = materialized.agent;
         if ((saved.publish_blockers ?? []).length > 0) {
-          setError(
-            new Error(blockerLabel(saved.publish_blockers?.[0] ?? "", locale)),
-          );
+          setError(new Error(blockerLabel(saved.publish_blockers?.[0] ?? "")));
           return;
         }
         const handle = mutationStore.handleFor(publishIntent);
@@ -1697,10 +1694,7 @@ export function AgentWorkbench({
                     abandonUploadIntent();
                     abandonPublishIntent();
                     setAgentMd(
-                      buildAgentTemplate(
-                        draftName.trim() || agent.name,
-                        locale,
-                      ),
+                      buildAgentTemplate(draftName.trim() || agent.name),
                     );
                   }}
                 >
@@ -2294,7 +2288,6 @@ function ReadOnlyVersion({
   backHref?: string;
 }) {
   const t = useT();
-  const { locale } = useLocale();
   const { api } = useSession();
   const [agentMdBusy, setAgentMdBusy] = useState(false);
   const [agentMdError, setAgentMdError] = useState<unknown>(null);
@@ -2410,7 +2403,7 @@ function ReadOnlyVersion({
             <div className="check-item check-good">
               <span aria-hidden="true">✓</span>
               <div>
-                <strong>{statusLabel(version.state, locale)}</strong>
+                <strong>{statusLabel(version.state)}</strong>
                 <small>
                   {t("revision")} {version.revision}
                 </small>

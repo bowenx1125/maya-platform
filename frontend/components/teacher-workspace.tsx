@@ -27,7 +27,7 @@ import {
   type PublishedAgentSummary,
 } from "../lib/api";
 import { prefetchVoiceList } from "../lib/voice-list-cache";
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import {

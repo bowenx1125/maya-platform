@@ -9,7 +9,6 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
-import { LocaleProvider } from "../components/locale";
 import { AppShell } from "../components/app-shell";
 import {
   TeacherDashboard,
@@ -155,11 +154,11 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     const tile = await screen.findByRole("link", { name: "Teacher Lens" });
@@ -181,11 +180,11 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     const tile = await screen.findByRole("link", { name: "Teacher Lens" });
@@ -225,9 +224,9 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherDashboard />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByRole("link", { name: "Colleague Lens" });
     const own = document.querySelector('[data-agent-row="own"]')!;
@@ -278,9 +277,9 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherDashboard />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByRole("link", { name: "Student Lens" });
     const student = document.querySelector('[data-agent-row="student"]')!;
@@ -329,11 +328,11 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByRole("link", { name: "Student Lens" });
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
@@ -356,9 +355,9 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherDashboard />
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByRole("heading", { name: /Welcome/ });
@@ -385,11 +384,11 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherPersonalAgentCreate />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     expect(
@@ -460,11 +459,11 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherPersonalAgentCreate />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     expect(
@@ -515,11 +514,11 @@ describe("W1 teacher personal workspace", () => {
       teacherSession(api, [{ group_id: "teacher-group" }]),
     );
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     const heading = await screen.findByRole("heading", { name: "Voices" });
@@ -554,11 +553,11 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherStudyformWorkspace />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     const heading = await screen.findByRole("heading", { name: "Voices" });
@@ -603,14 +602,14 @@ describe("W1 teacher personal workspace", () => {
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentWorkbench
           key="teacher-scope"
           actorScopeKey="teacher-user:teacher-course:2"
           backHref="/teacher"
           versionId={versionId}
         />
-      </LocaleProvider>,
+      </>,
     );
 
     expect(

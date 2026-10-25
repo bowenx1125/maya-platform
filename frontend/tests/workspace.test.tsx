@@ -43,7 +43,6 @@ vi.mock("../components/stage3d/scholar-scene", () => ({
 import { AgentChat } from "../components/agent-chat";
 import { AppShell } from "../components/app-shell";
 import { ClassroomLive } from "../components/classroom-live";
-import { LocaleProvider } from "../components/locale";
 import { TeacherDashboard } from "../components/teacher-workspace";
 import { abandonChatRequest, getChatRequest } from "../lib/chat-request-store";
 import {
@@ -144,7 +143,7 @@ function renderChat({
 }: { newChat?: boolean; shell?: boolean } = {}) {
   if (newChat) window.history.replaceState({}, "", "/teacher/chat?mode=new");
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       {shell ? (
         <AppShell role="teacher">
           <AgentChat />
@@ -152,7 +151,7 @@ function renderChat({
       ) : (
         <AgentChat />
       )}
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -179,11 +178,11 @@ describe("private Agent chat", () => {
   it("follows the New URL through browser history without reading old chat history in New mode", async () => {
     window.history.replaceState({}, "", "/teacher/chat?mode=new");
     const view = render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     expect(
       await screen.findByRole("button", { name: /Socrates/ }),
@@ -192,11 +191,11 @@ describe("private Agent chat", () => {
 
     window.history.pushState({}, "", "/teacher/chat");
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await waitFor(() =>
       expect(state.api.conversations).toHaveBeenCalledTimes(1),
@@ -205,11 +204,11 @@ describe("private Agent chat", () => {
 
     window.history.pushState({}, "", "/teacher/chat?mode=new");
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     expect(
       await screen.findByRole("button", { name: /Socrates/ }),
@@ -219,11 +218,11 @@ describe("private Agent chat", () => {
 
   it("starts from the sidebar and sends consecutive messages with the latest revision", async () => {
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("No chats yet.");
     const nav = within(screen.getByRole("navigation"));
@@ -317,9 +316,9 @@ describe("private Agent chat", () => {
     view.unmount();
     window.history.replaceState({}, "", "/teacher/chat");
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("A considered reply");
     expect(state.api.streamConversation).toHaveBeenCalledTimes(1);
@@ -342,9 +341,9 @@ describe("private Agent chat", () => {
       new Error("Network unavailable"),
     );
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     fireEvent.change(await screen.findByRole("textbox", { name: "Message" }), {
       target: { value: "Hello" },
@@ -390,9 +389,9 @@ describe("private Agent chat", () => {
     state.api.conversations.mockResolvedValue([failedSession]);
     window.history.replaceState({}, "", "/teacher/chat");
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     const reopenedInput = await screen.findByRole("textbox", {
       name: "Message",
@@ -561,9 +560,9 @@ describe("private Agent chat", () => {
     } as unknown as ChatSession;
     state.api.conversations.mockResolvedValue([unknownSession]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
 
     const input = await screen.findByRole("textbox", { name: "Message" });
@@ -744,9 +743,9 @@ describe("private Agent chat", () => {
       .mockResolvedValueOnce(readySession);
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByRole("status");
@@ -789,11 +788,11 @@ describe("private Agent chat", () => {
       .mockResolvedValueOnce(pendingSession)
       .mockResolvedValueOnce(readySession);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <AgentChat />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("A considered reply");
     await startNewAgentChat();
@@ -828,9 +827,9 @@ describe("private Agent chat", () => {
       .mockRejectedValueOnce(new Error("History refresh unavailable"))
       .mockResolvedValueOnce(otherConversation);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     const input = await screen.findByRole("textbox", { name: "Message" });
     fireEvent.change(input, { target: { value: "Keep this unknown request" } });
@@ -890,9 +889,9 @@ describe("private Agent chat", () => {
       });
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     const input = await screen.findByRole("textbox", { name: "Message" });
     fireEvent.change(input, { target: { value: "Hello" } });
@@ -1319,9 +1318,9 @@ describe("private Agent chat", () => {
       created_at: "2026-10-18T00:01:00Z",
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("A considered reply");
     const add = await screen.findByRole("button", { name: "Attach a file" });
@@ -1353,9 +1352,9 @@ describe("private Agent chat", () => {
     state.api.chatAgents.mockResolvedValue([]);
     state.api.streamConversation.mockClear();
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByText("A considered reply");
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveProperty(
@@ -1397,9 +1396,9 @@ describe("chat that cannot continue", () => {
     ]);
     state.api.chatAgents.mockResolvedValue([]);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     const log = await screen.findByRole("log");
     const notice = await within(log).findByText(
@@ -1437,9 +1436,9 @@ describe("chat history names and pins", () => {
 
   function renderHistory() {
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AgentChat />
-      </LocaleProvider>,
+      </>,
     );
     return screen.findByLabelText("History");
   }
@@ -1534,11 +1533,11 @@ describe("teacher workspace access", () => {
     state.api.courses.mockResolvedValue([{ id: "course", name: "Course" }]);
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="teacher">
           <TeacherDashboard />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
 
     await screen.findByRole("heading", { name: /Welcome/ });
@@ -1585,9 +1584,9 @@ describe("student Live", () => {
     }
     vi.stubGlobal("WebSocket", Socket);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ClassroomLive />
-      </LocaleProvider>,
+      </>,
     );
     await screen.findByTestId("scene");
     expect(

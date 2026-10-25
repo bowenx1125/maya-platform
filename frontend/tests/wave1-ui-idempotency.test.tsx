@@ -265,7 +265,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      errorCopyFor("provider_confirmation_required", "en") ?? "<missing copy>",
+      errorCopyFor("provider_confirmation_required") ?? "<missing copy>",
     );
     expect(api.publish).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();

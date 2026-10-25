@@ -2,7 +2,7 @@
 
 import { IconRefresh } from "../../quiet-icons";
 import { SectionCard } from "../../ui";
-import { useT } from "../../locale";
+import { useT } from "../../../lib/i18n";
 import type { DebateDraftRequest, DebateLLMDefaults } from "../../../lib/api";
 import styles from "./llm-params-card.module.css";
 import rulesetStyles from "./ruleset-editor.module.css";
@@ -17,47 +17,48 @@ export type LLMParamValues = Record<LLMParamName, LLMParamState>;
 export const LLM_PARAMS_ANCHOR = "debate-llm-params";
 
 // What the "?" says: meaning, range with what its ends do, suggestion
-// (owner copy, 2026-10-24; ranges and extremes added 2026-10-25).
+// (owner copy, 2026-10-24; ranges and extremes added and the UI made
+// English-only, 2026-10-25).
 const HELP: Record<LLMParamName, [string, string, string]> = {
   temperature: [
-    "随机性：越高越活越随意，越低越稳越保守。",
-    "范围：0 到 2（不含 2）。接近 0 几乎每次说同样的话；接近 2 用词跳跃、容易跑题。",
-    "建议：0.6–0.8。",
+    "Randomness: higher is livelier and looser, lower is steadier and more conservative.",
+    "Range: 0 up to (not including) 2. Near 0 says almost the same thing every time; near 2 jumps between words and drifts off topic.",
+    "Suggested: 0.6–0.8.",
   ],
   top_p: [
-    "只从累计概率前 p 的词里挑，p 越小选词越保守。",
-    "范围：大于 0，最大 1。接近 0 只挑最可能的词，近乎固定；1 表示不限制。",
-    "建议：0.8–0.9；和 temperature 二选一调。",
+    "Picks only from the words within the top cumulative probability p; a smaller p chooses more conservatively.",
+    "Range: above 0, at most 1. Near 0 picks only the likeliest word and is nearly fixed; 1 means no limit.",
+    "Suggested: 0.8–0.9; tune either this or temperature, not both.",
   ],
   presence_penalty: [
-    "减少重复已经说过的话题，越高越倾向换新话题。",
-    "范围：-2 到 2。-2 反复围绕同一话题；2 不断换新话题，容易发散。",
-    "建议：0.3–0.6。",
+    "Discourages returning to topics already covered; higher leans toward new topics.",
+    "Range: -2 to 2. -2 keeps circling the same topic; 2 keeps switching topics and can wander.",
+    "Suggested: 0.3–0.6.",
   ],
   frequency_penalty: [
-    "减少重复同一个词。DashScope 的接口没有写明支持这个参数，所以只保存、不会发给模型。",
-    "范围：-2 到 2。-2 鼓励重复用词；2 刻意避开用过的词。",
-    "建议：先不传。",
+    "Discourages repeating the same word. The DashScope API does not document this parameter, so it is saved but never sent to the model.",
+    "Range: -2 to 2. -2 encourages repeated words; 2 deliberately avoids words already used.",
+    "Suggested: leave it unset.",
   ],
   repetition_penalty: [
-    "DashScope 的防重复参数，越大越不容易重复。",
-    "范围：大于 0，最大 2；1.0 表示不惩罚。小于 1 更容易重复；接近 2 极力避免重复，用词可能生硬。",
-    "建议：1.0–1.1。",
+    "DashScope's anti-repetition parameter; larger values repeat less.",
+    "Range: above 0, at most 2; 1.0 means no penalty. Below 1 repeats more easily; near 2 avoids repetition hard and wording may feel stiff.",
+    "Suggested: 1.0–1.1.",
   ],
   max_tokens: [
-    "一次回答的输出硬上限（token 数）。",
-    "范围：正整数，1 到 32768。很小会把回答截断；很大只是上限，不会让回答变长。",
-    "建议：不设；设了可能截断 JSON，导致生成失败。",
+    "Hard cap on one answer's output, in tokens.",
+    "Range: a whole number from 1 to 32768. A small cap cuts the answer short; a large one is only a ceiling and does not make answers longer.",
+    "Suggested: leave it unset; a cap can cut the JSON short and fail the generation.",
   ],
   enable_thinking: [
-    "让模型先思考再回答。",
-    "取值：开或关。开：先推理再回答，明显更慢、更贵；关：直接回答。",
-    "建议：关。",
+    "Lets the model think before it answers.",
+    "Values: on or off. On reasons first, which is noticeably slower and costlier; off answers directly.",
+    "Suggested: off.",
   ],
   seed: [
-    "固定随机种子，便于复现同样的输出。",
-    "范围：0 到 2147483647 的整数。留空每次随机；同一个值配同样的输入会尽量给出同样的输出。",
-    "建议：不设，调试时才用。",
+    "Fixes the random seed so the same output can be reproduced.",
+    "Range: a whole number from 0 to 2147483647. Empty is random each time; the same value with the same input tries to give the same output.",
+    "Suggested: leave it unset; use it only when debugging.",
   ],
 };
 
@@ -67,19 +68,19 @@ export type VoiceParamValues = Record<VoiceParamName, number | string | null>;
 
 const VOICE_HELP: Record<VoiceParamName, [string, string, string]> = {
   rate: [
-    "生成语音时的说话速度，1.0 为正常。",
-    "范围：0.5 到 2.0。0.5 是正常语速的一半，很慢；2.0 是两倍速，很快，可能听不清。",
-    "建议：1.1–1.3。",
+    "Speaking rate of the generated voice; 1.0 is normal.",
+    "Range: 0.5 to 2.0. 0.5 is half the normal rate and very slow; 2.0 is double speed, very fast and may be hard to follow.",
+    "Suggested: 1.1–1.3.",
   ],
   instruction: [
-    "用一句话描述语气、情绪、角色，例如“语气坚定，像辩论赛选手”；留空则用默认语气。",
-    "范围：最多 500 字。描述越具体效果越明显；和发言内容冲突的要求可能被忽略。",
-    "建议：一句话即可。",
+    'One sentence on tone, emotion or role, for example "firm, like a debate contestant"; empty uses the default tone.',
+    "Range: at most 500 characters. The more specific, the stronger the effect; a request that conflicts with the speech may be ignored.",
+    "Suggested: one sentence is enough.",
   ],
   seed: [
-    "固定后，同样的文字会生成同样的声音，方便复现；留空则每次随机。",
-    "范围：0 到 65535 的整数。",
-    "建议：需要复现时再设。",
+    "When set, the same text produces the same voice, which helps reproduce it; empty is random each time.",
+    "Range: a whole number from 0 to 65535.",
+    "Suggested: set it only when you need to reproduce a voice.",
   ],
 };
 

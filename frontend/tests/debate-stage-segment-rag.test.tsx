@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
 import {
   DebateStage,
   type DebatePlaybackApi,
@@ -140,7 +139,7 @@ function detail(audioReady: boolean | null): DebateDetail {
 
 function renderClassic(audioReady: boolean | null, readOnly = true) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <DebateStage
         api={api}
         debateId={debateId}
@@ -148,7 +147,7 @@ function renderClassic(audioReady: boolean | null, readOnly = true) {
         readOnly={readOnly}
         socketFactory={() => new IdleSocket()}
       />
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -171,7 +170,7 @@ describe("segments_v2 stage projection", () => {
 
   it("uses the same structured projection in the Beta stage", () => {
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <BetaDebateStage
           api={api}
           debateId={debateId}
@@ -179,7 +178,7 @@ describe("segments_v2 stage projection", () => {
           readOnly
           socketFactory={() => new IdleSocket()}
         />
-      </LocaleProvider>,
+      </>,
     );
 
     expect(screen.getByText("Check RAG")).toBeTruthy();
@@ -214,7 +213,7 @@ it("shows current/total progress and connection color without separate connectio
   }));
   value.public_turns = [{ ...value.public_turns[0], turn_index: 3 }];
   render(
-    <LocaleProvider initialLocale="en">
+    <>
       <BetaDebateStage
         api={api}
         debateId={debateId}
@@ -222,7 +221,7 @@ it("shows current/total progress and connection color without separate connectio
         readOnly
         socketFactory={() => new IdleSocket()}
       />
-    </LocaleProvider>,
+    </>,
   );
   const progress = screen.getByLabelText("Turn 4 of 12, disconnected");
   expect(progress.textContent).toBe("4/12");

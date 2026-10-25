@@ -29,7 +29,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { BrainformWorkspace } from "../components/knowledge/brainform-workspace";
-import { LocaleProvider } from "../components/locale";
 import { PlatformApi, PlatformApiError } from "../lib/api/platform";
 
 const knowledge = {
@@ -69,9 +68,9 @@ async function advance(ms: number) {
 
 function workspace() {
   return (
-    <LocaleProvider initialLocale="en">
+    <>
       <BrainformWorkspace role="teacher" />
-    </LocaleProvider>
+    </>
   );
 }
 
@@ -181,9 +180,9 @@ describe("Brainform polling", () => {
           course_id: "course-other",
         });
       render(
-        <LocaleProvider initialLocale="en">
+        <>
           <BrainformWorkspace role="teacher" initialGroupId="group-1" />
-        </LocaleProvider>,
+        </>,
       );
       await advance(1);
       await advance(1);

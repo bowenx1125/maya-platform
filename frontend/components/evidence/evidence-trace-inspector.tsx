@@ -4,7 +4,7 @@ import {
   EVIDENCE_GRADE_POINTS,
   evidenceGrade,
 } from "../../lib/evidence-grading";
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import styles from "./evidence-trace-inspector.module.css";
 
 export type EvidenceTraceClaimType =
@@ -116,24 +116,18 @@ export function speechSpanText(
   return speech.slice(span.start_utf16, span.end_utf16);
 }
 
-type TextPair = { en: string; zh: string };
-
-function label(locale: string, value: TextPair): string {
-  return locale === "zh" ? value.zh : value.en;
-}
-
-function supportLabel(locale: string, mode: EvidenceTraceSupportMode): string {
+function supportLabel(mode: EvidenceTraceSupportMode): string {
   const grade = evidenceGrade(mode);
   if (grade === "direct") {
-    return label(locale, { en: "Direct evidence", zh: "直接证明" });
+    return "Direct evidence";
   }
   if (grade === "indirect") {
-    return label(locale, { en: "Indirect evidence", zh: "间接证明" });
+    return "Indirect evidence";
   }
   // `no_match` and general reasoning share this: retrieval returned nothing
   // this claim could stand on. Folding it into "indirect" would claim support
   // the debate never had.
-  return label(locale, { en: "No evidence", zh: "没有证据" });
+  return "No evidence";
 }
 
 /**
@@ -143,30 +137,27 @@ function supportLabel(locale: string, mode: EvidenceTraceSupportMode): string {
  * embedded, and it opens with the topic and an instruction, so printing it
  * whole told a reader almost nothing about which question this row answers.
  */
-function queryKindLabel(locale: string, kind: string | null | undefined) {
+function queryKindLabel(kind: string | null | undefined) {
   if (kind === "pending_question") {
-    return label(locale, { en: "Answering a question", zh: "回应提问" });
+    return "Answering a question";
   }
   if (kind === "rebuttal") {
-    return label(locale, {
-      en: "Engaging an earlier claim",
-      zh: "回应先前主张",
-    });
+    return "Engaging an earlier claim";
   }
   if (kind === "updated_position") {
-    return label(locale, { en: "Updated position", zh: "更新后的立场" });
+    return "Updated position";
   }
-  return label(locale, { en: "Independent viewpoint", zh: "独立观点" });
+  return "Independent viewpoint";
 }
 
-function claimTypeLabel(locale: string, type: EvidenceTraceClaimType): string {
-  const values: Record<EvidenceTraceClaimType, TextPair> = {
-    factual: { en: "Factual", zh: "事实" },
-    background: { en: "Background", zh: "背景" },
-    value_judgement: { en: "Value judgement", zh: "价值判断" },
-    proposal: { en: "Proposal", zh: "建议" },
+function claimTypeLabel(type: EvidenceTraceClaimType): string {
+  const values: Record<EvidenceTraceClaimType, string> = {
+    factual: "Factual",
+    background: "Background",
+    value_judgement: "Value judgement",
+    proposal: "Proposal",
   };
-  return label(locale, values[type]);
+  return values[type];
 }
 
 export function EvidenceTraceInspector({
@@ -176,7 +167,6 @@ export function EvidenceTraceInspector({
   speech: string;
   trace?: unknown;
 }) {
-  const { locale } = useLocale();
   const all = normaliseEvidenceTrace(trace);
   // A span that does not reproduce its claim is not shown as lineage: an
   // unverifiable highlight is worse than none. But dropping every row used to
@@ -191,14 +181,8 @@ export function EvidenceTraceInspector({
     return (
       <p className={styles.absent} data-testid="evidence-trace-absent">
         {all.length === 0
-          ? label(locale, {
-              en: "No snapshot evidence was cited in this turn.",
-              zh: "本轮发言没有引用快照证据。",
-            })
-          : label(locale, {
-              en: `Evidence lineage recorded (${all.length}) but it no longer aligns with this speech.`,
-              zh: `记录了 ${all.length} 条证据链，但与本段发言对不上。`,
-            })}
+          ? "No snapshot evidence was cited in this turn."
+          : `Evidence lineage recorded (${all.length}) but it no longer aligns with this speech.`}
       </p>
     );
   }
@@ -209,8 +193,7 @@ export function EvidenceTraceInspector({
       data-testid="evidence-trace-inspector"
     >
       <summary>
-        {label(locale, { en: "Check RAG", zh: "查看 RAG" })}{" "}
-        <span className={styles.count}>{rows.length}</span>
+        Check RAG <span className={styles.count}>{rows.length}</span>
       </summary>
       <ol className={styles.claimList}>
         {rows.map((row, index) => {
@@ -225,7 +208,7 @@ export function EvidenceTraceInspector({
               key={`${row.claim_id}:${row.evidence_id ?? "none"}:${index}`}
             >
               <div className={styles.claimHeader}>
-                <strong>{claimTypeLabel(locale, row.claim_type)}</strong>
+                <strong>{claimTypeLabel(row.claim_type)}</strong>
                 {/* The grade and what it is worth, in one pill: green for
                     direct, amber for indirect, plain for no evidence. The
                     number is the same one the Agent score sums. */}
@@ -233,7 +216,7 @@ export function EvidenceTraceInspector({
                   className={styles.mode}
                   data-grade={evidenceGrade(row.support_mode)}
                 >
-                  {supportLabel(locale, row.support_mode)}
+                  {supportLabel(row.support_mode)}
                   <span className={styles.modeScore}>
                     +{EVIDENCE_GRADE_POINTS[evidenceGrade(row.support_mode)]}
                   </span>
@@ -244,10 +227,8 @@ export function EvidenceTraceInspector({
               </p>
               {row.query_text ? (
                 <p className={styles.detail}>
-                  <span className={styles.detailLabel}>
-                    {label(locale, { en: "Retrieval query", zh: "检索问题" })}
-                  </span>
-                  {queryKindLabel(locale, row.query_kind)}
+                  <span className={styles.detailLabel}>Retrieval query</span>
+                  {queryKindLabel(row.query_kind)}
                 </p>
               ) : null}
               {row.query_text ? (
@@ -255,23 +236,18 @@ export function EvidenceTraceInspector({
                 // receipt for this retrieval, and the rows above are a reading
                 // of it, not a replacement.
                 <details className={styles.rawQuery}>
-                  <summary>
-                    {label(locale, {
-                      en: "Actual retrieval text",
-                      zh: "实际检索文本",
-                    })}
-                  </summary>
+                  <summary>Actual retrieval text</summary>
                   <p>{row.query_text}</p>
                 </details>
               ) : null}
               {hasSource ? (
                 <dl className={styles.source}>
                   <div>
-                    <dt>{label(locale, { en: "Source", zh: "来源" })}</dt>
+                    <dt>Source</dt>
                     <dd>{row.source_filename}</dd>
                   </div>
                   <div>
-                    <dt>{label(locale, { en: "Locator", zh: "定位" })}</dt>
+                    <dt>Locator</dt>
                     <dd>{row.source_locator}</dd>
                   </div>
                 </dl>

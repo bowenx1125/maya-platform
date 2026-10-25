@@ -7,7 +7,7 @@ import type { components } from "../../lib/api/generated/schema";
 import { apiErrorMessage, type IdempotencyHandle } from "../../lib/api";
 import { useIdempotencyStore } from "../../lib/idempotency";
 import { nextPollDelay } from "../../lib/poll-pacing";
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import {
   cleanReportCitations,
   reportLengthUnit,
@@ -58,18 +58,18 @@ export type ReportPanelProps = {
 const REPORT_POLL_INTERVAL_MS = 1500;
 const REPORT_POLL_LIMIT_MS = 180_000;
 
-function reportStatusLabel(locale: "en" | "zh", status: string): string {
-  const labels: Record<string, [string, string]> = {
-    not_started: ["Not started", "尚未生成"],
-    generating: ["Generating", "生成中"],
-    ready: ["Ready", "已就绪"],
-    failed: ["Failed", "失败"],
+function reportStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    not_started: "Not started",
+    generating: "Generating",
+    ready: "Ready",
+    failed: "Failed",
   };
-  return labels[status]?.[locale === "zh" ? 1 : 0] ?? status;
+  return labels[status] ?? status;
 }
 
-function revisionTitle(locale: "en" | "zh", revision: number): string {
-  return locale === "zh" ? `版本 ${revision}` : `Version ${revision}`;
+function revisionTitle(revision: number): string {
+  return `Version ${revision}`;
 }
 
 function triggerDownload(content: string, filename: string): void {
@@ -88,7 +88,6 @@ export function ReportPanel({
   api,
   canRegenerate = true,
 }: ReportPanelProps) {
-  const { locale } = useLocale();
   const idempotency = useIdempotencyStore();
   const [report, setReport] = useState<Report | null>(null);
   const [revisions, setRevisions] = useState<ReportRevisionSummary[]>([]);
@@ -101,43 +100,22 @@ export function ReportPanel({
   const pollStartedAt = useRef<number | null>(null);
   const loadVersion = useRef(0);
 
-  const copy = useMemo(
-    () =>
-      locale === "zh"
-        ? {
-            title: "报告",
-            insight: "匿名课堂洞察",
-            report: "当前报告",
-            history: "历史",
-            regenerate: "重新生成",
-            download: "下载",
-            noHistory: "还没有报告版本。",
-            view: "查看",
-            selected: "当前查看",
-            generating: "报告生成中…",
-            failed: "报告生成失败；既有成功修订仍会保留。",
-            included: "已纳入",
-            filtered: "已筛除",
-            words: reportLengthUnit("zh"),
-          }
-        : {
-            title: "Report",
-            insight: "Anonymous classroom insight",
-            report: "Current report",
-            history: "History",
-            regenerate: "Regenerate",
-            download: "Download",
-            noHistory: "No report versions yet.",
-            view: "Review",
-            selected: "Viewing",
-            generating: "Generating report...",
-            failed: "Report generation failed; earlier revisions remain.",
-            included: "included",
-            filtered: "filtered",
-            words: reportLengthUnit("en"),
-          },
-    [locale],
-  );
+  const copy = {
+    title: "Report",
+    insight: "Anonymous classroom insight",
+    report: "Current report",
+    history: "History",
+    regenerate: "Regenerate",
+    download: "Download",
+    noHistory: "No report versions yet.",
+    view: "Review",
+    selected: "Viewing",
+    generating: "Generating report...",
+    failed: "Report generation failed; earlier revisions remain.",
+    included: "included",
+    filtered: "filtered",
+    words: reportLengthUnit("en"),
+  };
 
   const load = useCallback(
     async ({ quiet = false } = {}) => {
@@ -294,9 +272,7 @@ export function ReportPanel({
 
         {pollTimedOut && polling ? (
           <p className={styles.notice} role="status">
-            {locale === "zh"
-              ? "报告仍在生成，请稍后重新打开。"
-              : "The report is still generating. Reopen this page later."}
+            The report is still generating. Reopen this page later.
           </p>
         ) : null}
         {report?.generation_status === "failed" ||
@@ -320,9 +296,7 @@ export function ReportPanel({
 
         <div className={styles.reportCard}>
           <div className={styles.cardHeading}>
-            {displayed ? (
-              <h3>{revisionTitle(locale, displayed.revision_no)}</h3>
-            ) : null}
+            {displayed ? <h3>{revisionTitle(displayed.revision_no)}</h3> : null}
             <div className={styles.actions}>
               <button
                 type="button"
@@ -368,10 +342,10 @@ export function ReportPanel({
             <ul>
               {revisions.map((revision) => (
                 <li key={revision.id}>
-                  <span>{revisionTitle(locale, revision.revision_no)}</span>
+                  <span>{revisionTitle(revision.revision_no)}</span>
                   <span className={styles.revisionStatus}>
                     {revision.status !== "ready"
-                      ? reportStatusLabel(locale, revision.status)
+                      ? reportStatusLabel(revision.status)
                       : ""}
                     {revision.word_count
                       ? `${revision.status === "ready" ? "" : " · "}${revision.word_count} ${copy.words}`

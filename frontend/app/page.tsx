@@ -10,7 +10,7 @@ import {
   AcademyEmblem,
   AcademyFrame,
 } from "../components/academy/scene";
-import { useT } from "../components/locale";
+import { useT } from "../lib/i18n";
 import { RegisterForm } from "../components/register-form";
 import { LoginForm } from "../components/session-provider";
 

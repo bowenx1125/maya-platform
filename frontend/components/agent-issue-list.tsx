@@ -8,7 +8,7 @@ import {
   issueKey,
   type AgentIssue,
 } from "../lib/agent-readiness";
-import { useT } from "./locale/locale-provider";
+import { useT } from "../lib/i18n";
 import { IconClose, IconEdit } from "./quiet-icons";
 import { WorkspaceIcon } from "./workspace-icon";
 

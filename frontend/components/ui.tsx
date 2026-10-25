@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { isConflict } from "../lib/api";
 import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { IconClose, IconEdit } from "./quiet-icons";
 
 export function LoadingCard({ label }: { label?: string }) {
@@ -121,7 +121,6 @@ export function ErrorNotice({
   notFound?: MessageKey;
 }) {
   const t = useT();
-  const { locale } = useLocale();
   // A new error shows again even where an earlier one was closed.
   const [dismissed, setDismissed] = useState<unknown>(null);
   if (dismissed === error) return null;
@@ -156,7 +155,7 @@ export function ErrorNotice({
         ? t("retryConflict")
         : notFound && missing
           ? t(notFound)
-          : localizeError(error, locale)}
+          : localizeError(error)}
       <ErrorFixLinks error={error} />
     </Notice>
   );
@@ -249,7 +248,6 @@ export function StatusBadge({
   status: string;
   tone?: "good" | "warn" | "bad" | "neutral";
 }) {
-  const { locale } = useLocale();
   const derived =
     tone ??
     (status === "ready" || status === "published" || status === "active"
@@ -260,7 +258,7 @@ export function StatusBadge({
   return (
     <span className={`status-badge status-${derived}`}>
       <span aria-hidden="true" />
-      {statusLabel(status, locale)}
+      {statusLabel(status)}
     </span>
   );
 }

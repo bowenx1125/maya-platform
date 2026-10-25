@@ -44,7 +44,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { BrainformWorkspace } from "../components/knowledge/brainform-workspace";
-import { LocaleProvider } from "../components/locale";
 import { PlatformApiError } from "../lib/api";
 import {
   WorkspaceActionsContext,
@@ -103,11 +102,11 @@ function renderWithActions(
   props: ComponentProps<typeof BrainformWorkspace> = { role: "teacher" },
 ) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <ActionsHost>
         <BrainformWorkspace {...props} />
       </ActionsHost>
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -153,11 +152,11 @@ const source = {
 
 function renderWorkspace(role = state.role) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <ActionsHost>
         <BrainformWorkspace role={role as "teacher" | "student"} />
       </ActionsHost>
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -985,11 +984,11 @@ describe("Brainform workspace actions", () => {
     });
     state.userId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <ActionsHost>
           <BrainformWorkspace role="teacher" />
         </ActionsHost>
-      </LocaleProvider>,
+      </>,
     );
     fireEvent.click(
       (await screen.findAllByRole("button", { name: "Edit lesson.md" }))[0],

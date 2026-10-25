@@ -10,8 +10,6 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
-
 const navigation = vi.hoisted(() => ({
   pathname: "/teacher",
   replace: vi.fn(),
@@ -44,22 +42,22 @@ import { WorkspaceAction } from "../components/workspace-actions";
 function renderTeacherShell(pathname: string) {
   navigation.pathname = pathname;
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <AppShell role="teacher">
         <p>Teacher content</p>
       </AppShell>
-    </LocaleProvider>,
+    </>,
   );
 }
 
 function renderStudentShell(pathname: string) {
   navigation.pathname = pathname;
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <AppShell role="student">
         <p>Student content</p>
       </AppShell>
-    </LocaleProvider>,
+    </>,
   );
 }
 
