@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.core.config import Settings
-from app.core.db import ALEMBIC_HEAD, Database
+from app.core.db import ALEMBIC_HEAD, MIGRATION_BASELINE, Database
 from sqlalchemy import inspect, text
 
 from tests.postgres_db import named_url
@@ -52,6 +52,25 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
         assert (
             connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             == ALEMBIC_HEAD
+        )
+
+
+def test_database_below_the_squashed_baseline_is_refused(tmp_path: Path) -> None:
+    db = Database(named_url(f"{tmp_path / 'old.sqlite3'}"))
+    db.upgrade_schema()
+    with db.engine.begin() as connection:
+        connection.execute(text("UPDATE alembic_version SET version_num = '0079_old'"))
+    try:
+        db.upgrade_schema()
+    except RuntimeError as error:
+        assert "older than the squashed migration baseline" in str(error)
+        assert MIGRATION_BASELINE in str(error)
+    else:
+        raise AssertionError("an unknown pre-squash revision must be refused")
+    with db.engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == "0079_old"
         )
 
 

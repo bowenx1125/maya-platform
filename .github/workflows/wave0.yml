@@ -57,14 +57,12 @@ jobs:
 
       - name: Assert Wave 1A backend inputs
         run: |
-          test -f backend/migrations/versions/0002_wave1_agents_rag.py
           test -f backend/tests/test_wave1_agents_knowledge.py
           test -d backend/app/modules/agents
           test -d backend/app/modules/knowledge
 
       - name: Assert Wave 1B and 1C inputs
         run: |
-          test -f backend/migrations/versions/0003_wave1b_avatar_voice.py
           test -f backend/tests/test_wave1b_avatars.py
           test -f backend/tests/test_wave1b_voices.py
           test -f scripts/enroll_system_fallback.py
@@ -89,7 +87,6 @@ jobs:
 
       - name: Assert Wave 2 inputs
         run: |
-          test -f backend/migrations/versions/0004_wave2_debate_playback.py
           test -f backend/tests/test_wave2_setup.py
           test -f backend/tests/test_wave2_generation.py
           test -f backend/tests/test_wave2_playback.py
@@ -104,7 +101,6 @@ jobs:
 
       - name: Assert Wave 3 inputs
         run: |
-          test -f backend/migrations/versions/0007_wave3_interaction_report.py
           test -f backend/tests/test_wave3_interactions.py
           test -f backend/tests/test_wave3_reports.py
           test -f backend/tests/test_wave3_playback_controls.py
@@ -115,12 +111,6 @@ jobs:
 
       - name: Assert Wave 4 inputs
         run: |
-          test -f backend/migrations/versions/0008_wave4_mutual_learning_rounds.py
-          test -f backend/migrations/versions/0009_persona_structured_fields.py
-          test -f backend/migrations/versions/0010_provider_control_ledger.py
-          test -f backend/migrations/versions/0011_evidence_trace_json.py
-          test -f backend/migrations/versions/0012_persona_activation.py
-          test -f backend/migrations/versions/0013_embedding_identity_stage.py
           test -f scripts/import_provider_policy.py
           test -f scripts/test_import_provider_policy.py
           test -f scripts/import_llm_policy.py
@@ -245,7 +235,7 @@ jobs:
         env:
           MAYA_TEST_POSTGRES_URL: postgresql+psycopg://postgres:maya-ci@127.0.0.1:5432/maya_test
         run: |
-          uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py migrations/versions/0006_pre_wave3_polish.py migrations/versions/0007_wave3_interaction_report.py
+          uv run ruff format --check app tests migrations
           uv run ruff check app
           uv run ruff check tests
           uv run ruff check migrations

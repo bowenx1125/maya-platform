@@ -90,9 +90,7 @@ unknown-acceptance recovery separate from budgeting.
 
 ```bash
 cd backend && uv run pytest -p no:warnings && uv run ruff check . && uv run mypy app
-uv run ruff format --check app tests migrations/versions/0004_wave2_debate_playback.py \
-  migrations/versions/0006_pre_wave3_polish.py \
-  migrations/versions/0007_wave3_interaction_report.py
+uv run ruff format --check app tests migrations
 ```
 
 `ruff check` and `ruff format` are separate gates and CI runs both. A change
