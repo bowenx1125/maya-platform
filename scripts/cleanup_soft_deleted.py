@@ -3,9 +3,12 @@
 
 Counts the rows before and after. Debate snapshots, Debate voice copies, grades and
 Record answer payloads are never deleted; the write rolls back if their counts
-move. Old Agent versions are pruned to the current version plus the previous
-AGENT.md. Files under the owned storage roots that no row references, and that
-are older than an hour, are listed and (with --apply) unlinked.
+move. Legacy soft-deleted Debates (nothing sets ``deleted_at`` any more) go
+afterwards, one at a time, through the app's own Debate delete; the live
+Debates' copies, Records and grades must not move. Old Agent versions are
+pruned to the current version plus the previous AGENT.md. Files under the owned
+storage roots that no row references, and that are older than an hour, are
+listed and (with --apply) unlinked.
 
 A production URL also needs --confirm-production next to --apply. Back up the
 database and the data root first.
@@ -14,6 +17,7 @@ database and the data root first.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
 import time
@@ -34,9 +38,14 @@ from app.core.models import (  # noqa: E402
     StoredFile,
     VoiceProfile,
 )
-from app.modules.debates.models import DebateParticipant  # noqa: E402
+from app.modules.debates.models import Debate, DebateParticipant, PlaybackState  # noqa: E402
 from app.modules.knowledge_sets.models import KnowledgeSet  # noqa: E402
-from app.modules.learning.models import AssessmentAttemptQuestion  # noqa: E402
+from app.modules.learning.models import (  # noqa: E402
+    AssessmentAttempt,
+    AssessmentAttemptQuestion,
+    LearningAssessment,
+    LearningRecord,
+)
 from app.modules.real_delete import (  # noqa: E402
     hard_delete_agent,
     hard_delete_conversation,
@@ -72,9 +81,13 @@ def _agent_in_live_team(session: Any, agent_id: str) -> bool:
 
 def _looks_like_production(url: str, data_root: Path) -> bool:
     lowered = f"{url} {data_root}".lower()
-    return any(
-        marker in lowered for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
-    ) or os.environ.get("MAYA_ENV") == "production"
+    return (
+        any(
+            marker in lowered
+            for marker in ("maya-production", "8.210.57.144", "/srv/maya-production")
+        )
+        or os.environ.get("MAYA_ENV") == "production"
+    )
 
 
 # Roots that only hold files a database row owns. Anything else under the
@@ -201,7 +214,89 @@ def counts(session: Any, data_root: Path) -> dict[str, int]:
         "debate_participants": int(
             session.scalar(select(func.count()).select_from(DebateParticipant)) or 0
         ),
+        "records": int(session.scalar(select(func.count()).select_from(LearningRecord)) or 0),
+        "attempts": int(session.scalar(select(func.count()).select_from(AssessmentAttempt)) or 0),
+        "grades": int(session.scalar(select(func.count()).select_from(LearningAssessment)) or 0),
+        "deleted_debates": int(
+            session.scalar(
+                select(func.count()).select_from(Debate).where(Debate.deleted_at.is_not(None))
+            )
+            or 0
+        ),
+        "agents_kept_for_live_teams": sum(
+            1
+            for agent_id in session.scalars(
+                select(Agent.id).where(Agent.deleted_at.is_not(None))
+            ).all()
+            if _agent_in_live_team(session, agent_id)
+        ),
     }
+
+
+def live_debate_counts(session: Any) -> dict[str, int]:
+    """What the Debate phase must not move: live Debates' copies, Records, grades."""
+
+    live = select(Debate.id).where(Debate.deleted_at.is_(None))
+    return {
+        "snapshots": int(
+            session.scalar(
+                select(func.count())
+                .select_from(KnowledgeSnapshot)
+                .where(KnowledgeSnapshot.owner_debate_id.in_(live))
+            )
+            or 0
+        ),
+        "records": int(session.scalar(select(func.count()).select_from(LearningRecord)) or 0),
+        "attempts": int(session.scalar(select(func.count()).select_from(AssessmentAttempt)) or 0),
+        "grades": int(session.scalar(select(func.count()).select_from(LearningAssessment)) or 0),
+        "participants": int(
+            session.scalar(
+                select(func.count())
+                .select_from(DebateParticipant)
+                .where(DebateParticipant.debate_id.in_(live))
+            )
+            or 0
+        ),
+    }
+
+
+def delete_legacy_debates(database: Database, data_root: Path) -> tuple[int, int]:
+    """Remove soft-deleted Debates with the teacher's Debate delete. Returns (done, failed)."""
+
+    from app.modules.debates.cleanup import delete_all
+
+    with database.session() as session:
+        targets = [
+            (str(row.id), str(row.created_by), int(row.revision))
+            for row in session.scalars(select(Debate).where(Debate.deleted_at.is_not(None)))
+        ]
+    done = failed = 0
+    for debate_id, actor_id, revision in targets:
+        session = database.session_factory()
+        try:
+            playback = session.scalar(
+                select(PlaybackState).where(PlaybackState.debate_id == debate_id)
+            )
+            if playback is None:
+                raise RuntimeError("no playback state")
+            asyncio.run(
+                delete_all(
+                    session,
+                    actor_user_id=actor_id,
+                    debate_id=debate_id,
+                    expected_revision=revision,
+                    expected_control_version=int(playback.control_version),
+                    data_root=data_root,
+                )
+            )
+            done += 1
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            failed += 1
+            print("debate not removed", debate_id, type(exc).__name__)
+        finally:
+            session.close()
+    return done, failed
 
 
 def apply(session: Any, data_root: Path) -> None:
@@ -293,10 +388,20 @@ def main(argv: list[str] | None = None) -> int:
         if after["debate_participants"] != before["debate_participants"]:
             session.rollback()
             raise SystemExit("Debate participants changed; the write was rolled back.")
+        for key in ("records", "attempts", "grades"):
+            if after[key] != before[key]:
+                session.rollback()
+                raise SystemExit(f"{key} changed; the write was rolled back.")
         session.commit()
+        live_before = live_debate_counts(session)
+    done, failed = delete_legacy_debates(database, data_root)
+    print("legacy debates removed", done, "failed", failed)
+    with database.session() as session:
+        if live_debate_counts(session) != live_before:
+            raise SystemExit("Live Debates, Records or grades changed; stop and check.")
         print("disk orphan files removed", unlink_disk_orphans(session, data_root))
         print("final", counts(session, data_root))
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
