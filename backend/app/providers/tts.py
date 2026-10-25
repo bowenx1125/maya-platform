@@ -7,6 +7,7 @@ import io
 import math
 import struct
 import wave
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -109,8 +110,13 @@ class TTSProvider(Protocol):
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: Mapping[str, object] | None = None,
     ) -> TTSResult:
-        """Synthesize audio for an already-authorized internal voice mapping."""
+        """Synthesize audio for an already-authorized internal voice mapping.
+
+        ``voice_params`` (rate, instruction, seed) apply to cloned voices only;
+        a provider drops them for models that do not take them.
+        """
 
 
 def _mock_wav(text: str, external_voice_id: str) -> bytes:
@@ -145,6 +151,7 @@ class MockTTSProvider:
         self.synthesize_calls = 0
         self.last_text: str | None = None
         self.last_voice_id: str | None = None
+        self.last_voice_params: dict[str, object] | None = None
         self.next_error: TTSProviderError | None = None
 
     def synthesize(
@@ -154,6 +161,7 @@ class MockTTSProvider:
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: Mapping[str, object] | None = None,
     ) -> TTSResult:
         del language, target_model_key
         if self.next_error is not None:
@@ -163,6 +171,7 @@ class MockTTSProvider:
         self.synthesize_calls += 1
         self.last_text = text
         self.last_voice_id = external_voice_id
+        self.last_voice_params = dict(voice_params) if voice_params else None
         return TTSResult(
             audio_bytes=_mock_wav(text, external_voice_id),
             request_id=f"mock-tts-request-{self.synthesize_calls}",

@@ -217,7 +217,7 @@ kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
-Head0079_playback_media_tickets. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
+Head0080_drop_playback_rate. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
 with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
 Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
 unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
@@ -300,3 +300,5 @@ max_tokens, seed, thinking, timeout 120; DEBATE_TTS_MODEL. Unset = previous valu
 The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze into
 rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
 contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.
+Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED (0–65535) freeze as
+voice_params, sent to clones only. Playback rate removed (0080): all play at 1.0.

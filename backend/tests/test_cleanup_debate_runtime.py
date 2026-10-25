@@ -439,7 +439,6 @@ def _seed_runtime_graph(database: Database, data_root: Path) -> dict[str, str]:
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=1.0,
             control_version=1,
             audio_duration_ms=10,
             created_at=now,

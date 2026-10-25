@@ -10509,12 +10509,6 @@
             "title": "Next Turn Ready",
             "type": "boolean"
           },
-          "playback_rate": {
-            "maximum": 1.25,
-            "minimum": 0.95,
-            "title": "Playback Rate",
-            "type": "number"
-          },
           "status": {
             "enum": [
               "preparing",
@@ -10533,7 +10527,6 @@
           "status",
           "mode",
           "cursor_ms",
-          "playback_rate",
           "control_version",
           "next_turn_ready"
         ],
@@ -13627,6 +13620,138 @@
         "title": "DebateLLMParamSpec",
         "type": "object"
       },
+      "DebateVoiceParamSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "kind": {
+            "enum": [
+              "float",
+              "int",
+              "text"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Length"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "name": {
+            "enum": [
+              "rate",
+              "instruction",
+              "seed"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "DebateVoiceParamSpec",
+        "type": "object"
+      },
+      "DebateVoiceParams": {
+        "additionalProperties": false,
+        "description": "One Debate's voice overrides; null (or blank text) means \"do not send\".",
+        "properties": {
+          "instruction": {
+            "maxLength": 500,
+            "title": "Instruction",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "maximum": 2,
+                "minimum": 0.5,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "title": "DebateVoiceParams",
+        "type": "object"
+      },
       "DebateLLMDefaults": {
         "additionalProperties": false,
         "properties": {
@@ -13637,14 +13762,17 @@
             "title": "Params",
             "type": "array"
           },
-          "playback_rate": {
-            "title": "Playback Rate",
-            "type": "number"
+          "voice_params": {
+            "items": {
+              "$ref": "#/components/schemas/DebateVoiceParamSpec"
+            },
+            "title": "Voice Params",
+            "type": "array"
           }
         },
         "required": [
           "params",
-          "playback_rate"
+          "voice_params"
         ],
         "title": "DebateLLMDefaults",
         "type": "object"
@@ -13666,6 +13794,17 @@
               }
             ],
             "description": "The parameter card's values; omitted means the DEBATE_LLM_* defaults."
+          },
+          "voice_params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebateVoiceParams"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults."
           },
           "topic": {
             "type": "string",
@@ -14631,7 +14770,6 @@
           "status",
           "mode",
           "cursor_ms",
-          "playback_rate",
           "control_version",
           "next_turn_ready"
         ],
@@ -14668,11 +14806,6 @@
           "cursor_ms": {
             "type": "integer",
             "minimum": 0
-          },
-          "playback_rate": {
-            "type": "number",
-            "minimum": 0.95,
-            "maximum": 1.25
           },
           "control_version": {
             "type": "integer",

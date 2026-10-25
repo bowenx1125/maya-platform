@@ -14,7 +14,6 @@ const playback: DebatePlaybackState = {
   mode: "live",
   current_turn_id: "40000000-0000-4000-8000-000000000001",
   cursor_ms: 120,
-  playback_rate: 1,
   control_version: 3,
   next_turn_ready: false,
 };

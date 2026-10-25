@@ -98,7 +98,6 @@ class PlaybackControlMixin(PlaybackCore):
                 "controller_epoch": old_epoch,
                 "previous_status": "replay",
                 "cursor_ms": 0,
-                "playback_rate": old_state.playback_rate,
             }
         if info is None:
             return None, None
@@ -112,7 +111,6 @@ class PlaybackControlMixin(PlaybackCore):
         try:
             control_version = int(info.get("control_version", 0) or 0)
             cursor_ms = int(info.get("cursor_ms", 0) or 0)
-            playback_rate = float(info.get("playback_rate", 1.0) or 1.0)
             event = self._stage_event(
                 db,
                 old_debate_id,
@@ -121,7 +119,6 @@ class PlaybackControlMixin(PlaybackCore):
                     "turn_id": turn_value,
                     "cursor_ms": max(0, cursor_ms),
                     "control_version": max(0, control_version),
-                    "playback_rate": max(0.95, min(1.25, playback_rate)),
                 },
             )
         except (TypeError, ValueError):
@@ -726,7 +723,6 @@ class PlaybackControlMixin(PlaybackCore):
                 "turn_id": turn_id,
                 "cursor_ms": state.cursor_ms,
                 "control_version": state.control_version,
-                "playback_rate": state.playback_rate,
             }
             paused_event = self._stage_event(db, debate_id, "playback.paused", payload)
             result = self._state_dto(state, db, debate)
@@ -865,7 +861,6 @@ class PlaybackControlMixin(PlaybackCore):
                 "turn_id": str(current.id),
                 "cursor_ms": cursor,
                 "control_version": state.control_version,
-                "playback_rate": state.playback_rate,
             }
             skip_events.append(self._stage_event(db, debate_id, "playback.skipped", payload))
             if next_turn is not None:
@@ -1071,7 +1066,6 @@ class PlaybackControlMixin(PlaybackCore):
                             "turn_id": str(event_turn.id),
                             "cursor_ms": 0,
                             "control_version": state.control_version,
-                            "playback_rate": state.playback_rate,
                         },
                     )
             result = self._state_dto(state, db, debate)

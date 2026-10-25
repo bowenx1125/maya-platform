@@ -81,6 +81,7 @@ class _RecordingTTS:
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: object = None,
     ) -> TTSResult:
         self.calls.append((text, external_voice_id, language, target_model_key))
         return TTSResult(audio_bytes=_wav(1), content_type="audio/wav", request_id="preset-tts")

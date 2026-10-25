@@ -153,6 +153,7 @@ class _FailingTTS(MockTTSProvider):
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: object = None,
     ) -> object:
         del text, external_voice_id, language, target_model_key
         self.synthesize_calls += 1

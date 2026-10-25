@@ -527,7 +527,6 @@ class PlaybackState(Base):
     mode: Mapped[str] = mapped_column(String(8), nullable=False, default="live")
     current_turn_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     cursor_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    playback_rate: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     control_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     controller_epoch: Mapped[str | None] = mapped_column(String(128), nullable=True)
     controller_owner_connection: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -583,10 +582,6 @@ class PlaybackState(Base):
             name="ck_playback_states_audio_duration",
         ),
         CheckConstraint("cursor_ms >= 0", name="ck_playback_states_cursor"),
-        CheckConstraint(
-            "playback_rate >= 0.95 AND playback_rate <= 1.25",
-            name="ck_playback_states_rate",
-        ),
         CheckConstraint("control_version >= 0", name="ck_playback_states_control_version"),
         CheckConstraint(
             "replay_scope IS NULL OR replay_scope IN ('turn', 'all')",

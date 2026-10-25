@@ -37,7 +37,6 @@ class PlaybackStateDTO(ClosedModel):
     mode: PlaybackMode
     current_turn_id: UUID | None = None
     cursor_ms: int = Field(ge=0)
-    playback_rate: float = Field(ge=0.95, le=1.25)
     control_version: int = Field(ge=0)
     next_turn_ready: bool
 
@@ -106,7 +105,6 @@ class PlaybackStartedPayload(ClosedModel):
     )
     avatar_states: list[AvatarStateDTO] = Field(min_length=1)
     cursor_ms: Literal[0] = 0
-    playback_rate: float | None = Field(default=None, ge=0.95, le=1.25)
 
     @model_validator(mode="after")
     def require_explicit_text_playback(self) -> PlaybackStartedPayload:
@@ -119,7 +117,6 @@ class PlaybackCursorPayload(ClosedModel):
     turn_id: UUID
     cursor_ms: int = Field(ge=0)
     control_version: int = Field(ge=0)
-    playback_rate: float | None = Field(default=None, ge=0.95, le=1.25)
 
 
 class PlaybackWaitingNextPayload(ClosedModel):

@@ -46,6 +46,7 @@ class _LanguageMock(MockTTSProvider):
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: object = None,
     ):
         self.languages.append(language)
         return super().synthesize(
@@ -53,6 +54,7 @@ class _LanguageMock(MockTTSProvider):
             external_voice_id,
             language=language,
             target_model_key=target_model_key,
+            voice_params=voice_params,  # type: ignore[arg-type]
         )
 
 
@@ -253,6 +255,36 @@ def test_regeneration_uses_debate_language(retained_turn):
         session.close()
     assert result.status == "completed"
     assert provider.languages == ["zh"]
+
+
+def test_regeneration_uses_the_debates_frozen_voice_parameters(retained_turn):
+    database, ids, data_root, _speech, _structured = retained_turn
+    frozen = {"rate": 1.1, "instruction": "语气坚定", "seed": 3}
+    with database.session() as db:
+        snapshot = json.loads(
+            db.execute(
+                text("SELECT rule_snapshot_json FROM debates WHERE id=:debate_id"),
+                {"debate_id": ids["debate"]},
+            ).scalar_one()
+        )
+        snapshot["voice_params"] = frozen
+        db.execute(
+            text("UPDATE debates SET rule_snapshot_json=:snapshot WHERE id=:debate_id"),
+            {"snapshot": json.dumps(snapshot), "debate_id": ids["debate"]},
+        )
+    deleted = _delete_voice(database, ids, data_root)
+    provider = _LanguageMock()
+    session = database.session_factory()
+    try:
+        result = AudioRegenerationService(
+            session,
+            audio_store=AudioStore(data_root, tts_provider=provider),
+            voice_resolver=lambda _cached: ResolvedTurnVoice("mock_sentinel", None, "mock"),
+        ).regenerate_turn_audio(ids["debate"], ids["turn"], deleted.revision, "regen-voice-01")
+    finally:
+        session.close()
+    assert result.status == "completed"
+    assert provider.last_voice_params == frozen
 
 
 def test_startup_promotes_durable_stage_without_another_tts_call(retained_turn):

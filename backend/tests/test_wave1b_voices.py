@@ -278,6 +278,7 @@ def test_voice_enrollment_preview_confirmation_delete_and_cleanup(
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: object = None,
     ) -> TTSResult:
         preview_languages.append(language)
         return synthesize(text, voice_id, language=language, target_model_key=target_model_key)
@@ -2231,6 +2232,7 @@ class _FlakyFallbackTTS:
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: object = None,
     ) -> TTSResult:
         del text, external_voice_id, language, target_model_key
         self.calls += 1

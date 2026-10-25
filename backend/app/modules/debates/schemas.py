@@ -20,7 +20,7 @@ from app.modules.debates.generation.types import (
     MutualLearningSynthesisV1,
     MutualLearningTurnResultV1,
 )
-from app.modules.debates.llm_params import DebateLLMParams
+from app.modules.debates.llm_params import DebateLLMParams, DebateVoiceParams
 
 Stance = Literal["support", "oppose", "neutral"]
 StanceMode = Literal["assigned", "open"]
@@ -92,9 +92,20 @@ class DebateLLMParamSpec(_ClosedModel):
     sent: bool
 
 
+class DebateVoiceParamSpec(_ClosedModel):
+    name: Literal["rate", "instruction", "seed"]
+    kind: Literal["float", "int", "text"]
+    default: float | int | str | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    step: float | None = None
+    max_length: int | None = None
+
+
 class DebateLLMDefaults(_ClosedModel):
     params: list[DebateLLMParamSpec]
-    playback_rate: float
+    # Cloned voices only; every Debate plays at 1.0.
+    voice_params: list[DebateVoiceParamSpec]
 
 
 class DebateDraftRequest(_ClosedModel):
@@ -112,6 +123,8 @@ class DebateDraftRequest(_ClosedModel):
     turn_duration_seconds: None = None
     # The parameter card's values; omitted means the DEBATE_LLM_* defaults.
     llm_params: DebateLLMParams | None = None
+    # Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults.
+    voice_params: DebateVoiceParams | None = None
 
     @field_validator("topic")
     @classmethod
@@ -304,7 +317,6 @@ class PlaybackState(_ClosedModel):
     mode: Literal["live", "replay"]
     current_turn_id: UUID | None = None
     cursor_ms: int = Field(ge=0)
-    playback_rate: float = Field(ge=0.95, le=1.25)
     control_version: int = Field(ge=0)
     next_turn_ready: bool
 

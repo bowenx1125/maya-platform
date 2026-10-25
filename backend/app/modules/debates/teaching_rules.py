@@ -142,6 +142,7 @@ def _compile_zh_system_prompt(markdown: str, round_number: int) -> str:
 def freeze_teaching_rules(
     prompts: Mapping[str, str] | None = None,
     llm_params: Mapping[str, object] | None = None,
+    voice_params: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     from app.modules.debates.llm_params import CONTRACT_VERSION
 
@@ -156,6 +157,8 @@ def freeze_teaching_rules(
     }
     if llm_params is not None:
         frozen["llm_params"] = dict(llm_params)
+    if voice_params is not None:
+        frozen["voice_params"] = dict(voice_params)
     return frozen
 
 

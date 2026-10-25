@@ -372,7 +372,6 @@ class FakeTransport:
             "mode": "live",
             "current_turn_id": self.current_turn_id,
             "cursor_ms": 0,
-            "playback_rate": 1.0,
             "control_version": self.control_version,
             "next_turn_ready": self.waiting_for_next
             and self.rest_next_ready

@@ -171,8 +171,17 @@ class Settings(BaseSettings):
     )
     # Speech model for voices bound to no model; a clone keeps its own.
     debate_tts_model: str | None = Field(default=None, validation_alias="DEBATE_TTS_MODEL")
-    debate_playback_rate: float = Field(
-        default=1.25, ge=0.95, le=1.25, validation_alias="DEBATE_PLAYBACK_RATE"
+    # Voice defaults for cloned voices (qwen-audio-*-tts-flash only; preset
+    # voices are never sent these). The speaking rate replaces the browser
+    # playback rate: every Debate plays at 1.0.
+    debate_tts_rate: float | None = Field(
+        default=1.25, ge=0.5, le=2.0, validation_alias="DEBATE_TTS_RATE"
+    )
+    debate_tts_instruction: str | None = Field(
+        default=None, max_length=500, validation_alias="DEBATE_TTS_INSTRUCTION"
+    )
+    debate_tts_seed: int | None = Field(
+        default=None, ge=0, le=65535, validation_alias="DEBATE_TTS_SEED"
     )
 
     # These server-only operational values are also part of C02/C08. They are
@@ -603,6 +612,9 @@ class Settings(BaseSettings):
         "debate_llm_max_tokens",
         "debate_llm_seed",
         "debate_tts_model",
+        "debate_tts_rate",
+        "debate_tts_instruction",
+        "debate_tts_seed",
         mode="before",
     )
     @classmethod

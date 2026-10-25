@@ -352,7 +352,6 @@ function playbackFromWire(
     mode,
     current_turn_id: currentTurnId,
     cursor_ms: Math.max(0, integer(value.cursor_ms, current.cursor_ms)),
-    playback_rate: numberValue(value.playback_rate, current.playback_rate),
     control_version: Math.max(
       0,
       integer(value.control_version, current.control_version),
@@ -1100,10 +1099,8 @@ export function DebateStage({
           throw new Error("stale early start");
         }
         audio.src = source;
-        audio.playbackRate = Math.min(
-          1.25,
-          Math.max(0.95, current.playback_rate),
-        );
+        // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
+        audio.playbackRate = 1;
         await audio.play();
       })();
       const pending = { key, play };
@@ -1373,10 +1370,8 @@ export function DebateStage({
           const playFrom = (source: string): Promise<void> => {
             try {
               audio.src = source;
-              audio.playbackRate = Math.min(
-                1.25,
-                Math.max(0.95, current.playback_rate),
-              );
+              // Every Debate plays at 1.0: the speaking rate is in the audio (TTS rate).
+              audio.playbackRate = 1;
               if (current.cursor_ms > 0) {
                 // A seek at 0 would only cost a second ranged request.
                 try {
@@ -1837,10 +1832,6 @@ export function DebateStage({
           mode: "live",
           current_turn_id: startedTurnId,
           cursor_ms: Math.max(0, integer(event.payload.cursor_ms, 0)),
-          playback_rate: numberValue(
-            event.payload.playback_rate,
-            current.playback_rate,
-          ),
         },
         "running",
       );
@@ -2198,10 +2189,6 @@ export function DebateStage({
               status: "playing",
               current_turn_id: payload.turn_id,
               cursor_ms: Math.max(0, integer(payload.cursor_ms, 0)),
-              playback_rate: numberValue(
-                payload.playback_rate,
-                playbackRef.current.playback_rate,
-              ),
             },
             playbackRef.current.mode === "replay"
               ? detailRef.current.status
@@ -2233,10 +2220,6 @@ export function DebateStage({
             cursor_ms: Math.max(
               0,
               integer(payload.cursor_ms, playbackRef.current.cursor_ms),
-            ),
-            playback_rate: numberValue(
-              payload.playback_rate,
-              playbackRef.current.playback_rate,
             ),
             control_version: Math.max(
               playbackRef.current.control_version,

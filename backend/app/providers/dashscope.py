@@ -15,6 +15,7 @@ import threading
 import time
 from base64 import b64decode
 from binascii import Error as BinasciiError
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -822,6 +823,22 @@ def _finalize_streamed_wav(raw: bytes) -> bytes:
     return raw
 
 
+# SpeechSynthesizer ``input`` fields a qwen-audio-*-tts-flash clone accepts.
+_CLONE_VOICE_FIELDS = ("rate", "instruction", "seed")
+
+
+def _clone_voice_fields(params: Mapping[str, object] | None) -> dict[str, object]:
+    """rate / instruction / seed that are set; an empty value is not sent."""
+
+    fields: dict[str, object] = {}
+    for name in _CLONE_VOICE_FIELDS:
+        value = (params or {}).get(name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        fields[name] = value.strip() if isinstance(value, str) else value
+    return fields
+
+
 class DashScopeTTSProvider:
     """DashScope non-streaming TTS adapter with bounded result download."""
 
@@ -843,6 +860,7 @@ class DashScopeTTSProvider:
         *,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: Mapping[str, object] | None = None,
     ) -> TTSResult:
         language_type = _TTS_LANGUAGE_TYPES.get(language)
         if language_type is None:
@@ -877,6 +895,9 @@ class DashScopeTTSProvider:
                     "voice": external_voice_id,
                     "format": "wav",
                     "sample_rate": 24000,
+                    # Cloned voices only: the preset flash model above takes
+                    # text, voice and language_type alone.
+                    **_clone_voice_fields(voice_params),
                 },
             }
         try:

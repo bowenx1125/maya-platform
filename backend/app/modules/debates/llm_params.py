@@ -17,10 +17,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy.orm import Session
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 
 ParamKind = Literal["float", "int", "bool"]
 
@@ -112,10 +111,89 @@ def request_fields(params: dict[str, Any]) -> dict[str, Any]:
     return fields
 
 
+@dataclass(frozen=True)
+class VoiceParamSpec:
+    name: str
+    kind: Literal["float", "int", "text"]
+    minimum: float | None
+    maximum: float | None
+    step: float | None = None
+    max_length: int | None = None
+
+
+# Voice parameters (2026-10-25): sent in the SpeechSynthesizer ``input`` for
+# cloned voices (qwen-audio-*-tts-flash) only; the preset qwen3-tts-flash takes
+# text, voice and language_type alone. The speaking rate replaces the browser
+# playback rate: every Debate plays at 1.0.
+VOICE_PARAM_SPECS: tuple[VoiceParamSpec, ...] = (
+    VoiceParamSpec("rate", "float", 0.5, 2.0, step=0.05),
+    VoiceParamSpec("instruction", "text", None, None, max_length=500),
+    VoiceParamSpec("seed", "int", 0, 65535),
+)
+VOICE_PARAM_NAMES = tuple(spec.name for spec in VOICE_PARAM_SPECS)
+
+
+class DebateVoiceParams(BaseModel):
+    """One Debate's voice overrides; null (or blank text) means "do not send"."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rate: float | None = Field(default=None, ge=0.5, le=2.0)
+    instruction: str | None = Field(default=None, max_length=500)
+    seed: int | None = Field(default=None, ge=0, le=65535)
+
+    @field_validator("instruction")
+    @classmethod
+    def blank_instruction_is_unset(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+
+def default_voice_params(settings: Settings) -> dict[str, Any]:
+    """DEBATE_TTS_* values, checked against the same ranges as the card."""
+
+    return DebateVoiceParams.model_validate(
+        {
+            "rate": settings.debate_tts_rate,
+            "instruction": settings.debate_tts_instruction,
+            "seed": settings.debate_tts_seed,
+        }
+    ).model_dump()
+
+
+def resolve_voice_params(settings: Settings, overrides: DebateVoiceParams | None) -> dict[str, Any]:
+    """What a new Debate freezes: the card's values, or the defaults when none came."""
+
+    if overrides is None:
+        return default_voice_params(settings)
+    return overrides.model_dump()
+
+
+def frozen_voice_params(snapshot: dict[str, Any] | None, settings: Settings) -> dict[str, Any]:
+    """The Debate's frozen voice values; a Debate frozen before them uses the defaults."""
+
+    stored = (snapshot or {}).get("voice_params")
+    if isinstance(stored, dict):
+        return {name: stored.get(name) for name in VOICE_PARAM_NAMES}
+    return default_voice_params(settings)
+
+
+def voice_request_fields(params: dict[str, Any] | None) -> dict[str, Any]:
+    """SpeechSynthesizer ``input`` fields. Empty parameters are left out."""
+
+    fields: dict[str, Any] = {}
+    for spec in VOICE_PARAM_SPECS:
+        value = (params or {}).get(spec.name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        fields[spec.name] = value
+    return fields
+
+
 def defaults_payload(settings: Settings) -> dict[str, Any]:
     """The read-only defaults and ranges the Debate form starts from."""
 
     defaults = default_params(settings)
+    voice_defaults = default_voice_params(settings)
     return {
         "params": [
             {
@@ -131,13 +209,16 @@ def defaults_payload(settings: Settings) -> dict[str, Any]:
             }
             for spec in PARAM_SPECS
         ],
-        "playback_rate": settings.debate_playback_rate,
+        "voice_params": [
+            {
+                "name": spec.name,
+                "kind": spec.kind,
+                "default": voice_defaults[spec.name],
+                "minimum": spec.minimum,
+                "maximum": spec.maximum,
+                "step": spec.step,
+                "max_length": spec.max_length,
+            }
+            for spec in VOICE_PARAM_SPECS
+        ],
     }
-
-
-def configured_playback_rate(db: Session) -> float:
-    """DEBATE_PLAYBACK_RATE: the rate a new playback row starts at."""
-
-    configured = db.info.get("maya_settings")
-    settings = configured if isinstance(configured, Settings) else get_settings()
-    return settings.debate_playback_rate
