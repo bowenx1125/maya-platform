@@ -250,7 +250,7 @@ export function AgentCard({
             data-ui-guide-text={guideText}
           />
           <span className={cn(FRAME_CLASS, "pointer-events-none")}>
-            <span className={cn(BAND_CLASS, "pointer-events-auto")} style={{ backgroundColor: tone }}>
+            <span data-card-band className={cn(BAND_CLASS, "pointer-events-auto")} style={{ backgroundColor: tone }}>
               {editing ? (
                 <input
                   ref={bindInput}
@@ -313,7 +313,7 @@ export function AgentCard({
           data-ui-guide={guideText ? "agent.lastEdited" : undefined}
           data-ui-guide-text={guideText}
         >
-          <span className={BAND_CLASS} style={{ backgroundColor: tone }}>
+          <span data-card-band className={BAND_CLASS} style={{ backgroundColor: tone }}>
             <span className={titleClass}>{title}</span>
           </span>
           {art}
