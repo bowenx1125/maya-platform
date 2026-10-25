@@ -301,4 +301,4 @@ The create card starts from GET /courses/{id}/debate-llm-defaults; values freeze
 rule_snapshot_json.llm_params (ruleset_contract_v3; null = not sent). The execution
 contract lives in default_rules/{zh,en}.md ({round}); pre-v3 Debates keep legacy.
 Voice: DEBATE_TTS_RATE 1.25 (0.5–2), _INSTRUCTION, _SEED (0–65535) freeze as
-voice_params, sent to clones only. Playback rate removed (0080): all play at 1.0.
+voice_params (clones only; seed is best-effort). Playback rate gone (0080): 1.0.

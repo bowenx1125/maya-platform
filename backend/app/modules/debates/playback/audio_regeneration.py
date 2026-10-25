@@ -93,8 +93,9 @@ class CachedSegmentTurn:
     effective_voice_profile_id: str | None
     receipt_ids: tuple[str, ...]
     turn_source_ids: tuple[str, ...]
-    # The Debate's frozen rate / instruction / seed: a regenerated speech
-    # sounds like the rest of its Debate.
+    # The Debate's frozen rate / instruction / seed: a regenerated speech is
+    # asked for with the same settings as the rest of its Debate. The seed only
+    # steadies the voice; the speech service does not promise identical audio.
     voice_params: dict[str, Any] = field(default_factory=dict)
 
     @property
