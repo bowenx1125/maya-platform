@@ -108,3 +108,29 @@ def test_session_time_zone_is_utc_whatever_the_client_says(
         assert stored.utcoffset() == timedelta(0)
     finally:
         db.dispose()
+
+
+def test_database_at_the_baseline_runs_no_ddl_and_keeps_its_version(tmp_path: Path) -> None:
+    # Production is at 0080_drop_playback_rate when the squash deploys: the
+    # baseline keeps that id, so startup must only find it, never replay DDL.
+    from sqlalchemy import event
+
+    db = Database(named_url(f"{tmp_path / 'baseline.sqlite3'}"))
+    db.upgrade_schema()
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        statements.append(statement.lstrip().split(None, 1)[0].upper())
+
+    event.listen(db.engine, "before_cursor_execute", record)
+    try:
+        db.upgrade_schema()
+    finally:
+        event.remove(db.engine, "before_cursor_execute", record)
+    assert MIGRATION_BASELINE == ALEMBIC_HEAD == "0080_drop_playback_rate"
+    assert not {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE"} & set(statements)
+    with db.engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == MIGRATION_BASELINE
+        )
