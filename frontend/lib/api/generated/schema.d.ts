@@ -789,7 +789,7 @@ export interface paths {
         head?: never;
         /**
          * Update Agent Metadata
-         * @description CAS-update description without touching any versioned Agent data.
+         * @description CAS-update name and/or description without touching versioned Agent data.
          */
         patch: operations["updateAgentMetadata"];
         trace?: never;
@@ -3328,6 +3328,11 @@ export interface components {
             description: string | null;
             /** Expected Metadata Revision */
             expected_metadata_revision: number;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /**
              * Visibility
              * @enum {string|null}
@@ -8173,6 +8178,15 @@ export interface operations {
             };
             /** @description Metadata revision conflict. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description agent_name_required or agent_name_too_long (max 120 characters). */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

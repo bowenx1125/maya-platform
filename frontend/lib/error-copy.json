@@ -4,6 +4,12 @@
     "accountFieldManaged": {
       "en": "This comes from the course's account list. Ask your teacher to change it."
     },
+    "agentNameRequired": {
+      "en": "Give the Agent a name."
+    },
+    "agentNameTooLong": {
+      "en": "Agent names can be at most 120 characters."
+    },
     "aiStepFailed": {
       "en": "The AI step didn't finish. Try again; if it keeps happening, tell your teacher."
     },
@@ -240,6 +246,8 @@
     "agent_memory_name_unknown": "memberNameUnknown",
     "agent_memory_span_missing": "notAvailable",
     "agent_memory_target_invalid": "invalidInput",
+    "agent_name_required": "agentNameRequired",
+    "agent_name_too_long": "agentNameTooLong",
     "agent_not_found": "notAvailable",
     "array_invalid": "invalidInput",
     "assessment_action_required": "assessmentUnavailable",

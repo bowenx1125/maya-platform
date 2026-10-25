@@ -156,7 +156,9 @@ class UpdateAgentDraftRequest(BaseModel):
 
 
 class AgentCreateRequest(BaseModel):
-    name: str = Field(min_length=1)
+    # Trimmed and checked by the route so empty / too-long names get the
+    # stable ``agent_name_required`` / ``agent_name_too_long`` codes.
+    name: str
     description: str = ""
     visibility: Literal["private", "public"] = "private"
 
@@ -167,9 +169,16 @@ class UpdateAgentMetadataRequest(BaseModel):
     ``description`` is intentionally nullable on the wire so clients can
     clear an older/null value explicitly.  The database stores a non-null
     empty string.
+
+    ``name`` is optional: omitted or null leaves the name unchanged. A sent
+    name is trimmed; empty after trimming is 422 ``agent_name_required`` and
+    more than 120 characters is 422 ``agent_name_too_long``. A name already
+    used in the Agent's namespace resolves to ``Name-2`` etc., exactly as on
+    create. ``description`` changes only when it is sent.
     """
 
     expected_metadata_revision: int = Field(ge=0)
+    name: str | None = None
     description: str | None = ""
     visibility: Literal["private", "public"] | None = None
 
