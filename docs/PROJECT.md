@@ -289,9 +289,8 @@ provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payload
 SQLite DATABASE_URL is refused; the startup import is gone. scripts/migrate_sqlite_to_postgres.py
 copies an old file: dry-run default, --apply --confirm-production, read-only source, one
 transaction + receipt (re-run no-op), never deletes it. Tests need MAYA_TEST_POSTGRES_URL
-(a database per test). Fixed: budget lost update, Agent
-publish/delete and document replace races, attempt vs knowledge update, two-phase purge,
-alembic URL with %, peer lock across databases.
+(a database per test). Fixed: budget lost update, Agent and
+document races, attempt vs knowledge update, purge order, alembic %, peer lock scope.
 
 ## Oct24 Immerse audio predownload (PR A2)
 
