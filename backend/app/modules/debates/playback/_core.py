@@ -1764,7 +1764,7 @@ class PlaybackCore:
         """The Debate's frozen rate / instruction / seed (DEBATE_TTS_* if none froze)."""
 
         from app.core.config import Settings, get_settings
-        from app.modules.debates.llm_params import frozen_voice_params
+        from app.modules.debates.generation_params import frozen_voice_params
 
         raw = self._get(debate, "rule_snapshot_json", default=None)
         try:

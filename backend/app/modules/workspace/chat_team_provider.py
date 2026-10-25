@@ -831,8 +831,8 @@ def dispatch_team_model(
         serialized_request=wire,
         current_policy_hash=policy.policy_hash,
     )
-    # The session's snapshot must not still hold SQLite's writer when the
-    # repository opens a second connection for BEGIN IMMEDIATE.
+    # End this session's read snapshot before the repository opens its own
+    # transaction on a second connection.
     db.rollback()
     try:
         # Budget, operation, call binding and reservation: one transaction,

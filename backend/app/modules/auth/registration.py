@@ -235,8 +235,8 @@ def register_student(
     canonical_group = normalize_group_name(group_name)
     canonical_display = normalize_display_name(display_name, canonical_username)
 
-    # Hash before taking SQLite's writer lock; the read/claim/group/session
-    # transaction must be serialized, but Argon2 work must not hold that lock.
+    # Hash before taking the registration advisory lock; the read/claim/group/
+    # session transaction is serialized, but Argon2 work must not hold the lock.
     if password_hash is None:
         password_hash = run_hash(lambda: _hasher().hash(password), settings)
     try:

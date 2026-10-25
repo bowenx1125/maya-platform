@@ -242,8 +242,7 @@ def _lock_agent_name_namespace(
 ) -> None:
     """Serialize name resolution per namespace on Postgres.
 
-    SQLite already runs these writers under ``BEGIN IMMEDIATE``. On Postgres
-    the plain ``_begin_immediate`` takes no lock, so two creates could both
+    The plain ``_begin_immediate`` takes no lock, so two creates could both
     see a name as free. A transaction advisory lock on the namespace makes
     the check-then-write atomic; it is released at commit/rollback.
     """
@@ -553,7 +552,7 @@ def _begin_immediate(db: Session, agent_id: str | None = None) -> None:
     Roll back the scoped authorization reads first. With ``agent_id`` the
     transaction holds that Agent's writer lock until it ends, so publish,
     metadata update and delete of one Agent cannot interleave between their
-    final check and their write (SQLite's single writer used to give this).
+    final check and their write.
     """
 
     db.rollback()
@@ -567,7 +566,7 @@ def _acquire_publish_guard(
     expected_revision: int,
     record: IdempotencyRecord,
 ) -> tuple[AgentVersion, Agent, str]:
-    """Re-read a publish target under SQLite's writer lock and fence deletion.
+    """Re-read a publish target under the Agent's writer lock and fence deletion.
 
     The idempotency claim is committed before this function is called.  The
     immediate transaction then re-resolves the student-visible version and
@@ -589,7 +588,7 @@ def _acquire_publish_guard(
         if scoped.version.revision != expected_revision:
             raise stale_revision(scoped.version.revision)
         # Keep an explicit CAS fence in the locked transaction as well as the
-        # ORM re-read.  This makes the publish winner observable to SQLite and
+        # ORM re-read.  This makes the publish winner observable to a delete and
         # prevents a stale worker from installing a guard for another draft.
         fenced = db.execute(
             update(AgentVersion)
@@ -1280,9 +1279,9 @@ def delete_agent(
     Debates keep their own copy, so a Debate does not block this. Chats stay
     readable under the snapshotted name and cannot continue.
 
-    The final eligibility query and delete run under one ``BEGIN IMMEDIATE``
-    transaction.  SQLite's writer lock therefore serializes this operation
-    with publish and Debate creation, leaving exactly one committed winner.
+    The final eligibility query and delete run in one transaction holding the
+    Agent's advisory writer lock, which serializes them with publish and
+    metadata updates of the same Agent, leaving exactly one committed winner.
     """
 
     # Keep the reserved-ID check before claiming idempotency or touching any

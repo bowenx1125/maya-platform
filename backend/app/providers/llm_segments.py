@@ -33,7 +33,7 @@ from app.modules.debates.generation.segments import (
     parse_segment_output_json,
     validate_segment_output,
 )
-from app.modules.debates.llm_params import CONTRACT_VERSION, default_params, request_fields
+from app.modules.debates.generation_params import CONTRACT_VERSION, default_params, request_fields
 from app.providers.llm_adapter import LLMAdapterError, LLMUsageV1
 from app.providers.llm_price_card import (
     LLM_INPUT_TOKEN_CAP,

@@ -40,7 +40,7 @@ from app.core.models import (
     KnowledgeSnapshot,
 )
 
-# These parent keys are required by SQLite before it will accept the exact
+# These parent keys are required by PostgreSQL before it will accept the exact
 # cross-scope foreign keys below.  They are declared here as metadata indexes
 # for ``create_all``-based isolated tests; migration 0004 creates the same
 # named indexes explicitly for existing databases.
@@ -479,7 +479,7 @@ class PositionHistory(Base):
         # ``influencing_turn_id`` intentionally has no participant FK: an
         # opponent's turn is a valid influence.  The setup service validates
         # that it belongs to the same Debate; the exact update turn above is
-        # the ownership relationship that must be enforced by SQLite.
+        # the ownership relationship the database enforces.
         CheckConstraint(
             "update_type IN ('unchanged', 'refined', 'partial_concession', 'reframed', 'switched')",
             name="ck_position_history_update_type",

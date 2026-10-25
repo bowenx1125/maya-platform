@@ -277,7 +277,7 @@ class Agent(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # This pointer is deliberately validated by the service against the same
     # agent and a published state.  A direct FK would create a migration cycle
-    # with agent_versions on SQLite.
+    # with agent_versions.
     current_published_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -790,7 +790,7 @@ class SnapshotDocument(Base):
     __table_args__ = (
         UniqueConstraint("snapshot_id", "document_id", name="uq_snapshot_documents_source"),
         UniqueConstraint("snapshot_id", "order_index", name="uq_snapshot_documents_order"),
-        # SQLite composite foreign keys require an explicitly unique parent
+        # Composite foreign keys require an explicitly unique parent
         # key.  Keep this as an index (rather than another UniqueConstraint)
         # so the two public uniqueness constraints above remain stable while
         # chunks can prove they belong to the same snapshot/document pair.

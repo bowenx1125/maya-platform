@@ -2,7 +2,7 @@
 
 Sign-in now waits in the unified pressure queue (``adaptive_admission``,
 class ``login``). The ``auth_login_admissions`` table stays mapped only so
-existing migrations and the SQLite importer keep a stable schema; nothing
+existing migrations and the one-off SQLite copy script keep a stable schema; nothing
 admits through it any more.
 """
 

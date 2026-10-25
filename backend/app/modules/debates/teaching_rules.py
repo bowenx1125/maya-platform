@@ -144,7 +144,7 @@ def freeze_teaching_rules(
     llm_params: Mapping[str, object] | None = None,
     voice_params: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    from app.modules.debates.llm_params import CONTRACT_VERSION
+    from app.modules.debates.generation_params import CONTRACT_VERSION
 
     authored = dict(default_teaching_prompts() if prompts is None else prompts)
     frozen: dict[str, object] = {

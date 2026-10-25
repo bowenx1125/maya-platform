@@ -1,4 +1,4 @@
-"""Debate generation parameters: env defaults, per-Debate overrides, request fields.
+"""Debate generation parameters: LLM and voice env defaults, per-Debate overrides, request fields.
 
 Owner decision (2026-10-24): the environment holds the global defaults
 (DEBATE_LLM_*), the Debate form's parameter card overrides them for one

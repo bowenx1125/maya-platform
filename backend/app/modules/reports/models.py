@@ -315,7 +315,7 @@ class CivilizationReportRevision(Base):
             "id", "report_id", "debate_id", name="uq_civilization_report_revisions_id_scope"
         ),
         # The current-success pointer references the exact ready status in
-        # the same child-column order; SQLite requires this parent key to be
+        # the same child-column order; PostgreSQL requires this parent key to be
         # explicitly unique before it will accept the composite FK.
         UniqueConstraint(
             "id",

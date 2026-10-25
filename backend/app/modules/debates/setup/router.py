@@ -68,7 +68,7 @@ def get_llm_defaults(
 ) -> DebateLLMDefaults:
     """The DEBATE_LLM_* defaults and ranges the parameter card starts from."""
 
-    from app.modules.debates.llm_params import defaults_payload
+    from app.modules.debates.generation_params import defaults_payload
 
     require_teacher_course(db, context.user.id, str(course_id))
     return DebateLLMDefaults.model_validate(defaults_payload(request.app.state.settings))
