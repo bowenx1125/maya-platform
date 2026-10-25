@@ -411,6 +411,9 @@ export function AgentWorkbench({
   const [error, setError] = useState<unknown>(null);
   // Shown only after Done on create; empty name / AGENT.md stay quiet until then.
   const [submitHint, setSubmitHint] = useState("");
+  const nameField = useRef<HTMLInputElement>(null);
+  const nameMissing =
+    submitHint !== "" && submitHint === t("agentNameRequired");
   const [knowledgeUploadError, setKnowledgeUploadError] =
     useState<unknown>(null);
   const [knowledgePreviewRefreshFailed, setKnowledgePreviewRefreshFailed] =
@@ -1608,7 +1611,17 @@ export function AgentWorkbench({
       <div className="agent-entry">
         <div className="workbench-main">
           {unsavedCreate && submitHint ? (
-            <Notice inline tone="error" onClose={() => setSubmitHint("")}>
+            // The mascot tray says it; the field it is about is marked and
+            // gets focus back once the notice is dismissed.
+            <Notice
+              id="agent-submit-hint"
+              tone="error"
+              onClose={() => {
+                const field = nameMissing ? nameField.current : null;
+                setSubmitHint("");
+                field?.focus();
+              }}
+            >
               {submitHint}
             </Notice>
           ) : null}
@@ -1640,7 +1653,13 @@ export function AgentWorkbench({
               >
                 <label>
                   <input
+                    ref={nameField}
                     aria-label={t("agentName")}
+                    aria-invalid={nameMissing || undefined}
+                    aria-describedby={
+                      nameMissing ? "agent-submit-hint" : undefined
+                    }
+                    className="aria-invalid:border-[3px]! aria-invalid:border-err! aria-invalid:bg-err-bg!"
                     value={draftName}
                     disabled={editingLocked}
                     maxLength={120}

@@ -1,14 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { isConflict } from "../lib/api";
 import { localizeError, statusLabel, type MessageKey } from "../lib/i18n";
 import type { UiGuideKey } from "../lib/ui-guide-copy";
 import { useT } from "../lib/i18n";
+import { cn } from "../lib/utils";
 import { IconClose, IconEdit } from "./quiet-icons";
+import { buttonVariants } from "./ui/button";
 
 export function LoadingCard({ label }: { label?: string }) {
   const t = useT();
@@ -28,15 +35,77 @@ export function LoadingCard({ label }: { label?: string }) {
 
 const noSubscription = () => () => {};
 
+/**
+ * Classes of the one mascot tray (DESIGN option C): fixed bottom-right at
+ * z-index 60, the gold scholar speaking from the corner, a tail on the newest
+ * bubble only, and on a phone only the newest two bubbles with the rest
+ * folded into "+N". The mascot and the fold are pseudo-elements, so the
+ * tray's children stay exactly the notices and `:empty` still hides it.
+ */
+const TRAY_CLASS = [
+  "notice-tray fixed right-5 bottom-[var(--arc-tray-bottom,20px)] z-[60] grid gap-2.5",
+  "w-[min(520px,calc(100vw-32px))] pr-[90px] pb-1.5 pointer-events-none font-body empty:hidden",
+  "after:content-[''] after:absolute after:right-0 after:bottom-0 after:w-[76px] after:h-[95px]",
+  "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat",
+  "data-[more]:before:content-['+'_attr(data-more)] data-[more]:before:justify-self-end",
+  "data-[more]:before:rounded-full data-[more]:before:border-2 data-[more]:before:border-border",
+  "data-[more]:before:bg-surface data-[more]:before:px-2.5 data-[more]:before:py-0.5",
+  "data-[more]:before:text-xs data-[more]:before:font-bold data-[more]:before:shadow-[2px_2px_0_#111]",
+  "max-[680px]:left-3 max-[680px]:right-3 max-[680px]:w-auto max-[680px]:bottom-[var(--arc-tray-bottom,12px)]",
+  "max-[680px]:pr-[68px] max-[680px]:after:w-14 max-[680px]:after:h-[70px]",
+  "max-[680px]:[&>.notice:nth-last-child(n+3)]:hidden",
+].join(" ");
+
+/** Hidden older bubbles on a phone are counted for the "+N" chip. */
+function countFolded(element: HTMLElement) {
+  const folded = element.children.length - 2;
+  const small = window.matchMedia?.("(max-width: 680px)").matches ?? false;
+  if (small && folded > 0) element.setAttribute("data-more", String(folded));
+  else element.removeAttribute("data-more");
+}
+
 /** One tray at the bottom of the page, so notices never push a page down. */
 function noticeTray(): HTMLElement {
   let element = document.querySelector<HTMLElement>(".notice-tray");
   if (!element) {
     element = document.createElement("div");
-    element.className = "notice-tray";
+    element.className = TRAY_CLASS;
     document.body.append(element);
+    const tray = element;
+    if (typeof MutationObserver === "function")
+      new MutationObserver(() => countFolded(tray)).observe(tray, {
+        childList: true,
+      });
   }
   return element;
+}
+
+/**
+ * Lift the tray above a Chat composer while it is on screen (option C: in
+ * Chat the mascot speaks from just above the message box).
+ */
+export function useNoticeTrayAbove(target: HTMLElement | null) {
+  useEffect(() => {
+    if (!target) return;
+    const root = document.documentElement;
+    const place = () => {
+      const top = target.getBoundingClientRect().top;
+      root.style.setProperty(
+        "--arc-tray-bottom",
+        `${Math.max(12, window.innerHeight - top + 12)}px`,
+      );
+    };
+    place();
+    const observer =
+      typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+    observer?.observe(target);
+    window.addEventListener("resize", place);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", place);
+      root.style.removeProperty("--arc-tray-bottom");
+    };
+  }, [target]);
 }
 
 /** The tray exists only in the browser; the server renders no notice. */
@@ -78,15 +147,23 @@ export function Notice({
   const notice = (
     <div
       id={id}
-      className={`notice notice-${tone}`}
+      className={cn(
+        `notice notice-${tone}`,
+        "relative my-4 flex w-full items-center gap-3 max-[680px]:flex-wrap rounded-[14px] border-[3px] border-border bg-surface px-3.5 py-2.5 font-body text-sm leading-snug text-ink shadow-[4px_4px_0_#111]",
+        // Status dot instead of an icon font; the colour carries the tone.
+        "before:size-2.5 before:flex-none before:rounded-full before:border-2 before:border-border before:bg-main before:content-['']",
+        NOTICE_TONE[tone],
+        !inline &&
+          "pointer-events-auto my-0 [.notice-tray>&:last-child]:after:absolute [.notice-tray>&:last-child]:after:-right-[11px] [.notice-tray>&:last-child]:after:bottom-3 [.notice-tray>&:last-child]:after:size-4 [.notice-tray>&:last-child]:after:rotate-[-45deg] [.notice-tray>&:last-child]:after:border-r-[3px] [.notice-tray>&:last-child]:after:border-b-[3px] [.notice-tray>&:last-child]:after:border-border [.notice-tray>&:last-child]:after:bg-inherit [.notice-tray>&:last-child]:after:content-['']",
+      )}
       role={tone === "error" || tone === "warning" ? "alert" : "status"}
     >
-      {title ? <strong>{title}</strong> : null}
-      {children ? <span>{children}</span> : null}
+      {title ? <strong className="whitespace-nowrap">{title}</strong> : null}
+      {children ? <span className="min-w-0">{children}</span> : null}
       {action}
       <button
         type="button"
-        className="notice-close"
+        className="notice-close ml-auto [.inline-button+&]:ml-0 inline-grid size-[26px] flex-none cursor-pointer place-items-center rounded-full border-2 border-border bg-surface text-ink hover:bg-err hover:text-white focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-main"
         aria-label={t("noticeDismiss")}
         onClick={() => (onClose ? onClose() : setClosed(true))}
       >
@@ -96,6 +173,20 @@ export function Notice({
   );
   return inline || !tray ? notice : createPortal(notice, tray);
 }
+
+const NOTICE_TONE = {
+  error: "bg-err-bg before:bg-err",
+  warning: "bg-warn-bg before:bg-warn",
+  success: "bg-ok-bg before:bg-ok",
+  info: "",
+} as const;
+
+/** A notice's own action (Retry, Refresh): a small neutral button. */
+export const NOTICE_ACTION_CLASS = cn(
+  "inline-button ml-auto",
+  buttonVariants({ variant: "neutral", size: "sm" }),
+  "h-8 px-3 text-[13px]",
+);
 
 /** A missing record, as opposed to one the server named a reason for. */
 function isNotFound(error: unknown) {
@@ -110,11 +201,16 @@ function isNotFound(error: unknown) {
  * deleted Agent reads as a deleted Agent rather than an unknown resource.
  */
 export function ErrorNotice({
+  id,
   error,
   onRetry,
   inline = false,
   notFound,
+  onClosed,
 }: {
+  id?: string;
+  /** Runs after the X closes it, e.g. to give focus back to a field. */
+  onClosed?: () => void;
   error: unknown;
   onRetry?: () => void;
   inline?: boolean;
@@ -128,16 +224,20 @@ export function ErrorNotice({
   const missing = isNotFound(error);
   return (
     <Notice
+      id={id}
       tone={conflict ? "warning" : "error"}
       title={conflict ? t("revisionConflict") : undefined}
       inline={inline}
-      onClose={() => setDismissed(error)}
+      onClose={() => {
+        setDismissed(error);
+        onClosed?.();
+      }}
       action={
         // Retrying with the stale revision would only conflict again: offer
         // a reload, which reads the latest revision from the server.
         conflict ? (
           <button
-            className="inline-button"
+            className={NOTICE_ACTION_CLASS}
             type="button"
             onClick={() => window.location.reload()}
           >
@@ -145,7 +245,11 @@ export function ErrorNotice({
           </button>
         ) : // Asking again for a deleted record cannot succeed.
         onRetry && !missing ? (
-          <button className="inline-button" type="button" onClick={onRetry}>
+          <button
+            className={NOTICE_ACTION_CLASS}
+            type="button"
+            onClick={onRetry}
+          >
             {t("retry")}
           </button>
         ) : null
