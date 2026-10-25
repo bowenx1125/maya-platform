@@ -6,9 +6,9 @@ now also runs on worker threads (see ``offload``), so the lock has two layers:
 
 - a ``threading.Lock`` per Debate inside the process (at most one waiter per
   Debate holds a database connection, and memory repositories still work);
-- a PostgreSQL session advisory lock on a dedicated connection, shared by
-  every replica. The connection is outside the request pool, and the server
-  drops the lock if the process dies.
+- a PostgreSQL session advisory lock on a connection from a small pool of its
+  own, shared by every replica. It never takes a request connection, and the
+  server drops the lock if the process dies.
 
 Waiting happens on a dedicated thread pool, never on an event loop.
 """
@@ -23,7 +23,6 @@ from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.pool import NullPool
 
 LOCK_PREFIX = "debate-playback:"
 _WAITERS = ThreadPoolExecutor(max_workers=64, thread_name_prefix="maya-debate-lock")
@@ -63,7 +62,15 @@ class DebateLocks:
             return None
         with self._guard:
             if self._engine is None:
-                self._engine = create_engine(self._source.url, poolclass=NullPool, future=True)
+                # A small pool of its own: a lock wait never takes a request
+                # connection, and Next does not pay for a new connection.
+                self._engine = create_engine(
+                    self._source.url,
+                    pool_size=4,
+                    max_overflow=28,
+                    pool_pre_ping=True,
+                    future=True,
+                )
             return self._engine
 
     def acquire_blocking(self, debate_id: str) -> Release:
@@ -102,9 +109,12 @@ class DebateLocks:
                             {"key": LOCK_PREFIX + debate_id},
                         )
                         connection.commit()
+                    except BaseException:
+                        # Discard the session instead of pooling it: closing
+                        # it is what drops a lock the unlock failed to release.
+                        connection.invalidate()
+                        raise
                     finally:
-                        # Closing the session also drops the lock if the
-                        # unlock statement itself failed.
                         connection.close()
             finally:
                 self._leave(debate_id, entry)
