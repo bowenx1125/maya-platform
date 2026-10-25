@@ -7,7 +7,7 @@ import json
 import secrets
 import struct
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -51,6 +51,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.prefetch import prefetched
 from app.core.read_memo import memoized
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
@@ -157,6 +158,20 @@ def scoped_group_role_for_user(db: Session, user_id: str, group_id: str) -> str 
     rather than a window into drafts.
     """
 
+    return prefetched(
+        db,
+        "scoped_group_role",
+        (str(user_id), str(group_id)),
+        lambda: memoized(
+            db,
+            ("scoped_group_role", str(user_id), str(group_id)),
+            lambda: _read_scoped_group_role(db, user_id, group_id),
+            across_sessions=True,
+        ),
+    )
+
+
+def _read_scoped_group_role(db: Session, user_id: str, group_id: str) -> str | None:
     row = db.execute(
         select(CourseMember.role, WorkspaceMember.user_id)
         .select_from(Group)
@@ -242,16 +257,21 @@ def scoped_student_group_role(db: Session, context: AuthContext, group_id: str) 
 
 
 def course_member_role(db: Session, user_id: str, course_id: str) -> str | None:
-    return memoized(
+    return prefetched(
         db,
-        ("course_member_role", str(user_id), str(course_id)),
-        lambda: db.scalar(
-            select(CourseMember.role).where(
-                CourseMember.user_id == user_id,
-                CourseMember.course_id == course_id,
-            )
+        "course_member_role",
+        (str(user_id), str(course_id)),
+        lambda: memoized(
+            db,
+            ("course_member_role", str(user_id), str(course_id)),
+            lambda: db.scalar(
+                select(CourseMember.role).where(
+                    CourseMember.user_id == user_id,
+                    CourseMember.course_id == course_id,
+                )
+            ),
+            across_sessions=True,
         ),
-        across_sessions=True,
     )
 
 
@@ -526,11 +546,7 @@ def snapshot_sources_are_readable(
     agent: Agent | None = None,
     allow_historical_epoch_for_owner: bool = False,
 ) -> bool:
-    rows = db.execute(
-        select(SnapshotDocument, KnowledgeDocument)
-        .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
-        .where(SnapshotDocument.snapshot_id == snapshot_id)
-    ).all()
+    rows = snapshot_source_rows(db, snapshot_id)
     actor_id = _actor_user_id(context)
     owner_can_read_history = bool(
         allow_historical_epoch_for_owner
@@ -1330,15 +1346,171 @@ def _document_dto(
 
 def _enabled_documents(db: Session, version_id: str) -> list[KnowledgeDocument]:
     return list(
-        db.scalars(
-            select(KnowledgeDocument)
-            .join(AgentVersionDocument, AgentVersionDocument.document_id == KnowledgeDocument.id)
-            .where(
-                AgentVersionDocument.agent_version_id == version_id,
-                AgentVersionDocument.enabled.is_(True),
+        prefetched(
+            db,
+            "enabled_documents",
+            version_id,
+            lambda: db.scalars(
+                select(KnowledgeDocument)
+                .join(
+                    AgentVersionDocument, AgentVersionDocument.document_id == KnowledgeDocument.id
+                )
+                .where(
+                    AgentVersionDocument.agent_version_id == version_id,
+                    AgentVersionDocument.enabled.is_(True),
+                )
+                .order_by(AgentVersionDocument.order_index)
+            ).all(),
+        )
+    )
+
+
+def snapshot_source_rows(
+    db: Session, snapshot_id: str
+) -> list[tuple[SnapshotDocument, KnowledgeDocument]]:
+    """A snapshot's frozen documents with their library rows."""
+
+    return list(
+        prefetched(
+            db,
+            "snapshot_source_rows",
+            snapshot_id,
+            lambda: [
+                (row[0], row[1])
+                for row in db.execute(
+                    select(SnapshotDocument, KnowledgeDocument)
+                    .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
+                    .where(SnapshotDocument.snapshot_id == snapshot_id)
+                ).all()
+            ],
+        )
+    )
+
+
+def prefetch_agent_reads(
+    db: Session, pairs: Sequence[tuple[Agent, AgentVersion]], *, viewer_id: str
+) -> None:
+    """Load in a few batches what the per-Agent helpers read for a list.
+
+    Covers the viewer's course and group roles, each Agent owner's course
+    role, enabled documents, snapshot sources and snapshots, edit audits,
+    names, current version numbers and bound voices. Every requested key is
+    stored, a missing row as None or an empty list, so the helpers answer
+    exactly what their own queries would.
+    """
+
+    from app.core.prefetch import store
+
+    if not pairs:
+        return
+    agents = {agent.id: agent for agent, _version in pairs}
+    versions = {version.id: version for _agent, version in pairs}
+    course_ids = {agent.course_id for agent in agents.values()}
+    group_ids = {agent.group_id for agent in agents.values() if agent.group_id}
+    member_ids = {viewer_id} | {
+        agent.owner_user_id for agent in agents.values() if agent.owner_user_id
+    }
+    roles = {(user, course): None for user in member_ids for course in course_ids}
+    for user, course, role in db.execute(
+        select(CourseMember.user_id, CourseMember.course_id, CourseMember.role).where(
+            CourseMember.user_id.in_(member_ids), CourseMember.course_id.in_(course_ids)
+        )
+    ).all():
+        roles[(user, course)] = role
+    store(db, "course_member_role", roles)
+    if group_ids:
+        group_roles: dict[tuple[str, str], str | None] = dict.fromkeys(
+            ((viewer_id, group) for group in group_ids), None
+        )
+        for group, member in db.execute(
+            select(Group.id, WorkspaceMember.user_id)
+            .join(CourseMember, CourseMember.course_id == Group.course_id)
+            .outerjoin(
+                WorkspaceMember,
+                and_(WorkspaceMember.group_id == Group.id, WorkspaceMember.user_id == viewer_id),
             )
-            .order_by(AgentVersionDocument.order_index)
-        ).all()
+            .where(
+                Group.id.in_(group_ids),
+                CourseMember.user_id == viewer_id,
+                or_(CourseMember.role == "teacher", WorkspaceMember.user_id.is_not(None)),
+            )
+        ).all():
+            if group_roles.get((viewer_id, group)) is None:
+                group_roles[(viewer_id, group)] = "teacher" if member is None else "student"
+        store(db, "scoped_group_role", group_roles)
+    enabled: dict[str, list[KnowledgeDocument]] = {version_id: [] for version_id in versions}
+    for version_id, document in db.execute(
+        select(AgentVersionDocument.agent_version_id, KnowledgeDocument)
+        .join(KnowledgeDocument, KnowledgeDocument.id == AgentVersionDocument.document_id)
+        .where(
+            AgentVersionDocument.agent_version_id.in_(versions),
+            AgentVersionDocument.enabled.is_(True),
+        )
+        .order_by(AgentVersionDocument.agent_version_id, AgentVersionDocument.order_index)
+    ).all():
+        enabled[version_id].append(document)
+    store(db, "enabled_documents", enabled)
+    snapshot_ids = {
+        version.knowledge_snapshot_id
+        for version in versions.values()
+        if version.knowledge_snapshot_id
+    }
+    if snapshot_ids:
+        sources: dict[str, list[tuple[SnapshotDocument, KnowledgeDocument]]] = {
+            snapshot_id: [] for snapshot_id in snapshot_ids
+        }
+        for source_row, document in db.execute(
+            select(SnapshotDocument, KnowledgeDocument)
+            .join(KnowledgeDocument, KnowledgeDocument.id == SnapshotDocument.document_id)
+            .where(SnapshotDocument.snapshot_id.in_(snapshot_ids))
+        ).all():
+            sources[source_row.snapshot_id].append((source_row, document))
+        store(db, "snapshot_source_rows", sources)
+        snapshots: dict[str, KnowledgeSnapshot | None] = dict.fromkeys(snapshot_ids)
+        for snapshot in db.scalars(
+            select(KnowledgeSnapshot).where(KnowledgeSnapshot.id.in_(snapshot_ids))
+        ).all():
+            snapshots[snapshot.id] = snapshot
+        store(db, "knowledge_snapshot", snapshots)
+    audits: dict[str, AgentEditAudit | None] = dict.fromkeys(agents)
+    for audit in db.scalars(
+        select(AgentEditAudit).where(AgentEditAudit.agent_id.in_(agents))
+    ).all():
+        audits[audit.agent_id] = audit
+    store(db, "edit_audit", audits)
+    user_ids = {
+        user_id
+        for user_id in [
+            *(agent.owner_user_id for agent in agents.values()),
+            *(version.persona_confirming_user_id for version in versions.values()),
+            *(audit.last_edited_by_user_id for audit in audits.values() if audit is not None),
+        ]
+        if user_id
+    }
+    users: dict[str, User | None] = dict.fromkeys(user_ids)
+    for user in db.scalars(select(User).where(User.id.in_(user_ids))).all():
+        users[user.id] = user
+    store(db, "user", users)
+    store(
+        db,
+        "user_display_name",
+        {user_id: (user.display_name if user else None) for user_id, user in users.items()},
+    )
+    current_ids = {
+        agent.current_published_version_id
+        for agent in agents.values()
+        if agent.current_published_version_id
+    }
+    seqs: dict[str, int | None] = dict.fromkeys(current_ids)
+    for version_id, seq in db.execute(
+        select(AgentVersion.id, AgentVersion.version_seq).where(AgentVersion.id.in_(current_ids))
+    ).all():
+        seqs[version_id] = seq
+    store(db, "version_seq", seqs)
+    from app.modules.voices.preview import prefetch_bound_voices
+
+    prefetch_bound_voices(
+        db, [(version, agents[version.agent_id]) for version in versions.values()]
     )
 
 
@@ -1552,10 +1724,12 @@ def _current_version_label(db: Session, agent: Agent) -> str | None:
 
     if not agent.current_published_version_id:
         return None
-    seq = db.scalar(
-        select(AgentVersion.version_seq).where(
-            AgentVersion.id == agent.current_published_version_id
-        )
+    version_id = agent.current_published_version_id
+    seq = prefetched(
+        db,
+        "version_seq",
+        version_id,
+        lambda: db.scalar(select(AgentVersion.version_seq).where(AgentVersion.id == version_id)),
     )
     return agent_version_label(seq) if seq is not None else None
 
@@ -1597,7 +1771,7 @@ def agent_summary(
         )
         if shared is not None and draft_shared_with_editors(db, shared, agent):
             draft = shared
-    audit = db.get(AgentEditAudit, agent.id)
+    audit = prefetched(db, "edit_audit", agent.id, lambda: db.get(AgentEditAudit, agent.id))
     # The hover tooltip names the latest editor; before anyone else edits,
     # that is the creator.
     last_editor_id = (
@@ -1606,7 +1780,12 @@ def agent_summary(
         else agent.owner_user_id
     )
     last_editor = (
-        db.scalar(select(User.display_name).where(User.id == last_editor_id))
+        prefetched(
+            db,
+            "user_display_name",
+            last_editor_id,
+            lambda: db.scalar(select(User.display_name).where(User.id == last_editor_id)),
+        )
         if last_editor_id
         else None
     )

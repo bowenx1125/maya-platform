@@ -1067,6 +1067,15 @@ def answer_sheets(db: Session, attempts: list[AssessmentAttempt]) -> dict[str, d
                 item.get("points_awarded"),
                 str(item.get("feedback") or ""),
             )
+    # Each attempt copies its activity's question text, so the same stored
+    # JSON comes back once per student: parse each distinct one once.
+    parsed: dict[str, QuestionContent] = {}
+
+    def content_of(raw: str) -> QuestionContent:
+        if raw not in parsed:
+            parsed[raw] = QuestionContent.model_validate_json(raw)
+        return parsed[raw]
+
     sheets: dict[str, dict[str, Any]] = {}
     for attempt in attempts:
         rows = questions.get(attempt.id, [])
@@ -1075,9 +1084,7 @@ def answer_sheets(db: Session, attempts: list[AssessmentAttempt]) -> dict[str, d
         items: list[dict[str, Any]] = []
         for row in rows:
             ordinal = row.ordinal - offset
-            content = (
-                QuestionContent.model_validate_json(row.content_json) if row.content_json else None
-            )
+            content = content_of(row.content_json) if row.content_json else None
             awarded, feedback = scores.get(attempt.id, {}).get(ordinal, (None, ""))
             total = None
             if content is not None:
@@ -1149,10 +1156,7 @@ def _attempt_rows(
             else []
         )
     }
-    report_paths = {
-        activity.id: _latest_report_path(db, actor, activity_id=activity.id)
-        for activity in activities
-    }
+    report_paths = _latest_report_paths(db, actor, [activity.id for activity in activities])
     sheets = answer_sheets(db, [attempt for attempt, _activity in pairs])
     results: list[dict[str, Any]] = []
     for attempt, activity in pairs:
@@ -1409,27 +1413,43 @@ def delete_course_assessment_attempt(
     db.commit()
 
 
-def _latest_report_path(db: Session, actor: AuthContext, *, activity_id: str) -> str | None:
-    report = db.scalar(
+def _latest_report_paths(
+    db: Session, actor: AuthContext, activity_ids: list[str]
+) -> dict[str, str | None]:
+    """``_latest_report_path`` for many activities in two queries."""
+
+    paths: dict[str, str | None] = dict.fromkeys(activity_ids)
+    if not activity_ids:
+        return paths
+    latest: dict[str, AssessmentCourseReport] = {}
+    for report in db.scalars(
         select(AssessmentCourseReport)
         .where(
-            AssessmentCourseReport.activity_id == activity_id,
+            AssessmentCourseReport.activity_id.in_(activity_ids),
             AssessmentCourseReport.owner_user_id == actor.user.id,
         )
         .order_by(AssessmentCourseReport.updated_at.desc(), AssessmentCourseReport.id)
-        .limit(1)
-    )
-    if report is None:
-        return None
-    revision = db.scalar(
-        select(AssessmentCourseReportRevision).where(
-            AssessmentCourseReportRevision.report_id == report.id,
-            AssessmentCourseReportRevision.revision_seq == report.current_revision_seq,
-        )
-    )
-    if revision is None:
-        return None
-    return f"/api/v1/learning/reports/{report.id}/download?revision_id={revision.id}"
+    ).all():
+        latest.setdefault(report.activity_id, report)
+    if not latest:
+        return paths
+    revisions = {
+        (revision.report_id, revision.revision_seq): revision.id
+        for revision in db.scalars(
+            select(AssessmentCourseReportRevision).where(
+                AssessmentCourseReportRevision.report_id.in_(
+                    [report.id for report in latest.values()]
+                )
+            )
+        ).all()
+    }
+    for activity_id, report in latest.items():
+        revision_id = revisions.get((report.id, report.current_revision_seq))
+        if revision_id is not None:
+            paths[activity_id] = (
+                f"/api/v1/learning/reports/{report.id}/download?revision_id={revision_id}"
+            )
+    return paths
 
 
 def _raw_answer_markdown(db: Session, attempts: list[AssessmentAttempt]) -> str:

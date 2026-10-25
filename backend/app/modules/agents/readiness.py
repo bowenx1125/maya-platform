@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.models import Agent, AgentVersion, KnowledgeSnapshot
+from app.core.prefetch import prefetched
 
 ISSUE_MESSAGES = {
     "agent_archived": "Agent “{name}” was deleted or archived.",
@@ -93,9 +94,12 @@ def readiness_issues(db: Session, agent: Agent) -> list[dict[str, Any]]:
     if version is None or version.agent_id != agent.id or version.state != "published":
         return [issue(agent, "agent_not_published")]
     found: list[dict[str, Any]] = []
+    snapshot_id = version.knowledge_snapshot_id
     snapshot = (
-        db.get(KnowledgeSnapshot, version.knowledge_snapshot_id)
-        if version.knowledge_snapshot_id
+        prefetched(
+            db, "knowledge_snapshot", snapshot_id, lambda: db.get(KnowledgeSnapshot, snapshot_id)
+        )
+        if snapshot_id
         else None
     )
     if snapshot is None or snapshot.agent_version_id != version.id:

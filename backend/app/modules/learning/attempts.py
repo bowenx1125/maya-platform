@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import PlatformError, conflict, idempotency_conflict, not_found
 from app.core.models import CourseMember, SessionRecord, User
+from app.core.read_memo import memoized
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge_sets.models import KnowledgeAsset, KnowledgeAssetVersion, KnowledgeSet
 from app.modules.knowledge_sets.schemas import QuestionContent
@@ -680,6 +681,13 @@ def follow_up_target(content: QuestionContent) -> tuple[int, int | None, bool] |
 
 
 def _is_follow_up_item(db: Session, row: AssessmentActivityQuestion) -> bool:
+    # Depends on the activity's Question only, not on the student: inside a
+    # memoized request (the teacher's Record) every attempt of one activity
+    # shares the answer instead of re-reading the Knowledge rows.
+    return memoized(db, ("follow_up_item", row.id), lambda: _read_follow_up_item(db, row))
+
+
+def _read_follow_up_item(db: Session, row: AssessmentActivityQuestion) -> bool:
     try:
         _version, content = _verify_question_source(db, row, require_current=False)
     except PlatformError:

@@ -34,6 +34,7 @@ from app.core.models import (
     StoredFile,
     User,
 )
+from app.core.read_memo import request_read_memo
 from app.core.version_label import agent_version_label
 from app.core.write_guard import WriteSlot, reserve_write_slot, write_guard_slot
 from app.modules.agents.schemas import AvatarConfig
@@ -46,6 +47,8 @@ from app.modules.auth.dependencies import (
 from app.modules.auth.service import AuthContext
 from app.modules.knowledge.services import (
     can_invoke_version,
+    prefetch_agent_reads,
+    snapshot_source_rows,
     snapshot_sources_are_readable,
     teacher_public_agent_hidden_from,
 )
@@ -1221,12 +1224,8 @@ def _version_sources_usable(db: Session, version: AgentVersion) -> bool:
 
     if version.knowledge_snapshot_id is None:
         return True
-    rows = db.execute(
-        select(KnowledgeDocument.workspace_state)
-        .join(SnapshotDocument, SnapshotDocument.document_id == KnowledgeDocument.id)
-        .where(SnapshotDocument.snapshot_id == version.knowledge_snapshot_id)
-    ).all()
-    return all(workspace_state == "active" for (workspace_state,) in rows)
+    rows = snapshot_source_rows(db, version.knowledge_snapshot_id)
+    return all(document.workspace_state == "active" for _source, document in rows)
 
 
 def _agent_knowledge_generation_progress(
@@ -1440,12 +1439,17 @@ def session_view(
 def list_agents(
     course_id: UUID, context: AuthContext = Depends(require_auth), db: Session = Depends(get_db)
 ) -> list[ChatAgent]:
-    course_member(db, context, str(course_id))
+    with request_read_memo():
+        return _chat_agents(db, context, str(course_id))
+
+
+def _chat_agents(db: Session, context: AuthContext, course_id: str) -> list[ChatAgent]:
+    course_member(db, context, course_id)
     rows = db.execute(
         select(AgentVersion, Agent)
         .join(Agent, Agent.current_published_version_id == AgentVersion.id)
         .where(
-            Agent.course_id == str(course_id),
+            Agent.course_id == course_id,
             Agent.status == "active",
             Agent.deleted_at.is_(None),
             AgentVersion.state == "published",
@@ -1460,11 +1464,14 @@ def list_agents(
         )
         .order_by(Agent.created_at.desc())
     ).all()
+    prefetch_agent_reads(
+        db, [(agent, version) for version, agent in rows], viewer_id=context.user.id
+    )
     return [
         agent_view(
             version,
             agent,
-            str(course_id),
+            course_id,
             available=_version_sources_usable(db, version),
         )
         for version, agent in rows

@@ -35,6 +35,7 @@ from app.core.models import (
     SnapshotDocument,
     StoredFile,
 )
+from app.core.read_memo import request_read_memo
 from app.core.sqlutil import begin_immediate
 from app.core.version_label import agent_version_label
 from app.modules.agents.schemas import (
@@ -1461,8 +1462,9 @@ def get_knowledge_snapshot(
     context: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> KnowledgeSnapshot:
-    scoped = visible_snapshot(db, context, str(snapshot_id))
-    return snapshot_dto(db, scoped.snapshot)
+    with request_read_memo():
+        scoped = visible_snapshot(db, context, str(snapshot_id))
+        return snapshot_dto(db, scoped.snapshot)
 
 
 @router.get(
