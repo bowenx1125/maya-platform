@@ -20,6 +20,7 @@ import logging
 import socket
 import threading
 import time
+from collections import deque
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -107,9 +108,83 @@ def finish(
 ) -> dict[str, Any]:
     _CURRENT.reset(token)  # type: ignore[arg-type]
     record = timing.close(method=method, route=route, status=status, stream=stream)
+    observe(record)
     if log:
         log_record(record)
     return record
+
+
+# Rolling per-route summary for /health/request-timing (internal port only:
+# Caddy proxies /api and /ws, never /health). Route templates and numbers
+# only. Kept in memory per replica: a restart starts it again.
+SUMMARY_SAMPLES = 500
+_summary: dict[tuple[str, str], deque[tuple[float, float, int, bool]]] = {}
+_summary_totals: dict[tuple[str, str], list[float]] = {}
+_summary_lock = threading.Lock()
+
+
+def observe(record: dict[str, Any]) -> None:
+    route = str(record.get("route", ""))
+    if not route.startswith("/api/"):
+        return
+    key = (str(record.get("method", "")), route)
+    sample = (
+        float(record["ms"]),
+        float(record["db_ms"]),
+        int(record["db_queries"]),
+        bool(record.get("slow")),
+    )
+    with _summary_lock:
+        _summary.setdefault(key, deque(maxlen=SUMMARY_SAMPLES)).append(sample)
+        totals = _summary_totals.setdefault(key, [0, 0.0])
+        totals[0] += 1
+        totals[1] = max(totals[1], sample[0])
+
+
+def _percentile(values: list[float], fraction: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return round(ordered[min(len(ordered) - 1, int(len(ordered) * fraction))], 1)
+
+
+def summary_snapshot() -> dict[str, Any]:
+    """Per route: requests seen, and p50/p95/max over the last samples."""
+
+    with _summary_lock:
+        items = [
+            (key, list(samples), list(_summary_totals[key])) for key, samples in _summary.items()
+        ]
+    routes: list[dict[str, Any]] = []
+    for (method, route), samples, (count, max_ever) in items:
+        ms = [sample[0] for sample in samples]
+        db_ms = [sample[1] for sample in samples]
+        queries = [float(sample[2]) for sample in samples]
+        routes.append(
+            {
+                "method": method,
+                "route": route,
+                "count": int(count),
+                "samples": len(samples),
+                "ms": {"p50": _percentile(ms, 0.5), "p95": _percentile(ms, 0.95), "max": max(ms)},
+                "max_ms_since_start": round(max_ever, 1),
+                "db_ms": {"p50": _percentile(db_ms, 0.5), "p95": _percentile(db_ms, 0.95)},
+                "db_queries": {
+                    "p50": _percentile(queries, 0.5),
+                    "p95": _percentile(queries, 0.95),
+                    "max": int(max(queries)),
+                },
+                "slow": sum(1 for sample in samples if sample[3]),
+            }
+        )
+    routes.sort(key=lambda item: float(item["ms"]["p95"] or 0.0), reverse=True)
+    return {"host": HOST, "samples_per_route": SUMMARY_SAMPLES, "routes": routes}
+
+
+def reset_summary() -> None:
+    with _summary_lock:
+        _summary.clear()
+        _summary_totals.clear()
 
 
 def log_record(record: dict[str, Any]) -> None:

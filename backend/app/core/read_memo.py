@@ -39,6 +39,7 @@ _REQUEST: ContextVar[dict[tuple[Hashable, ...], Any] | None] = ContextVar(
     "maya_request_read_memo", default=None
 )
 _INFO_KEY = "maya_request_read_memo"
+_TX_KEY = "maya_transaction_role_memo"
 _MISS = object()
 
 
@@ -67,14 +68,26 @@ def memoized[T](
     compute: Callable[[], T],
     *,
     across_sessions: bool = False,
+    in_transaction: bool = False,
 ) -> T:
-    """``compute()`` once per request (or per transaction of ``db``)."""
+    """``compute()`` once per request (or per transaction of ``db``).
+
+    ``in_transaction=True`` also keeps the value on ``db`` until its
+    transaction ends when no request memo is active. Only for role reads
+    (course role, group role): production 2026-10-26 ran the same course
+    role query up to 30 times in one request. Long-lived sockets and streams
+    open a short session per check, so a revoked role is still seen.
+    """
 
     request = _REQUEST.get()
-    if request is None:
+    if request is None and not in_transaction:
         return compute()
     store: dict[tuple[Hashable, ...], Any]
-    if across_sessions:
+    if request is None:
+        # Dropped at the first write of the transaction too, so a role the
+        # request itself changes is read again.
+        store = db.info.setdefault(_TX_KEY, {})
+    elif across_sessions:
         store = request
     else:
         store = db.info.setdefault(_INFO_KEY, {})
@@ -88,12 +101,25 @@ def memoized[T](
 
 def _forget(session: Session, *_args: Any) -> None:
     session.info.pop(_INFO_KEY, None)
+    session.info.pop(_TX_KEY, None)
+
+
+def _forget_on_write(session: Session, *_args: Any) -> None:
+    if session.new or session.dirty or session.deleted:
+        session.info.pop(_TX_KEY, None)
+
+
+def _forget_on_dml(state: Any) -> None:
+    if state.is_insert or state.is_update or state.is_delete:
+        state.session.info.pop(_TX_KEY, None)
 
 
 # Any end of a transaction (or a savepoint rolled back) drops what was read in it.
 event.listen(Session, "after_commit", _forget)
 event.listen(Session, "after_rollback", _forget)
 event.listen(Session, "after_soft_rollback", _forget)
+event.listen(Session, "before_flush", _forget_on_write)
+event.listen(Session, "do_orm_execute", _forget_on_dml)
 
 
 __all__ = ["forget_request_reads", "memoized", "request_read_memo"]

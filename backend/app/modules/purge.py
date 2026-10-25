@@ -26,7 +26,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sqlalchemy import MetaData, Table, delete, inspect, select, tuple_, update
+from sqlalchemy import MetaData, Table, delete, inspect, select, text, tuple_, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
@@ -241,31 +241,51 @@ def _catalog(engine: Engine) -> dict[str, list[ForeignKey]]:
         cached = _catalogs.get(id(engine))
         if cached is not None:
             return cached
-        inspector = inspect(engine)
-        incoming: dict[str, list[ForeignKey]] = defaultdict(list)
-        for table_name in inspector.get_table_names():
-            nullable = {
-                column["name"]: bool(column.get("nullable", True))
-                for column in inspector.get_columns(table_name)
-            }
-            for foreign_key in inspector.get_foreign_keys(table_name):
-                columns = tuple(foreign_key.get("constrained_columns") or ())
-                referred = tuple(foreign_key.get("referred_columns") or ())
-                parent = foreign_key.get("referred_table")
-                if not columns or not parent or len(columns) != len(referred):
-                    continue
-                incoming[parent].append(
-                    ForeignKey(
-                        child=table_name,
-                        columns=columns,
-                        parent=parent,
-                        referred=referred,
-                        nullable=tuple(nullable.get(name, True) for name in columns),
-                    )
-                )
-        catalog = dict(incoming)
+        catalog = read_foreign_key_catalog(engine)
         _catalogs[id(engine)] = catalog
         return catalog
+
+
+# One query for every foreign key of the current schema, in the order the
+# inspector reported them (table name, then constraint name). The first hard
+# delete of a process used to inspect ~120 tables one by one: production saw
+# ~2000 statements on the first Debate delete after a restart.
+_FOREIGN_KEYS_SQL = text(
+    """
+    SELECT child.relname AS child, parent.relname AS parent,
+           array_agg(a.attname ORDER BY k.ord) AS columns,
+           array_agg(pa.attname ORDER BY k.ord) AS referred,
+           array_agg(NOT a.attnotnull ORDER BY k.ord) AS nullable
+    FROM pg_constraint AS c
+    JOIN pg_class AS child ON child.oid = c.conrelid
+    JOIN pg_namespace AS ns ON ns.oid = child.relnamespace
+    JOIN pg_class AS parent ON parent.oid = c.confrelid
+    CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(attnum, refnum, ord)
+    JOIN pg_attribute AS a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+    JOIN pg_attribute AS pa ON pa.attrelid = c.confrelid AND pa.attnum = k.refnum
+    WHERE c.contype = 'f' AND ns.nspname = current_schema() AND child.relkind IN ('r', 'p')
+    GROUP BY c.oid, c.conname, child.relname, parent.relname
+    ORDER BY child.relname, c.conname
+    """
+)
+
+
+def read_foreign_key_catalog(engine: Engine) -> dict[str, list[ForeignKey]]:
+    """Incoming foreign keys per parent table, straight from pg_constraint."""
+
+    incoming: dict[str, list[ForeignKey]] = defaultdict(list)
+    with engine.connect() as connection:
+        for row in connection.execute(_FOREIGN_KEYS_SQL).mappings():
+            incoming[str(row["parent"])].append(
+                ForeignKey(
+                    child=str(row["child"]),
+                    columns=tuple(row["columns"]),
+                    parent=str(row["parent"]),
+                    referred=tuple(row["referred"]),
+                    nullable=tuple(bool(value) for value in row["nullable"]),
+                )
+            )
+    return dict(incoming)
 
 
 def reset_catalog_cache() -> None:

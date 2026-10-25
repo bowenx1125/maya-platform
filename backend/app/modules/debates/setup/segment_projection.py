@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import invalid_state
 from app.core.models import Job, KnowledgeChunk, SnapshotDocument, StoredFile
+from app.core.prefetch import prefetched
 from app.modules.debates.final_input import read_final_input
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn
 from app.modules.debates.round_count import debate_round_count
@@ -52,15 +53,20 @@ def segment_projection(
             dict.fromkeys(source for row in result.segments for source in row.source_ids)
         )
         query_texts: dict[str, str] = {}
-        recovery = db.execute(
-            text(
-                "SELECT input_json FROM llm_recovery_inputs WHERE turn_id=:turn_id "
-                "ORDER BY attempt_no DESC LIMIT 1"
-            ),
-            {"turn_id": turn.id},
-        ).first()
+        recovery = prefetched(
+            db,
+            "llm_recovery_input",
+            turn.id,
+            lambda: db.execute(
+                text(
+                    "SELECT input_json FROM llm_recovery_inputs WHERE turn_id=:turn_id "
+                    "ORDER BY attempt_no DESC LIMIT 1"
+                ),
+                {"turn_id": turn.id},
+            ).scalar(),
+        )
         if recovery:
-            saved = json.loads(recovery[0])
+            saved = json.loads(recovery)
             queries = (
                 saved["queries"]
                 if saved.get("protocol") == "segments_v2"
@@ -70,7 +76,7 @@ def segment_projection(
         sources: list[SegmentSourceDetail] = []
         for source_id in used_ids:
             receipt = by_id[source_id]
-            chunk = db.get(KnowledgeChunk, receipt["chunk_id"])
+            chunk = _chunk(db, receipt["chunk_id"])
             if (
                 chunk is None
                 or not receipt_scope_is_valid(db, turn, receipt)
@@ -78,7 +84,7 @@ def segment_projection(
                 or chunk.text != receipt["text"]
             ):
                 raise ValueError("source snapshot mismatch")
-            document = db.get(SnapshotDocument, chunk.snapshot_document_id)
+            document = _snapshot_document(db, chunk.snapshot_document_id)
             if (
                 document is None
                 or document.snapshot_id != receipt["snapshot_id"]
@@ -101,6 +107,73 @@ def segment_projection(
         return result, sources
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise invalid_state("The saved paragraph sources are invalid.") from exc
+
+
+def _chunk(db: Session, chunk_id: str) -> KnowledgeChunk | None:
+    return prefetched(db, "knowledge_chunk", chunk_id, lambda: db.get(KnowledgeChunk, chunk_id))
+
+
+def _snapshot_document(db: Session, document_id: str) -> SnapshotDocument | None:
+    return prefetched(
+        db, "snapshot_document", document_id, lambda: db.get(SnapshotDocument, document_id)
+    )
+
+
+def prefetch_segment_sources(db: Session, turns: list[DebateTurn]) -> None:
+    """Batch what ``segment_projection`` reads for these turns (Debate detail).
+
+    The turns' audio files, the latest recovery input per turn, the cited
+    chunks and their snapshot documents, each stored for every key asked so a
+    missing row stays None.
+    """
+
+    from app.core.prefetch import store
+
+    audio_ids = {turn.audio_file_id for turn in turns if turn.audio_file_id}
+    if audio_ids:
+        # Held here so the per-turn ``db.get(StoredFile, ...)`` calls are
+        # identity-map hits for the rest of the transaction.
+        store(
+            db,
+            "stored_file",
+            {
+                row.id: row
+                for row in db.scalars(select(StoredFile).where(StoredFile.id.in_(audio_ids)))
+            },
+        )
+    turn_ids = [turn.id for turn in turns if turn.structured_json]
+    if not turn_ids:
+        return
+    recoveries: dict[str, str | None] = dict.fromkeys(turn_ids)
+    for turn_id, input_json in db.execute(
+        text(
+            "SELECT DISTINCT ON (turn_id) turn_id, input_json FROM llm_recovery_inputs "
+            "WHERE turn_id = ANY(:turn_ids) ORDER BY turn_id, attempt_no DESC"
+        ),
+        {"turn_ids": turn_ids},
+    ).all():
+        recoveries[turn_id] = input_json
+    store(db, "llm_recovery_input", recoveries)
+    chunk_ids: set[str] = set()
+    for turn in turns:
+        try:
+            receipts = json.loads(turn.retrieval_receipts_json or "[]")
+            chunk_ids.update(str(row["chunk_id"]) for row in receipts if row.get("chunk_id"))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    if not chunk_ids:
+        return
+    chunks: dict[str, KnowledgeChunk | None] = dict.fromkeys(chunk_ids)
+    for chunk in db.scalars(select(KnowledgeChunk).where(KnowledgeChunk.id.in_(chunk_ids))):
+        chunks[chunk.id] = chunk
+    store(db, "knowledge_chunk", chunks)
+    document_ids = {chunk.snapshot_document_id for chunk in chunks.values() if chunk is not None}
+    documents: dict[str, SnapshotDocument | None] = dict.fromkeys(document_ids)
+    for document in db.scalars(
+        select(SnapshotDocument).where(SnapshotDocument.id.in_(document_ids))
+    ):
+        documents[document.id] = document
+    store(db, "snapshot_document", documents)
 
 
 def _source_version_label(db: Session, turn: DebateTurn, snapshot_id: str) -> str:

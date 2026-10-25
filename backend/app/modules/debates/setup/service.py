@@ -1023,19 +1023,28 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
     turn_dtos: list[DebateTurnDTO] = []
     synthesis_inputs: list[dict[str, Any]] = []
     participant_by_id = {row.id: row for row in participants}
+    from app.modules.debates.models import TurnSource
     from app.modules.debates.setup.segment_projection import (
+        prefetch_segment_sources,
         preview_turn_projection,
         segment_projection,
     )
 
-    for row in turn_rows:
-        # TurnSource is imported lazily to keep this service's core imports
-        # concise and to avoid a circular type-only dependency.
-        from app.modules.debates.models import TurnSource
+    # Production 2026-10-26: the detail read sources, recovery inputs and
+    # cited chunks once per turn. They come in a few batches now.
+    turn_list = list(turn_rows)
+    prefetch_segment_sources(db, turn_list)
+    sources_by_turn: dict[str, list[TurnSource]] = {row.id: [] for row in turn_list}
+    if turn_list:
+        for source_row in db.scalars(
+            select(TurnSource)
+            .where(TurnSource.turn_id.in_(list(sources_by_turn)))
+            .order_by(TurnSource.turn_id, TurnSource.rank)
+        ).all():
+            sources_by_turn[source_row.turn_id].append(source_row)
 
-        source_rows = db.scalars(
-            select(TurnSource).where(TurnSource.turn_id == row.id).order_by(TurnSource.rank)
-        ).all()
+    for row in turn_list:
+        source_rows = sources_by_turn[row.id]
         mutual_result = None
         segment_result, segment_sources = segment_projection(
             db, row, participant_by_id[row.participant_id]
