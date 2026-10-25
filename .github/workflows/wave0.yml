@@ -203,6 +203,7 @@ jobs:
           pnpm --filter @maya/frontend typecheck
           pnpm --filter @maya/frontend test
           pnpm --filter @maya/frontend build
+          node scripts/check_production_routes.mjs
 
       - name: Set up uv
         uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
