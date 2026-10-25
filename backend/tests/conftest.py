@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import anyio
 import pytest
 import yaml
 from app.core.config import Settings
@@ -17,8 +18,24 @@ from app.main import create_app
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
+from starlette.testclient import WebSocketTestSession
 
 from tests import postgres_db
+
+WS_RECEIVE_TIMEOUT_SECONDS = 30.0
+
+
+def _receive_with_timeout(self: WebSocketTestSession) -> Any:
+    """A server that never answers fails the one test instead of hanging the suite."""
+
+    async def receive() -> Any:
+        with anyio.fail_after(WS_RECEIVE_TIMEOUT_SECONDS):
+            return await self._send_rx.receive()
+
+    return self.portal.call(receive)
+
+
+WebSocketTestSession.receive = _receive_with_timeout  # type: ignore[method-assign]
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:

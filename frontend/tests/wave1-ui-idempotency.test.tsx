@@ -13,6 +13,7 @@ import {
   type AgentVersion,
   type KnowledgeDocument,
 } from "../lib/api";
+import { errorCopyFor } from "../lib/i18n";
 
 const useSessionMock = vi.hoisted(() => vi.fn());
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -264,7 +265,7 @@ describe("Wave 1A UI idempotency wiring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "Teacher confirmation required.",
+      errorCopyFor("provider_confirmation_required", "en") ?? "<missing copy>",
     );
     expect(api.publish).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();

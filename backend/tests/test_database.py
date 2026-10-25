@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
+import pytest
 from app.core.config import Settings
 from app.core.db import ALEMBIC_HEAD, Database
 from sqlalchemy import inspect, text
@@ -69,3 +71,21 @@ def test_provider_selectors_are_mock_safe_by_default() -> None:
     assert settings.embedding_provider == "mock"
     assert settings.tts_provider == "mock"
     assert settings.voice_provider == "mock"
+
+
+def test_session_time_zone_is_utc_whatever_the_client_says(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A JST host (PGTZ or the server default) must not shift timestamptz
+    # values: code reads them back with .replace(tzinfo=UTC).
+    monkeypatch.setenv("PGTZ", "Asia/Tokyo")
+    db = Database(named_url(f"{tmp_path / 'tz.sqlite3'}"))
+    try:
+        with db.engine.connect() as connection:
+            assert connection.execute(text("SHOW TIME ZONE")).scalar_one() == "UTC"
+            stored = connection.execute(
+                text("SELECT TIMESTAMPTZ '2026-10-25 12:00:00+00'")
+            ).scalar_one()
+        assert stored.utcoffset() == timedelta(0)
+    finally:
+        db.dispose()
