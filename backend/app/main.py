@@ -60,7 +60,7 @@ from app.modules.avatars.router import router as avatars_router
 from app.modules.cardroom.router import router as cardroom_router
 from app.modules.debates.cleanup import resume_cleanup_journals
 from app.modules.debates.cleanup_router import router as debate_cleanup_router
-from app.modules.debates.playback.audio import AudioStore
+from app.modules.debates.playback.audio import AudioStore, playback_transcoder
 from app.modules.debates.playback.audio_regeneration import (
     discard_unjournaled_audio_stages,
     startup_resume_audio_regeneration,
@@ -328,6 +328,7 @@ def create_app(
         audio_store=AudioStore(
             runtime_settings.resolved_data_root,
             tts_provider=selected_tts,
+            transcoder=playback_transcoder(runtime_settings),
         ),
         event_hub=event_hub,
         task_manager=playback_tasks,

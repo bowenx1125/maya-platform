@@ -434,7 +434,7 @@ class MediaPreparedResult(PrivateResultBase):
             r"^/api/v1/debates/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
             r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/audio/"
             r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
-            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\?media_ticket=[A-Za-z0-9_-]{43}$"
+            r"[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\?media_ticket=[A-Za-z0-9_-]{43}(?:&format=mp3)?$"
         )
     )
     expires_at: datetime

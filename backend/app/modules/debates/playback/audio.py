@@ -6,8 +6,11 @@ import hashlib
 import io
 import re
 import secrets
+import shutil
+import subprocess
 import threading
 import wave
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -35,6 +38,12 @@ from app.providers.tts import (
 MEDIA_TICKET_TTL = timedelta(minutes=5)
 MEDIA_TICKET_GRACE = timedelta(seconds=60)
 MEDIA_TICKET_BYTES = 32
+# Compressed playback copies (PR C): mono MP3 held in memory, never on disk.
+MP3_CACHE_BYTES = 64 * 1024 * 1024
+MP3_BITRATE = "64k"
+MP3_TRANSCODE_TIMEOUT_SECONDS = 30
+# Matches the media ticket lifetime: a ticket URL is never reused after it.
+AUDIO_CACHE_MAX_AGE_SECONDS = int(MEDIA_TICKET_TTL.total_seconds())
 _RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 _SAFE_UUID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
@@ -120,21 +129,157 @@ class ByteRange:
 
 @dataclass(frozen=True)
 class AudioResponse:
-    status_code: Literal[200, 206, 416]
+    status_code: Literal[200, 206, 304, 416]
     body: bytes
     etag: str
     headers: dict[str, str]
+    media_type: str = "audio/wav"
+
+
+@dataclass(frozen=True)
+class CompressedAudio:
+    body: bytes
+    sha256: str
+
+
+class Mp3Transcoder:
+    """WAV to MP3 through ffmpeg, cached in memory by the WAV digest.
+
+    The cache is bounded (least recently used first out) and holds only
+    copies of WAV bytes that were validated against their durable facts, so a
+    stale or deleted speech is never served from it: a new WAV has a new
+    digest, and removing a speech evicts its copy.
+    """
+
+    def __init__(
+        self,
+        *,
+        executable: str | None = None,
+        max_bytes: int = MP3_CACHE_BYTES,
+    ) -> None:
+        self.executable = executable if executable is not None else shutil.which("ffmpeg")
+        self.max_bytes = max_bytes
+        self._cache: OrderedDict[str, CompressedAudio] = OrderedDict()
+        self._size = 0
+        self._lock = threading.Lock()
+        self._encoding: dict[str, threading.Lock] = {}
+
+    @property
+    def available(self) -> bool:
+        return bool(self.executable)
+
+    def cached(self, wav_sha256: str) -> CompressedAudio | None:
+        with self._lock:
+            found = self._cache.get(wav_sha256)
+            if found is not None:
+                self._cache.move_to_end(wav_sha256)
+            return found
+
+    def encode(self, wav_sha256: str, raw: bytes) -> CompressedAudio | None:
+        found = self.cached(wav_sha256)
+        if found is not None or not self.executable:
+            return found
+        with self._lock:
+            gate = self._encoding.setdefault(wav_sha256, threading.Lock())
+        with gate:
+            # A concurrent request may have encoded it while this one waited.
+            found = self.cached(wav_sha256)
+            if found is not None:
+                return found
+            try:
+                result = subprocess.run(
+                    [
+                        self.executable,
+                        "-nostdin",
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-f",
+                        "wav",
+                        "-i",
+                        "pipe:0",
+                        "-vn",
+                        "-ac",
+                        "1",
+                        "-codec:a",
+                        "libmp3lame",
+                        "-b:a",
+                        MP3_BITRATE,
+                        "-f",
+                        "mp3",
+                        "pipe:1",
+                    ],
+                    input=raw,
+                    capture_output=True,
+                    timeout=MP3_TRANSCODE_TIMEOUT_SECONDS,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                return None
+            finally:
+                with self._lock:
+                    self._encoding.pop(wav_sha256, None)
+            if result.returncode != 0 or not result.stdout:
+                return None
+            encoded = CompressedAudio(
+                body=result.stdout, sha256=hashlib.sha256(result.stdout).hexdigest()
+            )
+            self._store(wav_sha256, encoded)
+            return encoded
+
+    def _store(self, wav_sha256: str, encoded: CompressedAudio) -> None:
+        if len(encoded.body) > self.max_bytes:
+            return
+        with self._lock:
+            previous = self._cache.pop(wav_sha256, None)
+            if previous is not None:
+                self._size -= len(previous.body)
+            self._cache[wav_sha256] = encoded
+            self._size += len(encoded.body)
+            while self._size > self.max_bytes and self._cache:
+                _, dropped = self._cache.popitem(last=False)
+                self._size -= len(dropped.body)
+
+    def evict(self, wav_sha256: str) -> None:
+        with self._lock:
+            dropped = self._cache.pop(wav_sha256, None)
+            if dropped is not None:
+                self._size -= len(dropped.body)
+
+
+def playback_transcoder(settings: object) -> Mp3Transcoder | None:
+    """The MP3 encoder when ``DEBATE_AUDIO_MP3`` is on and ffmpeg is present."""
+
+    if not getattr(settings, "debate_audio_mp3", False):
+        return None
+    transcoder = Mp3Transcoder()
+    return transcoder if transcoder.available else None
 
 
 class AudioStore:
     """Durable current-debate WAV store with no path supplied by the browser."""
 
-    def __init__(self, data_root: Path, *, tts_provider: TTSProvider | None = None) -> None:
+    def __init__(
+        self,
+        data_root: Path,
+        *,
+        tts_provider: TTSProvider | None = None,
+        transcoder: Mp3Transcoder | None = None,
+    ) -> None:
         self.data_root = data_root
         self.tts_provider = tts_provider or MockTTSProvider()
+        self.transcoder = transcoder if transcoder is not None and transcoder.available else None
         self._metadata: dict[tuple[str, str], AudioMetadata] = {}
+        # The WAV file identity each compressed copy was encoded from.
+        self._compressed_from: dict[tuple[str, str], tuple[tuple[int, int, int, int], str]] = {}
         self._lock = threading.RLock()
         self._load_existing()
+
+    @property
+    def compressed(self) -> bool:
+        """Whether media URLs may ask for the MP3 copy (``format=mp3``)."""
+
+        return self.transcoder is not None
 
     def _load_existing(self) -> None:
         """Rebuild the metadata index from the durable audio tree on restart.
@@ -582,6 +727,8 @@ class AudioStore:
         with self._lock:
             for key in [key for key in self._metadata if key[0] == debate_id]:
                 self._metadata.pop(key, None)
+            for key in [key for key in self._compressed_from if key[0] == debate_id]:
+                self._forget_compressed(key)
         if not _SAFE_UUID.fullmatch(debate_id):
             return
         # The process-local index is only a cache.  On a fresh service it is
@@ -614,6 +761,7 @@ class AudioStore:
 
         with self._lock:
             metadata = self._metadata.pop((debate_id, turn_id), None)
+            self._forget_compressed((debate_id, turn_id))
         if metadata is None:
             return
         path = self.path_for(metadata.relative_path)
@@ -720,20 +868,26 @@ class AudioStore:
             keys = [key for key in self._metadata if key[0] == debate_id]
         return any(self.metadata(*key) is not None for key in keys)
 
-    def response(
-        self,
-        debate_id: str,
-        turn_id: str,
-        *,
-        range_header: str | None = None,
-        if_range: str | None = None,
-    ) -> AudioResponse:
+    def _forget_compressed(self, key: tuple[str, str]) -> None:
+        recorded = self._compressed_from.pop(key, None)
+        if recorded is not None and self.transcoder is not None:
+            self.transcoder.evict(recorded[1])
+
+    @staticmethod
+    def _identity(path: Path) -> tuple[int, int, int, int] | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+    def _validated(self, debate_id: str, turn_id: str) -> tuple[AudioMetadata, bytes]:
         metadata = self.metadata(debate_id, turn_id)
         if metadata is None:
             raise FileNotFoundError("audio_not_retained")
         # The index is only a cache.  Re-read and validate the canonical bytes
-        # before every response so a file replaced after authorization cannot
-        # be served under stale hash/size metadata.
+        # so a file replaced after authorization cannot be served under stale
+        # hash/size metadata.
         snapshot = self._validated_file_snapshot(
             course_id=metadata.course_id,
             debate_id=debate_id,
@@ -745,9 +899,76 @@ class AudioStore:
         )
         if snapshot is None:
             raise FileNotFoundError("audio_not_retained")
-        metadata, body = snapshot
-        self.rehydrate(metadata)
-        etag = f'"{metadata.sha256}"'
+        self.rehydrate(snapshot[0])
+        return snapshot
+
+    def compressed_copy(
+        self, debate_id: str, turn_id: str
+    ) -> tuple[AudioMetadata, CompressedAudio] | None:
+        """The MP3 copy of one validated speech, encoding it on first use.
+
+        A cached copy is reused while the WAV file keeps the identity it was
+        encoded from; any change re-validates the WAV first.  ``None`` means
+        the WAV is served instead (no encoder, or encoding failed).
+        """
+
+        transcoder = self.transcoder
+        if transcoder is None:
+            return None
+        key = (debate_id, turn_id)
+        metadata = self.metadata(debate_id, turn_id)
+        if metadata is None:
+            raise FileNotFoundError("audio_not_retained")
+        path = self._non_symlink_path(metadata.relative_path)
+        identity = self._identity(path) if path is not None else None
+        with self._lock:
+            recorded = self._compressed_from.get(key)
+        if (
+            identity is not None
+            and recorded is not None
+            and recorded == (identity, metadata.sha256)
+        ):
+            found = transcoder.cached(metadata.sha256)
+            if found is not None:
+                return metadata, found
+        metadata, raw = self._validated(debate_id, turn_id)
+        encoded = transcoder.encode(metadata.sha256, raw)
+        if encoded is None:
+            return None
+        if path is not None:
+            identity = self._identity(path)
+        if identity is not None:
+            with self._lock:
+                previous = self._compressed_from.get(key)
+                if previous is not None and previous[1] != metadata.sha256:
+                    transcoder.evict(previous[1])
+                self._compressed_from[key] = (identity, metadata.sha256)
+        return metadata, encoded
+
+    def response(
+        self,
+        debate_id: str,
+        turn_id: str,
+        *,
+        range_header: str | None = None,
+        if_range: str | None = None,
+        if_none_match: str | None = None,
+        audio_format: Literal["wav", "mp3"] = "wav",
+    ) -> AudioResponse:
+        compressed = self.compressed_copy(debate_id, turn_id) if audio_format == "mp3" else None
+        if compressed is not None:
+            metadata, encoded = compressed
+            body, digest, media_type = encoded.body, encoded.sha256, "audio/mpeg"
+        else:
+            metadata, body = self._validated(debate_id, turn_id)
+            digest, media_type = metadata.sha256, "audio/wav"
+        etag = f'"{digest}"'
+        if if_none_match and etag in {item.strip() for item in if_none_match.split(",")}:
+            headers = _audio_headers(etag, 0)
+            headers.pop("Content-Length")
+            return AudioResponse(
+                status_code=304, body=b"", etag=etag, headers=headers, media_type=media_type
+            )
         use_range = bool(range_header)
         if use_range and if_range:
             use_range = if_range == etag or _if_range_matches_date(if_range, metadata)
@@ -757,16 +978,21 @@ class AudioStore:
                 body=body,
                 etag=etag,
                 headers=_audio_headers(etag, len(body)),
+                media_type=media_type,
             )
         byte_range = parse_single_range(range_header or "", len(body))
         if byte_range is None:
             headers = _audio_headers(etag, 0)
             headers["Content-Range"] = f"bytes */{len(body)}"
-            return AudioResponse(status_code=416, body=b"", etag=etag, headers=headers)
+            return AudioResponse(
+                status_code=416, body=b"", etag=etag, headers=headers, media_type=media_type
+            )
         sliced = body[byte_range.start : byte_range.end + 1]
         headers = _audio_headers(etag, len(sliced))
         headers["Content-Range"] = f"bytes {byte_range.start}-{byte_range.end}/{len(body)}"
-        return AudioResponse(status_code=206, body=sliced, etag=etag, headers=headers)
+        return AudioResponse(
+            status_code=206, body=sliced, etag=etag, headers=headers, media_type=media_type
+        )
 
 
 def wav_duration_ms(raw: bytes) -> int:
@@ -811,8 +1037,10 @@ def _audio_headers(etag: str, content_length: int) -> dict[str, str]:
         "Accept-Ranges": "bytes",
         "ETag": etag,
         "Content-Length": str(content_length),
-        "Cache-Control": "no-store, max-age=0",
-        "Pragma": "no-cache",
+        # Private: never stored by a shared cache.  A ticket URL names one
+        # speech's bytes for the ticket's lifetime, so the browser may reuse
+        # them (seek, replay) without asking again.
+        "Cache-Control": f"private, max-age={AUDIO_CACHE_MAX_AGE_SECONDS}",
         "X-Content-Type-Options": "nosniff",
     }
 
