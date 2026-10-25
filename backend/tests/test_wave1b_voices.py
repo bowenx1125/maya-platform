@@ -17,10 +17,8 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import PlatformError
 from app.core.models import (
-    AgentVersion,
     IdempotencyRecord,
     StoredFile,
-    TeacherGroupAccess,
     VoicePreview,
     VoiceProfile,
     VoiceProviderOperation,
@@ -1380,43 +1378,16 @@ def test_voice_permissions_are_same_group_students_only(
     assert client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles").json() == []
     assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
 
-    # The teacher is not a group member. The group list answers a course
-    # teacher (owner decision 2026-10-23) but holds only ready voices, so this
-    # one is not disclosed through list/detail/delete/media.
-    teacher_user, teacher = login(client, "maya")
+    # A course teacher, not a group member, has the student's rights over a
+    # student's clone (owner decision 2026-10-26): it is listed in every state
+    # and manageable.
+    login(client, "maya")
     teacher_list = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
     assert teacher_list.status_code == 200
-    assert teacher_list.json() == []
-    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
-    assert (
-        client.delete(
-            f"/api/v1/voice-profiles/{profile_id}",
-            headers=_headers(teacher, "voice-teacher-delete"),
-        ).status_code
-        == 404
-    )
-    # Opening the group from Accounts lets the teacher see the library, not
-    # another student's clone.
-    with database.session() as session:
-        session.add(
-            TeacherGroupAccess(
-                group_id=GROUP_A,
-                user_id=teacher_user["user"]["id"],
-                created_at=datetime.now(UTC),
-            )
-        )
-        session.commit()
-    heard = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
-    assert heard.status_code == 200
-    assert heard.json() == []
-    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 404
-    assert (
-        client.delete(
-            f"/api/v1/voice-profiles/{profile_id}",
-            headers=_headers(teacher, "voice-teacher-delete-after-listen"),
-        ).status_code
-        == 404
-    )
+    assert [(item["id"], item["can_manage"]) for item in teacher_list.json()] == [
+        (profile_id, True)
+    ]
+    assert client.get(f"/api/v1/voice-profiles/{profile_id}").status_code == 200
     # Return to the original same-group session to demonstrate it remains
     # authorized after the denied probes.
     login(client, "bowen")
@@ -2619,13 +2590,12 @@ def test_groupmates_choose_ready_voices_and_teachers_keep_personal_ones(
     assert personal_id not in [item["id"] for item in group_listed]
 
 
-def test_teachers_and_outsiders_never_hear_or_bind_a_students_voice(
+def test_outsiders_never_hear_a_students_voice(
     voice_client: tuple[TestClient, Database, Settings],
 ) -> None:
     # Owner decision (2026-10-18): only students of the same group share
-    # voices. Owner decision (2026-10-23): a course teacher lists them
-    # read-only (they edit the group's public Agents) but neither plays nor
-    # binds a student's voice.
+    # voices. A teacher of the course plays, binds and manages them (owner
+    # decision 2026-10-26, tests/test_teacher_group_voices.py).
     client, database, _settings = voice_client
     csrf = login(client, "bowen")[1]
     enrolled = client.post(
@@ -2646,43 +2616,6 @@ def test_teachers_and_outsiders_never_hear_or_bind_a_students_voice(
     )
     assert own_preview.status_code == 200, own_preview.text
     media_url = own_preview.json()["playback_url"]
-    agent = client.post(
-        f"/api/v1/groups/{GROUP_A}/agents",
-        headers=_headers(csrf, "outsider-voice-agent-01"),
-        json={"name": "Bowen voice agent", "description": ""},
-    )
-    assert agent.status_code == 201, agent.text
-    draft = agent.json()["versions"][0]
-
-    maya_csrf = login(client, "maya")[1]
-    entered = client.post(
-        f"/api/v1/groups/{GROUP_A}/membership",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": maya_csrf},
-    )
-    assert entered.status_code == 200, entered.text
-    listed = client.get(f"/api/v1/groups/{GROUP_A}/voice-profiles")
-    assert listed.status_code == 200
-    shown = {item["id"]: item for item in listed.json()}
-    assert shown[profile_id]["can_manage"] is False
-    assert (
-        client.post(
-            f"/api/v1/voice-profiles/{profile_id}/preview",
-            headers={"Origin": "http://testserver", "X-CSRF-Token": maya_csrf},
-        ).status_code
-        == 404
-    )
-    assert client.get(media_url).status_code == 404
-    teacher_bind = client.patch(
-        f"/api/v1/agent-versions/{draft['id']}",
-        headers={"Origin": "http://testserver", "X-CSRF-Token": maya_csrf},
-        json={"expected_revision": draft["revision"], "voice_profile_id": profile_id},
-    )
-    assert teacher_bind.status_code in {403, 404, 422}, teacher_bind.text
-    with database.session() as session:
-        version = session.get(AgentVersion, draft["id"])
-        assert version is not None
-        assert version.voice_profile_id is None
-
     # A student who has left the group loses access to its voices.
     with database.session() as session:
         session.execute(

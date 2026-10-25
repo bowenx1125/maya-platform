@@ -38,6 +38,7 @@ from app.modules.voices.service import (
     _safe_provider_error,
     _tts_external_id,
     _utc,
+    log_course_teacher_voice_action,
     now_utc,
     visible_student_voice,
     voice_profile_dto,
@@ -269,6 +270,7 @@ def delete_voice_profile(
     except PlatformError:
         abandon_claim(db, record)
         raise
+    log_course_teacher_voice_action(scoped, context, "delete")
     profile = scoped.profile
     # A preset is a published supplier name, not an enrolled clone. Students
     # cannot delete it, and this path must not ask the clone API about it.

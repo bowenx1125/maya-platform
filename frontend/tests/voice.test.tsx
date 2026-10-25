@@ -119,6 +119,47 @@ describe("M08 voice library", () => {
     ).toBeNull();
   });
 
+  it("lets a visiting course teacher rename and delete what the server says they manage", async () => {
+    // Owner decision (2026-10-26): a course teacher manages a student's voice.
+    api.voiceProfiles.mockResolvedValue([
+      {
+        id: "student-voice",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "student.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: true,
+      },
+      {
+        id: "other-voice",
+        scope: "group",
+        group_id: "group-a",
+        status: "ready",
+        source_filename: "other.wav",
+        created_at: "2026-10-12T00:00:00Z",
+        can_manage: false,
+      },
+    ]);
+    render(
+      <AppShell role="teacher">
+        <VoiceLibrary groupId="group-a" listenOnly />
+      </AppShell>,
+    );
+    expect(
+      await screen.findByRole("button", { name: "student.wav" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Delete student.wav" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "other.wav" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Delete other.wav" }),
+    ).toBeNull();
+    // Visiting a group still creates no voice there.
+    expect(screen.queryByRole("button", { name: "New" })).toBeNull();
+  });
+
   it("deletes the owner's voice after confirming and drops it from the list", async () => {
     const own = {
       id: "own-voice",
