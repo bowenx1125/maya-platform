@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import weakref
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -38,6 +39,26 @@ from .protocols import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+# PR C: catalog answers per engine. Migrations run before an engine serves,
+# so a table or column that exists stays for the engine's lifetime; only
+# positive answers are kept. Next asked information_schema 26 times.
+_SCHEMA_CACHE: weakref.WeakKeyDictionary[Any, dict[tuple[str, str], Any]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _schema_cache(db: Any) -> dict[tuple[str, str], Any] | None:
+    try:
+        bind = db.get_bind()
+    except Exception:
+        return None
+    engine = getattr(bind, "engine", bind)
+    try:
+        return _SCHEMA_CACHE.setdefault(engine, {})
+    except TypeError:
+        return None
+
 
 # A live turn may be prepared while it is the playing turn or the one after
 # it, as before, or further inside the lookahead window once every earlier turn
@@ -859,6 +880,9 @@ class SqlPlaybackRepository(PlaybackRepository):
 
     @staticmethod
     def _has_table(db: Any, table: str) -> bool:
+        cache = _schema_cache(db)
+        if cache is not None and cache.get(("table", table)):
+            return True
         try:
             statement = text(
                 "SELECT 1 FROM information_schema.tables "
@@ -867,10 +891,16 @@ class SqlPlaybackRepository(PlaybackRepository):
             row = db.execute(statement, {"name": table}).first()
         except Exception:
             return False
+        if row is not None and cache is not None:
+            cache[("table", table)] = True
         return row is not None
 
     @staticmethod
     def _columns(db: Any, table: str) -> set[str]:
+        cache = _schema_cache(db)
+        cached = cache.get(("columns", table)) if cache is not None else None
+        if cached:
+            return set(cached)
         try:
             rows = db.execute(
                 text(
@@ -879,9 +909,12 @@ class SqlPlaybackRepository(PlaybackRepository):
                 ),
                 {"name": table},
             ).all()
-            return {str(row[0]) for row in rows}
         except Exception:
             return set()
+        columns = {str(row[0]) for row in rows}
+        if columns and cache is not None:
+            cache[("columns", table)] = frozenset(columns)
+        return columns
 
     @classmethod
     def _select_one(cls, db: Any, table: str, object_id: str) -> SqlRow | None:
@@ -934,15 +967,22 @@ class SqlPlaybackRepository(PlaybackRepository):
             ),
             db,
         )
-        if self._has_table(db, "turn_sources"):
-            for turn in rows:
-                turn.sources = _rows(
-                    db.execute(
-                        text("SELECT * FROM turn_sources WHERE turn_id=:turn_id ORDER BY rank, id"),
-                        {"turn_id": str(turn.id)},
+        if self._has_table(db, "turn_sources") and rows:
+            # One query for every turn's sources (was one per turn).
+            by_turn: dict[str, list[SqlRow]] = {str(turn.id): [] for turn in rows}
+            for source in _rows(
+                db.execute(
+                    text(
+                        "SELECT * FROM turn_sources WHERE turn_id = ANY(:turn_ids) "
+                        "ORDER BY turn_id, rank, id"
                     ),
-                    db,
-                )
+                    {"turn_ids": list(by_turn)},
+                ),
+                db,
+            ):
+                by_turn[str(source.turn_id)].append(source)
+            for turn in rows:
+                turn.sources = by_turn[str(turn.id)]
         return rows
 
     def ensure_turn_plan(self, db: Any, debate: SqlRow) -> list[SqlRow]:

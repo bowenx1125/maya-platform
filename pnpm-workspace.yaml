@@ -1,5 +1,7 @@
 packages:
   - frontend
+# Refuse any Node but the pinned one (.nvmrc; scripts/check_node_pin.mjs).
+engineStrict: true
 allowBuilds:
   unrs-resolver: true
 minimumReleaseAgeExclude:

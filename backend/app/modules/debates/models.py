@@ -488,6 +488,34 @@ class PositionHistory(Base):
     )
 
 
+class PlaybackMediaTicket(Base):
+    """A playback media ticket, stored by hash so every replica can honor it.
+
+    PR C (2026-10-25). The raw token only ever exists in the URL the
+    controller tab received; this row holds its SHA-256 and binding. Tickets
+    expire within minutes and need no foreign key: authorization re-reads the
+    Debate and turn before any audio is served.
+    """
+
+    __tablename__ = "playback_media_tickets"
+    __table_args__ = (
+        Index("ix_playback_media_tickets_item", "debate_id", "turn_id"),
+        Index("ix_playback_media_tickets_epoch", "controller_epoch"),
+        Index("ix_playback_media_tickets_expires", "expires_at"),
+    )
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    controller_epoch: Mapped[str] = mapped_column(String(36), nullable=False)
+    debate_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    turn_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    control_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 class PlaybackState(Base):
     """One authoritative live/replay playback state per Debate."""
 

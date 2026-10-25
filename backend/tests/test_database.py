@@ -46,7 +46,7 @@ def test_alembic_upgrade_is_idempotent_and_readiness_checks_head(tmp_path: Path)
     db.upgrade_schema()
     db.upgrade_schema()
     assert db.using_migrations
-    assert ALEMBIC_HEAD == "0078_chat_answer_decouple"
+    assert ALEMBIC_HEAD == "0079_playback_media_tickets"
     assert db.check_ready()
     with db.engine.connect() as connection:
         assert (

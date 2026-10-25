@@ -857,7 +857,7 @@ async def test_sql_media_claim_rolls_back_replay_after_pointer_race(
             assert raised.value.code == "next_not_ready"
             assert calls >= (0 if race_point == "before_claim" else 2)
             assert service.ticket_store.get(first_prepared.token) is None
-            assert not service.ticket_store._tickets
+            assert service.ticket_store.active_count() == 0  # type: ignore[attr-defined]
         with database.session() as db:
             playback = db.scalar(
                 select(DebatePlaybackState).where(DebatePlaybackState.debate_id == debate_id)

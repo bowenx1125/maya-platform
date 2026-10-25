@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "engines": {
-    "node": ">=24.14.0 <25",
+    "node": "24.14.0",
     "pnpm": "11.19.0"
   },
   "scripts": {
@@ -12,6 +12,7 @@
     "contracts:generate": "openapi-typescript contracts/openapi-v0.1.yaml -o frontend/lib/api/generated/schema.d.ts",
     "contracts:lint": "redocly lint --config contracts/redocly.yaml contracts/openapi-v0.1.yaml",
     "latin-script:check": "node scripts/check_latin_script_tables.mjs",
+    "node:check": "node scripts/check_node_pin.mjs",
     "format:check": "prettier --check .",
     "frontend:dev": "pnpm --filter @maya/frontend dev",
     "frontend:lint": "pnpm --filter @maya/frontend lint",

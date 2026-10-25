@@ -417,7 +417,8 @@ class DebateEventHub:
                 {**snapshot_payload, "latest_sequence": watermark},
             )
             yield snapshot_wire
-            for event in self.store.events_after(debate_id, watermark):
+            # A SQL store reads on a worker thread, like the relay and gap fill.
+            for event in await asyncio.to_thread(self.store.events_after, debate_id, watermark):
                 if event.sequence != watermark + 1:
                     raise RuntimeError("debate event sequence gap")
                 watermark = event.sequence
