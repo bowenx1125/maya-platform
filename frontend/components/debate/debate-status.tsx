@@ -1,7 +1,7 @@
 "use client";
 
 import type { DebateSummary } from "../../lib/api";
-import { useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import { StatusBadge } from "../ui";
 
 export function DebateStatus({ debate }: { debate: DebateSummary }) {

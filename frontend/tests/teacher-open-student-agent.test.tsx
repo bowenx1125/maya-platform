@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
-import { LocaleProvider } from "../components/locale";
 import { useSession } from "../components/session-provider";
 import type { AgentDetail, AgentVersion, KnowledgeDocument } from "../lib/api";
 import { PlatformApiError } from "../lib/api";
@@ -115,9 +114,9 @@ function renderAsCourseTeacher() {
     logout: vi.fn(),
   } as never);
   render(
-    <LocaleProvider initialLocale="en">
+    <>
       <AgentWorkbench versionId="version-1" publishOnDone />
-    </LocaleProvider>,
+    </>,
   );
   return api;
 }
@@ -223,7 +222,7 @@ describe("concurrent Done on a shared public Agent", () => {
       logout: vi.fn(),
     } as never);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <AgentWorkbench
             versionId={base.id}
@@ -231,7 +230,7 @@ describe("concurrent Done on a shared public Agent", () => {
             backHref="/student/groups/group-1"
           />
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     return { api, draft };
   }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useLocale } from "../../locale";
+import { useT } from "../../../lib/i18n";
 import { teachingRoundLabel } from "../../../lib/debate-rounds";
 import type { SegmentEvidence } from "../../../lib/evidence-grading";
 import { SegmentGrade } from "../../evidence/segment-grade";
@@ -87,7 +87,6 @@ export function DebatePreview({
     (left, right) => left.turn_index - right.turn_index,
   );
   const background = (detail.background ?? "").trim();
-  const { locale } = useLocale();
   // A turn whose audio failed used to show only on its own card, so a Preview
   // where every turn failed read as still preparing. Say so at the top.
   // An Agent with no voice is a teacher's choice, not a failure: its turns
@@ -133,20 +132,16 @@ export function DebatePreview({
                 disabled={retryingTurnId !== null}
                 onClick={() => onRetryTurn(firstFailed.id)}
               >
-                {locale === "zh" ? "重试" : "Retry"}
+                Retry
               </button>
             ) : null
           }
         >
           <span data-testid="preview-audio-failed">
-            {tm(
-              "debatePreviewAudioFailed",
-              {
-                count: audioFailed.length,
-                code: firstFailed.safe_error_code ?? "turn_generation_failed",
-              },
-              locale,
-            )}
+            {tm("debatePreviewAudioFailed", {
+              count: audioFailed.length,
+              code: firstFailed.safe_error_code ?? "turn_generation_failed",
+            })}
           </span>
         </Notice>
       ) : null}
@@ -208,7 +203,6 @@ function PreviewTurnCard({
   onRetry?: (turnId: string) => void;
   teachingProtocol?: boolean;
 }) {
-  const { locale } = useLocale();
   const failed =
     turn.generation_status === "failed" || Boolean(turn.safe_error_code);
   const savedSpeech = Boolean(turn.speech.trim());
@@ -237,7 +231,7 @@ function PreviewTurnCard({
           <span className={styles.turnRound}>
             Round {turn.round_no}
             {teachingProtocol
-              ? ` · ${teachingRoundLabel(turn.round_no, locale)}`
+              ? ` · ${teachingRoundLabel(turn.round_no, "en")}`
               : ""}
           </span>
           <h2>{participantName}</h2>

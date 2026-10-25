@@ -22,7 +22,6 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { AppShell } from "../components/app-shell";
-import { LocaleProvider } from "../components/locale";
 
 class FakeSocket {
   static instances: FakeSocket[] = [];
@@ -57,11 +56,11 @@ describe("student Live badge", () => {
   it("follows server pushes instead of polling every 5 s", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const view = render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <p>Content</p>
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     expect(FakeSocket.instances).toHaveLength(1);
     expect(FakeSocket.instances[0].url).toContain(
@@ -84,11 +83,11 @@ describe("student Live badge", () => {
   it("falls back to a poll and reconnects when the socket drops", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <p>Content</p>
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     state.api.classroomLive.mockResolvedValue({ debate_id: "d" });
     act(() => FakeSocket.instances[0].onclose?.({ code: 1006 }));
@@ -102,11 +101,11 @@ describe("student Live badge", () => {
   it("does not reconnect after the server refuses access", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <AppShell role="student">
           <p>Content</p>
         </AppShell>
-      </LocaleProvider>,
+      </>,
     );
     act(() => FakeSocket.instances[0].onclose?.({ code: 4401 }));
     await act(async () => {

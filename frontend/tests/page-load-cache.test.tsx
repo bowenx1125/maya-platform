@@ -18,7 +18,6 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import { LocaleProvider } from "../components/locale";
 import { BrainformWorkspace } from "../components/knowledge/brainform-workspace";
 import { GroupWorkspace } from "../components/student-workspace";
 import { PlatformApiError } from "../lib/api/platform";
@@ -66,9 +65,9 @@ function signIn(userId = "student-a") {
 
 function show() {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <GroupWorkspace groupId="group-1" />
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -182,9 +181,9 @@ describe("Studyform page cache", () => {
       ]),
     });
     const page = () => (
-      <LocaleProvider initialLocale="en">
+      <>
         <BrainformWorkspace role="teacher" />
-      </LocaleProvider>
+      </>
     );
     const first = render(page());
     expect(await screen.findByText("Socrates Knowledge")).toBeTruthy();

@@ -607,54 +607,6 @@ details > summary {
   padding: 8px 0;
 }
 
-.locale-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 750;
-}
-
-.locale-label {
-  white-space: nowrap;
-}
-
-.locale-options {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.75);
-}
-
-.locale-option {
-  min-height: 44px;
-  min-width: 44px;
-  padding: 3px 9px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.74rem;
-  font-weight: 800;
-}
-
-.locale-option:hover,
-.locale-option.active {
-  color: var(--indigo-dark);
-  background: #eeeafd;
-}
-
-.locale-divider {
-  color: var(--line);
-  user-select: none;
-}
-
 .section-label {
   display: block;
   margin-bottom: 8px;
@@ -2041,10 +1993,6 @@ button.agent-tile-name {
 }
 
 @media (max-width: 620px) {
-  .locale-label {
-    display: none;
-  }
-
   :root {
     --workspace-inset: 18px;
   }

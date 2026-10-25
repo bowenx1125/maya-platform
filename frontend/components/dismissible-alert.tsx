@@ -2,7 +2,7 @@
 
 import { useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { IconClose } from "./quiet-icons";
 
 /**

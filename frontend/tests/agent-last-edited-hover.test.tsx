@@ -17,7 +17,6 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/teacher/studyform" }));
 
-import { LocaleProvider } from "../components/locale";
 import { VersionTile } from "../components/studyform-layout";
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
 
@@ -27,7 +26,7 @@ describe("agent last-edited hover", () => {
   it("uses the immediate guide tooltip instead of a delayed title", () => {
     const text = "最新版本：V1.3 · 最新编辑：Maya";
     render(
-      <LocaleProvider initialLocale="zh">
+      <>
         <UiGuideTooltip />
         <VersionTile
           name="Laozi"
@@ -38,7 +37,7 @@ describe("agent last-edited hover", () => {
           visibility="public"
           deleteLabel="Delete Laozi"
         />
-      </LocaleProvider>,
+      </>,
     );
     const link = screen.getByRole("link", { name: "Laozi" });
     expect(link.getAttribute("title")).toBeNull();

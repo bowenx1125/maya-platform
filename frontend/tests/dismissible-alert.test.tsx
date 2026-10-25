@@ -3,7 +3,6 @@ import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DismissibleAlert } from "../components/dismissible-alert";
-import { LocaleProvider } from "../components/locale";
 
 describe("dismissible alerts", () => {
   afterEach(() => cleanup());
@@ -134,14 +133,5 @@ describe("dismissible alerts", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Log in" }),
     );
-  });
-
-  it("labels the × in Chinese under the Chinese locale", () => {
-    render(
-      <LocaleProvider initialLocale="zh">
-        <DismissibleAlert>生成未完成。</DismissibleAlert>
-      </LocaleProvider>,
-    );
-    expect(screen.getByRole("button", { name: "关闭" })).toBeTruthy();
   });
 });

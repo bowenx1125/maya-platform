@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DismissibleAlert } from "../../../../../components/dismissible-alert";
 import {
   BetaDebateStage,
-  resolveBetaStageLabels,
+  defaultBetaStageLabels,
 } from "../../../../../components/debate-beta/stage";
 import type { PlaybackAuthorityState } from "../../../../../components/debate/stage/types";
 import {
@@ -24,7 +24,7 @@ import {
   type IdempotencyHandle,
   type TeacherInteraction,
 } from "../../../../../lib/api";
-import { useLocale, useT } from "../../../../../components/locale";
+import { useT } from "../../../../../lib/i18n";
 import { localizeError } from "../../../../../lib/i18n";
 import { expectedTurnCount } from "../../../../../lib/debate-rounds";
 import styles from "./control.module.css";
@@ -91,25 +91,24 @@ function canConcludeSegments(detail: DebateDetail): boolean {
 
 export default function TeacherDebateControlPage() {
   const t = useT();
-  const { locale } = useLocale();
   const params = useParams<{ debate_id: string | string[] }>();
   const rawDebateId = params?.debate_id;
   const debateId = Array.isArray(rawDebateId) ? rawDebateId[0] : rawDebateId;
   const { api } = useSession();
-  const betaLabels = useMemo(() => resolveBetaStageLabels(locale), [locale]);
+  const betaLabels = defaultBetaStageLabels;
   const stageLabels = useMemo(
     () => ({
       stageTitle: t("debateStageTitle"),
       stageDescription: t("debateStageDescription"),
       start: t("debateStart"),
-      pause: locale === "zh" ? "暂停" : "Pause",
-      resume: locale === "zh" ? "继续" : "Continue",
-      next: locale === "zh" ? "下一步" : "Next",
+      pause: "Pause",
+      resume: "Continue",
+      next: "Next",
       replayTurn: t("debateReplayTurn"),
       replayAll: t("debateReplayAll"),
       debatePartial: t("debatePartial"),
-      reconnect: locale === "zh" ? "重新连接" : "Reconnect",
-      finish: locale === "zh" ? "结束" : "End",
+      reconnect: "Reconnect",
+      finish: "End",
       transcript: t("debateTranscript"),
       sources: t("debateSources"),
       noSources: t("debateNoSources"),
@@ -124,10 +123,10 @@ export default function TeacherDebateControlPage() {
       statusPlaying: t("statusPlaying"),
       statusPaused: t("statusPaused"),
       waitingNext: t("debateWaitingNext"),
-      phaseReady: locale === "zh" ? "就绪" : "Ready",
-      phaseInProgress: locale === "zh" ? "生成中" : "Generating",
-      phaseWaiting: locale === "zh" ? "等待继续" : "Waiting",
-      phaseFinished: locale === "zh" ? "已完成" : "Completed",
+      phaseReady: "Ready",
+      phaseInProgress: "Generating",
+      phaseWaiting: "Waiting",
+      phaseFinished: "Completed",
       phaseOpening: t("debatePhaseOpening"),
       phaseExchange: t("debatePhaseExchange"),
       phaseFinalIntegration: t("debatePhaseFinalIntegration"),
@@ -146,7 +145,7 @@ export default function TeacherDebateControlPage() {
       connectionSignIn: t("debateConnectionSignIn"),
       connectionReload: t("debateConnectionReload"),
       regenerate: t("debateRegenerate"),
-      localizeCode: (code: string) => localizeError({ code }, locale),
+      localizeCode: (code: string) => localizeError({ code }),
       providerSetupIncomplete: t("debateProviderSetupIncomplete"),
       providerGateTitle: t("debateProviderGateTitle"),
       providerGateLoading: t("debateProviderGateLoading"),
@@ -161,7 +160,7 @@ export default function TeacherDebateControlPage() {
       replaceRetainedAudioConfirm: t("debateReplaceAudioConfirm"),
       audioLabel: t("debateAudioLabel"),
     }),
-    [locale, t],
+    [t],
   );
   const [detail, setDetail] = useState<DebateDetail | null>(null);
   const [currentAudioDebateId, setCurrentAudioDebateId] = useState<
@@ -264,12 +263,12 @@ export default function TeacherDebateControlPage() {
       setJoinUrl(next.status === "open" ? next.public_url : null);
       setJoinCodeVisible(next.status === "open" && Boolean(next.public_url));
     } catch (cause) {
-      setInteractionError(localizeError(cause, locale));
+      setInteractionError(localizeError(cause));
     } finally {
       interactionInFlight.current = false;
       setInteractionBusy(false);
     }
-  }, [api, debateId, joinUrl, locale]);
+  }, [api, debateId, joinUrl]);
 
   const closeCollection = useCallback(async () => {
     if (
@@ -295,12 +294,12 @@ export default function TeacherDebateControlPage() {
       setJoinUrl(null);
       setJoinCodeVisible(false);
     } catch (cause) {
-      setInteractionError(localizeError(cause, locale));
+      setInteractionError(localizeError(cause));
     } finally {
       interactionInFlight.current = false;
       setInteractionBusy(false);
     }
-  }, [api, betaLabels, debateId, interaction?.status, joinUrl, locale]);
+  }, [api, betaLabels, debateId, interaction?.status, joinUrl]);
 
   const refreshSnapshot = useCallback(async () => {
     if (!debateId) throw new Error("Debate id is missing.");
@@ -405,12 +404,12 @@ export default function TeacherDebateControlPage() {
         // sufficient to reveal Report even if this follow-up read is lost.
       }
     } catch (cause) {
-      setInteractionError(localizeError(cause, locale));
+      setInteractionError(localizeError(cause));
     } finally {
       interactionInFlight.current = false;
       setInteractionBusy(false);
     }
-  }, [api, debateId, detail, locale, readInteraction, refreshSnapshot]);
+  }, [api, debateId, detail, readInteraction, refreshSnapshot]);
 
   const finish = useCallback(async () => {
     if (
@@ -533,11 +532,7 @@ export default function TeacherDebateControlPage() {
                       onClick={() => void finish()}
                       type="button"
                     >
-                      {finishBusy
-                        ? locale === "zh"
-                          ? "正在结束…"
-                          : "Finishing…"
-                        : stageLabels.finish}
+                      {finishBusy ? "Finishing…" : stageLabels.finish}
                     </button>
                   </>
                 ) : null}
@@ -634,7 +629,7 @@ export default function TeacherDebateControlPage() {
             onAuthorityChange={updatePlaybackAuthority}
             onDetailChange={setDetail}
             onCurrentAudioDebateIdChange={setCurrentAudioDebateId}
-            outputLanguage={locale === "zh" ? "zh" : "en"}
+            outputLanguage={"en"}
             actionInFlight={finishBusy}
             refreshSnapshot={refreshSnapshot}
           />
@@ -648,7 +643,7 @@ export default function TeacherDebateControlPage() {
               <form method="dialog" className={styles.reportActions}>
                 <button
                   className={`secondary-action ${styles.reportClose}`}
-                  aria-label={locale === "zh" ? "关闭" : "Close"}
+                  aria-label={"Close"}
                   type="submit"
                   autoFocus
                 >

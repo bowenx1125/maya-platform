@@ -36,7 +36,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { AgentChat } from "../components/agent-chat";
-import { LocaleProvider } from "../components/locale";
 import { resetChatRequestIdentity } from "../lib/chat-request-store";
 
 const actionId = "11111111-1111-4111-8111-111111111111";
@@ -132,9 +131,9 @@ function assessmentResult(
 
 function renderChat() {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <AgentChat />
-    </LocaleProvider>,
+    </>,
   );
 }
 

@@ -20,7 +20,6 @@ vi.mock("../components/session-provider", () => ({
 }));
 
 import { GroupOverview } from "../components/group-overview";
-import { LocaleProvider } from "../components/locale";
 
 afterEach(() => {
   cleanup();
@@ -83,9 +82,9 @@ describe("group overview", () => {
   it("shows members' work and recent activity, without test results", async () => {
     session.api.groupOverview.mockResolvedValue(overview);
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <GroupOverview groupId="group-1" />
-      </LocaleProvider>,
+      </>,
     );
 
     const ada = await screen.findByRole("button", {
@@ -115,12 +114,14 @@ describe("group overview", () => {
       activity: [],
     });
     render(
-      <LocaleProvider initialLocale="zh">
+      <>
         <GroupOverview groupId="group-1" />
-      </LocaleProvider>,
+      </>,
     );
-    expect(await screen.findByText("这个组还没有学生。")).toBeTruthy();
+    expect(
+      await screen.findByText("No students in this group yet."),
+    ).toBeTruthy();
     expect(screen.queryByText("还没有测试成绩。")).toBeNull();
-    expect(screen.getByText("还没有动态。")).toBeTruthy();
+    expect(screen.getByText("Nothing yet.")).toBeTruthy();
   });
 });

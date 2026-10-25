@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { errorCopyFor, localizeError, statusLabel, t } from "../lib/i18n";
 
-describe("Wave 1A locale and V2 style boundary", () => {
+describe("Wave 1A copy and V2 style boundary", () => {
   it.each(["invalid_utf8", "empty_markdown", "invalid_control_chars"])(
     "gives Markdown-specific recovery for %s",
     (reason) => {
@@ -12,12 +12,13 @@ describe("Wave 1A locale and V2 style boundary", () => {
         "knowledge_import_invalid",
         "file_operation_failed",
       ]) {
-        const error = { code, status: 422, details: { reason } };
-        for (const locale of ["en", "zh"] as const) {
-          const message = localizeError(error, locale);
-          expect(message).toContain("UTF-8 Markdown");
-          expect(message).not.toMatch(/PDF|Word|OCR/);
-        }
+        const message = localizeError({
+          code,
+          status: 422,
+          details: { reason },
+        });
+        expect(message).toContain("UTF-8 Markdown");
+        expect(message).not.toMatch(/PDF|Word|OCR/);
       }
     },
   );
@@ -25,14 +26,12 @@ describe("Wave 1A locale and V2 style boundary", () => {
   it.each(["invalid_pdf", "invalid_docx", "invalid_filename", "invalid"])(
     "keeps format-neutral import guidance for %s",
     (reason) => {
-      for (const locale of ["en", "zh"] as const) {
-        expect(
-          localizeError(
-            { code: "knowledge_import_invalid", details: { reason } },
-            locale,
-          ),
-        ).toBe(t("knowledgeImportInvalid", locale));
-      }
+      expect(
+        localizeError({
+          code: "knowledge_import_invalid",
+          details: { reason },
+        }),
+      ).toBe(t("knowledgeImportInvalid"));
     },
   );
 
@@ -42,49 +41,40 @@ describe("Wave 1A locale and V2 style boundary", () => {
       status: 429,
       details: { retry_after_seconds: 37 },
     };
-    expect(localizeError(error, "zh")).toBe(
-      "登录或注册尝试过于频繁，请在 37 秒后重试。",
-    );
-    expect(localizeError(error, "en")).toContain("37 seconds");
+    expect(localizeError(error)).toContain("37 seconds");
     expect(
-      localizeError(
-        {
-          code: "auth_login_queued",
-          status: 429,
-          details: { position: 4, retry_after_seconds: 2 },
-        },
-        "zh",
-      ),
-    ).toBe("排队等待入列，前面还有 4 位。");
+      localizeError({
+        code: "auth_login_queued",
+        status: 429,
+        details: { position: 4, retry_after_seconds: 2 },
+      }),
+    ).toBe("Waiting to enter. 4 people are ahead of you.");
     expect(
-      localizeError(
-        { code: "auth_login_queued", status: 429, details: { position: 0 } },
-        "en",
-      ),
+      localizeError({
+        code: "auth_login_queued",
+        status: 429,
+        details: { position: 0 },
+      }),
     ).toBe("Waiting to enter. You are next.");
-    expect(
-      localizeError({ code: "provider_unavailable", status: 503 }, "zh"),
-    ).toBe("平台能力暂时不可用。");
+    expect(localizeError({ code: "provider_unavailable", status: 503 })).toBe(
+      "A platform capability is temporarily unavailable.",
+    );
     const malformed = Object.assign(new Error("Please try again later."), {
       ...error,
       details: { retry_after_seconds: "not-a-delay" },
     });
     // A malformed delay falls back to the code's catalog copy, not the raw message.
-    expect(localizeError(malformed, "zh")).toBe(
-      errorCopyFor("auth_rate_limited", "zh") ?? "<missing copy>",
+    expect(localizeError(malformed)).toBe(
+      errorCopyFor("auth_rate_limited") ?? "<missing copy>",
     );
   });
 
-  it("keeps English-first copy translatable without changing business state", () => {
-    expect(t("publish", "en")).toBe("Publish");
-    expect(t("publish", "zh")).toBe("发布");
-    expect(statusLabel("stale_revision", "en")).toBe("stale revision");
-    expect(statusLabel("stale_revision", "zh")).toBe("stale revision");
-    expect(statusLabel("published", "zh")).toBe("已发布");
-    expect(
-      localizeError({ code: "agent_name_conflict", status: 409 }, "zh"),
-    ).toBe(
-      "名字已被使用，请换一个名字，比如在后面加上你的名字或数字（如「Zhu Xi 2」）。",
+  it("keeps platform copy apart from business state", () => {
+    expect(t("publish")).toBe("Publish");
+    expect(statusLabel("stale_revision")).toBe("stale revision");
+    expect(statusLabel("published")).toBe(t("statusPublished"));
+    expect(localizeError({ code: "agent_name_conflict", status: 409 })).toBe(
+      t("errorAgentNameConflict"),
     );
   });
 

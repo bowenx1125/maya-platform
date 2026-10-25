@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentChat } from "../components/agent-chat";
 import type { AvatarConfig } from "../components/avatar";
-import { LocaleProvider } from "../components/locale";
 import { TeacherAgentDetail } from "../components/teacher-workspace";
 import { SidebarActions } from "./sidebar-actions";
 
@@ -163,11 +162,11 @@ describe("published avatar field parity", () => {
       state.role = role;
       window.history.replaceState(null, "", `/${role}/chat?mode=new`);
       render(
-        <LocaleProvider initialLocale="en">
+        <>
           <SidebarActions>
             <AgentChat />
           </SidebarActions>
-        </LocaleProvider>,
+        </>,
       );
       fireEvent.click(await screen.findByRole("button", { name: /Socrates/ }));
       expect(screen.queryByRole("img", { name: /Socrates/i })).toBeNull();
@@ -185,9 +184,9 @@ describe("published avatar field parity", () => {
   it("preserves every published avatar field in teacher preview", async () => {
     state.role = "teacher";
     const teacherPreview = render(
-      <LocaleProvider initialLocale="en">
+      <>
         <TeacherAgentDetail agentId="agent" />
-      </LocaleProvider>,
+      </>,
     );
     expect(await screen.findByRole("img", { name: /Socrates/i })).toBeTruthy();
     const teacherPreviewFields = readAvatarFields();

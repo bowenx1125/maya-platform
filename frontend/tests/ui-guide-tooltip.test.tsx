@@ -8,7 +8,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UiGuideTooltip } from "../components/ui-guide-tooltip";
-import { LocaleProvider, useLocale } from "../components/locale";
 
 const route = vi.hoisted(() => ({ pathname: "/student/workspace" }));
 vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
@@ -56,18 +55,9 @@ function mockTooltipMeasurement(width: number, height: number) {
   );
 }
 
-function LocaleSwitch() {
-  const { setLocale } = useLocale();
+function guideContent(showButton = true) {
   return (
-    <button type="button" onClick={() => setLocale("zh")}>
-      Switch locale
-    </button>
-  );
-}
-
-function guideContent(locale: "en" | "zh" = "en", showButton = true) {
-  return (
-    <LocaleProvider initialLocale={locale}>
+    <>
       <UiGuideTooltip />
       {showButton ? (
         <button
@@ -78,12 +68,12 @@ function guideContent(locale: "en" | "zh" = "en", showButton = true) {
           Edit
         </button>
       ) : null}
-    </LocaleProvider>
+    </>
   );
 }
 
-function renderGuide(locale: "en" | "zh" = "en") {
-  return render(guideContent(locale));
+function renderGuide() {
+  return render(guideContent());
 }
 
 describe("workspace UI guide tooltip", () => {
@@ -126,10 +116,10 @@ describe("workspace UI guide tooltip", () => {
       expect(screen.getByRole("tooltip")).toBeTruthy();
 
       view.rerender(
-        <LocaleProvider initialLocale="en">
+        <>
           <UiGuideTooltip />
           <h1>Classroom stage</h1>
-        </LocaleProvider>,
+        </>,
       );
 
       await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
@@ -146,7 +136,7 @@ describe("workspace UI guide tooltip", () => {
 
   it("clears help when its focused input is removed but the guide label remains", async () => {
     const view = render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <label data-ui-guide="voice.consent">
           <input
@@ -156,7 +146,7 @@ describe("workspace UI guide tooltip", () => {
           />
           Voice consent
         </label>
-      </LocaleProvider>,
+      </>,
     );
     const checkbox = screen.getByRole("checkbox", { name: "Voice consent" });
     const label = checkbox.closest("label");
@@ -164,10 +154,10 @@ describe("workspace UI guide tooltip", () => {
     expect(screen.getByRole("tooltip")).toBeTruthy();
 
     view.rerender(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <label data-ui-guide="voice.consent">Voice consent</label>
-      </LocaleProvider>,
+      </>,
     );
 
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
@@ -182,14 +172,14 @@ describe("workspace UI guide tooltip", () => {
     );
   });
 
-  it("shows localized help on keyboard focus", () => {
-    renderGuide("zh");
+  it("shows help on keyboard focus", () => {
+    renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
 
     fireEvent.focusIn(button);
 
     expect(screen.getByRole("tooltip").textContent).toContain(
-      "Markdown 编辑器",
+      "Markdown editor",
     );
 
     fireEvent.focusOut(button, { relatedTarget: document.body });
@@ -255,7 +245,7 @@ describe("workspace UI guide tooltip", () => {
     const view = renderGuide();
     const button = screen.getByRole("button", { name: "Edit" });
     fireEvent.pointerOver(button);
-    view.rerender(guideContent("en", false));
+    view.rerender(guideContent(false));
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
     expect(button.getAttribute("aria-describedby")).toBe(
       "existing-description",
@@ -301,14 +291,14 @@ describe("workspace UI guide tooltip", () => {
       value: 720,
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <label data-ui-guide="knowledge.importFile">Import a file</label>
         <p>
           Upload Markdown, PDF, or Word. Maya converts files to Markdown for
           this library.
         </p>
-      </LocaleProvider>,
+      </>,
     );
     const label = screen.getByText("Import a file");
     label.getBoundingClientRect = () =>
@@ -358,7 +348,7 @@ describe("workspace UI guide tooltip", () => {
 
   it("describes the focused control when help is marked on its label", () => {
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <label data-ui-guide="voice.consent">
           <input
@@ -368,7 +358,7 @@ describe("workspace UI guide tooltip", () => {
           />
           Voice consent
         </label>
-      </LocaleProvider>,
+      </>,
     );
     const checkbox = screen.getByRole("checkbox", { name: "Voice consent" });
     const label = checkbox.closest("label")!;
@@ -403,7 +393,7 @@ describe("workspace UI guide tooltip", () => {
 
   it("moves the description from a hovered label to its keyboard-focused control", () => {
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <label data-ui-guide="voice.consent">
           <input
@@ -413,7 +403,7 @@ describe("workspace UI guide tooltip", () => {
           />
           Voice consent
         </label>
-      </LocaleProvider>,
+      </>,
     );
     const checkbox = screen.getByRole("checkbox", {
       name: "Voice consent transition",
@@ -443,36 +433,6 @@ describe("workspace UI guide tooltip", () => {
       "existing-description maya-ui-guide-tooltip",
     );
     expect(label.hasAttribute("aria-describedby")).toBe(false);
-  });
-
-  it("keeps the focused control described when the locale changes", () => {
-    render(
-      <LocaleProvider initialLocale="en">
-        <UiGuideTooltip />
-        <button
-          type="button"
-          data-ui-guide="knowledge.edit"
-          aria-describedby="existing-description"
-        >
-          Edit
-        </button>
-        <LocaleSwitch />
-      </LocaleProvider>,
-    );
-    const button = screen.getByRole("button", { name: "Edit" });
-    const localeButton = screen.getByRole("button", { name: "Switch locale" });
-
-    fireEvent.focusIn(button);
-    fireEvent.focusOut(button, { relatedTarget: localeButton });
-    fireEvent.click(localeButton);
-    fireEvent.focusIn(button);
-
-    expect(screen.getByRole("tooltip").textContent).toContain(
-      "Markdown 编辑器",
-    );
-    expect(button.getAttribute("aria-describedby")).toBe(
-      "existing-description maya-ui-guide-tooltip",
-    );
   });
 
   it("pins touch help until the same guided control is tapped again", () => {
@@ -511,13 +471,13 @@ describe("workspace UI guide tooltip", () => {
       value: 720,
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <button type="button" data-ui-guide="knowledge.edit">
           Focused control
         </button>
         <button type="button">Neighbor control</button>
-      </LocaleProvider>,
+      </>,
     );
     const [button, neighbor] = screen.getAllByRole("button");
     button.getBoundingClientRect = () =>
@@ -569,13 +529,13 @@ describe("workspace UI guide tooltip", () => {
       value: 720,
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <button type="button" data-ui-guide="knowledge.edit">
           Hovered control
         </button>
         <button type="button">Neighbor control</button>
-      </LocaleProvider>,
+      </>,
     );
     const [button, neighbor] = screen.getAllByRole("button");
     button.getBoundingClientRect = () =>
@@ -632,7 +592,7 @@ describe("workspace UI guide tooltip", () => {
       value: 720,
     });
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <UiGuideTooltip />
         <strong>Upper left title</strong>
         <strong>Upper right title</strong>
@@ -642,7 +602,7 @@ describe("workspace UI guide tooltip", () => {
         </button>
         <span>Right ready</span>
         <strong>Neighbor file title</strong>
-      </LocaleProvider>,
+      </>,
     );
     const button = screen.getByRole("button", { name: "Edit" });
     button.getBoundingClientRect = () =>

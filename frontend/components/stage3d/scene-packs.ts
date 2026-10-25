@@ -10,29 +10,29 @@ export type StageScenePack = {
 export const STAGE_SCENE_PACKS: readonly StageScenePack[] = [
   {
     id: "courtyard",
-    label: "主院落",
+    label: "Main courtyard",
     splatUrl: "/stage/courtyard-360.spz",
     panoramaUrl: "/stage/courtyard-equirect.png",
     depthUrl: "/stage/courtyard-equirect-depth.png",
   },
   {
     id: "early-courtyard",
-    label: "早期院落",
+    label: "Early courtyard",
     splatUrl: "/stage/courtyard-normalized.sog",
   },
   {
     id: "photo",
-    label: "照片重建",
+    label: "Photo reconstruction",
     splatUrl: "/stage/courtyard-photo-transformed.spz",
   },
   {
     id: "procedural",
-    label: "程序庭院",
+    label: "Procedural courtyard",
     splatUrl: "/stage/courtyard-procedural.spz",
   },
   {
     id: "prototype",
-    label: "原型世界",
+    label: "Prototype world",
     splatUrl: "/stage/prototype-world.spz",
   },
 ];

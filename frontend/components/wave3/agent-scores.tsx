@@ -1,7 +1,7 @@
 "use client";
 
 import { BarChart, type ChartDatum } from "../charts";
-import { useLocale } from "../locale";
+import { useT } from "../../lib/i18n";
 import {
   EVIDENCE_GRADE_POINTS,
   EVIDENCE_GRADE_LABELS,
@@ -63,14 +63,12 @@ export function AgentScores({
   participants: DebateParticipant[];
   turns: DebateTurn[];
 }) {
-  const { locale } = useLocale();
-  const zh = locale === "zh";
   const data = agentScores(participants, turns);
   return (
     <section aria-labelledby="agent-scores-title" className={panelStyles.panel}>
       <div className={panelStyles.header}>
         <div>
-          <h2 id="agent-scores-title">{zh ? "评价" : "Evaluation"}</h2>
+          <h2 id="agent-scores-title">Evaluation</h2>
         </div>
       </div>
       <div className={panelStyles.content}>
@@ -85,7 +83,7 @@ export function AgentScores({
           <BarChart
             data={data}
             valueColor="var(--indigo-dark)"
-            emptyLabel={zh ? "还没有公开发言。" : "No public speeches yet."}
+            emptyLabel="No public speeches yet."
           />
         </div>
       </div>

@@ -73,7 +73,7 @@ import {
   ChatTargetPicker,
   type ChatTargetTeam,
 } from "./chats/chat-target-picker";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { localizeError } from "../lib/i18n";
 import { uiGuideText } from "../lib/ui-guide-copy";
 import { IconClose, IconPin } from "./quiet-icons";
@@ -576,7 +576,6 @@ function AgentChatScope({
     (parsedMemoryRoute.kind === "valid" &&
       (parsedMemoryRoute.value.actorId !== actorId ||
         parsedMemoryRoute.value.courseId !== courseId));
-  const { locale } = useLocale();
   const teamFailureText = (
     code: string | null | undefined,
     fallback: "teamMemberFailure" | "teamRequestFailure",
@@ -630,7 +629,7 @@ function AgentChatScope({
     );
   };
   const readOnlyHelp =
-    uiGuideText("chat.readOnly", locale) ??
+    uiGuideText("chat.readOnly") ??
     "This Agent is unavailable for new messages.";
   const [agents, setAgents] = useState<ChatAgent[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -3068,10 +3067,7 @@ function AgentChatScope({
                             ) : turn.state === "acceptance_unknown" ? (
                               t("errorChatAcceptanceUnknown")
                             ) : (
-                              localizeError(
-                                { code: turn.safe_error_code },
-                                locale,
-                              )
+                              localizeError({ code: turn.safe_error_code })
                             )}
                           </span>
                         )}

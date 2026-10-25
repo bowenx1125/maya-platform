@@ -7,7 +7,6 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
 import {
   DebatePreview,
   type DebatePreviewSnapshot,
@@ -68,13 +67,13 @@ function renderPreview(
   onRetryTurn: (turnId: string) => void = () => undefined,
 ) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <DebatePreview
         detail={snapshot}
         onRetryTurn={onRetryTurn}
         openClassroomHref="/teacher/debates-beta/debate-a/control"
       />
-    </LocaleProvider>,
+    </>,
   );
 }
 

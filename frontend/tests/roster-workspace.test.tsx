@@ -9,7 +9,6 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CourseRoster, Group, RosterEntry } from "../lib/api";
-import { LocaleProvider } from "../components/locale";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -99,7 +98,7 @@ function apiForTeacher() {
   };
 }
 
-function mount(api: ReturnType<typeof apiForTeacher>, locale: "en" | "zh") {
+function mount(api: ReturnType<typeof apiForTeacher>) {
   const refresh = vi.fn().mockResolvedValue(null);
   mockedUseSession.mockReturnValue({
     api,
@@ -111,11 +110,11 @@ function mount(api: ReturnType<typeof apiForTeacher>, locale: "en" | "zh") {
     },
   } as never);
   return render(
-    <LocaleProvider initialLocale={locale}>
+    <>
       <AppShell role="teacher">
         <RosterWorkspace />
       </AppShell>
-    </LocaleProvider>,
+    </>,
   );
 }
 
@@ -128,7 +127,7 @@ describe("teacher account management", () => {
 
   it("keeps Back and Done beside the member form while editing", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     const sidebar = within(screen.getByRole("navigation"));
@@ -153,7 +152,7 @@ describe("teacher account management", () => {
 
   it("offers edits only for accounts an edit can outlive a restart", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
     await waitFor(() => expect(api.courseRoster).toHaveBeenCalled());
 
     const account = (await screen.findByText("new-student")).closest(
@@ -192,7 +191,7 @@ describe("teacher account management", () => {
           : item,
       ),
     });
-    mount(api, "en");
+    mount(api);
 
     const own = (await screen.findByText("maya")).closest(
       ".account-row",
@@ -204,7 +203,7 @@ describe("teacher account management", () => {
 
   it("saves a renamed student", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     const nameField = screen.getByLabelText("Display name");
@@ -221,7 +220,7 @@ describe("teacher account management", () => {
 
   it("suggests the group names already in the course", async () => {
     const api = apiForTeacher();
-    const { container } = mount(api, "en");
+    const { container } = mount(api);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
 
     const options = Array.from(
@@ -233,7 +232,7 @@ describe("teacher account management", () => {
   it("confirms before removing and sends the new status", async () => {
     const api = apiForTeacher();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    mount(api, "en");
+    mount(api);
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     expect(confirm).toHaveBeenCalled();
@@ -247,7 +246,7 @@ describe("teacher account management", () => {
   it("keeps the account active when the teacher cancels the confirmation", async () => {
     const api = apiForTeacher();
     vi.spyOn(window, "confirm").mockReturnValue(false);
-    mount(api, "en");
+    mount(api);
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await waitFor(() => expect(api.courseRoster).toHaveBeenCalled());
@@ -266,7 +265,7 @@ describe("teacher account management", () => {
       ...roster(),
       entries: [...(roster().entries ?? []), removed],
     });
-    const { container } = mount(api, "en");
+    const { container } = mount(api);
 
     const members = await screen.findByRole("region", { name: /Members/ });
     // Three current members are counted; the removed one is not among them.
@@ -323,7 +322,7 @@ describe("teacher account management", () => {
         }),
       ],
     } as CourseRoster);
-    const { container } = mount(api, "en");
+    const { container } = mount(api);
     await screen.findByText("zed");
 
     const sections = [...container.querySelectorAll(".roster-section")].map(
@@ -344,7 +343,7 @@ describe("teacher account management", () => {
 
   it("shows an issued password once", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
 
     fireEvent.click(await screen.findByRole("button", { name: "Reset" }));
     expect(await screen.findByText("swift-otter-42")).toBeTruthy();
@@ -353,7 +352,7 @@ describe("teacher account management", () => {
 
   it("opens a group's workspace from its own row", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
 
     // Entering a group the caller is not in joins first, then opens it: one
     // action from the row rather than a state to set and then act on.
@@ -369,7 +368,7 @@ describe("teacher account management", () => {
 
   it("joins again a group the roster still lists it in", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
 
     // The roster can load before the previous visit's leave finishes, so the
     // listing is not trusted: joining is idempotent and always comes first.
@@ -385,20 +384,9 @@ describe("teacher account management", () => {
 
   it("leaves test results to Brainform Record", async () => {
     const api = apiForTeacher();
-    mount(api, "en");
+    mount(api);
     expect(await screen.findByText("new-student")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Test results" })).toBeNull();
     expect(api.courseAssessmentAttempts).not.toHaveBeenCalled();
-  });
-
-  it("renders the Chinese copy for the same surface", async () => {
-    const api = apiForTeacher();
-    mount(api, "zh");
-    expect(await screen.findByText("new-student")).toBeTruthy();
-    expect(screen.getAllByRole("heading", { level: 1 })[0].className).toBe(
-      "sr-only",
-    );
-    expect(screen.queryByText("自主注册", { exact: false })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "编辑" })).toHaveLength(1);
   });
 });

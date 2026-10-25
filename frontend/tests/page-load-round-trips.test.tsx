@@ -37,7 +37,6 @@ vi.mock("next/navigation", () => ({
 
 import { AgentChat } from "../components/agent-chat";
 import { BrainformWorkspace } from "../components/knowledge/brainform-workspace";
-import { LocaleProvider } from "../components/locale";
 import { GroupWorkspace } from "../components/student-workspace";
 import { TeacherStudyformWorkspace } from "../components/teacher-workspace";
 
@@ -143,7 +142,7 @@ async function visit(page: () => ReactElement, marker: string): Promise<Visit> {
   calls = [];
   answered = 0;
   const started = performance.now();
-  render(<LocaleProvider initialLocale="en">{page()}</LocaleProvider>);
+  render(<>{page()}</>);
   await screen.findAllByText(marker, {}, { timeout: 5000 });
   const paintMs = performance.now() - started;
   await waitFor(

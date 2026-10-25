@@ -18,7 +18,6 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import { LocaleProvider } from "../components/locale";
 import { VersionTile } from "../components/studyform-layout";
 
 afterEach(() => cleanup());
@@ -27,7 +26,7 @@ describe("version mark", () => {
   it("opens from the name link and keeps Delete on the version bubble", () => {
     const onDelete = vi.fn();
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <ul>
           <VersionTile
             name="Laozi"
@@ -39,7 +38,7 @@ describe("version mark", () => {
             onDelete={onDelete}
           />
         </ul>
-      </LocaleProvider>,
+      </>,
     );
     const open = screen.getByRole("link", { name: "Laozi" });
     expect(open.getAttribute("href")).toBe("/student/agents/laozi");

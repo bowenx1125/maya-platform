@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
-import { useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import type { ProviderDataCallDebateManifestListResponse } from "../../lib/api";
 import styles from "./provider-data-call-disclosure.module.css";
 

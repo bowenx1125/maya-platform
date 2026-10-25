@@ -7,15 +7,14 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LocaleProvider } from "../components/locale";
 import { OnboardingTour, place } from "../components/onboarding-tour";
 import { markTourPending } from "../lib/onboarding";
 
 const show = () =>
   render(
-    <LocaleProvider initialLocale="en">
+    <>
       <OnboardingTour userId="me" />
-    </LocaleProvider>,
+    </>,
   );
 
 beforeEach(() => {

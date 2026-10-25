@@ -7,7 +7,6 @@ import {
   speechSpanText,
   type EvidenceTraceRow,
 } from "../components/evidence";
-import { LocaleProvider } from "../components/locale";
 
 afterEach(() => cleanup());
 
@@ -32,7 +31,7 @@ const directTrace: EvidenceTraceRow = {
 };
 
 function renderEnglish(children: React.ReactNode) {
-  return render(<LocaleProvider initialLocale="en">{children}</LocaleProvider>);
+  return render(<>{children}</>);
 }
 
 describe("Wave 4 EvidenceTrace teaching inspector", () => {

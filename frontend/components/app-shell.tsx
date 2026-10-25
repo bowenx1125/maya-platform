@@ -17,7 +17,7 @@ import {
   type WorkspaceActions,
 } from "./workspace-actions";
 
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import {
   endTeacherEnter,
   teacherEnterInProgress,

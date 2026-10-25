@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { DismissibleAlert } from "../dismissible-alert";
 import { avatarOptionLabel, avatarTemplateLabel } from "../../lib/i18n";
-import { useLocale, useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import styles from "./avatar.module.css";
 import { AvatarCanvas } from "./avatar-canvas";
 import {
@@ -56,7 +56,6 @@ export function AvatarEditor({
   errorMessage,
 }: AvatarEditorProps) {
   const t = useT();
-  const { locale } = useLocale();
   const displayFallbackLabel = fallbackLabel ?? t("avatar");
   const [uncontrolledState, setUncontrolledState] = useState<AvatarState>(
     () => previewState ?? "idle",
@@ -109,7 +108,7 @@ export function AvatarEditor({
                 }}
               >
                 <span className={styles.templateName}>
-                  {avatarTemplateLabel(template.id, template.name, locale)}
+                  {avatarTemplateLabel(template.id, template.name)}
                 </span>
               </button>
             ))}
@@ -125,7 +124,7 @@ export function AvatarEditor({
           >
             {AVATAR_MATERIAL_THEMES.map((theme) => (
               <option key={theme} value={theme}>
-                {avatarOptionLabel(theme, locale)}
+                {avatarOptionLabel(theme)}
               </option>
             ))}
           </select>
@@ -147,7 +146,7 @@ export function AvatarEditor({
               <option key={color} value={color}>
                 {color === "default"
                   ? t("avatarAssetDefault")
-                  : avatarOptionLabel(color, locale)}
+                  : avatarOptionLabel(color)}
               </option>
             ))}
           </select>
@@ -167,7 +166,7 @@ export function AvatarEditor({
           >
             {AVATAR_EXPRESSIONS.map((expression) => (
               <option key={expression} value={expression}>
-                {avatarOptionLabel(expression, locale)}
+                {avatarOptionLabel(expression)}
               </option>
             ))}
           </select>
@@ -187,7 +186,7 @@ export function AvatarEditor({
           >
             {AVATAR_EXPRESSION_STRENGTHS.map((strength) => (
               <option key={strength} value={strength}>
-                {avatarOptionLabel(strength, locale)}
+                {avatarOptionLabel(strength)}
               </option>
             ))}
           </select>
@@ -204,7 +203,7 @@ export function AvatarEditor({
           >
             {AVATAR_MOTION_STYLES.map((motion) => (
               <option key={motion} value={motion}>
-                {avatarOptionLabel(motion, locale)}
+                {avatarOptionLabel(motion)}
               </option>
             ))}
           </select>
@@ -227,7 +226,7 @@ export function AvatarEditor({
                 aria-pressed={localState === state}
                 onClick={() => changeState(state)}
               >
-                {avatarOptionLabel(state, locale)}
+                {avatarOptionLabel(state)}
               </button>
             ))}
           </div>

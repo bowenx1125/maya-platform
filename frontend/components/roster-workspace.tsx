@@ -13,7 +13,7 @@ import {
   endTeacherEnter,
   teacherLeavesSettled,
 } from "../lib/teacher-visit";
-import { useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { PageAction } from "./page-action";
 import { IconArrowRight } from "./quiet-icons";
 import { useSession } from "./session-provider";

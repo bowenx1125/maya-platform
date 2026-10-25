@@ -18,7 +18,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { AgentChat } from "../components/agent-chat";
-import { LocaleProvider } from "../components/locale";
 import { SessionProvider, useSession } from "../components/session-provider";
 import type { AuthSession, ChatSession, PlatformApi } from "../lib/api";
 import {
@@ -149,11 +148,11 @@ afterEach(() => {
 
 function mount() {
   render(
-    <LocaleProvider initialLocale="en">
+    <>
       <SessionProvider api={api as unknown as PlatformApi}>
         <Harness />
       </SessionProvider>
-    </LocaleProvider>,
+    </>,
   );
 }
 

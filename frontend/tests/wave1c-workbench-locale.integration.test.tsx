@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentWorkbench } from "../components/agent-workspace";
 import { AppShell } from "../components/app-shell";
 import { buildAgentTemplate } from "../components/agent-template";
-import { LanguageSwitcher, LocaleProvider } from "../components/locale";
 import { SessionProvider, useSession } from "../components/session-provider";
 import type {
   AgentDetail,
@@ -232,19 +231,18 @@ function renderWorkbench(
   onIdentityChange: (value: IdentitySnapshot) => void,
 ) {
   return render(
-    <LocaleProvider initialLocale="en">
+    <>
       <SessionProvider api={api}>
         <IdentityProbe onChange={onIdentityChange} />
-        <LanguageSwitcher />
         <AppShell role="student">
           <AgentWorkbench versionId="version-id" />
         </AppShell>
       </SessionProvider>
-    </LocaleProvider>,
+    </>,
   );
 }
 
-describe("Wave 1C real workbench locale boundary", () => {
+describe("Wave 1C real workbench boundary", () => {
   afterEach(() => {
     cleanup();
     navigation.push.mockReset();
@@ -511,141 +509,19 @@ describe("Wave 1C real workbench locale boundary", () => {
     expect(api.updateDraft).not.toHaveBeenCalled();
   });
 
-  it("inserts the free Markdown template in the selected language", async () => {
+  it("inserts the free Markdown template", async () => {
     const { api } = makeApi();
     renderWorkbench(api as unknown as PlatformApi, () => undefined);
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Switch to Chinese" }),
-      ).toBeTruthy(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
-    fireEvent.click(screen.getByRole("button", { name: "模板" }));
-
-    expect(
-      (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe(buildAgentTemplate("Agent", "zh"));
-    expect(
-      (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toContain("# 我是谁");
-    expect(
-      (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).not.toContain("# Identity");
-  });
-
-  // RAG files are uploaded in Brainform, not from this editor, so a locale
-  // switch here only has to keep the session, selection and local edits.
-  it("preserves API/session/CSRF, selected docs and local edits across locale switches", async () => {
-    const identities: IdentitySnapshot[] = [];
-    const { api } = makeApi();
-    renderWorkbench(api as unknown as PlatformApi, (value) => {
-      identities.push(value);
-    });
-
-    await waitFor(() =>
       expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
     );
-    const countsBefore = {
-      me: api.me.mock.calls.length,
-      version: api.version.mock.calls.length,
-      agent: api.agent.mock.calls.length,
-      knowledge: api.knowledge.mock.calls.length,
-      ragPreview: api.ragPreview.mock.calls.length,
-      avatarTemplates: api.avatarTemplates.mock.calls.length,
-      voiceProfiles: api.voiceProfiles.mock.calls.length,
-    };
-    const firstIdentity = identities.at(-1);
+    fireEvent.click(screen.getByRole("button", { name: "Template" }));
 
-    const documentCheckbox = screen.getByRole("checkbox");
-    fireEvent.click(documentCheckbox);
-    await waitFor(() =>
-      expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
-        true,
-      ),
-    );
-    fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
-      target: { value: "# Local before switching" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
-    const lastIdentity = identities.at(-1);
-    expect(lastIdentity?.api).toBe(firstIdentity?.api);
-    expect(lastIdentity?.session).toBe(firstIdentity?.session);
-    expect(lastIdentity?.csrf).toBe(firstIdentity?.csrf);
-    expect(
-      (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe("# Local before switching");
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
-      true,
-    );
-    expect(screen.getByText("evidence.md")).toBeTruthy();
-    expect(screen.queryByText(/# Evidence/)).toBeNull();
-    expect(screen.getByText("Agent · V1.0")).toBeTruthy();
-    expect(api.me.mock.calls.length).toBe(countsBefore.me);
-    expect(api.version.mock.calls.length).toBe(countsBefore.version);
-    expect(api.agent.mock.calls.length).toBe(countsBefore.agent);
-    expect(api.knowledge.mock.calls.length).toBe(countsBefore.knowledge);
-    expect(api.avatarTemplates.mock.calls.length).toBe(
-      countsBefore.avatarTemplates,
-    );
-    expect(api.voiceProfiles.mock.calls.length).toBe(
-      countsBefore.voiceProfiles,
-    );
-    expect(api.uploadKnowledge).not.toHaveBeenCalled();
-  });
-
-  it("keeps a local AGENT.md and revision conflict visible after locale changes", async () => {
-    const { api } = makeApi();
-    api.updateDraft.mockImplementation(async () => {
-      throw new PlatformApiError(409, "Draft changed", {
-        code: "stale_revision",
-      });
-    });
-    const identities: IdentitySnapshot[] = [];
-    renderWorkbench(api as unknown as PlatformApi, (value) => {
-      identities.push(value);
-    });
-
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy(),
-    );
-    fireEvent.change(screen.getByLabelText("AGENT.md editor"), {
-      target: { value: "# Conflict stays local" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain(
-        "your edits are kept in this browser",
-      ),
-    );
-    const beforeSwitch = identities.at(-1);
-    const countsBefore = {
-      me: api.me.mock.calls.length,
-      version: api.version.mock.calls.length,
-      agent: api.agent.mock.calls.length,
-      knowledge: api.knowledge.mock.calls.length,
-      ragPreview: api.ragPreview.mock.calls.length,
-    };
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
-    expect(
-      (screen.getByLabelText("AGENT.md 编辑器") as HTMLTextAreaElement).value,
-    ).toBe("# Conflict stays local");
-    expect(screen.getByRole("alert").textContent).toContain(
-      "你的修改已保存在本浏览器",
-    );
-    expect(screen.getAllByText("版本冲突")).toHaveLength(1);
-    const afterSwitch = identities.at(-1);
-    expect(afterSwitch?.api).toBe(beforeSwitch?.api);
-    expect(afterSwitch?.session).toBe(beforeSwitch?.session);
-    expect(afterSwitch?.csrf).toBe(beforeSwitch?.csrf);
-    expect(api.me.mock.calls.length).toBe(countsBefore.me);
-    expect(api.version.mock.calls.length).toBe(countsBefore.version);
-    expect(api.agent.mock.calls.length).toBe(countsBefore.agent);
-    expect(api.knowledge.mock.calls.length).toBe(countsBefore.knowledge);
-    expect(api.ragPreview.mock.calls.length).toBe(countsBefore.ragPreview);
-    expect(api.updateDraft).toHaveBeenCalledTimes(1);
-    expect(api.publish).not.toHaveBeenCalled();
+    const editor = screen.getByLabelText(
+      "AGENT.md editor",
+    ) as HTMLTextAreaElement;
+    expect(editor.value).toBe(buildAgentTemplate("Agent"));
+    expect(editor.value).toContain("# Who I am");
   });
 });

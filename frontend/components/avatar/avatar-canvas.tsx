@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { useT } from "../locale";
+import { useT } from "../../lib/i18n";
 import type { AvatarConfig, AvatarState } from "./types";
 import { avatarAssetUrlForTemplate } from "./types";
 import styles from "./avatar.module.css";

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useT } from "../../components/locale";
+import { useT } from "../../lib/i18n";
 import {
   classifyBackendFailure,
   classifyBackendResponse,

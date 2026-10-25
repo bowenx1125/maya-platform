@@ -9,7 +9,7 @@ import type {
 } from "../lib/api/platform";
 import styles from "./knowledge/brainform-workspace.module.css";
 import overview from "./group-overview.module.css";
-import { useLocale, useT } from "./locale";
+import { useT } from "../lib/i18n";
 import { useSession } from "./session-provider";
 import { ModuleCard, ModuleGrid, ModuleList } from "./studyform-layout";
 import { ErrorNotice } from "./ui";
@@ -23,7 +23,6 @@ import { UserAvatar } from "./user-avatar";
  */
 export function GroupOverview({ groupId }: { groupId: string }) {
   const t = useT();
-  const { locale } = useLocale();
   const { api } = useSession();
   const [data, setData] = useState<GroupOverviewData | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -44,7 +43,7 @@ export function GroupOverview({ groupId }: { groupId: string }) {
   }, [load]);
 
   const when = (value: string) =>
-    new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en", {
+    new Date(value).toLocaleString("en", {
       month: "short",
       day: "numeric",
       hour: "2-digit",

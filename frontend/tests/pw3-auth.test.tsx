@@ -13,7 +13,6 @@ import {
   SessionProvider,
   useSession,
 } from "../components/session-provider";
-import { LocaleProvider } from "../components/locale";
 import { PlatformApi, PlatformApiError, type AuthSession } from "../lib/api";
 import { sanitizeNextPath } from "../lib/navigation";
 import HomePage from "../app/page";
@@ -62,11 +61,11 @@ describe("PW3-A anonymous Demo login", () => {
     } as unknown as PlatformApi;
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <SessionProvider api={api}>
           <LoginForm />
         </SessionProvider>
-      </LocaleProvider>,
+      </>,
     );
 
     const card = await screen.findByRole("button", { name: /Student/ });
@@ -96,11 +95,11 @@ describe("PW3-A anonymous Demo login", () => {
     } as unknown as PlatformApi;
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <SessionProvider api={api}>
           <HomePage />
         </SessionProvider>
-      </LocaleProvider>,
+      </>,
     );
 
     expect(
@@ -135,11 +134,11 @@ describe("PW3-A anonymous Demo login", () => {
     } as unknown as PlatformApi;
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <SessionProvider api={api}>
           <LoginForm />
         </SessionProvider>
-      </LocaleProvider>,
+      </>,
     );
 
     await waitFor(() => expect(api.demoIdentities).toHaveBeenCalledTimes(1));
@@ -181,11 +180,11 @@ describe("login form validation", () => {
       getCsrfToken: vi.fn(() => undefined),
     } as unknown as PlatformApi;
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <SessionProvider api={api}>
           <LoginForm />
         </SessionProvider>
-      </LocaleProvider>,
+      </>,
     );
     await waitFor(() => expect(api.demoIdentities).toHaveBeenCalledTimes(1));
     const password = screen.getByLabelText("Password");
@@ -321,13 +320,13 @@ describe("teacher group visit", () => {
     } as unknown as PlatformApi;
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <SessionProvider api={api}>
           <RouteGuard role="student">
             <p>Group workspace</p>
           </RouteGuard>
         </SessionProvider>
-      </LocaleProvider>,
+      </>,
     );
 
     expect(await screen.findByText("Group workspace")).toBeTruthy();
@@ -342,13 +341,13 @@ describe("teacher group visit", () => {
     } as unknown as PlatformApi;
 
     render(
-      <LocaleProvider initialLocale="en">
+      <>
         <SessionProvider api={api}>
           <RouteGuard role="student">
             <p>Group workspace</p>
           </RouteGuard>
         </SessionProvider>
-      </LocaleProvider>,
+      </>,
     );
 
     expect(
