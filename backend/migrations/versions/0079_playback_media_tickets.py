@@ -35,9 +35,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_playback_media_tickets_epoch", "playback_media_tickets", ["controller_epoch"]
     )
-    op.create_index(
-        "ix_playback_media_tickets_expires", "playback_media_tickets", ["expires_at"]
-    )
+    op.create_index("ix_playback_media_tickets_expires", "playback_media_tickets", ["expires_at"])
 
 
 def downgrade() -> None:
