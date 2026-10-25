@@ -45,6 +45,7 @@ const noSubscription = () => () => {};
 const TRAY_CLASS = [
   "notice-tray fixed right-5 bottom-[var(--arc-tray-bottom,20px)] z-[60] grid gap-2.5",
   "w-[min(520px,calc(100vw-32px))] pr-[90px] pb-1.5 pointer-events-none font-body empty:hidden",
+  "max-h-[var(--arc-tray-max,calc(100dvh-32px))] overflow-y-auto overscroll-contain content-end",
   "after:content-[''] after:absolute after:right-0 after:bottom-0 after:w-[76px] after:h-[95px]",
   "after:bg-[url(/mascots/wave.svg)] after:bg-contain after:bg-bottom after:bg-no-repeat",
   "data-[more]:before:content-['+'_attr(data-more)] data-[more]:before:justify-self-end",
@@ -88,22 +89,48 @@ export function useNoticeTrayAbove(target: HTMLElement | null) {
   useEffect(() => {
     if (!target) return;
     const root = document.documentElement;
+    let frame = 0;
     const place = () => {
+      frame = 0;
+      // Fixed boxes sit in the layout viewport; the visual viewport is what
+      // is really on screen (a phone keyboard or pinch zoom shrinks it).
+      const layoutHeight = window.innerHeight;
+      const view = window.visualViewport;
+      const viewTop = view ? view.offsetTop : 0;
+      const viewBottom = view ? view.offsetTop + view.height : layoutHeight;
       const top = target.getBoundingClientRect().top;
+      const edge = Math.min(Math.max(top, viewTop), viewBottom);
       root.style.setProperty(
         "--arc-tray-bottom",
-        `${Math.max(12, window.innerHeight - top + 12)}px`,
+        `${Math.max(12, layoutHeight - edge + 12)}px`,
       );
+      root.style.setProperty(
+        "--arc-tray-max",
+        `${Math.max(0, edge - viewTop - 24)}px`,
+      );
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(place);
     };
     place();
     const observer =
-      typeof ResizeObserver === "function" ? new ResizeObserver(place) : null;
+      typeof ResizeObserver === "function" ? new ResizeObserver(schedule) : null;
     observer?.observe(target);
-    window.addEventListener("resize", place);
+    observer?.observe(document.body);
+    const view = window.visualViewport;
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    view?.addEventListener("resize", schedule);
+    view?.addEventListener("scroll", schedule);
     return () => {
+      if (frame) cancelAnimationFrame(frame);
       observer?.disconnect();
-      window.removeEventListener("resize", place);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, { capture: true });
+      view?.removeEventListener("resize", schedule);
+      view?.removeEventListener("scroll", schedule);
       root.style.removeProperty("--arc-tray-bottom");
+      root.style.removeProperty("--arc-tray-max");
     };
   }, [target]);
 }
