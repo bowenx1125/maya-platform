@@ -65,10 +65,26 @@ def build_engine(database_url: str) -> Engine:
         )
         # No connection here: building an app (or a script's Database) must
         # not need the server. The JSON helpers are installed with the schema.
+        _session_time_zone_utc(engine)
         _time_writes(engine)
         _time_pool_checkout(engine)
         return engine
     raise RuntimeError("Unsupported database backend.")
+
+
+def _session_time_zone_utc(engine: Engine) -> None:
+    """Read timestamptz values back in UTC whatever the server or PGTZ says.
+
+    Code compares stored times with ``value.replace(tzinfo=UTC)``; under a
+    non-UTC session time zone (a JST host, PGTZ) that shifts every lease and
+    expiry by the offset, so an expired Live lease stayed live for hours.
+    """
+
+    @event.listens_for(engine, "connect")
+    def _utc(dbapi_connection, connection_record):  # type: ignore[no-untyped-def]
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute("SET TIME ZONE 'UTC'")
+        dbapi_connection.commit()
 
 
 def _time_writes(engine: Engine) -> None:

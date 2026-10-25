@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { localizeError, statusLabel, t } from "../lib/i18n";
+import { errorCopyFor, localizeError, statusLabel, t } from "../lib/i18n";
 
 describe("Wave 1A locale and V2 style boundary", () => {
   it.each(["invalid_utf8", "empty_markdown", "invalid_control_chars"])(
@@ -69,7 +69,10 @@ describe("Wave 1A locale and V2 style boundary", () => {
       ...error,
       details: { retry_after_seconds: "not-a-delay" },
     });
-    expect(localizeError(malformed, "zh")).toBe("Please try again later.");
+    // A malformed delay falls back to the code's catalog copy, not the raw message.
+    expect(localizeError(malformed, "zh")).toBe(
+      errorCopyFor("auth_rate_limited", "zh") ?? "<missing copy>",
+    );
   });
 
   it("keeps English-first copy translatable without changing business state", () => {
