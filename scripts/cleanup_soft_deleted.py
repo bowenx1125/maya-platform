@@ -208,6 +208,7 @@ def counts(session: Any, data_root: Path) -> dict[str, int]:
         ),
         "agent_versions": int(session.scalar(select(func.count()).select_from(AgentVersion)) or 0),
         "orphan_files": len(_orphan_ids(session)),
+        "stored_files": int(session.scalar(select(func.count()).select_from(StoredFile)) or 0),
         "disk_orphan_files": len(disk_orphans(session, data_root)),
         "debate_snapshots": int(debate_snapshots or 0),
         "answer_payloads": int(answer_rows or 0),
@@ -332,6 +333,50 @@ def apply(session: Any, data_root: Path) -> None:
     session.flush()
 
 
+_DELETED = (
+    "hidden_documents",
+    "deleted_voices",
+    "deleted_knowledge_sets",
+    "deleted_agents",
+    "deleted_teams",
+    "withdrawn_chats",
+)
+_KEPT = (
+    "records",
+    "attempts",
+    "grades",
+    "answer_payloads",
+    "debate_snapshots",
+    "debate_participants",
+)
+
+
+def preview(
+    session: Any, data_root: Path, before: dict[str, int]
+) -> tuple[dict[str, int], dict[str, int]]:
+    """What --apply would remove, measured by running it and rolling back.
+
+    The hard deletes only touch rows here; their files are unlinked after a
+    commit, and a rollback drops that queue, so nothing on disk changes.
+    Legacy deleted Debates go in a later phase with their own commits, so
+    they are counted, not run.
+    """
+
+    apply(session, data_root)
+    after = counts(session, data_root)
+    session.rollback()
+    would_delete = {key: before[key] - after[key] for key in _DELETED}
+    would_delete["old_agent_versions"] = before["agent_versions"] - after["agent_versions"]
+    would_delete["orphan_files"] = before["orphan_files"]
+    would_delete["stored_files"] = before["stored_files"] - after["stored_files"]
+    would_delete["disk_orphan_files"] = before["disk_orphan_files"]
+    would_delete["legacy_deleted_debates"] = before["deleted_debates"]
+    # Must all be 0. The legacy Debate phase only removes those Debates' own
+    # rows and checks the live Debates', Records and grades separately.
+    kept = {key: before[key] - after[key] for key in _KEPT}
+    return would_delete, kept
+
+
 def unlink_disk_orphans(session: Any, data_root: Path) -> int:
     removed = 0
     for path in disk_orphans(session, data_root):
@@ -374,6 +419,9 @@ def main(argv: list[str] | None = None) -> int:
         if not args.apply:
             for path in disk_orphans(session, data_root)[:50]:
                 print("disk orphan", path.relative_to(data_root).as_posix())
+            would_delete, kept = preview(session, data_root, before)
+            print("would_delete", would_delete)
+            print("kept", kept)
             print("dry-run; pass --apply to write")
             return 0
         apply(session, data_root)
