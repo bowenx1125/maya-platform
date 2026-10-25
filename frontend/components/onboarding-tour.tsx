@@ -500,7 +500,12 @@ function Tour({
                   : { left: spot.arrow - 15 }
               }
             >
-              <svg viewBox="0 0 24 24" width="30" height="30">
+              <svg
+                viewBox="0 0 24 24"
+                width="30"
+                height="30"
+                className="motion-safe:animate-tour-nod"
+              >
                 <path
                   d="M20 12H5m6-6-6 6 6 6"
                   fill="none"
