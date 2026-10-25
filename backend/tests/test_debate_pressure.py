@@ -19,6 +19,8 @@ from app.modules.debates.playback.events import (
     SharedSnapshots,
 )
 
+from tests.postgres_db import named_url
+
 
 def _settings(**values: Any) -> Settings:
     return Settings(**values)
@@ -279,7 +281,7 @@ def test_replica_touch_and_untouched(tmp_path: Any) -> None:
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
 
-    engine = create_engine(f"sqlite:///{tmp_path / 'r.sqlite3'}")
+    engine = create_engine(named_url(f"{tmp_path / 'r.sqlite3'}", schema=False))
     with engine.begin() as connection:
         connection.execute(
             text(

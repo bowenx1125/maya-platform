@@ -4,7 +4,6 @@ import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from pathlib import Path
 from threading import Barrier
 from typing import Any
 from uuid import uuid4
@@ -29,7 +28,7 @@ from app.core.models import (
 )
 from app.modules.teams.models import TeamVersionMember
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from tests.conftest import login
 
@@ -641,14 +640,13 @@ def test_team_metadata_cas_allows_only_one_concurrent_new_version(
         db = database.session_factory()
         try:
             # A detached user identity is sufficient for service-level ACL
-            # resolution; the separate SQLite writer locks serialize the CAS.
+            # resolution; the metadata revision CAS decides the race.
             user = db.get(User, MAYA_ID)
             assert user is not None
             db.expunge(user)
             context = AuthContext("", None, user, "")  # type: ignore[arg-type]
             db.rollback()
             start.wait(timeout=5)
-            db.execute(text("BEGIN IMMEDIATE"))
             request_payload = _team_payload([first[1], second[1]])
             request_payload["expected_metadata_revision"] = 0
             request_payload["display_name"] = name
@@ -965,69 +963,6 @@ def test_publication_failure_rolls_back_team_version_directory_and_grants(
         assert db.query(TeamVersionMember).count() == 0
         assert db.query(CourseTeamPublication).count() == 0
         assert db.query(TeamMemberInvokeGrant).count() == 0
-
-
-def test_0040_downgrade_refuses_to_discard_team_history(tmp_path: Path) -> None:
-    from alembic import command
-    from alembic.config import Config
-    from app.core.models import Course, User
-    from app.modules.teams.models import Team
-
-    database_path = tmp_path / "k3a-downgrade.sqlite3"
-    database_url = f"sqlite:///{database_path}"
-    database = Database(database_url)
-    database.upgrade_schema()
-    timestamp = datetime.now(UTC)
-    with database.session() as db:
-        db.add(
-            User(
-                id=MAYA_ID,
-                username="k3a-owner",
-                display_name="K3A owner",
-                status="active",
-                created_at=timestamp,
-            )
-        )
-        db.add(
-            Course(
-                id=COURSE_ID,
-                code="k3a-course",
-                name="K3A course",
-                current_audio_debate_id=None,
-                created_at=timestamp,
-            )
-        )
-        db.flush()
-        db.add(
-            Team(
-                id=str(uuid4()),
-                owner_user_id=MAYA_ID,
-                course_id=COURSE_ID,
-                group_id=None,
-                ownership_scope="personal",
-                display_name="Keep my Team",
-                visibility="private",
-                metadata_revision=0,
-                authorization_epoch=0,
-                current_version_seq=1,
-                deleted_at=None,
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
-        )
-
-    migration_dir = Path(__file__).resolve().parents[1] / "migrations"
-    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    config.set_main_option("script_location", str(migration_dir))
-    config.set_main_option("sqlalchemy.url", database_url)
-    config.attributes["database_url"] = database_url
-    with pytest.raises(RuntimeError, match="Team history exists"):
-        command.downgrade(config, "0039_knowledge_generation_materialization")
-    with database.engine.connect() as connection:
-        head = connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
-        assert head == "0040_teams_publication_grants"
-        assert connection.exec_driver_sql("SELECT COUNT(*) FROM teams").scalar_one() == 1
-    database.engine.dispose()
 
 
 @pytest.mark.parametrize(

@@ -2,13 +2,14 @@
 
 ## Runtime topology
 
-Maya runs locally as three containers behind one same-origin gateway:
+Maya runs locally as four containers behind one same-origin gateway:
 
 - Caddy gateway on port 8080;
 - Next.js frontend;
-- single-worker FastAPI backend with SQLite WAL and local controlled files.
+- FastAPI backend with local controlled files;
+- PostgreSQL, the only database (SQLite support was removed).
 
-The Demo intentionally excludes Redis, Celery, PostgreSQL, cloud object storage and a
+The Demo intentionally excludes Redis, Celery, cloud object storage and a
 separate vector database. Future infrastructure replaces adapters rather than browser
 DTOs or domain identities.
 
@@ -75,7 +76,7 @@ and disconnect rather than holding a Session for the socket lifetime.
 
 ## Database and file consistency
 
-SQLite stores identities, permissions, immutable relations, text, hashes, chunk/vector
+PostgreSQL stores identities, permissions, immutable relations, text, hashes, chunk/vector
 metadata, Jobs, operation journals and audit facts. Markdown/audio bytes live under a
 controlled data root. Cross-database/file operations use staging or trash, fsync/hash
 validation, short writer transactions, claim tokens and startup recovery.

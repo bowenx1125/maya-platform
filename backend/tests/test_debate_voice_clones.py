@@ -23,6 +23,7 @@ from sqlalchemy import select
 
 from tests import test_wave2_setup as debate_fixtures
 from tests.conftest import login
+from tests.postgres_db import named_url
 from tests.test_wave2_setup import COURSE_ID, GROUP_DEMO_ID, _insert_published_agent, headers
 
 debate_app = debate_fixtures.debate_app
@@ -340,6 +341,7 @@ def test_postgres_voice_delete_racing_the_last_debate_frees_the_voice_once(
     url = os.environ.get("MAYA_TEST_POSTGRES_URL")
     if not url:
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
+    url = named_url("pg", schema=False)
     _app, sqlite_database, base = app_factory()
     sqlite_database.dispose()
     settings = base.model_copy(update={"database_url": url})

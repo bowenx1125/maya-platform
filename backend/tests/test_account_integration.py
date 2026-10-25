@@ -8,14 +8,11 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from app.core.db import Database
 from app.core.models import Group, GroupMember, TeacherGroupAccess, User
 from app.modules.auth.models import UserCredential
 from app.modules.auth.service import sync_demo_accounts
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login
@@ -138,65 +135,3 @@ def test_teacher_access_survives_catalog_sync_and_allows_delete(tmp_path: Path) 
         assert removed.status_code in {200, 204}
         assert teacher.delete(membership, headers=headers).status_code == 204
         assert teacher.get(f"/api/v1/groups/{group_id}/knowledge-documents").status_code == 404
-
-
-def test_populated_migration_preserves_credentials_and_moves_teacher_access(tmp_path: Path) -> None:
-    database = Database(f"sqlite:///{tmp_path / 'upgrade.sqlite3'}")
-    config = Config("alembic.ini")
-    config.set_main_option("script_location", "migrations")
-    config.attributes["database_url"] = database.database_url
-    command.upgrade(config, "0028_student_self_registration")
-    user_id, course_id, group_id = (str(uuid4()) for _ in range(3))
-    with database.engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO users (id, username, display_name, status, created_at) "
-                "VALUES (:id, 'ReviewTeacher', 'Teacher', 'active', CURRENT_TIMESTAMP)"
-            ),
-            {"id": user_id},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO courses (id, code, name, created_at) "
-                "VALUES (:id, 'review-course', 'Review', CURRENT_TIMESTAMP)"
-            ),
-            {"id": course_id},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO groups (id, course_id, name, created_at) "
-                "VALUES (:id, :course, 'Équipe', CURRENT_TIMESTAMP)"
-            ),
-            {"id": group_id, "course": course_id},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO course_members (course_id, user_id, role, created_at) "
-                "VALUES (:course, :user, 'teacher', CURRENT_TIMESTAMP)"
-            ),
-            {"course": course_id, "user": user_id},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO group_members (group_id, user_id, role, created_at) "
-                "VALUES (:group, :user, 'member', CURRENT_TIMESTAMP)"
-            ),
-            {"group": group_id, "user": user_id},
-        )
-        connection.execute(
-            text(
-                "INSERT INTO user_credentials "
-                "(user_id, username, password_hash, created_at, updated_at) "
-                "VALUES (:user, 'ReviewTeacher', 'synthetic-hash', "
-                "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-            ),
-            {"user": user_id},
-        )
-    database.upgrade_schema()
-    with database.session() as session:
-        assert session.get(User, user_id).username_key == "reviewteacher"
-        assert session.get(Group, group_id).name_key == "équipe"
-        assert session.get(UserCredential, user_id).password_hash == "synthetic-hash"
-        assert session.get(TeacherGroupAccess, (group_id, user_id)) is not None
-        assert session.get(GroupMember, (group_id, user_id)) is None
-        assert not session.execute(text("PRAGMA foreign_key_check")).all()

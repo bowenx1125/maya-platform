@@ -39,7 +39,6 @@ from app.core.models import (
     KnowledgeChunk,
     KnowledgeSnapshot,
 )
-from app.core.sqlutil import portable_sql
 
 # These parent keys are required by SQLite before it will accept the exact
 # cross-scope foreign keys below.  They are declared here as metadata indexes
@@ -154,7 +153,6 @@ class Debate(Base):
             "uq_debates_one_running_per_course",
             "course_id",
             unique=True,
-            sqlite_where=(status == "running") & deleted_at.is_(None),
             postgresql_where=(status == "running") & deleted_at.is_(None),
         ),
     )
@@ -254,10 +252,7 @@ class DebateParticipant(Base):
             "order_index >= 0 AND order_index <= 4", name="ck_debate_participants_order"
         ),
         CheckConstraint(
-            portable_sql(
-                "slot = char(65 + order_index)",
-                "slot = chr(65 + order_index)",
-            ),
+            "slot = chr(65 + order_index)",
             name="ck_debate_participants_slot_order",
         ),
         CheckConstraint(

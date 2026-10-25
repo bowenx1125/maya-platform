@@ -1259,6 +1259,9 @@ def test_real_sdk_paused_queries_do_not_resume_but_natural_resume_replays_same_a
         replacement = start_or_resume_attempt(db, actor, conversation_id, client_event_id=uuid4())
         assert replacement is not None and replacement.attempt.id != first_attempt_id
         replacement_attempt_id = str(replacement.attempt.id)
+        # The restart is its own request: committed before the next claim
+        # (whose writer transaction starts from a rollback).
+        db.commit()
         row = db.get(Conversation, conversation_id)
         assert row is not None
         resumed_source_id = str(uuid4())

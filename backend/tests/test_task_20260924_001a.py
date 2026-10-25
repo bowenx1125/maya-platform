@@ -35,6 +35,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tests.conftest import login, post_message
+from tests.postgres_db import named_url
 from tests.test_wave1b_voices import GROUP_A, _headers, _wav
 
 
@@ -90,7 +91,7 @@ def test_dashscope_key_not_in_public_dto(
     settings = Settings(
         maya_env="test",
         session_secret="s" * 32,
-        database_url=f"sqlite:///{tmp_path / 'unused.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'unused.sqlite3'}"),
         data_root=tmp_path,
         llm_provider="dashscope",
         embedding_provider="dashscope",
@@ -450,7 +451,7 @@ def test_baseline_default_voices_reject_a_bad_map(tmp_path) -> None:
     base = {
         "maya_env": "test",
         "session_secret": "s" * 32,
-        "database_url": f"sqlite:///{tmp_path / 'unused.sqlite3'}",
+        "database_url": named_url(f"{tmp_path / 'unused.sqlite3'}"),
         "data_root": tmp_path,
     }
     assert Settings(**base, baseline_default_voices="  ").parsed_baseline_default_voices() == {}

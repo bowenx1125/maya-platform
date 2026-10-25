@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import event, select, text
 
+from tests.postgres_db import named_url
+
 _APP = Path(__file__).resolve().parents[1] / "app"
 _REPOSITORY = _APP / "modules/debates/playback/sql_repository.py"
 _CLEANUP = _APP / "modules/debates/cleanup.py"
@@ -75,7 +77,7 @@ def postgres_database(tmp_path):
         pytest.skip("MAYA_TEST_POSTGRES_URL is not set")
     from app.core.db import Database
 
-    database = Database(_POSTGRES_URL, tmp_path)
+    database = Database(named_url("pg", schema=False), tmp_path)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     database.initialize_schema()

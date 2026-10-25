@@ -44,6 +44,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from tests.conftest import login
+from tests.postgres_db import named_url
 from tests.test_wave1b_voices import _headers, _wav
 
 
@@ -207,7 +208,7 @@ def test_tts_call_uses_the_profile_model_and_refuses_any_other(
 
 @pytest.mark.parametrize("migrate", [False, True])
 def test_preset_seed_is_idempotent_and_keeps_the_fallback(tmp_path: Path, migrate: bool) -> None:
-    url = f"sqlite:///{tmp_path / 'preset.sqlite3'}"
+    url = named_url(f"{tmp_path / 'preset.sqlite3'}")
     settings = _settings(tmp_path, url=url)
     database = Database(url, tmp_path)
     if migrate:

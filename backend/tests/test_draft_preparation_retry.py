@@ -28,13 +28,14 @@ from app.providers.tts import MockTTSProvider, TTSProviderTimeout
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from tests.postgres_db import named_url
 from tests.test_cleanup_debate_runtime import _seed_runtime_graph, _uid
 from tests.test_debate_cleanup import _make_final_ready
 
 
 @pytest.fixture
 def draft_retry_db(tmp_path: Path):
-    database = Database(f"sqlite:///{tmp_path / 'maya.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'maya.sqlite3'}"), tmp_path)
     database.upgrade_schema()
     ids = _seed_runtime_graph(database, tmp_path)
     ids["job"] = _uid(77)
@@ -205,7 +206,7 @@ async def test_draft_retry_respects_prepared_prefix_and_control_fences(
                 table: [
                     dict(row)
                     for row in db.execute(
-                        text(f"SELECT * FROM {table} WHERE debate_id=:debate_id ORDER BY rowid"),
+                        text(f"SELECT * FROM {table} WHERE debate_id=:debate_id ORDER BY id"),
                         {"debate_id": ids["debate"]},
                     ).mappings()
                 ]
@@ -645,7 +646,7 @@ def _claim_rows(database, ids):
             table: [
                 dict(row)
                 for row in db.execute(
-                    text(f"SELECT * FROM {table} WHERE debate_id=:debate_id ORDER BY rowid"),
+                    text(f"SELECT * FROM {table} WHERE debate_id=:debate_id ORDER BY id"),
                     {"debate_id": ids["debate"]},
                 ).mappings()
             ]

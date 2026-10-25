@@ -12,6 +12,8 @@ from app.core.memory_guard import (
     set_mem_available_reader,
 )
 
+from tests.postgres_db import named_url
+
 
 @pytest.fixture(autouse=True)
 def _clear_mem_reader() -> None:
@@ -27,7 +29,7 @@ def _settings(**overrides: object) -> Settings:
         "maya_env": "test",
         "session_secret": "x" * 32,
         "demo_mode": True,
-        "database_url": "sqlite://",
+        "database_url": named_url("settings"),
         "data_root": "/tmp",
         "llm_provider": "mock",
         "embedding_provider": "mock",

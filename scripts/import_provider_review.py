@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import urllib.request
 from datetime import UTC, datetime
@@ -197,19 +198,18 @@ def main() -> None:
     from app.core.models import ProviderPolicySnapshot
     from app.providers.control_repository import ProviderRepository
 
-    database = Database(f"sqlite:///{root / 'data' / 'maya.sqlite3'}")
+    database_url = os.environ.get("DATABASE_URL") or env.get("DATABASE_URL", "")
+    if not database_url.startswith("postgresql"):
+        raise SystemExit("refusing: DATABASE_URL (environment or .env) must be PostgreSQL")
+    database = Database(database_url)
     database.upgrade_schema()
-    # Alembic leaves its connection pooled; the writer fence below opens
-    # BEGIN IMMEDIATE and would block on it.
     database.dispose()
 
     llm_endpoint, embedding_endpoint = resolved_endpoints(env)
     llm = build_policy("llm", llm_endpoint, region, evidence)
     embedding = build_policy("embedding", embedding_endpoint, region, evidence)
 
-    # Two separate transactions on purpose: save_policy_snapshot opens its own
-    # BEGIN IMMEDIATE writer fence, so holding an ORM transaction across the
-    # call deadlocks against it.
+    # Two separate transactions: stale rows go first, then the new ones.
     with database.session() as session:
         # Re-running must be able to replace a row this script wrote earlier:
         # the supplier edits a page, or the workspace changes the endpoint.

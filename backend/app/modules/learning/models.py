@@ -629,7 +629,6 @@ class AssessmentAttempt(Base):
             "team_id",
             "recipe_id",
             unique=True,
-            sqlite_where=(status.in_(("in_progress", "paused"))),
             postgresql_where=(status.in_(("in_progress", "paused"))),
         ),
     )

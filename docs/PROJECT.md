@@ -211,36 +211,26 @@ sends expected_base_version_id,409 stale_base_version keeps edits;per-user draft
 Performance: hash waits free DB connections;Chat history SELECTs constant (5);
 Brainform coalesces/fences/aborts reads. #237 82d68ffa released;charged14331 unchanged.
 
-Oct23 isolated 50-user run (Mock,2 capped backends): logins 100/100,p95≤7.85s;Agent/
-Team50 SSE+persistence passed. PG READ COMMITTED race (3/50 stale done) fixed with one
-REPEATABLE READ poll snapshot. Release #239 aa6d6ffd (~12s 502 during swap). Voice
-uploads: enrollment off the event loop,MP3/M4A padding fixed,10–20s limits kept;
-built3e785c01. All Oct releases:0 real Provider calls;Actions billing-blocked.
+Oct23 50-user Mock run passed (logins 100/100, p95≤7.85s); PG poll race fixed with one
+REPEATABLE READ snapshot. Release #239 aa6d6ffd; voice enrollment off the event loop.
+0 real Provider calls in all Oct releases.
 
 ## Oct24 Team chats and junk (#241)
 
-Open Team/Maya Team chats follow each new Team version (save,member publish,5-min
-sweep),history kept; mid-reply chats wait;in-progress/paused formal attempts and a
-removed member's replied chat stay on their version. Never-indexed RAG returns 503
-`rag_upload_index_failed`,not stored; failed Voices deleted unless charged or holding a
-supplier id. The sweep hard-deletes empty Agents (no version,files or reference) after 1h.
+Open Team chats follow each new Team version (save, publish, 5-min sweep); history,
+mid-reply chats and unfinished attempts keep theirs. Failed RAG uploads/Voices are not
+kept (unless charged or holding a supplier id); empty Agents are swept after 1h.
 
 ## Oct24 true deletion (#242, supersedes #233)
 
 Head0078_chat_answer_decouple. Voices/RAG/Knowledge/Agents/Teams/chats hard-deleted
-with storage; history FKs SET NULL with snapshot names,so Records/grades/history
-open. Deleting a chat keeps per-question answers;deleting an Agent/Team ends its chats
-(agent_deleted/team_deleted),fails pending turns,abandons unfinished attempts. Debates
-own AGENT.md,RAG/Knowledge copies and a voice copy:the Voice's recording plus its
-supplier voice ID (debate_voice_clones,encrypted+keyed hash);nothing enrolled or
-charged;playback/TTS read only it. Voice delete skips the supplier while a live Debate
-names the voice;the sweeper frees a deleted Debate's rows/files and deletes the
-supplier voice once when no Voice row or live Debate holds it (per-voice advisory lock). Prune
-keeps current+previous AGENT.md,skips versions a live chat/Team/unfinished attempt
-uses;5-min sweep prunes later. Failed uploads hard-deleted. Scripts (dry-run default,
-production needs --confirm-production): backfill_debate_snapshots (idempotent),
-backfill_debate_voice_clones (free copy),cleanup_soft_deleted (counts,prunes,disk
-orphans>1h;rolls back if Debate/answer counts move). Prod-shaped PG up→down→up passed.
+with storage; history FKs SET NULL with snapshot names, so Records/grades stay open.
+Deleting a chat keeps answers; deleting an Agent/Team ends its chats and abandons
+unfinished attempts. Debates own copies of AGENT.md, RAG/Knowledge and the voice
+(recording + supplier voice ID in debate_voice_clones); the sweeper deletes a supplier
+voice once nothing holds it (per-voice advisory lock). Prune keeps current+previous
+AGENT.md and versions still in use. Scripts (dry-run default, --confirm-production):
+backfill_debate_snapshots, backfill_debate_voice_clones, cleanup_soft_deleted.
 
 ## Oct24 Debate Next and errors
 
@@ -293,3 +283,16 @@ of page loads: Next→speech,first contentful paint,assessment send→reply; POS
 /client-metrics (160 routes) logs `client_metric`,stores nothing. Read-only
 `scripts/slow_endpoints_report.py` summarises docker logs: route p50/p95/p99/max,db,
 provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payloads logged.
+
+## Oct24 PostgreSQL only (PR B)
+
+The backend refuses a SQLite DATABASE_URL; the startup SQLite import
+(MAYA_POSTGRES_IMPORT_SOURCE/ALLOW_EMPTY) is gone. scripts/migrate_sqlite_to_postgres.py
+copies an old file: dry-run by default, --apply --confirm-production, SQLite opened
+read-only/immutable, one transaction + receipt (re-run is a no-op), never deletes the
+file. Tests need MAYA_TEST_POSTGRES_URL: one database per test cloned from a per-run
+template; SQLite migration-history tests removed. Postgres-only bugs fixed: budget
+reserve lost update (row lock), Agent publish/delete and document replace races
+(advisory locks), attempt completion vs knowledge update (row lock), purge clearing an
+answered question before deleting it (two-phase purge), alembic URL with %, peer lock
+across databases. Local Compose adds a postgres service.

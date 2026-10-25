@@ -44,9 +44,6 @@ def login_database_overloaded(exc: BaseException) -> bool:
     return any(
         token in message
         for token in (
-            "database is locked",
-            "database is busy",
-            "sqlite_busy",
             "too many clients",
             "deadlock detected",
         )

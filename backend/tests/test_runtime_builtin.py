@@ -96,7 +96,7 @@ def test_actual_registry_mounts_learning_tools_and_serializes_formal_reads(
             assert records["submitted_records"] == [
                 {
                     "answer_text": answer_text,
-                    "created_at": internal_answers[0].created_at.isoformat(),
+                    "created_at": internal_answers[0].created_at.isoformat().replace("+00:00", "Z"),
                 }
             ]
             assert set(records["submitted_records"][0]) == {"answer_text", "created_at"}

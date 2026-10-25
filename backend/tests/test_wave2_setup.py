@@ -989,7 +989,7 @@ def test_audio_swap_lease_takeover_covers_each_crash_boundary(
     _app, database, _client = debate_app
     old_debate_id = _insert_debate_row(database)
     new_debate_id = _insert_debate_row(database)
-    request_id = f"{boundary}-{uuid4()}"
+    request_id = str(uuid4())
     record_id = str(uuid4())
     now = datetime.now(UTC)
     with database.session() as session:

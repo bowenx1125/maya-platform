@@ -5,13 +5,11 @@ from __future__ import annotations
 import asyncio
 import threading
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
-from alembic import command
 from app.core.errors import PlatformError
 from app.core.models import Agent, ProviderOperation, SessionRecord
 from app.modules.auth.service import session_hash
@@ -30,19 +28,15 @@ from app.modules.workspace.schemas import TeamRouting
 from app.providers.control_repository import ProviderRepository
 from app.providers.llm_adapter import DashScopeLLMConfig
 from fastapi.testclient import TestClient
-from sqlalchemy import event, func, select
-from sqlalchemy.engine import Engine
+from sqlalchemy import func, select
 
 from tests.conftest import login, post_message
 from tests.test_mayaform_team_conversations import (
     COURSE_ID,
     MAYA_ID,
-    _config,
     _create,
-    _fingerprint,
     _headers,
     _make_agent_version,
-    _seed_0040,
 )
 from tests.test_wave4_provider_preflight import _digest, _policy
 
@@ -603,48 +597,6 @@ def test_startup_settles_member_states_without_reexecution(
         assert turn.state == "paused"
         assert [result.state for result in results] == ["ready", "pending", "pending"]
     assert len(ids) == 3
-
-
-@pytest.mark.parametrize(
-    "failure_match", [None, "CREATE TABLE team_turn_results", "UPDATE alembic_version"]
-)
-def test_0042_populated_single_history_and_atomic_rollback(
-    tmp_path: Path, failure_match: str | None
-) -> None:
-    import sqlite3
-
-    path = tmp_path / "team-turns.sqlite3"
-    _seed_0040(path)
-    command.upgrade(_config(path), "0041_team_conversations")
-    before = _fingerprint(path)
-    with sqlite3.connect(path) as db:
-        old_turns = db.execute("SELECT * FROM agent_conversation_turns ORDER BY id").fetchall()
-        ledger = db.execute("SELECT * FROM provider_operations ORDER BY id").fetchall()
-    if failure_match:
-
-        def fail(_db: Any, _cursor: Any, sql: str, _params: Any, _ctx: Any, _many: bool) -> None:
-            if failure_match in sql:
-                raise RuntimeError("0042 injected failure")
-
-        event.listen(Engine, "before_cursor_execute", fail)
-        try:
-            with pytest.raises(RuntimeError, match="0042 injected failure"):
-                command.upgrade(_config(path), "0042_team_turn_results")
-        finally:
-            event.remove(Engine, "before_cursor_execute", fail)
-        assert _fingerprint(path) == before
-    command.upgrade(_config(path), "0042_team_turn_results")
-    with sqlite3.connect(path) as db:
-        assert (
-            db.execute(
-                "SELECT id,conversation_id,position,user_text,assistant_text,sources_json,mode,"
-                "state,safe_error_code,created_at FROM agent_conversation_turns ORDER BY id"
-            ).fetchall()
-            == old_turns
-        )
-        assert db.execute("SELECT * FROM provider_operations ORDER BY id").fetchall() == ledger
-        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
 
 
 def test_extract_team_ruleset_only_from_guide_heading() -> None:

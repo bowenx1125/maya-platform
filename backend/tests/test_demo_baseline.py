@@ -39,6 +39,8 @@ from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 from sqlalchemy import func, select
 
+from tests.postgres_db import named_url
+
 
 def _seeded_database(app_factory: Any) -> tuple[Any, Any, Any]:
     app, database, settings = app_factory()
@@ -244,7 +246,7 @@ def test_non_test_startup_builds_the_philosophers_only_for_the_demo(
         demo_mode=demo_mode,
         allow_legacy_demo_users=True,
         demo_users_file=credentials,
-        database_url=f"sqlite:///{tmp_path / 'maya.sqlite3'}",
+        database_url=named_url(f"{tmp_path / 'maya.sqlite3'}"),
         data_root=tmp_path,
         demo_accounts_file=tmp_path / "missing-accounts.private.md",
         llm_provider="mock",

@@ -860,13 +860,10 @@ class SqlPlaybackRepository(PlaybackRepository):
     @staticmethod
     def _has_table(db: Any, table: str) -> bool:
         try:
-            if SqlPlaybackRepository._dialect_name(db) == "postgresql":
-                statement = text(
-                    "SELECT 1 FROM information_schema.tables "
-                    "WHERE table_schema = 'public' AND table_name = :name"
-                )
-            else:
-                statement = text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name")
+            statement = text(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema = 'public' AND table_name = :name"
+            )
             row = db.execute(statement, {"name": table}).first()
         except Exception:
             return False
@@ -875,16 +872,14 @@ class SqlPlaybackRepository(PlaybackRepository):
     @staticmethod
     def _columns(db: Any, table: str) -> set[str]:
         try:
-            if SqlPlaybackRepository._dialect_name(db) == "postgresql":
-                rows = db.execute(
-                    text(
-                        "SELECT column_name FROM information_schema.columns "
-                        "WHERE table_schema = 'public' AND table_name = :name"
-                    ),
-                    {"name": table},
-                ).all()
-                return {str(row[0]) for row in rows}
-            return {str(row[1]) for row in db.execute(text(f"PRAGMA table_info({table})")).all()}
+            rows = db.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = :name"
+                ),
+                {"name": table},
+            ).all()
+            return {str(row[0]) for row in rows}
         except Exception:
             return set()
 
@@ -1115,41 +1110,23 @@ class SqlPlaybackRepository(PlaybackRepository):
             # Do not issue a SELECT (or any other statement) before this
             # explicit write transaction.  This is the WAL snapshot fix.
             begin_immediate(claim_session)
-            # SQLite has json_array_length / json_group_array; Postgres compat only
-            # installs json_extract / json_valid.  Keep claim SQL dialect-portable.
-            if self._dialect_name(claim_session) == "postgresql":
-                predecessor_len = "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
-                # json_agg(...)::text inserts spaces after commas; stored rows use
-                # json.dumps(separators=(",", ":")). Compare as jsonb so prod Next
-                # is not blocked by whitespace-only inequality.
-                predecessor_json = (
-                    "SELECT COALESCE(jsonb_agg(dt.id ORDER BY dt.turn_index, dt.id), "
-                    "'[]'::jsonb) FROM debate_turns AS dt "
-                    "WHERE dt.debate_id=ps.debate_id "
-                    "AND dt.turn_index < successor.turn_index "
-                    "AND (d.rule_set_id <> :mutual_rule_set_id "
-                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
-                    "= :teaching_protocol AND successor.round_no > 1) "
-                    "OR dt.round_no < successor.round_no)"
-                )
-                predecessor_eq = (
-                    "successor.predecessor_turn_ids_json::jsonb = (" + predecessor_json + ")"
-                )
-            else:
-                predecessor_len = "json_array_length(successor.predecessor_turn_ids_json)"
-                predecessor_json = (
-                    "SELECT json_group_array(prefix_ids.id) FROM ("
-                    "SELECT id FROM debate_turns "
-                    "WHERE debate_id=ps.debate_id "
-                    "AND turn_index < successor.turn_index "
-                    "AND (d.rule_set_id <> :mutual_rule_set_id "
-                    "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
-                    "= :teaching_protocol AND successor.round_no > 1) "
-                    "OR round_no < successor.round_no) "
-                    "ORDER BY turn_index, id"
-                    ") AS prefix_ids"
-                )
-                predecessor_eq = "successor.predecessor_turn_ids_json = (" + predecessor_json + ")"
+            predecessor_len = "jsonb_array_length(successor.predecessor_turn_ids_json::jsonb)"
+            # json_agg(...)::text inserts spaces after commas; stored rows use
+            # json.dumps(separators=(",", ":")). Compare as jsonb so prod Next
+            # is not blocked by whitespace-only inequality.
+            predecessor_json = (
+                "SELECT COALESCE(jsonb_agg(dt.id ORDER BY dt.turn_index, dt.id), "
+                "'[]'::jsonb) FROM debate_turns AS dt "
+                "WHERE dt.debate_id=ps.debate_id "
+                "AND dt.turn_index < successor.turn_index "
+                "AND (d.rule_set_id <> :mutual_rule_set_id "
+                "OR (json_extract(d.rule_snapshot_json, '$.teaching_protocol') "
+                "= :teaching_protocol AND successor.round_no > 1) "
+                "OR dt.round_no < successor.round_no)"
+            )
+            predecessor_eq = (
+                "successor.predecessor_turn_ids_json::jsonb = (" + predecessor_json + ")"
+            )
             candidate = claim_session.execute(
                 text(
                     "SELECT ps.id AS claim_id, successor.audio_file_id, "
@@ -2146,17 +2123,13 @@ class SqlPlaybackRepository(PlaybackRepository):
         expected_control_version: int,
         controller_epoch: str,
     ) -> bool:
-        # SQLite's table-valued json_each(text) has no PostgreSQL equivalent
-        # for text columns; expand the predecessor array with jsonb instead.
-        if self._dialect_name(db) == "postgresql":
-            predecessor_ids = (
-                "(SELECT p.value FROM jsonb_array_elements_text("
-                "CASE WHEN json_valid(t.predecessor_turn_ids_json) "
-                "THEN t.predecessor_turn_ids_json::jsonb ELSE '[]'::jsonb END"
-                ") AS p(value))"
-            )
-        else:
-            predecessor_ids = "(SELECT value FROM json_each(t.predecessor_turn_ids_json))"
+        # Expand the predecessor array (a text column) with jsonb.
+        predecessor_ids = (
+            "(SELECT p.value FROM jsonb_array_elements_text("
+            "CASE WHEN json_valid(t.predecessor_turn_ids_json) "
+            "THEN t.predecessor_turn_ids_json::jsonb ELSE '[]'::jsonb END"
+            ") AS p(value))"
+        )
         result = db.execute(
             text(
                 "UPDATE playback_states SET status='waiting_next', cursor_ms=0, "
@@ -2850,7 +2823,7 @@ class SqlPlaybackRepository(PlaybackRepository):
 
     @staticmethod
     def _ensure_turn_job(db: Any, debate: SqlRow, turn: SqlRow) -> None:
-        """Insert the durable prepare job if missing (SQLite + Postgres).
+        """Insert the durable prepare job if missing.
 
         Prod R3 (201bcff): ``uq_jobs_operation_idempotency_key`` is a *partial*
         unique index ``UNIQUE (operation, idempotency_key)
@@ -2858,7 +2831,7 @@ class SqlPlaybackRepository(PlaybackRepository):
         ``ON CONFLICT (operation, idempotency_key)`` without that predicate
         raises ``InvalidColumnReference`` and aborts the prewarm transaction
         (zero turns + zero jobs). Target the partial index explicitly with
-        the matching WHERE. SQLite keeps ``INSERT OR IGNORE``.
+        the matching WHERE.
         """
 
         key = f"{debate.id}:{turn.id}"
@@ -2879,16 +2852,13 @@ class SqlPlaybackRepository(PlaybackRepository):
             "(:id, NULL, :debate_id, :turn_id, :key, NULL, :generation, "
             "'debate_turn_prepare', 'pending', NULL, 0, :created_at, :updated_at)"
         )
-        if SqlPlaybackRepository._dialect_name(db) == "postgresql":
-            db.execute(
-                text(
-                    "INSERT INTO jobs " + columns + " ON CONFLICT (operation, idempotency_key) "
-                    "WHERE idempotency_key IS NOT NULL DO NOTHING"
-                ),
-                params,
-            )
-        else:
-            db.execute(text("INSERT OR IGNORE INTO jobs " + columns), params)
+        db.execute(
+            text(
+                "INSERT INTO jobs " + columns + " ON CONFLICT (operation, idempotency_key) "
+                "WHERE idempotency_key IS NOT NULL DO NOTHING"
+            ),
+            params,
+        )
 
     def ensure_turn_job(self, db: Any, debate: SqlRow, turn: SqlRow) -> None:
         """Persist an on-demand next-turn job before exposing its preparing state."""

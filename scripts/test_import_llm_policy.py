@@ -27,6 +27,8 @@ main = _policy_module.main
 validate_reviewed_policy = _policy_module.validate_reviewed_policy
 
 
+from tests.postgres_db import public_table_count  # noqa: E402
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -76,7 +78,9 @@ def _llm_document() -> dict[str, Any]:
     return document
 
 
-def test_empty_db_holds_embedding_and_llm_policies_and_repeats_idempotently(tmp_path: Path) -> None:
+def test_empty_db_holds_embedding_and_llm_policies_and_repeats_idempotently(
+    empty_postgres_url: str,
+) -> None:
     db_module: Any = importlib.import_module("app.core.db")
     models_module: Any = importlib.import_module("app.core.models")
     sqlalchemy_module: Any = importlib.import_module("sqlalchemy")
@@ -88,7 +92,7 @@ def test_empty_db_holds_embedding_and_llm_policies_and_repeats_idempotently(tmp_
     embedding_document = embedding_test_module._document
     func, select = sqlalchemy_module.func, sqlalchemy_module.select
 
-    database_url = f"sqlite:///{tmp_path / 'dual-policy.sqlite3'}"
+    database_url = empty_postgres_url
     embedding = import_embedding(
         embedding_document(), database_url=database_url, acknowledge_reviewed=True
     )
@@ -113,13 +117,14 @@ def test_empty_db_holds_embedding_and_llm_policies_and_repeats_idempotently(tmp_
         database.dispose()
 
 
-def test_reviewed_acknowledgement_is_required_before_creating_db(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'not-created.sqlite3'}"
+def test_reviewed_acknowledgement_is_required_before_creating_db(
+    empty_postgres_url: str,
+) -> None:
     with pytest.raises(PolicyImportError, match="acknowledgement"):
         import_reviewed_policy(
-            _llm_document(), database_url=database_url, acknowledge_reviewed=False
+            _llm_document(), database_url=empty_postgres_url, acknowledge_reviewed=False
         )
-    assert not (tmp_path / "not-created.sqlite3").exists()
+    assert public_table_count(empty_postgres_url) == 0
 
 
 @pytest.mark.parametrize(
@@ -193,10 +198,12 @@ def test_file_loader_requires_named_json(tmp_path: Path) -> None:
         load_policy_file(env_path)
 
 
-def test_cli_prints_only_status_and_hash(tmp_path: Path, capsys: Any) -> None:
+def test_cli_prints_only_status_and_hash(
+    tmp_path: Path, capsys: Any, empty_postgres_url: str
+) -> None:
     policy_path = tmp_path / "provider-policy-llm.json"
     policy_path.write_text(json.dumps(_llm_document()), encoding="utf-8")
-    database_url = f"sqlite:///{tmp_path / 'cli.sqlite3'}"
+    database_url = empty_postgres_url
     assert (
         main(
             [

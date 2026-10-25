@@ -319,7 +319,7 @@ def test_provider_accepted_stage_is_atomic_and_suppresses_revoked_content(
 
     repository = ProviderRepository(database)
     policy = _provider_policy()
-    policy_id = repository.save_policy_snapshot(policy, snapshot_id=f"k2b1-policy-{uuid4()}")
+    policy_id = repository.save_policy_snapshot(policy, snapshot_id=str(uuid4()))
     with database.session() as db:
         run = db.get(KnowledgeGenerationRun, run_id)
         assert run is not None
@@ -565,7 +565,7 @@ def test_teacher_generation_intent_confirms_exact_manifest_and_dispatches_once(
     )
     policy = _provider_policy(endpoint)
     repository = ProviderRepository(database)
-    repository.save_policy_snapshot(policy, snapshot_id=f"k2b1-runtime-policy-{uuid4()}")
+    repository.save_policy_snapshot(policy, snapshot_id=str(uuid4()))
     settings = base_settings.model_copy(
         update={
             "llm_provider": "dashscope",
@@ -813,7 +813,7 @@ def test_new_teacher_regeneration_resumes_exact_unconfirmed_run_once(
     )
     policy = _provider_policy(endpoint)
     repository = ProviderRepository(database)
-    repository.save_policy_snapshot(policy, snapshot_id=f"k2b1-unconfirmed-policy-{uuid4()}")
+    repository.save_policy_snapshot(policy, snapshot_id=str(uuid4()))
     settings = base_settings.model_copy(
         update={
             "llm_provider": "dashscope",

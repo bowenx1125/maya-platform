@@ -25,6 +25,7 @@ from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 
 from tests.conftest import login
+from tests.postgres_db import named_url
 from tests.test_mayaform_assessment_attempts import _create_formal_conversation
 
 _POSTGRES_URL = os.environ.get("MAYA_TEST_POSTGRES_URL")
@@ -41,8 +42,8 @@ def postgres_classroom(app_factory: Any) -> Any:
 
     _app, sqlite_database, base = app_factory()
     sqlite_database.dispose()
-    settings = base.model_copy(update={"database_url": _POSTGRES_URL})
-    database = Database(_POSTGRES_URL, settings.data_root)
+    settings = base.model_copy(update={"database_url": named_url("pg", schema=False)})
+    database = Database(named_url("pg", schema=False), settings.data_root)
     with database.engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public"))
     app = create_app(settings, database)

@@ -18,9 +18,43 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 
+from tests import postgres_db
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if not os.environ.get(postgres_db.ENV):
+        pytest.exit(
+            f"{postgres_db.ENV} must name a PostgreSQL server: the suite runs on "
+            "PostgreSQL only (one database per test).",
+            returncode=4,
+        )
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    if os.environ.get(postgres_db.ENV):
+        postgres_db.drop_created()
+        postgres_db.drop_template()
+
+
+@pytest.fixture(autouse=True)
+def _drop_test_databases() -> Iterator[None]:
+    """Every database a test created with ``new_database_url`` goes with it."""
+
+    yield
+    postgres_db.drop_created()
+
 
 @pytest.fixture
-def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settings]]:
+def postgres_url() -> str:
+    """A fresh PostgreSQL database with the current schema."""
+
+    return postgres_db.new_database_url()
+
+
+@pytest.fixture
+def app_factory(
+    tmp_path: Path, postgres_url: str
+) -> Callable[..., tuple[FastAPI, Database, Settings]]:
     # One fixture lifetime represents one unchanged private catalog across
     # multiple app/process instances.  Re-hashing the same password for every
     # factory call would create a new Argon2 salt and falsely look like a
@@ -83,7 +117,7 @@ def app_factory(tmp_path: Path) -> Callable[..., tuple[FastAPI, Database, Settin
             # confirmation step tests must exercise.
             demo_auto_confirm_provider=False,
             allow_legacy_demo_users=True,
-            database_url=f"sqlite:///{tmp_path / 'maya.sqlite3'}",
+            database_url=postgres_url,
             data_root=tmp_path,
             # Keep the legacy fixture explicit and independent of any
             # developer .env file or repository-local private catalog.

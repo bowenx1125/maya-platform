@@ -19,6 +19,7 @@ from app.modules.debates.playback.protocols import ResolvedTurnVoice
 from app.providers.tts import MockTTSProvider, TTSHTTPRejectedError
 from sqlalchemy import text
 
+from tests.postgres_db import named_url
 from tests.test_cleanup_debate_runtime import _seed_runtime_graph
 from tests.test_debate_cleanup import _make_final_ready
 
@@ -57,7 +58,7 @@ class _LanguageMock(MockTTSProvider):
 
 @pytest.fixture
 def retained_turn(tmp_path: Path):
-    database = Database(f"sqlite:///{tmp_path / 'maya.sqlite3'}", tmp_path)
+    database = Database(named_url(f"{tmp_path / 'maya.sqlite3'}"), tmp_path)
     database.upgrade_schema()
     ids = _seed_runtime_graph(database, tmp_path)
     speech, structured = _make_final_ready(database, ids)

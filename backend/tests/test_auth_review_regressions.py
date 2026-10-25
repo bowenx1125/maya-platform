@@ -20,11 +20,13 @@ from fastapi import Request, Response
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
+from tests.postgres_db import named_url
+
 
 def test_password_reset_during_login_verification_prevents_stale_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    engine = create_engine(f"sqlite:///{tmp_path / 'reset-race.sqlite3'}")
+    engine = create_engine(named_url(f"{tmp_path / 'reset-race.sqlite3'}"))
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     settings = Settings(maya_env="test", session_secret="x" * 32)
@@ -97,7 +99,7 @@ def test_password_reset_during_login_verification_prevents_stale_session(
 def test_password_update_after_login_lock_revokes_new_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str, source: str
 ) -> None:
-    engine = create_engine(f"sqlite:///{tmp_path / 'login-first.sqlite3'}")
+    engine = create_engine(named_url(f"{tmp_path / 'login-first.sqlite3'}"))
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     settings = Settings(maya_env="test", session_secret="x" * 32)
@@ -144,7 +146,13 @@ def test_password_update_after_login_lock_revokes_new_session(
 
     @event.listens_for(engine, "before_cursor_execute")
     def observe_update(_connection, _cursor, statement, _parameters, _context, _executemany):
-        if statement == "BEGIN IMMEDIATE" and threading.current_thread() is worker:
+        # The reset reaches lock_password_identity's row lock, which the
+        # login already holds, and waits there.
+        if (
+            "FOR UPDATE" in statement
+            and "FROM users" in statement
+            and threading.current_thread() is worker
+        ):
             reset_write_started.set()
 
     def update_password() -> None:
@@ -216,7 +224,7 @@ def test_password_update_after_login_lock_revokes_new_session(
 def test_first_catalog_password_change_during_login_rejects_catalog_password(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    engine = create_engine(f"sqlite:///{tmp_path / 'catalog-change.sqlite3'}")
+    engine = create_engine(named_url(f"{tmp_path / 'catalog-change.sqlite3'}"))
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     settings = Settings(maya_env="test", session_secret="x" * 32)
