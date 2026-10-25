@@ -35,7 +35,7 @@ import {
   resolveDebateRoundPhase,
   resolvePlaybackStageLabels,
 } from "./labels";
-import { useNextAudioPrefetch } from "./next-audio-prefetch";
+import { useImmerseAudioQueue } from "./next-audio-prefetch";
 import {
   connectionIssueFromCloseCode,
   consumeEventSequence,
@@ -1057,6 +1057,65 @@ export function DebateStage({
     if (!sent) prepareKeyRef.current = null;
   }, [debateId, readOnly, sendCommand]);
 
+  const audioQueue = useImmerseAudioQueue({
+    api,
+    debateId,
+    enabled: !readOnly && controllerReady,
+    controllerEpochRef,
+    controllerReady,
+    // This stage has no 3D scene to wait for.
+    sceneSettled: true,
+    started: playback.status !== "preparing",
+  });
+  // A speech Next started before the media handshake answered.
+  const earlyStartRef = useRef<{
+    key: string;
+    play: Promise<void>;
+  } | null>(null);
+  useEffect(() => {
+    audioQueue.noteCurrent(playback.current_turn_id);
+  }, [audioQueue, playback.current_turn_id]);
+
+  /**
+   * PR A2: start the new speech as soon as Next answers, from its blob or
+   * from the URL Next returned, instead of waiting for the media handshake.
+   * The handshake still runs and acks the playing speech; a refused play()
+   * falls back to it.
+   */
+  const startEarly = useCallback(
+    (next: DebatePlaybackState & { media_url?: string | null }) => {
+      const turnId = next.current_turn_id;
+      const audio = audioRef.current;
+      if (readOnly || !audio || !turnId || next.status !== "ready") return;
+      const key = `${turnId}:${pendingActionRef.current}:${next.control_version}`;
+      const mediaUrl =
+        next.media_url && isSafeMediaUrl(next.media_url)
+          ? next.media_url
+          : null;
+      const play = (async () => {
+        const source = await audioQueue.sourceFor(turnId, mediaUrl);
+        if (!source) throw new Error("no early source");
+        const current = playbackRef.current;
+        if (current.current_turn_id !== turnId || current.status !== "ready") {
+          throw new Error("stale early start");
+        }
+        audio.src = source;
+        audio.playbackRate = Math.min(
+          1.25,
+          Math.max(0.95, current.playback_rate),
+        );
+        await audio.play();
+      })();
+      const pending = { key, play };
+      earlyStartRef.current = pending;
+      play.catch(() => {
+        // The media handshake starts it the usual way.
+        if (earlyStartRef.current === pending) earlyStartRef.current = null;
+      });
+    },
+    [audioQueue, readOnly],
+  );
+
   const scheduleMediaPrepare = useCallback(() => {
     const generation = playbackGenerationRef.current;
     window.setTimeout(() => {
@@ -1229,18 +1288,6 @@ export function DebateStage({
     [debateId, pauseAudio, readOnly, sendCommand],
   );
 
-  const nextAudio = useNextAudioPrefetch({
-    api,
-    debateId,
-    enabled: !readOnly && controllerReady,
-    mode: playback.mode,
-    status: playback.status,
-    currentTurnId: playback.current_turn_id,
-    controlVersion: playback.control_version,
-    controllerEpochRef,
-    nextTurnReady: playback.next_turn_ready,
-  });
-
   const handlePrivateMessage = useCallback(
     (message: PrivatePlaybackMessage) => {
       const binding = message.command_id
@@ -1318,28 +1365,49 @@ export function DebateStage({
           startedAckRef.current = false;
           const audio = audioRef.current;
           if (!audio) return;
-          audio.src = nextAudio.sourceFor(message.turn_id, message.media_url);
-          audio.playbackRate = Math.min(
-            1.25,
-            Math.max(0.95, current.playback_rate),
-          );
+          const mediaUrl = message.media_url;
+          const preparedTurnId = message.turn_id;
+          const early = earlyStartRef.current;
+          earlyStartRef.current = null;
           cursorMsRef.current = current.cursor_ms;
-          try {
-            audio.currentTime = Math.max(0, current.cursor_ms / 1000);
-          } catch {
-            // A not-yet-loaded media element may reject a seek; playback starts at its saved server cursor.
+          const playFrom = (source: string): Promise<void> => {
+            try {
+              audio.src = source;
+              audio.playbackRate = Math.min(
+                1.25,
+                Math.max(0.95, current.playback_rate),
+              );
+              if (current.cursor_ms > 0) {
+                // A seek at 0 would only cost a second ranged request.
+                try {
+                  audio.currentTime = current.cursor_ms / 1000;
+                } catch {
+                  // A not-yet-loaded media element may reject a seek; playback starts at its saved server cursor.
+                }
+              }
+              return Promise.resolve(audio.play());
+            } catch (cause) {
+              return Promise.reject(cause);
+            }
+          };
+          let playResult: Promise<void>;
+          if (early?.key === key) {
+            // Next already started this speech from its blob or the URL Next
+            // returned; the handshake only acks it.
+            playResult = early.play;
+          } else {
+            const now = audioQueue.sourceNow(preparedTurnId, mediaUrl);
+            playResult = now
+              ? playFrom(now)
+              : audioQueue
+                  .sourceFor(preparedTurnId, mediaUrl)
+                  .then((source) =>
+                    mediaGeneration === mediaGenerationRef.current
+                      ? playFrom(source ?? mediaUrl)
+                      : undefined,
+                  );
           }
-          let playResult: Promise<void> | void;
-          try {
-            playResult = audio.play();
-          } catch (cause) {
-            sendPlayFailure(
-              isNotAllowedError(cause) ? "autoplay_blocked" : "unknown",
-              cause,
-            );
-            return;
-          }
-          Promise.resolve(playResult).then(
+          playResult.then(
             () => {
               if (
                 !mountedRef.current ||
@@ -1350,7 +1418,7 @@ export function DebateStage({
                 return;
               }
               startedAckRef.current = true;
-              nextAudio.notePlaying(message.turn_id);
+              audioQueue.notePlaying(message.turn_id);
               setMediaRetryNeeded(false);
               setFailure(null);
               sendCommand({
@@ -1471,7 +1539,7 @@ export function DebateStage({
       applyPlayback,
       acquireReplayControllerAfterTerminal,
       debateId,
-      nextAudio,
+      audioQueue,
       markConnection,
       markConnectionIssue,
       markControllerReady,
@@ -1499,6 +1567,11 @@ export function DebateStage({
       setLastSequence(decision.nextSequence);
       const turns = normalisePublicTurns(payload.public_turns);
       updatePublicTurns(turns);
+      if (Array.isArray(payload.audio_ready_turn_ids)) {
+        audioQueue.noteReady(
+          payload.audio_ready_turn_ids.filter(isNonEmptyString),
+        );
+      }
       const nextPlayback = playbackFromWire(
         payload.playback,
         playbackRef.current,
@@ -1570,6 +1643,7 @@ export function DebateStage({
       setFailure(null);
     },
     [
+      audioQueue,
       onDetailChange,
       pauseAudio,
       requestReconnect,
@@ -1951,6 +2025,12 @@ export function DebateStage({
         return;
       }
       switch (event.event_type) {
+        case "turn.audio_ready":
+          // PR A2: a speech's audio is saved; playback state is unchanged.
+          if (isNonEmptyString(payload.turn_id)) {
+            audioQueue.noteReady([payload.turn_id]);
+          }
+          break;
         case "turn.preparing":
           if (
             isNonEmptyString(payload.turn_id) &&
@@ -2417,6 +2497,7 @@ export function DebateStage({
       onDetailChange?.(nextDetail);
     },
     [
+      audioQueue,
       applyPlayback,
       acquireReplayControllerAfterTerminal,
       commitDetail,
@@ -2995,6 +3076,7 @@ export function DebateStage({
           setActiveParticipant(null);
           applyPlayback(next);
           pendingActionRef.current = next.mode === "replay" ? "replay" : "next";
+          startEarly(next);
           scheduleMediaPrepare();
           return;
         }
@@ -3158,6 +3240,7 @@ export function DebateStage({
       }
     },
     [
+      startEarly,
       api,
       recoverPlayback,
       refreshSnapshot,

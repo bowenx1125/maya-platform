@@ -232,6 +232,48 @@
         },
         "event_type": {
           "type": "string",
+          "const": "turn.audio_ready"
+        },
+        "event_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "debate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/payload_turn_audio_ready"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "debate_id",
+        "sequence",
+        "occurred_at",
+        "payload"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string",
           "const": "playback.started"
         },
         "event_version": {
@@ -1732,6 +1774,14 @@
           },
           "minItems": 0
         },
+        "audio_ready_turn_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minItems": 0
+        },
         "playback": {
           "type": "object",
           "required": [
@@ -2278,6 +2328,19 @@
         "audio_duration_ms": {
           "type": "integer",
           "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_turn_audio_ready": {
+      "type": "object",
+      "required": [
+        "turn_id"
+      ],
+      "properties": {
+        "turn_id": {
+          "type": "string",
+          "format": "uuid"
         }
       },
       "additionalProperties": false

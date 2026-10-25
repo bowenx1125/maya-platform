@@ -183,6 +183,12 @@ class TurnReadyPayload(ClosedModel):
     audio_duration_ms: int | None = Field(default=None, ge=0)
 
 
+class TurnAudioReadyPayload(ClosedModel):
+    """A speech's audio is saved and can be downloaded; playback is unchanged."""
+
+    turn_id: UUID
+
+
 class ErrorPayload(ClosedModel):
     code: str = Field(min_length=1)
     message: str = Field(min_length=1)
@@ -334,6 +340,8 @@ class SnapshotPayload(ClosedModel):
     insight_status: Literal["not_started", "generating", "ready", "failed"]
     report_status: Literal["not_started", "generating", "ready", "failed"]
     public_turns: list[PublicTurnDTO]
+    # Speeches whose audio the Immerse stage can download now, in order.
+    audio_ready_turn_ids: list[UUID] = Field(default_factory=list)
     playback: PlaybackStateDTO
     interaction: SnapshotInteractionDTO
     report: SnapshotReportDTO
