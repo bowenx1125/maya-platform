@@ -348,3 +348,67 @@ def test_prune_keeps_a_version_a_live_team_chat_still_runs_on(
             select(AgentVersion.version_seq).where(AgentVersion.agent_id == agent_id)
         ).all()
         assert len(remaining) == 3
+
+
+def test_one_agent_failing_to_prune_does_not_stop_the_sweep(
+    app_bundle: Any, client: TestClient, monkeypatch: Any, caplog: Any
+) -> None:
+    """Production 2026-10-25: one failure left every later Agent unpruned."""
+
+    from app.core.models import AgentVersion
+    from app.modules import real_delete
+    from app.modules.agents.cascade import _sweep_team_chats_and_junk
+    from app.modules.demo_baseline.service import ensure_demo_baseline
+
+    _app, database, settings = app_bundle
+    now = datetime.now(UTC)
+    with database.session() as db:
+        ensure_demo_baseline(db, settings.resolved_data_root)
+        agents = db.scalars(
+            select(Agent).where(Agent.current_published_version_id.is_not(None)).limit(2)
+        ).all()
+        assert len(agents) == 2
+        for agent in agents:
+            current = db.get(AgentVersion, agent.current_published_version_id)
+            assert current is not None
+            base = current.version_seq
+            current.version_seq = base + 10
+            db.flush()
+            for seq in (1, 2, 3):
+                db.add(
+                    AgentVersion(
+                        id=str(uuid4()),
+                        agent_id=agent.id,
+                        version_seq=base + seq,
+                        state="superseded",
+                        revision=1,
+                        agent_md=f"old {seq}",
+                        avatar_config_json=current.avatar_config_json,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+        agent_ids = [agent.id for agent in agents]
+    real_prune = real_delete.prune_agent_versions
+    seen: list[str] = []
+
+    def flaky_prune(db: Any, agent_id: str, data_root: Any) -> int:
+        seen.append(agent_id)
+        if len(seen) == 1:
+            raise RuntimeError("constraint only production has")
+        return real_prune(db, agent_id, data_root)
+
+    monkeypatch.setattr(real_delete, "prune_agent_versions", flaky_prune)
+    _sweep_team_chats_and_junk(database, settings)
+
+    assert sorted(seen) == sorted(agent_ids)
+    assert "Agent version prune failed" in caplog.text
+    with database.session() as db:
+        counts = {
+            agent_id: len(
+                db.scalars(select(AgentVersion.id).where(AgentVersion.agent_id == agent_id)).all()
+            )
+            for agent_id in agent_ids
+        }
+    assert counts[seen[0]] == 4  # the failed Agent is rolled back, untouched
+    assert counts[seen[1]] == 2  # current + the previous version's AGENT.md
