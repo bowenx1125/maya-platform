@@ -654,7 +654,11 @@ def test_two_database_threads_concurrent_replace_have_one_winner(
             assert len(active) == 1
             assert len(documents) == 1
             assert old_row.content_version_seq == 2
-            assert {row.state for row in operations} == {"committed", "recovered"}
+            # The loser either staged a file first (its operation is then
+            # recovered) or already saw the new revision and was refused
+            # before staging anything; both interleavings are correct.
+            states = sorted(row.state for row in operations)
+            assert states in (["committed"], ["committed", "recovered"])
             version = session.scalar(
                 select(AgentVersion).where(AgentVersion.id == uploaded["agent_version"]["id"])
             )
