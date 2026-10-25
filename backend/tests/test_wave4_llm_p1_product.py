@@ -24,7 +24,6 @@ from app.modules.debates.generation.recovery_input import build_llm_recovery_inp
 from app.modules.debates.generation.runtime import LLMDeferredPublicationV1
 from app.modules.debates.models import Debate, DebatePlaybackState, DebateTurn, TurnSource
 from app.modules.debates.playback.audio import AudioStore
-from app.modules.debates.playback.generation_adapter import SqlTurnPreparer
 from app.modules.debates.playback.llm_publication import SqlLLMPublication
 from app.modules.debates.playback.service import PlaybackService
 from app.modules.debates.playback.sql_repository import SqlPlaybackRepository
@@ -301,10 +300,6 @@ def _product_service(
     )
 
 
-def _product_preparer(settings: object, adapter: _FakeDashScopeAdapter) -> SqlTurnPreparer:
-    return SqlTurnPreparer(settings=settings, llm=adapter)
-
-
 def _install_fake_dashscope_product_path(
     database: Database,
     settings: object,
@@ -339,81 +334,6 @@ def _patch_local_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
         "require_exact_confirmation",
         lambda *_args, **_kwargs: SimpleNamespace(confirmation_revision=1),
     )
-
-
-@pytest.mark.asyncio
-@pytest.mark.skip(reason="removed legacy accepted-stage path")
-async def test_legacy_accepted_stage_without_recovery_input_stays_blocked_and_zero_call(
-    app_factory: object,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _app, database, settings, debate_id, turn_id = _seed_running_product_debate(app_factory)
-    adapter = _FakeDashScopeAdapter()
-    _install_fake_dashscope_product_path(database, settings, adapter)
-    _patch_local_confirmation(monkeypatch)
-    first_tasks = TaskManager()
-    service = _product_service(
-        database,
-        settings,
-        preparer=_product_preparer(settings, adapter),
-        tts_provider=_FailingTTS(),
-        tasks=first_tasks,
-    )
-    try:
-        with database.session() as db:
-            await service.prepare_turn(db, debate_id, turn_id)
-        calls_before_restart = adapter.call_count
-        assert calls_before_restart in {1, 2}
-        with database.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "DELETE FROM llm_recovery_inputs WHERE operation_id IN "
-                    "(SELECT id FROM provider_operations WHERE logical_item_id=:turn_id "
-                    "AND state='accepted')"
-                ),
-                {"turn_id": turn_id},
-            )
-        await first_tasks.close()
-
-        restart_tts = MockTTSProvider()
-        restart_tasks = TaskManager()
-        restarted = _product_service(
-            database,
-            settings,
-            preparer=_product_preparer(settings, adapter),
-            tts_provider=restart_tts,
-            tasks=restart_tasks,
-        )
-        with database.session() as db:
-            await restarted.recover_startup(db)
-        await restart_tasks.wait_debate(debate_id)
-        assert adapter.call_count == calls_before_restart
-        assert restart_tts.synthesize_calls == 0
-        with database.engine.connect() as connection:
-            blocked = connection.execute(
-                text(
-                    "SELECT d.status,t.generation_status,t.safe_error_code,j.state,"
-                    "j.safe_error_code,p.state,r.state FROM debates AS d "
-                    "JOIN debate_turns AS t ON t.debate_id=d.id "
-                    "JOIN jobs AS j ON j.turn_id=t.id "
-                    "JOIN provider_operations AS p ON p.logical_item_id=t.id "
-                    "JOIN provider_reservations AS r ON r.operation_id=p.id "
-                    "WHERE t.id=:turn_id AND p.state='accepted'"
-                ),
-                {"turn_id": turn_id},
-            ).one()
-            assert blocked == (
-                "running",
-                "pending",
-                "llm_recovery_input_unavailable",
-                "pending",
-                "llm_recovery_input_unavailable",
-                "accepted",
-                "accepted",
-            )
-    finally:
-        await first_tasks.close()
-        database.dispose()
 
 
 def test_deferred_runtime_keeps_accepted_operation_until_playback(
