@@ -37,10 +37,10 @@ export function HomeHero({
         </h1>
         {children}
       </div>
-      <div className="home-hero-art relative isolate self-end justify-self-center border-b-[8px] border-ink bg-[linear-gradient(transparent_82%,#A3E635_82%)] px-5 max-[880px]:hidden [&_.academy-mascots]:relative [&_.academy-mascots]:inset-auto [&_.academy-mascots]:z-[1] [&_.academy-mascots]:m-0 [&_.academy-mascots]:block [&_.academy-mascots]:h-[220px] [&_.academy-mascots]:w-auto max-[1180px]:[&_.academy-mascots]:h-[180px]">
+      <div className="home-hero-art relative isolate self-end w-full max-w-[490px] min-w-0 justify-self-center border-b-[8px] border-ink bg-[linear-gradient(transparent_82%,#A3E635_82%)] px-5 max-[880px]:hidden [&_.academy-mascots]:relative [&_.academy-mascots]:inset-auto [&_.academy-mascots]:z-[1] [&_.academy-mascots]:m-0 [&_.academy-mascots]:block [&_.academy-mascots]:h-auto [&_.academy-mascots]:max-h-[220px] [&_.academy-mascots]:w-full">
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute top-2 right-0 z-0 grid size-[92px] rotate-[10deg] place-items-center rounded-full border-[3px] border-ink bg-[repeating-conic-gradient(#16A34A_0_15deg,#15803D_15deg_30deg)] font-display text-[17px] font-extrabold whitespace-nowrap text-white shadow-[inset_0_0_0_6px_#fff,inset_0_0_0_9px_#FF4D8D,4px_4px_0_#111] select-none [text-shadow:1px_1px_0_#111]"
+          className="pointer-events-none absolute top-[38%] right-[5%] z-0 grid aspect-square w-[16%] max-w-[76px] rotate-[10deg] place-items-center rounded-full border-[3px] border-ink bg-[repeating-conic-gradient(#16A34A_0_15deg,#15803D_15deg_30deg)] font-display text-[13px] font-extrabold whitespace-nowrap max-[1180px]:text-[10px] text-white shadow-[inset_0_0_0_6px_#fff,inset_0_0_0_9px_#FF4D8D,4px_4px_0_#111] select-none [text-shadow:1px_1px_0_#111]"
         >
           Holdem
         </span>

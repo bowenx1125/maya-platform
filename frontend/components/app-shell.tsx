@@ -782,7 +782,7 @@ export function AppShell({
   return (
     <WorkspaceActionsContext.Provider value={actionRegistry}>
       <div
-        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]"}`}
+        className={`grid min-h-dvh max-[900px]:grid-cols-1 ${pathname === "/student" || pathname === "/teacher" ? "bg-[#DCEBFF] bg-[linear-gradient(#0001_1px,transparent_1px),linear-gradient(90deg,#0001_1px,transparent_1px)] bg-size-[32px_32px]" : ""} ${collapsed ? "grid-cols-[76px_minmax(0,1fr)]" : "grid-cols-[248px_minmax(0,1fr)]"}`}
       >
         <div className="sticky top-0 z-30 hidden h-14 items-center gap-3 border-b-[3px] border-border bg-sidebar px-4 max-[900px]:flex">
           <button

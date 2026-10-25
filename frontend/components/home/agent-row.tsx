@@ -51,7 +51,7 @@ export function HomeAgentRow({
   return (
     <div
       className={cn(
-        "relative min-w-0 after:pointer-events-none after:absolute after:top-0 after:right-0 after:bottom-[18px] after:w-[72px] after:bg-[linear-gradient(90deg,#F6F5F200,#F6F5F2)] after:transition-opacity after:duration-[160ms] after:content-[''] max-[767px]:after:w-10 motion-reduce:after:transition-none",
+        "relative min-w-0 after:pointer-events-none after:absolute after:top-0 after:right-0 after:bottom-[18px] after:w-[72px] after:bg-[linear-gradient(90deg,#DCEBFF00,#DCEBFF)] after:transition-opacity after:duration-[160ms] after:content-[''] max-[767px]:after:w-10 motion-reduce:after:transition-none",
         more ? "after:opacity-100" : "after:opacity-0",
         className,
       )}
