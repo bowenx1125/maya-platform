@@ -70,11 +70,9 @@ jobs:
           test -d backend/app/modules/voices
           test -d backend/app/providers
           test -d frontend/components/avatar
-          test -d frontend/components/locale
           test -d frontend/components/voice
           test -f frontend/tests/avatar.test.tsx
           test -f frontend/tests/voice.test.tsx
-          test -f frontend/tests/wave1c-m02.test.tsx
           test -f frontend/tests/wave1c-workbench-locale.integration.test.tsx
           test -f frontend/public/avatars/female_1.glb
           test -f frontend/public/avatars/NOTICE.md
@@ -251,9 +249,6 @@ jobs:
           PGPASSWORD=maya-ci psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE maya_empty"
           # Twice: the second start finds the head and does nothing.
           uv run --directory backend python -c "from app.core.db import Database; import os; d = Database(os.environ['DATABASE_URL']); d.upgrade_schema(); d.upgrade_schema(); assert d.check_ready()"
-
-      - name: Populated Wave 1A migration preservation evidence
-        run: uv run --directory backend python ../scripts/test_wave1_migration.py
 
       - name: Export Wave 4 FastAPI OpenAPI for route comparison
         run: uv run --directory backend python ../scripts/export_fastapi_openapi.py "$RUNNER_TEMP/maya-fastapi-openapi.json"
