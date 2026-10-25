@@ -232,7 +232,10 @@ export function AgentCard({
     </span>
   );
   const foot = footer ? (
-    <span className="pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]">
+    <span
+      data-card-footer
+      className="pointer-events-none relative z-[1] mt-auto border-t-2 border-dashed border-[#11111144] px-2.5 py-1.5 text-[11px] font-medium text-[#333]"
+    >
       {footer}
     </span>
   ) : null;

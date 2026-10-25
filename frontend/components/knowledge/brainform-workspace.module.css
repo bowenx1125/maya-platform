@@ -660,6 +660,19 @@
     overscroll-behavior: contain;
   }
 
+  /* Card A is taller (title band + sunburst + strip + Last edited). Let the
+   Agents panel grow with its cards so the footer and × are never clipped;
+   every other module keeps the fixed viewport height above. */
+  .studyformGrid > [aria-labelledby="studyform-agents"] {
+    height: auto;
+    min-height: var(--studyform-card-height);
+    overflow: visible;
+  }
+
+  .studyformGrid > [aria-labelledby="studyform-agents"] > :not(.sectionHeading) {
+    overflow: visible;
+  }
+
   @media (max-width: 960px) {
     .studyformGrid {
       grid-template-columns: 1fr;
