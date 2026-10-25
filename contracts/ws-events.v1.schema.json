@@ -1789,7 +1789,6 @@
             "mode",
             "current_turn_id",
             "cursor_ms",
-            "playback_rate",
             "control_version",
             "next_turn_ready"
           ],
@@ -1827,11 +1826,6 @@
             "cursor_ms": {
               "type": "integer",
               "minimum": 0
-            },
-            "playback_rate": {
-              "type": "number",
-              "minimum": 0.95,
-              "maximum": 1.25
             },
             "control_version": {
               "type": "integer",
@@ -2786,11 +2780,6 @@
         "cursor_ms": {
           "type": "integer",
           "const": 0
-        },
-        "playback_rate": {
-          "type": "number",
-          "minimum": 0.95,
-          "maximum": 1.25
         }
       },
       "additionalProperties": false,
@@ -2838,11 +2827,6 @@
         "control_version": {
           "type": "integer",
           "minimum": 0
-        },
-        "playback_rate": {
-          "type": "number",
-          "minimum": 0.95,
-          "maximum": 1.25
         }
       },
       "additionalProperties": false
@@ -2866,11 +2850,6 @@
         "control_version": {
           "type": "integer",
           "minimum": 0
-        },
-        "playback_rate": {
-          "type": "number",
-          "minimum": 0.95,
-          "maximum": 1.25
         }
       },
       "additionalProperties": false
@@ -2894,11 +2873,6 @@
         "control_version": {
           "type": "integer",
           "minimum": 0
-        },
-        "playback_rate": {
-          "type": "number",
-          "minimum": 0.95,
-          "maximum": 1.25
         }
       },
       "additionalProperties": false
@@ -2952,11 +2926,6 @@
         "control_version": {
           "type": "integer",
           "minimum": 0
-        },
-        "playback_rate": {
-          "type": "number",
-          "minimum": 0.95,
-          "maximum": 1.25
         }
       },
       "additionalProperties": false
@@ -3490,7 +3459,6 @@
                 "mode",
                 "current_turn_id",
                 "cursor_ms",
-                "playback_rate",
                 "control_version",
                 "next_turn_ready"
               ],
@@ -3528,11 +3496,6 @@
                 "cursor_ms": {
                   "type": "integer",
                   "minimum": 0
-                },
-                "playback_rate": {
-                  "type": "number",
-                  "minimum": 0.95,
-                  "maximum": 1.25
                 },
                 "control_version": {
                   "type": "integer",
@@ -3625,7 +3588,6 @@
                 "mode",
                 "current_turn_id",
                 "cursor_ms",
-                "playback_rate",
                 "control_version",
                 "next_turn_ready"
               ],
@@ -3663,11 +3625,6 @@
                 "cursor_ms": {
                   "type": "integer",
                   "minimum": 0
-                },
-                "playback_rate": {
-                  "type": "number",
-                  "minimum": 0.95,
-                  "maximum": 1.25
                 },
                 "control_version": {
                   "type": "integer",
@@ -3751,7 +3708,6 @@
                 "mode",
                 "current_turn_id",
                 "cursor_ms",
-                "playback_rate",
                 "control_version",
                 "next_turn_ready"
               ],
@@ -3789,11 +3745,6 @@
                 "cursor_ms": {
                   "type": "integer",
                   "minimum": 0
-                },
-                "playback_rate": {
-                  "type": "number",
-                  "minimum": 0.95,
-                  "maximum": 1.25
                 },
                 "control_version": {
                   "type": "integer",

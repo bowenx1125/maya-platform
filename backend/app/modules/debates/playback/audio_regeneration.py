@@ -12,21 +12,23 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.modules.debates.generation.segments import (
     SegmentProtocolError,
     StoredSegmentTurnResult,
     load_stored_segment_turn_result,
 )
+from app.modules.debates.llm_params import frozen_voice_params
 from app.modules.debates.playback.audio import (
     AudioMetadata,
     AudioStore,
@@ -91,6 +93,9 @@ class CachedSegmentTurn:
     effective_voice_profile_id: str | None
     receipt_ids: tuple[str, ...]
     turn_source_ids: tuple[str, ...]
+    # The Debate's frozen rate / instruction / seed: a regenerated speech
+    # sounds like the rest of its Debate.
+    voice_params: dict[str, Any] = field(default_factory=dict)
 
     @property
     def speech_hash(self) -> str:
@@ -247,6 +252,7 @@ class SqlAudioRegenerationRepository:
                 text(
                     "SELECT d.id AS debate_id, d.course_id, d.revision, "
                     "d.cancellation_generation, d.output_language, d.status AS debate_status, "
+                    "d.rule_snapshot_json, "
                     "t.id AS turn_id, t.participant_id, t.generation_status, "
                     "t.publication_status, t.preparation_stage, t.speech, t.structured_json, "
                     "t.retrieval_receipts_json, t.transcript_hash, t.audio_file_id, "
@@ -385,7 +391,15 @@ class SqlAudioRegenerationRepository:
             raise AudioRegenerationError(
                 "segment references do not belong to this turn", code="receipt_scope_invalid"
             )
+        try:
+            snapshot = json.loads(row["rule_snapshot_json"] or "{}")
+        except ValueError:
+            snapshot = {}
+        voice_params = frozen_voice_params(
+            snapshot if isinstance(snapshot, dict) else None, get_settings()
+        )
         return CachedSegmentTurn(
+            voice_params=voice_params,
             debate_id=str(row["debate_id"]),
             course_id=str(row["course_id"]),
             turn_id=str(row["turn_id"]),
@@ -1070,6 +1084,7 @@ class AudioRegenerationService:
                 language=cached.output_language,
                 operation_id=claim.file_operation_id,
                 target_model_key=voice.target_model_key,
+                voice_params=cached.voice_params,
             )
             if not self.repository.mark_staged(self.db, claim, staged):
                 raise AudioRegenerationError(

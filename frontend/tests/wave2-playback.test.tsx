@@ -122,7 +122,6 @@ function detail(
       mode: "live",
       current_turn_id: turnId,
       cursor_ms: 0,
-      playback_rate: 1,
       control_version: 0,
       next_turn_ready: false,
     },
@@ -1769,7 +1768,6 @@ describe("Wave 2 M12 playback stage", () => {
           playback_url: null,
           audio_ready: false,
           cursor_ms: 0,
-          playback_rate: 1,
           avatar_states: [],
         }),
       );
@@ -1779,7 +1777,6 @@ describe("Wave 2 M12 playback stage", () => {
           turn_id: turnId,
           cursor_ms: 0,
           control_version: 0,
-          playback_rate: 1,
         }),
       );
       socket.emit(
@@ -1898,7 +1895,6 @@ describe("Wave 2 M12 playback stage", () => {
         sources: [{ source_filename: "evidence.md" }],
         playback_url: `/api/v1/debates/${debateId}/audio/${turnId}`,
         cursor_ms: 0,
-        playback_rate: 1,
         avatar_states: [
           {
             participant_id: participantAId,
@@ -2402,7 +2398,6 @@ describe("Wave 2 M12 playback stage", () => {
         sources: [],
         playback_url: `/api/v1/debates/${debateId}/audio/${nextTurnId}`,
         cursor_ms: 0,
-        playback_rate: 1,
         avatar_states: [],
       }),
     );
@@ -2511,7 +2506,6 @@ describe("Wave 2 M12 playback stage", () => {
         sources: [],
         playback_url: `/api/v1/debates/${debateId}/audio/${nextTurnId}`,
         cursor_ms: 0,
-        playback_rate: 1,
         avatar_states: [],
       }),
     );
@@ -2523,7 +2517,6 @@ describe("Wave 2 M12 playback stage", () => {
         turn_id: nextTurnId,
         cursor_ms: 150,
         control_version: 4,
-        playback_rate: 1,
       }),
     );
     expect(container.querySelector('[data-playback-status="paused"]')).toBe(
@@ -2587,7 +2580,6 @@ describe("Wave 2 M12 playback stage", () => {
         sources: [],
         playback_url: `/api/v1/debates/${debateId}/audio/${nextTurnId}`,
         cursor_ms: 0,
-        playback_rate: 1,
         avatar_states: [],
       }),
     );

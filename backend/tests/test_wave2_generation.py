@@ -459,7 +459,6 @@ def test_sql_repository_generation_cas_rejects_stale_claim_prefix_hash_cutoff_at
                     mode="live",
                     current_turn_id=turn_ids[0],
                     cursor_ms=0,
-                    playback_rate=1.0,
                     control_version=0,
                     controller_epoch=None,
                     controller_owner_connection=None,

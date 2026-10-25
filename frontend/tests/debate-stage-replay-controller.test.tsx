@@ -182,7 +182,6 @@ function detail(): DebateDetail {
       mode: "live",
       current_turn_id: null,
       cursor_ms: 0,
-      playback_rate: 1,
       control_version: 7,
       next_turn_ready: false,
     },
@@ -456,7 +455,6 @@ describe("terminal segments replay controller", () => {
               },
             ],
             cursor_ms: 0,
-            playback_rate: 1,
           },
         }),
       );

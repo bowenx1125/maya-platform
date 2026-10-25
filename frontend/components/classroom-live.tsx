@@ -210,7 +210,7 @@ function ClassroomLiveSession({
     }
     if (audio.getAttribute("src") !== current.audio_url)
       audio.src = current.audio_url;
-    audio.playbackRate = playback.playback_rate;
+    audio.playbackRate = 1;
     const seek = () => {
       const target = playback.cursor_ms / 1000;
       if (Math.abs(audio.currentTime - target) > 0.8)

@@ -2578,8 +2578,6 @@ export interface components {
             mode: "live" | "replay";
             /** Next Turn Ready */
             next_turn_ready: boolean;
-            /** Playback Rate */
-            playback_rate: number;
             /**
              * Status
              * @enum {string}
@@ -3475,16 +3473,53 @@ export interface components {
             /** Step */
             step?: number | null;
         };
+        /** DebateVoiceParamSpec */
+        DebateVoiceParamSpec: {
+            /** Default */
+            default?: number | string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "float" | "int" | "text";
+            /** Max Length */
+            max_length?: number | null;
+            /** Maximum */
+            maximum?: number | null;
+            /** Minimum */
+            minimum?: number | null;
+            /**
+             * Name
+             * @enum {string}
+             */
+            name: "rate" | "instruction" | "seed";
+            /** Step */
+            step?: number | null;
+        };
+        /**
+         * DebateVoiceParams
+         * @description One Debate's voice overrides; null (or blank text) means "do not send".
+         */
+        DebateVoiceParams: {
+            /** Instruction */
+            instruction?: string | null;
+            /** Rate */
+            rate?: number | null;
+            /** Seed */
+            seed?: number | null;
+        };
         /** DebateLLMDefaults */
         DebateLLMDefaults: {
             /** Params */
             params: components["schemas"]["DebateLLMParamSpec"][];
-            /** Playback Rate */
-            playback_rate: number;
+            /** Voice Params */
+            voice_params: components["schemas"]["DebateVoiceParamSpec"][];
         };
         DebateDraftRequest: {
             /** @description The parameter card's values; omitted means the DEBATE_LLM_* defaults. */
             llm_params?: components["schemas"]["DebateLLMParams"] | null;
+            /** @description Voice card values (cloned voices); omitted means the DEBATE_TTS_* defaults. */
+            voice_params?: components["schemas"]["DebateVoiceParams"] | null;
             /** @description Non-empty topic; any script or symbols are accepted. */
             topic: string;
             /** @default  */
@@ -3751,7 +3786,6 @@ export interface components {
             mode: "live" | "replay";
             current_turn_id?: components["schemas"]["Uuid"] | null;
             cursor_ms: number;
-            playback_rate: number;
             control_version: number;
             /** @description Derived readiness of the adjacent live or retained replay successor while playing, paused, or waiting_next; Next may interrupt the current published speech. */
             next_turn_ready: boolean;

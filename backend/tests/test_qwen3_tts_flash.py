@@ -422,3 +422,52 @@ def test_enroll_returns_a_created_voice_when_the_review_query_times_out(
     assert result.external_voice_id == "qwen-audio-3.1-tts-flash-mabcdef12-x1"
     assert not result.degraded
     assert any("query_voice" in str(call.get("json")) for call in capture.calls)
+
+
+def test_a_clone_sends_rate_instruction_and_seed_in_its_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider, capture = _tts(monkeypatch)
+    provider.synthesize(
+        "Clone sentence.",
+        "qwen-audio-3.1-tts-flash-mabc-123",
+        voice_params={"rate": 1.25, "instruction": " 语气坚定，像辩论赛选手 ", "seed": 7},
+    )
+    assert capture.calls[0]["json"] == {
+        "model": DEFAULT_TARGET_MODEL_KEY,
+        "input": {
+            "text": "Clone sentence.",
+            "voice": "qwen-audio-3.1-tts-flash-mabc-123",
+            "format": "wav",
+            "sample_rate": 24000,
+            "rate": 1.25,
+            "instruction": "语气坚定，像辩论赛选手",
+            "seed": 7,
+        },
+    }
+
+
+def test_empty_voice_parameters_are_not_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider, capture = _tts(monkeypatch, target="qwen-audio-3.0-tts-flash")
+    provider.synthesize(
+        "Clone sentence.",
+        "qwen-audio-3.0-tts-flash-mabc-123",
+        voice_params={"rate": 1.1, "instruction": "   ", "seed": None},
+    )
+    sent = capture.calls[0]["json"]["input"]  # type: ignore[index]
+    assert sent["rate"] == 1.1
+    assert "instruction" not in sent and "seed" not in sent
+
+
+def test_a_preset_voice_never_sends_voice_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    provider, capture = _tts(monkeypatch)
+    voice = sorted(FLASH_SYSTEM_VOICES)[0]
+    provider.synthesize(
+        "Preset sentence.",
+        voice,
+        target_model_key=FLASH_TTS_MODEL_KEY,
+        voice_params={"rate": 1.25, "instruction": "语气坚定", "seed": 7},
+    )
+    call = capture.calls[0]
+    assert call["url"] == QWEN_TTS_URL
+    assert set(call["json"]["input"]) == {"text", "voice", "language_type"}  # type: ignore[index]

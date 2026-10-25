@@ -11,11 +11,12 @@ import subprocess
 import threading
 import wave
 from collections import OrderedDict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from app.core.errors import PlatformError
@@ -470,6 +471,7 @@ class AudioStore:
         *,
         language: str,
         target_model_key: str | None,
+        voice_params: Mapping[str, object] | None = None,
     ) -> TTSResult:
         """One TTS provider call, holding an LLM admission slot like a model call.
 
@@ -482,14 +484,21 @@ class AudioStore:
         lesson never stalls on it. The local Mock makes no outbound call.
         """
 
+        # The Debate's frozen voice values (cloned voices); the provider drops
+        # them for a preset voice. Empty means none were frozen.
+        extra: dict[str, Any] = {"voice_params": dict(voice_params)} if voice_params else {}
         if getattr(self.tts_provider, "key", "mock") == "mock":
             return self.tts_provider.synthesize(
-                speech, voice_token, language=language, target_model_key=target_model_key
+                speech, voice_token, language=language, target_model_key=target_model_key, **extra
             )
         try:
             with debate_llm_slot():
                 return self.tts_provider.synthesize(
-                    speech, voice_token, language=language, target_model_key=target_model_key
+                    speech,
+                    voice_token,
+                    language=language,
+                    target_model_key=target_model_key,
+                    **extra,
                 )
         except PlatformError as exc:
             if not exc.details.get("retryable"):
@@ -508,6 +517,7 @@ class AudioStore:
         voice_token: str,
         language: str = "en",
         target_model_key: str | None = None,
+        voice_params: Mapping[str, object] | None = None,
     ) -> AudioMetadata:
         """Use the injected (Mock by default) TTS provider and atomically store WAV."""
 
@@ -521,6 +531,7 @@ class AudioStore:
             voice_token,
             language=language,
             target_model_key=target_model_key,
+            voice_params=voice_params,
         )
         raw = result.audio_bytes
         relative = self.relative_path(course_id, debate_id, turn_id)
@@ -551,6 +562,7 @@ class AudioStore:
         language: str = "en",
         operation_id: str | UUID | None = None,
         target_model_key: str | None = None,
+        voice_params: Mapping[str, object] | None = None,
     ) -> StagedAudio:
         """Synthesize one WAV into a unique journal-owned staging file.
 
@@ -572,6 +584,7 @@ class AudioStore:
             voice_token,
             language=language,
             target_model_key=target_model_key,
+            voice_params=voice_params,
         )
         raw = result.audio_bytes
         if not isinstance(raw, bytes) or not raw:

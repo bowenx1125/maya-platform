@@ -104,3 +104,18 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* "Voice" group heading between the two panels. */
+.group {
+  margin: 16px 0 8px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.control > textarea.text {
+  flex: 1 1 260px;
+  min-height: 56px;
+  padding: 6px 10px;
+  resize: vertical;
+}

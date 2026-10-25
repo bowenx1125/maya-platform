@@ -627,6 +627,7 @@ const enMessages = {
   debateParamsOff: "Off",
   debateParamsEmpty: "Empty = not sent",
   debateParamsOmit: "Do not send to the model",
+  debateParamsVoice: "Voice",
   debateFieldOther: "The field “{field}” is not valid.",
   errorEditTeam: "Edit Team “{name}”",
   errorChatFailed:
@@ -1603,6 +1604,7 @@ const zhMessages: Record<keyof typeof enMessages, string> = {
   debateParamsOff: "关",
   debateParamsEmpty: "留空 = 不传",
   debateParamsOmit: "不传给模型",
+  debateParamsVoice: "语音",
   debateFieldOther: "字段「{field}」不正确。",
   errorEditTeam: "编辑 Team「{name}」",
   errorChatFailed: "这条回复没有生成出来，请重新发送。",

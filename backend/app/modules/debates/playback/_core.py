@@ -113,7 +113,6 @@ class PlaybackRuntime:
     mode: str = "live"
     current_turn_id: str | None = None
     cursor_ms: int = 0
-    playback_rate: float = 1.0
     control_version: int = 0
     controller_epoch: str | None = None
     controller_session_hash: str | None = None
@@ -471,9 +470,6 @@ class PlaybackCore:
             cached.mode = str(getattr(state, "mode", cached.mode))
             cached.current_turn_id = getattr(state, "current_turn_id", cached.current_turn_id)
             cached.cursor_ms = int(getattr(state, "cursor_ms", cached.cursor_ms) or 0)
-            cached.playback_rate = float(
-                getattr(state, "playback_rate", cached.playback_rate) or 1.0
-            )
             cached.control_version = int(
                 getattr(state, "control_version", cached.control_version) or 0
             )
@@ -515,7 +511,6 @@ class PlaybackCore:
             mode=str(getattr(state, "mode", "live")),
             current_turn_id=getattr(state, "current_turn_id", None),
             cursor_ms=int(getattr(state, "cursor_ms", 0) or 0),
-            playback_rate=float(getattr(state, "playback_rate", 1.0) or 1.0),
             control_version=int(getattr(state, "control_version", 0) or 0),
             controller_epoch=getattr(state, "controller_epoch", None),
             controller_session_hash=self._controller_sessions.get(debate_id),
@@ -555,7 +550,6 @@ class PlaybackCore:
                 "mode",
                 "current_turn_id",
                 "cursor_ms",
-                "playback_rate",
                 "control_version",
                 "controller_epoch",
                 "controller_session_hash",
@@ -1623,7 +1617,8 @@ class PlaybackCore:
         if state.status != "playing" or state.started_monotonic is None:
             return max(0, int(state.cursor_ms))
         elapsed = max(0.0, time.monotonic() - state.started_monotonic)
-        value = state.cursor_ms + int(elapsed * 1000 * state.playback_rate)
+        # Every Debate plays at 1.0; the speaking rate is in the audio itself.
+        value = state.cursor_ms + int(elapsed * 1000)
         if state.audio_duration_ms > 0:
             value = min(value, state.audio_duration_ms)
         return max(0, value)
@@ -1657,7 +1652,6 @@ class PlaybackCore:
             mode=state.mode,  # type: ignore[arg-type]
             current_turn_id=UUID(state.current_turn_id) if state.current_turn_id else None,
             cursor_ms=self._cursor(state),
-            playback_rate=max(0.95, min(1.25, state.playback_rate)),
             control_version=state.control_version,
             next_turn_ready=next_turn_ready,
         )
@@ -1765,6 +1759,20 @@ class PlaybackCore:
                     spawn_on_main(cast(Coroutine[Any, Any, None], maybe))
                 except RuntimeError:
                     pass
+
+    def _voice_params(self, debate: Any) -> dict[str, Any]:
+        """The Debate's frozen rate / instruction / seed (DEBATE_TTS_* if none froze)."""
+
+        from app.core.config import Settings, get_settings
+        from app.modules.debates.llm_params import frozen_voice_params
+
+        raw = self._get(debate, "rule_snapshot_json", default=None)
+        try:
+            snapshot = json.loads(raw) if isinstance(raw, str) else raw
+        except ValueError:
+            snapshot = None
+        settings = self.settings if isinstance(self.settings, Settings) else get_settings()
+        return frozen_voice_params(snapshot if isinstance(snapshot, dict) else None, settings)
 
     def _warm_compressed(self, debate_id: str, turn_id: str) -> None:
         """Encode a ready speech's MP3 copy in the background (best effort).

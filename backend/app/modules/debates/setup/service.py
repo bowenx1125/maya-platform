@@ -44,7 +44,7 @@ from app.core.models import (
 )
 from app.core.version_label import agent_version_label
 from app.modules.avatars import AvatarConfigValidationError, validate_avatar_config
-from app.modules.debates.llm_params import configured_playback_rate, resolve_params
+from app.modules.debates.llm_params import resolve_params, resolve_voice_params
 from app.modules.debates.models import Debate, DebateParticipant, DebateTurn, PlaybackState
 from app.modules.debates.owned_copies import (
     adopt_debate_knowledge,
@@ -976,7 +976,6 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=configured_playback_rate(db),
             control_version=0,
             next_turn_ready=False,
         )
@@ -989,7 +988,6 @@ def _detail(db: Session, debate: Debate) -> DebateDetail:
                     _as_uuid(playback.current_turn_id) if playback.current_turn_id else None
                 ),
                 "cursor_ms": playback.cursor_ms,
-                "playback_rate": playback.playback_rate,
                 "control_version": playback.control_version,
                 "next_turn_ready": _next_turn_ready(db, debate.id, playback),
             }
@@ -1307,6 +1305,8 @@ def create_debate_draft(
                 else None,
                 # Frozen with the Ruleset: every turn sends these values.
                 llm_params=resolve_params(runtime_settings, payload.llm_params),
+                # Every speech (preview, live, regenerated) uses these voice values.
+                voice_params=resolve_voice_params(runtime_settings, payload.voice_params),
             ),
         ),
         status="draft",
@@ -1360,7 +1360,6 @@ def create_debate_draft(
             mode="live",
             current_turn_id=None,
             cursor_ms=0,
-            playback_rate=runtime_settings.debate_playback_rate,
             control_version=0,
             created_at=timestamp,
             updated_at=timestamp,
@@ -1583,13 +1582,23 @@ def update_debate_draft(
         and payload.teaching_prompts.model_dump() != stored_rules.get("teaching_prompts")
     ):
         raise invalid_state("Teaching rules are frozen when the debate is created.")
-    if payload.llm_params is not None and payload.llm_params.model_dump() != stored_rules.get(
-        "llm_params"
+    if (
+        payload.llm_params is not None
+        and payload.llm_params.model_dump() != stored_rules.get("llm_params")
+    ) or (
+        payload.voice_params is not None
+        and payload.voice_params.model_dump() != stored_rules.get("voice_params")
     ):
         raise invalid_state("Generation parameters are frozen when the debate is created.")
     frozen_teaching = {
         key: stored_rules[key]
-        for key in ("teaching_prompts", "system_prompts", "contract_version", "llm_params")
+        for key in (
+            "teaching_prompts",
+            "system_prompts",
+            "contract_version",
+            "llm_params",
+            "voice_params",
+        )
         if key in stored_rules
     }
     timestamp = utc_now()

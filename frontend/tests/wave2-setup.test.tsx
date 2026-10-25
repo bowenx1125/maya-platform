@@ -863,7 +863,7 @@ describe("Wave 2 teacher debate setup", () => {
           .mockResolvedValue({ zh: "# 默认规则", en: "# Default rules" }),
         debateLLMDefaults: vi
           .fn()
-          .mockResolvedValue({ params: [], playback_rate: 1.25 }),
+          .mockResolvedValue({ params: [], voice_params: [] }),
         createDebate: vi.fn().mockResolvedValue(createdDebate()),
       },
       user: teacherSession().user,

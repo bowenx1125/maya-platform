@@ -90,7 +90,6 @@ class PlaybackSessionMixin(PlaybackCore):
                             "turn_id": state.current_turn_id,
                             "cursor_ms": state.cursor_ms,
                             "control_version": state.control_version,
-                            "playback_rate": state.playback_rate,
                         },
                     )
                     self._commit(db)
@@ -171,7 +170,6 @@ class PlaybackSessionMixin(PlaybackCore):
                         "turn_id": state.current_turn_id,
                         "cursor_ms": state.cursor_ms,
                         "control_version": state.control_version,
-                        "playback_rate": state.playback_rate,
                     },
                 )
                 self._commit(db)
@@ -514,7 +512,6 @@ class PlaybackSessionMixin(PlaybackCore):
                     "playback_url": None,
                     "avatar_states": self._avatar_states(participants, turn),
                     "cursor_ms": 0,
-                    "playback_rate": state.playback_rate,
                 },
             )
         ]
@@ -540,7 +537,6 @@ class PlaybackSessionMixin(PlaybackCore):
                     "turn_id": turn_id,
                     "cursor_ms": 0,
                     "control_version": state.control_version,
-                    "playback_rate": state.playback_rate,
                 },
             )
         )
@@ -691,7 +687,6 @@ class PlaybackSessionMixin(PlaybackCore):
                     "turn_id": turn_id,
                     "cursor_ms": state.cursor_ms,
                     "control_version": state.control_version,
-                    "playback_rate": state.playback_rate,
                 }
                 event_type = "playback.resumed"
             else:
@@ -707,7 +702,6 @@ class PlaybackSessionMixin(PlaybackCore):
                     "playback_url": f"/api/v1/debates/{debate_id}/audio/{turn_id}",
                     "avatar_states": self._avatar_states(participants, turn),
                     "cursor_ms": 0,
-                    "playback_rate": state.playback_rate,
                 }
                 event_type = "playback.started"
             started_event = self._stage_event(db, debate_id, event_type, payload)
@@ -883,7 +877,6 @@ class PlaybackSessionMixin(PlaybackCore):
                         "turn_id": turn_id,
                         "cursor_ms": cursor,
                         "control_version": state.control_version,
-                        "playback_rate": state.playback_rate,
                     }
                 else:
                     self._set_nonplaying(state, "completed", cursor)
@@ -904,7 +897,6 @@ class PlaybackSessionMixin(PlaybackCore):
                         "turn_id": turn_id,
                         "cursor_ms": cursor,
                         "control_version": state.control_version,
-                        "playback_rate": state.playback_rate,
                     }
                     next_ready = False
             if mode != "replay":

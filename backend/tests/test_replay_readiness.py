@@ -186,7 +186,6 @@ def _seed_segments_debate(database: Any, agent_ids: tuple[str, str]) -> tuple[st
                 mode="live",
                 current_turn_id=None,
                 cursor_ms=0,
-                playback_rate=1.0,
                 control_version=7,
                 controller_epoch=None,
                 controller_owner_connection=None,

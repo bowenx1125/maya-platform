@@ -27,8 +27,11 @@ import { RulesetEditor, type TeachingPrompts } from "./ruleset-editor";
 import {
   LlmParamsCard,
   defaultParamValues,
+  defaultVoiceValues,
   paramsPayload,
+  voicePayload,
   type LLMParamValues,
+  type VoiceParamValues,
 } from "./llm-params-card";
 import sectionStyles from "./create-section.module.css";
 import { validateDebateTopic } from "../../../lib/debate-topic";
@@ -404,6 +407,7 @@ export function TeacherDebateCreate({
     null,
   );
   const [llmValues, setLLMValues] = useState<LLMParamValues | null>(null);
+  const [voiceValues, setVoiceValues] = useState<VoiceParamValues | null>(null);
   const rulesLoaded = useRef(false);
   const [outputLanguage, setOutputLanguage] = useState<"en" | "zh">("zh");
   const ruleSetId: DebateRuleSetId = "ordered_multi_expert_mutual_learning_v1";
@@ -465,6 +469,7 @@ export function TeacherDebateCreate({
       if (llm !== null) {
         setLLMDefaults(llm);
         setLLMValues(defaultParamValues(llm.params));
+        setVoiceValues(defaultVoiceValues(llm.voice_params ?? []));
       }
       if (defaults !== null) {
         setTeachingPrompts(defaults);
@@ -568,6 +573,7 @@ export function TeacherDebateCreate({
       total_duration_seconds: null,
       turn_duration_seconds: null,
       ...(llmValues ? { llm_params: paramsPayload(llmValues) } : {}),
+      ...(voiceValues ? { voice_params: voicePayload(voiceValues) } : {}),
     };
     const unstanced = payload.participants.find(
       (item) => item.stance_mode === "assigned" && !item.assigned_stance,
@@ -868,7 +874,19 @@ export function TeacherDebateCreate({
                 current ? { ...current, [name]: next } : current,
               )
             }
-            onReset={() => setLLMValues(defaultParamValues(llmDefaults.params))}
+            voiceSpecs={llmDefaults.voice_params ?? []}
+            voiceValues={voiceValues ?? undefined}
+            onVoiceChange={(name, next) =>
+              setVoiceValues((current) =>
+                current ? { ...current, [name]: next } : current,
+              )
+            }
+            onReset={() => {
+              setLLMValues(defaultParamValues(llmDefaults.params));
+              setVoiceValues(
+                defaultVoiceValues(llmDefaults.voice_params ?? []),
+              );
+            }}
           />
         ) : null}
         {/* Creating mid-edit would freeze rules other than the ones on

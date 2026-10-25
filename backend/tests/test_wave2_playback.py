@@ -368,7 +368,6 @@ def _insert_sql_retained_debate(
                 mode="live",
                 current_turn_id=None,
                 cursor_ms=0,
-                playback_rate=1.0,
                 control_version=7,
                 controller_epoch=None,
                 controller_owner_connection=None,
@@ -1993,7 +1992,6 @@ def test_sql_restart_fails_the_turn_owned_by_an_interrupted_job(app_factory: Any
             playback.mode = "live"
             playback.current_turn_id = turn_id
             playback.cursor_ms = 420
-            playback.playback_rate = 1.0
             playback.control_version = 3
             playback.controller_epoch = str(uuid4())
             playback.controller_owner_connection = "restart-tab"
@@ -2062,7 +2060,6 @@ async def test_snapshot_stream_race_delivers_one_committed_event_after_watermark
             "mode": "live",
             "current_turn_id": None,
             "cursor_ms": 0,
-            "playback_rate": 1.0,
             "control_version": 0,
             "next_turn_ready": False,
         },
@@ -2096,7 +2093,6 @@ async def test_snapshot_stream_race_delivers_one_committed_event_after_watermark
                 "turn_id": turn_id,
                 "cursor_ms": 0,
                 "control_version": 1,
-                "playback_rate": 1.0,
             },
         )
         await hub.publish(event)

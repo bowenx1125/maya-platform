@@ -49,7 +49,6 @@ const playback = {
   mode: "live",
   current_turn_id: null,
   cursor_ms: 0,
-  playback_rate: 1,
   control_version: 0,
   next_turn_ready: false,
 };
@@ -193,7 +192,6 @@ const valid = [
       avatar(participantB, "B", "listening", "attentive"),
     ],
     cursor_ms: 0,
-    playback_rate: 1,
   }),
   envelope("playback.started", 6, {
     turn_id: turnId,
@@ -207,7 +205,6 @@ const valid = [
       "/api/v1/debates/11111111-1111-4111-8111-111111111111/audio/44444444-4444-4444-8444-444444444444",
     avatar_states: [avatar(participantA, "A", "speaking", "neutral")],
     cursor_ms: 0,
-    playback_rate: 1,
   }),
   envelope("playback.paused", 7, {
     turn_id: turnId,

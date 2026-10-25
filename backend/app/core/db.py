@@ -26,7 +26,7 @@ from app.core.postgres_compat import ensure_postgres_compat
 POSTGRES_POOL_SIZE = 15
 POSTGRES_MAX_OVERFLOW = 25
 
-ALEMBIC_HEAD = "0079_playback_media_tickets"
+ALEMBIC_HEAD = "0080_drop_playback_rate"
 _STARTUP_LOCK = "maya-startup"
 _LEADER_LOCK = "maya-background-leader"
 
