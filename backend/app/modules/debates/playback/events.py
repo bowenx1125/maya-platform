@@ -36,6 +36,7 @@ from .schemas import (
     ReportStartedPayload,
     RoundStartedPayload,
     SnapshotPayload,
+    TurnAudioReadyPayload,
     TurnPreparingPayload,
     TurnReadyPayload,
 )
@@ -78,6 +79,7 @@ _PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "round.started": RoundStartedPayload,
     "turn.preparing": TurnPreparingPayload,
     "turn.ready": TurnReadyPayload,
+    "turn.audio_ready": TurnAudioReadyPayload,
     "playback.started": PlaybackStartedPayload,
     "playback.paused": PlaybackCursorPayload,
     "playback.resumed": PlaybackCursorPayload,

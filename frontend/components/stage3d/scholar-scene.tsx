@@ -33,6 +33,8 @@ export type ScholarSceneProps = {
   layout?: "classroom" | "preview";
   /** Barrage lanes, the join card and the teacher's pause control. */
   overlay?: ReactNode;
+  /** Called once the scene has loaded or failed: heavy downloads may start. */
+  onSceneSettled?: () => void;
 };
 
 type SceneStatus = "loading" | "ready" | "failed";
@@ -54,6 +56,7 @@ export function ScholarScene({
   unavailableLabel,
   layout = "classroom",
   overlay,
+  onSceneSettled,
 }: ScholarSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<import("./scholar-stage").ScholarStage | null>(null);
@@ -61,6 +64,13 @@ export function ScholarScene({
   const latestVisualsRef = useRef(visuals);
   const latestRestingRef = useRef(resting);
   const [status, setStatus] = useState<SceneStatus>("loading");
+  const onSceneSettledRef = useRef(onSceneSettled);
+  useEffect(() => {
+    onSceneSettledRef.current = onSceneSettled;
+  }, [onSceneSettled]);
+  useEffect(() => {
+    if (status !== "loading") onSceneSettledRef.current?.();
+  }, [status]);
   const [anchors, setAnchors] = useState<StageAnchor[]>([]);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [scenePackId, setScenePackId] = useState(

@@ -286,13 +286,17 @@ provider,top20 by p95,browser metrics,Debate stages. No ids,user data or payload
 
 ## Oct24 PostgreSQL only (PR B)
 
-The backend refuses a SQLite DATABASE_URL; the startup SQLite import
-(MAYA_POSTGRES_IMPORT_SOURCE/ALLOW_EMPTY) is gone. scripts/migrate_sqlite_to_postgres.py
-copies an old file: dry-run by default, --apply --confirm-production, SQLite opened
-read-only/immutable, one transaction + receipt (re-run is a no-op), never deletes the
-file. Tests need MAYA_TEST_POSTGRES_URL: one database per test cloned from a per-run
-template; SQLite migration-history tests removed. Postgres-only bugs fixed: budget
-reserve lost update (row lock), Agent publish/delete and document replace races
-(advisory locks), attempt completion vs knowledge update (row lock), purge clearing an
-answered question before deleting it (two-phase purge), alembic URL with %, peer lock
-across databases. Local Compose adds a postgres service.
+SQLite DATABASE_URL is refused; the startup import is gone. scripts/migrate_sqlite_to_postgres.py
+copies an old file: dry-run default, --apply --confirm-production, read-only source, one
+transaction + receipt (re-run no-op), never deletes it. Tests need MAYA_TEST_POSTGRES_URL
+(a database per test). Fixed: budget lost update, Agent
+publish/delete and document replace races, attempt vs knowledge update, two-phase purge,
+alembic URL with %, peer lock across databases.
+
+## Oct24 Immerse audio predownload (PR A2)
+
+From mount (after the 3D scene, Start, or 10 s) the stage downloads ready speeches as
+blobs, one at a time in speaking order, independent of Next/pause
+(snapshot audio_ready_turn_ids, turn.audio_ready). next-audio takes turn_id. Playing uses the
+blob, waits ≤3 s for its download, else the URL (never twice). Next returns media_url;
+no seek at cursor 0. Leaving aborts and frees blobs.

@@ -181,6 +181,7 @@ export type PlaybackEventType =
   | "round.started"
   | "turn.preparing"
   | "turn.ready"
+  | "turn.audio_ready"
   | "playback.started"
   | "playback.paused"
   | "playback.resumed"
