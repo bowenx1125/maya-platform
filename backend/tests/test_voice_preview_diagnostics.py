@@ -69,7 +69,7 @@ def direct_preview_profile(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(
         voice_preview,
         "visible_student_voice",
-        lambda _db, _context, _profile_id: SimpleNamespace(profile=profile),
+        lambda _db, _context, _profile_id: SimpleNamespace(profile=profile, role="student"),
     )
     return profile
 

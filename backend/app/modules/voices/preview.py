@@ -40,7 +40,9 @@ from app.modules.voices.service import (
     _groupmate_owner_ids,
     _profile_external_id,
     _utc,
+    course_teacher_can_access_voice,
     groupmate_ready_voice,
+    log_course_teacher_voice_action,
     now_utc,
     visible_student_voice,
     voice_profile_dto,
@@ -235,8 +237,11 @@ def create_voice_preview(
     # Own voice first, exactly as before; a groupmate's ready voice only when
     # the caller owns no such voice.
     try:
-        profile = visible_student_voice(db, context, profile_id).profile
-        owner_preview = True
+        scoped = visible_student_voice(db, context, profile_id)
+        profile = scoped.profile
+        # A course teacher's preview (owner decision 2026-10-26) leaves the
+        # student's own preview playing, like a groupmate's.
+        owner_preview = scoped.role == "student"
     except PlatformError:
         profile = groupmate_ready_voice(db, context, profile_id)
         owner_preview = False
@@ -476,7 +481,7 @@ def media_path_for_preview(
                 VoicePreview.group_id == VoiceProfile.group_id,
             )
         ).first()
-        if shared is not None:
+        if shared is not None and not course_teacher_can_access_voice(db, context, shared[1]):
             try:
                 groupmate_ready_voice(db, context, shared[1].id)
             except PlatformError:
@@ -516,6 +521,7 @@ def confirm_voice_profile(
     """Promote preview-ready profile only while live preview bytes exist."""
 
     scoped = visible_student_voice(db, context, profile_id)
+    log_course_teacher_voice_action(scoped, context, "confirm")
     profile = scoped.profile
     if profile.status == "ready":
         # Uploads are ready at once now; an older client's confirm is a no-op.

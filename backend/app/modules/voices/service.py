@@ -187,14 +187,73 @@ def _personal_voice_query(context: AuthContext, profile_id: str) -> Any:
 
 
 def visible_student_voice(db: Session, context: AuthContext, profile_id: str) -> ScopedVoice:
-    """The voice its creator may manage: their group clone or their personal voice."""
+    """The voice the caller may manage.
+
+    Its creator manages their group clone or personal voice. Owner decision
+    (2026-10-26): a teacher of the course manages a student's group clone in
+    that course the same way (rename, confirm, delete), whether or not they
+    entered the group; ``role`` is then ``course_teacher`` and the action is
+    logged with the teacher as actor.
+    """
 
     row = db.execute(_scoped_voice_query(context, profile_id)).first()
     if row is None:
         row = db.execute(_personal_voice_query(context, profile_id)).first()
-    if row is None:
+    if row is not None:
+        return ScopedVoice(row[0], "student")
+    profile = db.get(VoiceProfile, profile_id)
+    if profile is None or not course_teacher_can_access_voice(db, context, profile):
         raise not_found()
-    return ScopedVoice(row[0], "student")
+    return ScopedVoice(profile, "course_teacher")
+
+
+def _course_teacher_of_group(db: Session, context: AuthContext, group_id: str) -> bool:
+    """Whether the caller teaches the course this group belongs to (in the group or not)."""
+
+    return (
+        db.execute(
+            select(CourseMember.user_id)
+            .join(Group, Group.course_id == CourseMember.course_id)
+            .where(
+                Group.id == group_id,
+                CourseMember.user_id == context.user.id,
+                CourseMember.role == "teacher",
+            )
+        ).first()
+        is not None
+    )
+
+
+def course_teacher_can_access_voice(
+    db: Session, context: AuthContext, profile: VoiceProfile
+) -> bool:
+    """A group clone uploaded by one of the group's students, and the caller teaches its course.
+
+    Owner decision (2026-10-26): such a teacher plays, binds and manages the
+    voice like the student does. A teacher of another course, a student of
+    another group, and a profile with a missing owner all stay not found.
+    """
+
+    if profile.scope != "group" or profile.group_id is None:
+        return False
+    if profile.consent_actor_user_id is None:
+        return False
+    if not _course_teacher_of_group(db, context, profile.group_id):
+        return False
+    owners = set(db.scalars(_groupmate_owner_ids(db, profile.group_id)).all())
+    return profile.consent_actor_user_id in owners
+
+
+def log_course_teacher_voice_action(scoped: ScopedVoice, context: AuthContext, action: str) -> None:
+    if scoped.role == "course_teacher":
+        LOGGER.info(
+            "voice_managed_by_course_teacher action=%s profile_id=%s actor_user_id=%s "
+            "owner_user_id=%s",
+            action,
+            scoped.profile.id,
+            context.user.id,
+            scoped.profile.consent_actor_user_id,
+        )
 
 
 def rename_voice_profile(
@@ -203,7 +262,9 @@ def rename_voice_profile(
     profile_id: str,
     source_filename: str,
 ) -> VoiceProfileResponse:
-    profile = visible_student_voice(db, context, profile_id).profile
+    scoped = visible_student_voice(db, context, profile_id)
+    log_course_teacher_voice_action(scoped, context, "rename")
+    profile = scoped.profile
     profile.source_filename = source_filename
     profile.updated_at = now_utc()
     db.flush()
@@ -250,8 +311,8 @@ def groupmate_ready_voice(db: Session, context: AuthContext, profile_id: str) ->
     """A groupmate's ready group voice the calling student may play; else not found.
 
     Owner decision (2026-10-18): students of one group hear each other's ready
-    voices in Brainform. A teacher, even one who entered the group, is not a
-    groupmate and plays no student voice.
+    voices in Brainform. A teacher is not a groupmate; a teacher of the course
+    plays a student's voice through ``course_teacher_can_access_voice``.
     """
 
     profile = db.scalar(
@@ -278,8 +339,8 @@ def list_group_voices(
 ) -> list[VoiceProfileResponse]:
     # A student sees their own voices and the ready voices of the group's other
     # students, which they may choose but not manage. A teacher of the course,
-    # whether or not they entered the group, may edit the group's public Agents
-    # and so sees the same ready voices, read-only.
+    # whether or not they entered the group, sees the same ready voices and
+    # (owner decision 2026-10-26) may play, bind and manage them.
     member = db.execute(
         select(WorkspaceMember.user_id)
         .join(Group, Group.id == WorkspaceMember.group_id)
@@ -301,9 +362,11 @@ def list_group_voices(
     ).first()
     if member is None and course_teacher is None:
         raise not_found()
-    shared = and_(
-        VoiceProfile.status == "ready",
-        VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, group_id)),
+    students = VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, group_id))
+    # A course teacher manages the students' voices, so sees them in every
+    # state a student sees their own; a groupmate sees the ready ones.
+    shared = (
+        students if course_teacher is not None else and_(VoiceProfile.status == "ready", students)
     )
     profiles = db.scalars(
         select(VoiceProfile)
@@ -316,7 +379,11 @@ def list_group_voices(
         .order_by(VoiceProfile.created_at, VoiceProfile.id)
     ).all()
     return [
-        voice_profile_dto(profile, can_manage=profile.consent_actor_user_id == context.user.id)
+        voice_profile_dto(
+            profile,
+            can_manage=profile.consent_actor_user_id == context.user.id
+            or course_teacher is not None,
+        )
         for profile in profiles
     ]
 
@@ -418,14 +485,21 @@ def validate_voice_binding(
             CourseMember.user_id == context.user.id,
         )
     )
+    course_teacher = False
     if target_group is None:
-        raise not_found()
-    # The caller's own clone or, for a student, a groupmate's; a teacher who
-    # entered the group never takes a student's voice. A missing owner fails
-    # closed.
+        # A teacher of the course edits the group's Agents without entering it.
+        group_id = agent.group_id if agent is not None else None
+        if group_id is None or not _course_teacher_of_group(db, context, group_id):
+            raise not_found()
+        target_group, course_teacher = group_id, True
+    else:
+        course_teacher = _course_teacher_of_group(db, context, target_group)
+    # The caller's own clone or one of the group's students' clones, for a
+    # groupmate and (owner decision 2026-10-26) for a teacher of the course.
+    # A missing owner fails closed.
     shared = (
         VoiceProfile.consent_actor_user_id.in_(_groupmate_owner_ids(db, target_group))
-        if _student_in_group(db, context, target_group)
+        if course_teacher or _student_in_group(db, context, target_group)
         else false()
     )
     profile = db.scalar(

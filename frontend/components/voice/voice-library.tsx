@@ -149,7 +149,8 @@ export function VoiceLibrary({
   courseId?: string | null;
   /** Groups this person belongs to. Never a course-wide picker. */
   membershipGroupIds?: string[];
-  /** Accounts opens a group so a teacher can play its voices. */
+  /** A teacher visiting a group: no new voice here. Renaming and deleting
+   * follow each voice's can_manage from the server. */
   listenOnly?: boolean;
   embedded?: boolean;
   /** Studyform home: the same ModuleCard frame as the Teams panel beside it. */
@@ -764,7 +765,7 @@ export function VoiceLibrary({
                   />
                   <span className={styles.voiceName}>{name}</span>
                 </label>
-              ) : listenOnly || !manageable ? (
+              ) : !manageable ? (
                 <span className={styles.voiceName}>{name}</span>
               ) : (
                 <button
@@ -807,7 +808,7 @@ export function VoiceLibrary({
                     in progress. The server soft-deletes any of them and cleans
                     up the supplier voice on a best-effort basis. While this
                     row's delete runs, × stays visible as a disabled spinner. */}
-                {!listenOnly && manageable ? (
+                {manageable ? (
                   <button
                     className={cards.iconButton}
                     aria-label={t("voiceDeleteNamed", { name })}
