@@ -167,6 +167,7 @@ def scoped_group_role_for_user(db: Session, user_id: str, group_id: str) -> str 
             ("scoped_group_role", str(user_id), str(group_id)),
             lambda: _read_scoped_group_role(db, user_id, group_id),
             across_sessions=True,
+            in_transaction=True,
         ),
     )
 
@@ -271,6 +272,7 @@ def course_member_role(db: Session, user_id: str, course_id: str) -> str | None:
                 )
             ),
             across_sessions=True,
+            in_transaction=True,
         ),
     )
 

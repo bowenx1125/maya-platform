@@ -1483,7 +1483,14 @@ async def _cancel_runtime(
     report_task_manager: Any | None = None,
     wait_for_workers: bool = True,
 ) -> None:
-    """Interrupt process-local work after DB rows have been fenced."""
+    """Interrupt process-local work after DB rows have been fenced.
+
+    The task managers live on the server loop; a cleanup offloaded to a
+    worker thread hands those steps back to it. Revoking media tickets is a
+    database write and stays on the caller's thread.
+    """
+
+    from app.modules.debates.playback.offload import on_main
 
     if playback_service is not None:
         task_manager = task_manager or getattr(playback_service, "task_manager", None)
@@ -1491,14 +1498,10 @@ async def _cancel_runtime(
     cancel = getattr(task_manager, "request_cancel_debate", None) if not wait_for_workers else None
     cancel = cancel or getattr(task_manager, "cancel_debate", None)
     if callable(cancel):
-        value = cancel(str(debate_id))
-        if inspect.isawaitable(value):
-            await value
+        await on_main(_await_if_needed(cancel, str(debate_id)))
     revoke = getattr(ticket_store, "revoke_debate", None)
     if callable(revoke):
-        value = revoke(str(debate_id))
-        if inspect.isawaitable(value):
-            await value
+        await _await_if_needed(revoke, str(debate_id))
     cancel_reports = (
         getattr(report_task_manager, "request_cancel_debate", None)
         if not wait_for_workers
@@ -1506,9 +1509,13 @@ async def _cancel_runtime(
     )
     cancel_reports = cancel_reports or getattr(report_task_manager, "cancel_debate", None)
     if callable(cancel_reports):
-        value = cancel_reports(str(debate_id))
-        if inspect.isawaitable(value):
-            await value
+        await on_main(_await_if_needed(cancel_reports, str(debate_id)))
+
+
+async def _await_if_needed(function: Any, *args: Any) -> None:
+    value = function(*args)
+    if inspect.isawaitable(value):
+        await value
 
 
 async def _resume_replayed_cleanup(

@@ -14,6 +14,7 @@ from app.modules.auth.service import AuthContext
 from app.modules.debates.cleanup import DebateCleanupError, delete_all, delete_voice
 from app.modules.debates.models import Debate, DebateParticipant
 from app.modules.debates.playback.audio_regeneration import CachedSegmentTurn, regenerate_turn_audio
+from app.modules.debates.playback.offload import run_offloaded
 from app.modules.debates.playback.protocols import ResolvedTurnVoice
 from app.modules.debates.playback.router import get_playback_service
 from app.modules.debates.rebirth import rebirth_debate, remake_debate
@@ -49,16 +50,20 @@ async def _cleanup(
     service = get_playback_service(request)
     action = delete_all if remove_all else delete_voice
     try:
-        result = await action(
-            db,
-            actor_user_id=str(context.user.id),
-            debate_id=str(debate_id),
-            expected_revision=payload.expected_revision,
-            expected_control_version=payload.expected_control_version,
-            data_root=settings.resolved_data_root,
-            playback_service=service,
-            report_task_manager=getattr(request.app.state, "report_task_manager", None),
-            idempotency_key=key,
+        # Production 2026-10-26: a Debate delete ran ~1.6 s of SQL on the
+        # event loop and every other request of the replica waited behind it.
+        result: Any = await run_offloaded(
+            lambda: action(
+                db,
+                actor_user_id=str(context.user.id),
+                debate_id=str(debate_id),
+                expected_revision=payload.expected_revision,
+                expected_control_version=payload.expected_control_version,
+                data_root=settings.resolved_data_root,
+                playback_service=service,
+                report_task_manager=getattr(request.app.state, "report_task_manager", None),
+                idempotency_key=key,
+            )
         )
     except DebateCleanupError as exc:
         raise PlatformError(
@@ -146,21 +151,24 @@ async def _reset_classroom(
     payload: DebateCleanupRequest,
     key: str,
 ) -> DebateCleanupResult:
-    result = await action(
-        db,
-        actor_user_id=str(context.user.id),
-        debate_id=str(debate_id),
-        expected_revision=payload.expected_revision,
-        expected_control_version=payload.expected_control_version,
-        data_root=settings.resolved_data_root,
-        idempotency_key=key,
-        playback_service=get_playback_service(request),
-        report_task_manager=getattr(request.app.state, "report_task_manager", None),
-        **(
-            {"prewarm_scheduler": getattr(request.app.state, "prewarm_scheduler", None)}
-            if action is remake_debate
-            else {}
-        ),
+    playback_service = get_playback_service(request)
+    result = await run_offloaded(
+        lambda: action(
+            db,
+            actor_user_id=str(context.user.id),
+            debate_id=str(debate_id),
+            expected_revision=payload.expected_revision,
+            expected_control_version=payload.expected_control_version,
+            data_root=settings.resolved_data_root,
+            idempotency_key=key,
+            playback_service=playback_service,
+            report_task_manager=getattr(request.app.state, "report_task_manager", None),
+            **(
+                {"prewarm_scheduler": getattr(request.app.state, "prewarm_scheduler", None)}
+                if action is remake_debate
+                else {}
+            ),
+        )
     )
     scheduler = getattr(request.app.state, "prewarm_scheduler", None)
     if scheduler is not None and action is not remake_debate:

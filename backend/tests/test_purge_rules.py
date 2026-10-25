@@ -388,3 +388,53 @@ def test_postgres_every_foreign_key_in_the_database_has_a_rule(
     finally:
         database.dispose()
         purge_module.reset_catalog_cache()
+
+
+def test_foreign_key_catalog_matches_the_inspector_in_one_query(tmp_path: Path) -> None:
+    """The single pg_constraint read sees exactly what per-table inspection saw."""
+
+    from collections import defaultdict
+
+    from sqlalchemy import event, inspect
+
+    database = Database(named_url(f"{tmp_path / 'catalog.sqlite3'}"))
+    try:
+        database.upgrade_schema()
+        inspector = inspect(database.engine)
+        expected: dict[str, list[purge_module.ForeignKey]] = defaultdict(list)
+        for table_name in inspector.get_table_names():
+            nullable = {
+                column["name"]: bool(column.get("nullable", True))
+                for column in inspector.get_columns(table_name)
+            }
+            for foreign_key in inspector.get_foreign_keys(table_name):
+                columns = tuple(foreign_key.get("constrained_columns") or ())
+                referred = tuple(foreign_key.get("referred_columns") or ())
+                parent = foreign_key.get("referred_table")
+                if not columns or not parent or len(columns) != len(referred):
+                    continue
+                expected[parent].append(
+                    purge_module.ForeignKey(
+                        child=table_name,
+                        columns=columns,
+                        parent=parent,
+                        referred=referred,
+                        nullable=tuple(nullable.get(name, True) for name in columns),
+                    )
+                )
+        statements: list[str] = []
+        event.listen(
+            database.engine,
+            "before_cursor_execute",
+            lambda conn, cursor, statement, *_: statements.append(statement),
+        )
+        actual = purge_module.read_foreign_key_catalog(database.engine)
+        assert len(statements) == 1
+        # The same keys per parent table; sibling order differs from the
+        # inspector's and does not matter (children always go before parents).
+        assert {key: sorted(map(repr, value)) for key, value in actual.items()} == {
+            key: sorted(map(repr, value)) for key, value in expected.items()
+        }
+        assert sum(len(value) for value in actual.values()) > 100
+    finally:
+        database.dispose()

@@ -773,6 +773,12 @@ def create_app(
             "message_timing": message_timing_snapshot(),
         }
 
+    @app.get("/health/request-timing", tags=["Health"])
+    def health_request_timing() -> dict[str, Any]:
+        # Per-route p50/p95/max of this replica's recent API requests (route
+        # templates and numbers only). Internal: Caddy never proxies /health.
+        return request_timing.summary_snapshot()
+
     health_limiter: list[anyio.CapacityLimiter] = []
 
     @app.get("/health/ready", tags=["Health"])

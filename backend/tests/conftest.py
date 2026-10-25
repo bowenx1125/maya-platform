@@ -20,7 +20,9 @@ from fastapi.testclient import TestClient
 from pwdlib import PasswordHash
 from starlette.testclient import WebSocketTestSession
 
-from tests import postgres_db
+from tests import n_plus_one_report, postgres_db
+
+n_plus_one_report.install()
 
 WS_RECEIVE_TIMEOUT_SECONDS = 30.0
 
