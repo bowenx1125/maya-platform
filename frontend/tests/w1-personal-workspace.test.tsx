@@ -193,56 +193,8 @@ describe("W1 teacher personal workspace", () => {
     expect(api.workspaceAgents).toHaveBeenCalledWith(courseId);
   });
 
-  it("shows Delete on Home only for the teacher's own published Agent", async () => {
-    const tile = (id: string, name: string, authorId: string) => ({
-      agent: personalAgent({
-        id,
-        name,
-        visibility: "public",
-        can_edit: false,
-        current_published_version_id: `${id}-v`,
-      }),
-      author: { user_id: authorId, display_name: authorId, avatar: null },
-      current_version: { ...draft(privateDocument()), id: `${id}-v` },
-      group_name: "",
-    });
-    const api = {
-      courses: vi
-        .fn()
-        .mockResolvedValue([
-          { id: courseId, code: "MAYA-101", name: "Cultural exchange" },
-        ]),
-      publishedAgents: vi
-        .fn()
-        .mockResolvedValue([
-          tile("own", "Own Lens", "teacher-user"),
-          tile("other", "Colleague Lens", "colleague"),
-        ]),
-      debates: vi.fn().mockResolvedValue([]),
-      groups: vi.fn().mockResolvedValue([]),
-      deleteAgent: vi.fn(),
-    };
-    mockedUseSession.mockReturnValue(teacherSession(api));
-    render(
-      <>
-        <TeacherDashboard />
-      </>,
-    );
-    await screen.findByRole("link", { name: "Colleague Lens" });
-    const own = document.querySelector('[data-agent-row="own"]')!;
-    const other = document.querySelector('[data-agent-row="other"]')!;
-    expect(
-      within(own as HTMLElement).getByRole("button", { name: "Delete" }),
-    ).toBeTruthy();
-    expect(
-      within(other as HTMLElement).queryByRole("button", { name: "Delete" }),
-    ).toBeNull();
-    expect(within(other as HTMLElement).getByText("V1.0")).toBeTruthy();
-  });
-
-  it("lets a course teacher delete a student's public Agent the API allows", async () => {
-    // PR #229: a course teacher who never entered the group may delete a
-    // student's published public Agent; the × follows the server's can_delete.
+  it("shows published Agents on Home without a Delete", async () => {
+    // Home reads the class; deleting an Agent lives on Studyform.
     const tile = (id: string, name: string, canDelete: boolean) => ({
       agent: personalAgent({
         id,
@@ -258,22 +210,15 @@ describe("W1 teacher personal workspace", () => {
       current_version: { ...draft(privateDocument()), id: `${id}-v` },
       group_name: "Group 1",
     });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = {
-      courses: vi
-        .fn()
-        .mockResolvedValue([
-          { id: courseId, code: "MAYA-101", name: "Cultural exchange" },
-        ]),
       publishedAgents: vi
         .fn()
         .mockResolvedValue([
           tile("student", "Student Lens", true),
           tile("locked", "Locked Lens", false),
         ]),
-      debates: vi.fn().mockResolvedValue([]),
       groups: vi.fn().mockResolvedValue([]),
-      deleteAgent: vi.fn().mockResolvedValue(undefined),
+      deleteAgent: vi.fn(),
     };
     mockedUseSession.mockReturnValue(teacherSession(api));
     render(
@@ -282,20 +227,36 @@ describe("W1 teacher personal workspace", () => {
       </>,
     );
     await screen.findByRole("link", { name: "Student Lens" });
-    const student = document.querySelector('[data-agent-row="student"]')!;
-    const locked = document.querySelector('[data-agent-row="locked"]')!;
-    expect(
-      within(locked as HTMLElement).queryByRole("button", { name: "Delete" }),
-    ).toBeNull();
-    fireEvent.click(
-      within(student as HTMLElement).getByRole("button", { name: "Delete" }),
+    const student = document.querySelector('[data-agent-card="student"]')!;
+    expect(screen.getByRole("link", { name: "Locked Lens" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(within(student as HTMLElement).getByText("V1.0")).toBeTruthy();
+  });
+
+  it("counts the course's active students on Home", async () => {
+    const api = {
+      publishedAgents: vi.fn().mockResolvedValue([]),
+      groups: vi.fn().mockResolvedValue([]),
+      courseRoster: vi.fn().mockResolvedValue({
+        entries: [
+          { user_id: "a", role: "student", status: "active" },
+          { user_id: "b", role: "student", status: "active" },
+          { user_id: "c", role: "student", status: "inactive" },
+          { user_id: "d", role: "teacher", status: "active" },
+        ],
+      }),
+    };
+    mockedUseSession.mockReturnValue(teacherSession(api));
+    render(
+      <>
+        <TeacherDashboard />
+      </>,
     );
+    const label = await screen.findByText("Students");
     await waitFor(() =>
-      expect(api.deleteAgent).toHaveBeenCalledWith("student"),
+      expect(label.closest(".home-stat")?.textContent).toMatch(/^2/),
     );
-    await waitFor(() =>
-      expect(screen.queryByRole("link", { name: "Student Lens" })).toBeNull(),
-    );
+    expect(api.courseRoster).toHaveBeenCalledWith(courseId);
   });
 
   it("shows Delete on Studyform for a student's public Agent with can_delete", async () => {
@@ -363,8 +324,7 @@ describe("W1 teacher personal workspace", () => {
     await screen.findByRole("heading", { name: /Welcome/ });
     expect(api.workspaceAgents).not.toHaveBeenCalled();
     expect(screen.queryByText("Personal Agents · 0")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Guide" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Publish an Agent/ })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Guide" })).toBeNull();
   });
 
   it("creates a course-scoped Agent with Private as the default visibility", async () => {

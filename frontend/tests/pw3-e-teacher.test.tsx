@@ -211,8 +211,9 @@ describe("PW3-E teacher shell and responsive contract", () => {
       // capabilities section, then again in five explainer cards. It is a rule
       // the screen enforces, not a sentence the screen has to say, so the last
       // statement of it is gone too.
-      await waitFor(() => expect(api.courses).toHaveBeenCalledTimes(1));
-      expect(api.publishedAgents).toHaveBeenCalledWith(courseId);
+      await waitFor(() =>
+        expect(api.publishedAgents).toHaveBeenCalledWith(courseId),
+      );
       for (const boundary of [
         "Student drafts cannot be viewed or edited here.",
         "教师视图不能查看或编辑学生草稿。",

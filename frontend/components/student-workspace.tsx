@@ -31,10 +31,17 @@ import {
   prefetchVoiceList,
   voiceListIdentity,
 } from "../lib/voice-list-cache";
-import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { GroupOverview } from "./group-overview";
 import { HomeGuide } from "./home-guide";
+import { HomeAgentRow } from "./home/agent-row";
+import {
+  HOME_CARD_CLASS,
+  HOME_CARD_TITLE,
+  HOME_CLASS,
+  HOME_TAPE_TITLE,
+  HomeHero,
+} from "./home/home-hero";
 import { useT } from "../lib/i18n";
 import { AgentWorkbench } from "./agent-workspace";
 import { useSession } from "./session-provider";
@@ -51,12 +58,7 @@ import {
   VersionTile,
   teamVersionLabel,
 } from "./studyform-layout";
-import {
-  AGENT_GRID_CLASS,
-  AgentsEmpty,
-  NewButton,
-  type AgentRename,
-} from "./ui/agent-card";
+import { AgentsEmpty, NewButton, type AgentRename } from "./ui/agent-card";
 import { GuidePortrait } from "./ui/guide-dialog";
 import {
   EmptyCard,
@@ -139,6 +141,7 @@ export function StudentDashboard() {
   const voiceIdentity = voiceListIdentity(user?.id, identityGeneration);
   const [groups, setGroups] = useState<GroupOverview[]>([]);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
+  const [chatCount, setChatCount] = useState(0);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const hasUser = Boolean(user);
@@ -152,16 +155,23 @@ export function StudentDashboard() {
     setError(null);
     try {
       const groupIds = groupIdsKey ? groupIdsKey.split(",") : [];
-      const [overviews, nextPublished] = await Promise.all([
+      const [overviews, nextPublished, chats] = await Promise.all([
         loadGroups(api, groupIds, voiceIdentity),
         courseId && typeof api.publishedAgents === "function"
           ? cachedCall(api, voiceIdentity, "publishedAgents", [courseId], () =>
               api.publishedAgents(courseId),
             )
           : Promise.resolve([]),
+        // "Start the Chat" is done once the student has any chat in their
+        // history (the list Chat with Agent reads). Only the guide uses it,
+        // so a failed read leaves the step undone rather than the page.
+        typeof api.conversations === "function"
+          ? api.conversations().catch(() => [])
+          : Promise.resolve([]),
       ]);
       setGroups(overviews);
       setPublished(nextPublished);
+      setChatCount(chats.length);
     } catch (cause) {
       setError(cause);
     } finally {
@@ -185,11 +195,6 @@ export function StudentDashboard() {
   const guide = primary
     ? [
         {
-          label: t("studentGuideGroup"),
-          complete: true,
-          href: `/student/groups/${primary.group.id}`,
-        },
-        {
           label: t("studentGuideAgent"),
           complete: primary.agentCount > 0,
           href: `/student/groups/${primary.group.id}`,
@@ -205,25 +210,26 @@ export function StudentDashboard() {
           optional: true,
           href: `/student/groups/${primary.group.id}/voices?mode=new`,
         },
+        {
+          label: t("studentGuideChat"),
+          complete: chatCount > 0,
+          href: "/student/chat",
+        },
       ]
     : [];
 
   return (
-    <div className="mayaform-home">
-      <section className="home-hero">
-        <div className="home-hero-copy">
-          <h1>{t("homeWelcomeTitle", { name })}</h1>
-        </div>
-        <div className="home-hero-art">
-          <AcademyMascots label={t("academyMascotsLabel")} />
-        </div>
-      </section>
+    <div className={HOME_CLASS}>
+      <HomeHero name={name} />
       {published.length ? (
-        <section className="home-panel" aria-labelledby="student-agents-title">
-          <h2 id="student-agents-title">
+        <section
+          className="home-panel grid min-w-0 gap-2"
+          aria-labelledby="student-agents-title"
+        >
+          <h2 id="student-agents-title" className={HOME_TAPE_TITLE}>
             {t("agents")} · {published.length}
           </h2>
-          <ul className={AGENT_GRID_CLASS}>
+          <HomeAgentRow>
             {published.map((item) => (
               <VersionTile
                 key={item.agent.id}
@@ -239,22 +245,27 @@ export function StudentDashboard() {
                 deleteLabel={t("deleteAgent")}
               />
             ))}
-          </ul>
+          </HomeAgentRow>
         </section>
       ) : null}
       {groups.length === 0 ? (
         <EmptyCard title={t("noGroup")} />
       ) : (
-        <div className="home-columns" id="student-groups">
+        <div
+          className="home-columns grid grid-cols-2 items-start gap-8 max-[880px]:grid-cols-1 max-[880px]:gap-10"
+          id="student-groups"
+        >
           <section
-            className="home-panel"
+            className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#67E8F9,8px_8px_0_3px_#111]`}
             aria-labelledby="student-guide-title"
             data-tour="guide"
           >
-            <h2 id="student-guide-title">{t("guide")}</h2>
+            <h2 id="student-guide-title" className={HOME_CARD_TITLE}>
+              {t("guide")}
+            </h2>
             {/* The guide speaks from its gold portrait, as in the tour. */}
             <div className="flex items-start gap-5 max-[680px]:gap-3">
-              <GuidePortrait />
+              <GuidePortrait className="size-24" />
               <div className="min-w-0 flex-1">
                 <HomeGuide steps={guide} />
               </div>
@@ -262,16 +273,21 @@ export function StudentDashboard() {
           </section>
           {groups.map((overview, index) => (
             <section
-              className="home-panel"
+              className={`home-panel ${HOME_CARD_CLASS} shadow-[0_0_0_3px_#FF4D8D,8px_8px_0_3px_#111]`}
               key={overview.group.id}
               aria-labelledby={`group-${overview.group.id}`}
               data-tour={index === 0 ? "group" : undefined}
             >
-              <h2 id={`group-${overview.group.id}`}>{overview.group.name}</h2>
-              <ul className="home-people-list">
+              <h2
+                id={`group-${overview.group.id}`}
+                className={`${HOME_CARD_TITLE} bg-[#67E8F9]`}
+              >
+                {overview.group.name}
+              </h2>
+              <ul className="home-people-list m-0 grid list-none border-0 border-t-2 border-[#FFE14D] p-0">
                 {(overview.group.members ?? []).map((member) => (
                   <li
-                    className="home-person"
+                    className="home-person grid min-h-[52px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-0 border-b-2 border-dashed border-[#11111133] px-1.5 py-2.5 font-body"
                     data-role={member.role}
                     key={member.user_id}
                   >
@@ -281,8 +297,20 @@ export function StudentDashboard() {
                       userId={member.user_id}
                       size="sm"
                     />
-                    <strong>{member.display_name}</strong>
-                    <small>{roleLabel(member.role)}</small>
+                    <strong className="min-w-0 truncate text-sm font-semibold">
+                      {member.display_name}
+                    </strong>
+                    {/* Shown as Leader / Member; the words are roleLabel's. */}
+                    <small
+                      className={
+                        "rounded border-2 border-ink px-2 py-px text-[11px] font-extrabold text-ink capitalize shadow-[2px_2px_0_#111] " +
+                        (member.role === "leader"
+                          ? "-rotate-3 bg-[#FF4D8D]"
+                          : "rotate-3 bg-[#67E8F9]")
+                      }
+                    >
+                      {roleLabel(member.role)}
+                    </small>
                   </li>
                 ))}
               </ul>

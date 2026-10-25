@@ -2,10 +2,15 @@
 
 import { agentLastEditedTitle } from "../lib/agent-tooltip";
 import { CountUp } from "./count-up";
-import { HomeGuide } from "./home-guide";
+import { HomeAgentRow } from "./home/agent-row";
+import {
+  HOME_CLASS,
+  HOME_TAPE_TITLE,
+  HomeHero,
+  HomeStat,
+} from "./home/home-hero";
+import { AgentCard, agentMascot } from "./ui/agent-card";
 
-import Link from "next/link";
-import { FitTitle } from "./fit-title";
 import {
   useCallback,
   useEffect,
@@ -19,7 +24,6 @@ import {
   type AgentSummary,
   type AgentVersion,
   type ChatAgent,
-  type Course,
   type Group,
   type GroupDetail,
   type TeamSummaryDto,
@@ -28,7 +32,6 @@ import {
 } from "../lib/api";
 import { prefetchVoiceList } from "../lib/voice-list-cache";
 import { useT } from "../lib/i18n";
-import { IconClose } from "./quiet-icons";
 import { useSession } from "./session-provider";
 import {
   cachedCall,
@@ -40,7 +43,6 @@ import {
   requestCacheGeneration,
   requestCacheIdentity,
 } from "../lib/request-cache";
-import { AcademyMascots } from "./academy/mascots";
 import { AccountSettings } from "./account-settings";
 import { UserAvatar } from "./user-avatar";
 import { AgentReadOnly, AgentWorkbench } from "./agent-workspace";
@@ -56,13 +58,7 @@ import {
   teamVersionLabel,
 } from "./studyform-layout";
 import { VoiceLibrary } from "./voice/voice-library";
-import {
-  EmptyCard,
-  ErrorNotice,
-  LoadingCard,
-  PageIntro,
-  SectionCard,
-} from "./ui";
+import { EmptyCard, ErrorNotice, LoadingCard, PageIntro } from "./ui";
 
 export function TeacherDashboard() {
   const t = useT();
@@ -76,34 +72,43 @@ export function TeacherDashboard() {
   useEffect(() => {
     workspaceScopeRef.current = workspaceScope;
   }, [workspaceScope]);
-  const [course, setCourse] = useState<Course | null>(null);
   const [published, setPublished] = useState<PublishedAgentSummary[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [students, setStudents] = useState<number | null>(null);
   const [loadedScope, setLoadedScope] = useState<string | null>(null);
-  const [debateCount, setDebateCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
   const load = useCallback(async () => {
     const requestScope = workspaceScope;
+    const courseId = teacherCourseId;
     setLoading(true);
     setError(null);
+    setStudents(null);
+    // The Students count reads the roster on its own, so the page does not
+    // wait on it; it shows a dash until it lands.
+    if (courseId && typeof api.courseRoster === "function") {
+      api
+        .courseRoster(courseId)
+        .then((roster) => {
+          if (workspaceScopeRef.current !== requestScope) return;
+          setStudents(
+            (roster.entries ?? []).filter(
+              (entry) => entry.role === "student" && entry.status === "active",
+            ).length,
+          );
+        })
+        .catch((cause: unknown) => {
+          if (workspaceScopeRef.current === requestScope) setError(cause);
+        });
+    }
     try {
-      const courses = await api.courses();
-      if (workspaceScopeRef.current !== requestScope) return;
-      const courseId = teacherCourseId;
-      const [nextPublished, nextGroups, debates] = await Promise.all([
+      const [nextPublished, nextGroups] = await Promise.all([
         courseId ? api.publishedAgents(courseId) : Promise.resolve([]),
         courseId ? api.groups(courseId) : Promise.resolve([]),
-        courseId ? api.debates(courseId) : Promise.resolve([]),
       ]);
       if (workspaceScopeRef.current !== requestScope) return;
-      setCourse(
-        courses.find((item) => item.id === courseId) ?? courses[0] ?? null,
-      );
       setPublished(nextPublished);
       setGroups(nextGroups);
-      setDebateCount(debates.length);
     } catch (cause) {
       if (workspaceScopeRef.current === requestScope) setError(cause);
     } finally {
@@ -120,120 +125,103 @@ export function TeacherDashboard() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  async function deleteAgent(agentId: string) {
-    if (deleting || !window.confirm(t("deleteAgentConfirm"))) return;
-    const requestScope = workspaceScope;
-    setDeleting(agentId);
-    setError(null);
-    try {
-      await api.deleteAgent(agentId);
-      if (workspaceScopeRef.current !== requestScope) return;
-      setPublished((current) =>
-        current.filter((item) => item.agent.id !== agentId),
-      );
-    } catch (cause) {
-      if (workspaceScopeRef.current === requestScope) setError(cause);
-    } finally {
-      if (workspaceScopeRef.current === requestScope) setDeleting(null);
-    }
-  }
-
   if (loading || loadedScope !== workspaceScope) return <LoadingCard />;
   if (error && published.length === 0)
     return <ErrorNotice inline error={error} onRetry={() => void load()} />;
   const name = user?.display_name ?? "";
-  const guide = [
-    {
-      label: t("teacherGuideCourse"),
-      complete: Boolean(course),
-      href: "/teacher/roster",
-    },
-    {
-      label: t("teacherGuideGroups"),
-      complete: groups.length > 0,
-      href: "/teacher/roster",
-    },
-    {
-      label: t("teacherGuideAgents"),
-      complete: published.length > 0,
-      href: "/teacher/studyform",
-    },
-    {
-      label: t("teacherGuideDebate"),
-      complete: debateCount > 0,
-      href: "/teacher/debates/new",
-    },
-  ];
   return (
-    <div className="mayaform-home">
-      <section className="home-hero">
-        <div className="home-hero-copy">
-          <h1>{t("homeWelcomeTitle", { name })}</h1>
+    <div className={HOME_CLASS}>
+      <HomeHero name={name}>
+        {/* A teacher opens this page to read the class: how many groups,
+            how many students. The Agents count heads their row below. */}
+        <div className="home-stats mt-6 flex flex-wrap gap-5 max-[767px]:gap-3">
+          <HomeStat
+            tone="lime"
+            value={<CountUp value={groups.length} />}
+            label={t("groups")}
+          />
+          <HomeStat
+            tone="cyan"
+            value={students === null ? "–" : <CountUp value={students} />}
+            label={t("homeStudentsCount")}
+          />
         </div>
-        <div className="home-hero-art">
-          <AcademyMascots label={t("academyMascotsLabel")} />
-        </div>
-      </section>
-      {/* A teacher opens this page to read the class, not their own progress,
-          so the counts come before the guide. A student has one group and
-          needs no such summary, which is what keeps the two homes apart. */}
-      <div className="home-stats">
-        <div className="home-stat">
-          <b>
-            <CountUp value={groups.length} />
-          </b>
-          <span>{t("groups")}</span>
-        </div>
-        <div className="home-stat">
-          <b>
-            <CountUp value={published.length} />
-          </b>
-          <span>{t("agents")}</span>
-        </div>
-        <div className="home-stat">
-          <b>
-            <CountUp value={debateCount} />
-          </b>
-          {/* `debates` is the nav's own word for the section ("Classroom"),
-              which reads wrong over a number; `debateList` is the plural
-              noun. */}
-          <span>{t("debateList")}</span>
-        </div>
-      </div>
-      <section className="home-panel" aria-labelledby="teacher-guide-title">
-        <h2 id="teacher-guide-title">{t("guide")}</h2>
-        <HomeGuide steps={guide} />
-      </section>
+      </HomeHero>
       {error ? <ErrorNotice error={error} /> : null}
       {published.length === 0 ? (
         <EmptyCard title={t("noPublishedAgents")} />
       ) : (
-        <SectionCard
-          title={`${t("agents")} · ${published.length}`}
-          className="published-section"
+        <section
+          className="published-section grid min-w-0 gap-2"
+          aria-labelledby="teacher-agents-title"
         >
-          <div className="agent-tile-grid">
+          <h2 id="teacher-agents-title" className={HOME_TAPE_TITLE}>
+            {t("agents")} · {published.length}
+          </h2>
+          <HomeAgentRow>
             {published.map((item) => (
-              <PublishedAgentTile
+              <PublishedAgentCard
                 groupName={
                   groups.find((group) => group.id === item.agent.group_id)
                     ?.name ?? ""
                 }
                 item={item}
                 key={item.agent.id}
-                deleting={deleting !== null}
-                onDelete={
-                  (item.agent.can_delete ?? item.author?.user_id === user?.id)
-                    ? () => void deleteAgent(item.agent.id)
-                    : undefined
-                }
               />
             ))}
-          </div>
-        </SectionCard>
+          </HomeAgentRow>
+        </section>
       )}
       <AccountSettings onSaved={() => void load()} />
     </div>
+  );
+}
+
+/** A published Agent on the teacher's home: who made it, in which group. */
+function PublishedAgentCard({
+  item,
+  groupName,
+}: {
+  item: PublishedAgentSummary;
+  groupName: string;
+}) {
+  const t = useT();
+  const hasUnpublishedWork =
+    Boolean(item.agent.current_draft_version_id) &&
+    item.agent.current_draft_version_id !==
+      item.agent.current_published_version_id;
+  return (
+    <AgentCard
+      id={item.agent.id}
+      name={item.agent.name}
+      href={`/teacher/agents/${item.agent.id}`}
+      label={item.current_version.version_label}
+      pending={hasUnpublishedWork}
+      mascot={agentMascot(
+        item.agent.id,
+        item.current_version.avatar_config?.material_theme,
+      )}
+      guideText={agentLastEditedTitle(t, item.agent)}
+      deleteLabel={t("deleteAgent")}
+      footer={
+        groupName || item.author ? (
+          <span className="flex min-w-0 flex-col gap-1 text-xs font-bold">
+            {groupName ? <span className="truncate">{groupName}</span> : null}
+            {item.author ? (
+              <span className="flex min-w-0 items-center gap-1.5">
+                <UserAvatar
+                  avatar={item.author.avatar}
+                  name={item.author.display_name}
+                  userId={item.author.user_id}
+                  size="sm"
+                />
+                <span className="truncate">{item.author.display_name}</span>
+              </span>
+            ) : null}
+          </span>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -601,72 +589,6 @@ export function TeacherPersonalAgentCreate() {
   const scopeKey = `${user.id}:${teacherMembership.course_id}:${identityGeneration}`;
   return (
     <CreateAgentForm key={scopeKey} courseId={teacherMembership.course_id} />
-  );
-}
-
-function PublishedAgentTile({
-  item,
-  groupName,
-  deleting,
-  onDelete,
-}: {
-  item: PublishedAgentSummary;
-  groupName: string;
-  deleting: boolean;
-  onDelete?: () => void;
-}) {
-  const t = useT();
-  const version = item.current_version;
-  const hasUnpublishedWork =
-    Boolean(item.agent.current_draft_version_id) &&
-    item.agent.current_draft_version_id !==
-      item.agent.current_published_version_id;
-  const edited = agentLastEditedTitle(t, item.agent);
-  return (
-    <div className="agent-tile" data-agent-row={item.agent.id}>
-      <Link
-        className="agent-tile-name text-link"
-        href={`/teacher/agents/${item.agent.id}`}
-        data-ui-guide={edited ? "agent.lastEdited" : undefined}
-        data-ui-guide-text={edited}
-      >
-        <FitTitle text={item.agent.name} />
-      </Link>
-      {groupName ? <span className="agent-tile-group">{groupName}</span> : null}
-      {item.author ? (
-        <span className="agent-tile-author">
-          <UserAvatar
-            avatar={item.author.avatar}
-            name={item.author.display_name}
-            userId={item.author.user_id}
-            size="sm"
-          />
-          <span>{item.author.display_name}</span>
-        </span>
-      ) : null}
-      {onDelete ? (
-        <button
-          type="button"
-          className="agent-pill agent-pill-action"
-          data-pending={hasUnpublishedWork ? "true" : "false"}
-          disabled={deleting}
-          aria-label={t("deleteAgent")}
-          onClick={onDelete}
-        >
-          <span className="agent-pill-label">{version.version_label}</span>
-          <span className="agent-pill-x" aria-hidden="true">
-            <IconClose size={12} />
-          </span>
-        </button>
-      ) : (
-        <span
-          className="agent-pill"
-          data-pending={hasUnpublishedWork ? "true" : "false"}
-        >
-          <span className="agent-pill-label">{version.version_label}</span>
-        </span>
-      )}
-    </div>
   );
 }
 
